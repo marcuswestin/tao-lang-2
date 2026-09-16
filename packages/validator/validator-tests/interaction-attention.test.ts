@@ -2,7 +2,7 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, stubView, Test } from '@shared/test'
 import { InteractionValidator } from '../validator-src/validators/interaction-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
-import { accepts, rejects, stubContainer, testValidateCode } from './test-validate'
+import { accepts, acceptsFiles, rejects, stubContainer, testValidateCode } from './test-validate'
 
 const leaf = stubView('Leaf')
 const messages = InteractionValidator.messages
@@ -43,19 +43,32 @@ Describe('validator: interaction attention', () => {
   )
 
   Test(
-    'accepts an active-region condition naming a #tag and rejects one naming nothing visible',
+    'accepts a named region from another app file and rejects tags and unknown names',
     async () => {
-      await accepts(`
-        ${leaf}
-        ${stubContainer('Panel')}
-        view Home() {
-          render Panel() {
-            #Sidebar
-            Leaf()
-            Leaf() [rigid when Sidebar is active]
+      await acceptsFiles({
+        'Main.tao': `
+          app Demo { view Home }
+          view Home() { render Sidebar() [rigid when Sidebar is active] }
+        `,
+        'Sidebar.tao': `
+          ${leaf}
+          folder view Sidebar() { render Leaf() }
+        `,
+      })()
+      await rejects(
+        `
+          ${leaf}
+          ${stubContainer('Panel')}
+          view Home() {
+            render Panel() {
+              #Sidebar
+              Leaf()
+              Leaf() [rigid when Sidebar is active]
+            }
           }
-        }
-      `)()
+        `,
+        messages.unknownRegion('Sidebar'),
+      )()
       await rejects(
         `
           ${leaf}
@@ -84,8 +97,8 @@ Describe('validator: interaction attention', () => {
         }
       `,
       messages.condition('when focusd'),
-      testValidationMessages.interactionVocabulary('key'),
-      testValidationMessages.interactionVocabulary('narrow'),
+      testValidationMessages.interactionVocabulary('key, down, or up'),
+      testValidationMessages.interactionVocabulary('hover, focus, or narrow'),
       testValidationMessages.interactionExpectation,
     ),
   )

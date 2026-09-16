@@ -266,4 +266,62 @@ Describe('parser: minimal design declarations', () => {
       references.findReferences(bundle(draftDesign, 'header'), { includeDeclaration: false }).toArray(),
     ).toEqual([])
   })
+
+  Test('keeps file-private sibling designs out of definition lookup', async () => {
+    const { services } = Parser.createContext()
+    const source = `view Main() { render Col() [privateCard] }\nview Col() { }`
+    const privateDesign = `design PrivateTheme { privateCard [pad 8] }`
+    const sourceDoc = services.shared.workspace.LangiumDocumentFactory.fromString(source, URI.file('/app/Main.tao'))
+    const designDoc = services.shared.workspace.LangiumDocumentFactory.fromString(
+      privateDesign,
+      URI.file('/app/PrivateTheme.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(sourceDoc)
+    services.shared.workspace.LangiumDocuments.addDocument(designDoc)
+    await services.shared.workspace.DocumentBuilder.build([sourceDoc, designDoc], { eagerLinking: true })
+
+    const file = sourceDoc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const word = AST.streamAllContents(file).find(
+      node => AST.isLayoutWord(node) && node.value === 'privateCard',
+    )
+    Expect(word?.$cstNode).toBeDefined()
+    Expect(services.language.references.References.findDeclarations(word!.$cstNode!)).toHaveLength(0)
+  })
+
+  Test('finds design references inside structured blocks without replacing dotted suffixes', async () => {
+    const { services } = Parser.createContext()
+    const source = `
+      design Theme {
+        colors {
+          palette #112233 { 60 #001122 }
+          accent palette.60
+        }
+      }
+    `
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(source, URI.file('/Theme.tao'))
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+
+    const file = doc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const design = file.statements.find(AST.isDesignDeclaration)!
+    const palette = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!
+    const shade = palette.family!.members[0]!
+    const references = services.language.references.References
+
+    const paletteRefs = references.findReferences(palette, { includeDeclaration: false }).toArray()
+    Expect(paletteRefs).toHaveLength(1)
+    Expect(doc.textDocument.getText(paletteRefs[0]!.segment.range)).toBe('palette')
+
+    const shadeRefs = references.findReferences(shade, { includeDeclaration: false }).toArray()
+    Expect(shadeRefs).toHaveLength(1)
+    Expect(doc.textDocument.getText(shadeRefs[0]!.segment.range)).toBe('palette.60')
+  })
 })

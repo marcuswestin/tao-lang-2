@@ -113,26 +113,27 @@ export class TaoReferences extends Langium.DefaultReferences {
         continue
       }
       for (const node of AST.streamAllContents(file)) {
-        if (!AST.isLayoutWord(node)) {
+        if (!AST.isLayoutWord(node) && !AST.isDesignValuePath(node)) {
           continue
         }
         const cstNode = node.$cstNode
-        if (cstNode === undefined || (layoutWordFullName(node) !== name && node.value !== name)) {
+        const segment = designReferenceSegment(node, name)
+        if (cstNode === undefined || segment === undefined) {
           continue
         }
         // Spelling only narrows the candidates. Whether this word is a reference to *this* member is
         // settled by resolving it the way go-to-definition does and comparing the declaration itself:
         // two designs may each declare a private `header`, and one is not a reference to the other.
-        if (!this.findDesignDeclarations(cstNode).includes(targetNode)) {
+        if (!this.findDesignDeclarationsForNames(cstNode, [name]).includes(targetNode)) {
           continue
         }
         refs.push({
           local: doc.uri.toString() === targetDoc.uri.toString(),
           segment: {
-            end: cstNode.end,
-            length: cstNode.length,
-            offset: cstNode.offset,
-            range: cstNode.range,
+            end: segment.end,
+            length: segment.length,
+            offset: segment.offset,
+            range: segment.range,
           },
           sourcePath: this.nodeLocator.getAstNodePath(node),
           sourceUri: doc.uri,
@@ -143,6 +144,45 @@ export class TaoReferences extends Langium.DefaultReferences {
     }
 
     return refs
+  }
+
+  private findDesignDeclarationsForNames(
+    sourceCstNode: Langium.CstNode,
+    candidateNames: readonly string[],
+  ): Langium.AstNode[] {
+    const word = layoutWordFromCstNode(sourceCstNode)
+    const path = designValuePathFromCstNode(sourceCstNode)
+    if (!word && !path) {
+      return []
+    }
+    const root = AST.findRoot(sourceCstNode.astNode)
+    if (!AST.isTaoFile(root)) {
+      return []
+    }
+    const enclosingDesign = findEnclosingDesign(sourceCstNode.astNode)
+    const tiers: AST.DesignDeclaration[][] = [
+      enclosingDesign ? [enclosingDesign] : [],
+      findFileAppDesigns(root, this.documents),
+      root.statements.filter(AST.isDesignDeclaration),
+      findFolderDesigns(root, this.documents),
+      findImportedDesigns(root, this.documents, this.packages),
+      findWorkspaceAppDesigns(this.documents),
+    ]
+    const seenDesigns = new Set<AST.DesignDeclaration>()
+    for (const tier of tiers) {
+      const reachable = tier.filter(design => !seenDesigns.has(design))
+      reachable.forEach(design => seenDesigns.add(design))
+      for (const name of candidateNames) {
+        const matches = reachable.flatMap(design => {
+          const member = findDesignMember(design, name)
+          return member ? [member] : []
+        })
+        if (matches.length > 0) {
+          return [...new Set(matches)]
+        }
+      }
+    }
+    return []
   }
 }
 
@@ -252,6 +292,27 @@ function collectLookupNames(
   return names
 }
 
+function designReferenceSegment(
+  node: AST.LayoutWord | AST.DesignValuePath,
+  targetName: string,
+): Langium.CstNode | undefined {
+  const cstNode = node.$cstNode
+  if (!cstNode) {
+    return undefined
+  }
+  const fullName = AST.isLayoutWord(node)
+    ? layoutWordFullName(node)
+    : [node.head, ...node.segments].join('.')
+  const head = AST.isLayoutWord(node) ? node.value : node.head
+  if (fullName === targetName) {
+    return cstNode
+  }
+  if (head === targetName) {
+    return Langium.GrammarUtils.findNodeForProperty(cstNode, AST.isLayoutWord(node) ? 'value' : 'head')
+  }
+  return undefined
+}
+
 function findEnclosingDesign(node: Langium.AstNode): AST.DesignDeclaration | undefined {
   let current: Langium.AstNode | undefined = node
   while (current) {
@@ -313,7 +374,11 @@ function findFolderDesigns(
       continue
     }
     for (const statement of otherFile.statements) {
-      if (AST.isDesignDeclaration(statement) && !designs.includes(statement)) {
+      if (
+        AST.isDesignDeclaration(statement)
+        && statement.visibility === 'folder'
+        && !designs.includes(statement)
+      ) {
         designs.push(statement)
       }
     }
@@ -359,7 +424,7 @@ function appSelectedDesign(
   if (app.block) {
     for (const stmt of app.block.statements) {
       if (AST.isAppProperty(stmt) && stmt.name === 'Design') {
-        const design = resolveDesignFromExpression(stmt.value, file, documents)
+        const design = resolveDesignFromExpression(stmt.value, file)
         if (design) {
           return design
         }
@@ -367,7 +432,7 @@ function appSelectedDesign(
     }
   }
   if (app.value) {
-    const baseApp = resolveBaseApp(app.value, file, documents)
+    const baseApp = resolveBaseApp(app.value, file)
     if (baseApp) {
       return appSelectedDesign(baseApp, file, documents)
     }
@@ -378,7 +443,6 @@ function appSelectedDesign(
 function resolveDesignFromExpression(
   expression: AST.Expression | undefined,
   file: AST.TaoFile,
-  documents: Langium.LangiumDocuments,
 ): AST.DesignDeclaration | undefined {
   if (!expression) {
     return undefined
@@ -394,15 +458,6 @@ function resolveDesignFromExpression(
       if (local && AST.isDesignDeclaration(local)) {
         return local
       }
-      for (const doc of documents.all) {
-        const otherFile = doc.parseResult.value
-        if (AST.isTaoFile(otherFile)) {
-          const found = otherFile.statements.find(s => AST.isDesignDeclaration(s) && s.name === targetName)
-          if (found && AST.isDesignDeclaration(found)) {
-            return found
-          }
-        }
-      }
     }
   }
   return undefined
@@ -411,7 +466,6 @@ function resolveDesignFromExpression(
 function resolveBaseApp(
   expression: AST.Expression,
   file: AST.TaoFile,
-  documents: Langium.LangiumDocuments,
 ): AST.AppDeclaration | undefined {
   if (AST.isRefinementExpression(expression)) {
     const ref = expression.target?.ref
@@ -423,15 +477,6 @@ function resolveBaseApp(
       const local = file.statements.find(s => AST.isAppDeclaration(s) && s.name === name)
       if (local && AST.isAppDeclaration(local)) {
         return local
-      }
-      for (const doc of documents.all) {
-        const otherFile = doc.parseResult.value
-        if (AST.isTaoFile(otherFile)) {
-          const found = otherFile.statements.find(s => AST.isAppDeclaration(s) && s.name === name)
-          if (found && AST.isAppDeclaration(found)) {
-            return found
-          }
-        }
       }
     }
   }
@@ -445,15 +490,6 @@ function resolveBaseApp(
       const local = file.statements.find(s => AST.isAppDeclaration(s) && s.name === name)
       if (local && AST.isAppDeclaration(local)) {
         return local
-      }
-      for (const doc of documents.all) {
-        const otherFile = doc.parseResult.value
-        if (AST.isTaoFile(otherFile)) {
-          const found = otherFile.statements.find(s => AST.isAppDeclaration(s) && s.name === name)
-          if (found && AST.isAppDeclaration(found)) {
-            return found
-          }
-        }
       }
     }
   }

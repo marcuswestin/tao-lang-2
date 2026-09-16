@@ -95,20 +95,20 @@ Describe('parser: fixtures and scenarios', () => {
     const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
     Expect.Is(scenario, AST.isScenarioDeclaration)
     Expect(scenario.block.steps.map(step => step.$type)).toEqual([
-      AST.PressPhaseStep.$type,
+      AST.PressWordStep.$type,
       AST.AdvanceStep.$type,
-      AST.PressPhaseStep.$type,
-      AST.HoverStep.$type,
-      AST.FocusStep.$type,
-      AST.HoverStep.$type,
+      AST.PressWordStep.$type,
+      AST.InteractionWordStep.$type,
+      AST.InteractionWordStep.$type,
+      AST.InteractionWordStep.$type,
     ])
     const down = scenario.block.steps[0]
-    Expect.Is(down, AST.isPressPhaseStep)
-    Expect(down.phase).toBe('down')
+    Expect.Is(down, AST.isPressWordStep)
+    Expect(down.subject).toBe('down')
     Expect(down.selector).toBe('label')
     Expect(down.target).toBe('Revert')
     const up = scenario.block.steps[2]
-    Expect.Is(up, AST.isPressPhaseStep)
+    Expect.Is(up, AST.isPressWordStep)
     Expect(up.tag).toBe('#revertSave')
   })
 
@@ -126,6 +126,30 @@ Describe('parser: fixtures and scenarios', () => {
       }
     `),
   )
+
+  Test('keeps pointer journey words available as ordinary declaration names', async () => {
+    const result = await testParseCode(`
+      view hover() { }
+      view down() { }
+      view up() { }
+    `)
+
+    Expect(result.entry.ast.statements.filter(AST.isViewDeclaration).map(view => view.name))
+      .toEqual(['hover', 'down', 'up'])
+  })
+
+  Test('keeps ordinary identifier-headed view statements distinct from interaction words', async () => {
+    const result = await testParseCode(`
+      view Card(Title text) { }
+      view Home() { Card("hover") }
+    `)
+
+    const home = result.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'Home',
+    )
+    Expect.Is(home, AST.isViewDeclaration)
+    Expect.Is(home.block?.statements[0], AST.isViewRender)
+  })
 
   Test(
     'does not widen scenario journeys to the full test language',

@@ -451,4 +451,15 @@ Describe('minimal Tao parser', () => {
     const defaultApp = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]
     Expect(defaultApp?.app.ref?.name).toBe('PackageAccess')
   })
+
+  Test('keeps DefaultApp available as an ordinary declaration name', async () => {
+    const parseResult = await testParseCode(`
+      project { id "default-app-name" name "Default app name" DefaultApp DefaultApp }
+      app DefaultApp { view DefaultApp }
+      view DefaultApp() { }
+    `)
+
+    const declarations = parseResult.entry.ast.statements.filter(AST.isDeclaration)
+    Expect(declarations.map(declaration => declaration.name)).toEqual(['DefaultApp', 'DefaultApp'])
+  })
 })

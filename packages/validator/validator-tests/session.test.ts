@@ -1,11 +1,30 @@
 import { AST } from '@parser'
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { Validation } from '../validator-src/validation'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { validationErrorMessages } from './test-validate'
 
 Describe('validator: reusable sessions', () => {
+  Test('shares workspace memoization across per-file contexts in one Langium batch', () => {
+    const memoStore = new Map<string, unknown>()
+    let computes = 0
+    const runContext = {
+      entryFilePath: '/Main.tao',
+      memoStore,
+      packagesContext: {} as Parameters<typeof Validator.createContext>[0],
+      workspaceFiles: [] as readonly AST.TaoFile[],
+    }
+    const accept = () => undefined
+    const first = Validation.createContext(accept, runContext)
+    const second = Validation.createContext(accept, { ...runContext, entryFilePath: '/Other.tao' })
+
+    Expect(first.memo('workspace.views', () => ++computes)).toBe(1)
+    Expect(second.memo('workspace.views', () => ++computes)).toBe(1)
+    Expect(computes).toBe(1)
+  })
+
   Test('isolates concurrent results that reuse the standalone source URI', async () => {
     const session = await Validator.createSession()
     const [textResult, numberResult, syntaxResult] = await Promise.all([

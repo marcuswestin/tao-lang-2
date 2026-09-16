@@ -333,26 +333,8 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
     PressTextStep: compilePressTextStep,
-    PressPhaseStep: step => ({
-      kind: step.phase === 'down' ? 'pressDown' : 'pressUp',
-      ...pointerTarget(step),
-      source: sourceLocation(step),
-    }),
-    HoverStep: step => ({
-      kind: 'hover',
-      ...pointerTarget(step),
-      source: sourceLocation(step),
-    }),
-    FocusStep: step => ({
-      kind: 'focus',
-      source: sourceLocation(step),
-      tag: tagName(step.tag),
-    }),
-    PressKeyStep: step => ({
-      key: step.value,
-      kind: 'pressKey',
-      source: sourceLocation(step),
-    }),
+    PressWordStep: compilePressWordStep,
+    InteractionWordStep: compileInteractionWordStep,
     PressToolbarCommandStep: step => ({
       kind: 'pressToolbarCommand',
       label: literalText(step.value),
@@ -365,11 +347,6 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
     SelectStep: compileSelectStep,
-    NarrowStep: step => ({
-      kind: 'narrow',
-      source: sourceLocation(step),
-      text: step.value,
-    }),
     ExpectInteractionStep: compileInteractionExpectation,
     SubmitInputStep: compileSubmitInputStep,
     TagSubmitStep: step => ({
@@ -485,7 +462,35 @@ function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
   }
 }
 
-function pointerTarget(step: AST.PressPhaseStep | AST.HoverStep): { selector: string; target: string } {
+function compilePressWordStep(step: AST.PressWordStep): TaoTestPressKeyStep | TaoTestPressPhaseStep {
+  if (step.subject === 'key') {
+    Assert.defined(step.target, 'validated key press names a value')
+    return { key: step.target, kind: 'pressKey', source: sourceLocation(step) }
+  }
+  Assert(step.subject === 'down' || step.subject === 'up', 'validated press word step names key, down, or up')
+  return {
+    kind: step.subject === 'down' ? 'pressDown' : 'pressUp',
+    ...pointerTarget(step),
+    source: sourceLocation(step),
+  }
+}
+
+function compileInteractionWordStep(
+  step: AST.InteractionWordStep,
+): TaoTestHoverStep | TaoTestFocusStep | TaoTestNarrowStep {
+  if (step.head === 'hover') {
+    return { kind: 'hover', ...pointerTarget(step), source: sourceLocation(step) }
+  }
+  if (step.head === 'focus') {
+    Assert.defined(step.tag, 'validated focus step names a tag')
+    return { kind: 'focus', source: sourceLocation(step), tag: tagName(step.tag) }
+  }
+  Assert(step.head === 'narrow', 'validated interaction word step names hover, focus, or narrow')
+  Assert.defined(step.target, 'validated narrow step names text')
+  return { kind: 'narrow', source: sourceLocation(step), text: step.target }
+}
+
+function pointerTarget(step: AST.PressWordStep | AST.InteractionWordStep): { selector: string; target: string } {
   if (step.tag !== undefined) {
     return { selector: 'tag', target: tagName(step.tag) }
   }

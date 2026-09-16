@@ -38,7 +38,51 @@ function createContext(
  * standalone session below validates a parse result directly instead and never installs it.
  */
 function installLangiumChecks(services: ParserServices, packagesContext: Packages.Context): void {
+  let batch: {
+    contexts: ReadonlyMap<AST.TaoFile, ValidationRunContext>
+    pending: Set<AST.TaoFile>
+  } | undefined
   registerTaoValidationChecks(services.language, file => {
+    if (!batch?.pending.has(file)) {
+      const allFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
+        .map(document => document.parseResult.value)
+        .filter(AST.isTaoFile)
+      if (!allFiles.includes(file)) {
+        allFiles.push(file)
+      }
+      const workspaceByProject = new Map<string | undefined, readonly AST.TaoFile[]>()
+      const memoByProject = new Map<string | undefined, Map<string, unknown>>()
+      const contexts = new Map<AST.TaoFile, ValidationRunContext>()
+      for (const candidate of allFiles) {
+        const entryFilePath = AST.getDocument(candidate).uri.path
+        const projectRoot = Packages.projectRootForPath(packagesContext.index, entryFilePath)
+        let workspaceFiles = workspaceByProject.get(projectRoot)
+        if (!workspaceFiles) {
+          workspaceFiles = allFiles.filter(workspaceCandidate => {
+            const path = AST.getDocument(workspaceCandidate).uri.path
+            return FS.pathIsWithin(path, packagesContext.stdlibRoot)
+              || !FS.pathIsWithin(path, packagesContext.index.projectRoot)
+              || Packages.projectRootForPath(packagesContext.index, path) === projectRoot
+          })
+          workspaceByProject.set(projectRoot, workspaceFiles)
+        }
+        let memoStore = memoByProject.get(projectRoot)
+        if (!memoStore) {
+          memoStore = new Map<string, unknown>()
+          memoByProject.set(projectRoot, memoStore)
+        }
+        contexts.set(candidate, {
+          ...createContext(packagesContext, workspaceFiles, entryFilePath),
+          memoStore,
+        })
+      }
+      batch = { contexts, pending: new Set(allFiles) }
+    }
+    const context = batch.contexts.get(file)
+    batch.pending.delete(file)
+    if (context) {
+      return context
+    }
     const entryFilePath = AST.getDocument(file).uri.path
     const projectRoot = Packages.projectRootForPath(packagesContext.index, entryFilePath)
     const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)

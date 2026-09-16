@@ -32,24 +32,15 @@ export const TestsCompiler = {
     return gen.noop()
   },
 
-  /** PressKeyStep compiles only into test-plan IR. */
-  PressKeyStep(_press: AST.PressKeyStep): Compiled {
-    return gen.noop()
-  },
-
   TagPressStep(): Compiled {
     return gen.noop()
   },
 
-  PressPhaseStep(): Compiled {
+  PressWordStep(): Compiled {
     return gen.noop()
   },
 
-  HoverStep(): Compiled {
-    return gen.noop()
-  },
-
-  FocusStep(): Compiled {
+  InteractionWordStep(): Compiled {
     return gen.noop()
   },
 
@@ -72,11 +63,6 @@ export const TestsCompiler = {
   },
 
   SelectStep(): Compiled {
-    return gen.noop()
-  },
-
-  /** NarrowStep compiles only into test-plan IR. */
-  NarrowStep(_narrow: AST.NarrowStep): Compiled {
     return gen.noop()
   },
 

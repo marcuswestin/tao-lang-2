@@ -10,7 +10,7 @@ const interactionValidationMessages = {
   condition: (condition: string) =>
     `Unknown interaction condition '${condition}'; expected when pressed, when focused, when hovered, when <region> is active, or when Scheme is Light|Dark.`,
   unknownRegion: (subject: string) =>
-    `'when ${subject} is active' names no view or #tag visible from this file; a misspelt region is a condition that is never true.`,
+    `'when ${subject} is active' names no view in this app; a misspelt region is a condition that is never true.`,
   duplicateEntityPolicy: (entity: string, hidden: boolean) =>
     `Entity '${entity}' may declare '${hidden ? 'commands hide' : 'commands'}' only once.`,
   duplicateMention: (scope: string, command: string) => `${scope} references command '${command}' more than once.`,
@@ -49,22 +49,19 @@ function validateInteractionCondition(condition: AST.LayoutCondition, ctx: Valid
     ctx.error(condition, interactionValidationMessages.condition(conditionText(condition)))
     return
   }
-  // The runtime resolves the subject against the regions an occurrence renders. It is the one word in
-  // this vocabulary that is not a cross-reference, so it is checked here against the views and tags
-  // this file can see; otherwise a typo is a style that silently never applies.
-  if (active && !regionSubjectKnown(subject, condition)) {
+  // The runtime names structural regions after view occurrences, not #tags. A view may live in any
+  // source file participating in the app, so validate against the batch rather than this file alone.
+  if (active && !regionSubjectKnown(subject, ctx)) {
     ctx.error(condition, interactionValidationMessages.unknownRegion(subject))
   }
 }
 
-function regionSubjectKnown(subject: string, condition: AST.LayoutCondition): boolean {
-  const file = AST.getDocument(condition).parseResult.value
-  const declared = file.statements.filter(AST.isViewDeclaration).some(view => view.name === subject)
-  const imported = file.statements.filter(AST.isUseStatement).some(statement =>
-    statement.importedDeclarations.some(reference => reference.$refText === subject)
-  )
-  const tagged = [...AST.streamAllContents(file)].filter(AST.isTagStatement).some(tag => tag.tag === `#${subject}`)
-  return declared || imported || tagged
+function regionSubjectKnown(subject: string, ctx: ValidationContext): boolean {
+  const names = ctx.memo('interaction-validator.regionNames', () =>
+    new Set(
+      ctx.workspaceFiles.flatMap(file => file.statements.filter(AST.isViewDeclaration).map(view => view.name)),
+    ))
+  return names.has(subject)
 }
 
 function isPlainWord(word: AST.LayoutWord): boolean {
