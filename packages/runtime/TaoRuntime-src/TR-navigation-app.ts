@@ -688,6 +688,11 @@ export class RuntimeAppDefinition implements Subscription {
   }
 }
 
+/** Narrow test seam for proving render-created apps do not enter the process registry before commit. */
+export function runtimeAppIsRegisteredForTest(app: RuntimeAppDefinition): boolean {
+  return runtimeApps.has(app)
+}
+
 /**
  * Identifies one app's navigation capture. The declaration alone is not enough: an app variant
  * (`app Preview = Base with { … }`) keeps its base's declaration identity, so every variant of one

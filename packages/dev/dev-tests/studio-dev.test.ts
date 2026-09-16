@@ -184,14 +184,14 @@ Describe('Studio native wrapper foundation', () => {
           async loadRecentProjects() {
             events.push('recent.load')
             if (failedStage === 'recent') {
-              throw new Error('recent failed')
+              return Errors.throwHostEnvironment('recent failed')
             }
             return []
           },
           async openTrustStore() {
             events.push('trust.open')
             if (failedStage === 'trust') {
-              throw new Error('trust failed')
+              return Errors.throwHostEnvironment('trust failed')
             }
             return trust
           },
@@ -202,13 +202,13 @@ Describe('Studio native wrapper foundation', () => {
           async startDeviceGateway() {
             events.push('gateway.start')
             if (failedStage === 'gateway') {
-              throw new Error('gateway failed')
+              return Errors.throwHostEnvironment('gateway failed')
             }
             return gateway
           },
           async startSessionServer() {
             events.push('server.start')
-            throw new Error('server failed')
+            return Errors.throwHostEnvironment('server failed')
           },
         })).rejects.toThrow(`${failedStage} failed`)
         Expect(events).toEqual(

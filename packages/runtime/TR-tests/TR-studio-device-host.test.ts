@@ -1,10 +1,10 @@
 import { Describe, Expect, MockModule, reactNativeStubs, Test } from '@shared/test'
 import TR from '../TaoRuntime-src/TR'
-import { captureRuntime } from '../TaoRuntime-src/TR-runtime-capture'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '../TaoRuntime-src/TR-studio-device-client'
 import { deviceViewportNotice, networkConditionOf, viewportLine } from '../TaoRuntime-src/TR-studio-device-host'
 import type { TaoStudioDeviceCellIdentity } from '../TaoRuntime-src/TR-studio-device-protocol'
 import { StudioDeviceTrust } from '../TaoRuntime-src/TR-studio-device-trust'
+import { runtimeAppIsRegisteredForTest } from '../TaoRuntime-src/TR-navigation-app'
 import { createStudioSubjectApp } from '../TaoRuntime-src/TR-studio-subject'
 
 const scriptURL = 'http://192.168.1.20:8081/index.bundle?platform=ios&dev=true&hot=false'
@@ -396,7 +396,6 @@ Describe('Studio device synthetic app lifecycle', () => {
   Test('does not register an app produced by an abandoned render before commit', async () => {
     const home = TR.Navigation.View({ name: 'Synthetic Home', render: () => null })
     const slot = TR.Navigation.Declaration('Synthetic Slot', TR.NavKind.Slot())
-    const before = await navigationCaptureKeys()
     const app = createStudioSubjectApp(
       () => ({
         auxiliaries: () => ({}),
@@ -406,18 +405,11 @@ Describe('Studio device synthetic app lifecycle', () => {
       }),
       {},
     )
-    Expect(await navigationCaptureKeys()).toEqual(before)
+    Expect(runtimeAppIsRegisteredForTest(app)).toBe(false)
     app.dispose()
-    Expect(await navigationCaptureKeys()).toEqual(before)
+    Expect(runtimeAppIsRegisteredForTest(app)).toBe(false)
   })
 })
-
-async function navigationCaptureKeys(): Promise<string[]> {
-  const navigation = (await captureRuntime()).domains.find(domain => domain.domain === 'navigation')?.value
-  return navigation !== null && typeof navigation === 'object' && !Array.isArray(navigation)
-    ? Object.keys(navigation)
-    : []
-}
 
 Describe('Studio device host platform adapters', () => {
   Test('keeps one JSON record in the keychain and rejects a partial one', async () => {

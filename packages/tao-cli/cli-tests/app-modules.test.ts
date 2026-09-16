@@ -61,7 +61,7 @@ Describe('Tao app TypeScript modules', () => {
       await TaoAppModules.ensureProject(project, cliRoot)
       Expect(await FS.realPath(FS.resolvePath('node_modules/@tao/runtime', project))).toBe(await FS.realPath(carried))
       const resolved = await CLI.run(Platform.runtimeProcess.execPath, {
-        args: ['-e', 'process.stdout.write(import.meta.resolve("@tao/runtime"))'],
+        args: ['-e', 'await Bun.write(Bun.stdout, import.meta.resolve("@tao/runtime"))'],
         cwd: project,
       })
       Assert(resolved.exitCode === 0, 'the relocated consumer resolves its carried runtime', resolved)
