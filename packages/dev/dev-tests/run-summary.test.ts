@@ -127,4 +127,21 @@ Describe('versioned run summary', () => {
     Expect(classifyFailure("EFAULT: bad address in system call argument, rm '/repo/Apps/HNReader/App.tao'"))
       .toBe('repository')
   })
+
+  Test('recognizes a Chrome abort before DevTools despite the Bun failure banner', () => {
+    Expect(classifyFailure([
+      'HostEnvironmentError: Chrome exited before exposing DevTools (exit none, signal SIGABRT)',
+      '(fail) Studio dialog restores its live background in Chrome [310.05ms]',
+      '0 pass',
+      '1 fail',
+    ].join('\n'))).toBe('sandbox-restriction')
+  })
+
+  Test('does not let a Chrome host abort hide a browser assertion failure', () => {
+    Expect(classifyFailure([
+      'HostEnvironmentError: Chrome exited before exposing DevTools (exit none, signal SIGABRT)',
+      '(fail) another browser test',
+      'error: expect(received).toBe(expected)',
+    ].join('\n'))).toBe('test-assertion')
+  })
 })

@@ -99,6 +99,9 @@ export type BuildSummaryOptions = {
 
 const FAILURE_OUTPUT_LINES = 40
 const SUMMARY_VERSION = 2
+const CHROME_PRE_DEVTOOLS_HOST_ABORT =
+  /^HostEnvironmentError: Chrome exited before exposing DevTools \(exit none, signal SIGABRT\)$/m
+const ASSERTION_DETAIL = /AssertionError|expect\(received\)/i
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
@@ -170,6 +173,12 @@ export function describesTimeout(output: string): boolean {
 export function classifyFailure(output: string, context: ClassifyContext = {}): FailureKind {
   if (context.interrupted === true) {
     return 'user-interruption'
+  }
+  // Bun appends `(fail)` to every failed test, including one whose browser process was rejected by
+  // the host before CDP existed. Recognize that exact boundary without letting it outrank a real
+  // assertion reported elsewhere in the same browser run.
+  if (CHROME_PRE_DEVTOOLS_HOST_ABORT.test(output) && !ASSERTION_DETAIL.test(output)) {
+    return 'sandbox-restriction'
   }
   // A runner prints FAIL/(fail) for a timed-out test as well as for a wrong answer. Classify the
   // specific host/native signatures first, then the timeout with measured contention, and only
