@@ -59,7 +59,9 @@ async function withProjectLock<T>(projectRoot: string, name: string, work: () =>
         const owner = staleTarget === undefined ? undefined : await readOwner(staleTarget)
         if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
           if (staleTarget !== undefined) {
-            if (reclaimClaim?.staleTarget !== staleTarget) {
+            const ownsReclaimClaim = reclaimClaim !== undefined
+              && await lockTarget(reclaimClaim.linkPath) === reclaimClaim.ownerPath
+            if (reclaimClaim?.staleTarget !== staleTarget || !ownsReclaimClaim) {
               await releaseReclaimClaim()
               reclaimClaim = await acquireReclaimClaim(coordinationRoot, name, staleTarget, ownerPath)
             }

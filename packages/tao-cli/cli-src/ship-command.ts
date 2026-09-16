@@ -319,9 +319,12 @@ function validateOptions(options: ShipCommandOptions): void {
   }
 }
 
-/** acceptedEntryWithRunState returns the lock update the executor persists at its checkpoints. */
+/** acceptedEntryWithRunState returns the ship-only lock update the executor persists at its checkpoints. */
 export function acceptedEntryWithRunState(prepared: PreparedShip, entry: ShipLockEntry): TaoProjectLock {
-  return putShipLockEntry(prepared.lock, { ...entry, inputHash: prepared.inputHash, status: 'accepted' })
+  return putShipLockEntry(
+    { schemaVersion: 1 },
+    { ...entry, inputHash: prepared.inputHash, status: 'accepted' },
+  )
 }
 
 export function preparedKeyPath(prepared: PreparedShip): string {

@@ -5,6 +5,7 @@ import { shipContentHash } from '../cli-src/ship-model'
 
 const transactionModule = FS.resolvePath('packages/tao-cli/cli-src/ship-transaction.ts')
 const lockModule = FS.resolvePath('packages/tao-cli/cli-src/ship-lock.ts')
+const commandModule = FS.resolvePath('packages/tao-cli/cli-src/ship-command.ts')
 const sharedModule = FS.resolvePath('packages/shared/shared-src/shared.ts')
 const tsconfig = FS.resolvePath('packages/tao-cli/tsconfig.json')
 
@@ -51,6 +52,68 @@ Describe('tao ship cross-process transactions', () => {
       Expect(await FS.readJson(FS.resolvePath(replacementResults[0]!, root))).toEqual({ survived: true })
       Expect(await FS.exists(FS.resolvePath('ship-transaction.lock', coordinationRoot))).toBe(false)
     } finally {
+      await FS.remove(coordinationRoot)
+      await FS.remove(root)
+    }
+  })
+
+  Test('reacquires a stale-owner claim displaced while the claimant is alive', async () => {
+    const root = await mkTestDir('tao-ship-displaced-claim-')
+    const repositoryKey = shipContentHash([await FS.realPath(root)])
+    const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
+    const staleOwnerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
+    const lockPath = FS.resolvePath('ship-transaction.lock', coordinationRoot)
+    const claimPath = FS.resolvePath(
+      'ship-transaction-reclaim-ship-transaction-stale.json.lock',
+      coordinationRoot,
+    )
+    await FS.writeJson(staleOwnerPath, { pid: Number.MAX_SAFE_INTEGER, token: 'stale' })
+    await FS.symlink(FS.basename(staleOwnerPath), lockPath)
+    const worker = CLI.start('bun', {
+      args: [
+        `--tsconfig=${tsconfig}`,
+        '-e',
+        `
+          import { FS } from ${JSON.stringify(sharedModule)}
+          import { ShipTransactionTesting, withShipTransaction } from ${JSON.stringify(transactionModule)}
+          ShipTransactionTesting.setStaleUnlinkDelay(250)
+          try {
+            await withShipTransaction(${JSON.stringify(root)}, async () => {
+              await FS.writeText(${JSON.stringify(FS.resolvePath('entered', root))}, '')
+            })
+          } finally {
+            ShipTransactionTesting.setStaleUnlinkDelay(0)
+          }
+        `,
+      ],
+    })
+    try {
+      const claimInstalled = await Time.pollUntil(async () => await FS.exists(claimPath), {
+        intervalMs: 5,
+        timeoutMs: 2_000,
+      })
+      Expect(claimInstalled).toBe(true)
+      const displacedPath = FS.resolvePath('displaced-live-claim.lock', coordinationRoot)
+      await FS.move(claimPath, displacedPath)
+      await FS.remove(displacedPath)
+
+      const completed = await Time.pollUntil(() => worker.exitCode !== null, {
+        intervalMs: 10,
+        timeoutMs: 3_000,
+      })
+      if (!completed) {
+        worker.kill('SIGKILL')
+      }
+      const result = await worker.waitForClose()
+      Expect(completed).toBe(true)
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.exists(FS.resolvePath('entered', root))).toBe(true)
+    } finally {
+      if (worker.exitCode === null) {
+        worker.kill('SIGKILL')
+        await worker.waitForClose()
+      }
+      worker.dispose()
       await FS.remove(coordinationRoot)
       await FS.remove(root)
     }
@@ -136,6 +199,48 @@ Describe('tao ship cross-process transactions', () => {
       await FS.remove(root)
     }
   })
+
+  Test('preserves a fresh installs concern when a stale ship process checkpoints', async () => {
+    const root = await mkTestDir('tao-ship-lock-concerns-')
+    const staleInstalls = installsLock('stale')
+    const freshInstalls = installsLock('fresh')
+    try {
+      await writeInstalls(root, staleInstalls)
+      const preparedPath = FS.resolvePath('ship-prepared', root)
+      const ship = runWorker(`
+        import { FS, Time } from ${JSON.stringify(sharedModule)}
+        import { acceptedEntryWithRunState } from ${JSON.stringify(commandModule)}
+        import { writeProjectLock } from ${JSON.stringify(lockModule)}
+        const root = ${JSON.stringify(root)}
+        const entry = {
+          identity: 'notes/Notes',
+          inputHash: 'old-input',
+          provenance: { at: '2026-09-16T00:00:00.000Z', command: 'tao ship', version: 1 },
+          status: 'accepted',
+        }
+        const prepared = {
+          inputHash: 'current-input',
+          lock: { schemaVersion: 1, installs: ${JSON.stringify(staleInstalls)} },
+        }
+        await FS.writeText(${JSON.stringify(preparedPath)}, '')
+        await Time.sleep(150)
+        await writeProjectLock(root, acceptedEntryWithRunState(prepared, entry))
+      `)
+      const prepared = await Time.pollUntil(async () => await FS.exists(preparedPath), {
+        intervalMs: 5,
+        timeoutMs: 2_000,
+      })
+      Expect(prepared).toBe(true)
+      await writeInstalls(root, freshInstalls)
+      Expect((await ship).exitCode).toBe(0)
+
+      const lock = await readProjectLock(root)
+      Expect(lock.installs).toEqual(freshInstalls)
+      Expect(lock.ship?.apps['notes/Notes']?.inputHash).toBe('current-input')
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })
 
 async function runWorker(source: string) {
@@ -188,4 +293,24 @@ function staleContenderSource(root: string, coordinationRoot: string, index: num
       ShipTransactionTesting.setBeforeStaleUnlink(undefined)
     }
   `
+}
+
+function installsLock(label: string) {
+  return {
+    lockfileVersion: 1 as const,
+    projects: {
+      [label]: { projectId: label, resolvedCommit: `${label}-commit` },
+    },
+    requires: {
+      [label]: { ref: `${label}-ref` },
+    },
+  }
+}
+
+async function writeInstalls(root: string, installs: ReturnType<typeof installsLock>): Promise<void> {
+  const result = await runWorker(`
+    import { writeProjectLock } from ${JSON.stringify(lockModule)}
+    await writeProjectLock(${JSON.stringify(root)}, { schemaVersion: 1, installs: ${JSON.stringify(installs)} })
+  `)
+  Expect(result.exitCode).toBe(0)
 }
