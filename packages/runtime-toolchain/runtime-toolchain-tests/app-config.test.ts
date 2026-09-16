@@ -12,7 +12,7 @@ type ExpoAppConfig = {
   }
   name: string
   plugins?: Array<string | [string, unknown]>
-  runtimeVersion?: { policy: 'fingerprint' }
+  runtimeVersion?: string
   slug: string
   splash?: { backgroundColor: string; image: string; resizeMode: string }
   updates?: {
@@ -54,7 +54,7 @@ const shipManifest: ShipManifest = {
   updates: {
     channel: 'wordflower-instantdb',
     runtimeFingerprint: 'native-fingerprint-1',
-    runtimeVersion: { policy: 'fingerprint' },
+    runtimeVersion: 'native-fingerprint-1',
     url: 'https://updates.tao-lang.org/v1/wordflower-instantdb',
   },
   version: '1.2.3',
@@ -111,7 +111,7 @@ Describe('Expo ship host configuration', () => {
         bundleIdentifier: 'lang.tao.wordflower.instantdb',
         config: { usesNonExemptEncryption: false },
       },
-      runtimeVersion: { policy: 'fingerprint' },
+      runtimeVersion: 'native-fingerprint-1',
       updates: {
         enabled: true,
         requestHeaders: { 'expo-channel-name': 'wordflower-instantdb' },
@@ -149,13 +149,34 @@ Describe('Expo ship host configuration', () => {
     Expect(config.updates).toBeUndefined()
   })
 
+  Test('omits an unproven export-compliance declaration', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-encryption-unknown-')
+    await FS.writeJson(
+      FS.resolvePath('_gen_tao-app/ship.json', projectRoot),
+      {
+        ...shipManifest,
+        ios: {},
+      } satisfies ShipManifest,
+    )
+
+    const config = createExpoAppConfig(fallbackConfig, projectRoot)
+
+    Expect(config.ios?.config).toEqual({})
+    Expect(config.ios?.config?.usesNonExemptEncryption).toBeUndefined()
+    Expect(Object.hasOwn(config.ios?.config ?? {}, 'usesNonExemptEncryption')).toBe(false)
+  })
+
   Test('applies the iCloud entitlement plugin with the manifest containers', async () => {
     const projectRoot = await mkTestDir('tao-app-config-icloud-')
     await FS.writeJson(
       FS.resolvePath('_gen_tao-app/ship.json', projectRoot),
       {
         ...shipManifest,
-        icloud: { containers: ['iCloud.lang.tao.wordflower'], services: ['CloudKit'] },
+        icloud: {
+          containers: ['iCloud.lang.tao.wordflower'],
+          documentContainers: [],
+          services: ['CloudKit'],
+        },
       } satisfies ShipManifest,
     )
 
@@ -163,7 +184,14 @@ Describe('Expo ship host configuration', () => {
 
     Expect(config.plugins).toEqual([
       './plugins/with-ios-fmt-compat.cjs',
-      ['tao-icloud-native', { containers: ['iCloud.lang.tao.wordflower'], services: ['CloudKit'] }],
+      [
+        'tao-icloud-native',
+        {
+          containers: ['iCloud.lang.tao.wordflower'],
+          documentContainers: [],
+          services: ['CloudKit'],
+        },
+      ],
     ])
   })
 

@@ -14,18 +14,19 @@ Describe('tao ship action list', () => {
   Test('lists a new App Store build in execution order', () => {
     const actions = planShipActions({ ...base, bump: { from: '1.2.2', to: '1.2.3' } })
     Expect(actions[0]).toContain('Bump project version')
+    Expect(actions.some(action => /commit|push|tag/iu.test(action))).toBe(false)
     Expect(actions).toContain('Prebuild the iOS project')
     Expect(actions.at(-1)).toContain('submit it for review')
   })
 
-  Test('lists beta recipients without tagging', () => {
+  Test('lists beta recipients without Git mutations', () => {
     const actions = planShipActions({
       ...base,
       betaRecipients: ['one@example.com', 'two@example.com'],
       bump: { from: '1.2.2', to: '1.2.3' },
       notes: 'Try editing a document',
     })
-    Expect(actions[1]).toBe('Commit the version bump')
+    Expect(actions.some(action => /commit|push|tag/iu.test(action))).toBe(false)
     Expect(actions.at(-2)).toContain('one@example.com, two@example.com')
     Expect(actions.at(-1)).toContain('Try editing a document')
   })

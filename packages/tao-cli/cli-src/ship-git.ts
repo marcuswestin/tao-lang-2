@@ -1,95 +1,72 @@
 import { CLI, Errors, FS } from '@shared'
+import { shipContentHash } from './ship-model'
 
 export type ShipGitState = {
   commit: string
   dirty: boolean
+  dirtyFingerprint?: string
   root?: string
+}
+
+export type InspectShipGitOptions = {
+  excludePaths?: readonly string[]
 }
 
 type GitRunner = typeof CLI.run
 
-export async function inspectShipGit(path: string, runner: GitRunner = CLI.run): Promise<ShipGitState> {
-  const rootResult = await runner('git', { args: ['-C', path, 'rev-parse', '--show-toplevel'] })
+/** inspectShipGit records an immutable commit plus an exact content identity for dirty provenance. */
+export async function inspectShipGit(
+  path: string,
+  options: InspectShipGitOptions = {},
+  runner: GitRunner = CLI.run,
+): Promise<ShipGitState> {
+  const rootResult = await runner('git', { args: ['--no-optional-locks', '-C', path, 'rev-parse', '--show-toplevel'] })
   if (rootResult.exitCode !== 0) {
     return { commit: 'unversioned', dirty: false }
   }
   const root = rootResult.stdout.trim()
-  const [commitResult, statusResult] = await Promise.all([
-    runner('git', { args: ['-C', root, 'rev-parse', 'HEAD'] }),
-    runner('git', { args: ['-C', root, 'status', '--porcelain=v1'] }),
-  ])
-  if (commitResult.exitCode !== 0 || statusResult.exitCode !== 0) {
-    Errors.throwHostEnvironment(`Git could not inspect ${root}.`)
+  const exclusions = await Promise.all(
+    options.excludePaths?.map(async item => FS.relativePath(root, await canonicalPotentialPath(item))) ?? [],
+  )
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const commitBefore = await gitHead(root, runner)
+    const first = await dirtySnapshot(root, exclusions, runner)
+    const second = await dirtySnapshot(root, exclusions, runner)
+    const commitAfter = await gitHead(root, runner)
+    if (commitBefore === commitAfter && first === second) {
+      return {
+        commit: commitAfter,
+        dirty: first !== undefined,
+        ...(first === undefined ? {} : { dirtyFingerprint: first }),
+        root,
+      }
+    }
   }
-  return { commit: commitResult.stdout.trim(), dirty: statusResult.stdout.trim().length > 0, root }
+  Errors.throwHostEnvironment(
+    'The Git working tree kept changing while tao ship recorded its provenance. Try again once writes settle.',
+  )
 }
 
-/** commitShipVersion records only Tao's version and lock writes. */
-export async function commitShipVersion(
-  state: ShipGitState,
-  paths: readonly string[],
-  version: string,
-  runner: GitRunner = CLI.run,
-): Promise<string> {
-  if (!state.root) {
-    return state.commit
+async function gitHead(root: string, runner: GitRunner): Promise<string> {
+  const result = await runner('git', { args: ['--no-optional-locks', '-C', root, 'rev-parse', 'HEAD'] })
+  if (result.exitCode !== 0) {
+    Errors.throwHostEnvironment(`Git could not inspect ${root}.`)
   }
-  const relativePaths = await Promise.all(
-    paths.map(async path => FS.relativePath(state.root!, await FS.realPath(path))),
-  )
-  await mustGit(runner, state.root, ['add', '--', ...relativePaths])
-  await mustGit(runner, state.root, [
-    'commit',
-    '-m',
-    `Bump app version to ${version}`,
-    '-m',
-    `- Update the authored Tao project version\n- Record accepted ship metadata and build state`,
-  ])
-  const result = await mustGit(runner, state.root, ['rev-parse', 'HEAD'])
   return result.stdout.trim()
 }
 
-/** commitShipState records Tao-owned accepted metadata or a completed checkpoint. */
-export async function commitShipState(
-  state: ShipGitState,
-  path: string,
-  message: string,
-  runner: GitRunner = CLI.run,
-): Promise<string> {
-  if (!state.root) {
-    return state.commit
-  }
-  const relativePath = FS.relativePath(state.root, await FS.realPath(path))
-  await mustGit(runner, state.root, ['add', '--', relativePath])
-  const staged = await runner('git', { args: ['-C', state.root, 'diff', '--cached', '--quiet', '--exit-code'] })
-  if (staged.exitCode === 0) {
-    return (await mustGit(runner, state.root, ['rev-parse', 'HEAD'])).stdout.trim()
-  }
-  if (staged.exitCode !== 1) {
-    Errors.throwHostEnvironment(`Git could not inspect the staged ship metadata: ${staged.stderr.trim()}`)
-  }
-  await mustGit(runner, state.root, ['commit', '-m', message])
-  return (await mustGit(runner, state.root, ['rev-parse', 'HEAD'])).stdout.trim()
-}
-
-export async function tagShipVersion(
-  state: ShipGitState,
-  version: string,
-  runner: GitRunner = CLI.run,
-): Promise<void> {
-  if (!state.root) {
-    return
-  }
-  const tag = `v${version}`
-  const existing = await runner('git', { args: ['-C', state.root, 'rev-parse', '-q', '--verify', `refs/tags/${tag}`] })
-  if (existing.exitCode === 0) {
-    const head = await mustGit(runner, state.root, ['rev-parse', 'HEAD'])
-    if (existing.stdout.trim() === head.stdout.trim()) {
-      return
+async function canonicalPotentialPath(inputPath: string): Promise<string> {
+  let existing = FS.resolvePath(inputPath)
+  const missingParts: string[] = []
+  while (!await FS.exists(existing)) {
+    const parent = FS.dirname(existing)
+    if (parent === existing) {
+      return FS.resolvePath(inputPath)
     }
-    Errors.throwUserInput(`Git tag ${tag} already exists at another commit. Choose a new project version.`)
+    missingParts.unshift(FS.basename(existing))
+    existing = parent
   }
-  await mustGit(runner, state.root, ['tag', tag])
+  return FS.resolvePath(missingParts.join('/'), await FS.realPath(existing))
 }
 
 export async function shipNotesSince(
@@ -109,42 +86,67 @@ export async function shipNotesSince(
     : 'New Tao app build.'
 }
 
-/** shipSourceMatchesBuild ignores only Tao's post-upload lock checkpoints when considering build reuse. */
-export async function shipSourceMatchesBuild(
-  state: ShipGitState,
-  sourceCommit: string,
-  lockPath: string,
-  runner: GitRunner = CLI.run,
-): Promise<boolean> {
-  if (state.dirty) {
-    return false
-  }
-  if (state.commit === sourceCommit) {
-    return true
-  }
-  if (!state.root) {
-    return false
-  }
-  const relativeLockPath = FS.relativePath(state.root, await FS.realPath(lockPath))
-  const result = await runner('git', {
-    args: [
-      '-C',
-      state.root,
-      'diff',
-      '--quiet',
-      `${sourceCommit}..HEAD`,
-      '--',
-      '.',
-      `:(exclude)${relativeLockPath}`,
-    ],
-  })
-  return result.exitCode === 0
+/** shipSourceMatchesBuild compares the commit and exact dirty bytes recorded for the built artifact. */
+export function shipSourceMatchesBuild(state: ShipGitState, built: ShipGitState): boolean {
+  return state.root !== undefined
+    && state.commit === built.commit
+    && state.dirty === built.dirty
+    && state.dirtyFingerprint === built.dirtyFingerprint
 }
 
-async function mustGit(runner: GitRunner, root: string, args: string[]) {
-  const result = await runner('git', { args: ['-C', root, ...args] })
-  if (result.error || result.exitCode !== 0) {
-    Errors.throwHostEnvironment(`Git failed: ${result.stderr.trim() || result.stdout.trim() || args.join(' ')}`)
+async function dirtySnapshot(
+  root: string,
+  exclusions: readonly string[],
+  runner: GitRunner,
+): Promise<string | undefined> {
+  const pathspec = ['--', '.', ...exclusions.map(path => `:(exclude)${path}`)]
+  const [status, diff, untracked] = await Promise.all([
+    runner('git', {
+      args: ['--no-optional-locks', '-C', root, 'status', '--porcelain=v1', '-z', '--untracked-files=all', ...pathspec],
+    }),
+    runner('git', {
+      args: [
+        '--no-optional-locks',
+        '-C',
+        root,
+        'diff',
+        'HEAD',
+        '--binary',
+        '--full-index',
+        '--no-ext-diff',
+        ...pathspec,
+      ],
+    }),
+    runner('git', {
+      args: ['--no-optional-locks', '-C', root, 'ls-files', '--others', '--exclude-standard', '-z', ...pathspec],
+    }),
+  ])
+  const failed = [status, diff, untracked].find(result => result.exitCode !== 0)
+  if (failed !== undefined) {
+    Errors.throwHostEnvironment(
+      `Git could not inspect the working tree at ${root}: ${failed.stderr.trim() || failed.stdout.trim()}`,
+    )
   }
-  return result
+  if (status.stdout.length === 0) {
+    return undefined
+  }
+  const parts: Array<string | Uint8Array> = ['status\0', status.stdout, '\0diff\0', diff.stdout]
+  const untrackedPaths = untracked.stdout.split('\0').filter(Boolean).toSorted()
+  for (const relativePath of untrackedPaths) {
+    const path = FS.resolvePath(relativePath, root)
+    const link = await runner('/usr/bin/readlink', { args: [path] })
+    if (link.exitCode === 0) {
+      parts.push('\0untracked-symlink\0', relativePath, '\0', link.stdout)
+    } else {
+      parts.push(
+        '\0untracked-file\0',
+        relativePath,
+        '\0mode\0',
+        (await FS.fileMode(path)).toString(8),
+        '\0',
+        await FS.readFile(path),
+      )
+    }
+  }
+  return shipContentHash(parts)
 }

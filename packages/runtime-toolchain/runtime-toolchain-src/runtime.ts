@@ -1,10 +1,16 @@
 import { AST } from '@parser'
 import { Assert, FS } from '@shared'
 import { Workspace } from '@workspace'
-import { proveReleaseBundle } from './release-bundle-proof'
+import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
-export { proveReleaseBundle, type ReleaseBundleProof } from './release-bundle-proof'
+export {
+  type ExpoUpdateArtifact,
+  type ExpoUpdateArtifacts,
+  expoUpdateArtifacts,
+  proveReleaseBundle,
+  type ReleaseBundleProof,
+} from './release-bundle-proof'
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
@@ -36,7 +42,7 @@ export type GenerateAppOptions = {
 export type ShipUpdatesConfig = {
   channel: string
   runtimeFingerprint: string
-  runtimeVersion: { policy: 'fingerprint' }
+  runtimeVersion: string
   url: string
 }
 
@@ -52,10 +58,12 @@ export type ShipManifest = {
   /** icloud names the containers and services an app bound to an Apple datasource is entitled to. */
   icloud?: {
     containers: readonly string[]
+    /** documentContainers is the subset mounted by the document datasource rather than CloudKit alone. */
+    documentContainers: readonly string[]
     services: ReadonlyArray<'CloudDocuments' | 'CloudKit'>
   }
   ios: {
-    usesNonExemptEncryption: false
+    usesNonExemptEncryption?: false
   }
   name: string
   schemaVersion: 1
@@ -189,6 +197,7 @@ async function resetStudioPreviewSession(opts: { runtimePackageRoot?: string } =
 /** Runtime exposes Expo runtime app generation functions. */
 const Runtime = {
   appNames,
+  expoUpdateArtifacts,
   generateApp,
   proveReleaseBundle,
   resetStudioPreviewSession,

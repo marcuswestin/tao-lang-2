@@ -54,25 +54,70 @@ app NotesInline = Notes with { Datasource ICloud { Container "iCloud.custom.note
 app NotesPatched = Notes with { Datasource with { Container "iCloud.patched.notes" } }
 app NotesTyped = Notes with { Datasource TypedCloud { } }
 app NotesKit = Notes with { Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
+app NotesBoth = Notes with {
+  Datasource { Documents, Records }
+}
 
 datasource NotesCloud = ICloud { StorageKey "Notes" }
+datasource Documents = ICloud { Container "iCloud.lang.tao.documents" }
+datasource Records = CloudKit { Container "iCloud.lang.tao.records" }
 type TypedCloud is ICloud with { Container is "iCloud.typed.notes" }
 view Main() { }
 `
     await withTaoFiles('tao-ship-icloud-', { 'App.tao': source }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)
       const icloudOf = (name: string) => project.apps.find(app => app.name === name)?.icloud
-      const documents = { services: ['CloudDocuments'] }
+      const documents = {
+        serviceBindings: [{ containers: [], service: 'CloudDocuments', usesDefaultContainer: true }],
+      }
 
       // A named declaration, an inherited variant, an inline construction, a patch of the base's
       // binding, and a reusable type all name the same provider.
       Expect(icloudOf('Notes')).toEqual(documents)
       Expect(icloudOf('NotesInherited')).toEqual(documents)
-      Expect(icloudOf('NotesInline')).toEqual({ ...documents, container: 'iCloud.custom.notes' })
-      Expect(icloudOf('NotesPatched')).toEqual({ ...documents, container: 'iCloud.patched.notes' })
-      Expect(icloudOf('NotesTyped')).toEqual({ ...documents, container: 'iCloud.typed.notes' })
+      Expect(icloudOf('NotesInline')).toEqual({
+        serviceBindings: [{
+          containers: ['iCloud.custom.notes'],
+          service: 'CloudDocuments',
+          usesDefaultContainer: false,
+        }],
+      })
+      Expect(icloudOf('NotesPatched')).toEqual({
+        serviceBindings: [{
+          containers: ['iCloud.patched.notes'],
+          service: 'CloudDocuments',
+          usesDefaultContainer: false,
+        }],
+      })
+      Expect(icloudOf('NotesTyped')).toEqual({
+        serviceBindings: [{
+          containers: ['iCloud.typed.notes'],
+          service: 'CloudDocuments',
+          usesDefaultContainer: false,
+        }],
+      })
       // CloudKit is the other Apple provider, and entitles its own service.
-      Expect(icloudOf('NotesKit')).toEqual({ container: 'iCloud.lang.tao.kitchen', services: ['CloudKit'] })
+      Expect(icloudOf('NotesKit')).toEqual({
+        serviceBindings: [{
+          containers: ['iCloud.lang.tao.kitchen'],
+          service: 'CloudKit',
+          usesDefaultContainer: false,
+        }],
+      })
+      Expect(icloudOf('NotesBoth')).toEqual({
+        serviceBindings: [
+          {
+            containers: ['iCloud.lang.tao.documents'],
+            service: 'CloudDocuments',
+            usesDefaultContainer: false,
+          },
+          {
+            containers: ['iCloud.lang.tao.records'],
+            service: 'CloudKit',
+            usesDefaultContainer: false,
+          },
+        ],
+      })
       // A variant that binds a device store mounts no Apple provider at all.
       Expect(icloudOf('NotesDevice')).toBeUndefined()
     })
@@ -105,7 +150,13 @@ view Main() { }
       // The Dev store is the second binding, and it still refuses to ship.
       Expect(reader.usesDevDatasource).toBe(true)
       // The Apple entitlement comes from the other binding.
-      Expect(reader.icloud).toEqual({ container: 'iCloud.lang.tao.reader', services: ['CloudKit'] })
+      Expect(reader.icloud).toEqual({
+        serviceBindings: [{
+          containers: ['iCloud.lang.tao.reader'],
+          service: 'CloudKit',
+          usesDefaultContainer: false,
+        }],
+      })
     })
   })
 

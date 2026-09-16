@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { createHash } from 'node:crypto'
 
 /** ShipVersion is the numeric SemVer core Apple accepts as a marketing version. */
@@ -55,6 +56,19 @@ export function timestampBuildNumber(date: Date): string {
   return digits.join('')
 }
 
+/** nextBuildNumber keeps timestamp-derived build numbers monotonic across local and remote history. */
+export function nextBuildNumber(minimum: string, usedNumbers: readonly string[]): string {
+  const minimumValue = numericBuildNumber(minimum)
+  const maximumUsed = usedNumbers.reduce<bigint | undefined>((maximum, candidate) => {
+    const value = numericBuildNumber(candidate, false)
+    if (value === undefined) {
+      return maximum
+    }
+    return maximum === undefined || value > maximum ? value : maximum
+  }, undefined)
+  return (maximumUsed !== undefined && maximumUsed >= minimumValue ? maximumUsed + 1n : minimumValue).toString()
+}
+
 /** deriveShipIdentity deterministically separates every non-primary app variant. */
 export function deriveShipIdentity(input: ShipIdentityInput): {
   bundleIdentifier: string
@@ -77,12 +91,33 @@ export function shipInputHash(input: unknown): string {
   return createHash('sha256').update(stableJson(input)).digest('hex')
 }
 
+/** shipContentHash derives a stable SHA-256 identity without exposing Node crypto across CLI modules. */
+export function shipContentHash(parts: readonly (string | Uint8Array)[]): string {
+  const hash = createHash('sha256')
+  for (const part of parts) {
+    hash.update(part)
+  }
+  return hash.digest('hex')
+}
+
 function bundleSegment(value: string): string {
   return value
     .normalize('NFKD')
     .toLowerCase()
     .replace(/[^a-z0-9-]+/gu, '-')
     .replace(/^-+|-+$/gu, '')
+}
+
+function numericBuildNumber(value: string): bigint
+function numericBuildNumber(value: string, required: false): bigint | undefined
+function numericBuildNumber(value: string, required = true): bigint | undefined {
+  if (!/^\d+$/u.test(value)) {
+    if (required) {
+      Errors.throwUnexpected(`Build number must contain only decimal digits: ${value}`)
+    }
+    return undefined
+  }
+  return BigInt(value)
 }
 
 function stableJson(value: unknown): string {

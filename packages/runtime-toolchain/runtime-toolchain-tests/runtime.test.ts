@@ -120,7 +120,7 @@ Describe('Tao runtime app generation', () => {
       updates: {
         channel: 'release-variant',
         runtimeFingerprint: 'native-fingerprint-1',
-        runtimeVersion: { policy: 'fingerprint' },
+        runtimeVersion: 'native-fingerprint-1',
         url: 'https://updates.tao-lang.org/v1/release-variant',
       },
       version: '1.2.3',
