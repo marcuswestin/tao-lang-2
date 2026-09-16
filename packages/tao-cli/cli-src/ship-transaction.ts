@@ -6,10 +6,16 @@ type LockOwner = {
   token: string
 }
 
+type ReclaimClaim = {
+  path: string
+  prefix: string
+  staleTarget: string
+}
+
 const ACQUIRE_POLL_MS = 25
 const ACQUIRE_TIMEOUT_MS = 30 * 60_000
 let staleUnlinkDelayForTestingMs = 0
-let afterStaleUnlinkForTesting: ((linkPath: string) => Promise<void>) | undefined
+let beforeStaleUnlinkForTesting: ((linkPath: string) => Promise<void>) | undefined
 
 /** withShipTransaction serializes complete ship runs for one Git repository across independent processes. */
 export async function withShipTransaction<T>(projectRoot: string, work: () => Promise<T>): Promise<T> {
@@ -31,37 +37,51 @@ async function withProjectLock<T>(projectRoot: string, name: string, work: () =>
   const linkPath = FS.resolvePath(`${name}.lock`, coordinationRoot)
   await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid, token } satisfies LockOwner)
   const deadline = Time.nowMs() + ACQUIRE_TIMEOUT_MS
-  while (true) {
-    try {
-      await FS.symlink(FS.basename(ownerPath), linkPath)
-      break
-    } catch (error) {
-      if (errorCode(error) !== 'EEXIST') {
-        await FS.remove(ownerPath).catch(() => {})
-        throw error
-      }
-      const staleTarget = await lockTarget(linkPath)
-      const owner = staleTarget === undefined ? undefined : await readOwner(staleTarget)
-      if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
-        if (staleTarget !== undefined) {
-          await reclaimStaleOwner(coordinationRoot, linkPath, name, staleTarget)
-        }
-        continue
-      }
-      if (Time.nowMs() >= deadline) {
-        await FS.remove(ownerPath).catch(() => {})
-        Errors.throwHostEnvironment(`Timed out waiting for another tao ship process in ${projectRoot}.`)
-      }
-      await Time.sleep(ACQUIRE_POLL_MS)
+  let reclaimClaim: ReclaimClaim | undefined
+  const releaseReclaimClaim = async (): Promise<void> => {
+    if (reclaimClaim) {
+      await FS.remove(reclaimClaim.path).catch(() => {})
+      reclaimClaim = undefined
     }
   }
-
   try {
-    return await work()
-  } finally {
-    if (await lockTarget(linkPath) === ownerPath) {
-      await FS.remove(linkPath)
+    while (true) {
+      try {
+        await FS.symlink(FS.basename(ownerPath), linkPath)
+        break
+      } catch (error) {
+        if (errorCode(error) !== 'EEXIST') {
+          throw error
+        }
+        const staleTarget = await lockTarget(linkPath)
+        const owner = staleTarget === undefined ? undefined : await readOwner(staleTarget)
+        if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
+          if (staleTarget !== undefined) {
+            if (reclaimClaim?.staleTarget !== staleTarget) {
+              await releaseReclaimClaim()
+              reclaimClaim = await createReclaimClaim(coordinationRoot, name, staleTarget)
+            }
+            await reclaimStaleOwner(coordinationRoot, linkPath, name, reclaimClaim)
+          }
+          continue
+        }
+        await releaseReclaimClaim()
+        if (Time.nowMs() >= deadline) {
+          Errors.throwHostEnvironment(`Timed out waiting for another tao ship process in ${projectRoot}.`)
+        }
+        await Time.sleep(ACQUIRE_POLL_MS)
+      }
     }
+    await releaseReclaimClaim()
+    try {
+      return await work()
+    } finally {
+      if (await lockTarget(linkPath) === ownerPath) {
+        await FS.remove(linkPath)
+      }
+    }
+  } finally {
+    await releaseReclaimClaim()
     await FS.remove(ownerPath).catch(() => {})
   }
 }
@@ -84,56 +104,67 @@ async function reclaimStaleOwner(
   coordinationRoot: string,
   linkPath: string,
   name: string,
-  staleTarget: string,
+  claim: ReclaimClaim,
 ): Promise<void> {
+  await Time.sleep(ACQUIRE_POLL_MS)
+  const liveClaims: string[] = []
+  for (const entry of await FS.listDir(coordinationRoot)) {
+    if (!entry.startsWith(claim.prefix)) {
+      continue
+    }
+    const candidate = FS.resolvePath(entry, coordinationRoot)
+    const owner = await readOwner(candidate)
+    if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
+      await FS.remove(candidate).catch(() => {})
+    } else {
+      liveClaims.push(candidate)
+    }
+  }
+  if (liveClaims.toSorted()[0] !== claim.path || await lockTarget(linkPath) !== claim.staleTarget) {
+    return
+  }
+  if (staleUnlinkDelayForTestingMs > 0) {
+    await Time.sleep(staleUnlinkDelayForTestingMs)
+  }
+  await beforeStaleUnlinkForTesting?.(linkPath)
+  // The election and the target observation are separate filesystem operations. Recheck at the
+  // destructive edge so a replacement installed while this claimant waited is never unlinked.
+  if (await lockTarget(linkPath) !== claim.staleTarget) {
+    return
+  }
+  await FS.remove(linkPath).catch(error => {
+    if (errorCode(error) !== 'ENOENT') {
+      throw error
+    }
+  })
+  if (
+    await lockTarget(linkPath) !== claim.staleTarget
+    && FS.dirname(claim.staleTarget) === coordinationRoot
+    && FS.basename(claim.staleTarget).startsWith(`${name}-`)
+  ) {
+    await FS.remove(claim.staleTarget).catch(() => {})
+  }
+}
+
+async function createReclaimClaim(
+  coordinationRoot: string,
+  name: string,
+  staleTarget: string,
+): Promise<ReclaimClaim> {
   const targetKey = FS.basename(staleTarget).replaceAll(/[^a-zA-Z0-9._-]/gu, '_')
-  const claimPrefix = `${name}-reclaim-${targetKey}-`
-  const claimPath = FS.resolvePath(
-    `${claimPrefix}${
-      String(Time.nowMs()).padStart(16, '0')
-    }-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`,
+  const prefix = `${name}-reclaim-${targetKey}-`
+  const path = FS.resolvePath(
+    `${prefix}${String(Time.nowMs()).padStart(16, '0')}-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`,
     coordinationRoot,
   )
   await FS.writeJson(
-    claimPath,
+    path,
     {
       pid: Platform.runtimeProcess.pid,
-      token: FS.basename(claimPath),
+      token: FS.basename(path),
     } satisfies LockOwner,
   )
-  try {
-    await Time.sleep(ACQUIRE_POLL_MS)
-    const liveClaims: string[] = []
-    for (const entry of await FS.listDir(coordinationRoot)) {
-      if (!entry.startsWith(claimPrefix)) {
-        continue
-      }
-      const candidate = FS.resolvePath(entry, coordinationRoot)
-      const owner = await readOwner(candidate)
-      if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
-        await FS.remove(candidate).catch(() => {})
-      } else {
-        liveClaims.push(candidate)
-      }
-    }
-    if (liveClaims.toSorted()[0] !== claimPath || await lockTarget(linkPath) !== staleTarget) {
-      return
-    }
-    if (staleUnlinkDelayForTestingMs > 0) {
-      await Time.sleep(staleUnlinkDelayForTestingMs)
-    }
-    await FS.remove(linkPath).catch(error => {
-      if (errorCode(error) !== 'ENOENT') {
-        throw error
-      }
-    })
-    await afterStaleUnlinkForTesting?.(linkPath)
-    if (FS.dirname(staleTarget) === coordinationRoot && FS.basename(staleTarget).startsWith(`${name}-`)) {
-      await FS.remove(staleTarget).catch(() => {})
-    }
-  } finally {
-    await FS.remove(claimPath).catch(() => {})
-  }
+  return { path, prefix, staleTarget }
 }
 
 async function lockTarget(linkPath: string): Promise<string | undefined> {
@@ -161,8 +192,8 @@ function errorCode(error: unknown): string | undefined {
 
 /** Narrow test seam for deterministically widening the stale-unlink replacement race. */
 export const ShipTransactionTesting = {
-  setAfterStaleUnlink(hook: ((linkPath: string) => Promise<void>) | undefined): void {
-    afterStaleUnlinkForTesting = hook
+  setBeforeStaleUnlink(hook: ((linkPath: string) => Promise<void>) | undefined): void {
+    beforeStaleUnlinkForTesting = hook
   },
   setStaleUnlinkDelay(ms: number): void {
     staleUnlinkDelayForTestingMs = ms

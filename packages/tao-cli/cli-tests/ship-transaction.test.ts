@@ -1,8 +1,7 @@
-import { CLI, FS, Platform } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { readProjectLock } from '../cli-src/ship-lock'
 import { shipContentHash } from '../cli-src/ship-model'
-import { ShipTransactionTesting, withShipTransaction } from '../cli-src/ship-transaction'
 
 const transactionModule = FS.resolvePath('packages/tao-cli/cli-src/ship-transaction.ts')
 const lockModule = FS.resolvePath('packages/tao-cli/cli-src/ship-lock.ts')
@@ -14,44 +13,69 @@ Describe('tao ship cross-process transactions', () => {
     const root = await mkTestDir('tao-ship-stale-transaction-')
     const repositoryKey = shipContentHash([await FS.realPath(root)])
     const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
-    let replacementInstalled = false
-    let replacementSurvived = false
     try {
-      ShipTransactionTesting.setStaleUnlinkDelay(50)
-      ShipTransactionTesting.setAfterStaleUnlink(async linkPath => {
-        if (replacementInstalled) {
-          return
-        }
-        replacementInstalled = true
-        const replacement = FS.resolvePath('ship-transaction-replacement.json', coordinationRoot)
-        await FS.writeJson(replacement, { pid: Platform.runtimeProcess.pid, token: 'replacement' })
-        await FS.symlink(FS.basename(replacement), linkPath)
-        await new Promise(resolve => setTimeout(resolve, 50))
-        const target = await CLI.run('/usr/bin/readlink', { args: [linkPath] })
-        replacementSurvived = target.stdout.trim() === FS.basename(replacement)
-        if (replacementSurvived) {
-          await FS.remove(linkPath)
-        }
-        await FS.remove(replacement)
-      })
       const ownerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
       await FS.writeJson(ownerPath, { pid: Number.MAX_SAFE_INTEGER, token: 'stale' })
       await FS.symlink(FS.basename(ownerPath), FS.resolvePath('ship-transaction.lock', coordinationRoot))
 
-      const entered: number[] = []
-      await Promise.all(Array.from({ length: 3 }, (_, index) =>
-        withShipTransaction(root, async () => {
-          entered.push(index)
-          await new Promise(resolve => setTimeout(resolve, 10))
-        })))
+      const results = await Promise.all(Array.from({ length: 3 }, (_, index) =>
+        runWorker(`
+          import { CLI, FS, Platform, Time } from ${JSON.stringify(sharedModule)}
+          import { ShipTransactionTesting, withShipTransaction } from ${JSON.stringify(transactionModule)}
+          const root = ${JSON.stringify(root)}
+          const coordinationRoot = ${JSON.stringify(coordinationRoot)}
+          const readyPath = FS.resolvePath(${JSON.stringify(`ready-${index}`)}, root)
+          let replacementCheck
+          ShipTransactionTesting.setStaleUnlinkDelay(75)
+          ShipTransactionTesting.setBeforeStaleUnlink(async linkPath => {
+            const replacement = FS.resolvePath(${
+          JSON.stringify(`ship-transaction-replacement-${index}.json`)
+        }, coordinationRoot)
+            const replacementLink = FS.resolvePath(${
+          JSON.stringify(`ship-transaction-replacement-${index}.lock`)
+        }, coordinationRoot)
+            await FS.writeJson(replacement, { pid: Platform.runtimeProcess.pid, token: 'replacement' })
+            await FS.symlink(FS.basename(replacement), replacementLink)
+            await FS.move(replacementLink, linkPath)
+            replacementCheck = (async () => {
+              await Time.sleep(100)
+              const target = await CLI.run('/usr/bin/readlink', { args: [linkPath] })
+              const survived = target.stdout.trim() === FS.basename(replacement)
+              await FS.writeJson(FS.resolvePath(${JSON.stringify(`replacement-${index}.json`)}, root), { survived })
+              if (survived) {
+                await FS.remove(linkPath)
+              }
+              await FS.remove(replacementLink)
+              await FS.remove(replacement)
+            })()
+          })
+          try {
+            await FS.writeText(readyPath, '')
+            while ((await FS.listDir(root)).filter(entry => entry.startsWith('ready-')).length < 3) {
+              await Time.sleep(5)
+            }
+            await withShipTransaction(root, async () => {
+              await FS.writeText(FS.resolvePath(${JSON.stringify(`entered-${index}`)}, root), '')
+              await Time.sleep(10)
+            })
+            await replacementCheck
+          } finally {
+            ShipTransactionTesting.setStaleUnlinkDelay(0)
+            ShipTransactionTesting.setBeforeStaleUnlink(undefined)
+          }
+        `)))
 
-      Expect(entered.toSorted()).toEqual([0, 1, 2])
-      Expect(replacementInstalled).toBe(true)
-      Expect(replacementSurvived).toBe(true)
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0])
+      Expect((await FS.listDir(root)).filter(entry => entry.startsWith('entered-')).toSorted()).toEqual([
+        'entered-0',
+        'entered-1',
+        'entered-2',
+      ])
+      const replacementResults = (await FS.listDir(root)).filter(entry => entry.startsWith('replacement-'))
+      Expect(replacementResults).toHaveLength(1)
+      Expect(await FS.readJson(FS.resolvePath(replacementResults[0]!, root))).toEqual({ survived: true })
       Expect(await FS.exists(FS.resolvePath('ship-transaction.lock', coordinationRoot))).toBe(false)
     } finally {
-      ShipTransactionTesting.setStaleUnlinkDelay(0)
-      ShipTransactionTesting.setAfterStaleUnlink(undefined)
       await FS.remove(coordinationRoot)
       await FS.remove(root)
     }
