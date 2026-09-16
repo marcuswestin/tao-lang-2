@@ -1,11 +1,11 @@
 import { CLI, Errors, FS } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { Android, type AndroidSession } from './android'
+import { Android, type AndroidSession, EXPO_GO_SDK_VERSION } from './android'
 import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { detectLanIPv4 } from './lan-host'
 import { ExpoMetro, type ExpoMetroSession } from './metro'
 
-const EXPO_GO_IOS_BUNDLE_ID = 'host.exp.Exponent'
+const unsupportedPhysicalIosSdk = EXPO_GO_SDK_VERSION.split('.')[0]
 
 /** DevicectlList is the `devicectl list devices` JSON shape this module reads. */
 export type DevicectlList = {
@@ -53,6 +53,11 @@ export type IosPhysicalDevice = {
   name: string
 }
 
+export type PhysicalDeviceDependencies = {
+  detectLanHost?: typeof detectLanIPv4
+  listIosDevices?: () => Promise<IosPhysicalDevice[]>
+}
+
 /** expoGoUrl builds the Expo Go deep link for a reachable Metro host. */
 export function expoGoUrl(host: string, port: number = ExpoConfig.EXPO_PORT): string {
   return `exp://${host}:${port}`
@@ -78,28 +83,40 @@ export function iosPhysicalDevicesFromDevicectl(payload: DevicectlList): IosPhys
   })
 }
 
-/** openPhysicalDevice installs or opens Expo Go on every connected phone. */
+/** physicalIosUnsupportedMessage explains why the generic iOS target is deliberately unavailable. */
+export function physicalIosUnsupportedMessage(device: IosPhysicalDevice): string {
+  return `Cannot open this Tao app on ${device.name}: App Store Expo Go does not support Expo SDK ${unsupportedPhysicalIosSdk}. Use Android Expo Go or an iOS Simulator; physical iOS needs a maintained Tao development client.`
+}
+
+/** openPhysicalDevice opens compatible Android phones and truthfully rejects generic physical iOS. */
 export async function openPhysicalDevice(
   config: ExpoSessionConfig = ExpoConfig,
   metro: ExpoMetroSession = ExpoMetro,
   android: AndroidSession = Android,
+  dependencies: PhysicalDeviceDependencies = {},
 ): Promise<boolean> {
   await metro.waitForMetro()
-  const host = await detectLanIPv4()
-  const lanUrl = expoGoUrl(host, config.EXPO_PORT)
-  const iosDevices = await listIosPhysicalDevices()
+  const iosDevices = await (dependencies.listIosDevices ?? listIosPhysicalDevices)()
   const androidSerials = await listAndroidPhysicalDevices(android)
   if (iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopTUI.logDevLoop(
       'dev',
-      `No connected physical device. Install Expo Go, then open ${lanUrl} on the phone.`,
+      `No connected physical device. Connect Android with compatible Expo Go, or use an iOS Simulator; generic physical iOS is unsupported for Expo SDK ${unsupportedPhysicalIosSdk}.`,
       'warn',
     )
     return false
   }
 
+  for (const device of iosDevices) {
+    DevLoopTUI.logDevLoop('dev', physicalIosUnsupportedMessage(device), 'warn')
+  }
+  if (androidSerials.length === 0) {
+    return false
+  }
+
+  const host = await (dependencies.detectLanHost ?? detectLanIPv4)()
+  const lanUrl = expoGoUrl(host, config.EXPO_PORT)
   const opened = [
-    ...await Promise.all(iosDevices.map(device => openIosExpoGo(device, lanUrl))),
     ...await Promise.all(androidSerials.map(serial => openAndroidExpoGo(config, android, serial, lanUrl))),
   ]
   return opened.some(Boolean)
@@ -186,32 +203,6 @@ async function listAndroidPhysicalDevices(android: AndroidSession): Promise<stri
     }
     throw error
   }
-}
-
-async function openIosExpoGo(device: IosPhysicalDevice, url: string): Promise<boolean> {
-  const result = await CLI.run('xcrun', {
-    args: [
-      'devicectl',
-      'device',
-      'process',
-      'launch',
-      '--device',
-      device.id,
-      '--payload-url',
-      url,
-      EXPO_GO_IOS_BUNDLE_ID,
-    ],
-  })
-  if (result.error !== undefined || result.exitCode !== 0) {
-    DevLoopTUI.logDevLoop(
-      'dev',
-      `Could not open Expo Go on ${device.name}. Install Expo Go from the App Store, then open ${url}.`,
-      'warn',
-    )
-    return false
-  }
-  DevLoopTUI.logDevLoop('dev', `opened Expo Go on ${device.name} at ${url}`)
-  return true
 }
 
 async function openAndroidExpoGo(

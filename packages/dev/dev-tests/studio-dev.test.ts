@@ -443,13 +443,13 @@ Describe('Studio native wrapper foundation', () => {
         args: ['install'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
       {
         args: ['electrobun', 'prepare'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
     ])
   })

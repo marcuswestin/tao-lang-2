@@ -4,15 +4,27 @@ import { createServer } from 'node:net'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
 import { createDevLoopExpoSession } from '../dev-src/expo-dev-loop/expo-dev-loop'
+import {
+  createAndroid,
+  expoGoSupportsSdk,
+  expoGoVersionFromPackageInfo,
+} from '../dev-src/expo-dev-loop/expo-runner/android'
 import { createExpoConfig } from '../dev-src/expo-dev-loop/expo-runner/expo-config'
 import { ExpoServer, formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
-import { type ExpoFetch, expoRuntimeLink, fetchExpoOpenEndpoint } from '../dev-src/expo-dev-loop/expo-runner/metro'
+import {
+  type ExpoFetch,
+  type ExpoMetroSession,
+  expoRuntimeLink,
+  fetchExpoOpenEndpoint,
+} from '../dev-src/expo-dev-loop/expo-runner/metro'
 import {
   devicectlFailure,
   expoGoUrl,
   iosPhysicalDevicesFromDevicectl,
+  openPhysicalDevice,
+  physicalIosUnsupportedMessage,
   runDevicectlJson,
 } from '../dev-src/expo-dev-loop/expo-runner/physical-device'
 import { simulatorOpenFailure } from '../dev-src/expo-dev-loop/expo-runner/run-targets'
@@ -95,6 +107,32 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(commands).toEqual([
       ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
       ['open', 'devices://device/open?id=SIM%20PRO%2F27'],
+    ])
+  })
+
+  Test('falls back to opening Device Hub when its simulator-selection URL is not registered', async () => {
+    const commands: string[][] = []
+    const run = (async (command: string, spec: CLI.CommandSpec) => {
+      commands.push([command, ...(spec.args ?? [])])
+      return commands.length < 3
+        ? {
+          error: new Errors.HostEnvironmentError('simulator presentation unavailable'),
+          exitCode: 1,
+          signal: null,
+          stderr: '',
+          stdout: '',
+        }
+        : { exitCode: 0, signal: null, stderr: '', stdout: '' }
+    }) as typeof CLI.run
+
+    const presented = await presentIosSimulator('SIM-27', run)
+
+    Expect(presented.host).toBe('Device Hub')
+    Expect(presented.result.exitCode).toBe(0)
+    Expect(commands).toEqual([
+      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-27'],
+      ['open', 'devices://device/open?id=SIM-27'],
+      ['open', '-a', 'DeviceHub'],
     ])
   })
 
@@ -444,6 +482,93 @@ en7: flags=8863
 
   Test('builds an Expo Go URL for the detected host', () => {
     Expect(expoGoUrl('169.254.37.4')).toBe('exp://169.254.37.4:8081')
+  })
+
+  Test('rejects App Store Expo Go on a generic physical iPhone for Expo 57', () => {
+    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'roPhone' })
+
+    Expect(message).toBe(
+      'Cannot open this Tao app on roPhone: App Store Expo Go does not support Expo SDK 57. '
+        + 'Use Android Expo Go or an iOS Simulator; physical iOS needs a maintained Tao development client.',
+    )
+  })
+
+  Test('rejects a physical iPhone through the production target without probing LAN or launching Expo Go', async () => {
+    const config = createExpoConfig(8_099)
+    const android = createAndroid(config, {} as ExpoMetroSession, {
+      requireAdb: async () => {},
+    })
+    android.listPhysicalDevices = async () => []
+    let lanLookups = 0
+    const captured = await withCapturedOutput(() =>
+      openPhysicalDevice(
+        config,
+        { waitForMetro: async () => {} } as unknown as ExpoMetroSession,
+        android,
+        {
+          detectLanHost: async () => {
+            lanLookups += 1
+            return '192.168.1.20'
+          },
+          listIosDevices: async () => [{ id: 'PHONE-1', name: 'roPhone' }],
+        },
+      )
+    )
+
+    Expect(captured.result).toBe(false)
+    Expect(lanLookups).toBe(0)
+    const output = `${captured.stdout}${captured.stderr}`
+    Expect(output).toContain('App Store Expo Go does not support Expo SDK 57')
+    Expect(output).not.toContain('opened Expo Go')
+  })
+
+  Test('accepts only Android Expo Go clients from the configured SDK generation', () => {
+    const packageInfo = `
+      Packages:
+        Package [host.exp.exponent]
+          versionCode=5700009 minSdk=24 targetSdk=36
+          versionName=57.0.9
+    `
+    const version = expoGoVersionFromPackageInfo(packageInfo)
+
+    Expect(version).toBe('57.0.9')
+    Expect(expoGoSupportsSdk(version)).toBe(true)
+    Expect(expoGoSupportsSdk('56.0.8')).toBe(false)
+    Expect(expoGoSupportsSdk(undefined)).toBe(false)
+  })
+
+  Test('replaces stale Expo Go and blocks it from the prepared Android production paths', async () => {
+    const config = createExpoConfig(8_099)
+    let installedVersion: string | undefined = '56.0.8'
+    const installs: string[] = []
+    const reversed: string[] = []
+    const android = createAndroid(config, {} as ExpoMetroSession, {
+      findRunningEmulator: async () => 'emulator-5554',
+      installExpoGo: async serial => {
+        installs.push(serial)
+      },
+      installedExpoGoVersion: async () => installedVersion,
+      isEmulatorBooted: async () => true,
+      requireAdb: async () => {},
+      reverseMetroPort: async (_config, serial) => {
+        reversed.push(serial)
+        return true
+      },
+    })
+
+    await withCapturedOutput(() => android.ensureExpoGoOnSerial('phone-1'))
+    Expect(installs).toEqual(['phone-1'])
+
+    const stalePrepared = await withCapturedOutput(() => android.prepareAvailableExpoGo())
+    Expect(stalePrepared.result).toBe(false)
+    Expect(stalePrepared.stdout).toContain('does not support SDK 57.0.0')
+    Expect(reversed).toEqual([])
+
+    installedVersion = '57.0.9'
+    await withCapturedOutput(() => android.ensureExpoGoOnSerial('phone-2'))
+    Expect(installs).toEqual(['phone-1'])
+    Expect((await withCapturedOutput(() => android.prepareAvailableExpoGo())).result).toBe(true)
+    Expect(reversed).toEqual(['emulator-5554'])
   })
 
   Test('reads a devicectl JSON report through a temporary file and removes the file afterwards', async () => {
