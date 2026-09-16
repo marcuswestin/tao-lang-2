@@ -1,8 +1,11 @@
 import { FS } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
+import { GreenTree } from '../dev-src/repository-tests/GreenTree'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
 import { classifyFailure, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
+import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
 
@@ -192,6 +195,62 @@ Describe('repository gate runner', () => {
       const latest = FS.resolvePath('.artifacts/logs/check/latest', root)
       Expect(await FS.realPath(latest)).toBe(await FS.realPath(summary.logRoot))
       Expect(await FS.readText(FS.resolvePath('repo-lint.log', latest))).toBe('lint ok\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('publishes a gate log as that gate finishes, before the lane finishes', async () => {
+    const root = await mkTestDir('tao-gate-runner-live-log-')
+    const held = Deferred()
+    try {
+      const finished = runGates({
+        gates: ['first', 'held'],
+        jobs: 2,
+        logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async name => {
+          if (name === 'held') {
+            await held.promise
+          }
+          return { exitCode: 0, output: `${name} output\n` }
+        },
+      })
+
+      const firstLog = FS.resolvePath('logs/first.log', root)
+      await until(() => FS.isFile(firstLog), { description: 'the completed gate log to be published' })
+      Expect(await FS.readText(firstLog)).toBe('first output\n')
+      Expect(await FS.isFile(FS.resolvePath('logs/summary.json', root))).toBe(false)
+
+      held.resolve()
+      Expect((await finished).status).toBe('passed')
+    } finally {
+      held.resolve()
+      await FS.remove(root)
+    }
+  })
+
+  Test('forwards completion only after the announced log path is readable', async () => {
+    const root = await mkTestDir('tao-gate-runner-log-order-')
+    try {
+      const location = RunArtifacts.locate({ lane: 'verify', logRoot: 'logs', repositoryRoot: root })
+      const state = WorkGraph.createState({ name: 'gate', run: { args: [], command: 'true' } })
+      state.fullOutput = 'finished\n'
+      state.status = 'passed'
+      await RunArtifacts.assignLogPaths([state], location)
+      let readableWhenForwarded = false
+      const writer = RunArtifacts.liveWriter(location, event => {
+        if (event.kind === 'complete') {
+          readableWhenForwarded = state.logPath !== undefined && FS.existsSync(state.logPath)
+        }
+      })
+
+      writer.handle({ kind: 'complete', state })
+      await writer.finish()
+
+      Expect(readableWhenForwarded).toBe(true)
+      Expect(await FS.readText(state.logPath!)).toBe('finished\n')
     } finally {
       await FS.remove(root)
     }
@@ -449,6 +508,78 @@ Describe('gate runner green trees', () => {
       Expect(fresh.started.length).toBe(2)
       Expect(fresh.summary.greenTree).toBeUndefined()
       Expect((await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })).started).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects a run whose tree changes after the pre-run snapshot', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-drift-')
+    const hashes = ['tree-before', 'tree-after']
+    try {
+      const summary = await runGates({
+        gates: ['_repo-lint'],
+        greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
+        logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+
+      Expect(summary.status).toBe('failed')
+      Expect(summary.warnings).toContain(
+        'working tree changed while verification was running; this run is not green evidence',
+      )
+      Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('snapshots after mutating gates settle and before reader gates start', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-mutator-')
+    const hashes = ['before-fix', 'after-fix', 'after-fix']
+    const started: string[] = []
+    try {
+      const summary = await runGates({
+        gates: ['_fix-dprint', '_repo-lint'],
+        greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
+        logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async name => {
+          started.push(name)
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(started).toEqual(['_fix-dprint', '_repo-lint'])
+      Expect(summary.status).toBe('passed')
+      Expect((await GreenTree.load(root)).lanes['verify']?.treeHash).toBe('after-fix')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a failed mutating gate prevents every reader from running', async () => {
+    const root = await mkTestDir('tao-gate-runner-mutator-failure-')
+    const started: string[] = []
+    try {
+      const summary = await runGates({
+        gates: ['_fix-dprint', '_repo-lint'],
+        logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async name => {
+          started.push(name)
+          return { exitCode: name === '_fix-dprint' ? 1 : 0, output: '' }
+        },
+      })
+
+      Expect(started).toEqual(['_fix-dprint'])
+      Expect(summary.status).toBe('failed')
+      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.status).toBe('skipped')
+      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.reason).toContain('dependency failed')
     } finally {
       await FS.remove(root)
     }

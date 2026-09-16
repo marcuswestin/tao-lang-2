@@ -50,11 +50,6 @@ const WORKFLOW_PATHS = [
   'agent',
   'dev',
   'tao',
-  'package.json',
-  'bun.lock',
-  'devenv.nix',
-  'devenv.yaml',
-  'devenv.lock',
   '.envrc',
 ]
 const WORKFLOW_PREFIXES = [
@@ -69,7 +64,20 @@ const WORKFLOW_PREFIXES = [
 ]
 /** Paths no suite executes; the lint and format gates own them. */
 const DOCUMENTATION_PATTERN = /(^|\/)(LICENSE|\.gitignore|\.gitattributes|\.editorconfig)$|\.md$|^Docs\//
-const EVERYTHING_PATHS = new Set(['packages/tsconfig.base.json'])
+const EVERYTHING_PATHS = new Set([
+  'bun.lock',
+  'devenv.lock',
+  'devenv.nix',
+  'devenv.yaml',
+  'package.json',
+  'packages/tsconfig.base.json',
+])
+
+/** packageTestSuite mirrors the package-suite registry's exact test-file shape. */
+function packageTestSuite(path: string): string | undefined {
+  const match = /^packages\/([^/]+)\/[^/]+-tests\/[^/]+\.test\.ts$/.exec(path)
+  return match?.[1]
+}
 
 /** changedSelection resolves the comparison once so every runner receives exactly the same ref. */
 async function changedSelection(
@@ -149,10 +157,11 @@ function planChangedSuites(
   const selected = new Map<string, string>()
   const changedPackages = new Map<string, string>()
   const appPaths = new Map<string, string>()
+  let appSourcesChanged = false
   let everything: string | undefined
 
   for (const path of paths) {
-    if (EVERYTHING_PATHS.has(path)) {
+    if (EVERYTHING_PATHS.has(path) || path.startsWith('devenv.')) {
       everything ??= path
       continue
     }
@@ -166,10 +175,10 @@ function planChangedSuites(
         everything ??= path
       } else if (name === 'dev' && rest.startsWith('performance-checks/')) {
         selected.set(PERFORMANCE_CHECKS, 'changed test file')
-      } else if (new RegExp(`^${name}-tests/[^/]+\\.test\\.ts$`).test(rest)) {
-        selected.set(name, 'changed test file')
       } else if (name === 'runtime-toolchain' && /^runtime-toolchain-tests\/[^/]+\.jest-test\.tsx?$/.test(rest)) {
         selected.set(RUNTIME_JEST, 'changed test file')
+      } else if (packageTestSuite(path) === name) {
+        selected.set(name, 'changed test file')
       } else {
         changedPackages.set(name, path)
       }
@@ -182,14 +191,16 @@ function planChangedSuites(
       const segments = path.split('/')
       const root = segments.length >= 3 ? `Apps/${segments[1]}` : ALL_APPS
       appPaths.set(root, `${root} changed`)
+      appSourcesChanged = true
       continue
     }
     if (path.endsWith('.tao')) {
       appPaths.set(ALL_APPS, `${path} changed outside Apps/`)
+      appSourcesChanged = true
       continue
     }
     if (WORKFLOW_PATHS.includes(path) || WORKFLOW_PREFIXES.some(prefix => path.startsWith(prefix))) {
-      changedPackages.set('dev', path)
+      selected.set('dev', 'repository workflow changed')
       continue
     }
     if (DOCUMENTATION_PATTERN.test(path)) {
@@ -200,6 +211,10 @@ function planChangedSuites(
 
   // Affected packages arrive nearest-first, so the first reason to reach the apps or the
   // performance checks is the most direct one and the one worth printing.
+  const appAffectedPackages = new Set(
+    PackageGraph.affected(graph, [...changedPackages.keys()].filter(name => name !== 'dev'))
+      .map(entry => entry.package),
+  )
   for (const { package: name, reason } of PackageGraph.affected(graph, changedPackages.keys())) {
     if (inventory.packageSuites.includes(name)) {
       selected.set(name, reason)
@@ -212,7 +227,7 @@ function planChangedSuites(
     ) {
       selected.set(PERFORMANCE_CHECKS, `${name} ${reason}`)
     }
-    if (TAO_APPS_PACKAGES.has(name) && !appPaths.has(ALL_APPS)) {
+    if (TAO_APPS_PACKAGES.has(name) && appAffectedPackages.has(name) && !appPaths.has(ALL_APPS)) {
       appPaths.clear()
       appPaths.set(ALL_APPS, `${name} ${reason}`)
     }
@@ -231,6 +246,16 @@ function planChangedSuites(
 
   let taoAppPaths: string[] | undefined
   if (appPaths.size > 0 && inventory.hasTaoApps) {
+    if (appSourcesChanged) {
+      for (const suite of ['formatter', 'runtime-toolchain']) {
+        if (inventory.packageSuites.includes(suite)) {
+          selected.set(suite, 'reads Tao app sources')
+        }
+      }
+      if (inventory.hasRuntimeJest) {
+        selected.set(RUNTIME_JEST, 'reads Tao app sources')
+      }
+    }
     taoAppPaths = appPaths.has(ALL_APPS) ? [ALL_APPS] : [...appPaths.keys()].sort()
     selected.set(TAO_APPS, appPaths.get(ALL_APPS) ?? taoAppPaths.map(root => `${root} changed`).join(', '))
   }
@@ -255,5 +280,6 @@ function allSuiteNames(inventory: SuiteInventory): string[] {
 export const TestSelection = {
   ALL_APPS,
   changedSelection,
+  packageTestSuite,
   planChangedSuites,
 } as const

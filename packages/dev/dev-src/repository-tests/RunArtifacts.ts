@@ -1,6 +1,6 @@
 import { FS, Platform, Repo } from '@shared'
 import { RunTimings } from './RunTimings'
-import { WorkGraph, type WorkState } from './WorkGraph'
+import { type WorkEvent, WorkGraph, type WorkState } from './WorkGraph'
 
 /**
  * Every lane leaves the same trail: `.artifacts/logs/<lane>/<stamp>/` with one `<node>.log` per
@@ -34,6 +34,12 @@ export type FinishRunOptions = {
   summary: unknown
 }
 
+/** LiveRunWriter publishes a completed node's log before its reporter announces the path. */
+export type LiveRunWriter = {
+  finish: () => Promise<void>
+  handle: (event: WorkEvent) => void
+}
+
 const SUMMARY_FILE = 'summary.json'
 const LATEST_LINK = 'latest'
 
@@ -64,13 +70,37 @@ async function assignLogPaths(states: readonly WorkState[], location: RunLocatio
   }
 }
 
+/**
+ * liveWriter forwards progress immediately, except completion: that event is forwarded only after
+ * the node's log exists. A quiet reporter can therefore print a path another process can open at
+ * that moment, even while the rest of the lane is still running.
+ */
+function liveWriter(location: RunLocation, forward: (event: WorkEvent) => void): LiveRunWriter {
+  const writes: Promise<void>[] = []
+  return {
+    finish: async () => await Promise.all(writes).then(() => {}),
+    handle: event => {
+      if (event.kind !== 'complete') {
+        forward(event)
+        return
+      }
+      writes.push(writeCompletedLog(event.state, location).then(() => forward(event)))
+    },
+  }
+}
+
+async function writeCompletedLog(state: WorkState, location: RunLocation): Promise<void> {
+  await FS.mkdir(location.logRoot)
+  if (state.logPath !== undefined) {
+    await FS.writeText(state.logPath, state.fullOutput)
+  }
+}
+
 /** finishRun writes the node logs, the summary, the `latest` link, and this run's timings. */
 async function finishRun(options: FinishRunOptions): Promise<string> {
   await FS.mkdir(options.location.logRoot)
   await Promise.all(options.states.map(async state => {
-    if (state.logPath !== undefined) {
-      await FS.writeText(state.logPath, state.fullOutput)
-    }
+    await writeCompletedLog(state, options.location)
     const initialAttempt = state.attempts?.[0]
     if (initialAttempt !== undefined) {
       const initialPath = FS.resolvePath(
@@ -127,6 +157,7 @@ export const RunArtifacts = {
   SUMMARY_FILE,
   assignLogPaths,
   finishRun,
+  liveWriter,
   locate,
   writeSummaryCopy,
 } as const

@@ -44,7 +44,7 @@ const DIAGNOSTIC_PATTERN = /^\S+\.langium:\d+:\d+ - .+$/
 const STAMP_PATH = '.artifacts/parser-generate-stamp.json'
 
 /** The stamp layout. An older or unreadable stamp is treated as stale, never as an error. */
-const STAMP_VERSION = 2
+const STAMP_VERSION = 3
 
 /** Langium's configuration file, which is both an input to generation and the list of outputs. */
 const LANGIUM_CONFIG = 'langium-config.json'
@@ -209,10 +209,9 @@ async function parserGenerateIsUpToDate(
       return false
     }
   }
-  // Existence is not enough. The generated tree is ignored by Git, so it does not move with a
-  // branch while the stamp beside it does: switching branches can leave output built from another
-  // branch's grammar, which the input hash alone would certify as current. Hashing what was
-  // actually written is what catches that.
+  // Existence is not enough: an interrupted tool or manual edit can corrupt generated parser
+  // output without changing its inputs. Hash only generator-owned output inside the parser package;
+  // downstream builds deliberately post-process external products such as the IDE grammar.
   if (await parserGenerateOutputHash(parserRoot) !== stamp.outputsHash) {
     return false
   }
@@ -222,7 +221,7 @@ async function parserGenerateIsUpToDate(
 /** parserGenerateOutputHash hashes the generated files themselves, in a stable order. */
 export async function parserGenerateOutputHash(parserRoot: string): Promise<string> {
   const entries: string[] = []
-  for (const path of await generatedFilePaths(parserRoot)) {
+  for (const path of (await generatedFilePaths(parserRoot)).filter(path => FS.pathIsWithin(path, parserRoot))) {
     entries.push(`${FS.relativePath(parserRoot, path)}\n${hashContent(await FS.readFile(path))}`)
   }
   return hashContent(entries.join('\n'))

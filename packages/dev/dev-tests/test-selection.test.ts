@@ -12,6 +12,7 @@ const graph: PackageGraph = {
   imports: new Map<string, ReadonlySet<string>>([
     ['compiler', new Set(['parser', 'shared'])],
     ['dev', new Set(['shared'])],
+    ['formatter', new Set()],
     ['parser', new Set(['shared'])],
     ['runtime', new Set()],
     ['runtime-toolchain', new Set(['runtime', 'shared'])],
@@ -24,6 +25,7 @@ const graph: PackageGraph = {
   packages: [
     'compiler',
     'dev',
+    'formatter',
     'parser',
     'runtime',
     'runtime-toolchain',
@@ -42,6 +44,7 @@ const inventory: SuiteInventory = {
   packageSuites: [
     'compiler',
     'dev',
+    'formatter',
     'parser',
     'runtime',
     'runtime-toolchain',
@@ -122,6 +125,8 @@ Describe('changed suite plan', () => {
 
   Test('a changed test file selects only the suite that runs it', () => {
     Expect([...plan(['packages/shared/shared-tests/FS.test.ts']).selected.keys()]).toEqual(['shared'])
+    Expect([...plan(['packages/runtime/TR-tests/TR.test.ts']).selected.keys()]).toEqual(['runtime'])
+    Expect([...plan(['packages/tao-cli/cli-tests/cli.test.ts']).selected.keys()]).toEqual(['tao-cli'])
     Expect([...plan(['packages/runtime-toolchain/runtime-toolchain-tests/nav.jest-test.tsx']).selected.keys()])
       .toEqual(['runtime-jest'])
     Expect([...plan(['packages/dev/performance-checks/language-performance.test.ts']).selected.keys()])
@@ -136,14 +141,14 @@ Describe('changed suite plan', () => {
     Expect(result.taoAppPaths).toEqual(['Apps'])
   })
 
-  Test('an app change runs the Tao behavior tests under that app only', () => {
+  Test('an app change runs its behavior tests and every suite that reads app sources', () => {
     const result = plan([
       'Apps/WordFlower/1 - Current/Tests/Login.tao',
       'Apps/Skillet/Skillet.tao',
       'Apps/WordFlower/README.md',
     ])
 
-    Expect([...result.selected.keys()]).toEqual(['tao-apps'])
+    Expect([...result.selected.keys()]).toEqual(['formatter', 'runtime-toolchain', 'runtime-jest', 'tao-apps'])
     Expect(result.taoAppPaths).toEqual(['Apps/Skillet', 'Apps/WordFlower'])
     Expect(result.selected.get('tao-apps')).toBe('Apps/Skillet changed, Apps/WordFlower changed')
   })
@@ -164,11 +169,20 @@ Describe('changed suite plan', () => {
       ]
     ) {
       const result = plan([path])
-      Expect(result.selected.get('dev')).toBe('changed directly')
+      Expect(result.selected.get('dev')).toBe('repository workflow changed')
       Expect(result.everything).toBeUndefined()
     }
-    // `tao-cli` imports `dev`, so a workflow change also reaches the CLI and, through it, the apps.
-    Expect(plan(['Justfile']).selected.get('tao-cli')).toBe('imports dev')
+    Expect([...plan(['Justfile']).selected.keys()]).toEqual(['dev'])
+    Expect(plan(['packages/dev/dev-src/dev.ts']).selected.has('tao-apps')).toBe(false)
+  })
+
+  Test('root dependency and toolchain files widen to every suite', () => {
+    for (const path of ['package.json', 'bun.lock', 'devenv.nix', 'devenv.yaml', 'devenv.lock', 'devenv.local.nix']) {
+      const result = plan([path])
+      Expect(result.everything).toBe(path)
+      Expect(result.selected.size).toBe(inventory.packageSuites.length + 3)
+      Expect(result.taoAppPaths).toEqual(['Apps'])
+    }
   })
 
   Test('documentation selects nothing', () => {

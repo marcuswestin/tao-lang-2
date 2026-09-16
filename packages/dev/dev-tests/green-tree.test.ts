@@ -14,6 +14,11 @@ async function repository(): Promise<string> {
   await git(root, 'config', 'user.email', 'tests@example.invalid')
   await git(root, 'config', 'user.name', 'Tests')
   await FS.writeText(FS.resolvePath('tracked.txt', root), 'one\n')
+  await FS.writeText(FS.resolvePath('script.sh', root), '#!/bin/sh\necho tao\n')
+  await FS.chmod(FS.resolvePath('script.sh', root), 0o755)
+  await FS.writeText(FS.resolvePath('target-one.txt', root), 'same target bytes\n')
+  await FS.writeText(FS.resolvePath('target-two.txt', root), 'same target bytes\n')
+  await FS.symlink('target-one.txt', FS.resolvePath('current-target', root))
   await FS.writeText(FS.resolvePath('.gitignore', root), 'ignored/\n')
   await git(root, 'add', '.')
   await git(root, 'commit', '--quiet', '--message', 'initial')
@@ -40,11 +45,44 @@ Describe('green tree records', () => {
       await FS.writeText(FS.resolvePath('new.txt', root), 'changed\n')
       Expect(await GreenTree.hashTree(root)).not.toBe(withUntracked)
 
+      // Moving the exact same bytes from the diff into HEAD does not change the visible tree.
+      const beforeCommit = await GreenTree.hashTree(root)
+      await git(root, 'add', '.')
+      await git(root, 'commit', '--quiet', '--message', 'same visible tree')
+      Expect(await GreenTree.hashTree(root)).toBe(beforeCommit)
+
       // An ignored file is derived state and never part of the identity.
       await FS.mkdir(FS.resolvePath('ignored', root))
       const before = await GreenTree.hashTree(root)
       await FS.writeText(FS.resolvePath('ignored/output.txt', root), 'anything\n')
       Expect(await GreenTree.hashTree(root)).toBe(before)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('the tree hash includes Git-visible executable and symlink modes', async () => {
+    const root = await repository()
+    try {
+      const clean = await GreenTree.hashTree(root)
+
+      await FS.chmod(FS.resolvePath('script.sh', root), 0o644)
+      Expect(await git(root, 'status', '--short')).toContain('script.sh')
+      Expect(await GreenTree.hashTree(root)).not.toBe(clean)
+      await FS.chmod(FS.resolvePath('script.sh', root), 0o755)
+      Expect(await GreenTree.hashTree(root)).toBe(clean)
+
+      const untracked = FS.resolvePath('untracked-script.sh', root)
+      await FS.writeText(untracked, '#!/bin/sh\necho untracked\n')
+      await FS.chmod(untracked, 0o644)
+      const untrackedNonExecutable = await GreenTree.hashTree(root)
+      await FS.chmod(untracked, 0o645)
+      Expect(await GreenTree.hashTree(root)).not.toBe(untrackedNonExecutable)
+
+      await FS.remove(FS.resolvePath('current-target', root))
+      await FS.symlink('target-two.txt', FS.resolvePath('current-target', root))
+      Expect(await git(root, 'status', '--short')).toContain('current-target')
+      Expect(await GreenTree.hashTree(root)).not.toBe(clean)
     } finally {
       await FS.remove(root)
     }

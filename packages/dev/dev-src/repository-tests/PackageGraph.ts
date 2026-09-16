@@ -4,10 +4,9 @@ import { FS, Repo } from '@shared'
  * Which workspace package imports which. The changed-files lane needs this to know that a change
  * in `shared` reaches every suite while a change in `studio` reaches only Studio's own tests.
  *
- * The graph is read from the import statements themselves, not from `package.json`: seven
- * packages import a workspace package their manifest does not declare, and Bun's own `--changed`
- * selection stops at the package boundary, so neither is a sound source for "who depends on this".
- * The alias-to-package mapping is the one `packages/tsconfig.base.json` already owns.
+ * The graph is read from the import statements themselves, not dependency declarations: workspace
+ * packages import through tsconfig aliases, published package names, and relative cross-package
+ * paths, and Bun's own `--changed` selection stops at the package boundary.
  */
 
 export type PackageGraph = {
@@ -22,9 +21,10 @@ export type AffectedPackage = {
   reason: string
 }
 
+type PackageManifest = { name?: unknown }
 type TsconfigPaths = { compilerOptions?: { paths?: Record<string, readonly string[]> } }
 
-const IMPORT_PATTERN = /\b(?:from|import|require)\s*\(?\s*['"](@[^'"]+)['"]/g
+const IMPORT_PATTERN = /\b(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g
 const PACKAGES_DIRECTORY = 'packages'
 const TSCONFIG_BASE = 'packages/tsconfig.base.json'
 
@@ -32,10 +32,10 @@ const TSCONFIG_BASE = 'packages/tsconfig.base.json'
 async function load(repositoryRoot = Repo.getRoot()): Promise<PackageGraph> {
   const packagesRoot = FS.resolvePath(PACKAGES_DIRECTORY, repositoryRoot)
   const packages = await packageDirectories(packagesRoot)
-  const owners = await aliasOwners(repositoryRoot, packages)
+  const owners = await specifierOwners(repositoryRoot, packages)
   const imports = new Map<string, ReadonlySet<string>>()
   await Promise.all(packages.map(async name => {
-    imports.set(name, await importedPackages(FS.resolvePath(name, packagesRoot), name, owners))
+    imports.set(name, await importedPackages(FS.resolvePath(name, packagesRoot), packagesRoot, name, owners))
   }))
   return { imports, packages }
 }
@@ -50,8 +50,8 @@ async function packageDirectories(packagesRoot: string): Promise<string[]> {
   return names.sort()
 }
 
-/** aliasOwners maps every tsconfig path alias, without its `/*` suffix, to the package it points into. */
-async function aliasOwners(repositoryRoot: string, packages: readonly string[]): Promise<Map<string, string>> {
+/** specifierOwners maps tsconfig aliases and published workspace names to package directories. */
+async function specifierOwners(repositoryRoot: string, packages: readonly string[]): Promise<Map<string, string>> {
   const tsconfig = await FS.readJson<TsconfigPaths>(FS.resolvePath(TSCONFIG_BASE, repositoryRoot))
   const owners = new Map<string, string>()
   for (const [alias, targets] of Object.entries(tsconfig.compilerOptions?.paths ?? {})) {
@@ -60,11 +60,20 @@ async function aliasOwners(repositoryRoot: string, packages: readonly string[]):
       owners.set(alias.replace(/\/\*$/, ''), owner)
     }
   }
+  await Promise.all(packages.map(async owner => {
+    const manifest = await FS.readJson<PackageManifest>(
+      FS.resolvePath(`${PACKAGES_DIRECTORY}/${owner}/package.json`, repositoryRoot),
+    )
+    if (typeof manifest.name === 'string' && manifest.name.length > 0) {
+      owners.set(manifest.name, owner)
+    }
+  }))
   return owners
 }
 
 async function importedPackages(
   packageRoot: string,
+  packagesRoot: string,
   self: string,
   owners: ReadonlyMap<string, string>,
 ): Promise<Set<string>> {
@@ -73,13 +82,25 @@ async function importedPackages(
   await Promise.all(files.map(async file => {
     const source = await FS.readText(file)
     for (const match of source.matchAll(IMPORT_PATTERN)) {
-      const owner = ownerOf(match[1] ?? '', owners)
+      const specifier = match[1] ?? ''
+      const owner = specifier.startsWith('.')
+        ? relativeOwner(specifier, file, packagesRoot)
+        : ownerOf(specifier, owners)
       if (owner !== undefined && owner !== self) {
         imported.add(owner)
       }
     }
   }))
   return imported
+}
+
+function relativeOwner(specifier: string, sourceFile: string, packagesRoot: string): string | undefined {
+  const target = FS.resolvePath(specifier, FS.dirname(sourceFile))
+  if (!FS.pathIsWithin(target, packagesRoot)) {
+    return undefined
+  }
+  const owner = FS.relativePath(packagesRoot, target).split('/')[0]
+  return owner === undefined || owner.length === 0 ? undefined : owner
 }
 
 /** ownerOf resolves a specifier to its alias owner, trying the longest alias first. */

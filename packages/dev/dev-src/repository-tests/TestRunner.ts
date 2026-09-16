@@ -454,13 +454,15 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = WorkReporter.create({ lane: LANE, logRoot: location.logRoot, mode })
+  const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
 
   const result = await WorkGraph.run(states, {
     expectedMs,
     jobs: machineLane.ceiling,
-    onEvent: event => reporter.handle(event),
+    onEvent: event => liveArtifacts.handle(event),
     slotBroker: machineLane,
   })
+  await liveArtifacts.finish()
   await reporter.finish()
   if (!result.interrupted) {
     await ContentionRetry.confirmContendedFailures({
@@ -485,6 +487,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     : await TestLedger.recordRun({
       fullRun: prepared.kind === 'full',
       observations,
+      partialFiles: partialTaoAppRun(prepared) ? ['Apps'] : undefined,
       repositoryRoot: location.repositoryRoot,
       startedAt: options.startedAt,
     })
@@ -493,7 +496,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const contention = machineLane.report()
   const summaryPath = await RunArtifacts.finishRun({
     location,
-    recordTimings: !contention.contended,
+    recordTimings: prepared.kind === 'full' && !contention.contended,
     states,
     summary: buildSummary({
       contention,
@@ -521,6 +524,11 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   // The graph's result holds the same state objects the retry updated, so a suite that recovered on
   // an isolated retry is already no longer failed here.
   return WorkGraph.exitCodeFor(result)
+}
+
+function partialTaoAppRun(prepared: PreparedRun): boolean {
+  const roots = prepared.plan?.taoAppPaths
+  return roots !== undefined && !(roots.length === 1 && roots[0] === TestSelection.ALL_APPS)
 }
 
 async function prepareRun(request: TestRunRequest, repositoryRoot: string): Promise<PreparedRun> {
@@ -805,7 +813,7 @@ async function packageTestFilesByPackage(repositoryRoot: string): Promise<Map<st
   const testFilesByPackage = new Map<string, string[]>()
   for (
     const testFile of (await Shared.Repo.filesUnder(packageRoot, { extensions: ['.ts'] })).filter(path =>
-      isPackageTestFile(packageRoot, path)
+      TestSelection.packageTestSuite(repositoryRelative(path, repositoryRoot)) !== undefined
     )
   ) {
     const packageName = Shared.FS.relativePath(packageRoot, testFile).split('/')[0]
@@ -820,15 +828,6 @@ async function packageTestFilesByPackage(repositoryRoot: string): Promise<Map<st
     testFiles.sort()
   }
   return testFilesByPackage
-}
-
-function isPackageTestFile(packageRoot: string, path: string): boolean {
-  const relativePath = Shared.FS.relativePath(packageRoot, path)
-  const [packageName, testsDirectory, fileName, ...rest] = relativePath.split('/')
-  return packageName !== undefined
-    && testsDirectory?.endsWith('-tests') === true
-    && fileName?.endsWith('.test.ts') === true
-    && rest.length === 0
 }
 
 /** TestRunner owns the suite registry, its scheduling weights, and the `./dev test` lane. */
