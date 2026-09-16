@@ -801,7 +801,7 @@ Describe('Studio device launcher', () => {
     )
   })
 
-  Test('builds and reads the SDK 54 development-client deep link', () => {
+  Test('builds and reads the development-client deep link', () => {
     const url = companionDevClientUrl({ host: '192.168.50.107', port: 8081, scheme: 'taostudiocompanion' })
     Expect(url).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.50.107%3A8081')
     Expect(metroHostFromDevClientUrl(url)).toBe('192.168.50.107')
@@ -931,7 +931,11 @@ Describe('Tao Companion shell configuration', () => {
     Expect(config.expo.ios?.infoPlist?.['NSAppTransportSecurity']).toEqual({ NSAllowsLocalNetworking: true })
     Expect(config.expo.ios?.infoPlist?.['NSBonjourServices']).toBeUndefined()
     Expect(config.expo.plugins?.[0]).toBe('expo-dev-client')
-    const fmtPlugin = config.expo.plugins?.[1]
+    Expect(config.expo.plugins?.[1]).toEqual([
+      'expo-build-properties',
+      { ios: { enableSceneSupport: true } },
+    ])
+    const fmtPlugin = config.expo.plugins?.[2]
     Expect(typeof fmtPlugin).toBe('string')
     const pluginSource = await FS.readText(FS.resolvePath(String(fmtPlugin), packageRoot))
     Expect(pluginSource).toContain("require('../../runtime-toolchain/plugins/with-ios-fmt-compat.cjs')")

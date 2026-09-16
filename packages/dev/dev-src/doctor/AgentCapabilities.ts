@@ -40,6 +40,8 @@ export type ReadCapabilitiesDependencies = {
 }
 
 const DENIED = /\b(operation not permitted|permission denied|eperm|eacces|sandbox)\b/i
+const FAILED_CORE_SIMULATOR_SERVICE =
+  /CoreSimulatorService connection became invalid|simdiskimaged (?:crashed|is not responding)|failed to initialize simulator runtime/i
 
 /**
  * Only a variable a harness sets *because* the command is sandboxed belongs here. Claude Code sets
@@ -51,7 +53,7 @@ const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
 const PROBES: readonly CapabilityProbe[] = [
   {
     args: ['-o', 'pid=,ppid=,lstart=,command=', '-p', String(Platform.runtimeProcess.pid)],
-    command: '/bin/ps',
+    command: 'ps',
     display: `ps -o pid=,ppid=,lstart=,command= -p ${Platform.runtimeProcess.pid}`,
     name: 'process table',
     remediation: 'Run the displayed ps shape directly; Tao project rules authorize it outside the sandbox.',
@@ -89,7 +91,7 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'xcrun',
     display: 'xcrun simctl list devices --json available',
     name: 'CoreSimulator service',
-    remediation: 'Run the displayed read-only command directly or select tao-native for native filesystem access.',
+    remediation: 'After a runtime install, restart macOS, open Device Hub once, then retry the displayed command.',
   },
   {
     args: ['ps', '--format', '{{.ID}}'],
@@ -107,8 +109,12 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
   if (result.error === undefined && result.exitCode !== null && successfulExitCodes.includes(result.exitCode)) {
     return { command: probe.display, detail: 'available', name: probe.name, status: 'available' }
   }
-  const status: CapabilityStatus = DENIED.test(output) ? 'denied' : 'unavailable'
   const fallback = result.error instanceof Error ? result.error.message : `exit ${result.exitCode ?? 'unknown'}`
+  const failedCoreSimulatorService = probe.name === 'CoreSimulator service'
+    && FAILED_CORE_SIMULATOR_SERVICE.test(output)
+  const status: CapabilityStatus = !failedCoreSimulatorService && DENIED.test(output || fallback)
+    ? 'denied'
+    : 'unavailable'
   return {
     command: probe.display,
     detail: (output.split('\n').find(Boolean) ?? fallback).trim(),
@@ -129,7 +135,13 @@ export async function readAgentCapabilities(
 ): Promise<CapabilityReport> {
   const runProbe = dependencies.runProbe
     ?? (async (probe: CapabilityProbe) => await CLI.run(probe.command, { args: [...probe.args], stdio: 'pipe' }))
-  const checks = await Promise.all(PROBES.map(async probe => classifyCapability(probe, await runProbe(probe))))
+  const checks = await Promise.all(PROBES.map(async probe => {
+    try {
+      return classifyCapability(probe, await runProbe(probe))
+    } catch (error) {
+      return classifyCapability(probe, { error, exitCode: null, stderr: '', stdout: '' })
+    }
+  }))
   return {
     checks,
     repositoryRoot: Repo.getRoot(),

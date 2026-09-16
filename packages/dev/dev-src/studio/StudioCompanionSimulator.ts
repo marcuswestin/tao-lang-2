@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { presentIosSimulator } from '../ios/IosSimulatorPresentation'
 import {
   companionInstallArgs,
   companionInstallEnv,
@@ -95,9 +96,9 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
     )
   }
 
-  /** show brings the Simulator app forward so a person watching sees the launch. */
-  async function show(): Promise<void> {
-    await run('open', { args: ['-a', 'Simulator'], stdio: 'pipe' })
+  /** show brings Simulator or Device Hub forward so a person watching sees the launch. */
+  async function show(id?: string): Promise<void> {
+    await presentIosSimulator(id, run)
   }
 
   async function open(input: { id: string; url: string }): Promise<void> {
@@ -111,7 +112,7 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
         }`,
       )
     }
-    await show()
+    await show(input.id)
   }
 
   async function install(input: { id: string }): Promise<void> {
@@ -140,14 +141,14 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
       )
     }
     if (result.exitCode !== 0) {
-      // Expo ends a simulator run by asking System Events to bring the Simulator window forward,
-      // which fails without macOS automation permission long after the app is installed. The
-      // installed app is the fact that matters, so ask the simulator rather than trust the code.
+      // Expo may finish a simulator run by asking System Events to bring Simulator or Device Hub
+      // forward. That can fail without macOS automation permission after the app is installed, so
+      // ask the simulator whether the app arrived rather than trusting the process exit code.
       if (await installedOn(input.id) === true) {
         HCI.logProcessInfo(
           'companion',
           `Expo exited ${result.exitCode} after installing; the app is on the simulator. `
-            + 'The last step it tried was bringing the Simulator window forward.',
+            + 'The last step it tried was bringing the simulator host forward.',
         )
         return
       }

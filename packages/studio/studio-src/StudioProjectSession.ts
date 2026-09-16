@@ -628,6 +628,12 @@ export class StudioProjectSession {
     if (!changed) {
       return catalog
     }
+    // Bind refreshes (host-absolute renderId, compile offsets, sourceVersion) are session-local.
+    // The catalog already lives inside the project; persisting a checkout-specific locator
+    // would rewrite committed sketches.jsonc on every open from another worktree.
+    if (!sketchMembershipChanged(catalog.sketches, sketches)) {
+      return { ...catalog, sketches }
+    }
     const reconciled = { ...catalog, revision: catalog.revision + 1, sketches }
     await this.#sketchCatalog.restore(reconciled)
     this.#emitSketchCatalog(reconciled)
@@ -1879,6 +1885,20 @@ function sourceActionProposalDiff(path: string, before: string, after: string): 
     ...removed.map(line => `-${line}`),
     ...added.map(line => `+${line}`),
   ].join('\n')
+}
+
+function sketchMembershipChanged(before: readonly StudioSketch[], after: readonly StudioSketch[]): boolean {
+  return before.length !== after.length || before.some((sketch, index) => {
+    const next = after[index]!
+    return sketch.id !== next.id
+      || !sameIdSequence(sketch.rectOrder, next.rectOrder)
+      || !sameIdSequence(sketch.rects.map(rect => rect.id), next.rects.map(rect => rect.id))
+      || !sameIdSequence(sketch.snapped.map(item => item.rect.id), next.snapped.map(item => item.rect.id))
+  })
+}
+
+function sameIdSequence(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index])
 }
 
 function previewMeasurementCellKey(identity: StudioCellInstanceIdentity): string {

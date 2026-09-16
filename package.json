@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "overrides": {
-    "expo-constants": "18.0.14",
+    "expo-constants": "57.0.18",
     "langium": "~4.3.1"
   },
   "devDependencies": {

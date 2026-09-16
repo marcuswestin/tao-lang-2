@@ -154,6 +154,10 @@ function defaultStart(
 ): CLI.StartedCommand {
   return CLI.start(command, {
     args: [...args],
+    // Metro's dev-middleware refuses to launch its debugger tooling under NODE_ENV=test, assuming
+    // that means its own jest suite; override it so this real subprocess launch is not mistaken
+    // for that unit-test context.
+    env: { NODE_ENV: 'development' },
     onOutput: (_stream, chunk) => onOutput(chunk),
     stdio: ['ignore', 'pipe', 'pipe'],
   })

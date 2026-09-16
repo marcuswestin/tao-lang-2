@@ -457,6 +457,56 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
+  Test('handshake bind refresh does not rewrite the committed sketch catalog', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-bind-refresh'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const snapped = await session.applySketchSnap({
+        checkpointId: 'snap-bind-refresh',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['cover'],
+        requestId: 'snap-bind-refresh-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', root)
+      const onDisk = await FS.readText(catalogPath)
+      const generatedPath = FS.resolvePath('@/studio/View1.tao', root)
+      const before = snapped.catalog.sketches[0]!.snapped[0]!.target
+      const refreshedRenderId = '/Users/ro/.codex/worktrees/other/Garden/@/studio/View1.tao:1:2'
+      session.setMatrixManifest({
+        capabilities: { captureDomains: [], scheme: 'reactive-browser' },
+        cells: [],
+        compileRevision: session.compileSnapshot().compileRevision,
+        fixtures: [],
+        generationDeclarations: [],
+        manifestRevision: 'manifest-bind-refresh',
+        parametersBySubject: {},
+        project: { appName: session.appName, entryPath: 'Garden.tao', root },
+        renders: [{
+          elementName: before.elementName,
+          renderId: refreshedRenderId,
+          source: { kind: 'tao', path: generatedPath, range: { end: 2, start: 1 } },
+          studioRectId: 'cover',
+        }],
+        scenarios: [],
+        sourceVersions: { [generatedPath]: snapped.file.sourceVersion },
+        states: [],
+        subjects: [],
+        version: 2,
+      })
+      const events: StudioSessionEvent[] = []
+      session.subscribe(event => events.push(event))
+
+      const refreshed = await session.sketchCatalog()
+
+      Expect(refreshed.revision).toBe(snapped.catalog.revision)
+      Expect(await FS.readText(catalogPath)).toBe(onDisk)
+      Expect(refreshed.sketches[0]!.snapped[0]!.target.renderId).toBe(refreshedRenderId)
+      Expect(events.some(event => event.type === 'sketch-catalog-changed')).toBe(false)
+    })
+  })
+
   Test('drops retyped reopen associations and uses current measured geometry for later arbitrary Unsnap', async () => {
     await withSketchSession(async (session, root) => {
       const created = await session.applySketchAction(createRequest(root, 'create-measured'))

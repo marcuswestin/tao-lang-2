@@ -2,6 +2,7 @@
 
 import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
+import { presentIosSimulator } from '../../ios/IosSimulatorPresentation'
 import { DevLoopTUI } from '../DevLoopTUI'
 import type { AndroidSession } from './android'
 import type { ExpoSessionConfig } from './expo-config'
@@ -215,11 +216,11 @@ async function openSimulatorApp(udid: string): Promise<void> {
   if (!await CLI.commandExists('open')) {
     return
   }
-  const result = await CLI.run('open', { args: ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid] })
+  const { host, result } = await presentIosSimulator(udid)
   if (result.exitCode !== 0 || result.error !== undefined) {
     DevLoopTUI.logDevLoop(
       'dev',
-      `Could not open Simulator app: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
+      `Could not open ${host}: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
       'warn',
     )
   }
