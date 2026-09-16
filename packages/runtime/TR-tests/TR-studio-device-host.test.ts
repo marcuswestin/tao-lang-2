@@ -1,10 +1,10 @@
 import { Describe, Expect, MockModule, reactNativeStubs, Test } from '@shared/test'
 import TR from '../TaoRuntime-src/TR'
+import { runtimeAppIsRegisteredForTest } from '../TaoRuntime-src/TR-navigation-app'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '../TaoRuntime-src/TR-studio-device-client'
 import { deviceViewportNotice, networkConditionOf, viewportLine } from '../TaoRuntime-src/TR-studio-device-host'
 import type { TaoStudioDeviceCellIdentity } from '../TaoRuntime-src/TR-studio-device-protocol'
 import { StudioDeviceTrust } from '../TaoRuntime-src/TR-studio-device-trust'
-import { runtimeAppIsRegisteredForTest } from '../TaoRuntime-src/TR-navigation-app'
 import { createStudioSubjectApp } from '../TaoRuntime-src/TR-studio-subject'
 
 const scriptURL = 'http://192.168.1.20:8081/index.bundle?platform=ios&dev=true&hot=false'

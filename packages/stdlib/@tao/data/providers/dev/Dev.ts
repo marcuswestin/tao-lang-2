@@ -430,9 +430,11 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
         throw hostError('The Tao dev data server did not provide a revision for this stream.')
       }
       const seq = ++nextSeq
-      await request(mutation.type === 'save'
-        ? { expectedRevision, seq, snapshot: mutation.snapshot!, type: 'save' }
-        : { expectedRevision, seq, type: 'reset' })
+      await request(
+        mutation.type === 'save'
+          ? { expectedRevision, seq, snapshot: mutation.snapshot!, type: 'save' }
+          : { expectedRevision, seq, type: 'reset' },
+      )
     })
     mutationQueue = run.catch(() => {})
     return run

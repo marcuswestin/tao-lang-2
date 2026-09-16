@@ -99,7 +99,9 @@ export class DevDataServer {
         return jsonResponse({ error: 'Expected a storage key.' }, 400)
       }
       const data: SocketData = { app, key, topic: `${app}/${encodeURIComponent(key)}` }
-      return server.upgrade(request, { data }) ? undefined : jsonResponse({ error: 'Expected a WebSocket upgrade.' }, 426)
+      return server.upgrade(request, { data })
+        ? undefined
+        : jsonResponse({ error: 'Expected a WebSocket upgrade.' }, 426)
     }
     return jsonResponse({ error: 'Not found.' }, 404)
   }
@@ -164,13 +166,15 @@ export class DevDataServer {
   }
 
   async #refreshExternalChanges(): Promise<void> {
-    await Promise.all([...this.#streams.values()].map(stream => this.#enqueue(stream.data, async current => {
-      const before = current.revision
-      await this.#refresh(current)
-      if (current.revision !== before) {
-        this.#publish(current)
-      }
-    })))
+    await Promise.all([...this.#streams.values()].map(stream =>
+      this.#enqueue(stream.data, async current => {
+        const before = current.revision
+        await this.#refresh(current)
+        if (current.revision !== before) {
+          this.#publish(current)
+        }
+      })
+    ))
   }
 
   async #refresh(stream: Stream): Promise<void> {
@@ -188,11 +192,14 @@ export class DevDataServer {
         )
       }
       const next = { revision: current.revision + 1, snapshot }
-      await writeAtomically(this.#pathFor(data), JSON.stringify({
-        format: stateFormat,
-        revision: next.revision,
-        snapshot: next.snapshot ?? null,
-      }))
+      await writeAtomically(
+        this.#pathFor(data),
+        JSON.stringify({
+          format: stateFormat,
+          revision: next.revision,
+          snapshot: next.snapshot ?? null,
+        }),
+      )
       return next
     })
   }
@@ -215,8 +222,10 @@ export class DevDataServer {
       // tag, rather than field names such as `revision`, keeps arbitrary app JSON unambiguous.
       return { revision: 1, snapshot: content }
     }
-    if (!Number.isSafeInteger(parsed.revision) || (parsed.revision as number) < 0
-      || !(typeof parsed.snapshot === 'string' || parsed.snapshot === null)) {
+    if (
+      !Number.isSafeInteger(parsed.revision) || (parsed.revision as number) < 0
+      || !(typeof parsed.snapshot === 'string' || parsed.snapshot === null)
+    ) {
       Errors.throwHostEnvironment(`Dev data authority state is invalid: ${FS.displayPath(path)}.`)
     }
     return { revision: parsed.revision as number, snapshot: parsed.snapshot ?? undefined }

@@ -361,10 +361,11 @@ Describe('dev data server', () => {
     try {
       await TR.testProvider(
         () => DevProvider(() => host(server.port, 'Conformance-00000000', server.capability)),
-        () => DevProvider(() => ({
-          ...host(server.port, 'Conformance-00000000', server.capability),
-          connect: () => rejectingSocket(),
-        })),
+        () =>
+          DevProvider(() => ({
+            ...host(server.port, 'Conformance-00000000', server.capability),
+            connect: () => rejectingSocket(),
+          })),
       )
     } finally {
       await server.stop()
