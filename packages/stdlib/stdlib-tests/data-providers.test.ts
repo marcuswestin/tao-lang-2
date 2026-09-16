@@ -507,8 +507,8 @@ Describe('@tao/data providers', () => {
   })
 
   Test('names a Dev stream by server, app key, and storage key, and reads the bundle host a device loaded from', () => {
-    Expect(devDataSocketUrl('ws://192.168.1.20:4321/', 'Notes-0123abcd', 'My Notes'))
-      .toBe('ws://192.168.1.20:4321/data?app=Notes-0123abcd&key=My%20Notes')
+    Expect(devDataSocketUrl('ws://192.168.1.20:4321/', 'Notes-0123abcd', 'My Notes', 'secret'))
+      .toBe('ws://192.168.1.20:4321/data?app=Notes-0123abcd&key=My%20Notes&capability=secret')
     Expect(parseBundleHost('http://192.168.1.20:8081/index.bundle?platform=ios')).toBe('192.168.1.20')
     Expect(parseBundleHost('http://[fe80::1]:8081/index.bundle')).toBe('[fe80::1]')
     Expect(parseBundleHost(undefined)).toBeUndefined()
@@ -528,7 +528,10 @@ Describe('@tao/data providers', () => {
       const loading = connection.load() as Promise<string | undefined>
       await flushMicrotasks()
       Expect(wire.sockets).toHaveLength(1)
-      Expect(wire.sockets[0]!.url).toBe('ws://dev.test:4321/data?app=Notes-0123abcd&key=Notes')
+      Expect(wire.sockets[0]!.url).toBe(
+        'ws://dev.test:4321/data?app=Notes-0123abcd&key=Notes&capability='
+          + 'test_capability_0123456789abcdef0123456789abcdef',
+      )
       wire.sockets[0]!.open()
       wire.sockets[0]!.receive({ revision: 1, snapshot: '{"first":true}', type: 'snapshot' })
       Expect(await loading).toBe('{"first":true}')
@@ -546,7 +549,13 @@ Describe('@tao/data providers', () => {
 
       const saving = connection.save('{"mine":true}')
       await flushMicrotasks()
-      Expect(wire.sockets[0]!.sent).toEqual([{ seq: 1, snapshot: '{"mine":true}', type: 'save' }])
+      Expect(wire.sockets[0]!.sent).toEqual([{
+        expectedRevision: 3,
+        seq: 1,
+        snapshot: '{"mine":true}',
+        type: 'save',
+      }])
+      wire.sockets[0]!.receive({ revision: 4, snapshot: '{"mine":true}', type: 'snapshot' })
       wire.sockets[0]!.receive({ revision: 4, seq: 1, type: 'ack' })
       await saving
 
@@ -562,7 +571,7 @@ Describe('@tao/data providers', () => {
       wire.sockets[0]!.receive({ revision: 4, snapshot: '{"current":true}', type: 'snapshot' })
       wire.sockets[0]!.receive({ revision: 4, seq: 3, type: 'ack' })
       Expect(await reloading).toBe('{"current":true}')
-      Expect(snapshots).toEqual(['{"missed":true}', undefined])
+      Expect(snapshots).toEqual(['{"missed":true}', undefined, '{"mine":true}'])
 
       stop()
       connection.close?.()
@@ -643,7 +652,12 @@ Describe('@tao/data providers', () => {
       return { json: async () => body }
     }
 
-    const fact = { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' }
+    const fact = {
+      app: 'Notes-0123abcd',
+      capability: 'test_capability_0123456789abcdef0123456789abcdef',
+      port: 4_321,
+      protocol: 'tao-dev-data-v1',
+    }
     // The Expo dev server's updates-style manifest nests the app config under extra.expoClient.
     const updatesManifest = { extra: { eas: {}, expoClient: { extra: { taoDevData: fact }, name: 'Tao Runtime' } } }
     Expect(await fetchDevDataManifest('http://192.168.1.20:8081/', answer(updatesManifest))).toEqual(fact)
@@ -682,7 +696,12 @@ function scriptedDevDataHost(): {
   const scheduled = new Map<number, () => void>()
   let nextHandle = 0
   const host: DevDataHost = {
-    bootstrap: () => ({ app: 'Notes-0123abcd', kind: 'ready', serverUrl: 'ws://dev.test:4321' }),
+    bootstrap: () => ({
+      app: 'Notes-0123abcd',
+      capability: 'test_capability_0123456789abcdef0123456789abcdef',
+      kind: 'ready',
+      serverUrl: 'ws://dev.test:4321',
+    }),
     connect: url => {
       const socket: ScriptedSocket = {
         close: () => {

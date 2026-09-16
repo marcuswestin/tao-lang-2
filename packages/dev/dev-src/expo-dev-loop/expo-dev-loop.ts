@@ -49,7 +49,9 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     throw error
   }
   const runtimeToolchainRoot = Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
-  const expoServer = expo.createServer(runtimeToolchainRoot, { env: devDataEnvironment(devData.port, devDataApp) })
+  const expoServer = expo.createServer(runtimeToolchainRoot, {
+    env: devDataEnvironment(devData.port, devDataApp, devData.capability),
+  })
   const output = DevLoopTUI.startDevLoopOutput()
   let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined

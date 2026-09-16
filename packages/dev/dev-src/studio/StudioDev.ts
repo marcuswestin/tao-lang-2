@@ -143,12 +143,12 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       rootDir: options.devDataRoot ?? Repo.resolvePath(DEV_DATA_ROOT_PATH),
     })
     HCI.logProcessInfo('studio', `Dev data: tao-dev-data-v1 on port ${devDataServer.port}`)
-    const devDataPort = devDataServer.port
+    const devDataAuthority = { capability: devDataServer.capability, port: devDataServer.port }
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
         await openStudioProjectResource(request, {
-          devDataPort,
+          devDataAuthority,
           deviceGatewayPort: gatewayPort,
           entryPath,
           isStopping: () => requestedStop,
@@ -419,8 +419,8 @@ async function publishPreviewBeforeBundling(steps: {
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
-    /** The dev data server port written into the preview manifest; absent in launches without one. */
-    devDataPort?: number
+    /** The dev data authority written into the preview manifest; absent in launches without one. */
+    devDataAuthority?: { capability: string; port: number }
     /** The device gateway port written into the preview manifest; absent in launches without a gateway. */
     deviceGatewayPort?: number
     entryPath: string | undefined
@@ -477,11 +477,15 @@ export async function openStudioProjectResource(
     })
     watcher = await startStudioFileWatcher(preview.session)
     const session = preview.session
-    if (options.devDataPort !== undefined) {
+    if (options.devDataAuthority !== undefined) {
       // The app key needs the session's resolved app name, and Metro has not started yet, so the
       // manifest still takes the fact before any bundle is served.
       await previewRuntime.configure({
-        devData: devDataManifest(options.devDataPort, devDataAppKey(project.projectRoot, session.appName)),
+        devData: devDataManifest(
+          options.devDataAuthority.port,
+          devDataAppKey(project.projectRoot, session.appName),
+          options.devDataAuthority.capability,
+        ),
       })
     }
     const bundler = expoServer

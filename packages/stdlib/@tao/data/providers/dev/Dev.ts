@@ -30,8 +30,8 @@ const DevDataProtocol = {
 } as const
 
 type DevDataClientMessage =
-  | { seq: number; snapshot: string; type: 'save' }
-  | { seq: number; type: 'reset' }
+  | { expectedRevision: number; seq: number; snapshot: string; type: 'save' }
+  | { expectedRevision: number; seq: number; type: 'reset' }
   /** load asks for the stream's current snapshot again; the server answers it before the ack. */
   | { seq: number; type: 'load' }
 
@@ -43,6 +43,7 @@ type DevDataServerMessage =
 /** The non-secret facts written into a development build's Expo manifest by the dev server. */
 type DevDataManifest = {
   app: string
+  capability: string
   port: number
   protocol: typeof DevDataProtocol.name
 }
@@ -58,7 +59,7 @@ export type DevDataSocket = {
 }
 
 export type DevDataBootstrap =
-  | { app: string; kind: 'ready'; serverUrl: string }
+  | { app: string; capability: string; kind: 'ready'; serverUrl: string }
   | { kind: 'missing'; missing: readonly string[] }
 
 export type DevDataHost = {
@@ -87,10 +88,10 @@ export function DevProvider(loadHost: () => DevDataHost = nativeDevDataHost): TR
 }
 
 /** devDataSocketUrl names one (app, storage key) stream on the dev data server. */
-export function devDataSocketUrl(serverUrl: string, app: string, storageKey: string): string {
+export function devDataSocketUrl(serverUrl: string, app: string, storageKey: string, capability: string): string {
   return `${serverUrl.replace(/\/$/, '')}${DevDataProtocol.path}?app=${encodeURIComponent(app)}&key=${
     encodeURIComponent(storageKey)
-  }`
+  }&capability=${encodeURIComponent(capability)}`
 }
 
 /**
@@ -118,7 +119,12 @@ export function resolveDevDataBootstrap(input: {
   if (manifest === undefined || input.bundleHost === undefined || input.bundleHost === '') {
     return { kind: 'missing', missing }
   }
-  return { app: manifest.app, kind: 'ready', serverUrl: `ws://${input.bundleHost}:${manifest.port}` }
+  return {
+    app: manifest.app,
+    capability: manifest.capability,
+    kind: 'ready',
+    serverUrl: `ws://${input.bundleHost}:${manifest.port}`,
+  }
 }
 
 /** parseBundleOrigin reads where a native bundle loaded from; mirrors `TR-studio-device-host`'s parse. */
@@ -145,15 +151,17 @@ function readManifest(value: unknown): DevDataManifest | undefined {
   }
   const record = value as Record<string, unknown>
   const app = record['app']
+  const capability = record['capability']
   const port = record['port']
   if (
     record['protocol'] !== DevDataProtocol.name
     || typeof app !== 'string' || !appNamePattern.test(app)
+    || typeof capability !== 'string' || !/^[A-Za-z0-9_-]{32,256}$/.test(capability)
     || typeof port !== 'number' || !Number.isSafeInteger(port) || port <= 0 || port > 65_535
   ) {
     return undefined
   }
-  return { app, port, protocol: DevDataProtocol.name }
+  return { app, capability, port, protocol: DevDataProtocol.name }
 }
 
 type Pending = { reject(error: Error): void; resolve(): void }
@@ -175,7 +183,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
   let attempt = 0
   let strandedDials = 0
   let reconnectHandle: unknown
-  let latest: { snapshot: string | undefined } | undefined
+  let latest: { revision: number; snapshot: string | undefined } | undefined
   let readyWaiters: ReadyWaiter[] = []
   let observer: TR.DataConnectionObserver | undefined
   let missed: MissedResult | undefined
@@ -212,7 +220,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
   const handle = (message: DevDataServerMessage): void => {
     if (message.type === 'snapshot') {
       const snapshot = message.snapshot ?? undefined
-      latest = { snapshot }
+      latest = { revision: message.revision, snapshot }
       const waiters = readyWaiters
       readyWaiters = []
       for (const waiter of waiters) {
@@ -270,7 +278,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
     scheduleReconnect()
   }
 
-  const serverName = (): string => (url === '' ? '' : ` at ${url}`)
+  const serverName = (): string => (url === '' ? '' : ` at ${url.replace(/([?&]capability=)[^&]*/u, '$1<redacted>')}`)
 
   /** failReadyWaiters rejects every caller waiting on this attempt; false when nobody was waiting. */
   const failReadyWaiters = (message: string): boolean => {
@@ -327,7 +335,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
           scheduleReconnect()
           return
         }
-        url = devDataSocketUrl(bootstrap.serverUrl, bootstrap.app, storageKey)
+        url = devDataSocketUrl(bootstrap.serverUrl, bootstrap.app, storageKey, bootstrap.capability)
         dial()
       }, error => {
         opening = false
@@ -413,6 +421,23 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
     })
   }
 
+  let mutationQueue: Promise<void> = Promise.resolve()
+  const mutate = (mutation: { snapshot?: string; type: 'reset' | 'save' }): Promise<void> => {
+    const run = mutationQueue.then(async () => {
+      await ready(false)
+      const expectedRevision = latest?.revision
+      if (expectedRevision === undefined) {
+        throw hostError('The Tao dev data server did not provide a revision for this stream.')
+      }
+      const seq = ++nextSeq
+      await request(mutation.type === 'save'
+        ? { expectedRevision, seq, snapshot: mutation.snapshot!, type: 'save' }
+        : { expectedRevision, seq, type: 'reset' })
+    })
+    mutationQueue = run.catch(() => {})
+    return run
+  }
+
   return {
     automaticReset: true,
     close: () => {
@@ -455,9 +480,9 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
     // The full envelope round-trips row ids untouched, so identity tokens restore across
     // relaunches and across devices exactly as for the local snapshot providers.
     referenceToken: reference => reference.id,
-    reset: () => request({ seq: ++nextSeq, type: 'reset' }),
+    reset: () => mutate({ type: 'reset' }),
     resolveReference: reference => reference.token,
-    save: snapshot => request({ seq: ++nextSeq, snapshot, type: 'save' }),
+    save: snapshot => mutate({ snapshot, type: 'save' }),
     subscribe: next => {
       observer = next
       const replay = missed

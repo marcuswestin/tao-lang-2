@@ -40,6 +40,7 @@ Describe('Tao dev app discovery and selection', () => {
       Expect(projects.map(project => project.name)).toEqual(['Data MVP', 'WordFlower'])
       Expect(projects[0]?.apps.map(app => app.appName)).toEqual(['DataMVP'])
       Expect(projects[1]?.apps.map(app => app.appName)).toEqual(['WordFlower', 'WordFlowerDemo'])
+      Expect(projects[1]?.root).toBe(await FS.realPath(FS.resolvePath('WordFlower/Current', root)))
     } finally {
       await FS.remove(root)
     }

@@ -72,10 +72,16 @@ Describe('Expo ship host configuration', () => {
 
     const configured = createExpoAppConfig(fallbackConfig, projectRoot, {
       TAO_DEV_DATA_APP: 'Notes-0123abcd',
+      TAO_DEV_DATA_CAPABILITY: 'test_capability_0123456789abcdef0123456789abcdef',
       TAO_DEV_DATA_PORT: '4321',
     })
     Expect(configured.extra).toEqual({
-      taoDevData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' },
+      taoDevData: {
+        app: 'Notes-0123abcd',
+        capability: 'test_capability_0123456789abcdef0123456789abcdef',
+        port: 4_321,
+        protocol: 'tao-dev-data-v1',
+      },
     })
     Expect(configured.name).toBe('Tao Runtime')
 

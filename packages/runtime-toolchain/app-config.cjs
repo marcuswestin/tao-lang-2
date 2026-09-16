@@ -90,14 +90,19 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
 function withDevData(config, env) {
   const port = Number(env.TAO_DEV_DATA_PORT)
   const app = env.TAO_DEV_DATA_APP
-  if (!Number.isInteger(port) || port <= 0 || port > 65_535 || typeof app !== 'string' || app === '') {
+  const capability = env.TAO_DEV_DATA_CAPABILITY
+  if (
+    !Number.isInteger(port) || port <= 0 || port > 65_535
+    || typeof app !== 'string' || app === ''
+    || typeof capability !== 'string' || !/^[A-Za-z0-9_-]{32,256}$/.test(capability)
+  ) {
     return config
   }
   return {
     ...config,
     extra: {
       ...config.extra,
-      taoDevData: { app, port, protocol: 'tao-dev-data-v1' },
+      taoDevData: { app, capability, port, protocol: 'tao-dev-data-v1' },
     },
   }
 }
