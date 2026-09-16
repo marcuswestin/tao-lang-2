@@ -6,7 +6,14 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
-import { commandSlots, commandStaticMemberText, commandStaticShortcut, mentionFills } from './commands'
+import {
+  commandSlots,
+  commandStaticMemberText,
+  commandStaticShortcut,
+  mentionFills,
+  parseShortcut,
+  reservedCommandShortcuts,
+} from './commands'
 import {
   datasourceCollectionNames,
   datasourceCollections,
@@ -54,6 +61,8 @@ export const ASTUtils = {
   commandSlots,
   commandStaticMemberText,
   commandStaticShortcut,
+  parseShortcut,
+  reservedCommandShortcuts,
   mentionFills,
   guardBranches,
   datasourceMembershipSlot,
@@ -98,6 +107,7 @@ export namespace ASTUtils {
   export type ListedEntry = import('./app-configuration').ListedEntry
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
   export type CommandSlot = import('./commands').CommandSlot
+  export type ParsedShortcut = import('./commands').ParsedShortcut
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult

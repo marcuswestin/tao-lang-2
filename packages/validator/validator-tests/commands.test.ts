@@ -313,6 +313,26 @@ Describe('validator: commands as configured values', () => {
   )
 
   Test(
+    'rejects reducer-owned, multi-key, and duplicate-modifier shortcuts',
+    rejects(
+      `
+        ${leaf}
+        action Run() { }
+        command Escape() { Title "Escape" Key "escape" do Run() }
+        command Palette() { Title "Palette" Key "primary+k" do Run() }
+        command Multiple() { Title "Multiple" Key "ab" do Run() }
+        command Duplicate() { Title "Duplicate" Key "primary+primary+x" do Run() }
+        command Space() { Title "Space" Key " " do Run() }
+      `,
+      commandValidationMessages.shortcutReserved('escape'),
+      commandValidationMessages.shortcutReserved('primary+k'),
+      commandValidationMessages.shortcutKey,
+      commandValidationMessages.shortcutDuplicateModifier('primary'),
+      commandValidationMessages.shortcutReserved('space'),
+    ),
+  )
+
+  Test(
     'keeps a command out of an app body',
     rejects(
       `

@@ -431,6 +431,11 @@ export class RuntimeDataSchema {
     return limited
   }
 
+  /** interactionCandidates exposes real stored handles, never cold-reference placeholders. */
+  interactionCandidates(entity: string): readonly unknown[] {
+    return this.definition.entities[entity] === undefined ? [] : this.query({ entity, filters: [] })
+  }
+
   /**
    * queryActivationKey identifies one query's fill descriptor, or undefined when the connection
    * has no fill half. The key is what `Query` re-activates on, so it must be stable across renders.

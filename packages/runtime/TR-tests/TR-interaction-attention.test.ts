@@ -334,14 +334,15 @@ Describe('TR.Interaction attention', () => {
     const schema = TR.Data.Schema({
       entities: {
         Document: { collection: 'Documents', fields: { Title: { kind: 'text' } } },
-        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text', title: true } } },
       },
       name: 'InteractionPicker',
     }, testDataConnection())
     TR.Data.Create(schema, 'Document', { Title: TR.Value('Other') })
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
     TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Archive') })
     const otherDocument = schema.query({ entity: 'Document', filters: [] })[0]
-    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[1]
     let selected: unknown
     const move = TR.Interaction.Command({
       action: fills =>
@@ -382,7 +383,10 @@ Describe('TR.Interaction attention', () => {
 
     Expect(attention.read().verbPending).toMatchObject({ request: 'search', slot: 'Workspace' })
     Expect(attention.choosePendingSearchResult(TR.Value(otherDocument))).toBe(false)
-    Expect(attention.choosePendingSearchResult(TR.Value(workspace))).toBe(true)
+    Expect(attention.pressKey('a')).toBe(true)
+    Expect(attention.pendingSearchResults().map(result => result.label)).toEqual(['Archive'])
+    Expect(attention.read().targetLabel).toBe('Archive')
+    Expect(attention.pressKey('Enter')).toBe(true)
     Expect(selected).toBe(workspace)
     Expect(attention.read().verbPending).toBeUndefined()
   })
@@ -635,7 +639,7 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['Scoped'])
   })
 
-  Test('dispatches a bare declared command key instead of typing it into narrowing', () => {
+  Test('uses a bare declared command key only inside the target verb layer', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
     const attention = new InteractionAttention(outline, catalog)
@@ -658,24 +662,93 @@ Describe('TR.Interaction attention', () => {
     })
     register(outline, region('main', { primary: true }))
     register(outline, item('draft', 'main', 'Draft'))
+    catalog.registerSurface({ commands: [save], hidden: [], identity: 'Draft row' }, 'draft')
     attention.revalidateOutline()
 
     Expect(attention.pressKey('s')).toBe(true)
-    Expect(invoked).toEqual(['Save'])
-    Expect(attention.read().narrowing).toBe('')
-    Expect(attention.read().mode).toBe('navigating')
-
-    // A letter no command declares still narrows, so the shortcut has not swallowed the alphabet.
-    Expect(attention.pressKey('d')).toBe(true)
-    Expect(invoked).toEqual(['Save'])
-    Expect(attention.read().narrowing).toBe('d')
+    Expect(invoked).toEqual([])
+    Expect(attention.read().narrowing).toBe('s')
     Expect(attention.pressKey('Backspace')).toBe(true)
 
-    // The exclusion contract: a generated hint key never takes `s`, so `s` still reaches the command.
-    Expect(attention.pressKey('/')).toBe(true)
-    Expect(attention.read().mode).toBe('hints')
+    attention.target('draft')
+    attention.openVerbs()
     Expect(attention.pressKey('s')).toBe(true)
-    Expect(invoked).toEqual(['Save', 'Save'])
+    Expect(invoked).toEqual(['Save'])
+    Expect(attention.read().narrowing).toBe('')
+  })
+
+  Test('does not dispatch a row-scoped shortcut until that row is targeted', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const rowCommand = (name: string) =>
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Key: () => TR.Value('primary+e'), Title: () => TR.Value(name) },
+        name,
+      })
+    register(outline, region('rows', { primary: true }))
+    register(outline, item('first', 'rows', 'First'))
+    register(outline, item('second', 'rows', 'Second'))
+    catalog.registerSurface({ commands: [rowCommand('Edit first')], hidden: [], identity: 'First row' }, 'first')
+    catalog.registerSurface({ commands: [rowCommand('Edit second')], hidden: [], identity: 'Second row' }, 'second')
+    attention.revalidateOutline()
+
+    Expect(attention.read().target).toBeUndefined()
+    Expect(attention.pressKey('primary+e')).toBe(false)
+    Expect(invoked).toEqual([])
+
+    attention.target('first')
+    Expect(attention.pressKey('primary+e')).toBe(true)
+    Expect(invoked).toEqual(['Edit first'])
+  })
+
+  Test('narrows palette letters and cycles its selected command with arrows', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const registerCommand = (name: string) => {
+      const command = TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Title: () => TR.Value(name) },
+        name,
+      })
+      catalog.register({
+        commands: [{
+          command: () => command,
+          identity: name,
+          name,
+          scope: { kind: 'module' },
+          slots: [],
+          static: { title: name },
+        }],
+        module: `@test/${name}`,
+      })
+    }
+    registerCommand('Archive')
+    registerCommand('Duplicate')
+    register(outline, region('main', { primary: true }))
+    attention.revalidateOutline()
+
+    attention.pressKey('primary+k')
+    Expect(attention.read().target).toBe('Archive')
+    Expect(attention.pressKey('d')).toBe(true)
+    Expect(attention.read().narrowing).toBe('d')
+    Expect(attention.read().target).toBe('Duplicate')
+    Expect(invoked).toEqual([])
+
+    attention.pressKey('Backspace')
+    Expect(attention.read().target).toBe('Duplicate')
+    attention.pressKey('ArrowDown')
+    Expect(attention.read().target).toBe('Archive')
+    attention.pressKey('ArrowDown')
+    Expect(attention.read().target).toBe('Duplicate')
+    attention.pressKey('ArrowUp')
+    Expect(attention.read().target).toBe('Archive')
+    attention.pressKey('Enter')
+    Expect(invoked).toEqual(['Archive'])
   })
 
   Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {

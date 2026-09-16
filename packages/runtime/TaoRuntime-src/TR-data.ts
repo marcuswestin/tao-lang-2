@@ -8,6 +8,7 @@ import {
   canResetAllDataSchemas,
   captureDataSchemas,
   endTest as endDataTest,
+  interactionEntityHandles,
   isDataTestMode,
   registerDataSchema,
   resetAllDataSchemas,
@@ -242,6 +243,36 @@ function useConfiguredProviderBinding(
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
+  /** interactionCandidates is the internal pending-command picker seam over active stores. */
+  interactionCandidates(entity: string): readonly unknown[] {
+    return interactionEntityHandles(entity)
+  },
+
+  /** interactionCandidateIdentity keeps same-id rows from different stores distinct in a picker. */
+  interactionCandidateIdentity(value: unknown): string | undefined {
+    const handle = entityHandle(value)
+    if (!handle) {
+      return undefined
+    }
+    const metadata = metadataOf(handle)
+    return JSON.stringify([metadata.schema.captureIdentity(), metadata.entity, metadata.id])
+  },
+
+  /** interactionCandidateLabel reads the authored title field, falling back to the stable id. */
+  interactionCandidateLabel(value: unknown): string | undefined {
+    const handle = entityHandle(value)
+    if (!handle) {
+      return undefined
+    }
+    const metadata = metadataOf(handle)
+    const definition = metadata.schema.definition.entities[metadata.entity]
+    const title = Object.entries(definition?.fields ?? {}).find(([, field]) => field.title)?.[0]
+    const label = title === undefined ? undefined : metadata.schema.read(handle, title)
+    return label === undefined || label === null || String(label).trim().length === 0
+      ? metadata.id
+      : String(label)
+  },
+
   /** Declaration binds one Tao declaration identity to its package-scope provider implementation. */
   Declaration(
     name: string,

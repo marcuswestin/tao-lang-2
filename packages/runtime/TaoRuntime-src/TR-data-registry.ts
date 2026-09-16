@@ -23,6 +23,11 @@ export function registerDataSchema(schema: TaoDataSchema): void {
   schemas.add(schema)
 }
 
+/** interactionEntityHandles returns stored live rows in active-schema then schema query order. */
+export function interactionEntityHandles(entity: string): readonly unknown[] {
+  return [...schemas].flatMap(schema => schema.interactionCandidates(entity))
+}
+
 export function serializeEntityReference(value: unknown): TaoEntityReferenceSnapshot | undefined {
   const handle = entityHandle(value)
   return handle ? metadataOf(handle).schema.serializeReference(handle) : undefined
