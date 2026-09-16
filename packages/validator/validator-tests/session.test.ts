@@ -1,28 +1,71 @@
-import { AST } from '@parser'
+import { Packages } from '@ast-utils'
+import { AST, Parser, URI } from '@parser'
 import { Diagnostics } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
 import { Validation } from '../validator-src/validation'
 import Validator, { type ValidationResult } from '../validator-src/validator'
+import { InteractionValidator } from '../validator-src/validators/interaction-validator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { validationErrorMessages } from './test-validate'
 
-Describe('validator: reusable sessions', () => {
-  Test('shares workspace memoization across per-file contexts in one Langium batch', () => {
-    const memoStore = new Map<string, unknown>()
-    let computes = 0
-    const runContext = {
-      entryFilePath: '/Main.tao',
-      memoStore,
-      packagesContext: {} as Parameters<typeof Validator.createContext>[0],
-      workspaceFiles: [] as readonly AST.TaoFile[],
-    }
-    const accept = () => undefined
-    const first = Validation.createContext(accept, runContext)
-    const second = Validation.createContext(accept, { ...runContext, entryFilePath: '/Other.tao' })
+const validationContextSlot = testOverrideSlot<typeof Validation.createContext>({
+  read: () => Validation.createContext,
+  write: createContext => {
+    Validation.createContext = createContext
+  },
+})
 
-    Expect(first.memo('workspace.views', () => ++computes)).toBe(1)
-    Expect(second.memo('workspace.views', () => ++computes)).toBe(1)
-    Expect(computes).toBe(1)
+Describe('validator: reusable sessions', () => {
+  Test('shares production workspace memoization across a multi-document Langium build', async () => {
+    await withTaoFiles(
+      'tao-validator-batch-',
+      {
+        'One.tao': `view One() { render One() [rigid when One is active] }`,
+        'Two.tao': `view Two() { render Two() [rigid when Two is active] }`,
+      },
+      async (paths, rootDir) => {
+        const packagesContext = await Packages.createContext(rootDir)
+        const { services } = Parser.createContext({ packages: Packages.createResolver(packagesContext) })
+        Validator.installLangiumChecks(services, packagesContext)
+        const originalCreateContext = Validation.createContext
+        let regionIndexComputes = 0
+        const restore = validationContextSlot.install((accept, runContext) => {
+          const context = originalCreateContext(accept, runContext)
+          const memo = context.memo
+          return {
+            ...context,
+            memo<T>(key: string, compute: () => T): T {
+              return memo(key, () => {
+                if (key === 'interaction-validator.regionMembers') {
+                  regionIndexComputes += 1
+                }
+                return compute()
+              })
+            },
+          }
+        })
+        try {
+          const documents = await Promise.all(
+            [paths['One.tao'], paths['Two.tao']].map(async path =>
+              await services.shared.workspace.LangiumDocumentFactory.fromUri(URI.file(path))
+            ),
+          )
+          documents.forEach(document => services.shared.workspace.LangiumDocuments.addDocument(document))
+          await services.shared.workspace.DocumentBuilder.build(documents, {
+            eagerLinking: true,
+            validation: true,
+          })
+
+          Expect(documents.map(document => document.diagnostics?.map(diagnostic => diagnostic.message))).toEqual([
+            [InteractionValidator.messages.unknownRegion('One')],
+            [InteractionValidator.messages.unknownRegion('Two')],
+          ])
+          Expect(regionIndexComputes).toBe(1)
+        } finally {
+          restore()
+        }
+      },
+    )
   })
 
   Test('isolates concurrent results that reuse the standalone source URI', async () => {

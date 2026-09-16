@@ -42,7 +42,7 @@ export class TaoReferences extends Langium.DefaultReferences {
       return []
     }
 
-    const candidateNames = collectLookupNames(word, path, sourceCstNode.text)
+    const candidateNames = collectLookupNames(word, path, sourceCstNode)
     if (candidateNames.length === 0) {
       return []
     }
@@ -267,29 +267,37 @@ function designValuePathFromCstNode(cstNode: Langium.CstNode): AST.DesignValuePa
 function collectLookupNames(
   word: AST.LayoutWord | undefined,
   path: AST.DesignValuePath | undefined,
-  cstText: string | undefined,
+  sourceCstNode: Langium.CstNode,
 ): string[] {
-  const names: string[] = []
   if (word) {
     const full = layoutWordFullName(word)
-    names.push(full)
-    if (word.value !== full) {
-      names.push(word.value)
+    const cstNode = word.$cstNode
+    const head = Langium.GrammarUtils.findNodeForProperty(cstNode, 'value')
+    if (head && containsCstNode(head, sourceCstNode)) {
+      return [word.value]
     }
+    const pathSegments = Langium.GrammarUtils.findNodesForProperty(cstNode, 'pathSegments')
+    const pathIndex = pathSegments.findIndex(segment => containsCstNode(segment, sourceCstNode))
+    if (pathIndex >= 0) {
+      return [[[word.value, ...word.suffixes].join('-'), ...word.pathSegments.slice(0, pathIndex + 1)].join('.')]
+    }
+    return full === word.value ? [full] : [full, word.value]
   }
   if (path) {
     const full = [path.head, ...path.segments].join('.')
-    names.push(full)
-    if (path.head !== full) {
-      names.push(path.head)
+    const cstNode = path.$cstNode
+    const head = Langium.GrammarUtils.findNodeForProperty(cstNode, 'head')
+    if (head && containsCstNode(head, sourceCstNode)) {
+      return [path.head]
     }
+    const segments = Langium.GrammarUtils.findNodesForProperty(cstNode, 'segments')
+    const segmentIndex = segments.findIndex(segment => containsCstNode(segment, sourceCstNode))
+    if (segmentIndex >= 0) {
+      return [[path.head, ...path.segments.slice(0, segmentIndex + 1)].join('.')]
+    }
+    return full === path.head ? [full] : [full, path.head]
   }
-  // Only when neither shape yielded a name: the raw token text is a last resort, not another spelling
-  // to try alongside the structured ones, which would let `palette.dark` also match a plain `palette`.
-  if (names.length === 0 && cstText) {
-    names.push(cstText)
-  }
-  return names
+  return sourceCstNode.text ? [sourceCstNode.text] : []
 }
 
 function designReferenceSegment(
@@ -305,12 +313,21 @@ function designReferenceSegment(
     : [node.head, ...node.segments].join('.')
   const head = AST.isLayoutWord(node) ? node.value : node.head
   if (fullName === targetName) {
+    const property = AST.isLayoutWord(node) ? 'pathSegments' : 'segments'
+    const segments = AST.isLayoutWord(node) ? node.pathSegments : node.segments
+    if (segments.length > 0) {
+      return Langium.GrammarUtils.findNodeForProperty(cstNode, property, segments.length - 1)
+    }
     return cstNode
   }
   if (head === targetName) {
     return Langium.GrammarUtils.findNodeForProperty(cstNode, AST.isLayoutWord(node) ? 'value' : 'head')
   }
   return undefined
+}
+
+function containsCstNode(container: Langium.CstNode, candidate: Langium.CstNode): boolean {
+  return candidate.offset >= container.offset && candidate.end <= container.end
 }
 
 function findEnclosingDesign(node: Langium.AstNode): AST.DesignDeclaration | undefined {

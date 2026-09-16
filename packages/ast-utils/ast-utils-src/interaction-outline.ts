@@ -131,7 +131,7 @@ export function outlineSiblingRegionDescriptor(view: AST.ViewDeclaration): Outli
     return undefined
   }
   const label = roots.map(root => firstDerivedLabel(root, new Set())).find(candidate => candidate !== undefined)
-  const members = siblingMemberNames(roots)
+  const members = siblingMemberDeclarations(roots).map(member => member.name)
   return {
     ...(label === undefined ? {} : { label }),
     members,
@@ -145,6 +145,12 @@ export function outlineSiblingRegionForRender(render: AST.Render): OutlineSiblin
   const owner = AST.findOwningView(render)
   const descriptor = owner ? outlineSiblingRegionDescriptor(owner) : undefined
   return descriptor?.roots.includes(render) ? descriptor : undefined
+}
+
+/** outlineSiblingRegionMemberDeclarations returns the exact view identities the runtime descriptor names. */
+export function outlineSiblingRegionMemberDeclarations(view: AST.ViewDeclaration): readonly AST.ViewDeclaration[] {
+  const descriptor = outlineSiblingRegionDescriptor(view)
+  return descriptor ? siblingMemberDeclarations(descriptor.roots) : []
 }
 
 function siblingRootRenders(statements: readonly AST.Statement[], renderedNav: AST.Render): AST.Render[] {
@@ -175,16 +181,16 @@ function siblingRootRenders(statements: readonly AST.Statement[], renderedNav: A
   return roots
 }
 
-/** Stable declaration names, not display labels, let design conditions identify region members. */
-function siblingMemberNames(roots: readonly AST.Render[]): string[] {
-  const names = new Set<string>()
+/** Stable declaration identities, not display labels, let validators distinguish same-named views. */
+function siblingMemberDeclarations(roots: readonly AST.Render[]): AST.ViewDeclaration[] {
+  const members = new Set<AST.ViewDeclaration>()
   for (const root of roots) {
     const target = resolveRenderTarget(root)
     if (target?.kind === 'view') {
-      names.add(target.view.name)
+      members.add(target.view)
     }
   }
-  return [...names]
+  return [...members]
 }
 
 function firstDerivedLabel(render: AST.Render, seen: Set<AST.ViewDeclaration>): string | undefined {

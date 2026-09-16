@@ -35,6 +35,7 @@ import {
   outlineLoopDescriptor,
   outlineSiblingRegionDescriptor,
   outlineSiblingRegionForRender,
+  outlineSiblingRegionMemberDeclarations,
 } from './interaction-outline'
 import {
   resolveActionInvocation,
@@ -84,6 +85,7 @@ export const ASTUtils = {
   outlineLoopDescriptor,
   outlineSiblingRegionDescriptor,
   outlineSiblingRegionForRender,
+  outlineSiblingRegionMemberDeclarations,
   referencedNames,
   renderTargetIsNav,
   renderTargetName,
