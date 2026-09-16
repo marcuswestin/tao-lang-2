@@ -120,7 +120,8 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       `document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`,
       { timeoutMs: 30_000 },
     )
-    await waitForPreview(browser, previewUrl, `document.body?.innerText.includes('Increment') === true`)
+    // The native button renders its title uppercase on web, and innerText reports the transformed text.
+    await waitForPreview(browser, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
 
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
@@ -148,22 +149,11 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     })()`,
     )
 
-    await browser.evaluateInFrame(
-      previewUrl,
-      `(() => {
-      const increment = [...document.querySelectorAll('[data-tao-studio]')]
-        .find(element => element.textContent?.trim() === 'Increment')
-      if (!(increment instanceof HTMLElement)) throw new Error('Missing Increment control')
-      increment.click()
-      return true
-    })()`,
-    )
-    await waitForPreview(
-      browser,
-      previewUrl,
-      `[...document.querySelectorAll('[data-tao-studio]')]
-        .some(element => element.textContent?.trim() === '1')`,
-    )
+    // Edit mode gives Studio every click for selection, so the press happens in Run mode, the way a
+    // person would press it, and the drag after it happens back in Edit mode.
+    await setInteractionMode(browser, 'run')
+    await pressIncrementOnce(browser, previewUrl)
+    await setInteractionMode(browser, 'edit')
 
     const compileRevision = await waitForCompileAfter(browser, -1)
     await dragThirdBetweenFirstAndSecond(browser, previewUrl)
@@ -241,7 +231,10 @@ async function waitForPreview(browser: StudioCdp, previewUrl: string, expression
     }
   }, { intervalMs: 100, timeoutMs: 30_000 })
   if (!ready) {
-    Errors.throwHostEnvironment(`Timed out waiting for Studio preview expression: ${expression}; last=${last}`)
+    const text = await browser.evaluateInFrame<string>(previewUrl, `document.body?.innerText ?? ''`).catch(() => '')
+    Errors.throwHostEnvironment(
+      `Timed out waiting for Studio preview expression: ${expression}; last=${last}; text=${JSON.stringify(text)}`,
+    )
   }
 }
 
@@ -263,6 +256,58 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
     )
   }
   return revision
+}
+
+async function setInteractionMode(browser: StudioCdp, mode: 'edit' | 'run'): Promise<void> {
+  await browser.evaluate(`(() => {
+    const button = document.querySelector('.studio-interaction-mode')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing Studio interaction mode control')
+    if (button.dataset.mode !== ${JSON.stringify(mode)}) button.click()
+    return button.dataset.mode
+  })()`)
+}
+
+/**
+ * The native button answers pointer input rather than a synthetic `click()`, so the press is real
+ * mouse input at the button's centre, mapped out of the preview frame and through the canvas zoom.
+ *
+ * The mode reaches the preview by message, so a press sent before it lands is still Studio's. Press
+ * only while the count still reads 0, and give each press time to render before looking again, so a
+ * press that did land is never repeated.
+ */
+async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promise<void> {
+  const counted =
+    `[...document.querySelectorAll('[data-tao-studio]')].some(element => element.textContent?.trim() === '1')`
+  const ready = await Time.pollUntil(async () => {
+    if (await browser.evaluateInFrame<boolean>(previewUrl, counted)) {
+      return true
+    }
+    const inFrame = await browser.evaluateInFrame<Readonly<{ x: number; y: number }>>(
+      previewUrl,
+      `(() => {
+      const increment = [...document.querySelectorAll('[data-tao-studio]')]
+        .filter(element => element.textContent?.trim() === 'Increment')
+        .toSorted((left, right) => left.querySelectorAll('[data-tao-studio]').length
+          - right.querySelectorAll('[data-tao-studio]').length)[0]
+      if (!(increment instanceof HTMLElement)) throw new Error('Missing Increment control')
+      const rect = increment.getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    })()`,
+    )
+    const point = await browser.evaluate<Readonly<{ x: number; y: number }>>(`(() => {
+      const frame = document.querySelector('.studio-preview-cell iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
+      const rect = frame.getBoundingClientRect()
+      const scale = frame.clientWidth === 0 ? 1 : rect.width / frame.clientWidth
+      return { x: rect.left + ${inFrame.x} * scale, y: rect.top + ${inFrame.y} * scale }
+    })()`)
+    await browser.clickAt(point)
+    await Time.sleep(300)
+    return await browser.evaluateInFrame<boolean>(previewUrl, counted)
+  }, { intervalMs: 100, timeoutMs: 30_000 })
+  if (!ready) {
+    Errors.throwHostEnvironment('Timed out pressing Increment in Run mode.')
+  }
 }
 
 async function waitForStudioStatus(browser: StudioCdp, expected: string): Promise<void> {

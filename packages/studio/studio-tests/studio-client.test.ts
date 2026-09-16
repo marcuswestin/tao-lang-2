@@ -1,9 +1,9 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
-import { Errors } from '@shared'
+import { Errors, Time } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
-import { mountStudioPreviewReload } from '../studio-src/client/app/StudioPreviewStatus'
+import { mountStudioPreviewReload, StudioPreviewNotice } from '../studio-src/client/app/StudioPreviewStatus'
 import { StudioSourceMutations } from '../studio-src/client/app/StudioSourceMutations'
 import { nextStop } from '../studio-src/client/matrix/StudioCanvasViewport'
 import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
@@ -773,6 +773,59 @@ Test('an app that never bundled says so, instead of leaving an empty preview une
   })
   Expect(previewBundleNoticeFor({ message: 'connection refused', status: 'unreachable' })?.heading)
     .toBe('This preview is empty: its app server did not answer.')
+})
+
+/**
+ * Reading the bundle rebuilds the preview's own Metro graph, and one that lands ahead of Metro's
+ * hot-update handler ends a retained preview's hot updates for good, so a preview that is running the
+ * compile it was handed is never probed.
+ */
+Test('asks the bundler about a preview only when it has not applied its compile', async () => {
+  const previousFetch = globalThis.fetch
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { pathname: '/sessions/probe-1' } },
+    writable: true,
+  })
+  const requests: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
+    return Response.json({ status: 'ok' })
+  }) as typeof fetch
+  try {
+    const preview = { appliedRevision: 2, expectedRevision: 2 } as StudioPreviewConnection
+    const notice = new StudioPreviewNotice({
+      compileState: () => ({
+        appliedRevision: 2,
+        compileRevision: 2,
+        diagnostics: [],
+        message: '',
+        status: 'compiled',
+      }),
+      preview: { querySelector: () => null } as unknown as HTMLElement,
+      previewUrl: 'http://127.0.0.1:1',
+      previews: [preview],
+      settleMs: 0,
+      signal: undefined,
+    })
+
+    notice.checkBundle()
+    await Time.sleep(20)
+    Expect(requests).toEqual([])
+
+    preview.expectedRevision = 3
+    notice.checkBundle()
+    await until(() => requests.length === 1, { description: 'the bundle probe for a lagging preview', intervalMs: 0 })
+    Expect(requests[0]).toStartWith('/sessions/probe-1/')
+  } finally {
+    globalThis.fetch = previousFetch
+    if (previousWindow === undefined) {
+      Reflect.deleteProperty(globalThis, 'window')
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
+  }
 })
 
 Test('Studio preview teardown releases observers and pending capture work', () => {

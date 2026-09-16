@@ -154,6 +154,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       compileState: () => compileState,
       preview: view.preview,
       previewUrl: config.previewUrl,
+      previews,
       signal,
     })
     const session = new StudioEditorSession({
