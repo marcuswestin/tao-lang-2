@@ -7,8 +7,8 @@ type LockOwner = {
 }
 
 type ReclaimClaim = {
-  path: string
-  prefix: string
+  linkPath: string
+  ownerPath: string
   staleTarget: string
 }
 
@@ -40,7 +40,9 @@ async function withProjectLock<T>(projectRoot: string, name: string, work: () =>
   let reclaimClaim: ReclaimClaim | undefined
   const releaseReclaimClaim = async (): Promise<void> => {
     if (reclaimClaim) {
-      await FS.remove(reclaimClaim.path).catch(() => {})
+      if (await lockTarget(reclaimClaim.linkPath) === reclaimClaim.ownerPath) {
+        await FS.remove(reclaimClaim.linkPath).catch(() => {})
+      }
       reclaimClaim = undefined
     }
   }
@@ -59,9 +61,13 @@ async function withProjectLock<T>(projectRoot: string, name: string, work: () =>
           if (staleTarget !== undefined) {
             if (reclaimClaim?.staleTarget !== staleTarget) {
               await releaseReclaimClaim()
-              reclaimClaim = await createReclaimClaim(coordinationRoot, name, staleTarget)
+              reclaimClaim = await acquireReclaimClaim(coordinationRoot, name, staleTarget, ownerPath)
             }
-            await reclaimStaleOwner(coordinationRoot, linkPath, name, reclaimClaim)
+            if (reclaimClaim) {
+              await reclaimStaleOwner(coordinationRoot, linkPath, name, reclaimClaim)
+            } else {
+              await Time.sleep(ACQUIRE_POLL_MS)
+            }
           }
           continue
         }
@@ -106,30 +112,23 @@ async function reclaimStaleOwner(
   name: string,
   claim: ReclaimClaim,
 ): Promise<void> {
-  await Time.sleep(ACQUIRE_POLL_MS)
-  const liveClaims: string[] = []
-  for (const entry of await FS.listDir(coordinationRoot)) {
-    if (!entry.startsWith(claim.prefix)) {
-      continue
-    }
-    const candidate = FS.resolvePath(entry, coordinationRoot)
-    const owner = await readOwner(candidate)
-    if (owner === undefined || !Platform.processIsAlive(owner.pid)) {
-      await FS.remove(candidate).catch(() => {})
-    } else {
-      liveClaims.push(candidate)
-    }
-  }
-  if (liveClaims.toSorted()[0] !== claim.path || await lockTarget(linkPath) !== claim.staleTarget) {
+  if (
+    await lockTarget(claim.linkPath) !== claim.ownerPath
+    || await lockTarget(linkPath) !== claim.staleTarget
+  ) {
     return
   }
   if (staleUnlinkDelayForTestingMs > 0) {
     await Time.sleep(staleUnlinkDelayForTestingMs)
   }
   await beforeStaleUnlinkForTesting?.(linkPath)
-  // The election and the target observation are separate filesystem operations. Recheck at the
+  // The fixed claim symlink is the cross-process election: while its owner is alive no later
+  // contender can become another winner. Recheck both it and the observed lock target at the
   // destructive edge so a replacement installed while this claimant waited is never unlinked.
-  if (await lockTarget(linkPath) !== claim.staleTarget) {
+  if (
+    await lockTarget(claim.linkPath) !== claim.ownerPath
+    || await lockTarget(linkPath) !== claim.staleTarget
+  ) {
     return
   }
   await FS.remove(linkPath).catch(error => {
@@ -146,25 +145,52 @@ async function reclaimStaleOwner(
   }
 }
 
-async function createReclaimClaim(
+async function acquireReclaimClaim(
   coordinationRoot: string,
   name: string,
   staleTarget: string,
-): Promise<ReclaimClaim> {
+  ownerPath: string,
+): Promise<ReclaimClaim | undefined> {
   const targetKey = FS.basename(staleTarget).replaceAll(/[^a-zA-Z0-9._-]/gu, '_')
-  const prefix = `${name}-reclaim-${targetKey}-`
-  const path = FS.resolvePath(
-    `${prefix}${String(Time.nowMs()).padStart(16, '0')}-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`,
+  const linkPath = FS.resolvePath(`${name}-reclaim-${targetKey}.lock`, coordinationRoot)
+  try {
+    await FS.symlink(FS.basename(ownerPath), linkPath)
+    return { linkPath, ownerPath, staleTarget }
+  } catch (error) {
+    if (errorCode(error) !== 'EEXIST') {
+      throw error
+    }
+  }
+
+  const observedTarget = await lockTarget(linkPath)
+  const observedOwner = observedTarget === undefined ? undefined : await readOwner(observedTarget)
+  if (observedOwner !== undefined && Platform.processIsAlive(observedOwner.pid)) {
+    return undefined
+  }
+
+  // Atomically move a dead claimant aside instead of unlinking the shared path. If another process
+  // already replaced it, the moved target exposes that race and is discarded without granting this
+  // contender ownership; the fresh claimant will verify the fixed link before it can unlink.
+  const displacedPath = FS.resolvePath(
+    `${FS.basename(linkPath)}-displaced-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`,
     coordinationRoot,
   )
-  await FS.writeJson(
-    path,
-    {
-      pid: Platform.runtimeProcess.pid,
-      token: FS.basename(path),
-    } satisfies LockOwner,
-  )
-  return { path, prefix, staleTarget }
+  try {
+    await FS.move(linkPath, displacedPath)
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') {
+      return undefined
+    }
+    throw error
+  }
+  try {
+    if (observedTarget !== undefined && await lockTarget(displacedPath) !== observedTarget) {
+      return undefined
+    }
+  } finally {
+    await FS.remove(displacedPath).catch(() => {})
+  }
+  return undefined
 }
 
 async function lockTarget(linkPath: string): Promise<string | undefined> {
