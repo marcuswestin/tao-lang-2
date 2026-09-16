@@ -112,7 +112,7 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
     ./dev studio-release-check --payload-root "{{ payload_root }}" --artifacts-root "{{ artifacts_root }}" {{ ARGS }}
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
-studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://releases.example.com/tao-studio") channel="stable" output_root=".artifacts/build/studio-native":
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
 # Install development dependencies
@@ -128,6 +128,7 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://rele
 # every probed module still loads. When that happens, or when one of those packages is itself the
 # damaged one, no sandboxed repair can reach it: run `rm -rf node_modules && bun install` from an
 # unsandboxed shell.
+# Install dependencies and repair a partial dependency tree
 deps:
     mkdir -p "{{ BUN_TMP_DIR }}"
     TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
