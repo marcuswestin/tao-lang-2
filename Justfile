@@ -17,8 +17,8 @@ help:
 # `just setup` is what every harness runs through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the Claude Code and Codex SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-# Setup dependencies and generated agent adapters
-setup: deps _agent-config
+# Setup dependencies, generated parser artifacts, and generated agent adapters
+setup: deps _parser-gen _agent-config
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 secrets *ARGS:

@@ -374,6 +374,17 @@ Describe('agent worktree profile bootstrap', () => {
     )
   })
 
+  Test('setup makes the parser ready before it generates agent adapters', async () => {
+    const commands = await justCommands('setup')
+    const install = commands.indexOf('bun install --frozen-lockfile')
+    const parser = commands.indexOf('packages/dev/dev-src/repository-tests/ParserGenerate.ts')
+    const adapters = commands.indexOf('./dev agent-config')
+
+    Expect(install).toBeGreaterThanOrEqual(0)
+    Expect(parser).toBeGreaterThan(install)
+    Expect(adapters).toBeGreaterThan(parser)
+  })
+
   Test('bootstraps dependencies before full verification runs its graph', async () => {
     const commands = await justCommands('full-verify')
 
