@@ -107,6 +107,7 @@ nav HNNavigator = SelectionNav {
 
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
 // rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
+folder
 design HNDesign {
    colors {
       paper #f6f6ef
@@ -171,6 +172,7 @@ data Comments / Comment {
 // is: the story's unique HnId is what a bookmark stores, so it names a story the feed holds without
 // the two stores needing to know about each other. A story that drops out of the feed leaves the
 // bookmark alone, reading as missing until the feed serves it again.
+folder
 data Bookmarks / Bookmark {
    Story (reference)
    Note text (default "")
@@ -181,6 +183,7 @@ data Bookmarks / Bookmark {
 
 // One local row per story. StoryHnId is its stable reconciliation key, while Story is the
 // cross-datasource handle whose missing state remains observable.
+folder
 data ReadingEntries / ReadingEntry {
    StoryHnId number (unique)
    Story (reference)
@@ -255,6 +258,7 @@ scene ReadingPage() {
 
 // A feed row either creates its one history record or refreshes the existing record's recency. The
 // query keeps repeat opens on the update path, and the unique scalar gives the row stable identity.
+folder
 view TrackedStoryRow(Story) {
    query ReadingEntries as ExistingHistory {
       where Story == Story
@@ -286,6 +290,7 @@ view TrackedStoryRow(Story) {
 
 // Missing feed data never erases the local history row. It renders the reference state instead of
 // an empty card; when the adapter can resolve the story again, the same row becomes selectable.
+folder
 view ReadingHistoryRow(ReadingEntry) {
    render Col() [content top stretch] {
       when ReadingEntry.Story {

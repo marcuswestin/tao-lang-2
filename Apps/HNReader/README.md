@@ -44,8 +44,10 @@ WordFlower product behavior.
 `HNReader` binds `HackerNews` (the real adapter, `CacheFor 5.min`), `Personal`, and
 `ReadingHistory`; `HNReaderStub` swaps the feed for `StubNews` while keeping the same bookmark and
 reading-history declarations. That keeps journeys deterministic while still exercising real fill,
-cross-store reference, local-persistence, ordering, and update machinery. Both variants retain the
-bare `@tao/nav` import, so they prove the native-default kit. The behavior-test host renders its
+cross-store reference, test-registry relaunch, ordering, and update machinery. The test compiler also
+validates that both variants bind the Local-backed `ReadingHistory` datasource, but the behavior host
+replaces provider persistence with its deterministic registry. Both variants retain the bare
+`@tao/nav` import, so they prove the native-default kit. The behavior-test host renders its
 deterministic basic fallback. Opening a story URL uses `OpenUrl` from `@tao/linking`; the runtime
 skips the external launch while tests run.
 
@@ -66,8 +68,12 @@ skips the external launch while tests run.
   store with an in-memory one.
 - **Reading history is device-local.** `ReadingEntry.StoryHnId` is the unique reconciliation key,
   `ReadingEntry.Story` is the cross-store reference, and `OpenedAt` owns recency. Opening a story
-  creates the row once and updates that same row thereafter; a relaunch keeps it even while the feed
-  refills. A missing feed row leaves its history intact and visibly unavailable until it resolves.
+  creates the row once and updates that same row thereafter. The HNReader journey proves that rows
+  survive a relaunch of the deterministic behavior-test registry; it does not exercise device
+  storage. `packages/stdlib/stdlib-tests/data-providers.test.ts` separately holds `Local` to the
+  provider conformance contract, including save/load through an injected storage boundary. Real
+  device persistence remains device validation, not a claim derived from the journey. A missing or
+  failed feed lookup leaves its history row intact and renders that reference state explicitly.
 - **Feeds over one entity share its rows.** A second feed over `Stories` must materialize and
   filter on its own field, the way the front page uses `Rank number (default 0)` with
   `where Rank >= 1`. Without that, one feed renders rows another fetched.
