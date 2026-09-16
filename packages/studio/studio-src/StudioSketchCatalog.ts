@@ -1,4 +1,4 @@
-import { Assert, Errors, FS, Json } from '@shared'
+import { Assert, CLI, Errors, FS, Json, Platform, Time } from '@shared'
 
 export const studioSketchCatalogFormatVersion = 1 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
@@ -135,7 +135,18 @@ export type StudioSketchCatalogIO = Readonly<{
   writeTemporary?: (temporaryPath: string, content: string) => Promise<void>
 }>
 
+export type StudioSketchCatalogTransaction = Readonly<{
+  apply(request: StudioSketchCatalogRequest): Promise<StudioSketchCatalogResult>
+  read(): Promise<StudioSketchCatalogSnapshot>
+  restore(snapshot: StudioSketchCatalogSnapshot, expectedCurrentRevision: number): Promise<void>
+}>
+
 type CachedResult = Readonly<{ fingerprint: string; result: StudioSketchCatalogResult }>
+
+const catalogLockPollMs = 10
+const catalogLockTimeoutMs = 10_000
+let beforeStaleUnlinkForTesting: (() => Promise<void>) | undefined
+let afterStaleUnlinkForTesting: ((lockPath: string) => Promise<void>) | undefined
 
 /** A stale catalog proposal is retryable after the client refreshes its snapshot. */
 export class StudioSketchCatalogConflictError extends Errors.UserInputError {
@@ -167,7 +178,19 @@ export class StudioSketchCatalog {
   }
 
   async read(): Promise<StudioSketchCatalogSnapshot> {
-    return this.#mutate(() => this.#read())
+    return this.#mutate(() => this.#withCatalogLock(() => this.#read()))
+  }
+
+  transaction<Result>(work: (transaction: StudioSketchCatalogTransaction) => Promise<Result>): Promise<Result> {
+    return this.#mutate(() =>
+      this.#withCatalogLock(() =>
+        work({
+          apply: request => this.#apply(request),
+          read: () => this.#read(),
+          restore: (snapshot, expectedCurrentRevision) => this.#restore(snapshot, expectedCurrentRevision),
+        })
+      )
+    )
   }
 
   async #read(): Promise<StudioSketchCatalogSnapshot> {
@@ -178,61 +201,75 @@ export class StudioSketchCatalog {
       await FS.isFile(this.#catalogPath),
       `Studio sketch catalog must be a file: ${studioSketchCatalogRelativePath}`,
     )
-    return parseCatalog(await FS.readText(this.#catalogPath))
+    return hydrateCatalogTargets(parseCatalog(await FS.readText(this.#catalogPath)), this.projectRoot)
   }
 
   apply(request: StudioSketchCatalogRequest): Promise<StudioSketchCatalogResult> {
-    return this.#mutate(async () => {
-      validateRequest(request)
-      const fingerprint = JSON.stringify(request)
-      const cached = this.#results.get(request.requestId)
-      if (cached !== undefined) {
-        Assert.input(
-          cached.fingerprint === fingerprint,
-          `Studio sketch request id was reused: ${request.requestId}`,
-        )
-        return cached.result
-      }
-
-      const current = await this.#read()
-      if (request.expectedRevision !== current.revision) {
-        throw new StudioSketchCatalogConflictError(request.expectedRevision, current.revision)
-      }
-      const changed = applyAction(current, request.action)
-      const catalog = validateCatalog({ ...changed.catalog, revision: current.revision + 1 })
-      await this.#write(catalog)
-      const result: StudioSketchCatalogResult = {
-        catalog,
-        ...(changed.createdSketch === undefined ? {} : { createdSketch: changed.createdSketch }),
-        requestId: request.requestId,
-      }
-      this.#results.set(request.requestId, { fingerprint, result })
-      while (this.#results.size > 100) {
-        const oldest = this.#results.keys().next()
-        if (oldest.done) {
-          break
-        }
-        this.#results.delete(oldest.value)
-      }
-      return result
-    })
+    return this.#mutate(() => this.#withCatalogLock(() => this.#apply(request)))
   }
 
-  /** Restores a previously read snapshot after a downstream source or compile transaction fails. */
-  restore(snapshot: StudioSketchCatalogSnapshot): Promise<void> {
-    return this.#mutate(async () => {
-      const catalog = validateCatalog(snapshot)
-      await this.#write(catalog)
-      // Cached successes describe state that this rollback deliberately removed. A retry must
-      // execute against the restored revision rather than replaying a result that is no longer true.
+  async #apply(request: StudioSketchCatalogRequest): Promise<StudioSketchCatalogResult> {
+    validateRequest(request)
+    const fingerprint = JSON.stringify(request)
+    const current = await this.#read()
+    const cached = this.#results.get(request.requestId)
+    if (cached !== undefined) {
+      Assert.input(cached.fingerprint === fingerprint, `Studio sketch request id was reused: ${request.requestId}`)
+      if (cached.result.catalog.revision === current.revision) {
+        return cached.result
+      }
+      this.#results.delete(request.requestId)
+    }
+    if (request.expectedRevision !== current.revision) {
+      throw new StudioSketchCatalogConflictError(request.expectedRevision, current.revision)
+    }
+    const allocationCatalog = request.action.kind === 'create-sketch'
+      ? { ...current, nextViewNumber: await nextAvailableViewNumber(this.projectRoot, current) }
+      : current
+    const changed = applyAction(allocationCatalog, request.action)
+    const catalog = validateCatalog({ ...changed.catalog, revision: current.revision + 1 })
+    await this.#write(catalog)
+    const result: StudioSketchCatalogResult = {
+      catalog,
+      ...(changed.createdSketch === undefined ? {} : { createdSketch: changed.createdSketch }),
+      requestId: request.requestId,
+    }
+    this.#results.set(request.requestId, { fingerprint, result })
+    while (this.#results.size > 100) {
+      const oldest = this.#results.keys().next()
+      if (oldest.done) {
+        break
+      }
+      this.#results.delete(oldest.value)
+    }
+    return result
+  }
+
+  /** Restores a snapshot only while the transaction revision it replaces is still current. */
+  restore(snapshot: StudioSketchCatalogSnapshot, expectedCurrentRevision: number): Promise<void> {
+    return this.#mutate(() => this.#withCatalogLock(() => this.#restore(snapshot, expectedCurrentRevision)))
+  }
+
+  async #restore(snapshot: StudioSketchCatalogSnapshot, expectedCurrentRevision: number): Promise<void> {
+    const catalog = validateCatalog(snapshot)
+    const current = await this.#read()
+    if (current.revision !== expectedCurrentRevision) {
       this.#results.clear()
-    })
+      throw new StudioSketchCatalogConflictError(expectedCurrentRevision, current.revision)
+    }
+    await this.#write(catalog)
+    // Cached successes describe state that this rollback deliberately removed. A retry must
+    // execute against the restored revision rather than replaying a result that is no longer true.
+    this.#results.clear()
   }
 
   async #write(catalog: StudioSketchCatalogSnapshot): Promise<void> {
     const temporaryPath = `${this.#catalogPath}.${crypto.randomUUID()}.tmp`
     try {
-      await (this.#io.writeTemporary ?? FS.writeText)(temporaryPath, serializeCatalog(catalog))
+      await (this.#io.writeTemporary ?? FS.writeText)(
+        temporaryPath,
+        serializeCatalog(portableCatalogTargets(catalog, this.projectRoot)),
+      )
       await (this.#io.move ?? FS.move)(temporaryPath, this.#catalogPath)
     } finally {
       if (await FS.exists(temporaryPath)) {
@@ -246,6 +283,149 @@ export class StudioSketchCatalog {
     this.#mutationLane = result.then(() => undefined, () => undefined)
     return result
   }
+
+  #withCatalogLock<Result>(work: () => Promise<Result>): Promise<Result> {
+    return withCatalogLock(`${this.#catalogPath}.lock`, work)
+  }
+}
+
+async function nextAvailableViewNumber(
+  projectRoot: string,
+  catalog: StudioSketchCatalogSnapshot,
+): Promise<number> {
+  let next = catalog.nextViewNumber
+  const allocated = new Set(catalog.sketches.map(sketch => sketch.view))
+  while (
+    allocated.has(`View${next}`)
+    || await FS.isFile(FS.resolvePath(`@/studio/View${next}.tao`, projectRoot))
+  ) {
+    next += 1
+  }
+  return next
+}
+
+/**
+ * Catalog writes are shared by every Studio process for a project. The symlink is the atomic claim;
+ * its owner file makes a crashed writer reclaimable without ever deleting a replacement owner's lock.
+ */
+async function withCatalogLock<Result>(lockPath: string, work: () => Promise<Result>): Promise<Result> {
+  const ownerFile = `${lockPath}.owner-${Platform.randomUUID()}`
+  await FS.writeJson(ownerFile, { pid: Platform.runtimeProcess.pid }, { mode: 0o600 })
+  const ownerPath = await FS.realPath(ownerFile)
+  const deadline = Time.nowMs() + catalogLockTimeoutMs
+  try {
+    while (true) {
+      try {
+        await FS.symlink(ownerPath, lockPath)
+        break
+      } catch (error) {
+        if (errorCode(error) !== 'EEXIST') {
+          throw error
+        }
+        const target = await catalogLockTarget(lockPath)
+        if (target !== undefined && !await liveCatalogLockOwner(target)) {
+          await reclaimStaleCatalogLock(lockPath, target)
+        }
+        if (Time.nowMs() >= deadline) {
+          Errors.throwHostEnvironment('Timed out waiting for another Tao Studio process to update sketches.')
+        }
+        await Time.sleep(catalogLockPollMs)
+      }
+    }
+    return await work()
+  } finally {
+    if (await catalogLockTarget(lockPath) === ownerPath) {
+      await FS.remove(lockPath)
+    }
+    await FS.remove(ownerFile)
+  }
+}
+
+/** Elect exactly one waiter before removing a dead owner so another reclaimer cannot delete its replacement. */
+async function reclaimStaleCatalogLock(lockPath: string, staleOwnerPath: string): Promise<void> {
+  const staleOwnerKey = FS.basename(staleOwnerPath).replaceAll(/[^A-Za-z0-9_.-]/g, '_')
+  const claimPrefix = `${lockPath}.reclaim-${staleOwnerKey}-`
+  const claimOwnerFile = `${lockPath}.claim-owner-${Platform.randomUUID()}`
+  await FS.writeJson(claimOwnerFile, { pid: Platform.runtimeProcess.pid }, { mode: 0o600 })
+  const claimOwnerPath = await FS.realPath(claimOwnerFile)
+  let claimPath: string | undefined
+  while (claimPath === undefined) {
+    const prefixName = FS.basename(claimPrefix)
+    const sequences = (await FS.listDir(FS.dirname(lockPath))).flatMap(entry => {
+      if (!entry.startsWith(prefixName)) {
+        return []
+      }
+      const sequence = Number(entry.slice(prefixName.length))
+      return Number.isSafeInteger(sequence) && sequence >= 0 ? [sequence] : []
+    })
+    const candidate = `${claimPrefix}${String(Math.max(-1, ...sequences) + 1).padStart(16, '0')}`
+    try {
+      await FS.symlink(claimOwnerPath, candidate)
+      claimPath = candidate
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') {
+        throw error
+      }
+    }
+  }
+  try {
+    // Give simultaneous waiters one poll interval to publish monotonically ordered atomic claims.
+    await Time.sleep(catalogLockPollMs)
+    const claims = (await FS.listDir(FS.dirname(lockPath)))
+      .filter(name => name.startsWith(FS.basename(claimPrefix)))
+      .map(name => FS.resolvePath(name, FS.dirname(lockPath)))
+      .toSorted()
+    const liveClaims: string[] = []
+    for (const candidate of claims) {
+      const ownerPath = await catalogLockTarget(candidate)
+      if (ownerPath !== undefined && await liveCatalogLockOwner(ownerPath)) {
+        liveClaims.push(candidate)
+      } else {
+        await FS.remove(candidate).catch(() => {})
+      }
+    }
+    if (liveClaims[0] === claimPath && await catalogLockTarget(lockPath) === staleOwnerPath) {
+      await beforeStaleUnlinkForTesting?.()
+      await FS.remove(lockPath)
+      await afterStaleUnlinkForTesting?.(lockPath)
+      await FS.remove(staleOwnerPath).catch(() => {})
+    }
+  } finally {
+    await FS.remove(claimPath).catch(() => {})
+    await FS.remove(claimOwnerFile).catch(() => {})
+  }
+}
+
+async function liveCatalogLockOwner(ownerPath: string): Promise<boolean> {
+  if (!await FS.isFile(ownerPath)) {
+    return false
+  }
+  const owner = await FS.readJson<{ pid?: unknown }>(ownerPath).catch(() => undefined)
+  return owner !== undefined && typeof owner.pid === 'number' && Platform.processIsAlive(owner.pid)
+}
+
+async function catalogLockTarget(lockPath: string): Promise<string | undefined> {
+  const result = await CLI.run('/usr/bin/readlink', { args: [lockPath], stdio: 'pipe' })
+  const target = result.stdout.trim()
+  return result.error === undefined && result.exitCode === 0 && target !== ''
+    ? FS.resolvePath(target, FS.dirname(lockPath))
+    : undefined
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined
+}
+
+/** Narrow deterministic seams for stale-owner replacement-race tests. */
+export const StudioSketchCatalogTesting = {
+  setAfterStaleUnlink(hook: ((lockPath: string) => Promise<void>) | undefined): void {
+    afterStaleUnlinkForTesting = hook
+  },
+  setBeforeStaleUnlink(hook: (() => Promise<void>) | undefined): void {
+    beforeStaleUnlinkForTesting = hook
+  },
 }
 
 function emptyCatalog(): StudioSketchCatalogSnapshot {
@@ -550,6 +730,75 @@ function parseCatalog(content: string): StudioSketchCatalogSnapshot {
   }
   Assert.input(Json.isRecord(parsed), 'Studio sketch catalog must contain an object.')
   return validateCatalog(parsed)
+}
+
+/** Runtime callers use absolute render locators; the committed catalog uses project-relative ones. */
+function hydrateCatalogTargets(
+  catalog: StudioSketchCatalogSnapshot,
+  projectRoot: string,
+): StudioSketchCatalogSnapshot {
+  return mapCatalogTargets(catalog, target => {
+    const parsed = renderIdParts(target.renderId)
+    if (parsed === undefined || parsed.path.startsWith('/')) {
+      return target
+    }
+    return { ...target, renderId: `${FS.resolvePath(parsed.path, projectRoot)}:${parsed.start}:${parsed.end}` }
+  })
+}
+
+function portableCatalogTargets(
+  catalog: StudioSketchCatalogSnapshot,
+  projectRoot: string,
+): StudioSketchCatalogSnapshot {
+  return mapCatalogTargets(catalog, target => {
+    const path = portableTargetPath(target.path, projectRoot)
+    const parsed = renderIdParts(target.renderId)
+    return {
+      ...target,
+      path,
+      ...(parsed === undefined ? {} : { renderId: `${path}:${parsed.start}:${parsed.end}` }),
+    }
+  })
+}
+
+function mapCatalogTargets(
+  catalog: StudioSketchCatalogSnapshot,
+  map: (target: StudioSketchRenderTarget) => StudioSketchRenderTarget,
+): StudioSketchCatalogSnapshot {
+  return {
+    ...catalog,
+    sketches: catalog.sketches.map(sketch => ({
+      ...sketch,
+      snapped: sketch.snapped.map(item => ({ ...item, target: map(item.target) })),
+    })),
+  }
+}
+
+function portableTargetPath(path: string, projectRoot: string): string {
+  if (!path.startsWith('/')) {
+    return path
+  }
+  if (FS.pathIsWithin(path, projectRoot)) {
+    return FS.relativePath(projectRoot, path)
+  }
+  for (const marker of ['/@/', '/.tao-project/']) {
+    const index = path.lastIndexOf(marker)
+    if (index >= 0) {
+      return path.slice(index + 1)
+    }
+  }
+  return FS.basename(path)
+}
+
+function renderIdParts(renderId: string): Readonly<{ end: number; path: string; start: number }> | undefined {
+  const endSeparator = renderId.lastIndexOf(':')
+  const startSeparator = renderId.lastIndexOf(':', endSeparator - 1)
+  const start = Number(renderId.slice(startSeparator + 1, endSeparator))
+  const end = Number(renderId.slice(endSeparator + 1))
+  const path = renderId.slice(0, startSeparator)
+  return path !== '' && Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start
+    ? { end, path, start }
+    : undefined
 }
 
 function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {

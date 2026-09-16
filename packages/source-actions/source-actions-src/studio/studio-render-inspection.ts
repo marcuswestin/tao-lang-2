@@ -72,7 +72,8 @@ type StudioTextLeaf = Readonly<{ argument: AST.Argument; render: AST.Render }>
 
 /** textLeaf recognizes a Text or TextMultiline render whose first positional argument can be edited. */
 function textLeaf(render: AST.Render): StudioTextLeaf | undefined {
-  if (!studioTextLeafNames.has(render.view?.$refText ?? '') || render.block !== undefined) {
+  const standardName = ASTUtils.design.standardElementName(render)
+  if (standardName === undefined || !studioTextLeafNames.has(standardName) || render.block !== undefined) {
     return undefined
   }
   const argument = render.argumentList?.arguments.find(candidate => candidate.label === undefined)
@@ -93,7 +94,7 @@ function textInspection(document: AST.Document, render: AST.Render): StudioTextI
     return undefined
   }
   const expression = document.textDocument.getText().slice(leaf.argument.$cstNode!.offset, leaf.argument.$cstNode!.end)
-  const literal = /^"([^"{}\\]*)"$/.exec(expression)?.[1]
+  const literal = AST.isStringLiteral(leaf.argument.value) ? leaf.argument.value.value : undefined
   return {
     candidates: textBindingCandidates(render),
     expression,
@@ -102,9 +103,6 @@ function textInspection(document: AST.Document, render: AST.Render): StudioTextI
 }
 
 function textCandidateType(type: ASTUtils.TaoType): StudioTextBindingCandidate['type'] | undefined {
-  if (type.kind === 'enum') {
-    return 'enum'
-  }
   if (type.kind === 'primitive' && (type.primitive === 'text' || type.primitive === 'number')) {
     return type.primitive
   }

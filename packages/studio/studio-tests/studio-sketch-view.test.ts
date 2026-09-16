@@ -1,4 +1,5 @@
-import { Expect, Test } from '@shared/test'
+import { Assert } from '@shared'
+import { Deferred, Expect, Test } from '@shared/test'
 import {
   applySketchSnapWith,
   StudioSketchMutationLane,
@@ -10,11 +11,15 @@ import {
   StudioSketchBoardInput,
   StudioSketchChanges,
   StudioSketchDragOneIn,
+  StudioSketchDragTarget,
+  StudioSketchErrors,
   StudioSketchFlowControls,
   StudioSketchOuterDrawing,
+  StudioSketchPointerRelease,
   StudioSketchProposal,
   StudioSketchRenderGate,
   StudioSketchSelection,
+  StudioSketchView,
   StudioSketchViewNames,
 } from '../studio-src/client/StudioSketchView'
 import type {
@@ -38,6 +43,12 @@ Test('Studio outer sketch drawing normalizes 360x76 and ignores taps, cancellati
     y: 24,
   })
   Expect(StudioSketchOuterDrawing.preview(gesture, { x: 421, y: 101 })).toBeUndefined()
+  const clipped = StudioSketchOuterDrawing.end(
+    StudioSketchOuterDrawing.begin(undefined, 8, { x: 20, y: 20 }),
+    8,
+    { x: -40, y: -30 },
+  )
+  Expect(clipped.size).toEqual({ height: 20, width: 20, x: 0, y: 0 })
   Expect(StudioSketchViewNames.next([])).toBe('View1')
   Expect(StudioSketchViewNames.next([{ view: 'View1' }, { view: 'View3' }])).toBe('View4')
 
@@ -517,3 +528,241 @@ Test('Studio drag-one-in snaps only a plain move released outside the board over
     'move',
   )
 })
+
+Test('Studio drag-one-in resolves the sketch-owned visible drop target', () => {
+  const target = {
+    closest(selector: string) {
+      Expect(selector).toBe('[data-tao-studio-sketch-drop-target]')
+      return { dataset: { taoStudioSketchDropTarget: 'sketch-1' } }
+    },
+  }
+  Expect(StudioSketchDragTarget.owns(target, 'sketch-1')).toBe(true)
+  Expect(StudioSketchDragTarget.owns(target, 'sketch-2')).toBe(false)
+  Expect(StudioSketchDragTarget.owns(null, 'sketch-1')).toBe(false)
+})
+
+Test('mounted drag-one-in sees through its moved rectangle and holds capture until Snap settles', async () => {
+  const dom = new SketchTestDocument()
+  const host = dom.createElement('main')
+  const snap = Deferred<StudioSketchSnapApplyResult>()
+  const requests: unknown[] = []
+  const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+    onSnap: request => {
+      requests.push(request)
+      return snap.promise
+    },
+    sketches: [testSketch()],
+    sourceVersion: 'source-1',
+  })
+  const board = dom.find(host, 'taoStudioSketch', 'sketch-1')
+  const rect = dom.find(board, 'taoStudioSketchRect', 'back')
+  const dropTarget = dom.find(host, 'taoStudioSketchDropTarget', 'sketch-1')
+  dom.hitTest = [rect, dropTarget]
+
+  board.dispatch('pointerdown', pointer('pointerdown', rect, 1, 15, 15))
+  board.dispatch('pointermove', pointer('pointermove', rect, 1, 420, 30))
+  board.dispatch('pointerup', pointer('pointerup', rect, 1, 420, 30))
+
+  Expect(requests).toHaveLength(1)
+  Expect(requests[0]).toMatchObject({ rectIds: ['back'], sketchId: 'sketch-1', sourceVersion: 'source-1' })
+  Expect(board.releasedPointers).toEqual([])
+  mounted.render([{ ...testSketch(), rects: [] }])
+  Expect(dom.find(host, 'taoStudioSketch', 'sketch-1')).toBe(board)
+
+  snap.resolve(snapApply(catalog(2, testSketch()), 'request-mounted', 'checkpoint-mounted'))
+  await snap.promise
+  await Promise.resolve()
+  await Promise.resolve()
+  Expect(board.releasedPointers).toEqual([1])
+  mounted.dispose()
+})
+
+Test('Studio pointer release keeps the render gate held until an asynchronous catalog commit settles', async () => {
+  const persistence = Deferred<void>()
+  const order: string[] = []
+  StudioSketchPointerRelease.afterCommit(
+    () => {
+      order.push('commit')
+      return persistence.promise.then(() => {
+        order.push('settled')
+      })
+    },
+    () => {
+      order.push('release')
+    },
+  )
+  await Promise.resolve()
+  Expect(order).toEqual(['commit'])
+  persistence.resolve()
+  await persistence.promise
+  await Promise.resolve()
+  Expect(order).toEqual(['commit', 'settled', 'release'])
+})
+
+Test('successful sketch work clears board and persistent host errors', () => {
+  const host = { closest: () => null, dataset: { taoStudioSketchError: 'old host failure' } }
+  const board = {
+    closest: (selector: string) => {
+      Expect(selector).toBe('[data-tao-studio-sketch-error]')
+      return host
+    },
+    dataset: { taoStudioSketchError: 'old board failure' },
+  }
+  StudioSketchErrors.clear(board)
+  Expect(board.dataset.taoStudioSketchError).toBeUndefined()
+  Expect(host.dataset.taoStudioSketchError).toBeUndefined()
+})
+
+type SketchTestEvent = Readonly<Record<string, unknown> & { target: SketchTestElement; type: string }>
+
+function pointer(
+  type: string,
+  target: SketchTestElement,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+): SketchTestEvent {
+  return {
+    altKey: false,
+    button: 0,
+    clientX,
+    clientY,
+    isPrimary: true,
+    pointerId,
+    preventDefault() {},
+    shiftKey: false,
+    target,
+    type,
+  }
+}
+
+class SketchTestDocument {
+  hitTest: SketchTestElement[] = []
+
+  createElement(tagName: string): SketchTestElement {
+    return new SketchTestElement(this, tagName)
+  }
+
+  elementFromPoint(): SketchTestElement | null {
+    return this.hitTest[0] ?? null
+  }
+
+  elementsFromPoint(): SketchTestElement[] {
+    return this.hitTest
+  }
+
+  find(root: SketchTestElement, datasetName: string, value: string): SketchTestElement {
+    const found = root.descendants().find(element => element.dataset[datasetName] === value)
+    Assert.defined(found, `mounted sketch element ${datasetName}=${value}`)
+    return found
+  }
+}
+
+class SketchTestElement {
+  ariaLabel = ''
+  readonly children: SketchTestElement[] = []
+  readonly dataset: Record<string, string | undefined> = {}
+  disabled = false
+  hidden = false
+  readonly listeners = new Map<string, Array<(event: never) => void>>()
+  multiple = false
+  parent: SketchTestElement | undefined
+  readonly releasedPointers: number[] = []
+  selected = false
+  readonly style: Record<string, string> = {}
+  textContent = ''
+  title = ''
+  type = ''
+  value = ''
+
+  constructor(readonly ownerDocument: SketchTestDocument, readonly tagName: string) {}
+
+  get selectedOptions(): SketchTestElement[] {
+    return this.children.filter(child => child.selected)
+  }
+
+  add(child: SketchTestElement): void {
+    this.append(child)
+  }
+
+  addEventListener(type: string, listener: (event: never) => void): void {
+    const listeners = this.listeners.get(type) ?? []
+    listeners.push(listener)
+    this.listeners.set(type, listeners)
+  }
+
+  append(...children: SketchTestElement[]): void {
+    for (const child of children) {
+      child.parent = this
+      this.children.push(child)
+    }
+  }
+
+  closest(selector: string): SketchTestElement | null {
+    const name = dataSelectorName(selector)
+    for (let current: SketchTestElement | undefined = this; current !== undefined; current = current.parent) {
+      if (name !== undefined && current.dataset[name] !== undefined) {
+        return current
+      }
+    }
+    return null
+  }
+
+  contains(candidate: SketchTestElement | null): boolean {
+    return candidate !== null && (candidate === this || this.children.some(child => child.contains(candidate)))
+  }
+
+  descendants(): SketchTestElement[] {
+    return [this, ...this.children.flatMap(child => child.descendants())]
+  }
+
+  dispatch(type: string, event: SketchTestEvent): void {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event as never)
+    }
+  }
+
+  getBoundingClientRect(): DOMRect {
+    return { bottom: 0, height: 0, left: 0, right: 0, toJSON: () => ({}), top: 0, width: 0, x: 0, y: 0 }
+  }
+
+  querySelector(selector: string): SketchTestElement | null {
+    const name = dataSelectorName(selector)
+    return name === undefined
+      ? null
+      : this.children.find(child => child.dataset[name] !== undefined) ?? null
+  }
+
+  releasePointerCapture(pointerId: number): void {
+    this.releasedPointers.push(pointerId)
+  }
+
+  remove(): void {
+    if (this.parent === undefined) {
+      return
+    }
+    const index = this.parent.children.indexOf(this)
+    if (index >= 0) {
+      this.parent.children.splice(index, 1)
+    }
+    this.parent = undefined
+  }
+
+  replaceChildren(...children: SketchTestElement[]): void {
+    for (const child of this.children) {
+      child.parent = undefined
+    }
+    this.children.splice(0)
+    this.append(...children)
+  }
+
+  setPointerCapture(): void {}
+}
+
+function dataSelectorName(selector: string): string | undefined {
+  const match = selector.match(/data-tao-studio-([a-z-]+)/)
+  return match?.[1]?.split('-').reduce(
+    (name, part) => `${name}${part[0]?.toUpperCase()}${part.slice(1)}`,
+    'taoStudio',
+  )
+}

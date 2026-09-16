@@ -1,5 +1,5 @@
-import { Errors, FS } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Deferred, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioApiEventStream } from '../studio-src/client/StudioApiClient'
 import type { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import { StudioGeneratedSources } from '../studio-src/StudioGeneratedSources'
@@ -8,6 +8,7 @@ import { StudioProjectSession, type StudioSessionEvent } from '../studio-src/Stu
 import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
 import { StudioServerTesting } from '../studio-src/StudioServer'
 import {
+  StudioSketchCatalog,
   StudioSketchCatalogConflictError,
   type StudioSketchCatalogIO,
   type StudioSketchCatalogRequest,
@@ -457,6 +458,119 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
+  Test('evicts a successful flow result after an independent catalog revision', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createTwoRectRequest(root, 'create-flow-cache'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const snapped = await session.applySketchSnap({
+        checkpointId: 'snap-flow-cache',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['café', 'subtitle'],
+        requestId: 'snap-flow-cache-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const request = {
+        action: { kind: 'toggle-direction' as const, rectId: 'café' },
+        checkpointId: 'flow-cache',
+        expectedCatalogRevision: snapped.catalog.revision,
+        requestId: 'flow-cache-request',
+        sketchId: 'sketch-1',
+        sourceVersion: snapped.file.sourceVersion,
+      }
+      const flowed = await session.applySketchFlowAction(request)
+      const sketch = flowed.catalog.sketches[0]!
+      await new StudioSketchCatalog(root).apply({
+        action: {
+          kind: 'refresh-snap-targets',
+          sketchId: sketch.id,
+          targets: sketch.snapped.map(item => item.target),
+        },
+        expectedRevision: flowed.catalog.revision,
+        requestId: 'independent-flow-cache-revision',
+      })
+
+      await Expect(session.applySketchFlowAction(request)).rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      Expect((await session.sketchCatalog()).revision).toBe(flowed.catalog.revision + 1)
+    })
+  })
+
+  Test('serializes a failed flow rollback against an independent Studio create', async () => {
+    const flowCompileEntered = Deferred<void>()
+    const releaseFlowCompile = Deferred<void>()
+    let pauseFlow = false
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createTwoRectRequest(root, 'create-flow-process'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const snapped = await session.applySketchSnap({
+        checkpointId: 'snap-flow-process',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['café', 'subtitle'],
+        requestId: 'snap-flow-process-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      pauseFlow = true
+      const failedFlow = session.applySketchFlowAction({
+        action: { kind: 'toggle-direction', rectId: 'café' },
+        checkpointId: 'flow-process-failure',
+        expectedCatalogRevision: snapped.catalog.revision,
+        requestId: 'flow-process-failure-request',
+        sketchId: 'sketch-1',
+        sourceVersion: snapped.file.sourceVersion,
+      })
+      await flowCompileEntered.promise
+      const marker = FS.resolvePath('independent-flow-create-finished', root)
+      const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+      const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+      const independent = CLI.run('bun', {
+        args: [
+          '-e',
+          `
+        import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
+        import { FS } from ${JSON.stringify(sharedModule)}
+        const root = ${JSON.stringify(root)}
+        const session = await StudioProjectSession.open({
+          async compile() {},
+          entryPath: FS.resolvePath('Garden.tao', root),
+          projectRoot: root,
+        })
+        await session.applySketchAction({
+          action: {
+            height: 40,
+            id: 'independent-flow-sketch',
+            kind: 'create-sketch',
+            project: root,
+            rects: [],
+            width: 100,
+          },
+          expectedRevision: ${snapped.catalog.revision},
+          requestId: 'independent-flow-create',
+        })
+        await FS.writeText(${JSON.stringify(marker)}, 'done')
+      `,
+        ],
+        stdio: 'pipe',
+      })
+      await Time.sleep(40)
+      Expect(await FS.exists(marker)).toBe(false)
+      releaseFlowCompile.resolve()
+      await Expect(failedFlow).rejects.toThrow('generated Tao source failed to compile')
+      Expect((await independent).exitCode).toBe(0)
+      Expect(await session.readFile('@/studio/View1.tao')).toEqual(snapped.file)
+      const catalog = await session.sketchCatalog()
+      Expect(catalog.revision).toBe(snapped.catalog.revision + 1)
+      Expect(catalog.sketches.some(sketch => sketch.id === 'independent-flow-sketch')).toBe(true)
+    }, async () => {
+      if (pauseFlow) {
+        pauseFlow = false
+        flowCompileEntered.resolve()
+        await releaseFlowCompile.promise
+        Errors.throwUserInput('Flow preview is invalid.')
+      }
+    })
+  })
+
   Test('handshake bind refresh does not rewrite the committed sketch catalog', async () => {
     await withSketchSession(async (session, root) => {
       const created = await session.applySketchAction(createRequest(root, 'create-bind-refresh'))
@@ -734,28 +848,74 @@ Describe('Studio sketch session protocol', () => {
   })
 
   Test(
-    'restores the exact catalog and removes only the new source after compile failure, then permits retry',
+    'serializes failed create rollback against another process and rejects a stale same-request retry',
     async () => {
+      const compileEntered = Deferred<void>()
+      const releaseCompile = Deferred<void>()
       let fail = true
       await withSketchSession(async (session, root, compiles) => {
-        const before = await session.sketchCatalog()
         const request = createRequest(root, 'retry-after-failure')
         const events: StudioSessionEvent[] = []
         session.subscribe(event => events.push(event))
 
-        await Expect(session.applySketchAction(request)).rejects.toThrow('generated source failed to compile')
-        Expect(await session.sketchCatalog()).toEqual(before)
-        Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+        const failedCreate = session.applySketchAction(request)
+        await compileEntered.promise
+        const marker = FS.resolvePath('independent-create-finished', root)
+        const started = FS.resolvePath('independent-create-started', root)
+        const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+        const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+        const independent = CLI.run('bun', {
+          args: [
+            '-e',
+            `
+          import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
+          import { FS } from ${JSON.stringify(sharedModule)}
+          const root = ${JSON.stringify(root)}
+          const session = await StudioProjectSession.open({
+            async compile() {},
+            entryPath: FS.resolvePath('Garden.tao', root),
+            projectRoot: root,
+          })
+          await FS.writeText(${JSON.stringify(started)}, 'started')
+          await session.applySketchAction({
+            action: {
+              height: 76,
+              id: 'independent-sketch',
+              kind: 'create-sketch',
+              project: root,
+              rects: [],
+              width: 360,
+            },
+            expectedRevision: 0,
+            requestId: 'independent-create',
+          })
+          await FS.writeText(${JSON.stringify(marker)}, 'done')
+        `,
+          ],
+          stdio: 'pipe',
+        })
+        while (!await FS.exists(started)) {
+          await Time.sleep(1)
+        }
+        await Time.sleep(100)
+        Expect(await FS.exists(marker)).toBe(false)
+        releaseCompile.resolve()
+        await Expect(failedCreate).rejects.toThrow('generated source failed to compile')
+        Expect((await independent).exitCode).toBe(0)
+        const afterIndependent = await session.sketchCatalog()
+        Expect(afterIndependent.revision).toBe(1)
+        Expect(afterIndependent.sketches[0]?.id).toBe('independent-sketch')
+        Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
         Expect(compiles).toHaveLength(2)
         Expect(events.some(event => event.type === 'file-changed' || event.type === 'files-changed')).toBe(false)
         Expect(events.some(event => event.type === 'sketch-catalog-changed')).toBe(false)
 
         fail = false
-        const retried = await session.applySketchAction(request)
-        Expect(retried.createdSketch?.name).toBe('View1')
-        Expect(await FS.isFile(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
-      }, () => {
+        await Expect(session.applySketchAction(request)).rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      }, async () => {
         if (fail) {
+          compileEntered.resolve()
+          await releaseCompile.promise
           Errors.throwUserInput('Generated preview is invalid.')
         }
       })
@@ -994,7 +1154,7 @@ function createAxisChangeRequest(project: string, requestId: string): StudioSket
 
 async function withSketchSession(
   use: (session: StudioProjectSession, root: string, compiles: unknown[]) => Promise<void>,
-  compile: () => void = () => {},
+  compile: () => Promise<void> | void = () => {},
   options: Readonly<{ sketchCatalogIO?: StudioSketchCatalogIO }> = {},
 ): Promise<void> {
   await withTaoFiles('tao-studio-sketch-session-', {
@@ -1004,7 +1164,7 @@ async function withSketchSession(
     const session = await StudioProjectSession.open({
       async compile(request) {
         compiles.push(request)
-        compile()
+        await compile()
       },
       entryPath: paths['Garden.tao'],
       projectRoot: root,

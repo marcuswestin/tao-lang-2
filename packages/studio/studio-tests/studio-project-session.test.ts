@@ -1,5 +1,5 @@
-import { Errors, FS } from '@shared'
-import { Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
   StudioProjectSession,
@@ -246,6 +246,98 @@ Test('Move to package restores source, imports, catalog, and compile state after
     Expect(await session.sketchCatalog()).toEqual(beforeCatalog)
     Expect(session.compileSnapshot().status).toBe('compiled')
     Expect(compiles).toHaveLength(3)
+  })
+})
+
+Test('Move to package serializes source and catalog rollback against an independent Studio create', async () => {
+  const moveCompileEntered = Deferred<void>()
+  const releaseMoveCompile = Deferred<void>()
+  let pauseMove = false
+  await withTaoFiles('tao-studio-move-process-rollback-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {
+        if (pauseMove) {
+          pauseMove = false
+          moveCompileEntered.resolve()
+          await releaseMoveCompile.promise
+          Errors.throwUserInput('Moved source does not compile.')
+        }
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const created = await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-process-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-process-sketch',
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    pauseMove = true
+    const failedMove = session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-process-failure',
+    })
+    await moveCompileEntered.promise
+    const marker = FS.resolvePath('independent-move-create-finished', root)
+    const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+    const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const independent = CLI.run('bun', {
+      args: [
+        '-e',
+        `
+      import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
+      import { FS } from ${JSON.stringify(sharedModule)}
+      const root = ${JSON.stringify(root)}
+      const project = await FS.realPath(root)
+      const session = await StudioProjectSession.open({
+        async compile() {},
+        entryPath: FS.resolvePath('Garden.tao', root),
+        projectRoot: root,
+      })
+      await session.applySketchAction({
+        action: {
+          height: 40,
+          id: 'independent-move-sketch',
+          kind: 'create-sketch',
+          project,
+          rects: [],
+          width: 100,
+        },
+        expectedRevision: ${created.catalog.revision},
+        requestId: 'independent-move-create',
+      })
+      await FS.writeText(${JSON.stringify(marker)}, 'done')
+    `,
+      ],
+      stdio: 'pipe',
+    })
+    await Time.sleep(40)
+    Expect(await FS.exists(marker)).toBe(false)
+    releaseMoveCompile.resolve()
+    await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
+    const independentResult = await independent
+    Expect(independentResult.stderr).toBe('')
+    Expect(independentResult.exitCode).toBe(0)
+    Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    const catalog = await session.sketchCatalog()
+    Expect(catalog.revision).toBe(created.catalog.revision + 1)
+    Expect(catalog.sketches.map(sketch => sketch.id).toSorted()).toEqual([
+      'independent-move-sketch',
+      'move-process-sketch',
+    ])
   })
 })
 
