@@ -1,0 +1,116 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+project {
+   id "runtime-keyboard-navigation-smoke"
+   name "Runtime Keyboard Navigation Smoke"
+}
+
+app KeyboardNavigationAcceptance {
+   Name "Keyboard Navigation Acceptance"
+   Navigator StackNav {
+      Initial KeyboardWorkbench
+   }
+   Datasource Memory { }
+}
+
+data Folders / Folder {
+   Name text (title)
+
+   order by Name
+}
+
+data Notes / Note {
+   Title text (title)
+   Folder
+
+   order by Title
+
+   commands FileNote
+}
+
+data Events / Event {
+   Name text (title)
+
+   order by Name
+}
+
+command FileNote(Note, Destination Folder, Label text) {
+   Title "File note"
+   Key "f"
+   do -> { update Note {
+      Title: Label
+      Folder: Destination
+   } }
+}
+
+command RecordAlpha() {
+   Title "Record alpha"
+   do -> { create Event {
+      Name: "Alpha invoked"
+   } }
+}
+
+command RecordBeta() {
+   Title "Record beta"
+   do -> { create Event {
+      Name: "Beta invoked"
+   } }
+}
+
+command RecordGamma() {
+   Title "Record gamma"
+   do -> { create Event {
+      Name: "Gamma invoked"
+   } }
+}
+
+scene KeyboardWorkbench() {
+   Title "Keyboard acceptance"
+   state Search = ""
+   query Folders as VisibleFolders {
+      limit 1
+   }
+   query Notes { }
+   query Events { }
+   action SeedFolders() {
+      create Folder {
+         Name: "Archive"
+      }
+      create Folder {
+         Name: "Home"
+   }  }
+   render Col() {
+      Text("Keyboard acceptance ready")
+
+      #acceptanceInput
+      TextInput(Value: Search, Label: "Acceptance input") {
+         on submit -> { set Search = Search }
+      }
+
+      #seedFolders
+      FormButton("Seed folders") {
+         on press SeedFolders
+      }
+      loop VisibleFolders / Folder {
+         Text("Mounted folder: { Folder.Name }")
+
+         #createDraft
+         FormButton("Create draft") {
+            on press -> { create Note {
+               Title: "Draft note"
+               Folder
+            } }
+      }  }
+      loop Notes / Note {
+         NoteRow(Note)
+      }
+      loop Events / Event {
+         Text(Event.Name)
+}  }  }
+
+view NoteRow(Note) {
+   render Col() {
+      Text(Note.Title)
+}  }
