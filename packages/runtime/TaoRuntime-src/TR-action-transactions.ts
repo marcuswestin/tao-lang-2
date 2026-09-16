@@ -39,6 +39,7 @@ class ActionTransaction {
   committed = false
   journal: TaoDebugJournalEntry | undefined
   failure: unknown
+  settled = false
 
   pushFrame(name: string): void {
     this.frames.push(name)
@@ -109,6 +110,22 @@ let activeTransaction: ActionTransaction | undefined
 let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
+
+/** TaoActionContinuation is the compiler-carried transaction identity for one async action root. */
+export type TaoActionContinuation = Readonly<{ transaction?: object }>
+
+/** captureActionContinuation binds generated continuation segments to their invoking transaction. */
+export function captureActionContinuation(): TaoActionContinuation {
+  return { ...(activeTransaction ? { transaction: activeTransaction } : {}) }
+}
+
+/** resumeActionContinuation selects the transaction owned by the generated segment about to run. */
+export function resumeActionContinuation(continuation: TaoActionContinuation): void {
+  const transaction = continuation.transaction as ActionTransaction | undefined
+  if (transaction && !transaction.settled) {
+    activeTransaction = transaction
+  }
+}
 
 /**
  * beginActionLaunch ends the launch every running action root belongs to. A root the ending launch
@@ -210,7 +227,9 @@ export function runAction(
 }
 
 function finishRootSuccess(transaction: ActionTransaction): void {
-  activeTransaction = undefined
+  if (activeTransaction === transaction) {
+    activeTransaction = undefined
+  }
   if (abandonedByLaunch(transaction)) {
     // Every resource this root touched is still private to the transaction, so dropping it without
     // committing is the rollback. Publishing here would write the ended launch's work into the one
@@ -227,7 +246,9 @@ function finishRootFailure(
   name: string,
   arguments_: readonly unknown[],
 ): void {
-  activeTransaction = undefined
+  if (activeTransaction === transaction) {
+    activeTransaction = undefined
+  }
   transaction.rollback()
   transaction.failure = error
   if (abandonedByLaunch(transaction)) {
@@ -237,7 +258,10 @@ function finishRootFailure(
 }
 
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
-  activeTransaction = suspendedTransaction
+  transaction.settled = true
+  if (activeTransaction === undefined && suspendedTransaction && !suspendedTransaction.settled) {
+    activeTransaction = suspendedTransaction
+  }
   transaction.popFrame()
   settleJournal(transaction)
   if (transaction.committed) {

@@ -27,6 +27,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+        const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
           ${Compile.ActionBlockBody(action.block)}
@@ -124,6 +125,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       TR.Action(${asyncKeyword}() => {
+        const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
@@ -173,16 +175,22 @@ export const ActionsCompiler = {
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
     if (!actionInstrumentationEnabled() || !block) {
-      return gen.list(block?.statements ?? [], Compile.ActionStatement)
+      return gen.list(block?.statements ?? [], statement =>
+        gen`
+        TR.ResumeActionContinuation(_TaoActionContinuation)
+        ${Compile.ActionStatement(statement)}
+      `)
     }
     const owner = debugOwner(block)
     return gen.list(block.statements.map((statement, index) => ({ index, statement })), ({ index, statement }) =>
       gen`
+        TR.ResumeActionContinuation(_TaoActionContinuation)
         await TR.Debug.At({ action: ${gen.jsLiteral(owner.name)}, path: ${
         gen.jsLiteral(statementPath(block, index))
       }, declaration: ${compileDeclarationIdentity(owner.declaration)}.canonical, statement: ${
         gen.jsLiteral(structuralStatementIdentity(statement, owner.declaration))
       } }, _Scope)
+        TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
       `)
   },
@@ -194,11 +202,12 @@ export const ActionsCompiler = {
 
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
-    return gen`TR.Async(() =>
-      TR.BlockScope(_Scope, async _Scope => {
+    return gen`TR.Async(() => {
+      const _TaoActionContinuation = TR.ActionContinuation()
+      return TR.BlockScope(_Scope, async _Scope => {
         ${Compile.ActionBlockBody(statement.block)}
       })
-    )`
+    })`
   },
 
   /** DoStatement compiles Tao action invocation. */

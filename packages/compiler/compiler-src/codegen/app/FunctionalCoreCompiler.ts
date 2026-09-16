@@ -179,11 +179,13 @@ export const FunctionalCoreCompiler = {
     const block = handler.block
     Assert.defined(loop, 'validated loop select handler is a direct loop child')
     Assert.defined(block, 'validated loop select handler has an inline action block')
-    return gen`${functionRuntimeParameterName(0)} =>
-      TR.BlockScope(_Scope, async _Scope => {
+    return gen`${functionRuntimeParameterName(0)} => {
+      const _TaoActionContinuation = TR.ActionContinuation()
+      return TR.BlockScope(_Scope, async _Scope => {
         ${gen.scopeName(loop)} = ${functionRuntimeParameterName(0)}
         ${Compile.ActionBlockBody(block)}
-      })`
+      })
+    }`
   },
 } as const
 

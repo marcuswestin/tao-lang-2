@@ -354,7 +354,7 @@ Describe('Tao Studio scenario runtime', () => {
           scenario "held" {
             render ()
             press down #revertSave
-            advance 600.ms
+            advance 1.5.ms
             press up #revertSave
             hover #revertSave
             focus #revertSave
@@ -405,7 +405,7 @@ Describe('Tao Studio scenario runtime', () => {
         'hover',
         'focus',
       ])
-      Expect(scenario.steps[1]).toMatchObject({ kind: 'advance', milliseconds: 600 })
+      Expect(scenario.steps[1]).toMatchObject({ kind: 'advance', milliseconds: 1.5 })
 
       const generatedApp = require(FS.resolvePath('TaoApp.tsx', generatedRoot)) as { default: ComponentType }
       const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {})

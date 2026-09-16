@@ -1,6 +1,8 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { Debug } from '../TaoRuntime-src/TR-debug'
+import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from '../TaoRuntime-src/TR-errors'
+import { registerRuntimeCaptureDomain } from '../TaoRuntime-src/TR-runtime-capture'
 import {
   collectStudioPreviewLayoutMeasurements,
   mountStudioPreviewBridge,
@@ -626,6 +628,56 @@ Describe('Studio preview runtime bridge', () => {
       targetOrigin: config.parentOrigin,
     })
     cleanup()
+  })
+
+  Test('preserves Tao error taxonomy when runtime capture fails across the preview protocol', async () => {
+    const failures = [
+      { error: new UserInputError('invalid capture'), message: 'invalid capture' },
+      { error: new HostEnvironmentError('capture host unavailable'), message: 'capture host unavailable' },
+      { error: new UnexpectedBehaviorError('capture invariant failed'), message: 'capture invariant failed' },
+      { error: 'unknown capture failure', message: 'unknown capture failure' },
+    ] as const
+    const expectedNames = [
+      'UserInputError',
+      'HostEnvironmentError',
+      'UnexpectedBehaviorError',
+      'UnexpectedBehaviorError',
+    ] as const
+
+    for (const [index, failure] of failures.entries()) {
+      const fake = previewHost([])
+      const unregister = registerRuntimeCaptureDomain({
+        capture: () => {
+          throw failure.error
+        },
+        domain: `capture-failure-${index}`,
+        version: 1,
+      })
+      const cleanup = mountStudioPreviewBridge(config, fake.host)
+      try {
+        fake.dispatchWindow('message', {
+          data: {
+            channel: 'tao-studio',
+            identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+            protocolVersion: 1,
+            requestId: `runtime-capture-${index}`,
+            type: 'capture-runtime',
+          },
+          origin: config.parentOrigin,
+          source: fake.parent,
+        })
+        await settled()
+        Expect(fake.messages.at(-1)?.message).toMatchObject({
+          error: failure.message,
+          errorName: expectedNames[index],
+          requestId: `runtime-capture-${index}`,
+          type: 'preview-runtime-capture-failed',
+        })
+      } finally {
+        cleanup()
+        unregister()
+      }
+    }
   })
 
   Test('forwards bounded preview console records and restores the console on cleanup', () => {

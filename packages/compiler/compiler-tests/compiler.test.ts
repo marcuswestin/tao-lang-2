@@ -977,6 +977,8 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('await TR.Navigation.Ask(')
     Expect(compiled.code).toContain('TR.Navigation.Respond(')
     Expect(compiled.code).toContain('TR.Action(async')
+    Expect(compiled.code).toContain('const _TaoActionContinuation = TR.ActionContinuation()')
+    Expect(compiled.code).toContain('TR.ResumeActionContinuation(_TaoActionContinuation)')
     Expect(compiled.code).toContain('await TR.If(')
     Expect(compiled.code).toContain('...TR.TaoContext(_ViewProps.__tao)')
   })

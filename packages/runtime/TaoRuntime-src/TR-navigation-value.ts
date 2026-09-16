@@ -160,6 +160,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
       || this.hostedNavigations().some(mount => mount.canGoBack)
   }
 
+  /** contentIsCovered reports whether this navigator's own overlay or ask masks its content. */
+  contentIsCovered(): boolean {
+    return this.overlayEntries.length > 0
+  }
+
   /** historyDepth is the number of semantic Back operations mirrored by the web adapter. */
   historyDepth(): number {
     return this.overlayEntries.length + this.contentHistoryDepth()

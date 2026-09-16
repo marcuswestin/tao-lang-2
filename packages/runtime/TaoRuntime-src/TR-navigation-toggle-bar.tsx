@@ -131,6 +131,14 @@ function BarToolbar(props: {
   const [expanded, setExpanded] = React.useState(false)
   const runtime = requireReactNativeRuntime()
   const moreHost = React.useRef<TaoAccessibilityHost | null>(null)
+  const restoreOverflowFocus = React.useRef(false)
+  React.useEffect(() => {
+    if (expanded || !restoreOverflowFocus.current) {
+      return
+    }
+    restoreOverflowFocus.current = false
+    focusAccessibilityHost(runtime, moreHost.current)
+  }, [expanded, runtime])
   if (props.commands.length === 0) {
     return null
   }
@@ -138,8 +146,8 @@ function BarToolbar(props: {
   const direct = props.commands.slice(0, directToolbarCapacity)
   const overflow = props.commands.slice(directToolbarCapacity)
   const close = () => {
+    restoreOverflowFocus.current = true
     setExpanded(false)
-    focusAccessibilityHost(runtime, moreHost.current)
   }
   return React.createElement(runtime.View, {
     children: [
@@ -155,7 +163,7 @@ function BarToolbar(props: {
       overflow.length === 0 ? null : React.createElement(NavigationCommandButton, {
         accessibilityState: { expanded },
         command: {
-          enabled: true,
+          enabled: props.observable,
           icon: 'ellipsis',
           identity: 'navigation:toolbar:more',
           invoke: () => expanded ? close() : setExpanded(true),

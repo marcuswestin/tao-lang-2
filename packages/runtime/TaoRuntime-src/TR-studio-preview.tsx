@@ -2,6 +2,7 @@ import React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
+import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
 import type { TaoSchemeSnapshot } from './TR-scheme'
@@ -418,16 +419,20 @@ export async function replayStudioJourney(
       },
       async find(selector, target, scope) {
         checkAborted()
-        return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs)
+        return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs, options.signal)
       },
       async select(tag, index, scope) {
         checkAborted()
         let matchCount = 0
-        const selected = await waitForTaoJourneyTarget(() => {
-          const matches = findJourneyTargets(host, 'tag', tag, scope)
-          matchCount = matches.length
-          return matches[index - 1]
-        }, options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs)
+        const selected = await waitForTaoJourneyTarget(
+          () => {
+            const matches = findJourneyTargets(host, 'tag', tag, scope)
+            matchCount = matches.length
+            return matches[index - 1]
+          },
+          options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs,
+          options.signal,
+        )
         RuntimeAssert.input(
           selected !== undefined,
           `Tao Studio journey expected row ${index} for tag '#${tag}', found ${matchCount} after waiting ${
@@ -456,16 +461,21 @@ async function findJourneyTarget(
   target: string,
   scope?: StudioPreviewElement,
   timeoutMs = taoJourneyTargetTimeoutMs,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewElement> {
-  const match = await waitForTaoJourneyTarget(() => {
-    const matches = findJourneyTargets(host, selector, target, scope)
-    RuntimeAssert.input(
-      matches.length <= 1,
-      `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
-      { selector, target },
-    )
-    return matches[0]
-  }, timeoutMs)
+  const match = await waitForTaoJourneyTarget(
+    () => {
+      const matches = findJourneyTargets(host, selector, target, scope)
+      RuntimeAssert.input(
+        matches.length <= 1,
+        `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+        { selector, target },
+      )
+      return matches[0]
+    },
+    timeoutMs,
+    signal,
+  )
   RuntimeAssert.input(
     match !== undefined,
     `Tao Studio journey expected exactly one ${selector} target '${target}', found 0 after waiting ${timeoutMs}ms.`,
@@ -1497,11 +1507,24 @@ function postRuntimeCaptureFailure(
   host.parent.postMessage({
     channel: studioProtocolChannel,
     error: error instanceof Error ? error.message : String(error),
+    errorName: runtimeCaptureErrorName(error),
     identity: previewIdentity(config),
     protocolVersion: studioProtocolVersion,
     requestId,
     type: 'preview-runtime-capture-failed',
   }, config.parentOrigin)
+}
+
+function runtimeCaptureErrorName(
+  error: unknown,
+): 'HostEnvironmentError' | 'UnexpectedBehaviorError' | 'UserInputError' {
+  if (error instanceof HostEnvironmentError) {
+    return 'HostEnvironmentError'
+  }
+  if (error instanceof UserInputError) {
+    return 'UserInputError'
+  }
+  return error instanceof UnexpectedBehaviorError ? error.name : 'UnexpectedBehaviorError'
 }
 
 function postCapturedFixture(
