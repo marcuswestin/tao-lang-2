@@ -100,7 +100,7 @@ Describe('Tao package discovery', () => {
     },
   )
 
-  Test('indexes only eligible package directories beside ancestor roots', async () => {
+  Test('does not index package directories above the project root', async () => {
     const root = await mkTestDir('tao-packages-ancestor-eligibility-')
     try {
       const projectRoot = FS.resolvePath('project', root)
@@ -109,9 +109,131 @@ Describe('Tao package discovery', () => {
       await FS.writeText(FS.resolvePath('@future/nested/View.tao-next', root), '')
 
       const index = await Packages.createIndex(projectRoot)
+      const context = await Packages.createContext(projectRoot)
 
-      Expect(index.packages.has('@current')).toBe(true)
+      Expect(index.packages.has('@current')).toBe(false)
       Expect(index.packages.has('@future')).toBe(false)
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '../Outside',
+      })).toMatchObject({ invalidReason: 'project-boundary', relation: 'invalid' })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('resolves the same package name independently in sibling projects', async () => {
+    const root = await mkTestDir('tao-packages-project-local-')
+    try {
+      const firstRoot = FS.resolvePath('First', root)
+      const secondRoot = FS.resolvePath('Second', root)
+      await FS.writeText(FS.resolvePath('Main.tao', firstRoot), 'project { id "first" name "First" }')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', firstRoot), '')
+      await FS.writeText(FS.resolvePath('Main.tao', secondRoot), 'project { id "second" name "Second" }')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', secondRoot), '')
+      const context = await Packages.createContext(root)
+
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', firstRoot),
+        importPath: '@data',
+      })).toMatchObject({
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@data', firstRoot),
+      })
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', secondRoot),
+        importPath: '@data',
+      })).toMatchObject({
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@data', secondRoot),
+      })
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', firstRoot),
+        importPath: '@data/../../Outside',
+      })).toMatchObject({
+        invalidReason: 'package-path-escape',
+        packageName: '@data',
+        relation: 'invalid',
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('does not enter a nested project through a package subpath or bare package import', async () => {
+    const root = await mkTestDir('tao-packages-nested-project-boundary-')
+    try {
+      const packageMain = FS.resolvePath('@outer/Main.tao', root)
+      const nestedRoot = FS.resolvePath('@outer/Child', root)
+      const nestedFile = FS.resolvePath('Hidden.tao', nestedRoot)
+      await FS.writeText(FS.resolvePath('Project.tao', root), 'project { id "outer" name "Outer" }')
+      await FS.writeText(packageMain, '')
+      await FS.writeText(FS.resolvePath('Project.tao', nestedRoot), 'project { id "child" name "Child" }')
+      await FS.writeText(nestedFile, '')
+      const context = await Packages.createContext(root)
+
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', root),
+        importPath: '@outer/Child',
+      })).toMatchObject({ invalidReason: 'project-boundary', relation: 'invalid' })
+      const bareResolution = Packages.resolve(context, { fromFilePath: packageMain })
+      Expect(await Packages.candidateFilePaths(bareResolution)).toEqual([packageMain])
+      Expect(Packages.targetMatches(bareResolution, {
+        filePath: nestedFile,
+        workspaceFilePaths: new Set([packageMain, nestedFile]),
+      })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reserves a separate generated package for each declared project', async () => {
+    const root = await mkTestDir('tao-packages-project-generated-roots-')
+    try {
+      for (const project of ['First', 'Second']) {
+        await FS.writeText(
+          FS.resolvePath(`${project}/Main.tao`, root),
+          `project { id "${project.toLowerCase()}" name "${project}" }`,
+        )
+        await FS.writeText(FS.resolvePath(`${project}/@/studio/.gitkeep`, root), '')
+      }
+      const context = await Packages.createContext(root)
+
+      Expect(context.index.packages.get('@')).toEqual([
+        FS.resolvePath('First/@', root),
+        FS.resolvePath('Second/@', root),
+      ])
+      for (const project of ['First', 'Second']) {
+        Expect(Packages.resolve(context, {
+          fromFilePath: FS.resolvePath(`${project}/Main.tao`, root),
+          importPath: '@/studio',
+        })).toMatchObject({
+          relation: 'same-project-package',
+          targetPath: FS.resolvePath(`${project}/@/studio`, root),
+        })
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('roots a nested entry context at its containing project', async () => {
+    const root = await mkTestDir('tao-packages-containing-project-')
+    try {
+      const nestedRoot = FS.resolvePath('screens', root)
+      await FS.writeText(FS.resolvePath('Main.tao', root), 'project { id "root" name "Root" }')
+      await FS.writeText(FS.resolvePath('Main.tao', nestedRoot), '')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', root), '')
+      const context = await Packages.createContext(nestedRoot)
+
+      Expect(context.index.projectRoot).toBe(root)
+      Expect(Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', nestedRoot),
+        importPath: '@data',
+      })).toMatchObject({
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@data', root),
+      })
     } finally {
       await FS.remove(root)
     }
@@ -194,6 +316,16 @@ Describe('Tao package discovery', () => {
 
       Expect(resolution.targetPath).toBe(FS.resolvePath('@tao/ui', stdlibRoot))
       Expect(await Packages.candidateFilePaths(resolution)).toEqual([viewsPath])
+      const escaped = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '@tao/../../../Outside',
+      })
+      Expect(escaped).toMatchObject({
+        invalidReason: 'package-path-escape',
+        packageName: '@tao',
+        relation: 'invalid',
+      })
+      Expect(await Packages.candidateFilePaths(escaped)).toEqual([])
     } finally {
       await FS.remove(root)
     }

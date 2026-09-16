@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices } from '@parser'
-import { type Diagnostic, Diagnostics } from '@shared'
+import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
@@ -39,10 +39,18 @@ function createContext(
  */
 function installLangiumChecks(services: ParserServices, packagesContext: Packages.Context): void {
   registerTaoValidationChecks(services.language, file => {
+    const entryFilePath = AST.getDocument(file).uri.path
+    const projectRoot = Packages.projectRootForPath(packagesContext.index, entryFilePath)
     const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
       .filter(AST.isTaoFile)
-    return createContext(packagesContext, workspaceFiles, AST.getDocument(file).uri.path)
+      .filter(candidate => {
+        const path = AST.getDocument(candidate).uri.path
+        return FS.pathIsWithin(path, packagesContext.stdlibRoot)
+          || !FS.pathIsWithin(path, packagesContext.index.projectRoot)
+          || Packages.projectRootForPath(packagesContext.index, path) === projectRoot
+      })
+    return createContext(packagesContext, workspaceFiles, entryFilePath)
   })
 }
 

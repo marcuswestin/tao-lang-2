@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "nextViewNumber": 3,
-  "revision": 16,
+  "revision": 17,
   "sketches": [
     {
       "height": 259,
@@ -68,8 +68,8 @@
           "target": {
             "elementName": "Text",
             "path": "@/studio/View2.tao",
-            "renderId": "/Users/ro/code/tao-lang-2/Apps/HNReader/@/studio/View2.tao:380:394",
-            "sourceVersion": "text-v1:487:105kqzs0z1nxv0",
+            "renderId": "/Users/ro/.codex/worktrees/f274/tao-lang-2/Apps/HNReader/@/studio/View2.tao:367:381",
+            "sourceVersion": "text-v1:474:0bq3xmn186pher",
             "studioRectId": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
             "view": "View2"
           }

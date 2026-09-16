@@ -16,6 +16,7 @@ import {
   checksFiles,
   rejects,
   rejectsFiles,
+  rejectsFilesFrom,
   stubView,
   testValidateCodeWithErrors,
   validationErrorMessages,
@@ -401,6 +402,49 @@ Describe('validator: workspace structure', () => {
         'features/@bar/Main.tao': visibleView('MainView'),
       },
       useValidationMessages.packageBoundary('./features/@bar'),
+    ),
+  )
+
+  Test(
+    'rejects package subpaths that enter nested projects with project dependency guidance',
+    rejectsFilesFrom(
+      'Outer/Main.tao',
+      {
+        'Outer/Main.tao': `
+          project { id "outer" name "Outer" }
+          use Hidden from @outer/Child
+        `,
+        'Outer/@outer/Main.tao': 'workspace let Visible = "Outer"',
+        'Outer/@outer/Child/Project.tao': 'project { id "child" name "Child" }',
+        'Outer/@outer/Child/Hidden.tao': 'public let Hidden = "Nested"',
+      },
+      useValidationMessages.projectBoundary('@outer/Child'),
+    ),
+  )
+
+  Test(
+    'rejects relative imports that leave a project with project dependency guidance',
+    rejectsFilesFrom(
+      'App/Main.tao',
+      {
+        'App/Main.tao': `
+          project { id "app" name "App" }
+          use Hidden from ../Sibling
+        `,
+        'Sibling/Hidden.tao': 'public let Hidden = "Sibling"',
+      },
+      useValidationMessages.projectBoundary('../Sibling'),
+    ),
+  )
+
+  Test(
+    'rejects package imports that traverse outside their named package',
+    rejectsFiles(
+      {
+        'Main.tao': 'use Hidden from @data/../../Outside',
+        '@data/Data.tao': 'workspace let Visible = "Local"',
+      },
+      useValidationMessages.packagePathEscape('@data/../../Outside', '@data'),
     ),
   )
 
