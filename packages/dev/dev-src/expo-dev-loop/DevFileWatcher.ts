@@ -19,8 +19,8 @@ type DevWatcherSpec = {
 export class DevFileWatcher {
   private readonly watchers: DebouncedWatcher[]
 
-  constructor(appPath: string, onChange: (shouldRunParserGen: boolean) => void) {
-    this.watchers = watcherSpecs(appPath).map(spec => startDebouncedWatcher(spec, onChange))
+  constructor(projectRoot: string, onChange: (shouldRunParserGen: boolean) => void) {
+    this.watchers = watcherSpecs(projectRoot).map(spec => startDebouncedWatcher(spec, onChange))
   }
 
   async close(): Promise<void> {
@@ -66,10 +66,9 @@ function startDebouncedWatcher(
   }
 }
 
-function watcherSpecs(appPath: string): DevWatcherSpec[] {
-  // Watching the whole app folder keeps recompiles working for project files outside the
+function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
+  // Watching the whole project keeps recompiles working for project files outside the
   // current dependency tree, e.g. newly created or not-yet-imported .tao files.
-  const appRoot = FS.dirname(appPath)
   // Separate watcher groups keep grammar generation unconditional for grammar edits and avoid path classification.
   return [
     {
@@ -83,7 +82,7 @@ function watcherSpecs(appPath: string): DevWatcherSpec[] {
     {
       label: 'compile',
       paths: [
-        appRoot,
+        projectRoot,
         Repo.resolvePath('Justfile'),
         Repo.resolvePath('packages/ast-utils'),
         Repo.resolvePath('packages/compiler'),

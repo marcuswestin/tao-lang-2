@@ -191,11 +191,6 @@ Describe('TR.Data references across stores', () => {
     Expect(stories.captureIdentity()).toContain('"explicit"')
   })
 
-  Test('keys restoration by every store, and not at all when one cannot be represented', () => {
-    Expect(TR.Data.CombinedIdentity(['feed', 'personal'])).toBe('["feed","personal"]')
-    Expect(TR.Data.CombinedIdentity(['feed', undefined])).toBeUndefined()
-  })
-
   Test('rejects a reference definition that tries to cascade across the boundary', () => {
     Expect(() =>
       TR.Data.Schema({

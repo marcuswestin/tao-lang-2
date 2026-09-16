@@ -43,15 +43,15 @@ Test(
             }
             const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
             const stableRoot = await FS.readText(FS.resolvePath('App.tsx', generatedRoot))
-            const firstRevision = await FS.readText(FS.resolvePath('TaoStudioRevision.ts', generatedRoot))
+            const firstPublication = await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))
             const file = await preview.session.readFile('Garden.tao')
             const manifest = preview.session.previewManifest()
 
             Expect(compiled.status).toBe('compiled')
             Expect(stableRoot).toContain('TR.Studio.PreviewBridge')
             Expect(stableRoot).toContain('/api/preview/cell/bootstrap')
-            Expect(firstRevision).toContain('"compileRevision":1')
-            Expect(firstRevision).toContain(file.sourceVersion)
+            Expect(firstPublication).toContain('"compileRevision":1')
+            Expect(firstPublication).toContain(file.sourceVersion)
             Expect(manifest?.scenarios.map(scenario => [scenario.group, scenario.label])).toEqual([['states', 'phone']])
             Expect(manifest?.cells[0]?.cellId).toBe(`${manifest?.scenarios[0]?.scenarioId}#cell`)
             Expect(manifest?.cells[0]?.environment.viewport).toEqual({
@@ -76,7 +76,7 @@ Test(
               writeId: 'invalid-draft',
             })
             Expect(invalid.saved).toBe(false)
-            Expect(await FS.readText(FS.resolvePath('TaoStudioRevision.ts', generatedRoot))).toBe(firstRevision)
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))).toBe(firstPublication)
 
             const valid = await preview.session.syncDraft({
               content: file.content.replace('Before', 'After'),
@@ -84,12 +84,12 @@ Test(
               sourceVersion: file.sourceVersion,
               writeId: 'valid-draft',
             })
-            const secondRevision = await FS.readText(FS.resolvePath('TaoStudioRevision.ts', generatedRoot))
+            const secondPublication = await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))
 
             Expect(valid.saved).toBe(true)
             Expect(valid.compile?.compileRevision).toBe(2)
-            Expect(secondRevision).toContain('"compileRevision":2')
-            Expect(secondRevision).toContain(valid.file.sourceVersion)
+            Expect(secondPublication).toContain('"compileRevision":2')
+            Expect(secondPublication).toContain(valid.file.sourceVersion)
           } finally {
             await preview.close()
           }
@@ -150,7 +150,7 @@ Test('Studio preview session publishes a generated sketch scenario after creatio
           Expect(manifest.cells.some(cell => cell.scenarioId === sketchScenario?.scenarioId)).toBe(true)
           Expect(
             await FS.readText(
-              FS.resolvePath('_gen_tao-app/revisions/revision-2/TaoApp.tsx', previewRuntimeRoot),
+              FS.resolvePath('_gen_tao-app/TaoApp.tsx', previewRuntimeRoot),
             ),
           ).toContain("import './modules/@/studio/View1.tao'")
         } finally {

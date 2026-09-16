@@ -227,7 +227,11 @@ export class StudioCdp {
       element.scrollIntoView({ block: 'center', inline: 'center' })
       return true
     })()`)
-    const point = await this.elementCenter(selector, 'clickable')
+    await this.clickAt(await this.elementCenter(selector, 'clickable'))
+  }
+
+  /** Clicks a viewport point with real mouse input, reaching whatever is drawn there, including inside a frame. */
+  async clickAt(point: Point): Promise<void> {
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 1,

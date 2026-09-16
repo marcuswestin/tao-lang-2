@@ -46,6 +46,15 @@ export const FilesCompiler = {
 
       ${gen.textLines(importLines)}
 
+      ${
+      opts.studio && apps.length > 0
+        ? gen`
+          const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario
+          const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture
+        `
+        : gen.noop()
+    }
+
       const _Scope: any = {}
       ${gen.textLines(scopeBindings)}
       ${gen.textLines(viewRegistrations)}

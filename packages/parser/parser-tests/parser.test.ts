@@ -4,6 +4,25 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 Describe('parser: core language syntax', () => {
+  Test('parses app declarations with ordinary visibility markers', async () => {
+    const parseResult = await testParseCode(`
+      file app Private { }
+      folder app Sibling { }
+      package app PackageApp { }
+      workspace app WorkspaceApp { }
+      public app PublicApp { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    Expect(parseResult.entry.ast.statements.filter(AST.isAppDeclaration).map(app => app.visibility)).toEqual([
+      'file',
+      'folder',
+      'package',
+      'workspace',
+      'public',
+    ])
+  })
+
   Test('links live app state and actions into a bound configured root view', async () => {
     const result = await testParseCode(`
       public type StackNav is nav with {
