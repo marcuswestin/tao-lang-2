@@ -261,6 +261,7 @@ export async function startStudioSessionServer(
             ? undefined
             : response(request, url, requestOptions, { error: 'WebSocket upgrade failed.' }, 400)
         }
+        configureRequestLifetime(request, bunServer, route.pathname)
         const sessionUrl = new URL(`${route.pathname}${url.search}${url.hash}`, url.origin)
         return await handleRequest(
           resource.session,
@@ -349,6 +350,17 @@ export async function startStudioSessionServer(
       server.stop(true)
     },
     url,
+  }
+}
+
+/** Shipping can be quiet for minutes while Apple processes a build; Bun otherwise resets it after ten seconds. */
+function configureRequestLifetime(
+  request: Request,
+  server: Pick<Bun.Server<StudioSocketData>, 'timeout'>,
+  pathname: string,
+): void {
+  if (at(request, pathname, routes.shipBeta)) {
+    server.timeout(request, 0)
   }
 }
 
@@ -1174,6 +1186,7 @@ function forbiddenResponse(message: string): Response {
 
 export const StudioServerTesting = {
   betaShipArguments,
+  configureRequestLifetime,
   errorResponse,
   handleDeviceRequest,
   handleRequest: handleRequestForTesting,

@@ -179,6 +179,22 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
+  Test('disables Bun idle timeout only for the long-running beta ship request', () => {
+    const calls: Array<{ request: Request; seconds: number }> = []
+    const server = {
+      timeout(request: Request, seconds: number) {
+        calls.push({ request, seconds })
+      },
+    }
+    const ship = new Request('http://127.0.0.1:5678/api/ship/beta', { method: 'POST' })
+    const files = new Request('http://127.0.0.1:5678/api/files')
+
+    StudioServerTesting.configureRequestLifetime(ship, server as never, '/api/ship/beta')
+    StudioServerTesting.configureRequestLifetime(files, server as never, '/api/files')
+
+    Expect(calls).toEqual([{ request: ship, seconds: 0 }])
+  })
+
   Test('the default beta ship ignores a dirty Git tree', () => {
     Expect(StudioServerTesting.betaShipArguments({
       appName: 'Garden',
