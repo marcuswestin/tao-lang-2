@@ -138,6 +138,86 @@ Describe('@tao/data providers', () => {
     Expect(message.includes('hidden')).toBe(false)
   })
 
+  Test('recovers repeated loads and completes close after unsubscribe failures', async () => {
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
+    const connection = provider.connect({
+      configuration: { AppId: 'app-id' },
+      schema: { entities: {}, name: 'InstantTest' },
+      storageKey: 'Notes',
+    })
+    const initial = connection.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [] } })
+    await initial
+
+    sdk.failNextUnsubscribeWith({ message: 'raw unsubscribe detail' })
+    await Expect(connection.load()).rejects.toThrow('InstantDB unsubscribe failed.')
+
+    const recovered = connection.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'recovered', StorageKey: 'Notes' }] } })
+    Expect(await recovered).toBe('recovered')
+
+    const categorized = new Errors.UserInputError('Categorized unsubscribe failure.')
+    sdk.failNextUnsubscribeWith(categorized)
+    let closeError: unknown
+    try {
+      connection.close?.()
+    } catch (error) {
+      closeError = error
+    }
+    Expect(closeError).toBe(categorized)
+    Expect(sdk.shutdownCalls).toBe(1)
+    connection.close?.()
+    Expect(sdk.shutdownCalls).toBe(1)
+  })
+
+  Test('aggregates unsubscribe and shutdown failures without stranding shared lifecycle state', async () => {
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
+    const connect = (): TR.DataConnection =>
+      provider.connect({
+        configuration: { AppId: 'app-id' },
+        schema: { entities: {}, name: 'InstantTest' },
+        storageKey: 'Notes',
+      })
+
+    const failing = connect()
+    const loading = failing.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [] } })
+    await loading
+    sdk.failNextUnsubscribeWith(Errors.abortError('raw unsubscribe failure'))
+    sdk.failNextShutdownWith('raw shutdown failure')
+    let aggregate: unknown
+    try {
+      failing.close?.()
+    } catch (error) {
+      aggregate = error
+    }
+    Expect(aggregate).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(aggregate)).toBe('InstantDB cleanup failed during unsubscribe and shutdown.')
+    Expect(sdk.shutdownCalls).toBe(1)
+    failing.close?.()
+    Expect(sdk.shutdownCalls).toBe(1)
+
+    const rawShutdown = connect()
+    sdk.failNextShutdownWith(Errors.abortError('raw shutdown detail'))
+    Expect(() => rawShutdown.close?.()).toThrow('InstantDB shutdown failed.')
+
+    const categorizedShutdown = new Errors.UnexpectedBehaviorError('Categorized shutdown failure.')
+    const categorized = connect()
+    sdk.failNextShutdownWith(categorizedShutdown)
+    let categorizedError: unknown
+    try {
+      categorized.close?.()
+    } catch (error) {
+      categorizedError = error
+    }
+    Expect(categorizedError).toBe(categorizedShutdown)
+
+    connect().close?.()
+    Expect(sdk.shutdownCalls).toBe(4)
+  })
+
   Test('counts core references across provider instances sharing one cached SDK core', () => {
     // @instantdb caches one core per equivalent init config, so two datasource declarations with
     // the same AppId hand their connections the same core object.
@@ -780,6 +860,8 @@ type InstantSubscriptionResult = {
 /** fakeInstantSDK emulates the SDK boundary, including its one cached core per init config. */
 function fakeInstantSDK(): {
   failTransactionsWith: (error: unknown) => void
+  failNextShutdownWith: (error: unknown) => void
+  failNextUnsubscribeWith: (error: unknown) => void
   initConfig: Record<string, unknown> | undefined
   instantSDK: unknown
   shutdownCalls: number
@@ -790,19 +872,31 @@ function fakeInstantSDK(): {
   const state = {
     initConfig: undefined as Record<string, unknown> | undefined,
     shutdownCalls: 0,
+    shutdownFailure: undefined as { error: unknown } | undefined,
     subscription: undefined as ((result: InstantSubscriptionResult) => void) | undefined,
     transactions: [] as unknown[],
     transactionFailure: undefined as unknown,
+    unsubscribeFailure: undefined as { error: unknown } | undefined,
     unsubscribeCalls: 0,
   }
   const core = {
     shutdown: () => {
       state.shutdownCalls += 1
+      const failure = state.shutdownFailure
+      state.shutdownFailure = undefined
+      if (failure !== undefined) {
+        throw failure.error
+      }
     },
     subscribeQuery: (_query: unknown, observer: (result: InstantSubscriptionResult) => void) => {
       state.subscription = observer
       return () => {
         state.unsubscribeCalls += 1
+        const failure = state.unsubscribeFailure
+        state.unsubscribeFailure = undefined
+        if (failure !== undefined) {
+          throw failure.error
+        }
       }
     },
   }
@@ -835,6 +929,12 @@ function fakeInstantSDK(): {
   return {
     failTransactionsWith(error: unknown) {
       state.transactionFailure = error
+    },
+    failNextShutdownWith(error: unknown) {
+      state.shutdownFailure = { error }
+    },
+    failNextUnsubscribeWith(error: unknown) {
+      state.unsubscribeFailure = { error }
     },
     get initConfig() {
       return state.initConfig

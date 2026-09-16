@@ -12,6 +12,7 @@ type SnapshotResult = {
   data?: { taoSnapshots?: readonly unknown[] }
   error?: unknown
 }
+type InstantCleanupFailure = Readonly<{ error: unknown; operation: 'shutdown' | 'unsubscribe' }>
 
 // Instant caches one core per equivalent init config across every `init` call, so the reference
 // count lives at module scope keyed by that shared core: closing the last connection of one
@@ -61,6 +62,16 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
       let missedResult: { error: unknown } | { snapshot: string | undefined } | undefined
       let rejectPendingLoad: ((error: Error) => void) | undefined
       let stopQuery: (() => void) | undefined
+      const stopActiveQuery = (): InstantCleanupFailure | undefined => {
+        const stop = stopQuery
+        stopQuery = undefined
+        try {
+          stop?.()
+          return undefined
+        } catch (error) {
+          return { error, operation: 'unsubscribe' }
+        }
+      }
 
       return {
         close: () => {
@@ -68,8 +79,11 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
             return
           }
           closed = true
-          stopQuery?.()
-          stopQuery = undefined
+          const failures: InstantCleanupFailure[] = []
+          const unsubscribeFailure = stopActiveQuery()
+          if (unsubscribeFailure !== undefined) {
+            failures.push(unsubscribeFailure)
+          }
           rejectPendingLoad?.(
             new Errors.HostEnvironmentError('The InstantDB connection closed before its load settled.'),
           )
@@ -77,10 +91,15 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
           const remaining = (clientReferences.get(db.core) ?? 1) - 1
           if (remaining > 0) {
             clientReferences.set(db.core, remaining)
-            return
+          } else {
+            clientReferences.delete(db.core)
+            try {
+              db.core.shutdown()
+            } catch (error) {
+              failures.push({ error, operation: 'shutdown' })
+            }
           }
-          clientReferences.delete(db.core)
-          db.core.shutdown()
+          throwCleanupFailures(failures)
         },
         // The load resolves from the first subscribeQuery result and the subscription stays alive
         // for the connection's lifetime: unlike queryOnce, the subscription serves the SDK's local
@@ -89,8 +108,13 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         load: () =>
           new Promise<string | undefined>((resolve, reject) => {
             let settled = false
-            stopQuery?.()
+            const unsubscribeFailure = stopActiveQuery()
             rejectPendingLoad?.(new Errors.HostEnvironmentError('The InstantDB connection restarted its load.'))
+            rejectPendingLoad = undefined
+            if (unsubscribeFailure !== undefined) {
+              reject(instantFailure(unsubscribeFailure.operation, unsubscribeFailure.error))
+              return
+            }
             rejectPendingLoad = error => {
               if (!settled) {
                 settled = true
@@ -203,6 +227,18 @@ function instantFailure(operation: string, error: unknown): Error {
     return error
   }
   return new Errors.HostEnvironmentError(`InstantDB ${operation} failed.`, { cause: error })
+}
+
+function throwCleanupFailures(failures: readonly InstantCleanupFailure[]): void {
+  if (failures.length === 0) {
+    return
+  }
+  if (failures.length === 1) {
+    const [failure] = failures
+    throw instantFailure(failure!.operation, failure!.error)
+  }
+  const operations = failures.map(failure => failure.operation).join(' and ')
+  Errors.throwHostEnvironment(`InstantDB cleanup failed during ${operations}.`, { cause: failures })
 }
 
 function instantSDK(): InstantSDK {
