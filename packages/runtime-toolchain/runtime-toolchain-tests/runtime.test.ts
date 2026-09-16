@@ -671,28 +671,7 @@ Describe('Tao runtime app generation', () => {
         )
         Expect(moduleCode).toContain('__tao_configuration_implementation_SidecarStack__')
 
-        const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
-        const typecheckConfig = FS.resolvePath('tsconfig.json', runtimePackageRoot)
-        await FS.writeJson(typecheckConfig, {
-          extends: Repo.resolvePath('packages/tsconfig.base.json'),
-          compilerOptions: {
-            allowImportingTsExtensions: true,
-            composite: false,
-            declaration: false,
-            incremental: false,
-            jsx: 'react-jsx',
-            lib: ['ES2023', 'DOM'],
-            noEmit: true,
-            rootDir: '/',
-            typeRoots: [Repo.resolvePath('node_modules/@types')],
-            types: ['bun', 'node'],
-          },
-          exclude: [`${generatedRoot}/current`],
-          include: [`${generatedRoot}/**/*.ts`, `${generatedRoot}/**/*.tsx`],
-        })
-        const typecheck = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
-          args: ['--project', typecheckConfig],
-        })
+        const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
         Assert(typecheck.exitCode === 0, 'generated sidecar configuration contract type-checks', {
           stderr: typecheck.stderr,
           stdout: typecheck.stdout,

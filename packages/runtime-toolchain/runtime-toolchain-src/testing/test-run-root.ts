@@ -20,7 +20,7 @@ const RETAINED_RUN_ROOTS = 1
 const ACTIVE_RUN_GRACE_MS = 60 * 60 * 1000
 
 /** RUN_ROOT_NAME matches the `TestRunId.create()` directory names this module owns. */
-const RUN_ROOT_NAME = /^run-(\d+)-[0-9a-z]/
+const RUN_ROOT_NAME = /^run-(\d+)-[0-9a-z]+$/
 
 /** CATEGORY_NAME matches the run-root grouping directory names this module writes. */
 const CATEGORY_NAME = /^[a-z][a-z0-9-]*$/

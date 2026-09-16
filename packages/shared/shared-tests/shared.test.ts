@@ -531,6 +531,22 @@ Describe('Errors, Assert, and Switch', () => {
     Expect(commandError.messageForUser).toBe('Command failed: tao run "Hello World.tao"')
   })
 
+  Test('describes message-less platform values without flattening them', () => {
+    Expect(Errors.messageOf({ code: 1006, type: 'close' })).toBe('Object (code: 1006, type: close)')
+  })
+
+  Test('normalizes unknown failures and builds Web-compatible cancellations', () => {
+    const original = new Errors.UserInputError('Fix the value.')
+    const normalized = Errors.asError('unexpected value')
+    const cancellation = Errors.abortError('Stopped by the caller.')
+
+    Expect(Errors.asError(original)).toBe(original)
+    Expect(normalized).toBeInstanceOf(Errors.UnexpectedBehaviorError)
+    Expect(normalized.message).toBe('unexpected value')
+    Expect(cancellation.name).toBe('AbortError')
+    Expect(cancellation.message).toBe('Stopped by the caller.')
+  })
+
   Test('sorts a host or environment failure into its own category', () => {
     const hostError = Errors.fromUnknown(
       new Errors.HostEnvironmentError('The Tao Studio browser bundle is missing.', { cause: 'no bundle' }),
@@ -663,6 +679,10 @@ Describe('Text', () => {
   Test('stripJsonc drops comments and trailing commas but leaves string contents alone', () => {
     const source = '{\n  // note\n  "s": "x, } /* not a comment */",\n  "list": [1, 2, /* two */],\n}\n'
     Expect(JSON.parse(Text.stripJsonc(source))).toEqual({ list: [1, 2], s: 'x, } /* not a comment */' })
+  })
+
+  Test('stripJsonc preserves an unterminated block comment as invalid input', () => {
+    Expect(() => JSON.parse(Text.stripJsonc('{ "ready": true } /* unfinished'))).toThrow()
   })
 })
 

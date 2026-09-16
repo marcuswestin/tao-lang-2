@@ -115,7 +115,33 @@ export function isTaoError(error: unknown): error is TaoError {
  * `packages/runtime/TaoRuntime-src/TR-errors.ts` keeps `errorMessage` as its mirror.
  */
 export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorDetail(error) ?? describeThrownValue(error)
+}
+
+function errorDetail(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message.trim().length > 0 ? error.message : undefined
+  }
+  if (typeof error === 'string') {
+    return error.trim().length > 0 ? error : undefined
+  }
+  if (typeof error === 'object' && error !== null) {
+    const carried = (error as { message?: unknown }).message
+    return typeof carried === 'string' && carried.trim().length > 0 ? carried : undefined
+  }
+  return error === undefined || error === null ? undefined : String(error)
+}
+
+function describeThrownValue(value: unknown): string {
+  if (typeof value !== 'object' || value === null) {
+    return String(value)
+  }
+  const name = value.constructor?.name ?? 'object'
+  const fields = Object.entries(value)
+    .filter(([, field]) => field === null || ['boolean', 'number', 'string'].includes(typeof field))
+    .slice(0, 4)
+    .map(([key, field]) => `${key}: ${typeof field === 'string' ? field : String(field)}`)
+  return fields.length === 0 ? name : `${name} (${fields.join(', ')})`
 }
 
 /**

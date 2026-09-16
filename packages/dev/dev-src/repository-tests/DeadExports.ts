@@ -166,7 +166,7 @@ export function taoForeignBindings(source: string): TaoBindingScan {
   const bindings: TaoForeignBinding[] = []
   const unreadable: number[] = []
   let injecting = false
-  source.split('\n').forEach((rawLine, index) => {
+  maskTaoComments(source).split('\n').forEach((rawLine, index) => {
     const fences = (rawLine.match(/```/g) ?? []).length
     const insideInjection = injecting
     if (fences % 2 === 1) {
@@ -175,17 +175,18 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     if (insideInjection || injecting) {
       return
     }
-    const line = rawLine.replace(/\/\/.*$/, '')
+    const line = rawLine
     const injected = TAO_INJECT_BINDING.exec(line)
-    if (injected !== null) {
+    const code = maskTaoStrings(line)
+    if (injected !== null && code[injected.index] === '=') {
       bindings.push({ line: index + 1, name: 'default', path: injected[1]! })
       return
     }
     if (/^\s*use\b/.test(line)) {
       return
     }
-    for (const match of line.matchAll(TAO_FROM_BINDING)) {
-      const name = boundExportName(line.slice(0, match.index))
+    for (const match of code.matchAll(TAO_FROM_BINDING)) {
+      const name = boundExportName(code.slice(0, match.index))
       if (name === undefined) {
         unreadable.push(index + 1)
         continue
@@ -194,6 +195,79 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     }
   })
   return { bindings, unreadable }
+}
+
+/** maskTaoComments preserves lines and strings while hiding both Tao comment forms from the binding scan. */
+function maskTaoComments(source: string): string {
+  let output = ''
+  let inBlockComment = false
+  let inString = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]!
+    const next = source[index + 1]
+    if (character === '\n') {
+      output += character
+      continue
+    }
+    if (inBlockComment) {
+      if (character === '*' && next === '/') {
+        output += '  '
+        index += 1
+        inBlockComment = false
+      } else {
+        output += ' '
+      }
+      continue
+    }
+    if (inString) {
+      output += character
+      if (character === '\\' && next !== undefined) {
+        output += next
+        index += 1
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      output += character
+    } else if (character === '/' && next === '/') {
+      const lineEnd = source.indexOf('\n', index)
+      const end = lineEnd === -1 ? source.length : lineEnd
+      output += ' '.repeat(end - index)
+      index = end - 1
+    } else if (character === '/' && next === '*') {
+      output += '  '
+      index += 1
+      inBlockComment = true
+    } else {
+      output += character
+    }
+  }
+  return output
+}
+
+/** maskTaoStrings keeps character offsets stable while hiding prose that only resembles a binding. */
+function maskTaoStrings(line: string): string {
+  let output = ''
+  let inString = false
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]!
+    if (!inString) {
+      inString = character === '"'
+      output += character
+      continue
+    }
+    output += character === '"' ? '"' : ' '
+    if (character === '\\' && line[index + 1] !== undefined) {
+      output += ' '
+      index += 1
+    } else if (character === '"') {
+      inString = false
+    }
+  }
+  return output
 }
 
 /**

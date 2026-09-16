@@ -67,6 +67,21 @@ Describe('generated test run roots', () => {
     })
   })
 
+  Test('refuses a run-root prefix with a foreign suffix', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const generatedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, runtimePackageRoot)
+      const foreignRunRoot = FS.resolvePath(`tao-test-command/run-${Date.now()}-a-manual`, generatedRoot)
+      await FS.writeText(FS.resolvePath('App.tsx', foreignRunRoot), 'kept')
+
+      await Expect(TestRunRoot.discard(foreignRunRoot, { runtimePackageRoot })).rejects.toThrow(
+        'not a _gen_tao-app-test run root',
+      )
+      await TestRunRoot.prune({ runtimePackageRoot })
+
+      Expect(await FS.readText(FS.resolvePath('App.tsx', foreignRunRoot))).toBe('kept')
+    })
+  })
+
   // `discard` removes recursively, so the run-root name shape alone must not authorize it: an
   // identically shaped directory under someone else's runtime root is still someone else's.
   Test('refuses to discard a same-shaped run root outside the configured runtime root', async () => {

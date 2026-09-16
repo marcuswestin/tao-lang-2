@@ -94,6 +94,17 @@ _bench-check:
     ])
   })
 
+  Test('a raw-error exemption allows one site rather than its whole file', () => {
+    const path = 'packages/runtime/TR-tests/failure.test.ts'
+    const source = `${rawError('first')}\n${rawError('second')}\n`
+    Expect(conventionRuleIssues(CONVENTION_RULES.rawError, [{ path, source }], [`${path}:1`])).toEqual([
+      `${path}:2 constructs a raw \`Error\`; where an error object must exist rather than be thrown,`
+      + ' build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+      + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
+      + ' `Errors.abortError(...)`.',
+    ])
+  })
+
   Test('accepts absorbed byte-identical mapped WordFlower directories', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`), file('nested/Feature.test.tao', 'test "Feature" { }')],
@@ -214,6 +225,34 @@ _bench-check:
 
       Expect(await repoLintIssues(root)).toEqual([
         'Apps/WordFlower/2 - Next is absorbed but .contract.bin differs from Apps/WordFlower/1 - Current.',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('scans Apps, runtime, and CommonJS executable sources for raw errors', async () => {
+    const root = await mkTestDir('tao-repo-lint-sources-')
+    try {
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root),
+        absorbed,
+      )
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root),
+        absorbed,
+      )
+      const source = `const failure = ${rawError('unclassified')}\n`
+      await FS.writeText(FS.resolvePath('Apps/Sample/Adapter.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/runtime/TR-tests/failure.test.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/plugin/config.cjs', root), source)
+
+      Expect(await repoLintIssues(root)).toEqual([
+        rawErrorIssue('Apps/Sample/Adapter.ts'),
+        rawErrorIssue('packages/plugin/config.cjs'),
+        rawErrorIssue('packages/runtime/TR-tests/failure.test.ts'),
       ])
     } finally {
       await FS.remove(root)
@@ -400,6 +439,25 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports side-effect, dynamic, and CommonJS node imports', () => {
+    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
+    const forms = [
+      "import 'node:fs'",
+      "await import('node:path')",
+      "const crypto = require('node:crypto')",
+    ]
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nodeImport,
+      [{ path, source: forms.join('\n') }],
+      [],
+    )).toEqual(
+      forms.map((_, index) =>
+        `${path}:${index + 1} imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
+        + ' from `@shared`, and add the seam there when none fits.'
+      ),
+    )
+  })
+
   Test('leaves a type-only node import alone', () => {
     const typeImport = ['import type { Writable }', 'from', "'node:stream'"].join(' ')
     const source = `${typeImport}\n${importFrom('@shared')}`
@@ -567,6 +625,18 @@ function importFrom(specifier: string): string {
 /** rawThrow builds a raw `Error` throw at call time so this file never matches the rule it exercises. */
 function rawThrow(message: string): string {
   return `${['throw', 'new', 'Error'].join(' ')}('${message}')`
+}
+
+/** rawError builds a raw `Error` construction without making this test file violate its own rule. */
+function rawError(message: string): string {
+  return `${['new', 'Error'].join(' ')}('${message}')`
+}
+
+function rawErrorIssue(path: string): string {
+  return `${path}:1 constructs a raw \`Error\`; where an error object must exist rather than be thrown,`
+    + ' build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+    + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
+    + ' `Errors.abortError(...)`.'
 }
 
 function directory(currentFiles: readonly TestFile[], nextFiles: readonly TestFile[]) {

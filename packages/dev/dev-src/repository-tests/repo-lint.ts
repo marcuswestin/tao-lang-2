@@ -1,4 +1,4 @@
-import { FS, HCI, Platform, Repo } from '@shared'
+import { CLI, FS, HCI, Platform, Repo } from '@shared'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -249,29 +249,73 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
   + ' for host and environment failures.'
 
 /**
- * A raw `Error` handed to a promise rejection reaches a reader exactly as a thrown one does, but the
- * throw rule cannot see it. This is its own ratchet so the two lists stay legible: the entries here
- * are the sites that predate the taxonomy, not an exemption for new ones.
+ * A raw `Error` handed to a promise rejection reaches a reader exactly as a thrown one does. Each
+ * exemption names one exact `path:line`, so an emitted script or a test probe cannot grant the rest
+ * of its file permission to add more unclassified errors.
  */
 const RAW_ERROR_ALLOWLIST = [
-  // Emitted text: browser-evaluated bodies, the Electrobun main, an inline page script, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts',
-  'packages/studio/studio-src/StudioWelcome.ts',
-  // The leaf that builds the taxonomy's own cancellation error.
-  'packages/shared/shared-src/core/Errors.ts',
-  // Tests that hand an unknown raw error to the code under test to prove it is classified.
-  'packages/dev/dev-tests/agent-config-generation.test.ts',
-  'packages/dev/dev-tests/claude-profiles-generation.test.ts',
-  'packages/dev/dev-tests/codex-config-generation.test.ts',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts',
-  'packages/dev/dev-tests/studio-companion-device.test.ts',
-  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
-  'packages/shared/shared-tests/test-helpers.test.ts',
-  'packages/stdlib/stdlib-tests/data-providers.test.ts',
-  'packages/studio/studio-tests/studio-client.test.ts',
-  'packages/studio/studio-tests/studio-server-datasource.test.ts',
+  // Emitted browser and Electrobun bodies, where no Tao module loads.
+  'packages/dev/dev-src/studio/StudioCdp.ts:226',
+  'packages/dev/dev-src/studio/StudioCdp.ts:255',
+  'packages/dev/dev-src/studio/StudioCdp.ts:278',
+  'packages/dev/dev-src/studio/StudioCdp.ts:436',
+  'packages/dev/dev-src/studio/StudioCdp.ts:464',
+  'packages/dev/dev-src/studio/StudioCdp.ts:633',
+  'packages/dev/dev-src/studio/StudioCdp.ts:743',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:542',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:582',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:729',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:736',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:742',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:763',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:766',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:436',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:438',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:642',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:647',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:652',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:887',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:906',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1015',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1057',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1083',
+  'packages/studio/studio-src/StudioWelcome.ts:83',
+  // Expo config plugins execute as standalone CommonJS host scripts.
+  'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
+  // The shared leaf builds the Web-standard cancellation error itself.
+  'packages/shared/shared-src/core/Errors.ts:160',
+  // Tests hand raw unknown failures to production boundaries to prove their classification.
+  'packages/dev/dev-tests/agent-config-generation.test.ts:44',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:81',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:104',
+  'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:210',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
+  'packages/dev/dev-tests/studio-companion-device.test.ts:560',
+  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
+  'packages/runtime/TR-tests/TR-async.test.ts:43',
+  'packages/runtime/TR-tests/TR-async.test.ts:57',
+  'packages/runtime/TR-tests/TR-data.test.ts:387',
+  'packages/runtime/TR-tests/TR-data.test.ts:616',
+  'packages/runtime/TR-tests/TR-data.test.ts:963',
+  'packages/runtime/TR-tests/TR-data.test.ts:981',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:40',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:46',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:67',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:69',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:489',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:510',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:511',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:317',
+  'packages/shared/shared-tests/test-helpers.test.ts:45',
+  'packages/stdlib/stdlib-tests/data-providers.test.ts:86',
+  'packages/studio/studio-tests/studio-client.test.ts:624',
+  'packages/studio/studio-tests/studio-client.test.ts:2903',
+  'packages/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 
 const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must exist rather than be thrown,'
@@ -303,6 +347,7 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
   'packages/dev/dev-src/repository-tests/TestLedger.ts',
   'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
   'packages/dev/dev-src/studio/StudioNative.ts',
   'packages/dev/dev-src/studio/StudioReview.ts',
   'packages/dev/dev-tests/studio-review.test.ts',
@@ -318,6 +363,9 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
   'packages/dev/dev-tests/expo-dev-loop.test.ts',
   'packages/generation/generation-live/apple-foundation-models.live.ts',
+  // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
+  'packages/dev/dev-tests/repo-lint.test.ts',
+  'packages/dev/dev-tests/work-graph.test.ts',
   // Stream classes a test constructs to stand in for a terminal.
   'packages/tao-cli/cli-tests/compile-command.test.ts',
   'packages/tao-cli/cli-tests/create-command.test.ts',
@@ -326,6 +374,12 @@ const NODE_IMPORT_ALLOWLIST = [
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
   'packages/studio/studio-src/StudioClientAssets.ts',
   'packages/studio/studio-src/device/StudioDeviceTrustStore.ts',
+  // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
+  'packages/runtime-toolchain/app-config.cjs',
+  'packages/runtime-toolchain/metro.config.cjs',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs',
+  // A test proves the packaged CommonJS entry can resolve its generated dependency.
+  'packages/icloud-native/icloud-native-tests/icloud-native.test.ts',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
@@ -389,8 +443,9 @@ const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
  * The wrapper patterns are written so this file never matches them: each spells its target with an
  * escape or a group, and the details above name the construct without writing it.
  */
-/** A static value import from a `node:` module; `import type` is not a platform call and passes. */
-const NODE_IMPORT_PATTERN = /^import\s+(?!type\b)[^'"]*from\s*['"]node:/gm
+/** A static, dynamic, or CommonJS value import from `node:`; `import type` remains type-only. */
+const NODE_IMPORT_PATTERN =
+  /(?:^\s*import\s+(?!type\b)(?:[^'"\n]*\s+from\s+)?['"]node:|\b(?:import|require)\s*\(\s*['"]node:)/gm
 const CONSOLE_CALL_PATTERN = /(?<![\w$.\-])console\.(?:debug|error|info|log|warn)\b/g
 const PROCESS_ACCESS_PATTERN = /(?<![\w$.])process\.(?:argv|cwd|env|exitCode|exit|stderr|stdin|stdout)\b/g
 const BUN_CONVENIENCE_PATTERN = /\bBun\.(?:randomUUIDv7|semver|sleep|TOML)\b/g
@@ -407,6 +462,8 @@ type ConventionMatch = {
 /** ConventionRule is one pattern-and-allowlist convention over package source. */
 export type ConventionRule = {
   allowlist: readonly string[]
+  /** Each allowlist entry is one exact `path:line`, rather than permission for its whole file. */
+  allowlistBySite?: boolean
   detail: string
   /** Path prefixes the rule does not apply to at all, as opposed to files still allowed an exception. */
   excludePathPrefixes?: readonly string[]
@@ -447,8 +504,8 @@ export const CONVENTION_RULES = {
   },
   rawError: {
     allowlist: RAW_ERROR_ALLOWLIST,
+    allowlistBySite: true,
     detail: RAW_ERROR_DETAIL,
-    excludePathPrefixes: ['packages/runtime/'],
     pattern: RAW_ERROR_PATTERN,
     staleDetail: 'no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
   },
@@ -489,7 +546,10 @@ export function conventionRuleIssues(
   allowlist: readonly string[] = rule.allowlist,
 ): string[] {
   const scanned = files.filter(file => !rule.excludePathPrefixes?.some(prefix => file.path.startsWith(prefix)))
-  return conventionIssues(scanned, conventionMatches(scanned, rule.pattern, rule.detail), allowlist, rule.staleDetail)
+  const matches = conventionMatches(scanned, rule.pattern, rule.detail)
+  return rule.allowlistBySite === true
+    ? conventionSiteIssues(scanned, matches, allowlist, rule.staleDetail)
+    : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
 }
 
 /** langiumImportIssues reports Langium imports outside the parser package. */
@@ -627,6 +687,27 @@ function conventionIssues(
   ].sort()
 }
 
+function conventionSiteIssues(
+  files: readonly SourceFile[],
+  matches: readonly ConventionMatch[],
+  allowlist: readonly string[],
+  staleDetail: string,
+): string[] {
+  const allowed = new Set(allowlist)
+  const scanned = new Set(files.map(file => file.path))
+  const matchSites = new Set(matches.map(match => `${match.path}:${match.line}`))
+  return [
+    ...matches.filter(match => !allowed.has(`${match.path}:${match.line}`)).map(issueLine),
+    ...allowlist
+      .filter(site => {
+        const separator = site.lastIndexOf(':')
+        const path = separator < 0 ? site : site.slice(0, separator)
+        return scanned.has(path) && !matchSites.has(site)
+      })
+      .map(site => `${site} ${staleDetail}`),
+  ].sort()
+}
+
 function conventionMatches(files: readonly SourceFile[], pattern: RegExp, detail: string): ConventionMatch[] {
   return files.flatMap(file =>
     [...file.source.matchAll(pattern)].map(match => ({
@@ -683,23 +764,55 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
     issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
 
-  const packageFiles: SourceFile[] = []
-  for await (
-    const path of FS.walk(FS.resolvePath('packages', repoRoot), {
-      excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
-      extensions: ['.ts', '.tsx'],
-    })
-  ) {
-    packageFiles.push({ path: FS.relativePath(repoRoot, path), source: await FS.readText(path) })
-  }
+  const executableFiles = await readExecutableFiles(repoRoot)
+  const packageFiles = executableFiles.filter(file =>
+    file.path.startsWith('packages/') && (file.path.endsWith('.ts') || file.path.endsWith('.tsx'))
+  )
   issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
-  for (const rule of Object.values(CONVENTION_RULES)) {
-    issues.push(...conventionRuleIssues(rule, packageFiles))
+  for (const [name, rule] of Object.entries(CONVENTION_RULES)) {
+    const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
+    issues.push(...conventionRuleIssues(rule, files))
   }
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   return issues
+}
+
+const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+
+async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
+  const tracked = await CLI.run('git', { args: ['ls-files', '-z', '--', 'Apps', 'packages'], cwd: repoRoot })
+  const paths = tracked.exitCode === 0
+    ? tracked.stdout.split('\0').filter(path => EXECUTABLE_EXTENSIONS.some(extension => path.endsWith(extension)))
+    : await walkedExecutablePaths(repoRoot)
+  const files: SourceFile[] = []
+  for (const path of paths) {
+    const absolutePath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(absolutePath)) {
+      files.push({ path: FS.slashPath(path), source: await FS.readText(absolutePath) })
+    }
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {
+  const paths: string[] = []
+  for (const root of ['Apps', 'packages']) {
+    const absoluteRoot = FS.resolvePath(root, repoRoot)
+    if (!await FS.isDirectory(absoluteRoot)) {
+      continue
+    }
+    for await (
+      const path of FS.walk(absoluteRoot, {
+        excludeDirectory: name => name === '.artifacts' || name === 'node_modules' || name.startsWith('_gen_'),
+        extensions: EXECUTABLE_EXTENSIONS,
+      })
+    ) {
+      paths.push(FS.relativePath(repoRoot, path))
+    }
+  }
+  return paths
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {

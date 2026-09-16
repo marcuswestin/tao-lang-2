@@ -292,6 +292,12 @@ Describe('Shared test runner helpers', () => {
     Expect(mocked.probe).toBe('mocked')
   })
 
+  Test('MockModule rejects a relative specifier instead of silently mocking from the helper module', () => {
+    Expect(() => MockModule('./local-probe', () => ({ probe: 'mocked' }))).toThrow(
+      "MockModule cannot resolve relative specifier './local-probe'",
+    )
+  })
+
   Test('withCapturedOutput keeps overlapping captures apart and leaves the streams usable', async () => {
     // Two captures started before either finished used to interleave, and the inner one restored the
     // outer one's sink instead of the real stream, so every later capture silently recorded nothing.
