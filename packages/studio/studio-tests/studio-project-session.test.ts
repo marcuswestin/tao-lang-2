@@ -414,6 +414,23 @@ Test('Studio project session opens the project DefaultApp when the command line 
   })
 })
 
+Test('Studio project session lets an explicit entry override the project DefaultApp', async () => {
+  await withTaoFiles('tao-studio-explicit-entry-', {
+    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'First.tao': 'app First { view FirstMain }\nview FirstMain() { }\n',
+    'Second.tao': 'app Second { view SecondMain }\nview SecondMain() { }\n',
+  }, async (_paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: 'First.tao',
+      projectRoot: root,
+    })
+
+    Expect(session.appName).toBe('First')
+    Expect(session.entryPath).toBe(FS.resolvePath('First.tao', await FS.realPath(root)))
+  })
+})
+
 Test('Studio project session still asks which app to open when the project names no default', async () => {
   await withTaoFiles('tao-studio-no-default-app-', {
     'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
@@ -782,6 +799,27 @@ Test('Studio lists project files from one scan kept current by writes and watche
       Expect(reads).toBe(initialReads + 1)
     },
   )
+})
+
+Test('Studio file reconciliation repairs changes missed by the OS watcher', async () => {
+  await withStudioProject(async (session, paths, root) => {
+    const before = await session.files()
+    const supportBefore = before.find(file => file.path === 'Support.tao')!.sourceVersion
+    await FS.writeText(paths['Support.tao'], 'view Support() { render Text("reconciled") }\n')
+    await FS.writeText(FS.resolvePath('Added.tao', root), 'view Added() { }\n')
+
+    // The cache remains a cheap in-memory view until its watcher-owned reconciliation pass runs.
+    Expect((await session.files()).some(file => file.path === 'Added.tao')).toBe(false)
+    const reconciled = await session.reconcileProjectFiles()
+    const after = await session.files()
+    Expect(reconciled?.compile?.status).toBe('compiled')
+    Expect(after.map(file => file.path)).toContain('Added.tao')
+    Expect(after.find(file => file.path === 'Support.tao')?.sourceVersion).not.toBe(supportBefore)
+
+    await FS.remove(paths['Support.tao'])
+    await session.reconcileProjectFiles()
+    Expect((await session.files()).some(file => file.path === 'Support.tao')).toBe(false)
+  })
 })
 
 Test('Studio draft writes keep invalid source off disk and acknowledge their exact watcher echo', async () => {

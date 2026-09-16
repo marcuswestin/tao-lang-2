@@ -146,6 +146,8 @@ export {
   StudioSourceConflictError,
 } from './StudioProjectSession'
 
+export { StudioRoutes, StudioSessionPath } from './StudioProtocol'
+
 export {
   type StudioSketch,
   StudioSketchCatalog,

@@ -156,11 +156,12 @@ Describe('Studio Electrobun project', () => {
   Test('routes native project opens and window closes through opaque Studio sessions', () => {
     const main = StudioElectrobun.sources(options).main
 
-    Expect(main).toContain("fetch(new URL('/api/sessions/open', studioUrl)")
+    Expect(main).toContain('fetch(new URL("/api/sessions/open", studioUrl)')
     Expect(main).toContain('projectSessionUrl(process.env.TAO_STUDIO_PROJECT_URL)')
     Expect(main).toContain("createStudioWindow('Project', projectSessionUrl(opened.url), openedPreviewUrl)")
     Expect(main).toContain('value.pathname.match(/^\\/sessions\\/([A-Za-z0-9_-]{1,128})')
-    Expect(main).toContain("'/api/sessions/' + encodeURIComponent(sessionId) + '/close'")
+    Expect(main).toContain('const closePath = "/api/sessions/:sessionId/close"')
+    Expect(main).toContain(".replace(':sessionId', encodeURIComponent(sessionId))")
     Expect(main).toContain("method: 'POST'")
     Expect(main).toContain('url.origin !== studioUrl.origin')
     Expect(main).toContain("searchParams.get('native-preview-url')")

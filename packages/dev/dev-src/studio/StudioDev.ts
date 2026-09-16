@@ -15,6 +15,7 @@ import {
   type StudioProjectOpenRequest,
   type StudioRecentProject,
   StudioSessionManager,
+  StudioSessionPath,
   type StudioSessionResource,
 } from '@studio'
 import betterOpen from 'better-opn'
@@ -203,7 +204,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       hostname: options.hostname,
       port: options.port,
     })
-    const sessionUrl = `${server.url}/sessions/${encodeURIComponent(initial.sessionId)}`
+    const sessionUrl = `${server.url}${StudioSessionPath.window(initial.sessionId)}`
     lifecycle.record({ component: 'studio-server', event: 'port-allocated', port: server.port })
     lifecycle.record({ component: 'studio-server', event: 'server-ready', port: server.port })
     lifecycle.record({ component: 'studio-server', event: 'session-created', sessionId: initial.sessionId })

@@ -43,6 +43,7 @@ export {
   postDebugCommand,
   postEditorSelection,
   requestRuntimeCapture,
+  studioPreviewCaptureError,
 } from './matrix/StudioPreviewBridge'
 export {
   disconnectPreviews,

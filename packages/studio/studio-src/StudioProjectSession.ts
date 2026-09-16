@@ -1744,6 +1744,18 @@ export class StudioProjectSession {
   }
 
   async noteWatchChanges(changes: readonly StudioSourceChange[]): Promise<StudioWatchResult> {
+    return this.#mutate(() => this.#applyWatchChanges(changes))
+  }
+
+  /** Reconciles the cached file map after watcher startup and periodically while the session is open. */
+  async reconcileProjectFiles(): Promise<StudioWatchResult | undefined> {
+    return this.#mutate(async () => {
+      const changes = await this.#files.changesOnDisk()
+      return changes.length === 0 ? undefined : await this.#applyWatchChanges(changes)
+    })
+  }
+
+  async #applyWatchChanges(changes: readonly StudioSourceChange[]): Promise<StudioWatchResult> {
     const normalized = await Promise.all(changes.map(async change => ({
       ...change,
       path: await this.#files.resolveTaoWatchPath(change.path),

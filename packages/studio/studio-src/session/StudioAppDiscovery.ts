@@ -85,7 +85,9 @@ function resolveAppSelection(
   defaultAppName?: string,
 ): StudioAppVariant {
   const selected = requestedAppName
-    ?? (apps.filter(app => app.appName === defaultAppName).length === 1 ? defaultAppName : undefined)
+    ?? (requestedEntryPath === undefined && apps.filter(app => app.appName === defaultAppName).length === 1
+      ? defaultAppName
+      : undefined)
   const matching = apps.filter(app =>
     (selected === undefined || app.appName === selected)
     && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)

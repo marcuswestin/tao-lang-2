@@ -62,6 +62,7 @@ import {
   StudioFixtureProposal,
   StudioJourneyRecorder,
   StudioMatrixLayout,
+  studioPreviewCaptureError,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
   StudioPreviewSourceSync,
@@ -71,6 +72,7 @@ import {
   StudioReviewDom,
   StudioRuntimeData,
 } from '../studio-src/client/StudioMatrixView'
+
 import {
   StudioCommandPalette,
   StudioPanelBounds,
@@ -122,6 +124,13 @@ import {
 } from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 import { cellEnvironment } from './test-studio-fixtures'
+
+Test('Studio rebuilds preview capture failures with their original Tao error category', () => {
+  Expect(studioPreviewCaptureError('UserInputError', 'bad data')).toBeInstanceOf(Errors.UserInputError)
+  Expect(studioPreviewCaptureError('HostEnvironmentError', 'offline')).toBeInstanceOf(Errors.HostEnvironmentError)
+  Expect(studioPreviewCaptureError('UnexpectedBehaviorError', 'broken invariant'))
+    .toBeInstanceOf(Errors.UnexpectedBehaviorError)
+})
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })

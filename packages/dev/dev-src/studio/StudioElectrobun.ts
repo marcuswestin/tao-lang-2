@@ -1,4 +1,5 @@
 import { Errors, FS, Text } from '@shared'
+import { StudioRoutes } from '@studio'
 
 const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
@@ -514,7 +515,7 @@ function mainSource(): string {
         canChooseFiles: false,
       })
       if (paths[0] !== undefined) {
-        const response = await fetch(new URL('/api/sessions/open', studioUrl), {
+        const response = await fetch(new URL(${JSON.stringify(StudioRoutes.manager.openSession.path)}, studioUrl), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ projectPath: paths[0] }),
@@ -532,7 +533,9 @@ function mainSource(): string {
       let lastError: unknown
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          const response = await fetch(new URL('/api/sessions/' + encodeURIComponent(sessionId) + '/close', studioUrl), {
+          const closePath = ${JSON.stringify(StudioRoutes.manager.closeSession.path)}
+            .replace(':sessionId', encodeURIComponent(sessionId))
+          const response = await fetch(new URL(closePath, studioUrl), {
             method: 'POST',
           })
           if (response.ok || response.status === 404) return

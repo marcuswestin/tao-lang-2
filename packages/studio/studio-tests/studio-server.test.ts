@@ -150,6 +150,21 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
+  Test('refuses the wrong method on parameterized agent-chat routes', async () => {
+    const session = { subscribe: () => () => {} } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/agent-chat/send')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, { method: 'GET' }),
+      url,
+      {},
+    )
+
+    Expect(response.status).toBe(404)
+    Expect(await response.json()).toEqual({ error: 'Studio endpoint not found.' })
+  })
+
   Test('beta ships the active app through the injected shipping boundary', async () => {
     const ships: unknown[] = []
     const session = {

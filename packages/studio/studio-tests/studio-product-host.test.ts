@@ -1,14 +1,17 @@
 import type TR from '@runtime/TR'
-import { Assert, FS } from '@shared'
+import { Assert, Errors, FS } from '@shared'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { studioPaletteComponents } from '../studio-src/StudioInspector'
 import type { StudioProductHostState } from '../studio-src/StudioProductHostProtocol'
 import {
+  createStudioSourceAnalyzer,
   FileCreateBar,
   FilesPanelSurface,
   productHostStyle,
+  StudioButton,
+  StudioChoice,
   StudioDataRows,
   StudioDesignTokenRow,
   StudioDesignTokenSection,
@@ -70,6 +73,21 @@ import {
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
 
+Test('Tao Studio retries rejected syntax analysis for unchanged source', async () => {
+  let attempts = 0
+  const analyze = createStudioSourceAnalyzer(async content => {
+    attempts += 1
+    if (attempts === 1) {
+      Errors.throwHostEnvironment('language service disconnected')
+    }
+    return { content }
+  })
+
+  await Expect(analyze('view Main() { }')).rejects.toThrow('language service disconnected')
+  await Expect(analyze('view Main() { }')).resolves.toEqual({ content: 'view Main() { }' })
+  Expect(attempts).toBe(2)
+})
+
 function activeCell(cellRevision: number): NonNullable<StudioProductHostState['activeCell']> {
   return {
     cellId: 'cell:one',
@@ -119,6 +137,69 @@ Test('Tao Studio segmented controls implement cyclic radio navigation', () => {
   Expect(html).toContain('role="radiogroup"')
   Expect(html).toContain('aria-label="Device"')
   Expect(html).toContain('aria-checked="true" role="radio" tabindex="0"')
+})
+
+Test('Tao Studio host buttons and pickers dispatch their Tao-owned actions', () => {
+  let presses = 0
+  let prevented = 0
+  let focused = 0
+  const choices: string[] = []
+  const Press = {
+    async invoke() {
+      presses += 1
+    },
+  } as unknown as TR.ActionValue<[]>
+  const Change = {
+    async invoke(value: TR.Value<string>) {
+      choices.push(value.evaluate().jsValue)
+    },
+  } as unknown as TR.ActionValue<[TR.Value<string>]>
+  const button = StudioButton({ Disabled: false, Label: 'Apply', Press, Variant: 'primary' }) as React.ReactElement<{
+    onClick: () => void
+  }>
+  const segmented = StudioSegmented({
+    Change,
+    Label: 'Device',
+    Options: ['phone', 'tablet'],
+    Value: 'phone',
+  }) as React.ReactElement<{
+    children: readonly React.ReactElement<{
+      onKeyDown: (event: {
+        currentTarget: { parentElement: { querySelectorAll: () => readonly { focus: () => void }[] } }
+        key: string
+        preventDefault: () => void
+      }) => void
+    }>[]
+  }>
+  const choice = StudioChoice({
+    Change,
+    Label: 'Scenario',
+    Options: ['empty', 'filled'],
+    Value: 'empty',
+  }) as React.ReactElement<{ onChange: (event: { currentTarget: { value: string } }) => void }>
+
+  button.props.onClick()
+  segmented.props.children[0]!.props.onKeyDown({
+    currentTarget: {
+      parentElement: {
+        querySelectorAll: () => [{ focus() {} }, {
+          focus() {
+            focused += 1
+          },
+        }],
+      },
+    },
+    key: 'ArrowRight',
+    preventDefault() {
+      prevented += 1
+    },
+  })
+  choice.props.onChange({ currentTarget: { value: 'filled' } })
+
+  Expect(presses).toBe(1)
+  Expect(prevented).toBe(1)
+  Expect(focused).toBe(1)
+  Expect(choices).toEqual(['tablet', 'filled'])
 })
 
 Test('Tao Studio environment number inputs expose their field labels', () => {

@@ -783,9 +783,8 @@ async function handleRequest(
       ),
     )
   }
-  // The chat commands answer any method; the table's POST is the one the client sends.
   const chat = StudioRoutes.match(routes.agentChat, pathname)
-  if (chat !== undefined) {
+  if (request.method === routes.agentChat.method && chat !== undefined) {
     return response(
       request,
       url,

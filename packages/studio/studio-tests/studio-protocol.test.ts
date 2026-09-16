@@ -55,6 +55,25 @@ Describe('Studio session paths and routes', () => {
     Expect(StudioProtocol.parseMessage({ ...ownership, owned: 'design' })).toBeUndefined()
   })
 
+  Test('preserves runtime-capture error taxonomy across the preview protocol', () => {
+    const failure = {
+      channel: studioProtocolChannel,
+      error: 'The captured row is invalid.',
+      errorName: 'UserInputError',
+      identity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'capture-1',
+      type: 'preview-runtime-capture-failed',
+    }
+    Expect(StudioProtocol.parseMessage(failure)).toMatchObject({
+      error: failure.error,
+      errorName: 'UserInputError',
+      type: failure.type,
+    })
+    Expect(StudioProtocol.parseMessage({ ...failure, errorName: 'Error' })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...failure, errorName: undefined })).toBeUndefined()
+  })
+
   Test('scopes every session endpoint under one opaque window id and refuses anything else', () => {
     Expect(StudioSessionPath.route('/sessions/first_session/api/protocol')).toEqual({
       pathname: '/api/protocol',
@@ -133,6 +152,11 @@ Describe('Studio session paths and routes', () => {
     Expect(StudioRoutes.match(manager.closeSession, '/api/sessions/current_window/switch')).toBe(undefined)
     Expect(StudioRoutes.match(StudioRoutes.session.agentChatStream, '/api/agent-chat/stream/send'))
       .toEqual({ command: 'send' })
+    Expect(StudioRoutes.match(StudioRoutes.session.agentChat, '/api/agent-chat/send/another')).toBe(undefined)
+    Expect(StudioRoutes.match(StudioRoutes.session.agentChat, '/api/agent-chat/send%2Fanother'))
+      .toEqual({ command: 'send/another' })
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.agentChat, 'GET', '/api/agent-chat/send')).toBe(false)
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.agentChat, 'POST', '/api/agent-chat/send')).toBe(true)
     Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files')).toEqual({})
     Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files/')).toBe(undefined)
     Expect(StudioRoutes.matchesRequest(StudioRoutes.session.files, 'GET', '/api/files')).toBe(true)

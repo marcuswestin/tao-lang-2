@@ -324,10 +324,24 @@ function receiveRuntimeCapture(
   clearTimeout(request.timeout)
   preview.runtimeCaptureRequest = undefined
   if (message.type === 'preview-runtime-capture-failed') {
-    request.reject(new Errors.HostEnvironmentError(message.error))
+    request.reject(studioPreviewCaptureError(message.errorName, message.error))
   } else {
     request.resolve(message.capture)
   }
+}
+
+/** Rebuilds the runtime's three-category Tao error after it crosses the preview window protocol. */
+export function studioPreviewCaptureError(
+  name: 'HostEnvironmentError' | 'UnexpectedBehaviorError' | 'UserInputError',
+  message: string,
+): Error {
+  if (name === 'HostEnvironmentError') {
+    return new Errors.HostEnvironmentError(message)
+  }
+  if (name === 'UserInputError') {
+    return new Errors.UserInputError(message)
+  }
+  return new Errors.UnexpectedBehaviorError(message)
 }
 
 async function receivePreviewApplied(

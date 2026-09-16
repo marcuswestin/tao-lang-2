@@ -31,6 +31,7 @@ export type StudioAppNavigationDeps = Readonly<{
 /** Every way into a source location: diagnostics, screens, search hits, test failures, device taps. */
 export class StudioAppNavigation {
   readonly #deps: StudioAppNavigationDeps
+  #deviceSelectionInitialized = false
   #lastDeviceSelection = 0
 
   constructor(deps: StudioAppNavigationDeps) {
@@ -130,6 +131,11 @@ export class StudioAppNavigation {
    * whatever now occupies those offsets.
    */
   async revealDeviceSelection(selection: StudioDeviceStatus['selection']): Promise<void> {
+    if (!this.#deviceSelectionInitialized) {
+      this.#deviceSelectionInitialized = true
+      this.#lastDeviceSelection = selection?.sequence ?? 0
+      return
+    }
     if (selection === undefined || selection.sequence <= this.#lastDeviceSelection) {
       return
     }

@@ -159,7 +159,15 @@ export const StudioRoutes = {
     if (!route.path.includes(':')) {
       return pathname === route.path ? {} : undefined
     }
-    return pathname.match(routePattern(route))?.groups ?? undefined
+    const groups = pathname.match(routePattern(route))?.groups
+    if (groups === undefined) {
+      return undefined
+    }
+    try {
+      return Object.fromEntries(Object.entries(groups).map(([name, value]) => [name, decodeURIComponent(value)]))
+    } catch {
+      return undefined
+    }
   },
   /** matchesRequest is `match` plus the method check the HTTP dispatcher applies. */
   matchesRequest(route: StudioRoute, method: string, pathname: string): boolean {
@@ -186,7 +194,7 @@ function routePattern(route: StudioRoute): RegExp {
       segment === ':sessionId'
         ? `(?<sessionId>${sessionIdGrammar})`
         : segment.startsWith(':')
-        ? `(?<${segment.slice(1)}>.+)`
+        ? `(?<${segment.slice(1)}>[^/]+)`
         : segment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
     )
     .join('/')
@@ -771,9 +779,15 @@ type StudioPreviewRuntimeCapturedMessage = {
   type: 'preview-runtime-captured'
 }
 
+export type StudioRuntimeCaptureErrorName =
+  | 'HostEnvironmentError'
+  | 'UnexpectedBehaviorError'
+  | 'UserInputError'
+
 type StudioPreviewRuntimeCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
+  errorName: StudioRuntimeCaptureErrorName
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
@@ -1370,17 +1384,27 @@ function parsePreviewRuntimeCaptureFailed(
   value: StudioJsonObject,
 ): StudioPreviewRuntimeCaptureFailedMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
-  if (identity === undefined || !nonEmptyString(value['requestId']) || !nonEmptyString(value['error'])) {
+  if (
+    identity === undefined
+    || !nonEmptyString(value['requestId'])
+    || !nonEmptyString(value['error'])
+    || !runtimeCaptureErrorName(value['errorName'])
+  ) {
     return undefined
   }
   return {
     channel: studioProtocolChannel,
     error: value['error'],
+    errorName: value['errorName'],
     identity,
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-capture-failed',
   }
+}
+
+function runtimeCaptureErrorName(value: unknown): value is StudioRuntimeCaptureErrorName {
+  return value === 'HostEnvironmentError' || value === 'UnexpectedBehaviorError' || value === 'UserInputError'
 }
 
 const debugCommands = ['break', 'configure', 'continue', 'step-over', 'step-into', 'step-out'] as const
