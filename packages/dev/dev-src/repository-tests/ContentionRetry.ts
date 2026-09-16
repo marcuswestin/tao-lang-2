@@ -76,41 +76,83 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
     return { confirmed: [], recovered: [], unconfirmed: [] }
   }
 
-  const isolation = await options.machineLane?.acquireExclusive()
-  if (isolation === undefined) {
-    for (const state of retrying) {
-      state.reason =
+  const confirmed: string[] = []
+  const recovered: string[] = []
+  const unconfirmed: string[] = []
+  for (const original of retrying) {
+    // Isolation belongs to one confirmation, not the whole serial retry batch. Releasing between
+    // nodes lets peer worktrees use the machine while this lane prepares its next confirmation.
+    const isolation = await options.machineLane?.acquireExclusive()
+    if (isolation === undefined) {
+      original.reason =
         'timed out under machine contention; exclusive confirmation was not obtained, so the failure is unconfirmed'
+      unconfirmed.push(original.name)
+      continue
     }
-    return { confirmed: [], recovered: [], unconfirmed: retrying.map(state => state.name) }
+    const attempt = WorkGraph.createState(original.node)
+    attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
+    try {
+      await WorkGraph.run([attempt], {
+        jobs: 1,
+        runNode: options.runNode,
+        slotBroker: options.machineLane,
+        watchInterrupt: () => () => {},
+      })
+    } finally {
+      await isolation.release()
+    }
+    await writeRetryLog(attempt)
+    adoptRetry(original, attempt)
+    ;(attempt.status === 'passed' ? recovered : confirmed).push(original.name)
   }
 
-  try {
-    const attempts = retrying.map(state => WorkGraph.createState(state.node))
+  if (recovered.length > 0) {
+    const resumable = resumableDependents(options.states)
+    const attempts = resumable.map(state => WorkGraph.createState(state.node))
     for (const attempt of attempts) {
-      attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
+      attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.resume.log`, options.location.logRoot)
     }
-    // The exclusive lease blocks other lanes from admitting new nodes and was granted only after
-    // their existing reservations drained. jobs=1 additionally serializes this confirmation batch.
     await WorkGraph.run(attempts, {
-      jobs: 1,
+      jobs: options.machineLane?.ceiling ?? 1,
       runNode: options.runNode,
       slotBroker: options.machineLane,
       watchInterrupt: () => () => {},
     })
-
-    const confirmed: string[] = []
-    const recovered: string[] = []
     for (const [index, attempt] of attempts.entries()) {
-      const original = retrying[index]!
+      const original = resumable[index]!
       await writeRetryLog(attempt)
-      adoptRetry(original, attempt)
-      ;(attempt.status === 'passed' ? recovered : confirmed).push(original.name)
+      adoptResumed(original, attempt)
     }
-    return { confirmed, recovered, unconfirmed: [] }
-  } finally {
-    await isolation.release()
   }
+  return { confirmed, recovered, unconfirmed }
+}
+
+/** resumableDependents finds the skipped dependency closure made runnable by recovered gates. */
+function resumableDependents(states: readonly WorkState[]): WorkState[] {
+  const byName = new Map(states.map(state => [state.name, state]))
+  const selected = new Set<string>()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const state of states) {
+      if (
+        state.status !== 'skipped'
+        || !state.reason?.startsWith('dependency failed:')
+        || selected.has(state.name)
+      ) {
+        continue
+      }
+      const dependenciesReady = (state.node.needs ?? []).every(name => {
+        const dependency = byName.get(name)
+        return dependency === undefined || dependency.status === 'passed' || selected.has(name)
+      })
+      if (dependenciesReady) {
+        selected.add(state.name)
+        changed = true
+      }
+    }
+  }
+  return states.filter(state => selected.has(state.name))
 }
 
 /** adoptRetry replaces a contended failure with what the node did when it had the machine to itself. */
@@ -132,6 +174,17 @@ function adoptRetry(original: WorkState, attempt: WorkState): void {
   }
   original.status = attempt.status
   original.reason = 'timed out under machine contention and failed again on an isolated retry'
+}
+
+/** adoptResumed records work that did not run until its recovered dependency had passed. */
+function adoptResumed(original: WorkState, attempt: WorkState): void {
+  original.fullOutput = attempt.fullOutput
+  original.lines = [...attempt.lines]
+  original.failure = attempt.failure
+  original.exitCode = attempt.exitCode
+  original.elapsedMs += attempt.elapsedMs
+  original.status = attempt.status
+  original.reason = attempt.reason
 }
 
 function snapshotAttempt(state: WorkState) {

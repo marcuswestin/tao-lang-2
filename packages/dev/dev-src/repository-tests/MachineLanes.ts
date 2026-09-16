@@ -325,22 +325,26 @@ function registeredLane(options: {
     },
     ceiling: options.record.maxSlots,
     id: options.id,
-    acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) => acquireExclusive(options.root, options.id, timeoutMs),
+    acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) =>
+      acquireExclusive(options.root, options.id, timeoutMs, options.lockTimeoutMs),
     report: () => contentionReport({ cpuCount: options.cpuCount, peakLanes, peakLoadAverage }),
     release: async () => {
       if (released) {
         return
       }
+      // Remove both pieces of lane ownership under one registry transaction. Do not mark the local
+      // handle released until that transaction succeeds: a transient lock failure must be visible
+      // to the caller and a second release must be able to finish the cleanup.
+      await withRegistryLock(options.root, async () => {
+        const exclusivePath = FS.resolvePath(EXCLUSIVE_PATH, options.root)
+        const exclusive = await readRecord<ExclusiveRecord>(exclusivePath)
+        if (exclusive?.laneId === options.id) {
+          await FS.remove(exclusivePath)
+        }
+        await FS.remove(options.path)
+      }, options.lockTimeoutMs)
       released = true
       clearInterval(timer)
-      await releaseExclusiveOwnedBy(options.root, options.id)
-      try {
-        await withRegistryLock(options.root, async () => {
-          await FS.remove(options.path)
-        })
-      } catch {
-        await FS.remove(options.path).catch(() => {})
-      }
     },
     tryAcquire: async (requestedSlots, allowPartial) => {
       if (released) {
@@ -380,7 +384,7 @@ function registeredLane(options: {
           return undefined
         }
         admissionPollMs = ADMISSION_POLL_MS
-        return slotReservation(options.root, options.id, reservation)
+        return slotReservation(options.root, options.id, reservation, options.lockTimeoutMs)
       } catch (error) {
         if (error instanceof RegistryLockTimeoutError) {
           throw error
@@ -394,7 +398,12 @@ function registeredLane(options: {
   return lane
 }
 
-function slotReservation(root: string, laneId: string, slots: number): MachineSlotReservation {
+function slotReservation(
+  root: string,
+  laneId: string,
+  slots: number,
+  lockTimeoutMs?: number,
+): MachineSlotReservation {
   let released = false
   return {
     slots,
@@ -402,20 +411,16 @@ function slotReservation(root: string, laneId: string, slots: number): MachineSl
       if (released) {
         return
       }
+      await withRegistryLock(root, async () => {
+        const own = (await activeLaneEntries(root, false)).find(entry => entry.record.id === laneId)
+        if (own === undefined) {
+          return
+        }
+        own.record.slots = Math.max(0, own.record.slots - slots)
+        own.record.updatedAt = new Date().toISOString()
+        await atomicWriteJson(own.path, own.record)
+      }, lockTimeoutMs)
       released = true
-      try {
-        await withRegistryLock(root, async () => {
-          const own = (await activeLaneEntries(root, false)).find(entry => entry.record.id === laneId)
-          if (own === undefined) {
-            return
-          }
-          own.record.slots = Math.max(0, own.record.slots - slots)
-          own.record.updatedAt = new Date().toISOString()
-          await atomicWriteJson(own.path, own.record)
-        })
-      } catch {
-        // The lane release removes the whole record; a transient accounting failure is not fatal.
-      }
     },
   }
 }
@@ -424,6 +429,7 @@ async function acquireExclusive(
   root: string,
   laneId: string,
   timeoutMs: number,
+  lockTimeoutMs?: number,
 ): Promise<MachineExclusiveLease | undefined> {
   const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const deadline = Time.nowMs() + Math.max(0, timeoutMs)
@@ -448,9 +454,9 @@ async function acquireExclusive(
         }
         const peers = (await activeLaneEntries(root, true)).filter(entry => entry.record.id !== laneId)
         return peers.every(entry => entry.record.slots === 0)
-      })
+      }, lockTimeoutMs)
       if (drained && ownsIntent) {
-        return exclusiveLease(root, id)
+        return exclusiveLease(root, id, lockTimeoutMs)
       }
     } catch {
       // Without a shared registry this run cannot truthfully claim it was isolated.
@@ -459,49 +465,31 @@ async function acquireExclusive(
     await Time.sleep(ADMISSION_POLL_MS)
   }
   if (ownsIntent) {
-    await releaseExclusive(root, id)
+    await releaseExclusive(root, id, lockTimeoutMs)
   }
   return undefined
 }
 
-function exclusiveLease(root: string, id: string): MachineExclusiveLease {
+function exclusiveLease(root: string, id: string, lockTimeoutMs?: number): MachineExclusiveLease {
   let released = false
   return {
     release: async () => {
       if (released) {
         return
       }
+      await releaseExclusive(root, id, lockTimeoutMs)
       released = true
-      await releaseExclusive(root, id)
     },
   }
 }
 
-async function releaseExclusive(root: string, id: string): Promise<void> {
-  try {
-    await withRegistryLock(root, async () => {
-      const existing = await readRecord<ExclusiveRecord>(FS.resolvePath(EXCLUSIVE_PATH, root))
-      if (existing?.id === id) {
-        await FS.remove(FS.resolvePath(EXCLUSIVE_PATH, root))
-      }
-    })
-  } catch {
-    // A stale exclusive record is pruned by the next live lane.
-  }
-}
-
-async function releaseExclusiveOwnedBy(root: string, laneId: string): Promise<void> {
-  try {
-    await withRegistryLock(root, async () => {
-      const path = FS.resolvePath(EXCLUSIVE_PATH, root)
-      const existing = await readRecord<ExclusiveRecord>(path)
-      if (existing?.laneId === laneId) {
-        await FS.remove(path)
-      }
-    })
-  } catch {
-    // Best effort during lane teardown.
-  }
+async function releaseExclusive(root: string, id: string, lockTimeoutMs?: number): Promise<void> {
+  await withRegistryLock(root, async () => {
+    const existing = await readRecord<ExclusiveRecord>(FS.resolvePath(EXCLUSIVE_PATH, root))
+    if (existing?.id === id) {
+      await FS.remove(FS.resolvePath(EXCLUSIVE_PATH, root))
+    }
+  }, lockTimeoutMs)
 }
 
 async function liveExclusive(root: string): Promise<ExclusiveRecord | undefined> {
@@ -585,17 +573,13 @@ async function claimResource(
       if (released) {
         return
       }
+      await withRegistryLock(root, async () => {
+        const existing = normalizeResourceRecord(await readRecord<unknown>(path))
+        if (existing?.id === id) {
+          await FS.remove(path)
+        }
+      }, options.lockTimeoutMs)
       released = true
-      try {
-        await withRegistryLock(root, async () => {
-          const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-          if (existing?.id === id) {
-            await FS.remove(path)
-          }
-        })
-      } catch {
-        // A crashed owner is pruned by the next claimant.
-      }
     },
   }
   return { lease, owner }
@@ -707,7 +691,10 @@ async function withRegistryLock<T>(
       }
       const existing = await readRecord<MutexRecord>(linkPath)
       if (existing === undefined || mutexIsStale(existing)) {
-        await reclaimStaleMutex(root, linkPath)
+        const staleTarget = await mutexTarget(linkPath)
+        if (staleTarget !== undefined) {
+          await reclaimStaleMutex(root, linkPath, staleTarget)
+        }
         continue
       }
       if (Time.nowMs() >= deadline) {
@@ -730,26 +717,66 @@ async function withRegistryLock<T>(
 }
 
 /**
- * Reclaims a stale lock without discarding a fresh one. Two contenders can read the same stale
- * record; unlinking by path would let the slower one remove the link the faster one had already
- * replaced with its own, and both would then run the critical section. Renaming the link aside is
- * atomic, so exactly one contender gets it, and it is discarded only once it is confirmed to be the
- * stale link that was read; a fresh link renamed by mistake is put back.
+ * Reclaims a stale lock without discarding a fresh one. Each contender publishes an immutable,
+ * uniquely named claim for the observed owner, waits one poll so simultaneous claimants converge,
+ * and only the oldest live claim may unlink that exact owner. A later claimant can never outrank
+ * it, and a claimant that arrives after replacement sees a different target at the final check.
+ * Crashed claims are safe to prune by their unique path before the next election.
  */
-async function reclaimStaleMutex(root: string, linkPath: string): Promise<void> {
-  const staleTarget = await FS.realPath(linkPath).catch(() => undefined)
-  const asidePath = FS.resolvePath(`.mutex-stale-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`, root)
+async function reclaimStaleMutex(
+  root: string,
+  linkPath: string,
+  staleTarget: string,
+): Promise<void> {
+  const targetKey = FS.basename(staleTarget).replaceAll(/[^a-zA-Z0-9._-]/g, '_')
+  const claimPrefix = `.mutex-reclaim-${targetKey}-`
+  const claimPath = FS.resolvePath(
+    `${claimPrefix}${
+      String(Date.now()).padStart(16, '0')
+    }-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`,
+    root,
+  )
+  await atomicWriteJson(
+    claimPath,
+    {
+      pid: Platform.runtimeProcess.pid,
+      startedAt: new Date().toISOString(),
+    } satisfies MutexRecord,
+  )
   try {
-    await FS.move(linkPath, asidePath)
-  } catch {
-    return // Another contender already took the stale link.
+    await Time.sleep(ADMISSION_POLL_MS)
+    const claims: string[] = []
+    for (const entry of await FS.listDir(root)) {
+      if (!entry.startsWith(claimPrefix)) {
+        continue
+      }
+      const path = FS.resolvePath(entry, root)
+      const claim = await readRecord<MutexRecord>(path)
+      if (claim === undefined || mutexIsStale(claim)) {
+        await FS.remove(path).catch(() => {})
+        continue
+      }
+      claims.push(path)
+    }
+    if (claims.toSorted()[0] !== claimPath) {
+      return
+    }
+    const currentTarget = await mutexTarget(linkPath)
+    if (currentTarget === staleTarget) {
+      await FS.remove(linkPath)
+    }
+  } finally {
+    await FS.remove(claimPath).catch(() => {})
   }
-  const movedTarget = await FS.realPath(asidePath).catch(() => undefined)
-  if (movedTarget === staleTarget) {
-    await FS.remove(asidePath).catch(() => {})
-    return
-  }
-  await FS.move(asidePath, linkPath).catch(async () => await FS.remove(asidePath).catch(() => {}))
+}
+
+/** mutexTarget identifies even a broken symlink, so absence never compares equal to an old owner. */
+async function mutexTarget(linkPath: string): Promise<string | undefined> {
+  const result = await CLI.run('/usr/bin/readlink', { args: [linkPath], stdio: 'pipe' })
+  const target = result.stdout.trim()
+  return result.error === undefined && result.exitCode === 0 && target.length > 0
+    ? FS.resolvePath(target, FS.dirname(linkPath))
+    : undefined
 }
 
 /** ownerIsLive reports whether a recorded resource owner still runs as the process that took the lease. */
@@ -787,12 +814,10 @@ function isLive(record: { pid: number; startedAt: string; updatedAt?: string }):
 }
 
 function mutexIsStale(record: MutexRecord): boolean {
-  const startedAt = Date.parse(record.startedAt)
-  // The registry lock guards millisecond critical sections. A record older than twice the acquire
-  // timeout belongs to a holder that died with the lock, even when its PID has since been reused.
+  // Age cannot prove staleness: a delayed but live owner still owns the critical section. Prefer a
+  // bounded wait over allowing concurrent writers when a host cannot disambiguate PID reuse.
   return !Platform.processIsAlive(record.pid)
-    || !Number.isFinite(startedAt)
-    || Time.nowMs() - startedAt > MUTEX_ACQUIRE_TIMEOUT_MS * 2
+    || !Number.isFinite(Date.parse(record.startedAt))
 }
 
 function normalizeLaneRecord(

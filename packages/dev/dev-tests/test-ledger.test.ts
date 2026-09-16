@@ -85,6 +85,35 @@ Describe('per-test ledger', () => {
     })
   })
 
+  Test('a partial app run cannot erase a failure from the last full app run', async () => {
+    await withRepository(async root => {
+      await FS.writeText(FS.resolvePath('Apps/First/First.tao', root), 'app First\n')
+      await FS.writeText(FS.resolvePath('Apps/Second/Second.tao', root), 'app Second\n')
+      await TestLedger.recordRun({
+        fullRun: true,
+        observations: [observation('Apps', 'failed', 'all Tao behavior tests')],
+        repositoryRoot: root,
+        startedAt: Date.now() - 2_000,
+      })
+
+      await TestLedger.recordRun({
+        fullRun: false,
+        observations: [observation('Apps', 'passed', 'Tao behavior tests under Apps/First')],
+        partialFiles: ['Apps'],
+        repositoryRoot: root,
+        startedAt: Date.now() - 1_000,
+      })
+
+      const retry = await TestLedger.selectRetryFiles([{ file: 'Apps', suite: 'example' }], root)
+      Expect(retry.files).toEqual([{ file: 'Apps', suite: 'example' }])
+      const records = Object.values(await TestLedger.load(root).then(store => store.tests))
+      Expect(records.map(record => record.name).toSorted()).toEqual([
+        'Tao behavior tests under Apps/First',
+        'all Tao behavior tests',
+      ])
+    })
+  })
+
   Test('changing a settled test file selects the whole file again', async () => {
     await withRepository(async root => {
       const file = await writeTestFile(root)

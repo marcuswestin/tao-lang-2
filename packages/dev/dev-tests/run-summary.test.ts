@@ -1,7 +1,12 @@
 import { Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
-import { buildSummary, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
+import {
+  buildSummary,
+  classifyFailure,
+  formatGateSummary,
+  gateExitCode,
+} from '../dev-src/repository-tests/RunSummary'
 import { WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
 function finishedState(node: Partial<WorkNode> & { name: string }, outcome: Partial<WorkState> = {}): WorkState {
@@ -91,5 +96,19 @@ Describe('versioned run summary', () => {
 
     Expect(formatGateSummary(summary)).toContain('logs/verify/stamp')
     Expect(formatGateSummary(summary)).toContain('logs/verify/stamp/summary.json')
+  })
+
+  Test('a test-runner timeout under measured contention is not hidden by its FAIL banner', () => {
+    const contention = { contended: true, cpuCount: 8, peakLanes: 2, peakLoadAverage: 12 }
+
+    Expect(classifyFailure(
+      'FAIL packages/example.test.ts\n(fail) renders\nerror: Test "renders" timed out after 5000ms',
+      { contention },
+    )).toBe('machine-contention')
+  })
+
+  Test('recognizes the native runtime exit messages emitted by Studio', () => {
+    Expect(classifyFailure('Native Studio runtime exited with code 7.')).toBe('native-runtime-exit')
+    Expect(classifyFailure('Native Studio runtime terminated by signal 6.')).toBe('native-runtime-exit')
   })
 })

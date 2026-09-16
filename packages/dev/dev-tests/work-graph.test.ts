@@ -1,5 +1,5 @@
-import { Errors } from '@shared'
-import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
+import { Errors, FS, Platform } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { type WorkCommand, WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
 /**
@@ -128,6 +128,21 @@ Describe('work graph scheduling', () => {
     Expect(run.stateOf('lint').status).toBe('passed')
     Expect(run.started).toContain('lint')
     Expect(run.started).not.toContain('test')
+  })
+
+  Test('rescans nodes whose dependency became skipped later in the same admission pass', async () => {
+    const run = schedule([
+      { exitCode: 1, mutatesTree: true, name: 'compile' },
+      { name: 'report', needs: ['test'], priority: 10 },
+      { name: 'test', needs: ['compile'] },
+    ], { jobs: 1 })
+
+    await run.finished
+
+    Expect(run.stateOf('compile').status).toBe('failed')
+    Expect(run.stateOf('test').status).toBe('skipped')
+    Expect(run.stateOf('report').status).toBe('skipped')
+    Expect(run.stateOf('report').reason).toBe('dependency failed: test')
   })
 
   Test('never runs two nodes that hold the same named resource at once', async () => {
@@ -269,6 +284,75 @@ Describe('work graph scheduling', () => {
     Expect(state.failure?.kind).toBe('timeout')
   })
 
+  Test('a timeout terminates descendants that retain the command output pipe', async () => {
+    const root = await mkTestDir('tao-work-graph-process-tree-')
+    const descendantPath = FS.resolvePath('descendant.pid', root)
+    const state = WorkGraph.createState({
+      name: 'descendant-pipe',
+      run: {
+        args: ['-c', 'sleep 1 & echo $! > "$1"; exit 0', 'work-graph', descendantPath],
+        command: '/bin/sh',
+      },
+      timeoutMs: 30,
+    })
+    const startedAt = Date.now()
+
+    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
+
+    const descendantPid = Number((await FS.readText(descendantPath)).trim())
+    Expect(Date.now() - startedAt).toBeLessThan(750)
+    await until(() => !Platform.processIsAlive(descendantPid), {
+      description: 'the timed-out command descendant to exit',
+    })
+    Expect(state.failure?.kind).toBe('timeout')
+  })
+
+  Test('a timeout terminates an escaped descendant process group that retains output', async () => {
+    const root = await mkTestDir('tao-work-graph-escaped-tree-')
+    const descendantPath = FS.resolvePath('descendant.pid', root)
+    const script = `
+      import { writeFileSync } from 'node:fs'
+      import { spawn } from 'node:child_process'
+      const child = spawn('/bin/sh', ['-c', 'trap "" TERM; sleep 3'], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
+      })
+      writeFileSync(${JSON.stringify(descendantPath)}, String(child.pid))
+      child.unref()
+      await new Promise(() => {})
+    `
+    const state = WorkGraph.createState({
+      name: 'escaped-descendant-pipe',
+      run: { args: ['-e', script], command: process.execPath },
+      timeoutMs: 100,
+    })
+    const startedAt = Date.now()
+
+    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
+
+    const descendantPid = Number((await FS.readText(descendantPath)).trim())
+    Expect(Date.now() - startedAt).toBeLessThan(750)
+    await until(() => !Platform.processIsAlive(descendantPid), {
+      description: 'the escaped timed-out command descendant to exit',
+    })
+    Expect(state.failure?.kind).toBe('timeout')
+  })
+
+  Test('does not signal a replacement with the same PID and whole-second start time', () => {
+    const signals: Array<{ pids: readonly number[]; signal: NodeJS.Signals }> = []
+    const original = { command: 'original command', pid: 42, startedAt: 'Tue Sep 16 12:34:56 2026' }
+
+    WorkGraph.signalTrackedProcesses([original], 'SIGKILL', {
+      identities: () =>
+        new Map([
+          [42, { command: 'replacement command', pid: 42, startedAt: original.startedAt }],
+        ]),
+      signal: (pids, signal) => signals.push({ pids, signal }),
+    })
+
+    Expect(signals).toEqual([])
+  })
+
   Test('an interrupt stops the running children, skips the rest, and fails the run', async () => {
     const run = schedule([
       { held: true, name: 'test' },
@@ -378,6 +462,44 @@ Describe('work graph scheduling', () => {
     Expect(events.filter(kind => kind === 'waiting')).toEqual(['waiting'])
     Expect(state.status).toBe('passed')
     Expect(state.reason).toBeUndefined()
+  })
+
+  Test('asks the broker again when external capacity returns before a local node finishes', async () => {
+    const firstDone = Deferred()
+    const capacityChanged = Deferred()
+    const states = ['local-long-runner', 'capacity-waiter'].map(name => WorkGraph.createState(workNode({ name })))
+    const started: string[] = []
+    let capacityAvailable = false
+
+    const finished = WorkGraph.run(states, {
+      jobs: 2,
+      runNode: async state => {
+        started.push(state.name)
+        if (state.name === 'local-long-runner') {
+          await firstDone.promise
+        }
+        return { exitCode: 0 }
+      },
+      slotBroker: {
+        tryAcquire: async () =>
+          started.length === 0 || capacityAvailable
+            ? { release: async () => {}, slots: 1 }
+            : undefined,
+        waitForAvailability: async () => await capacityChanged.promise,
+      },
+      watchInterrupt: () => () => {},
+    })
+    await until(() => started.includes('local-long-runner'), { description: 'the local node to start' })
+
+    capacityAvailable = true
+    capacityChanged.resolve()
+    await until(() => started.includes('capacity-waiter'), {
+      description: 'the broker-blocked node to be admitted while the local node still runs',
+    })
+    firstDone.resolve()
+    await finished
+
+    Expect(started).toEqual(['local-long-runner', 'capacity-waiter'])
   })
 
   Test('cancels and drains running nodes when a later broker admission fails', async () => {

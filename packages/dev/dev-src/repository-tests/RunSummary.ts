@@ -107,7 +107,7 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   {
     kind: 'native-runtime-exit',
     pattern:
-      /(?:native runtime exited .* before (?:reporting|producing)|Electrobun exited before writing its runtime probe)/i,
+      /(?:native runtime exited .* before (?:reporting|producing)|Native Studio runtime (?:exited with code|terminated by signal) \d+|Electrobun exited before writing its runtime probe)/i,
   },
   { kind: 'native-probe-timeout', pattern: /Timed out waiting for the Electrobun runtime probe/i },
   { kind: 'user-interruption', pattern: /\b(?:user interruption|was interrupted|interrupted before completion)\b/i },
@@ -163,11 +163,20 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
   if (context.interrupted === true) {
     return 'user-interruption'
   }
-  const signature = FAILURE_SIGNATURES.find(candidate => candidate.pattern.test(output))
+  // A runner prints FAIL/(fail) for a timed-out test as well as for a wrong answer. Classify the
+  // specific host/native signatures first, then the timeout with measured contention, and only
+  // then fall back to the generic assertion banner.
+  const signature = FAILURE_SIGNATURES.find(candidate =>
+    candidate.kind !== 'test-assertion' && candidate.pattern.test(output)
+  )
   if (signature !== undefined) {
     return signature.kind
   }
-  return context.contention?.contended === true && describesTimeout(output) ? 'machine-contention' : 'repository'
+  if (describesTimeout(output)) {
+    return context.contention?.contended === true ? 'machine-contention' : 'repository'
+  }
+  return FAILURE_SIGNATURES.find(candidate => candidate.kind === 'test-assertion' && candidate.pattern.test(output))
+    ?.kind ?? 'repository'
 }
 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */

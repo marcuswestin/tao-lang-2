@@ -37,6 +37,8 @@ export type RecordTestRunOptions = {
   /** True only for a complete, unfiltered, non-interrupted `just test` invocation. */
   fullRun: boolean
   observations: readonly TestObservation[]
+  /** Synthetic files whose observations cover only part of their durable inventory. */
+  partialFiles?: readonly string[]
   repositoryRoot?: string
   startedAt: number
 }
@@ -116,7 +118,12 @@ async function recordRunUnlocked(
   // A native report is the complete current inventory for every file it names. Remove records for
   // tests deleted or renamed in that file before adding its current observations; otherwise one
   // deleted failure would make `test-retry` select the file forever.
-  const observedFiles = new Set(options.observations.map(observation => `${observation.suite}\0${observation.file}`))
+  const partialFiles = new Set(options.partialFiles ?? [])
+  const observedFiles = new Set(
+    options.observations
+      .filter(observation => !partialFiles.has(observation.file))
+      .map(observation => `${observation.suite}\0${observation.file}`),
+  )
   for (const [id, record] of Object.entries(store.tests)) {
     if (observedFiles.has(`${record.suite}\0${record.file}`)) {
       delete store.tests[id]
