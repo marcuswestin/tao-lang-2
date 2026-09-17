@@ -1,10 +1,10 @@
 import { Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { GateCatalog } from './GateCatalog'
-import { GreenTree, type GreenTreeMatch } from './GreenTree'
+import { GreenTree, type GreenTreeMatch, type GreenTreeRecord } from './GreenTree'
 import { type ContentionReport, type MachineLane, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
-import { buildSummary, type GateSummary, skippedResult } from './RunSummary'
+import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
 import { type WorkCommand, WorkGraph, type WorkOutcome, type WorkRunContext, type WorkState } from './WorkGraph'
 import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkReporter'
@@ -76,12 +76,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const now = options.now ?? Time.nowMs
   const startedAt = now()
   const hashTree = options.greenTree?.hashTree ?? GreenTree.hashTree
-  const initialTreeHash = options.greenTree === undefined ? undefined : await hashTree(location.repositoryRoot)
-  if (options.greenTree !== undefined && options.greenTree.fresh !== true) {
+  // Hashed before anything runs. A --fresh run reads no proof but still needs this seed, because
+  // the drift guard below compares what the readers proved against what the run leaves behind.
+  const startingTreeHash = options.greenTree === undefined ? undefined : await hashTree(location.repositoryRoot)
+  const readsGreenTree = options.greenTree !== undefined && options.greenTree.fresh !== true
+  if (readsGreenTree && startingTreeHash !== undefined) {
     const match = await GreenTree.find(
       location.repositoryRoot,
-      initialTreeHash!,
-      options.greenTree.lanes,
+      startingTreeHash,
+      options.greenTree!.lanes,
     )
     if (match !== undefined) {
       return greenTreeSummary(options, location.lane, match, now() - startedAt)
@@ -97,12 +100,31 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
       .map(name => `${name}=requires unsandboxed host capabilities; run just full-verify outside the sandbox`)
     : []
-  const declaredSkips = [...options.skipped ?? [], ...unsandboxedSkips]
-    .map(skippedResult)
-    .filter(result => !runnableGates.includes(result.name))
+  // Gates another lane already proved at this exact tree. Only tree-readers qualify: a gate that
+  // rewrites the tree or fills a generated directory produces state the tree hash does not
+  // describe, so it runs every time and its output is there for the gates that read it.
+  const provedGates: Map<string, GreenTreeRecord> = !readsGreenTree || startingTreeHash === undefined
+    ? new Map()
+    : await GreenTree.findGates(
+      location.repositoryRoot,
+      startingTreeHash,
+      runnableGates.filter(name => GateCatalog.metadata(name).mutatesTree !== true),
+    )
+  const gatesToRun = runnableGates.filter(name => !provedGates.has(name))
+  const greenSkips = [...provedGates].map(([name, record]): GateResult => ({
+    elapsedMs: 0,
+    name,
+    reason: GreenTree.describeGate(record),
+    status: 'skipped',
+  }))
+  const declaredSkips = [
+    ...[...options.skipped ?? [], ...unsandboxedSkips].map(skippedResult),
+    ...greenSkips,
+  ]
+    .filter(result => !gatesToRun.includes(result.name))
     .filter((result, index, results) => results.findIndex(candidate => candidate.name === result.name) === index)
 
-  const states = runnableGates.map(name => WorkGraph.createState(GateCatalog.node(name, location.repositoryRoot)))
+  const states = gatesToRun.map(name => WorkGraph.createState(GateCatalog.node(name, location.repositoryRoot)))
   await RunArtifacts.assignLogPaths(states, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
@@ -119,7 +141,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
 
   const runNode = options.runGate === undefined ? undefined : injectedRunner(options.runGate)
-  let verifiedTreeHash = initialTreeHash
+  let verifiedTreeHash = startingTreeHash
   const { contention, result } = await runUnderLane(async () => {
     const graphOptions = {
       env: machineLane.id === undefined ? undefined : { [MachineLanes.LANE_ID_ENV_KEY]: machineLane.id },
@@ -186,6 +208,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     order: runnableGates,
     states,
   })
+  // The readers proved the tree as it stood when they started. Anything that changed it after
+  // that — a concurrent edit, not this run's own fix gates — means this run is not evidence.
   const finalTreeHash = verifiedTreeHash === undefined ? undefined : await hashTree(location.repositoryRoot)
   if (verifiedTreeHash !== undefined && finalTreeHash !== verifiedTreeHash) {
     summary.status = 'failed'
@@ -194,16 +218,31 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       'working tree changed while verification was running; this run is not green evidence',
     ]
   }
+  if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
+    if (provedGates.size > 0 && verifiedTreeHash !== startingTreeHash) {
+      // A gate skipped on an earlier proof was proved against the tree this run started from. If
+      // the fix gates then rewrote that tree, this run proves nothing about the tree it leaves.
+      summary.warnings = [
+        ...summary.warnings,
+        'gates were skipped on an earlier proof and the fix gates then changed the tree; '
+        + 'this run is not green evidence. Re-run with --fresh.',
+      ]
+    } else {
+      await GreenTree.record(
+        location.repositoryRoot,
+        options.greenTree.lanes[0] ?? location.lane,
+        { at: new Date().toISOString(), logRoot: location.logRoot, treeHash: verifiedTreeHash! },
+        // Only what this run actually proved about this tree, and only gates whose verdict the
+        // tree hash fully describes.
+        states
+          .filter(state => state.status === 'passed' && state.node.mutatesTree !== true)
+          .map(state => state.name),
+      )
+    }
+  }
   await RunArtifacts.finishRun({ location, recordTimings: !contention.contended, states, summary })
   if (options.jsonPath !== undefined) {
     await RunArtifacts.writeSummaryCopy(options.jsonPath, location.repositoryRoot, summary)
-  }
-  if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
-    await GreenTree.record(location.repositoryRoot, options.greenTree.lanes[0] ?? location.lane, {
-      at: new Date().toISOString(),
-      logRoot: location.logRoot,
-      treeHash: verifiedTreeHash!,
-    })
   }
   return summary
 }

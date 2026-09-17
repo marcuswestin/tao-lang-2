@@ -343,7 +343,7 @@ export const MergeWithMainCommand = {
     ])
 
     await stabilizeAndVerify(snapshot, options, dependencies)
-    await squashAndVerify(snapshot, dependencies)
+    await squashAndVerify(snapshot, options, dependencies)
     await commitSquash(snapshot, preflight.message, dependencies)
     await pushArchiveAndPreserve(snapshot, dependencies)
 
@@ -375,7 +375,9 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? 'PLAN  Skip full verification because --skip-full-verify was explicit.'
       : 'PLAN  Run just full-verify on the feature branch.',
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
-    "PLAN  Squash onto main, compare tree hashes, run just verify --complete, and commit with Git's squash appendix.",
+    options.skipFullVerify === true
+      ? "PLAN  Squash onto main, compare tree hashes, run just verify --complete, and commit with Git's squash appendix."
+      : "PLAN  Squash onto main, prove the staged tree equals the verified feature tree, and commit with Git's squash appendix.",
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
@@ -560,6 +562,7 @@ async function stabilizeAndVerify(
 
 async function squashAndVerify(
   snapshot: MergeSnapshot,
+  options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await assertExpectedLocalState(snapshot, dependencies)
@@ -594,15 +597,27 @@ async function squashAndVerify(
     })
   }
   const mainHeadBeforeVerify = snapshot.currentMainHead
-  await runAndSnapshot(
-    snapshot,
-    'just',
-    ['verify', '--complete'],
-    snapshot.mainRoot,
-    'main-verified',
-    dependencies,
-    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-  )
+  if (options.skipFullVerify === true) {
+    // Nothing has verified this branch yet, so the staged squash is where it happens.
+    await runAndSnapshot(
+      snapshot,
+      'just',
+      ['verify', '--complete'],
+      snapshot.mainRoot,
+      'main-verified',
+      dependencies,
+      { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
+    )
+  } else {
+    // Git has just said the staged squash is the same tree, byte for byte, as the feature head
+    // full verification proved a moment ago. Running the repository's slowest lane over those same
+    // bytes a second time can only reproduce that verdict, so the equality above is the evidence.
+    writeLines(dependencies, [
+      `PASS  Staged squash tree ${shortSha(stagedTree)} equals the fully verified feature tree; `
+      + 'not verifying the same bytes twice.',
+    ])
+    await advanceSnapshot(snapshot, 'main-verified', dependencies)
+  }
   const stagedTreeAfterVerify = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
   const mainHeadAfterVerify = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   if (stagedTreeAfterVerify !== stagedTree || mainHeadAfterVerify !== mainHeadBeforeVerify) {

@@ -22,7 +22,7 @@ medium / 85 low by its own narrative count) and refuted 21 more as already fixed
 - Browser acceptance: studio-launch, studio-real-app (real HNReader app), studio-dialog-browser,
   and studio-agent-browser all pass headless from an ordinary unsandboxed shell. The
   once-documented Chrome `SIGABRT`-before-DevTools abort and the generated-directory cleanup denial
-  (DEVENV-015, DEVENV-061) are specific to a managed task namespace this machine also runs; they do
+  (DEVENV-015, DEVENV-064) are specific to a managed task namespace this machine also runs; they do
   not reproduce from a plain terminal.
 - `just full-verify`'s full chain (native canary, every browser gate in sequence) has **not** been
   run to completion this session: the chain aborts at the first failing gate
@@ -36,9 +36,9 @@ medium / 85 low by its own narrative count) and refuted 21 more as already fixed
    `keyboard-navigation-smoke`). After an input is engaged with Enter and left with Escape, the
    narrowing text from before engagement is still applied, so typing `f` narrows as `inpf`.
    `Docs/Roadmap/Tao Revolution/Decisions.md`'s Escape ladder puts "clears narrowing" first.
-   **Needs a decision:** should engaging an input clear narrowing, or should the fixture journey's
-   expectation change? See the merge message and the request that raised this for the concrete
-   repro.
+   **Decided 2026-09-17:** engaging a target clears narrowing, so narrowing never outlives the
+   engagement it selected; the journey's expectation stands. The follow-up branch implements that
+   in the attention reducer and lifts the `keyboard-navigation-smoke` failure.
 2. **Simulated-user journey remains quarantined.** It still fails at the same left-pane-divider
    drag step it fails at on `main`; ten consecutive green runs have not been attempted this
    session.

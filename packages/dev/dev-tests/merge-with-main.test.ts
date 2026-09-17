@@ -381,6 +381,7 @@ Describe('merge-with-main', () => {
     const fullVerify = operations.indexOf('just full-verify')
     const squash = operations.findIndex(operation => operation.startsWith('git merge --squash'))
     const treeProof = operations.findIndex((operation, index) => index > squash && operation === 'git write-tree')
+    // The staged squash is the tree full verification just proved, so it is not verified again.
     const verify = operations.indexOf('just verify --complete')
     const commit = operations.findIndex(operation => operation.startsWith('git commit -F'))
     const push = operations.indexOf(
@@ -402,9 +403,9 @@ Describe('merge-with-main', () => {
     Expect(fake.calls[fullVerify]?.stdio).toBe('inherit')
     Expect(squash).toBeGreaterThan(fullVerify)
     Expect(treeProof).toBeGreaterThan(squash)
-    Expect(verify).toBeGreaterThan(treeProof)
-    Expect(fake.calls[verify]?.stdio).toBe('inherit')
-    Expect(commit).toBeGreaterThan(verify)
+    Expect(verify).toBe(-1)
+    Expect(fake.lines.some(line => line.includes('equals the fully verified feature tree'))).toBe(true)
+    Expect(commit).toBeGreaterThan(treeProof)
     Expect(push).toBeGreaterThan(commit)
     Expect(archive).toBeGreaterThan(push)
     Expect(deleteRemote).toBeGreaterThan(archive)
@@ -485,7 +486,29 @@ Describe('merge-with-main', () => {
     const verificationCalls = fake.calls.filter(call =>
       call.command === 'just' && (call.args[0] === 'full-verify' || call.args[0] === 'verify')
     )
-    Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream', 'stream'])
+    Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream'])
+  })
+
+  Test('verifies the staged squash on main when full verification was explicitly skipped', async () => {
+    const fake = fakeDependencies()
+
+    await MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      skipFullVerify: true,
+      yes: true,
+    }, fake.dependencies)
+
+    const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+    // Nothing else verified this branch, so the staged squash is where verification happens.
+    Expect(operations).not.toContain('just full-verify')
+    Expect(operations.indexOf('just verify --complete')).toBeGreaterThan(
+      operations.findIndex(operation => operation.startsWith('git merge --squash')),
+    )
+    Expect(operations.indexOf('just verify --complete')).toBeLessThan(
+      operations.findIndex(operation => operation.startsWith('git commit -F')),
+    )
   })
 
   Test('integrates a main update discovered after verification and restarts full verification', async () => {

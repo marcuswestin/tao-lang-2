@@ -1137,42 +1137,29 @@ an entry here may link one when the developer workflow is also affected.
   probe is still reported; `./agent capabilities` completes in the managed shell.
 - **Source:** 2026-09-15 HNReader simulator recovery.
 
-### DEVENV-061 — Generated-artifact cleanup is denied after files gain macOS provenance
+### DEVENV-061 — `bun test` from the repository root loses subprocess output
 
-- **Status:** In progress
-- **Area:** Generated artifacts
-- **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
-  parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
-  resulting `EPERM` or `EFAULT` turns cleanup into broad, unrelated test failures.
-- **Evidence:** During the 2026-09-16 verification-foundation work, `verify --changed` and
-  `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
-  scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
-  `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
-  attempt had already emptied its live output before the same cleanup denial surfaced. A focused
-  probe then established the narrower host rule: file unlink and replacement work inside the
-  checkout, while directory rename and removal fail; host-temporary directories remain removable.
-  The same boundary left an old `.studio-device-trust.lock` directory undeletable, while a
-  monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
-  2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
-  a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
-  provenance alone.
-- **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
-  at the same source revision and verify that its generator reports `up to date`. Focused tests that
-  do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
-  and test roots in the host temporary directory; publish persistent generated output with
-  transactional file replacement instead of checkout-directory replacement.
-- **Proposed change:** The September remediation branch moves disposable runtime-test roots to host
-  temp and makes parser and IDE generated-file publication rollback-capable without renaming or
-  removing checkout directories. The Studio preview runtime is the exception and stays under
-  `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
-  root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
-  failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
-  task namespace prevents directory lifecycle operations.
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** An agent debugging with a direct `bun test <path>` from the repository root sees tests
+  that assert on captured command output fail, while the same tests pass through the repository's own
+  lanes. The failures look like a red tree and invite a hunt for a regression that is not there.
+- **Evidence:** 2026-09-17, `bun test packages/dev/dev-tests` from the root reported 610 pass / 41
+  fail; `just verify --changed` ran the same suite through `./dev test` in the same checkout and
+  reported 651 pass / 0 fail, as did `sh -c 'cd packages/dev && bun test dev-tests/green-tree.test.ts'`
+  and `./dev test-file`. A probe inside a root-cwd `bun test` shows `spawn('git', …)` with a piped
+  stdout delivering no `data` event before `close`, so `CLI.run` returns an empty `stdout`; the same
+  probe under `bun run` captures normally. Sandboxed and unsandboxed runs behave identically, and no
+  `bunfig.toml` or `.env` file is involved.
+- **Workaround:** Run package tests through `./dev test-file <path>` or `just test <pattern>`, or from
+  the package directory; do not trust a raw root-cwd `bun test`.
+- **Proposed change:** Find what the root working directory changes about Bun's test runtime, then
+  either fix the capture path in `Platform.spawn` or make a root-cwd `bun test` refuse and name the
+  supported entry points.
 - **Dependencies:** None.
-- **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
-  and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
-  intact and reports one actionable failure.
-- **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+- **Acceptance:** `bun test packages/dev/dev-tests` from the repository root agrees with `./dev test`,
+  or says why it cannot and points at the command that does.
+- **Source:** 2026-09-17 verification deduplication.
 
 ### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
 
@@ -1216,3 +1203,40 @@ an entry here may link one when the developer workflow is also affected.
   dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node
   watcher's `EMFILE` fallback.
 - **Source:** 2026-09-16 September remediation acceptance.
+
+### DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance
+
+- **Status:** In progress
+- **Area:** Generated artifacts
+- **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
+  parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
+  resulting `EPERM` or `EFAULT` turns cleanup into broad, unrelated test failures.
+- **Evidence:** During the 2026-09-16 verification-foundation work, `verify --changed` and
+  `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
+  scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
+  `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
+  attempt had already emptied its live output before the same cleanup denial surfaced. A focused
+  probe then established the narrower host rule: file unlink and replacement work inside the
+  checkout, while directory rename and removal fail; host-temporary directories remain removable.
+  The same boundary left an old `.studio-device-trust.lock` directory undeletable, while a
+  monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
+  2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
+  a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
+  provenance alone.
+- **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
+  at the same source revision and verify that its generator reports `up to date`. Focused tests that
+  do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
+  and test roots in the host temporary directory; publish persistent generated output with
+  transactional file replacement instead of checkout-directory replacement.
+- **Proposed change:** The September remediation branch moves disposable runtime-test roots to host
+  temp and makes parser and IDE generated-file publication rollback-capable without renaming or
+  removing checkout directories. The Studio preview runtime is the exception and stays under
+  `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
+  root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
+  failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
+  task namespace prevents directory lifecycle operations.
+- **Dependencies:** None.
+- **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
+  and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
+  intact and reports one actionable failure.
+- **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.

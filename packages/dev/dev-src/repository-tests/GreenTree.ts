@@ -11,6 +11,13 @@ import { createHash } from 'node:crypto'
  * record and the records of lanes whose gate membership is a superset of its own: a green
  * `full-verify` at this tree is also a green `verify`. It never accepts a subset, and `--fresh`
  * ignores every record.
+ *
+ * The same run also records each gate it proved, under its own name. A lane that no whole-lane
+ * record covers still skips the gates another lane already proved at this exact tree, which is what
+ * keeps `full-verify` from running the package gates a `verify --complete` has just run over the
+ * same bytes. Gates that rewrite the tree or a generated directory are deliberately never recorded:
+ * their output is derived state the tree hash does not describe, so proving them again is the only
+ * way to know it is present.
  */
 
 export type GreenTreeRecord = {
@@ -20,6 +27,8 @@ export type GreenTreeRecord = {
 }
 
 export type GreenTreeStore = {
+  /** Per-gate records, keyed by gate name; a lane reads them when no whole-lane record matches. */
+  gates: Record<string, GreenTreeRecord>
   lanes: Record<string, GreenTreeRecord>
   version: 1
 }
@@ -139,12 +148,17 @@ async function git(args: readonly string[], cwd: string, run: typeof CLI.run, st
 async function load(repositoryRoot: string): Promise<GreenTreeStore> {
   const path = FS.resolvePath(STORE_PATH, repositoryRoot)
   if (!await FS.isFile(path)) {
-    return { lanes: {}, version: VERSION }
+    return { gates: {}, lanes: {}, version: VERSION }
   }
   const store = await FS.readJson<Partial<GreenTreeStore>>(path)
   return store.version === VERSION && typeof store.lanes === 'object' && store.lanes !== null
-    ? { lanes: store.lanes, version: VERSION }
-    : { lanes: {}, version: VERSION }
+    // A store written before gates were recorded is read as a store with no gate records.
+    ? {
+      gates: typeof store.gates === 'object' && store.gates !== null ? store.gates : {},
+      lanes: store.lanes,
+      version: VERSION,
+    }
+    : { gates: {}, lanes: {}, version: VERSION }
 }
 
 /** find returns the first accepted lane whose recorded green tree is this tree. */
@@ -163,14 +177,38 @@ async function find(
   return undefined
 }
 
-/** record stores a green run's tree under its lane, replacing the lane's previous record. */
+/** findGates returns the gates among `gates` this exact tree has already proved. */
+async function findGates(
+  repositoryRoot: string,
+  treeHash: string,
+  gates: readonly string[],
+): Promise<Map<string, GreenTreeRecord>> {
+  const store = await load(repositoryRoot)
+  const proved = new Map<string, GreenTreeRecord>()
+  for (const gate of gates) {
+    const record = store.gates[gate]
+    if (record !== undefined && record.treeHash === treeHash) {
+      proved.set(gate, record)
+    }
+  }
+  return proved
+}
+
+/**
+ * record stores a green run's tree under its lane, and under each gate the run proved, replacing
+ * the previous record of each. One write, because the store is one file.
+ */
 async function record(
   repositoryRoot: string,
   lane: string,
   entry: GreenTreeRecord,
+  gates: readonly string[] = [],
 ): Promise<void> {
   const store = await load(repositoryRoot)
   store.lanes[lane] = entry
+  for (const gate of gates) {
+    store.gates[gate] = entry
+  }
   await FS.writeJson(FS.resolvePath(STORE_PATH, repositoryRoot), store)
 }
 
@@ -181,5 +219,10 @@ function describe(lane: string, match: GreenTreeMatch): string {
     + `\nEvidence: ${FS.displayPath(match.logRoot)}`
 }
 
+/** describeGate is the one line a gate skipped on an earlier proof prints in place of its run. */
+function describeGate(record: GreenTreeRecord): string {
+  return `proved green at this tree by the run at ${record.at}; evidence: ${FS.displayPath(record.logRoot)}`
+}
+
 /** GreenTree owns the per-checkout record of trees each verification lane has already proved. */
-export const GreenTree = { STORE_PATH, describe, find, hashTree, load, record } as const
+export const GreenTree = { STORE_PATH, describe, describeGate, find, findGates, hashTree, load, record } as const
