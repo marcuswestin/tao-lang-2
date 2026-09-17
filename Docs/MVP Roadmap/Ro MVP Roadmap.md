@@ -144,3 +144,33 @@ extension. Studio is the most impressive and the least finished.
 - **Recommended:** CLI and IDE extension as the product, Studio shown as a video or screenshots and
   offered to anyone who asks. It avoids promising a surface whose reliability gate (`A15`) is still
   open.
+
+### R13 — The spellings the Tao Future consolidation had to choose
+
+Process step 3 (`A12`) aligned Skillet, Hearth, and Wayfare to `Decisions.md` and found nine
+constructs the apps genuinely need that no decision covers, plus two places where `Decisions.md`
+disagrees with itself. Each is listed in `Apps/Tao Future/README.md`; the port chose a spelling so
+the apps would read as one dialect, and none of those choices is a decision.
+
+The nine: the reorder affordance and the drop target as container members (`Col(Reorderable: …)`,
+`Col(Accepts: …)` with `on drop`) now that `List` is retired and §18 fixes only `Reorderable: yes`;
+`where` on a `loop`; `first N of`; a composite `unique A, B`; `order by relevance`;
+`device.timeZone` and the `Connection` and `Sync` environment values, none of which §13's
+environment table carries; `X.Cases`; `to X otherwise Y` and a `never` schedule case in an
+automation; `runs single per Row`; and the world controls a journey uses beyond §16's named set
+(`clock`, `advance`, `collaborator`, `capture shared link`, `expect notification`, `expect window`,
+`move … onto …`).
+
+The two self-contradictions: §10's opening four-kinds bullet names `TabNav` while its own later
+host-read amendment, `@tao/nav`, and the runtime all name `SelectionNav`; and §1 says two
+visibility modifiers "and no others" while §8's command example and `visibility.langium` carry five
+(`file`, `folder`, `package`, `workspace`, `public`). The apps follow the implemented and
+later-amended spelling in both cases.
+
+- Blocks: nothing in the first hour, and no tranche until one of these constructs is the one being
+  implemented. It blocks the graduation promise: a file graduates by rename alone, so a spelling
+  decided differently later is an edit at graduation time, which is the thing the rule forbids.
+- **Recommended:** settle the two self-contradictions now, since both are one-word corrections to
+  `Decisions.md` and the implementation already chose. Take the nine as a decision round when the
+  first tranche reaches one of them, rather than deciding nine spellings with no code pressing on
+  them.
