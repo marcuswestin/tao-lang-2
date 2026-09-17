@@ -1,28 +1,65 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import type { SelectedSuite, TestProcess } from '../dev-src/repository-tests/TestNodes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
-import { TestRunner } from '../dev-src/repository-tests/TestRunner'
+import { type SuiteState, TestRunner, type TestRunRequest } from '../dev-src/repository-tests/TestRunner'
+import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
 
-function suiteState(name: string, sleepSeconds = 0, scheduling?: { cost?: number; priority?: number }) {
-  return TestRunner.createSuiteState({ name, command: 'sleep', args: [String(sleepSeconds)], scheduling })
-}
+/** An empty history: no recorded duration means no suite is sharded, so a node is named for its suite. */
+const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { nodes: {}, version: 1 } as const }
 
-/** discover answers one selection from the real registry and returns the suites by name. */
+type Suites = ReadonlyMap<string, SelectedSuite>
+
+/** discover answers one selection from the real registry and returns the selected suites by name. */
 async function discover(
   selection: Parameters<typeof TestRunner.discoverTestSuites>[0] = {},
   context: Parameters<typeof TestRunner.discoverTestSuites>[1] = {},
 ) {
   const result = await TestRunner.discoverTestSuites(selection, context)
-  return { ...result, byName: new Map(result.suites.map(suite => [suite.name, suite])) }
+  return { ...result, byName: new Map(result.selected.map(suite => [suite.name, suite])) as Suites }
+}
+
+/**
+ * processOf builds the process one node would run for a suite: the node's own name, the files that
+ * node owns, and the width the graph granted it. A suite builds a process for any subset of its
+ * files, which is what makes sharding possible without the registry knowing shards exist.
+ */
+function processOf(
+  suites: Suites,
+  name: string,
+  options: { files?: readonly string[]; nodeName?: string; slots?: number } = {},
+): TestProcess {
+  const suite = suites.get(name)
+  Expect(suite).toBeDefined()
+  return suite!.buildProcess(options.nodeName ?? name, options.files ?? suite!.files, options.slots ?? 1)
+}
+
+function argsOf(suites: Suites, name: string, options: Parameters<typeof processOf>[2] = {}): readonly string[] {
+  return processOf(suites, name, options).args
+}
+
+/** nodesFor builds the nodes one run would schedule, over this checkout's real registry. */
+async function nodesFor(request: TestRunRequest, reportRoot?: string) {
+  const repositoryRoot = Repo.getRoot()
+  const prepared = await TestRunner.prepareRun(request, repositoryRoot)
+  const plan = await TestRunner.testNodesFor({ ...NO_HISTORY, prepared, reportRoot, repositoryRoot })
+  return { ...plan, byName: new Map(plan.states.map(state => [state.name, state])) }
+}
+
+/** A finished test node, for the reporting assertions; only the report fields matter to them. */
+function suiteState(name: string): SuiteState {
+  const state = WorkGraph.createState({ name, run: { args: [], command: 'true' } }) as SuiteState
+  state.suite = name
+  return state
 }
 
 Describe('test runner suite registry', () => {
   Test('a name pattern filters every Bun suite and leaves out the suite that cannot filter by name', async () => {
     const { byName, skipped } = await discover({ pattern: 'one package only' })
 
-    Expect(byName.get('dev')?.args).toContain('--pass-with-no-tests')
-    Expect(byName.get('dev')?.args).toContain('--test-name-pattern=one package only')
+    Expect(argsOf(byName, 'dev')).toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'dev')).toContain('--test-name-pattern=one package only')
     Expect(byName.has('tao-apps')).toBe(false)
     // The summary's note comes from the registry entry, so the runner has no second flag to keep true.
     Expect(skipped).toEqual([{ name: 'tao-apps', reason: 'a test-name pattern cannot select Tao behavior tests' }])
@@ -31,106 +68,159 @@ Describe('test runner suite registry', () => {
   Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
     const { byName } = await discover()
 
-    Expect(byName.get('dev')?.args).toContain('--concurrent')
-    Expect(byName.get('dev')?.args).toContain('--timeout=15000')
+    Expect(argsOf(byName, 'dev')).toContain('--concurrent')
+    Expect(argsOf(byName, 'dev')).toContain('--timeout=60000')
   })
 
-  Test('runs performance checks as a dashboard suite', async () => {
+  Test('names every Bun test file absolutely, so the runner never walks the repository to find it', async () => {
     const { byName } = await discover()
 
+    // Bun reads a bare relative path as a filter and walks the whole tree to resolve it, leaving a
+    // descriptor open per visited entry; children spawned by a test then inherit an exhausted
+    // table and their piped output never arrives. An absolute path is taken literally.
+    const files = argsOf(byName, 'dev').filter(argument => argument.endsWith('.test.ts'))
+    Expect(files.length).toBeGreaterThan(0)
+    Expect(files.every(file => file.startsWith('/'))).toBe(true)
     Expect(
-      byName.get('performance-checks')?.args.some(argument =>
+      argsOf(byName, 'performance-checks').some(argument =>
         argument.endsWith('/packages/dev/performance-checks/language-performance.test.ts')
       ),
     ).toBe(true)
   })
 
-  Test('holds the Jest suite to the slots it reserved instead of letting it size to the machine', async () => {
+  Test('holds the Jest suite to the slots it was granted instead of letting it size to the machine', async () => {
     const { byName } = await discover()
 
     // Jest defaults to `cpuCount - 1` workers. Inside a three-slot reservation that fills the
     // machine on its own, and on a machine already shared with another worktree it fills it twice.
-    Expect(byName.get('runtime-jest')?.args).toContain('--maxWorkers=3')
-  })
-
-  Test('narrows the Jest suite further when the whole lane has been narrowed', async () => {
-    const { byName } = await discover({}, { jobs: 1 })
-
-    Expect(byName.get('runtime-jest')?.args).toContain('--maxWorkers=1')
+    Expect(argsOf(byName, 'runtime-jest', { slots: 3 })).toContain('--maxWorkers=3')
+    Expect(argsOf(byName, 'runtime-jest', { slots: 1 })).toContain('--maxWorkers=1')
+    Expect(argsOf(byName, 'runtime-jest', { slots: 1 })).toContain('--no-watchman')
   })
 
   Test('narrows the Jest child to the slots actually admitted after another lane joins', async () => {
-    const { byName } = await discover()
-    const state = TestRunner.createSuiteState(byName.get('runtime-jest')!)
-    const run = state.node.run
+    const { byName } = await nodesFor({ kind: 'full' })
+    const run = byName.get('runtime-jest')?.node.run
+
+    // The node's command is built after admission, so a narrowed grant reaches the child rather
+    // than the width the catalog hoped for.
     Expect(typeof run).toBe('function')
     if (typeof run !== 'function') {
       return
     }
-
     Expect(run({ slots: 1 }).args).toContain('--maxWorkers=1')
     Expect(run({ slots: 2 }).args).toContain('--maxWorkers=2')
   })
 
-  Test('gives every native runner its own structured report artifact', async () => {
-    const { byName } = await discover({}, { jobs: 3, reportRoot: '/tmp/test-reports' })
+  Test('names every structured report after the node that writes it, so two shards cannot collide', async () => {
+    const { byName } = await discover({}, { reportRoot: '/tmp/test-reports' })
 
-    Expect(byName.get('dev')?.args).toContain('--reporter=junit')
-    Expect(byName.get('dev')?.args).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
-    Expect(byName.get('runtime-jest')?.args).toContain('--json')
-    Expect(byName.get('runtime-jest')?.args).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
+    Expect(argsOf(byName, 'dev')).toContain('--reporter=junit')
+    Expect(argsOf(byName, 'dev')).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
+    Expect(argsOf(byName, 'runtime-jest')).toContain('--json')
+    Expect(argsOf(byName, 'runtime-jest')).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
+
+    // Two shards of one suite run at once. A path named for the suite would have each overwrite the
+    // other's results, and the run would then read a report that describes half of what it ran.
+    const first = processOf(byName, 'dev', { nodeName: 'dev#1' })
+    const second = processOf(byName, 'dev', { nodeName: 'dev#2' })
+    Expect(first.args).toContain('--reporter-outfile=/tmp/test-reports/dev_1.xml')
+    Expect(second.args).toContain('--reporter-outfile=/tmp/test-reports/dev_2.xml')
+    Expect(first.testReport?.path).not.toBe(second.testReport?.path)
+    // The report still says which suite it belongs to, so the ledger records per-suite outcomes.
+    Expect(first.testReport?.suite).toBe('dev')
+    Expect(processOf(byName, 'runtime-jest', { nodeName: 'runtime-jest#2' }).args)
+      .toContain('--outputFile=/tmp/test-reports/runtime-jest_2.json')
+  })
+
+  Test('builds a process for any subset of a suite files, which is what a shard runs', async () => {
+    const { byName } = await discover()
+    const all = byName.get('dev')?.files ?? []
+    const subset = all.slice(0, 2)
+
+    Expect(subset.length).toBe(2)
+    const shard = processOf(byName, 'dev', { files: subset, nodeName: 'dev#1' })
+    Expect(shard.files).toEqual(subset)
+    Expect(shard.args.filter(argument => argument.endsWith('.test.ts'))).toHaveLength(2)
+    Expect(processOf(byName, 'dev').args.filter(argument => argument.endsWith('.test.ts')))
+      .toHaveLength(all.length)
   })
 
   Test('a suite plan keeps only the named suites and hands the Tao Apps suite its roots', async () => {
-    const { byName, suites } = await discover({
+    const { byName, selected } = await discover({
       files: new Map([['tao-apps', ['Apps/WordFlower']]]),
       kind: 'changed',
       suites: new Set(['dev', 'runtime-jest', 'tao-apps']),
-    }, { jobs: 3 })
+    })
 
-    Expect(suites.map(suite => suite.name)).toEqual(['dev', 'runtime-jest', 'tao-apps'])
+    Expect(selected.map(suite => suite.name)).toEqual(['dev', 'runtime-jest', 'tao-apps'])
     // Whole suites run in full: neither runner is asked to narrow by Git, because Bun's
     // `--changed` stops at the package boundary and Jest ignores `--changedSince` beside paths.
-    Expect(byName.get('dev')?.args.some(arg => arg.startsWith('--changed'))).toBe(false)
-    Expect(byName.get('dev')?.args).not.toContain('--pass-with-no-tests')
-    Expect(byName.get('runtime-jest')?.args.some(arg => arg.startsWith('--changedSince'))).toBe(false)
-    Expect(byName.get('tao-apps')?.args).toEqual(['test', 'Apps/WordFlower'])
+    Expect(argsOf(byName, 'dev').some(argument => argument.startsWith('--changed'))).toBe(false)
+    Expect(argsOf(byName, 'dev')).not.toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'runtime-jest').some(argument => argument.startsWith('--changedSince'))).toBe(false)
+    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps/WordFlower'])
     Expect(byName.get('tao-apps')?.files).toEqual(['Apps/WordFlower'])
   })
 
   Test('exact files run only their own suites, over only those files', async () => {
     const file = 'packages/shared/shared-tests/shared.test.ts'
-    const { suites } = await discover({
+    const { byName, selected } = await discover({
       files: new Map([['shared', [file]]]),
       kind: 'file',
       suites: new Set(['shared']),
     })
 
-    Expect(suites.map(suite => suite.name)).toEqual(['shared'])
-    Expect(suites[0]?.files).toEqual([file])
-    Expect(suites[0]?.args.filter(arg => arg.endsWith('.test.ts'))).toHaveLength(1)
+    Expect(selected.map(suite => suite.name)).toEqual(['shared'])
+    Expect(byName.get('shared')?.files).toEqual([file])
+    Expect(argsOf(byName, 'shared').filter(argument => argument.endsWith('.test.ts'))).toHaveLength(1)
   })
 
   Test('the complete run tests every app and the inventory names every suite it would run', async () => {
-    const { byName, skipped, suites } = await discover()
+    const { byName, selected, skipped } = await discover()
     const inventory = await TestRunner.suiteInventory()
 
     Expect(skipped).toEqual([])
-    Expect(byName.get('tao-apps')?.args).toEqual(['test', 'Apps'])
+    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps'])
     Expect(inventory.packageSuites).toContain('dev')
     Expect(inventory.packageSuites).toContain('shared')
     Expect(inventory.hasRuntimeJest).toBe(true)
     const expected = [...inventory.packageSuites, 'performance-checks', 'runtime-jest', 'tao-apps'].sort()
-    Expect(suites.map(suite => suite.name).sort()).toEqual(expected)
+    Expect(selected.map(suite => suite.name).sort()).toEqual(expected)
   })
 
-  Test('weights the widest suites so the three largest fit inside the test gate together', async () => {
-    const { byName } = await discover()
+  Test('carries each suite declared width onto the node the graph schedules', async () => {
+    const { byName } = await nodesFor({ kind: 'full' })
 
-    Expect(byName.get('tao-apps')?.scheduling).toEqual({ priority: 5, cost: 8 })
-    Expect(byName.get('runtime-jest')?.scheduling).toEqual({ priority: 4, cost: 3 })
-    Expect(byName.get('runtime-toolchain')?.scheduling).toEqual({ priority: 3, cost: 2 })
-    Expect(byName.get('dev')?.scheduling).toBeUndefined()
+    // The widths belong to the catalog, but they only mean anything once they reach a node: this is
+    // where a suite renamed in the registry silently loses its reservation.
+    Expect(byName.get('tao-apps')?.node.cost).toBe(8)
+    Expect(byName.get('tao-apps')?.node.priority).toBe(5)
+    Expect(byName.get('runtime-jest')?.node.cost).toBe(3)
+    Expect(byName.get('runtime-toolchain')?.node.cost).toBe(2)
+    // An untuned Bun suite is one unsharded process that cannot use more than one core, so it
+    // reserves one slot and the scheduler packs the rest of the run around it.
+    Expect(byName.get('parser')?.node.cost).toBeUndefined()
+    Expect(byName.get('parser')?.node.serial).toBe(true)
+    // A suite that declares a width is not serial: it says so precisely because one of its
+    // processes uses more than one core, which is what the reservation is for.
+    Expect(byName.get('dev')?.node.cost).toBe(2)
+    Expect(byName.get('dev')?.node.serial).toBe(false)
+    Expect(byName.get('tao-apps')?.node.serial).toBe(false)
+    // Every node is bounded, so no runaway can hold a lane open for three quarters of an hour.
+    Expect(byName.get('dev')?.node.timeoutMs).toBeGreaterThan(0)
+    Expect(byName.get('dev')?.node.idleTimeoutMs).toBeGreaterThan(0)
+  })
+
+  Test('gives each node the edges its suite reads imply, and never the Justfile formatter', async () => {
+    const { byName } = await nodesFor({ kind: 'full' })
+
+    // A test node runs its runner directly, so it does not parse the Justfile on its way up.
+    Expect(byName.get('dev')?.node.needs).toContain('_compile-word-flower-app')
+    Expect(byName.get('dev')?.node.needs).toContain('_fix-tao')
+    Expect(byName.get('dev')?.node.needs).not.toContain('_fix-just-fmt')
+    // stdlib references no `.tao` source, no app, and no generated tree, so it waits for dprint alone.
+    Expect(byName.get('stdlib')?.node.needs).toEqual(['_fix-dprint'])
   })
 
   Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
@@ -189,48 +279,12 @@ Describe('test runner suite registry', () => {
       await FS.remove(root)
     }
   })
-
-  Test('a costly suite reserves the whole capacity before cheap suites start', async () => {
-    const events: string[] = []
-    const states = [
-      suiteState('cheap-a'),
-      suiteState('tao-apps', 0.1, { priority: 5, cost: 8 }),
-      suiteState('cheap-b'),
-    ]
-    await TestRunner.runSuiteProcesses(states, {
-      jobs: 2,
-      onChange: () => {},
-      onComplete: state => events.push(`complete ${state.name}`),
-      onStart: state => events.push(`start ${state.name}`),
-    })
-    Expect(events[0]).toBe('start tao-apps')
-    // tao-apps' cost clamps to the full capacity of 2, so both cheap suites wait for it.
-    Expect(events[1]).toBe('complete tao-apps')
-    Expect(events.slice(2).filter(event => event.startsWith('start')).sort())
-      .toEqual(['start cheap-a', 'start cheap-b'])
-    Expect(states.every(state => state.status === 'passed')).toBe(true)
-  })
-
-  Test('higher-priority suites start first under a single job', async () => {
-    const started: string[] = []
-    const states = [
-      suiteState('cheap-a'),
-      suiteState('tao-cli', 0, { priority: 2 }),
-      suiteState('runtime-jest', 0, { priority: 4, cost: 3 }),
-    ]
-    await TestRunner.runSuiteProcesses(states, {
-      jobs: 1,
-      onChange: () => {},
-      onStart: state => started.push(state.name),
-    })
-    Expect(started).toEqual(['runtime-jest', 'tao-cli', 'cheap-a'])
-  })
 })
 
 Describe('test lane reporting on a shared machine', () => {
   const shared = MachineLanes.contentionReport({ cpuCount: 18, peakLanes: 3, peakLoadAverage: 44 })
 
-  async function report(state: ReturnType<typeof suiteState>, contention = shared): Promise<string> {
+  async function report(state: SuiteState, contention = shared): Promise<string> {
     const captured = await withCapturedOutput(() => {
       TestResultSummary.printResultSummary([state], 1_000, { contention })
     })

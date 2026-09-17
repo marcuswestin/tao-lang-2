@@ -64,8 +64,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   the current request.
 - Before reporting a branch ready to merge, write or update its merge message at
   `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
-  merge-ready without it, and the human command Ro then runs is
-  `just merge-with-main --execute --push --yes`.
+  merge-ready without it, and the human command Ro then runs is `just merge-with-main`, which needs
+  no flag to do its job; its only flags remove verification work.
 - Whenever the work looks complete, carry it all the way to that command without being asked: land
   every change as commits on the feature branch, leave the worktree clean, run `verify --complete`
   plus the host lanes the change reaches, refresh the roadmap or ledger documents the work changed,

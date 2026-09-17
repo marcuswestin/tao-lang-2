@@ -17,6 +17,11 @@ app feature and Tao test proves each capability).
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in
     `Docs/Roadmap/Developer environment upgrades.md`.
+- [ ] Decide how parallel agents share one machine.
+  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
+    wall time and starved suites past their hang guards. What to share, what to serialize, what is
+    duplicated per worktree for no reason, and where a single orchestrator does and does not help
+    live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
 ## Documentation cleanup
 
