@@ -41,6 +41,7 @@ type MergeCommandOptions = {
   execute?: boolean
   messageFile?: string
   push?: boolean
+  refuseIfBusy?: boolean
   skipFullVerify?: boolean
   yes?: boolean
 }
@@ -145,8 +146,9 @@ await runWithCommands(commands => {
 
   commands
     .command('merge-with-main')
-    .description('Dry-run the human-only workflow that squash-merges a feature branch into main.')
+    .description('Dry-run the workflow that squash-merges a feature branch into main.')
     .option('--execute', 'Perform the workflow; the first release defaults to a ref-preserving dry run.')
+    .option('--refuse-if-busy', 'Fail immediately if the landing lease is held elsewhere instead of waiting for it.')
     .option('--yes', 'Confirm the normal execution prompt non-interactively.')
     .option('--push', 'Explicitly authorize pushing from a non-interactive invocation.')
     .option('--skip-full-verify', 'Explicitly omit the otherwise mandatory unsandboxed full verification.')
@@ -159,6 +161,7 @@ await runWithCommands(commands => {
           execute: options.execute === true,
           messageFile: options.messageFile,
           push: options.push === true,
+          refuseIfBusy: options.refuseIfBusy === true,
           skipFullVerify: options.skipFullVerify === true,
           yes: options.yes === true,
         })

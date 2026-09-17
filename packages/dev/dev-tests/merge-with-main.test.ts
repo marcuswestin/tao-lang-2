@@ -1,5 +1,6 @@
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { MachineResourceBusyError } from '../dev-src/repository-tests/MachineLanes'
 import {
   type MergeCommandRunner,
   type MergeSnapshot,
@@ -14,18 +15,22 @@ type FakeRepository = {
   branch: string
   committedTree?: string
   failDetach?: boolean
-  failFeatureMerge?: boolean
   failMainPush?: boolean
+  failRemoteFetch?: boolean
   failSquash?: boolean
+  failVerify?: boolean
   featureHead: string
   featureRoot: string
   featureStatus: string
+  integrationExists: boolean
+  integrationHead?: string
+  integrationRoot?: string
+  integrationStatus: string
+  localMainHead?: string
   mainHead: string
-  mainRoot: string
-  mainStatus: string
   remoteFeatureHead?: string
-  remoteMainHead: string
   remoteMainSequence?: string[]
+  remoteMergedHead?: string
   squashMessagePath: string
   stagedTree: string
   tree: string
@@ -41,11 +46,11 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     featureHead: 'feature00000000000000000000000000000000000',
     featureRoot: '/repo-feature',
     featureStatus: '',
+    integrationExists: false,
+    integrationStatus: '',
+    localMainHead: 'main000000000000000000000000000000000000',
     mainHead: 'main000000000000000000000000000000000000',
-    mainRoot: '/repo-main',
-    mainStatus: '',
     remoteFeatureHead: 'feature00000000000000000000000000000000000',
-    remoteMainHead: 'main000000000000000000000000000000000000',
     squashMessagePath: '/git/SQUASH_MSG',
     stagedTree: 'tree000000000000000000000000000000000000',
     tree: 'tree000000000000000000000000000000000000',
@@ -66,163 +71,172 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const snapshots = new Map<string, unknown>()
   const moves: Array<{ fromPath: string; toPath: string }> = []
   const lines: string[] = []
+  const leases: Array<{ released: boolean }> = []
   const ancestorExitCodes = [...(repository.ancestorExitCodes ?? [])]
   const remoteMainSequence = [...(repository.remoteMainSequence ?? [])]
-  let advertisedRemoteMain = repository.remoteMainHead
+  let advertisedMain = repository.mainHead
+
+  const consumeRemoteMain = (): string => {
+    advertisedMain = remoteMainSequence.shift() ?? advertisedMain
+    return advertisedMain
+  }
 
   const runner: MergeCommandRunner = async (command, spec) => {
     const args = [...(spec.args ?? [])]
     calls.push({ args, command, cwd: spec.cwd, stdio: spec.stdio })
+    const cwd = spec.cwd
+    const onIntegration = cwd !== undefined && cwd === repository.integrationRoot
     if (command === 'just') {
-      return result(command, args, spec.cwd)
+      if (repository.failVerify === true && (args[0] === 'full-verify' || args[0] === 'verify')) {
+        return result(command, args, cwd, '', 1)
+      }
+      return result(command, args, cwd)
     }
     const joined = args.join(' ')
     if (joined === 'symbolic-ref --quiet --short HEAD') {
-      return result(command, args, spec.cwd, `${repository.branch}\n`)
+      return result(command, args, cwd, `${repository.branch}\n`)
     }
     if (joined === 'status --porcelain=v1 --untracked-files=all') {
-      return result(
-        command,
-        args,
-        spec.cwd,
-        spec.cwd === repository.mainRoot
-          ? repository.mainStatus
-          : repository.featureStatus,
-      )
+      return result(command, args, cwd, onIntegration ? repository.integrationStatus : repository.featureStatus)
     }
     if (joined === 'diff --no-ext-diff --binary HEAD') {
-      return result(
-        command,
-        args,
-        spec.cwd,
-        spec.cwd === repository.mainRoot
-          ? repository.mainStatus
-          : repository.featureStatus,
-      )
+      return result(command, args, cwd, onIntegration ? repository.integrationStatus : repository.featureStatus)
     }
     if (joined === 'rev-parse HEAD') {
-      return result(
-        command,
-        args,
-        spec.cwd,
-        `${spec.cwd === repository.mainRoot ? repository.mainHead : repository.featureHead}\n`,
-      )
+      return result(command, args, cwd, `${onIntegration ? repository.integrationHead : repository.featureHead}\n`)
     }
     if (joined === 'worktree list --porcelain') {
       return result(
         command,
         args,
-        spec.cwd,
+        cwd,
         [
           `worktree ${repository.featureRoot}`,
           `HEAD ${repository.featureHead}`,
           `branch refs/heads/${repository.branch}`,
           '',
-          `worktree ${repository.mainRoot}`,
-          `HEAD ${repository.mainHead}`,
-          'branch refs/heads/main',
-          '',
         ].join('\n'),
       )
     }
-    if (args[0] === 'ls-remote') {
-      advertisedRemoteMain = remoteMainSequence.shift() ?? advertisedRemoteMain
-      return result(
-        command,
-        args,
-        spec.cwd,
-        [
-          `${advertisedRemoteMain}\trefs/heads/main`,
-          repository.remoteFeatureHead === undefined
-            ? ''
-            : `${repository.remoteFeatureHead}\trefs/heads/${repository.branch}`,
-        ].filter(Boolean).join('\n'),
-      )
-    }
-    if (args[0] === 'merge-base') {
-      return result(command, args, spec.cwd, '', ancestorExitCodes.shift() ?? 0)
-    }
-    if (joined === 'log -1 --format=%cI HEAD') {
-      return result(command, args, spec.cwd, '2026-09-03T12:00:00.000Z\n')
-    }
-    if (joined === 'fetch --prune origin') {
-      repository.remoteMainHead = advertisedRemoteMain
-      return result(command, args, spec.cwd)
+    if (joined === `fetch --prune origin main`) {
+      if (repository.failRemoteFetch === true) {
+        return result(command, args, cwd, '', 1)
+      }
+      advertisedMain = consumeRemoteMain()
+      return result(command, args, cwd)
     }
     if (joined === 'rev-parse origin/main') {
-      return result(command, args, spec.cwd, `${repository.remoteMainHead}\n`)
+      return result(command, args, cwd, `${advertisedMain}\n`)
+    }
+    if (joined === 'rev-parse --verify --quiet refs/heads/main') {
+      return repository.localMainHead === undefined
+        ? result(command, args, cwd, '', 1)
+        : result(command, args, cwd, `${repository.localMainHead}\n`)
+    }
+    if (args[0] === 'ls-remote') {
+      const refs: string[] = []
+      if (args.includes('refs/heads/main')) {
+        refs.push(`${consumeRemoteMain()}\trefs/heads/main`)
+      }
+      if (args.includes(`refs/heads/${repository.branch}`) && repository.remoteFeatureHead !== undefined) {
+        refs.push(`${repository.remoteFeatureHead}\trefs/heads/${repository.branch}`)
+      }
+      const archiveRef = `refs/heads/merged/${repository.branch.slice(5)}`
+      if (args.includes(archiveRef) && repository.remoteMergedHead !== undefined) {
+        refs.push(`${repository.remoteMergedHead}\t${archiveRef}`)
+      }
+      return result(command, args, cwd, refs.join('\n'))
+    }
+    if (args[0] === 'merge-base') {
+      return result(command, args, cwd, '', ancestorExitCodes.shift() ?? 0)
+    }
+    if (joined === 'log -1 --format=%cI HEAD') {
+      return result(command, args, cwd, '2026-09-03T12:00:00.000Z\n')
     }
     if (args[0] === 'rev-parse' && args[1]?.endsWith('^{tree}')) {
-      const tree = spec.cwd === repository.mainRoot && repository.mainHead.startsWith('commit')
+      const tree = onIntegration && repository.integrationHead?.startsWith('commit')
         ? repository.committedTree ?? repository.tree
         : repository.tree
-      return result(command, args, spec.cwd, `${tree}\n`)
+      return result(command, args, cwd, `${tree}\n`)
     }
     if (joined === 'write-tree') {
-      return result(command, args, spec.cwd, `${repository.stagedTree}\n`)
+      return result(command, args, cwd, `${onIntegration ? repository.stagedTree : repository.tree}\n`)
     }
     if (joined === 'rev-parse --git-path SQUASH_MSG') {
-      return result(command, args, spec.cwd, `${repository.squashMessagePath}\n`)
+      return result(command, args, cwd, `${repository.squashMessagePath}\n`)
+    }
+    if (args[0] === 'worktree' && args[1] === 'add') {
+      repository.integrationRoot = args[3]
+      repository.integrationHead = args[4]
+      repository.integrationExists = true
+      repository.integrationStatus = ''
+      return result(command, args, cwd)
+    }
+    if (args[0] === 'worktree' && args[1] === 'remove') {
+      repository.integrationExists = false
+      return result(command, args, cwd)
+    }
+    if (joined === 'worktree prune') {
+      return result(command, args, cwd)
     }
     if (joined.startsWith('merge --squash ')) {
-      repository.mainStatus = repository.failSquash === true ? 'UU example.ts\n' : 'M  example.ts\n'
-      return result(command, args, spec.cwd, '', repository.failSquash === true ? 1 : 0)
-    }
-    if (joined === 'merge --ff-only origin/main') {
-      repository.mainHead = repository.remoteMainHead
-      return result(command, args, spec.cwd)
-    }
-    if (joined === 'merge --no-edit origin/main') {
-      if (repository.failFeatureMerge === true) {
-        repository.featureStatus = 'UU example.ts\n'
-        return result(command, args, spec.cwd, '', 1)
-      }
-      repository.featureHead = 'integrated-feature0000000000000000000000000'
-      return result(command, args, spec.cwd)
+      repository.integrationStatus = repository.failSquash === true ? 'UU example.ts\n' : 'M  example.ts\n'
+      return result(command, args, cwd, '', repository.failSquash === true ? 1 : 0)
     }
     if (joined.startsWith('commit -F ')) {
-      repository.mainHead = 'commit00000000000000000000000000000000000'
-      repository.mainStatus = ''
-      return result(command, args, spec.cwd)
-    }
-    if (joined.startsWith('reset --hard ')) {
-      if (spec.cwd === repository.mainRoot) {
-        repository.mainHead = args[2]!
-        repository.mainStatus = ''
-      } else {
-        repository.featureHead = args[2]!
-        repository.featureStatus = ''
-      }
-      return result(command, args, spec.cwd)
+      repository.integrationHead = 'commit00000000000000000000000000000000000'
+      repository.integrationStatus = ''
+      return result(command, args, cwd)
     }
     if (joined.startsWith('switch --detach ')) {
       if (repository.failDetach === true) {
-        return result(command, args, spec.cwd, '', 1)
+        return result(command, args, cwd, '', 1)
       }
       repository.featureHead = args[2]!
       repository.featureStatus = ''
       repository.branch = ''
-      return result(command, args, spec.cwd)
+      return result(command, args, cwd)
     }
     if (joined === 'symbolic-ref --quiet HEAD') {
-      return result(command, args, spec.cwd, '', repository.branch === '' ? 1 : 0)
+      return result(command, args, cwd, '', repository.branch === '' ? 1 : 0)
     }
-    if (args[0] === 'push' && args.at(-1) === 'main:main' && repository.failMainPush === true) {
-      return result(command, args, spec.cwd, '', 1)
+    if (args[0] === 'push' && args.at(-1) === `${repository.integrationHead}:refs/heads/main` && repository.failMainPush === true) {
+      return result(command, args, cwd, '', 1)
     }
     if (
       args[0] === 'push'
-      || joined === 'worktree prune'
       || joined.startsWith('branch -D ')
     ) {
-      return result(command, args, spec.cwd)
+      return result(command, args, cwd)
     }
-    return result(command, args, spec.cwd, '', 1)
+    return result(command, args, cwd, '', 1)
   }
 
   const dependencies: MergeWithMainDependencies = {
+    acquireLease: async () => {
+      const lease = { released: false }
+      leases.push(lease)
+      return {
+        owner: {
+          command: 'merge-with-main',
+          id: `lease-${leases.length}`,
+          name: 'merge-with-main-landing',
+          pid: 4242,
+          repositoryRoot: repository.featureRoot,
+          startedAt: '2026-09-03T14:00:00.000Z',
+        },
+        release: async () => {
+          lease.released = true
+        },
+      }
+    },
     askConfirm: async () => true,
-    exists: async path => files.has(path) || snapshots.has(path),
+    exists: async path => {
+      if (path === repository.integrationRoot) {
+        return repository.integrationExists
+      }
+      return files.has(path) || snapshots.has(path)
+    },
     isInteractive: () => true,
     move: async (fromPath, toPath) => {
       moves.push({ fromPath, toPath })
@@ -251,6 +265,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       snapshots.delete(path)
     },
     run: runner,
+    sleep: async () => {},
     writeJson: async (path, value) => {
       snapshots.set(path, structuredClone(value))
     },
@@ -259,7 +274,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, lines, moves, repository, snapshots }
+  return { calls, dependencies, files, leases, lines, moves, repository, snapshots }
 }
 
 Describe('merge-with-main', () => {
@@ -313,41 +328,55 @@ Describe('merge-with-main', () => {
     ].join('\n'))).toEqual([{ branch: 'main', head: 'current', path: '/live' }])
   })
 
-  Test('dry run performs only read-only git operations and ends with the exact execute command', async () => {
+  Test('dry run performs only read-only git operations, never touches the landing lease, and ends with the exact execute command', async () => {
     const fake = fakeDependencies()
-    const result = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
+    const result_ = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
 
-    Expect(result.mode).toBe('dry-run')
-    Expect(fake.calls.map(call => call.args[0])).toEqual([
-      'symbolic-ref',
-      'status',
-      'rev-parse',
-      'worktree',
-      'status',
-      'rev-parse',
-      'ls-remote',
-      'merge-base',
-      'log',
-    ])
-    Expect(fake.calls.some(call => ['fetch', 'merge', 'commit', 'push', 'reset'].includes(call.args[0]!))).toBe(false)
+    Expect(result_.mode).toBe('dry-run')
+    Expect(fake.calls.some(call => ['merge', 'commit', 'push'].includes(call.args[0]!))).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] !== 'list')).toBe(false)
+    Expect(fake.leases).toEqual([])
     Expect(fake.lines.at(-1)).toBe(
       'DRY RUN  No refs or worktrees changed. Execute with: ./dev merge-with-main --execute --yes',
     )
     Expect(fake.snapshots.size).toBe(0)
   })
 
-  Test('fails before mutation for a dirty main worktree or divergent remote main', async () => {
-    const dirty = fakeDependencies({ mainStatus: 'M  local.ts\n' })
+  Test('fails before mutation for a dirty feature worktree or a local main branch that disagrees with origin', async () => {
+    const dirty = fakeDependencies({ featureStatus: 'M  local.ts\n' })
     await Expect(
       MergeWithMainCommand.run({ repositoryRoot: dirty.repository.featureRoot }, dirty.dependencies),
-    ).rejects.toThrow('The main worktree is not clean')
-    Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+    ).rejects.toThrow('The feature worktree is not clean')
 
-    const stale = fakeDependencies({ remoteMainHead: 'new-main' })
+    const stale = fakeDependencies({ localMainHead: 'stale-local-main' })
     await Expect(
       MergeWithMainCommand.run({ repositoryRoot: stale.repository.featureRoot }, stale.dependencies),
-    ).rejects.toThrow('main worktree is not at origin/main')
-    Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+    ).rejects.toThrow("Local branch 'main'")
+    Expect(stale.calls.some(call => call.args[0] === 'push')).toBe(false)
+  })
+
+  Test('degrades a dry run honestly when the remote cannot be reached', async () => {
+    const fake = fakeDependencies({ failRemoteFetch: true })
+    const outcome = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
+
+    Expect(outcome.mode).toBe('dry-run')
+    Expect(outcome.lines).toContain('WARN  Could not reach origin to confirm main; execution requires network access.')
+    Expect(outcome.lines).toContain(
+      'WARN  Could not confirm \'feat/example\' or its archive branch on origin because the remote was unreachable.',
+    )
+  })
+
+  Test('refuses to execute when the remote cannot be reached', async () => {
+    const fake = fakeDependencies({ failRemoteFetch: true })
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow('Cannot confirm origin/main')
+    // The lease was still taken and released around the failed preflight.
+    Expect(fake.leases).toHaveLength(1)
+    Expect(fake.leases[0]?.released).toBe(true)
   })
 
   Test('requires both non-interactive confirmation and independent push authorization', async () => {
@@ -366,9 +395,79 @@ Describe('merge-with-main', () => {
       yes: true,
     }, noPush.dependencies)).rejects.toThrow('requires explicit --push')
     Expect(noPush.snapshots.size).toBe(0)
+    Expect(noPush.leases[0]?.released).toBe(true)
   })
 
-  Test('executes verification and pushes before preserving the invoking worktree and cleaning refs', async () => {
+  Test('waits for a busy landing lease by default, printing the holder, then proceeds once free', async () => {
+    const fake = fakeDependencies()
+    const owner = {
+      command: 'merge-with-main',
+      id: 'other-lease',
+      name: 'merge-with-main-landing',
+      pid: 999,
+      repositoryRoot: '/repo-other',
+      startedAt: '2026-09-03T13:59:00.000Z',
+    }
+    let attempts = 0
+    const realAcquire = fake.dependencies.acquireLease
+    fake.dependencies.acquireLease = async (repositoryRoot, waitTimeoutMs) => {
+      attempts += 1
+      if (attempts < 3) {
+        throw new MachineResourceBusyError(owner)
+      }
+      return await realAcquire(repositoryRoot, waitTimeoutMs)
+    }
+    const sleeps: number[] = []
+    fake.dependencies.sleep = async ms => {
+      sleeps.push(ms)
+    }
+
+    const outcome = await MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(attempts).toBe(3)
+    Expect(sleeps).toEqual([5_000, 5_000])
+    Expect(fake.lines.filter(line => line.includes('is next in line'))).toHaveLength(1)
+    Expect(fake.lines.some(line => line.includes('/repo-other'))).toBe(true)
+  })
+
+  Test('refuses immediately instead of waiting when --refuse-if-busy is set', async () => {
+    const fake = fakeDependencies()
+    const owner = {
+      command: 'merge-with-main',
+      id: 'other-lease',
+      name: 'merge-with-main-landing',
+      pid: 999,
+      repositoryRoot: '/repo-other',
+      startedAt: '2026-09-03T13:59:00.000Z',
+    }
+    fake.dependencies.acquireLease = async () => {
+      throw new MachineResourceBusyError(owner)
+    }
+
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      refuseIfBusy: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow(Errors.HostEnvironmentError)
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      refuseIfBusy: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow(/repo-other/)
+    Expect(fake.calls).toEqual([])
+  })
+
+  Test('executes verification and pushes before removing the integration worktree and preserving the invoking worktree', async () => {
     const fake = fakeDependencies()
     const outcome = await MergeWithMainCommand.run({
       execute: true,
@@ -378,15 +477,11 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+    const integrationCreate = operations.findIndex(operation => operation.startsWith('git worktree add --detach'))
     const fullVerify = operations.indexOf('just full-verify')
     const squash = operations.findIndex(operation => operation.startsWith('git merge --squash'))
-    const treeProof = operations.findIndex((operation, index) => index > squash && operation === 'git write-tree')
-    // The staged squash is the tree full verification just proved, so it is not verified again.
-    const verify = operations.indexOf('just verify --complete')
     const commit = operations.findIndex(operation => operation.startsWith('git commit -F'))
-    const push = operations.indexOf(
-      `git push origin --force-with-lease=refs/heads/main:${fake.repository.remoteMainHead} main:main`,
-    )
+    const push = operations.findIndex(operation => operation.startsWith('git push origin --force-with-lease=refs/heads/main:'))
     const archive = operations.indexOf(
       'git push origin --force-with-lease=refs/heads/merged/example: feat/example:refs/heads/merged/example',
     )
@@ -394,26 +489,27 @@ Describe('merge-with-main', () => {
       `git push origin --force-with-lease=refs/heads/feat/example:${fake.repository.remoteFeatureHead}`
         + ' :refs/heads/feat/example',
     )
-    const detach = operations.indexOf(`git switch --detach ${fake.repository.featureHead}`)
+    const integrationRemove = operations.findIndex(operation => operation.startsWith('git worktree remove --force'))
+    const detach = operations.findIndex(operation => operation.startsWith('git switch --detach'))
     const proveDetached = operations.indexOf('git symbolic-ref --quiet HEAD')
     const deleteBranch = operations.indexOf('git branch -D feat/example')
     const prune = operations.indexOf('git worktree prune')
 
-    Expect(fullVerify).toBeGreaterThan(0)
+    Expect(integrationCreate).toBeGreaterThan(0)
+    Expect(fullVerify).toBeGreaterThan(integrationCreate)
+    Expect(squash).toBeGreaterThan(integrationCreate)
+    Expect(squash).toBeLessThan(fullVerify)
     Expect(fake.calls[fullVerify]?.stdio).toBe('inherit')
-    Expect(squash).toBeGreaterThan(fullVerify)
-    Expect(treeProof).toBeGreaterThan(squash)
-    Expect(verify).toBe(-1)
-    Expect(fake.lines.some(line => line.includes('equals the fully verified feature tree'))).toBe(true)
-    Expect(commit).toBeGreaterThan(treeProof)
+    Expect(commit).toBeGreaterThan(fullVerify)
+    Expect(fake.lines.some(line => line.includes('Verified the integration tree'))).toBe(true)
     Expect(push).toBeGreaterThan(commit)
     Expect(archive).toBeGreaterThan(push)
     Expect(deleteRemote).toBeGreaterThan(archive)
-    Expect(detach).toBeGreaterThan(deleteRemote)
+    Expect(integrationRemove).toBeGreaterThan(archive)
+    Expect(detach).toBeGreaterThan(integrationRemove)
     Expect(proveDetached).toBeGreaterThan(detach)
     Expect(deleteBranch).toBeGreaterThan(proveDetached)
     Expect(prune).toBeGreaterThan(deleteBranch)
-    Expect(operations.some(operation => operation.startsWith('git worktree remove '))).toBe(false)
     Expect(outcome.mode).toBe('executed')
     Expect(outcome.lines).toEqual([
       "PASS  Merged 'feat/example' into main and archived it as merged/example.",
@@ -421,13 +517,16 @@ Describe('merge-with-main', () => {
       + 'archive its owning task when you are ready to remove it.',
     ])
     Expect(outcome.snapshotPath).toMatch(
-      /^\/repo-main\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
+      /^\/repo-feature\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
     )
     const completedSnapshot = [...fake.snapshots.values()][0] as MergeSnapshot
     Expect(completedSnapshot.phase).toBe('complete')
     Expect(completedSnapshot.currentFeatureHead).toBe(fake.repository.featureHead)
     Expect(completedSnapshot.currentFeatureStatus).toBe('')
+    Expect(completedSnapshot.currentIntegrationHead).toBeUndefined()
     Expect(fake.moves.every(move => move.fromPath.endsWith('.tmp'))).toBe(true)
+    Expect(fake.leases).toHaveLength(1)
+    Expect(fake.leases[0]?.released).toBe(true)
     const commitMessage = [...fake.files.entries()].find(([path]) => path.endsWith('.commit-message'))?.[1]
     Expect(commitMessage).toContain('Land example\n\n- Add the example workflow.')
     Expect(commitMessage).toContain('Squashed commit of the following:')
@@ -472,6 +571,13 @@ Describe('merge-with-main', () => {
     Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
   })
 
+  Test('refuses when the remote archive branch already exists', async () => {
+    const fake = fakeDependencies({ remoteMergedHead: 'archived0000000000000000000000000000000000' })
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow("archive branch 'merged/example' already exists")
+  })
+
   Test('keeps verification output durable when merge execution has no terminal', async () => {
     const fake = fakeDependencies()
     fake.dependencies.isInteractive = () => false
@@ -489,7 +595,7 @@ Describe('merge-with-main', () => {
     Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream'])
   })
 
-  Test('verifies the staged squash on main when full verification was explicitly skipped', async () => {
+  Test('runs verify --complete on the staged squash when full verification was explicitly skipped', async () => {
     const fake = fakeDependencies()
 
     await MergeWithMainCommand.run({
@@ -501,7 +607,6 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    // Nothing else verified this branch, so the staged squash is where verification happens.
     Expect(operations).not.toContain('just full-verify')
     Expect(operations.indexOf('just verify --complete')).toBeGreaterThan(
       operations.findIndex(operation => operation.startsWith('git merge --squash')),
@@ -511,14 +616,12 @@ Describe('merge-with-main', () => {
     )
   })
 
-  Test('integrates a main update discovered after verification and restarts full verification', async () => {
+  Test('rebuilds the integration tree when main moves during verification and restarts verification', async () => {
     const originalMain = 'main000000000000000000000000000000000000'
     const movedMain = 'movedmain000000000000000000000000000000000'
     const fake = fakeDependencies({
-      ancestorExitCodes: [0, 0, 1],
       mainHead: originalMain,
-      remoteMainHead: originalMain,
-      remoteMainSequence: [originalMain, movedMain, movedMain],
+      remoteMainSequence: [originalMain, movedMain, movedMain, movedMain],
     })
 
     await MergeWithMainCommand.run({
@@ -530,25 +633,24 @@ Describe('merge-with-main', () => {
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(operations.filter(operation => operation === 'just full-verify')).toHaveLength(2)
-    Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
-      operations.indexOf('just full-verify'),
-    )
-    Expect(operations.findLastIndex(operation => operation === 'just full-verify')).toBeGreaterThan(
-      operations.indexOf('git merge --no-edit origin/main'),
-    )
-    Expect(operations.indexOf('git merge --ff-only origin/main')).toBeGreaterThan(
-      operations.findLastIndex(operation => operation === 'just full-verify'),
-    )
-    Expect(fake.lines.some(line => line.includes('restarting full verification (pass 2/3)'))).toBe(true)
+    Expect(operations.filter(operation => operation.startsWith('git worktree add --detach'))).toHaveLength(2)
+    Expect(operations.filter(operation => operation.startsWith('git worktree remove --force'))).toHaveLength(2)
+    Expect(fake.lines.some(line => line.includes('rebuilding the integration tree at the new head (pass 2/3)')))
+      .toBe(true)
   })
 
   Test('stops after three verification restarts when remote main never stabilizes', async () => {
     const originalMain = 'main000000000000000000000000000000000000'
     const fake = fakeDependencies({
-      ancestorExitCodes: [0, 1, 1, 1],
       mainHead: originalMain,
-      remoteMainHead: originalMain,
-      remoteMainSequence: [originalMain, 'main-1', 'main-2', 'main-3'],
+      remoteMainSequence: [
+        originalMain,
+        'main-1',
+        'main-1',
+        'main-2',
+        'main-2',
+        'main-3',
+      ],
     })
 
     await Expect(MergeWithMainCommand.run({
@@ -559,23 +661,8 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)).rejects.toThrow('moved during 3 consecutive verification passes')
 
     Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'full-verify')).toHaveLength(3)
-    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(false)
-    Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
-  })
-
-  Test('refuses a mismatched squash tree before verify or commit', async () => {
-    const fake = fakeDependencies({ stagedTree: 'different-tree' })
-    await Expect(MergeWithMainCommand.run({
-      execute: true,
-      push: true,
-      repositoryRoot: fake.repository.featureRoot,
-      yes: true,
-    }, fake.dependencies)).rejects.toThrow('staged squash tree does not equal')
-
-    Expect(fake.calls.some(call => call.command === 'just' && call.args[0] === 'verify')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'commit')).toBe(false)
-    const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
-    Expect(snapshot.phase).toBe('squashed')
+    Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
   })
 
   Test('refuses to adopt worktree changes that appear while validation is running', async () => {
@@ -584,7 +671,7 @@ Describe('merge-with-main', () => {
     fake.dependencies.run = async (command, spec) => {
       const outcome = await run(command, spec)
       if (command === 'just' && spec.args?.[0] === 'full-verify') {
-        fake.repository.mainStatus = '?? someone-elses-file.ts\n'
+        fake.repository.integrationStatus = '?? someone-elses-file.ts\n'
       }
       return outcome
     }
@@ -596,10 +683,7 @@ Describe('merge-with-main', () => {
       yes: true,
     }, fake.dependencies)).rejects.toThrow('changed while validation was running')
 
-    const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
-    Expect(snapshot.phase).toBe('prepared')
-    Expect(snapshot.currentMainStatus).toBe('')
-    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'commit')).toBe(false)
   })
 
   Test('refuses an appendix with automated attribution before creating a commit', async () => {
@@ -626,7 +710,7 @@ Describe('merge-with-main', () => {
       push: true,
       repositoryRoot: fake.repository.featureRoot,
       yes: true,
-    }, fake.dependencies)).rejects.toThrow('committed main tree does not equal')
+    }, fake.dependencies)).rejects.toThrow('committed tree does not equal')
     Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
   })
 
@@ -641,11 +725,10 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
     const [snapshotPath, stored] = [...fake.snapshots.entries()][0]!
     Expect((stored as MergeSnapshot).phase).toBe('push-started')
-    const resetCallsBeforeAbort = fake.calls.filter(call => call.args[0] === 'reset').length
 
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies))
       .rejects.toThrow('Refusing to rewrite pushed history')
-    Expect(fake.calls.filter(call => call.args[0] === 'reset')).toHaveLength(resetCallsBeforeAbort)
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(false)
   })
 
   Test('restores abort recovery when the main push lease proves main moved', async () => {
@@ -688,27 +771,7 @@ Describe('merge-with-main', () => {
     Expect(fake.repository.branch).toBe('feat/example')
   })
 
-  Test('records and aborts a failed feature integration without adopting the other worktree', async () => {
-    const fake = fakeDependencies({ ancestorExitCodes: [0, 1], failFeatureMerge: true })
-
-    await Expect(MergeWithMainCommand.run({
-      execute: true,
-      push: true,
-      repositoryRoot: fake.repository.featureRoot,
-      yes: true,
-    }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
-    const [snapshotPath, stored] = [...fake.snapshots.entries()][0]!
-    const snapshot = stored as MergeSnapshot
-    Expect(snapshot.phase).toBe('failed')
-    Expect(snapshot.currentFeatureStatus).toBe('UU example.ts\n')
-    Expect(snapshot.currentMainStatus).toBe('')
-
-    const outcome = await MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies)
-    Expect(outcome.mode).toBe('aborted')
-    Expect(fake.repository.featureStatus).toBe('')
-  })
-
-  Test('records and aborts a failed squash preparation', async () => {
+  Test('a failed squash preparation leaves no integration worktree behind, and abort is then a no-op', async () => {
     const fake = fakeDependencies({ failSquash: true })
 
     await Expect(MergeWithMainCommand.run({
@@ -717,100 +780,123 @@ Describe('merge-with-main', () => {
       repositoryRoot: fake.repository.featureRoot,
       yes: true,
     }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
+
+    // The worktree is disposed of immediately on failure, not left for `--abort` to clean up: a red
+    // verification or a staging conflict is the ordinary outcome of a landing attempt that does not
+    // succeed, and a stranded worktree would poison `git worktree list` for every worktree on the
+    // machine, not just this one.
+    Expect(fake.repository.integrationExists).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true)
     const [snapshotPath, stored] = [...fake.snapshots.entries()][0]!
     const snapshot = stored as MergeSnapshot
     Expect(snapshot.phase).toBe('failed')
-    Expect(snapshot.currentMainStatus).toBe('UU example.ts\n')
+    Expect(snapshot.currentIntegrationHead).toBeUndefined()
 
+    const removeCallsBeforeAbort = fake.calls
+      .filter(call => call.args[0] === 'worktree' && call.args[1] === 'remove').length
     const outcome = await MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies)
     Expect(outcome.mode).toBe('aborted')
-    Expect(fake.repository.mainStatus).toBe('')
+    // Nothing left to remove: abort is a no-op on the worktree, not a second removal.
+    Expect(fake.calls.filter(call => call.args[0] === 'worktree' && call.args[1] === 'remove'))
+      .toHaveLength(removeCallsBeforeAbort)
+    Expect(fake.calls.some(call => call.args[0] === 'reset')).toBe(false)
+  })
+
+  Test('a red verification lane leaves no integration worktree behind', async () => {
+    const fake = fakeDependencies({ failVerify: true })
+
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
+
+    Expect(fake.repository.integrationExists).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true)
+    const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
+    Expect(snapshot.phase).toBe('failed')
+    Expect(snapshot.currentIntegrationHead).toBeUndefined()
+    Expect(fake.calls.some(call => call.args[0] === 'commit')).toBe(false)
   })
 
   Test('guarded abort restores only a snapshot whose recorded state still matches', async () => {
     const fake = fakeDependencies({
       featureHead: 'integrated-feature',
-      mainHead: 'main-before',
-      mainStatus: 'M  staged.ts\n',
+      integrationExists: true,
+      integrationHead: 'main-before',
+      integrationRoot: '/repo-feature/.artifacts/merge/snapshot-integration',
+      integrationStatus: 'M  staged.ts\n',
       stagedTree: 'staged-tree',
     })
-    const snapshotPath = '/repo-main/.artifacts/merge/snapshot.json'
+    const snapshotPath = '/repo-feature/.artifacts/merge/snapshot.json'
     const snapshot: MergeSnapshot = {
       branch: 'feat/example',
       createdAt: '2026-09-03T14:15:16.789Z',
       currentFeatureDiff: '',
       currentFeatureHead: 'integrated-feature',
       currentFeatureStatus: '',
-      currentMainDiff: 'M  staged.ts\n',
-      currentMainHead: 'main-before',
-      currentMainStatus: 'M  staged.ts\n',
+      currentIntegrationDiff: 'M  staged.ts\n',
+      currentIntegrationHead: 'main-before',
+      currentIntegrationStatus: 'M  staged.ts\n',
       featureHead: 'feature-before',
       featureIndexTree: 'staged-tree',
       featureRoot: '/repo-feature',
       featureTree: 'staged-tree',
+      integrationRoot: '/repo-feature/.artifacts/merge/snapshot-integration',
       mainHead: 'main-before',
-      mainIndexTree: 'staged-tree',
-      mainRoot: '/repo-main',
       mainTree: 'staged-tree',
       messageFile: '/message',
       phase: 'squashed',
-      remoteMainHead: 'main-before',
       snapshotPath,
       stagedTree: 'staged-tree',
-      version: 1,
+      version: 2,
     }
     fake.snapshots.set(snapshotPath, snapshot)
 
     const outcome = await MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies)
     Expect(outcome.mode).toBe('aborted')
-    Expect(fake.calls.filter(call => call.args[0] === 'reset').map(call => call.args.slice(0, 3))).toEqual([
-      ['reset', '--hard', 'main-before'],
-      ['reset', '--hard', 'feature-before'],
-    ])
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true)
 
     const changed = fakeDependencies({ featureHead: 'someone-else-worked-here' })
     changed.snapshots.set(snapshotPath, snapshot)
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, changed.dependencies))
       .rejects.toThrow('no longer matches the merge snapshot')
-    Expect(changed.calls.some(call => call.args[0] === 'reset')).toBe(false)
+    Expect(changed.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(false)
   })
 
   Test('rejects merge-start flags combined with abort before reading the snapshot', async () => {
     const fake = fakeDependencies()
 
     await Expect(MergeWithMainCommand.run({
-      abortSnapshot: '/repo-main/.artifacts/merge/snapshot.json',
+      abortSnapshot: '/repo-feature/.artifacts/merge/snapshot.json',
       execute: true,
       yes: true,
     }, fake.dependencies)).rejects.toThrow('--abort cannot be combined')
     Expect(fake.calls).toEqual([])
+    Expect(fake.leases).toEqual([])
   })
 
   Test('never auto-aborts after main was pushed', async () => {
     const fake = fakeDependencies()
-    const snapshotPath = '/repo-main/.artifacts/merge/pushed.json'
+    const snapshotPath = '/repo-feature/.artifacts/merge/pushed.json'
     fake.snapshots.set(snapshotPath, {
       branch: 'feat/example',
       createdAt: '2026-09-03T14:15:16.789Z',
       currentFeatureDiff: '',
       currentFeatureHead: fake.repository.featureHead,
       currentFeatureStatus: '',
-      currentMainDiff: '',
-      currentMainHead: fake.repository.mainHead,
-      currentMainStatus: '',
       featureHead: fake.repository.featureHead,
       featureIndexTree: fake.repository.tree,
       featureRoot: '/repo-feature',
       featureTree: fake.repository.tree,
+      integrationRoot: '/repo-feature/.artifacts/merge/pushed-integration',
       mainHead: fake.repository.mainHead,
-      mainIndexTree: fake.repository.tree,
-      mainRoot: '/repo-main',
       mainTree: fake.repository.tree,
       messageFile: '/message',
       phase: 'pushed',
-      remoteMainHead: fake.repository.remoteMainHead,
       snapshotPath,
-      version: 1,
+      version: 2,
     })
 
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies))
@@ -845,6 +931,17 @@ Describe('merge-with-main', () => {
       )
 
       const dependencies: MergeWithMainDependencies = {
+        acquireLease: async () => ({
+          owner: {
+            command: 'merge-with-main',
+            id: 'real-lease',
+            name: 'merge-with-main-landing',
+            pid: Platform.runtimeProcess.pid,
+            repositoryRoot: featureRoot,
+            startedAt: new Date().toISOString(),
+          },
+          release: async () => {},
+        }),
         askConfirm: async () => true,
         exists: FS.exists,
         isInteractive: () => false,
@@ -857,6 +954,7 @@ Describe('merge-with-main', () => {
           command === 'just'
             ? result(command, spec.args ?? [], spec.cwd)
             : await CLI.run(command, { ...spec, stdio: 'pipe' }),
+        sleep: async () => {},
         writeJson: FS.writeJson,
         writeLine: () => {},
         writeText: FS.writeText,
@@ -877,11 +975,11 @@ Describe('merge-with-main', () => {
           .stdout.trim(),
       )
       Expect((await gitResult(featureRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
-      Expect((await gitResult(mainRoot, ['branch', '--list', 'feat/integration'])).stdout).toBe('')
-      Expect((await gitResult(mainRoot, ['status', '--porcelain'])).stdout).toBe('')
-      const mainHead = (await gitResult(mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-      Expect((await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/main'])).stdout.trim())
-        .toBe(mainHead)
+      const integrationEntries = (await gitResult(featureRoot, ['worktree', 'list', '--porcelain'])).stdout
+      Expect(integrationEntries).not.toContain('-integration')
+      const mainHead = (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/main'])).stdout
+        .trim()
+      Expect(mainHead).not.toBe('')
       Expect(
         (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
           .exitCode,
