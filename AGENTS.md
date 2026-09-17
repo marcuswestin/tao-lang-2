@@ -43,8 +43,14 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Guidance
 
-- `Docs/` holds the written material: `Spec/` the implemented contract, `Roadmap/` the plans, and
-  `Tutorials/` the learning material. `Docs/README.md` says what belongs in each.
+- `Docs/` holds the written material: `Spec/` the implemented contract, `Roadmap/` the plans,
+  `MVP Roadmap/` the remaining public-release work, and `Tutorials/` the learning material.
+  `Docs/README.md` says what belongs in each.
+- `Docs/MVP Roadmap/` owns what remains before the public MVP release: `Agent MVP Roadmap.md` the
+  work agents execute without a new decision, `Ro MVP Roadmap.md` the judgments that are Ro's. It is
+  authoritative for MVP scope and sequencing wherever `Roadmap.md`, `Docs/Roadmap/`, or any other
+  document says otherwise; those remain authoritative for their own workstreams' context and for
+  work outside the MVP release.
 - `Docs/Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
 - `Apps/WordFlower/README.md` owns the tranche mechanics. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice with behavior tests written in Tao. Current never leads; it follows Next.
 - `Apps/Tao Future/README.md` owns the post-MVP demo apps (Skillet, Hearth, Wayfare): tier-less specs whose files graduate from `.tao-revolution` to `.tao` as tranches land. Do not edit them outside consolidation or a decision amendment.

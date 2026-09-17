@@ -8,6 +8,10 @@ language target and the program that reaches it â€” first MVP, then Revolution â
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
+The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
+agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
+judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
+
 ## Ro STACK
 
 - [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
