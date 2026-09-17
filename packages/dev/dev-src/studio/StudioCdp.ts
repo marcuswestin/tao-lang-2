@@ -329,7 +329,18 @@ export class StudioCdp {
         const element = document.querySelector(selector)
         if (!(element instanceof HTMLElement)) throw new Error('Missing ' + label + ' element: ' + selector)
         const rect = element.getBoundingClientRect()
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        // An element taller or wider than the window — a scrolled editor's content, a long list —
+        // has its own centre outside the window, where pointer input never reaches it. The centre
+        // of the part actually on screen is both inside the element and somewhere a person could
+        // aim at.
+        const left = Math.max(rect.left, 0)
+        const right = Math.min(rect.right, window.innerWidth)
+        const top = Math.max(rect.top, 0)
+        const bottom = Math.min(rect.bottom, window.innerHeight)
+        if (right <= left || bottom <= top) {
+          throw new Error('No visible part of the ' + label + ' element: ' + selector)
+        }
+        return { x: (left + right) / 2, y: (top + bottom) / 2 }
       }
       return {
         start: center(${JSON.stringify(fromSelector)}, 'drag source'),

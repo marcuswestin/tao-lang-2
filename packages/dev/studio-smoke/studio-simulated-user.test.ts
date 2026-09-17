@@ -143,6 +143,25 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       })()`,
         { timeoutMs: 30_000 },
       )
+      // The agent panel opens as a floating window over the workbench, covering the inspector and
+      // the lower half of every divider. Minimize it once, as anyone about to work in the editor
+      // would, so the rest of the journey reaches the workbench rather than the panel. It stays
+      // minimized across the reloads below, which is why this is done once.
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
+          instanceof HTMLButtonElement`,
+        { timeoutMs: 30_000 },
+      )
+      if (
+        await browser.evaluate<boolean>(
+          `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') !== 'true'`,
+        )
+      ) {
+        await browser.click('.studio-agent-collapse')
+      }
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
+      )
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
@@ -469,8 +488,21 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       const drawingBrowser = browser
       const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
       const firstDraw = { x: 64, y: 24 }
-      await expectPointerReachesBoard(drawingBrowser, createdSketchId, boardGenerationBeforeDraw, firstDraw)
-      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, { steps: 8 })
+      // Draw the free rectangle against the board's right edge. An incremental Snap can only fold a
+      // new rectangle into an existing flow from one end of it, so a rectangle drawn in the middle
+      // of the board would leave the two groups interleaved and Snap would rightly refuse.
+      const firstDrawOrigin = { x: 288, y: 40 }
+      await expectPointerReachesBoard(
+        drawingBrowser,
+        createdSketchId,
+        boardGenerationBeforeDraw,
+        firstDraw,
+        firstDrawOrigin,
+      )
+      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
+        offset: firstDrawOrigin,
+        steps: 8,
+      })
       const persistedCatalog = await waitForSketchRect(
         sketchCatalogPath,
         createdCatalog.revision,
@@ -508,11 +540,12 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(reloadedRect).toEqual({ height: 24, width: 64 })
 
       // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
+      // Left of the free rectangle, so the projection's children run existing-then-new in one step.
       const playlistRects = [
         { height: 52, width: 52, x: 12, y: 8 },
         { height: 20, width: 100, x: 76, y: 8 },
         { height: 20, width: 100, x: 76, y: 40 },
-        { height: 20, width: 36, x: 300, y: 28 },
+        { height: 20, width: 36, x: 188, y: 28 },
       ] as const
       let drawCatalog = persistedCatalog
       const playlistRectIds: string[] = []
@@ -1167,11 +1200,13 @@ async function markSketchBoard(browser: StudioCdp, sketchId: string): Promise<st
  * The action boundary for a real pointer gesture: the board's centre must be inside the viewport
  * and hit-test to the board itself, otherwise Chrome would deliver the drag to whatever covers it.
  */
+/** `origin` is where in the board the gesture starts, when it is not the board's centre. */
 async function expectPointerReachesBoard(
   browser: StudioCdp,
   sketchId: string,
   generation: string,
   delta: Readonly<{ x: number; y: number }>,
+  origin?: Readonly<{ x: number; y: number }>,
 ): Promise<void> {
   await browser.evaluate(`(() => {
     const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
@@ -1183,7 +1218,9 @@ async function expectPointerReachesBoard(
   const bounds = diagnostics.bounds
   const start = bounds === undefined
     ? undefined
-    : { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : origin === undefined
+    ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : { x: bounds.left + origin.x, y: bounds.top + origin.y }
   const inView = (point: Readonly<{ x: number; y: number }>): boolean =>
     point.x >= 0 && point.y >= 0 && point.x < diagnostics.viewport.width && point.y < diagnostics.viewport.height
   const reachable = start !== undefined
