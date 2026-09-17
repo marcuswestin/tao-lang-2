@@ -33,7 +33,7 @@ shape and location are recorded.
 ## A. Agent instruction set, subagent profiles, skills, and `.rulesync`
 
 The whole agent surface is tracked and would publish: `AGENTS.md` (91 lines), `packages/AGENTS.md`,
-`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 15 skills under `agents/skills/`, 2 subagent
+`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 14 skills under `agents/skills/`, 2 subagent
 profiles under `agents/subagents/`, the 4 `.rulesync/` sources, and their generated adapters
 (`.claude/settings*.json`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/tao.rules`,
 `.cursor/*`, `.config/wt.toml`).
@@ -76,7 +76,7 @@ audience `A1`–`A16` are aiming at.
 
 `.rulesync/permissions.jsonc` (211 lines) and the generated `.claude/settings.json` (164 lines) and
 `.codex/config.toml` (157 lines) spell out the full policy: which commands auto-approve, which are
-excluded, which paths are writable, and a network allowlist of 26 host patterns (Anthropic, OpenAI,
+excluded, which paths are writable, and a network allowlist of 27 host patterns (Anthropic, OpenAI,
 Apple's developer, App Store Connect and software-update hosts, Expo, GitHub, npm, nixos/cachix).
 `.rulesync/profiles.jsonc` adds the opt-in escapes: `native` (Simulator and DerivedData writes),
 `local-services` (the Docker socket), `release` (Xcode archives), and `unsandboxed` (the Bash sandbox
@@ -97,14 +97,14 @@ learns exactly which commands execute without review.
 
 ### P4 — The skills document known weaknesses in the codebase — Low
 
-The 15 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
+The 14 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
 catch "vacuous or self-fulfilling assertions" and "README claims a journey does not prove".
 `removing-code` exists because dead surfaces accumulate. `old-repo-porting` warns against the
 previous repository's "stale conventions and copied implementation cruft". `error-handling`,
 `langium-scoping`, `runtime-codegen`, and `studio-hybrid-client` each encode a seam that was gotten
 wrong before.
 
-A skill is a scar. Fifteen of them published together read as a list of the project's recurring
+A skill is a scar. Fourteen of them published together read as a list of the project's recurring
 failure modes.
 
 - **Recommendation:** publish. This is the least of the exposures and arguably an asset — it is
