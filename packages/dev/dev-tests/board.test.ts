@@ -93,7 +93,7 @@ Describe('board', () => {
     }
   })
 
-  Test('names a peer worktree\'s registered lane and does not attribute it to this checkout', async () => {
+  Test("names a peer worktree's registered lane and does not attribute it to this checkout", async () => {
     const registryRoot = await mkTestDir('tao-board-registry-')
     const worktreePath = await mkTestDir('tao-board-worktree-')
     try {

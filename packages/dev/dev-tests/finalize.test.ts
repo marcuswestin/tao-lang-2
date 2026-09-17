@@ -1,8 +1,8 @@
 import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
-  type FinalizeDependencies,
   FinalizeCommand,
+  type FinalizeDependencies,
   type FinalizeState,
 } from '../dev-src/repository-tests/Finalize'
 import { validateMergeMessage } from '../dev-src/repository-tests/MergeWithMain'
@@ -158,13 +158,18 @@ Describe('finalize', () => {
     const fake = fakeDependencies()
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.calls.some(call => call.args.join(' ') === 'merge --no-edit mainsha00000000000000000000000000000000000'))
+    Expect(
+      fake.calls.some(call => call.args.join(' ') === 'merge --no-edit mainsha00000000000000000000000000000000000'),
+    )
       .toBe(true)
     Expect(outcome.lines.some(line => line.includes('Merged main'))).toBe(true)
   })
 
   Test('falls back to the local main branch without reporting it as an error when origin is unreachable', async () => {
-    const fake = fakeDependencies({ localMainSha: 'localmain0000000000000000000000000000000000', remoteReachable: false })
+    const fake = fakeDependencies({
+      localMainSha: 'localmain0000000000000000000000000000000000',
+      remoteReachable: false,
+    })
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(outcome.lines.some(line => line.includes('origin was unreachable'))).toBe(true)
@@ -196,7 +201,11 @@ Describe('finalize', () => {
 
   Test('runs just verify --complete only when no accepted lane already covers this tree', async () => {
     const fake = fakeDependencies()
-    fake.greenTreeRecords.set('full-verify', { at: '2026-09-17T09:00:00.000Z', logRoot: '/logs/full', treeHash: 'tree-of-mergedhead000000000000000000000000000000000' })
+    fake.greenTreeRecords.set('full-verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      logRoot: '/logs/full',
+      treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
+    })
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -278,7 +287,11 @@ Describe('finalize', () => {
       version: 1,
     }
     fake.states.set(statePath, state)
-    fake.greenTreeRecords.set('verify', { at: '2026-09-17T09:00:00.000Z', logRoot: '/logs/verify', treeHash: 'tree-of-mainsha00000000000000000000000000000000000' })
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      logRoot: '/logs/verify',
+      treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+    })
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -291,16 +304,19 @@ Describe('finalize', () => {
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
     fake.files.set(messagePath, 'Stale draft\n\n- From an earlier HEAD.\n')
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-    fake.states.set(statePath, {
-      headSha: 'someoldhead0000000000000000000000000000000',
-      mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
-      messageHeadSha: 'someoldhead0000000000000000000000000000000',
-      updatedAt: '2026-09-17T09:00:00.000Z',
-      verifiedAt: '2026-09-17T09:00:00.000Z',
-      verifiedLane: 'verify',
-      verifiedTreeHash: 'some-old-tree',
-      version: 1,
-    } satisfies FinalizeState)
+    fake.states.set(
+      statePath,
+      {
+        headSha: 'someoldhead0000000000000000000000000000000',
+        mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
+        messageHeadSha: 'someoldhead0000000000000000000000000000000',
+        updatedAt: '2026-09-17T09:00:00.000Z',
+        verifiedAt: '2026-09-17T09:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedTreeHash: 'some-old-tree',
+        version: 1,
+      } satisfies FinalizeState,
+    )
 
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -352,17 +368,20 @@ Describe('finalize', () => {
     async () => {
       const fake = fakeDependencies()
       const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-      fake.states.set(statePath, {
-        headSha: 'mergedhead000000000000000000000000000000000',
-        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
-        messageHeadSha: 'mergedhead000000000000000000000000000000000',
-        updatedAt: '2026-09-17T09:00:00.000Z',
-        verifiedAt: '2026-09-17T09:00:00.000Z',
-        verifiedLane: 'verify',
-        // Claims to have proved the post-merge tree, but no GreenTree record backs that claim up.
-        verifiedTreeHash: 'tree-of-mergedhead000000000000000000000000000000000',
-        version: 1,
-      } satisfies FinalizeState)
+      fake.states.set(
+        statePath,
+        {
+          headSha: 'mergedhead000000000000000000000000000000000',
+          mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+          messageHeadSha: 'mergedhead000000000000000000000000000000000',
+          updatedAt: '2026-09-17T09:00:00.000Z',
+          verifiedAt: '2026-09-17T09:00:00.000Z',
+          verifiedLane: 'verify',
+          // Claims to have proved the post-merge tree, but no GreenTree record backs that claim up.
+          verifiedTreeHash: 'tree-of-mergedhead000000000000000000000000000000000',
+          version: 1,
+        } satisfies FinalizeState,
+      )
 
       await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -372,7 +391,11 @@ Describe('finalize', () => {
 
   Test('a real GreenTree record is honored even with no state file at all', async () => {
     const fake = fakeDependencies()
-    fake.greenTreeRecords.set('verify', { at: '2026-09-17T09:00:00.000Z', logRoot: '/logs/verify', treeHash: 'tree-of-mergedhead000000000000000000000000000000000' })
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      logRoot: '/logs/verify',
+      treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
+    })
 
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -396,17 +419,24 @@ Describe('finalize', () => {
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
     fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-    fake.states.set(statePath, {
-      headSha: 'mainsha00000000000000000000000000000000000',
-      mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
-      messageHeadSha: 'mainsha00000000000000000000000000000000000',
-      updatedAt: '2026-09-17T09:00:00.000Z',
-      verifiedAt: '2026-09-17T09:00:00.000Z',
-      verifiedLane: 'verify',
-      verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-      version: 1,
-    } satisfies FinalizeState)
-    fake.greenTreeRecords.set('verify', { at: '2026-09-17T09:00:00.000Z', logRoot: '/logs/verify', treeHash: 'tree-of-mainsha00000000000000000000000000000000000' })
+    fake.states.set(
+      statePath,
+      {
+        headSha: 'mainsha00000000000000000000000000000000000',
+        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+        messageHeadSha: 'mainsha00000000000000000000000000000000000',
+        updatedAt: '2026-09-17T09:00:00.000Z',
+        verifiedAt: '2026-09-17T09:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+        version: 1,
+      } satisfies FinalizeState,
+    )
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      logRoot: '/logs/verify',
+      treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+    })
 
     await FinalizeCommand.run({ fresh: true, repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -423,16 +453,19 @@ Describe('finalize', () => {
       const messagePath = '/repo/.artifacts/merge/feat/example.msg'
       fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
       const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-      fake.states.set(statePath, {
-        headSha: 'mainsha00000000000000000000000000000000000',
-        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
-        messageHeadSha: 'mainsha00000000000000000000000000000000000',
-        updatedAt: '2026-09-17T09:00:00.000Z',
-        verifiedAt: '2026-09-17T09:00:00.000Z',
-        verifiedLane: 'verify',
-        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-        version: 1,
-      } satisfies FinalizeState)
+      fake.states.set(
+        statePath,
+        {
+          headSha: 'mainsha00000000000000000000000000000000000',
+          mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+          messageHeadSha: 'mainsha00000000000000000000000000000000000',
+          updatedAt: '2026-09-17T09:00:00.000Z',
+          verifiedAt: '2026-09-17T09:00:00.000Z',
+          verifiedLane: 'verify',
+          verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+          version: 1,
+        } satisfies FinalizeState,
+      )
       fake.greenTreeRecords.set('verify', {
         at: '2026-09-17T09:00:00.000Z',
         logRoot: '/logs/verify',
@@ -455,17 +488,24 @@ Describe('finalize', () => {
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
     fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-    fake.states.set(statePath, {
-      headSha: 'mainsha00000000000000000000000000000000000',
-      mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
-      messageHeadSha: 'mainsha00000000000000000000000000000000000',
-      updatedAt: '2026-09-17T09:00:00.000Z',
-      verifiedAt: '2026-09-17T09:00:00.000Z',
-      verifiedLane: 'verify',
-      verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-      version: 1,
-    } satisfies FinalizeState)
-    fake.greenTreeRecords.set('verify', { at: '2026-09-17T09:00:00.000Z', logRoot: '/logs/verify', treeHash: 'tree-of-mainsha00000000000000000000000000000000000' })
+    fake.states.set(
+      statePath,
+      {
+        headSha: 'mainsha00000000000000000000000000000000000',
+        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+        messageHeadSha: 'mainsha00000000000000000000000000000000000',
+        updatedAt: '2026-09-17T09:00:00.000Z',
+        verifiedAt: '2026-09-17T09:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+        version: 1,
+      } satisfies FinalizeState,
+    )
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      logRoot: '/logs/verify',
+      treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+    })
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
@@ -513,7 +553,16 @@ Describe('finalize', () => {
         readJson: FS.readJson,
         run: async (command, spec) =>
           command === 'just'
-            ? { args: [...(spec.args ?? [])], command, cwd: spec.cwd, error: undefined, exitCode: 0, signal: null, stderr: '', stdout: '' }
+            ? {
+              args: [...(spec.args ?? [])],
+              command,
+              cwd: spec.cwd,
+              error: undefined,
+              exitCode: 0,
+              signal: null,
+              stderr: '',
+              stdout: '',
+            }
             : await CLI.run(command, { ...spec, stdio: 'pipe' }),
         writeJson: FS.writeJson,
         writeLine: () => {},

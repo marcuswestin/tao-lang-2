@@ -1,6 +1,6 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GreenTree } from '../repository-tests/GreenTree'
-import { type LaneRecord, type MachineResourceOwner, MachineLanes } from '../repository-tests/MachineLanes'
+import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
 
 /**
  * `board` answers the question no other command answers: who else is touching this machine right
@@ -166,7 +166,9 @@ function formatMachineSection(machine: BoardMachine): string {
     lines.push('  no Tao lane is registered')
   }
   for (const lane of machine.lanes) {
-    lines.push(`  lane ${lane.lane} in ${lane.repositoryRoot} (pid ${lane.pid}, ${lane.slots}/${lane.maxSlots} slots, since ${lane.startedAt})`)
+    lines.push(
+      `  lane ${lane.lane} in ${lane.repositoryRoot} (pid ${lane.pid}, ${lane.slots}/${lane.maxSlots} slots, since ${lane.startedAt})`,
+    )
   }
   if (machine.resources.length === 0) {
     lines.push('  no named resource lease is held')
@@ -235,7 +237,7 @@ async function listWorktrees(run: typeof CLI.run): Promise<WorktreeRecord[]> {
     stdio: 'pipe',
   })
   if (result.error !== undefined || result.exitCode !== 0) {
-    Errors.throwHostEnvironment('Could not list this repository\'s worktrees.', { details: { stderr: result.stderr } })
+    Errors.throwHostEnvironment("Could not list this repository's worktrees.", { details: { stderr: result.stderr } })
   }
   return parseWorktreePorcelain(result.stdout)
 }
@@ -416,7 +418,9 @@ async function readBoardMachine(
   const root = registryRoot ?? MachineLanes.registryRoot()
   const inspection = await MachineLanes.inspectLanes(root, { prune: false })
   const [lanes, resources] = await Promise.all([
-    Promise.all(inspection.lanes.map(async lane => ({ ...lane, repositoryRoot: await canonicalPath(lane.repositoryRoot) }))),
+    Promise.all(
+      inspection.lanes.map(async lane => ({ ...lane, repositoryRoot: await canonicalPath(lane.repositoryRoot) })),
+    ),
     readResourceLeases(root),
   ])
   return {

@@ -319,7 +319,9 @@ export async function inspectMergePreflight(
       Errors.throwUserInput(`Remote archive branch 'merged/${branch.slice(5)}' already exists.`)
     }
   } else {
-    warnings.push(`Could not confirm '${branch}' or its archive branch on ${REMOTE} because the remote was unreachable.`)
+    warnings.push(
+      `Could not confirm '${branch}' or its archive branch on ${REMOTE} because the remote was unreachable.`,
+    )
   }
 
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, featureRoot)
@@ -433,7 +435,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       : 'PLAN  Run just full-verify on the staged squash in the integration worktree.',
     'PLAN  If main moves before the staged squash is pushed, rebuild the integration tree and verify again.',
     "PLAN  Commit with Git's squash appendix, push main, archive the remote feature branch, detach its clean "
-      + 'worktree, delete its local branch, and remove the integration worktree.',
+    + 'worktree, delete its local branch, and remove the integration worktree.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
   ]
@@ -672,7 +674,9 @@ async function createIntegrationWorktree(
   )
   const current = await readLocalState(snapshot, dependencies)
   assertFeatureMatches(snapshot, current)
-  if (current.integrationHead !== snapshot.mainHead || current.integrationStatus !== '' || current.integrationDiff !== '') {
+  if (
+    current.integrationHead !== snapshot.mainHead || current.integrationStatus !== '' || current.integrationDiff !== ''
+  ) {
     Errors.throwUnexpected('The freshly created integration worktree was not clean at the expected main head.')
   }
   adoptLocalState(snapshot, current)
@@ -763,7 +767,9 @@ async function runVerification(
     })
   }
   writeLines(dependencies, [
-    `PASS  Verified the integration tree ${shortSha(stagedTreeAfterVerify)}; the staged squash is unchanged and ready to commit.`,
+    `PASS  Verified the integration tree ${
+      shortSha(stagedTreeAfterVerify)
+    }; the staged squash is unchanged and ready to commit.`,
   ])
 }
 

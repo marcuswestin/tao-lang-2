@@ -213,10 +213,14 @@ function summaryLines(
   return [
     `1. Branch: ${branch}${integration.integratedNow ? ' — merged main just now' : ' — already contains main'}`,
     `2. Verification: ${
-      verification.lane === '' ? 'no record covers this tree yet' : `stood on ${verification.lane} at ${verification.at}`
+      verification.lane === ''
+        ? 'no record covers this tree yet'
+        : `stood on ${verification.lane} at ${verification.at}`
     }`,
     `3. Merge message: ${message.drafted ? 'drafted or redrafted — needs review' : 'already current for this HEAD'}`,
-    remaining.length === 0 ? '4. Remaining: none' : `4. Remaining:\n${remaining.map(item => `   - ${item}`).join('\n')}`,
+    remaining.length === 0
+      ? '4. Remaining: none'
+      : `4. Remaining:\n${remaining.map(item => `   - ${item}`).join('\n')}`,
     // Advisory only: never affects `ok`. A person weighs these before landing; finalize itself does
     // not treat them as unfinished work.
     advisories.length === 0
@@ -261,7 +265,11 @@ async function integrateMain(
   check: boolean,
   lines: string[],
 ): Promise<MainIntegration> {
-  const fetch = await dependencies.run('git', { args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH], cwd: root, stdio: 'pipe' })
+  const fetch = await dependencies.run('git', {
+    args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+    cwd: root,
+    stdio: 'pipe',
+  })
   const remoteReachable = fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null
   const mainSha = remoteReachable
     ? (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
@@ -525,7 +533,11 @@ async function adviseOnDiff(
   return advisories
 }
 
-async function git(dependencies: FinalizeDependencies, cwd: string, args: readonly string[]): Promise<CLI.CommandResult> {
+async function git(
+  dependencies: FinalizeDependencies,
+  cwd: string,
+  args: readonly string[],
+): Promise<CLI.CommandResult> {
   const result = await dependencies.run('git', { args, cwd, stdio: 'pipe' })
   assertCommandSucceeded(result)
   return result
