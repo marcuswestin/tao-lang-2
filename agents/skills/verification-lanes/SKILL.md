@@ -63,7 +63,7 @@ description: >-
   after every round of Ro's corrections. `--check` previews without touching anything.
 - Completing the work still means completing it: commits landed, worktree clean, affected roadmap and
   ledger documents refreshed, the reachable host lanes run, and the message reviewed. `finalize`
-  drafts the message from commit subjects — it cannot know what the branch was *for*, so the draft is
+  drafts the message from commit subjects — it cannot know what the branch was _for_, so the draft is
   a starting point you edit, never the message you hand over.
 - `./agent board` answers what no other command does: every worktree's branch, cleanliness, merge
   message, finalize state and last proof, beside the machine-wide lane and lease registry, led by
