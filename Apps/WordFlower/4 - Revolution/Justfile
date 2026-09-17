@@ -5,6 +5,8 @@
 #
 # The MVP-release surface (create, check, fmt, fix, test, compile, dev, ship) is specified in
 # `../3 - MVP/Justfile` and is not repeated here; this file adds to it.
+#
+# Spellings follow `Docs/Roadmap/Tao Revolution/Decisions.md`, the authority for the tier beside it.
 
 set quiet
 
@@ -54,12 +56,21 @@ simulate:
 simulate-state:
     {{ TAO }} simulate "{{ APP }}" --state "full-workspace"
 
-## Design and scenarios
+## Copy and translation
 ######################
 
-# Render declared scenarios to visual artifacts for design review. LANG-028
-scenarios:
-    {{ TAO }} scenarios "{{ APP }}"
+# Report every source sentence or `phrase` with no entry in a declared language. Decisions.md §14
+words-check:
+    {{ TAO }} words check
+
+## Design review
+###############
+
+# Render every declared `scenario` into a gallery, flagging what it can measure there — text
+# clipping at 200% scale, horizontal overflow. A person accepts or rejects; this is QA, never a
+# pass/fail gate in `tao test`. Decisions.md §13, §16
+review:
+    {{ TAO }} review "{{ APP }}"
 
 ## Debugging
 ###########

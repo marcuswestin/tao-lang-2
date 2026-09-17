@@ -46,9 +46,16 @@ active workstream ledgers (`Docs/Roadmap/Tao Revolution/Decisions.md`); the step
 now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
 tests written in Tao, green in Current, for every construct introduced.
 
-- [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
+- [x] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
+  - `Apps/WordFlower/4 - Revolution/Open questions.md` carries the eight questions the rewrite could
+    not answer from `Decisions.md` — chiefly whether WordFlower forces the authority cluster (which
+    step 4 must settle anyway), whether the visibility ladder is §1's two words or the implemented
+    five, and whether `DynamicSelectionNav` is a decided nav kind. Three internal contradictions in
+    `Decisions.md` were amended in the same change: container parentheses, `TabNav` → `SelectionNav`,
+    and the missing `overlay` presentation mode.
+  - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
 - [ ] Consolidate the `Apps/Tao Future/` apps to the decided dialect (Process step 3)
   - The three demos are design D's dialect today; align them to `Decisions.md` and complete
     `Coverage.md`'s rows during the port.

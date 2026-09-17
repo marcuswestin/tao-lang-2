@@ -1219,9 +1219,9 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 ```
 
 - **Presentation is a property of the call site, never the declaration.** A view composes inline in
-  a render tree, or `nav` presents it — `present X(…) as sheet | window | root | menu | toast`,
-  `reveal X(…) in @slot` (§10) — with the mode chosen where the presenting happens. No keyword
-  marks a view navigable, modal, or reusable.
+  a render tree, or `nav` presents it — `present X(…) as overlay | sheet | window | root | menu |
+  toast`, `reveal X(…) in @slot` (§10) — with the mode chosen where the presenting happens. No
+  keyword marks a view navigable, modal, or reusable.
 - **Capabilities are inferred from the declaration, never declared.** A view accepts caller content
   iff its body places `@@content`; it offers named render slots iff its body declares them; it
   returns a typed answer iff its head declares `responds T`. The `responds` clause survives the
@@ -1302,9 +1302,14 @@ navigator can describe itself when it is itself presented, without exposing its 
 - **Parameter types are inferred from the type name** — `view RecipeScreen(Recipe)` — not restated.
   A stated type is juxtaposed and its traits trail, exactly as in a field: `view Status(Message
   text, Tone default Neutral)`, `view CookScreen(Recipe, Meal?)` (§2).
-- **Empty argument lists on _containers_ are omitted**: `Col [page]`, not `Col()`. The render tree is
-  the primary shape of the code and the parentheses carry nothing there, so this is the one place the
-  mirroring rule yields.
+- **Every argument list is parenthesized, containers included**: `Col() [page]`. This reverses an
+  earlier exception — "empty argument lists on containers are omitted" — which never survived contact
+  with the implementation. The exception bought a little quiet in the render tree and cost a rule:
+  §10's own shell example writes `Col() [fill]` and `Navigator() [fill]`, `Docs/Spec/Tao Layout and
+  UI.md` states that render arguments are always parenthesized, and `1 - Current` has written `Col()`
+  since the surfaces tranche. The mirroring rule now has no exception anywhere, which is worth more
+  than two saved characters per line. _(Amended while rewriting `Apps/WordFlower/4 - Revolution`,
+  Process step 2.)_
 - **`render` introduces the visual tree**, and the visible hierarchy is the primary shape of the code:
 
 ```swift
@@ -1488,13 +1493,19 @@ Map(Places) alternative { loop Places / Place { PlaceRow(Place) } }
 ## 10. Navigation
 
 - **Four container kinds**: a back-stack, a replaceable detail pane, an adaptive selection container,
-  and a multi-pane split — `StackNav`, `SlotNav`, `TabNav`, `SplitNav`.
+  and a multi-pane split — `StackNav`, `SlotNav`, `SelectionNav`, `SplitNav`. The selection container
+  was first written `TabNav`, which named one of its surfaces rather than what it is: the same
+  declaration is a tab bar, a sidebar, a drawer, or a toggle bar depending on `Display` and width, so
+  the kind is named for the selection it owns. `TabNav` is retired without an alias, and the
+  host-read-set bullet below — which already said `SelectionNav` — is the spelling the rest of this
+  document and the implementation use. _(Amended while rewriting
+  `Apps/WordFlower/4 - Revolution`, Process step 2.)_
 - **Navigators are keywordized bindings**: `nav WelcomeNav = StackNav { Initial WelcomeScreen() }`.
 - **The selection container is tabs when narrow and a sidebar when wide**, declared once, with no
   device name anywhere:
 
 ```swift
-nav SkilletNav = TabNav {
+nav SkilletNav = SelectionNav {
    @library StackNav { Initial RecipeLibrary }
    @plan    StackNav { Initial WeekScreen }
 }
@@ -1563,12 +1574,19 @@ view SkilletShell(Navigator nav) {
 reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe focuses, not re-mounts
 ```
 
-- **Presentation modes with automatic fallbacks** — sheet, window, root, menu, toast. A window is a
-  window on a laptop and a full-screen sheet elsewhere, and carries a semantic key so reopening the
-  same subject focuses one window:
+- **Presentation modes with automatic fallbacks** — overlay, sheet, window, root, menu, toast. A
+  window is a window on a laptop and a full-screen sheet elsewhere, and carries a semantic key so
+  reopening the same subject focuses one window. **An overlay is Tao's own layer and a sheet is the
+  platform's**: every nav owns an absolute overlay lane above its content, so an overlay stacks there
+  — covered entries stay mounted but hidden, and `dismiss` or Back consumes the top one before the
+  nav's ordinary content history — while a sheet is the card the OS slides up and lets a person drag
+  down. Both are dismissible modals; only the sheet hands presentation to the host. This mode was
+  implemented and specified from the start and was missing from this list rather than from the
+  language. _(Recorded while rewriting `Apps/WordFlower/4 - Revolution`, Process step 2.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
+present WorkspaceNameNotice() as overlay
 present CookScreen(Recipe) as window (Key: Recipe)
 present SharedRecipeScreen(SharedRecipe) as root
 present ActionsMenu(Recipe) as menu

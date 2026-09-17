@@ -1,0 +1,178 @@
+# Revolution tier — open questions
+
+Written while rewriting `WordFlower.tao-revolution` into the decided dialect (`Process.md` step 2).
+
+Every spelling in this tier traces to a section of `Docs/Roadmap/Tao Revolution/Decisions.md`. The
+questions below are the places where it could not: constructs the tier needs that the decisions do
+not answer, and places where the decisions answer twice. Nothing here was invented to fill a gap —
+where the tier still uses an undecided construct it is because the construct is already implemented
+or already inherited, and the file says so at the use site.
+
+Three internal contradictions were resolved in `Decisions.md` itself, in this same change, because
+the document disagreed with itself rather than with the implementation; they are listed at the end
+and are not questions.
+
+---
+
+## Q1 — Is WordFlower the app that forces the authority cluster?
+
+**Decided but unused:** `access`, `audience`, `transaction`, `publish`, `presence` (§3, §4).
+
+`Process.md` records this as an open scope question settled at step 4: whether the cluster "enters
+MVP through collaborative WordFlower workspaces, or waits for the app expansion". If it waits, the
+forcing app is Skillet and WordFlower never has it — so putting shared workspaces, invitations, and a
+published read-only document projection into this tier would answer the question by writing code,
+without Ro.
+
+This tier therefore contains no authority surface, and the TODO list at the head of the app file
+says why. Answering "WordFlower" means adding accounts, `data Accounts / Account with { … }`,
+memberships, a share code, and a `publish Document … by capability` projection here; answering "the
+app expansion" means the cluster is proven in `Apps/Tao Future/Skillet` and this tier stays as it is.
+
+**Blocks:** `Coverage.md` rows for §3 and §4 — a coverage row cannot name a forcing feature until
+this is answered.
+
+## Q2 — Is the visibility ladder two words or five?
+
+§1 decides **"Two visibility modifiers and no others"**: `file` narrows to the source file, `public`
+widens past the folder or package boundary, and an unmarked declaration is folder-visible.
+
+The implementation has five — `file`, `folder`, `package`, `workspace`, `public` — and
+`Docs/Spec/Tao Packages.md` documents each, with `file` as the default rather than folder. Both
+halves of that differ from §1: the default is inverted, and three words exist that §1 says do not.
+
+§8 does not help: its own worked example writes `package command Finish(Document)`, so the wider
+ladder has already leaked into a section that postdates §1.
+
+This tier is written to §1, which is cheap here because it is one file: the `workspace` and `package`
+markers are gone, only `file` and `public` remain, and everything the test file imports is unmarked
+and therefore folder-visible. That is not cheap in `1 - Current`, where `@ui/`, `@nav/`, and `@data/`
+are real package folders using the wider ladder, so the migration is real and the decision is Ro's.
+
+## Q3 — Which nav kinds are decided?
+
+§10 decides four container kinds. The tier uses two that are not among them:
+
+- **`DynamicSelectionNav`** — a selection container that may begin empty and receive items at
+  runtime, which is what makes the documents pane's comparison tabs possible. It is inherited from
+  the MVP tier and appears nowhere in `Decisions.md`.
+- **`Occurrence { Content:, Key: }`** — the value that asks a dynamic selection for a second
+  occurrence of the same semantic content. Also inherited, also undecided.
+
+Both are used in `WorkspaceSplit` and `FileTree` and are marked at the use site. Either they are
+decided kinds §10 should list, or the comparison-tab feature is cut.
+
+## Q4 — How is a declaration gated on the platform?
+
+The previous tier wrote `<platform is Desktop>` blocks around whole declarations. That syntax is in
+no decision, and its cases (`Desktop`, `iOS`, `Android`) name devices and operating systems, which
+§13 and §18 both rule out — the decided vocabulary is the project's own `targets phone, tablet,
+laptop`, read through the `Platform` environment value.
+
+The tier now writes the split as a value instead:
+
+```swift
+nav WorkspaceNav = when Platform {
+   laptop -> SlotNav { Initial WorkspaceChooser }
+   otherwise -> StackNav { Initial WorkspaceChooser }
+}
+```
+
+Every part of that is decided — `Platform` (§13), value-producing `when` (§8), a keywordized nav
+binding (§10) — so nothing was invented. What remains open is whether gating a **whole declaration**
+(a view that exists only on one target, a provider only one target can bind) needs its own form, or
+whether the value-level `when` is the whole answer.
+
+## Q5 — What is a periodic in-view effect?
+
+§9 removed the `every` clause deliberately: a ticking clock is a library value, and `@tao/time`'s own
+source repeats that. `Interval` gives a _reading_ that changes, which is exactly right for the focus
+bar's countdown and is what the tier uses.
+
+It is not enough for an effect per tick. The previous tier wrote `on every 30.seconds -> { update
+Document { … } }` for autosave, importing an `every` that `@tao/time` does not export. §12's
+`automation` is not the answer either: it is provider-owned scheduled work driven by data, and is
+"explicitly not a timer on one mounted device".
+
+Autosave is therefore dropped from this tier and listed in the app file's TODO. Either a periodic
+effect gets a spelling, or the answer is that a writing app saves on submit and on write-through,
+which is what the tier does today.
+
+## Q6 — Where does `?` sit on a relation field?
+
+§2 decides that optionality is a postfix `?` on the slot, and separately that relation fields do not
+use juxtaposition — a differently named relation carries its target in the trait list
+(`Person (relation Accounts)`). It does not show the two together.
+
+`Paragraphs` needs an optional self-referential parent, so the tier writes:
+
+```swift
+Parent? (relation Paragraphs)
+```
+
+This applies both rules mechanically, but it is the one slot spelling in the file with no worked
+example behind it. The alternative reading is `Parent (relation Paragraphs)?`.
+
+## Q7 — Constructs the implementation has and `Decisions.md` does not record
+
+These are used in the tier because they are implemented today and the tier would be poorer without
+them, but `Decisions.md` — the record of the decided language — never mentions them. Each is either a
+decision that was never written down or an implementation detail that should not be in a spec tier.
+
+| Construct                                          | Used by                                   | Where it is specified today        |
+| -------------------------------------------------- | ----------------------------------------- | ---------------------------------- |
+| `async { … }`                                      | `AddDocument`, `AddParagraph`             | `1 - Current` tranche header       |
+| `guard <subject> <case> -> …` inside an **action** | — (retired here, see below)               | `Docs/Spec/Tao Actions.md`         |
+| `snapshot <row>`, `T.Snapshot`                     | `DocumentSnapshot`                        | `3 - MVP`                          |
+| `Panes()`                                          | `WorkspaceDetails`                        | `Docs/Spec/Tao Layout and UI.md`   |
+| `Occurrence`                                       | `FileTree` (see Q3)                       | `3 - MVP`                          |
+| `hide <Command>` on a view                         | `DraftDocumentRow`, `FinishedDocumentRow` | §8 (decided — listed for contrast) |
+
+One of these went the other way. `1 - Current` uses `guard WorkspaceName empty -> { … }` as an
+action's early exit, but §8 is explicit that `guard` is **views only** and tests a data object's
+availability, while an action stops with `check <boolean>`. This tier is written to §8:
+
+```swift
+action AddWorkspace() {
+   if WorkspaceName is empty {
+      present WorkspaceNameNotice() as overlay
+   }
+   check WorkspaceName is not empty
+   …
+}
+```
+
+That is a real migration Current owes, and it is the one place where following the decisions changed
+how an existing WordFlower action reads rather than only how it is spelled. If §8 is wrong and
+availability guards belong in actions too, this is the moment to say so.
+
+## Q8 — Does the Revolution tier stay one file?
+
+§1 decides a file decomposition every app shares — `App`, `Data`, `Access`, `Rules`, `Chrome`,
+per-feature folders, `Design`, `Words`, `Scenarios`, `Tests` — specifically so that reviewing what a
+person may do never requires reading what a row contains. `1 - Current` is already a directory,
+though along different lines (`@ui/`, `@nav/`, `@data/`).
+
+`Apps/WordFlower/README.md` describes this tier as one app file plus a test and a `Justfile`, so the
+tier stays one file and the rewrite did not restructure it. Splitting it is tranche mechanics, which
+that README owns, not a dialect change.
+
+---
+
+## Resolved in `Decisions.md` in this change
+
+Three places where the document contradicted itself. Each is amended rather than raised, because
+there was no second party to ask: the decision already existed twice, in two spellings.
+
+1. **§9 "Empty argument lists on _containers_ are omitted."** §10's own shell example — the amended
+   KEY-D7 one — writes `Col() [fill]` and `Navigator() [fill]`, `Docs/Spec/Tao Layout and UI.md`
+   states that render arguments are always parenthesized, and `1 - Current` writes `Col()`
+   throughout. The one-line exception to the mirroring rule never survived contact with the
+   implementation; §9 now says so.
+2. **§10 "Four container kinds … `TabNav`."** The same section's host-read-set bullet, amended by
+   KEY-D11, names `SelectionNav`, which is what is implemented, specified, and used everywhere. §10
+   now names `SelectionNav` and records `TabNav` as the retired name.
+3. **Presentation modes omit `overlay`.** §9 and §10 list sheet, window, root, menu, and toast, but
+   §10's own Back rules talk about "that presentation's own overlays", the grammar has
+   `as overlay | sheet | toast`, and every WordFlower tier uses it. `overlay` is now in the list,
+   with the sentence that distinguishes it from a sheet.
