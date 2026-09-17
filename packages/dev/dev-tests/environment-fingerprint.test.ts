@@ -6,6 +6,7 @@ import {
   environmentFingerprintOf,
   type FingerprintFacts,
   formatFingerprint,
+  safeToken,
   toolVersion,
 } from '../dev-src/doctor/EnvironmentFingerprint'
 import { RepositoryDoctorCommand } from '../dev-src/doctor/RepositoryDoctorCommand'
@@ -86,6 +87,31 @@ Describe('environment fingerprint', () => {
 
   Test('omits Xcode entirely on a machine that has none', () => {
     Expect(environmentFingerprint(facts({ xcodeVersionOutput: undefined })).xcode).toBe(undefined)
+  })
+
+  Test('accepts a version, a hash, or a bare word, and nothing that could hide anything else', () => {
+    for (const accepted of ['macOS', 'Darwin', 'arm64', '27.0', '26A428', '2026.01.19.00', 'v0.1.0-3-gabc1234']) {
+      Expect(safeToken(accepted)).toBe(accepted)
+    }
+    // Every shape a person, a machine, or a location could arrive in is refused outright rather
+    // than edited down, because an edit has to anticipate the thing it is removing.
+    for (
+      const refused of [
+        '/Users/someone',
+        '~/code/tao',
+        'someone@example.test',
+        'someones-laptop.local:8081',
+        'C:\\Users\\someone',
+        'macOS 27.0',
+        'feat/someones-branch',
+        '-rf',
+        '',
+        undefined,
+      ]
+    ) {
+      Expect(safeToken(refused)).toBe(undefined)
+    }
+    Expect(safeToken('  arm64  ')).toBe('arm64')
   })
 
   Test('reads the version out of whatever decoration a tool prints around it', () => {
