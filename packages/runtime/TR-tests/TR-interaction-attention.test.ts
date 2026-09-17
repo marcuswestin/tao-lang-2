@@ -2,7 +2,7 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { DesignControls } from '../TaoRuntime-src/TR-design'
-import { InteractionAttention } from '../TaoRuntime-src/TR-interaction-attention'
+import { InteractionAttention, runtimeInteractionValue } from '../TaoRuntime-src/TR-interaction-attention'
 import { CommandCatalog } from '../TaoRuntime-src/TR-interaction-catalog'
 import {
   InteractionOutline,
@@ -428,6 +428,88 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().verbPending).toBeUndefined()
   })
 
+  // Generated command bodies evaluate a fill and hand the result to a runtime action, which
+  // evaluates it once more. A fill that only survives the first evaluation fails inside the action,
+  // where the failure is reported as a contained action error rather than a rejected fill.
+  Test('supplies picker and scalar fills that a generated action can evaluate twice', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const schema = TR.Data.Schema({
+      entities: {
+        Folder: { collection: 'Folders', fields: { Name: { kind: 'text', title: true } } },
+        Note: {
+          collection: 'Notes',
+          fields: {
+            Folder: { kind: 'relation', relation: 'Folder' },
+            Title: { kind: 'text', title: true },
+          },
+        },
+      },
+      name: 'InteractionFills',
+    }, testDataConnection())
+    TR.Data.Create(schema, 'Folder', { Name: TR.Value('Archive') })
+    TR.Data.Create(schema, 'Folder', { Name: TR.Value('Home') })
+    const folders = schema.query({ entity: 'Folder', filters: [] })
+    const archive = folders.find(entry => TR.Data.Read(entry, 'Name') === 'Archive')
+    const folder = folders.find(entry => TR.Data.Read(entry, 'Name') === 'Home')
+    TR.Data.Create(schema, 'Note', { Folder: TR.Value(archive), Title: TR.Value('Draft note') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]
+    const file = TR.Interaction.Command({
+      // Exactly the shape the compiler emits: every fill is evaluated before the runtime call, and
+      // the runtime call evaluates what it is given.
+      action: fills =>
+        TR.Action(() => {
+          TR.Data.Update(fills['Note']!.evaluate(), {
+            Folder: fills['Destination']!.evaluate(),
+            Title: fills['Label']!.evaluate(),
+          })
+        }),
+      members: { Key: () => TR.Value('f'), Title: () => TR.Value('File note') },
+      name: 'FileNote',
+      slots: ['Note', 'Destination', 'Label'],
+    })
+    catalog.register({
+      commands: [{
+        command: () => file,
+        identity: '@ui/Notes.FileNote',
+        name: 'FileNote',
+        scope: { kind: 'module' },
+        slots: [
+          { entity: true, name: 'Note', required: true, type: 'Note' },
+          { entity: true, name: 'Destination', required: true, type: 'Folder' },
+          { entity: false, name: 'Label', required: true, type: 'text' },
+        ],
+        static: { key: 'f', title: 'File note' },
+      }],
+      module: '@ui/Notes',
+    })
+    register(outline, region('notes', { primary: true }))
+    register(
+      outline,
+      item('note', 'notes', 'Draft note', {
+        commandPolicy: { hidden: [], surfaced: ['@ui/Notes.FileNote'] },
+        entityType: 'Note',
+        runtimeValue: TR.Value(note),
+      }),
+    )
+    attention.revalidateOutline()
+    attention.target('note')
+    attention.openVerbs()
+    attention.pressKey('f')
+
+    Expect(attention.read().verbPending).toMatchObject({ request: 'search', slot: 'Destination' })
+    const result = attention.pendingSearchResults().find(entry => entry.label === 'Home')
+    Expect(result?.value.evaluate().evaluate().jsValue).toBe(folder)
+    Expect(attention.choosePendingSearchResult(result!.value)).toBe(true)
+    Expect(attention.read().verbPending).toMatchObject({ request: 'input', slot: 'Label' })
+    Expect(attention.providePendingValue(runtimeInteractionValue('Filed note'))).toBe(true)
+
+    Expect(attention.read().verbPending).toBeUndefined()
+    Expect(TR.Data.Read(note, 'Title')).toBe('Filed note')
+    Expect(TR.Data.Read(note, 'Folder')).toBe(folder)
+  })
+
   Test('does not invoke a fallback after a void-returning mounted activation', () => {
     const outline = new InteractionOutline()
     const attention = new InteractionAttention(outline, new CommandCatalog())
@@ -531,6 +613,41 @@ Describe('TR.Interaction attention', () => {
     Expect(engaged).toBe(1)
     Expect(submitted).toBe(0)
     Expect(attention.read().engaged).toBe('title')
+  })
+
+  Test('engaging clears the narrowing that selected the target', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    register(outline, item('sibling', 'main', 'Sibling row'))
+    register(outline, {
+      corpus: () => ['Document title'],
+      identity: 'title',
+      kind: 'input',
+      label: () => 'Document title',
+      live: { engage: () => {} },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    for (const key of ['d', 'o', 'c']) {
+      Expect(attention.pressKey(key)).toBe(true)
+    }
+    Expect(attention.read().narrowing).toBe('doc')
+    Expect(attention.read().target).toBe('title')
+
+    Expect(attention.pressKey('Enter')).toBe(true)
+
+    Expect(attention.read().engaged).toBe('title')
+    Expect(attention.read().narrowing).toBe('')
+    Expect(attention.read().target).toBe('title')
+
+    // Escape only has to disengage: the narrowing that chose the input is already gone, so the next
+    // letter starts a fresh narrowing instead of extending `doc`.
+    Expect(attention.pressKey('Escape')).toBe(true)
+    Expect(attention.read().engaged).toBe(undefined)
+    Expect(attention.pressKey('s')).toBe(true)
+    Expect(attention.read().narrowing).toBe('s')
   })
 
   Test('applies engaged input, target, mounted view, app command, then reducer precedence', () => {

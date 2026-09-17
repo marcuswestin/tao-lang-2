@@ -1,5 +1,5 @@
 import React from 'react'
-import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { accessibilityStateProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   type TaoInteractionOccurrence,
@@ -61,7 +61,7 @@ export function NavigationCommandButton(props: {
     {
       accessibilityLabel: props.command.label,
       accessibilityRole: props.role ?? 'button',
-      accessibilityState: { disabled: !props.command.enabled, ...props.accessibilityState },
+      ...accessibilityStateProps({ disabled: !props.command.enabled, ...props.accessibilityState }),
       disabled: !props.command.enabled,
       onBlur: () => InteractionControls.Pressed(occurrence, false),
       onFocus: () => InteractionControls.Target(occurrence),
