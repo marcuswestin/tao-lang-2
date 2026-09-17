@@ -1240,3 +1240,30 @@ an entry here may link one when the developer workflow is also affected.
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
   intact and reports one actionable failure.
 - **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+
+### DEVENV-065 — Starter-lowering tests time out at ordinary multi-worktree load
+
+- **Status:** Candidate
+- **Area:** Test reliability
+- **Impact:** `packages/tao-cli/cli-tests/creation-lowering.test.ts` can fail a `verify --complete`
+  that has nothing to do with `tao create`, and it survives the lane's isolated retry, so a red lane
+  reads as a regression on whichever branch happened to be verifying.
+- **Evidence:** On 2026-09-17 the same tree passed `_test` in full at 21:03 (tao-cli 193/193 in
+  55.3s). At 21:14, with 16 Tao lanes registered and load peaking at 62.7 on 18 CPUs, six tao-cli
+  tests timed out; `just test-retry` then failed the Pantry case again on its isolated retry at
+  load 9.9, and a focused `./dev test-file packages/tao-cli/cli-tests/creation-lowering.test.ts`
+  with seven other worktrees running gates timed out all three of its tests — Notebook at 5.2s and
+  Pantry at 5.7s against Bun's default five-second budget, and the out-of-starters case at 15.4s
+  against its explicit fifteen. The isolated retry does not help because isolation is exclusivity
+  within this checkout's lane, not against the other worktrees on the machine.
+- **Workaround:** Re-run the file when the machine is quiet, and read the summary's contention block
+  before treating the failure as a regression.
+- **Proposed change:** Give each starter-lowering case a timeout scaled to the work it does — each
+  one lowers a plan and compiles a whole starter app — rather than leaving two of three on Bun's
+  five-second default, and consider whether the three cases can share one lowering rather than
+  repeating it per starter.
+- **Dependencies:** None. `packages/tao-cli` is outside this task's ownership, so this is recorded
+  rather than fixed.
+- **Acceptance:** The focused file passes while several other worktrees run gates, and a contended
+  `_test` node either passes on its isolated retry or fails for a reason the summary names.
+- **Source:** 2026-09-17 `feat/mvp-feedback-intake-doctor-134afd` complete verification.
