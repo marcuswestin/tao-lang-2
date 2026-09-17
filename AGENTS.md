@@ -66,7 +66,9 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `just merge-with-main --execute --push --yes`.
 - Whenever the work looks complete, carry it all the way without being asked: land every change as
   commits on the feature branch, leave the worktree clean, refresh the roadmap or ledger documents
-  the work changed, verify, and write the merge message. Then decide whether to land it. An agent
+  the work changed, then run `./agent finalize`, which integrates `main`, verifies only what is not
+  already proved green, and drafts the merge message for you to edit. Then decide whether to land it.
+  Use `./agent board` to see what else this machine is doing first. An agent
   lands on its own judgment when the gates can prove the change; it brings the branch to ready and
   hands the landing to Ro when the change reaches what no gate can prove. The `verification-lanes`
   skill owns that judgment. Either way, say plainly which evidence stands behind it and which gates

@@ -55,18 +55,33 @@ description: >-
 - Write or update the message every time a branch becomes merge-ready, including when later commits
   change what the branch does. The command fails with `Merge message file does not exist` when the
   file is missing, so a branch handed over without it is not ready.
-- Completing the work means completing everything before that command: commits landed, worktree
-  clean, `verify --complete` and the reachable host lanes run, affected roadmap and ledger documents
-  refreshed, and the message written. Do this unprompted, and repeat it after every round of Ro's
-  corrections so the message never describes an earlier state of the branch.
+- `./agent finalize` does everything before that command: it asserts the branch and a clean tree,
+  integrates `main`, runs a verification lane **only** when no green record already covers this exact
+  tree, drafts the merge message from the branch's own commits, and prints what remains. It is cheap
+  and safe to re-run, because it records what it established at `.artifacts/merge/<branch>.state.json`
+  and redoes only what changed. Run it instead of performing the sequence by hand, and run it again
+  after every round of Ro's corrections. `--check` previews without touching anything.
+- Completing the work still means completing it: commits landed, worktree clean, affected roadmap and
+  ledger documents refreshed, the reachable host lanes run, and the message reviewed. `finalize`
+  drafts the message from commit subjects — it cannot know what the branch was *for*, so the draft is
+  a starting point you edit, never the message you hand over.
+- `./agent board` answers what no other command does: every worktree's branch, cleanliness, merge
+  message, finalize state and last proof, beside the machine-wide lane and lease registry, led by
+  whether this machine is busy and whether that is this checkout's own doing. Read it before
+  concluding that a slow lane is a regression, and before landing, to see who else is close.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command
   validates the complete final message and appends Git's generated appendix itself.
 - `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
   answers normal confirmation non-interactively, `--push` independently authorizes a
-  non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
-  intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
+  non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Execution
+  takes a machine-wide landing lease and holds it from preflight through push, so a second landing
+  waits its turn and prints who holds it rather than racing; `--refuse-if-busy` fails fast instead of
+  waiting. It lands through a disposable integration worktree rather than the shared `main` checkout,
+  and verifies that integration tree once — the branch-side lane is iteration evidence, not the gate.
+  Preflight requires `origin/main` to be reachable, and requires a local `main` ref, when one exists,
+  to agree with it. A remote feature branch that is behind
   the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
   the landing. Successful execution leaves the invoking feature worktree clean and detached at the
   archived feature tip, deletes its local feature branch, and leaves worktree removal to archival of

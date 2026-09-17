@@ -1392,3 +1392,29 @@ an entry here may link one when the developer workflow is also affected.
   with one verification pass each and no `Repository state changed unexpectedly` failure; landing
   three ready branches costs one full verification, not three.
 - **Source:** 2026-09-17 merge-finalization performance investigation.
+
+### DEVENV-070 — A test lane can die under load leaving no evidence it ever ran
+
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** "No artifact was written" is currently indistinguishable from "never started". An agent
+  that reads the lane's own instructions — read `summary.json` before diagnosing a red lane — finds
+  nothing to read, and the honest conclusion, that the machine killed the run, is the one conclusion
+  the evidence does not support. This is distinct from the documented contended-lane behavior, which
+  is designed to still record `summary.json` and its `contention` block.
+- **Evidence:** 2026-09-17, with twelve to fifteen concurrent Tao lanes across other worktrees and
+  the load average peaking at 33.6 on 18 CPUs, one `./agent test-file` run on a single file produced
+  `.artifacts/logs/dev-test/<stamp>/` containing only an empty `test-results/` directory: no
+  `dev.log`, no `summary.json`, and no red result. A retry of the same file under the same load
+  passed cleanly.
+- **Workaround:** Re-run the file and read the second run's artifacts; an empty log directory means
+  the run died, not that the tests failed.
+- **Proposed change:** Open and write the run's log and a provisional `summary.json` before the
+  first child starts, so an interrupted or killed lane leaves a record saying so; investigate
+  whether `dev-test` is being OOM-killed or reaped before it opens its log file, which would also
+  explain the absent `dev.log`.
+- **Dependencies:** DEVENV-067 is the load that provokes it; this entry is about the missing
+  evidence, not about the contention itself.
+- **Acceptance:** A lane killed mid-run leaves a `summary.json` that names the interruption, and no
+  run can leave a log directory holding nothing but an empty `test-results/`.
+- **Source:** 2026-09-17 merge-finalization performance investigation, landing workstream.
