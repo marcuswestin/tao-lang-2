@@ -53,6 +53,21 @@ hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `
 average beside it — the one reading that also counts work no lane registered, such as an Xcode build
 or another repository entirely.
 
+## What the doctor will let you send somebody
+
+`./agent doctor` names this checkout: its root, its branch, the ports it found held and by whom. That
+diagnosis is for the person running it. The part meant to travel is the environment fingerprint —
+OS, architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, Xcode where there is
+one — which `./agent doctor` prints as two lines at the end of its report, `--json` carries as the
+report's `fingerprint`, and `./agent doctor --fingerprint` prints alone, always exiting 0 because
+somebody collecting an attachment for a report is not asking for a verdict.
+
+`EnvironmentFingerprint` builds it by parsing each value out of what a tool printed and keeping it
+only when it already reads as a version, a hash, or a plain word, so a path, a home directory, an
+account name, or a machine name cannot reach it whatever a probe emits. The `.github/` feedback forms
+ask reporters for it on that basis, and `environment-fingerprint.test.ts` holds it to that on hostile
+probe output and again on the real host.
+
 ## What a contended lane reports
 
 A busy machine breaks timing-sensitive work first, and an anonymous timeout looks exactly like a
