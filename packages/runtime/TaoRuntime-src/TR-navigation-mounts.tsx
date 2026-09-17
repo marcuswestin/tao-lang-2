@@ -1,4 +1,5 @@
 import React from 'react'
+import { accessibilityStateProps } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
@@ -781,7 +782,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                 {
                   nativeProps: {
                     accessibilityRole: 'tab',
-                    accessibilityState: { selected: item.key === this.activeKey },
+                    ...accessibilityStateProps({ selected: item.key === this.activeKey }),
                   },
                 },
               ),

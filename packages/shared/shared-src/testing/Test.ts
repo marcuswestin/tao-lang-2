@@ -1,4 +1,5 @@
 import { Assert } from '../core/Assert'
+import { throwUserInput } from '../core/Errors'
 import * as Text from '../core/Text'
 import * as FS from '../FS'
 import { testOverrideSlot } from './TestOverride'
@@ -13,7 +14,10 @@ export const AfterAll = createTestRunnerFunction('afterAll')
 export const Describe = createTestRunnerFunction('describe')
 
 /** Expect wraps the active test runner's assertion API with Tao test narrowing helpers. */
-export const Expect: ExpectApi = Object.assign(createExpectFunction(), { Is: ExpectIs })
+export const Expect: ExpectApi = Object.assign(createExpectFunction(), {
+  Is: ExpectIs,
+  Unguarded: createUnguardedExpectFunction(),
+})
 
 /** Jest wraps the active Jest control API for Jest-only runtime tests. */
 export const Jest: JestApi = {
@@ -40,9 +44,13 @@ export function MockModule(specifier: string, factory: () => unknown): void {
 export const Test = createTestRunnerFunction('test')
 let temporaryProjectSequence = 0
 
-/** mkTestDir creates a unique temporary directory under the host temp directory. */
+/**
+ * mkTestDir creates a unique temporary directory under the host temp directory. The canonical path
+ * is returned because the host temp directory is a symlink on macOS: a test that builds a path from
+ * the uncanonical one and compares it with a path the code under test resolved would never match.
+ */
 export async function mkTestDir(prefix: string): Promise<string> {
-  return await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir()))
+  return await FS.realPath(await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir())))
 }
 
 /** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
@@ -108,12 +116,21 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
   copyFunctionProperties(Test, nextRuntime.test)
+  // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
+  // …) across; these two are Tao's and are restored after it, in case a runner ever spells them too.
   Expect.Is = ExpectIs
+  Expect.Unguarded = createUnguardedExpectFunction()
 }
 
 /** ExpectApi wraps an active test runner expect function with Tao narrowing helpers. */
 type ExpectApi = TestRunnerExpect & {
   Is: <T>(value: unknown, guard: (value: unknown) => value is T) => asserts value is T
+  /**
+   * Unguarded returns the runner's raw matcher object, with no Langium deep-equality guard. It is
+   * for the rare test that genuinely needs structural equality on parsed nodes and accepts that a
+   * failure may print a node the formatter cannot bound; assert on fields wherever you can instead.
+   */
+  Unguarded: TestRunnerExpect
 }
 
 /** JestApi exposes Jest-only control operations used by runtime tests. */
@@ -168,8 +185,121 @@ function ExpectIs<T>(value: unknown, guard: (value: unknown) => value is T): ass
   Expect(guard(value)).toBe(true)
 }
 
+/**
+ * Deep-equality matchers print both operands when they fail, and bun's formatter expands a value
+ * reachable by several paths once per path. A Langium AST node is reachable through `$container`,
+ * `$document` and `$cstNode` at every level, so one failing `toEqual` on two nodes went from 185 MB
+ * to 4.1 GB in two seconds and took a 128 GB machine out of application memory (bun issue #34178,
+ * fix PR #34179 unreleased). These matchers therefore refuse a Langium-shaped operand outright.
+ */
+const GUARDED_MATCHERS = new Set([
+  'toContainEqual',
+  'toEqual',
+  'toMatchInlineSnapshot',
+  'toMatchObject',
+  'toMatchSnapshot',
+  'toStrictEqual',
+])
+
+/** The chains that re-expose the same matchers, and so need the same guard. */
+const GUARDED_MATCHER_CHAINS = new Set(['not', 'rejects', 'resolves'])
+
+/** How many values the shape check may inspect. The guard must never be the slow thing. */
+const LANGIUM_SCAN_BUDGET = 64
+
 function createExpectFunction(): TestRunnerExpect {
+  return ((...args: any[]) => guardMatchers(getTestRuntime().expect(...args), args[0])) as TestRunnerExpect
+}
+
+function createUnguardedExpectFunction(): TestRunnerExpect {
   return ((...args: any[]) => getTestRuntime().expect(...args)) as TestRunnerExpect
+}
+
+/**
+ * guardMatchers wraps a runner matcher object so the deep-equality matchers refuse a Langium node.
+ * Every forwarded call and getter runs against the real matcher object rather than the proxy, so a
+ * runner whose matchers keep native internal state is unaffected.
+ */
+function guardMatchers(matchers: unknown, received: unknown): any {
+  if (matchers === null || typeof matchers !== 'object') {
+    return matchers
+  }
+  return new Proxy(matchers, {
+    get(target, property) {
+      const value = Reflect.get(target, property)
+      if (typeof property !== 'string') {
+        return value
+      }
+      if (GUARDED_MATCHER_CHAINS.has(property)) {
+        return guardMatchers(value, received)
+      }
+      if (typeof value !== 'function') {
+        return value
+      }
+      if (!GUARDED_MATCHERS.has(property)) {
+        return value.bind(target)
+      }
+      return (...args: unknown[]) => {
+        refuseLangiumOperand(property, received, args)
+        return Reflect.apply(value, target, args)
+      }
+    },
+  })
+}
+
+function refuseLangiumOperand(matcher: string, received: unknown, args: readonly unknown[]): void {
+  const operand = [received, ...args].some(value => hasLangiumNodeShape(value))
+  if (!operand) {
+    return
+  }
+  throwUserInput(
+    `Expect(...).${matcher} refuses a Langium AST node. Bun's formatter prints a value once per path`
+      + ` that reaches it, and an AST node is reachable through $container, $document and $cstNode at`
+      + ` every level, so one failing comparison expands exponentially — this has already taken a`
+      + ` 128 GB machine out of application memory. Assert on specific fields instead:`
+      + ` Expect(nodes).toHaveLength(2), Expect(node.$type).toBe('Member'), or compare a mapped array`
+      + ` of names. If this test genuinely needs structural equality on parsed nodes and accepts the`
+      + ` risk, use Expect.Unguarded(value).${matcher}.`,
+  )
+}
+
+/**
+ * hasLangiumNodeShape looks at the value, its array elements, and a plain object's own values one
+ * level deep, within a fixed budget. It never follows `$container` — recursing into the multiply
+ * reachable links is the very thing that explodes.
+ */
+function hasLangiumNodeShape(value: unknown): boolean {
+  let budget = LANGIUM_SCAN_BUDGET
+  const inspect = (candidate: unknown, depth: number): boolean => {
+    if (budget <= 0 || candidate === null || typeof candidate !== 'object') {
+      return false
+    }
+    budget -= 1
+    if (isLangiumNode(candidate)) {
+      return true
+    }
+    if (depth <= 0) {
+      return false
+    }
+    if (Array.isArray(candidate)) {
+      return candidate.some(entry => inspect(entry, depth - 1))
+    }
+    return isPlainObject(candidate) && Object.values(candidate).some(entry => inspect(entry, depth - 1))
+  }
+  return inspect(value, 1)
+}
+
+function isLangiumNode(value: object): boolean {
+  if (Array.isArray(value) || !isPlainObject(value)) {
+    return false
+  }
+  const node = value as Record<string, unknown>
+  return typeof node['$type'] === 'string' && (node['$container'] !== undefined || node['$cstNode'] !== undefined)
+}
+
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
 
 function createTestRunnerFunction(key: 'afterAll' | 'afterEach' | 'describe' | 'test'): TestRunnerFunction {
