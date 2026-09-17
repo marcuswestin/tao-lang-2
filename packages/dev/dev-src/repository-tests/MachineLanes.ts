@@ -937,7 +937,12 @@ async function resourceOwnerIsLive(
 /** inspectProcessIdentity reads the OS start time that distinguishes a live PID from its reuse. */
 async function inspectProcessIdentity(pid: number): Promise<ProcessIdentity> {
   try {
-    const result = await CLI.run('ps', { args: ['-o', 'lstart=', '-p', String(pid)], stdio: 'pipe' })
+    // `lstart` follows locale and time zone; pin both so every process compares the same spelling.
+    const result = await CLI.run('ps', {
+      args: ['-o', 'lstart=', '-p', String(pid)],
+      env: { LC_ALL: 'C', TZ: 'UTC' },
+      stdio: 'pipe',
+    })
     const startedAt = result.stdout.trim()
     if (result.error === undefined && result.exitCode === 0 && startedAt.length > 0) {
       return { evidence: 'alive', startedAt }
