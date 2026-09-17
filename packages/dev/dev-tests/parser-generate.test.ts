@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   acceptedDiagnosticReasons,
@@ -48,6 +48,63 @@ function generator(outcome: Partial<ParserGenerateOutcome> = {}) {
 }
 
 Describe('parser generate staleness stamp', () => {
+  Test('runs the real Langium CLI against staged copies of the repository grammar', async () => {
+    const root = await mkTestDir('tao-parser-generate-real-')
+    const parserRoot = FS.resolvePath('packages/parser', root)
+    try {
+      await FS.copyFile(
+        Repo.resolvePath('packages/parser/langium-config.json'),
+        FS.resolvePath('langium-config.json', parserRoot),
+      )
+      await FS.copyDirectory(
+        Repo.resolvePath('packages/parser/parser-grammar'),
+        FS.resolvePath('parser-grammar', parserRoot),
+      )
+      await FS.symlink(
+        Repo.resolvePath('packages/parser/node_modules'),
+        FS.resolvePath('node_modules', parserRoot),
+      )
+
+      Expect(await runParserGenerate({ repositoryRoot: root })).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('parser-src/_gen_tao-parser/ast.ts', parserRoot))).toBe(true)
+      Expect(
+        await FS.isFile(
+          FS.resolvePath('packages/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', root),
+        ),
+      ).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects an escaping real Langium output before the CLI can mutate it', async () => {
+    const root = await mkTestDir('tao-parser-generate-escape-')
+    const externalRoot = await mkTestDir('tao-parser-generate-external-')
+    const parserRoot = FS.resolvePath('packages/parser', root)
+    const sentinel = FS.resolvePath('sentinel.txt', externalRoot)
+    try {
+      const config = await FS.readJson<Record<string, unknown>>(Repo.resolvePath('packages/parser/langium-config.json'))
+      await FS.writeJson(FS.resolvePath('langium-config.json', parserRoot), { ...config, out: externalRoot })
+      await FS.copyDirectory(
+        Repo.resolvePath('packages/parser/parser-grammar'),
+        FS.resolvePath('parser-grammar', parserRoot),
+      )
+      await FS.symlink(
+        Repo.resolvePath('packages/parser/node_modules'),
+        FS.resolvePath('node_modules', parserRoot),
+      )
+      await FS.writeText(sentinel, 'must survive\n')
+
+      await Expect(runParserGenerate({ repositoryRoot: root })).rejects.toThrow(
+        'staged parser output escapes its repository root',
+      )
+      Expect(await FS.readText(sentinel)).toBe('must survive\n')
+    } finally {
+      await FS.remove(externalRoot)
+      await FS.remove(root)
+    }
+  })
+
   Test('generates once and skips while the grammar and the generated files are unchanged', async () => {
     const root = await repository()
     const langium = generator()
@@ -139,6 +196,458 @@ Describe('parser generate staleness stamp', () => {
       await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
       await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
       Expect(langium.calls.length).toBe(3)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('regenerates in host-temporary storage while the worktree tree stays in place', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    let generatedOutsideWorktree = false
+    let previousTreeStayedVisible = false
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+
+      Expect(
+        await runParserGenerate({
+          generate: async parserRoot => {
+            generatedOutsideWorktree = !FS.pathIsWithin(parserRoot, root)
+            previousTreeStayedVisible = await FS.isFile(generatedAst)
+            return langium.generate(parserRoot)
+          },
+          repositoryRoot: root,
+        }),
+      ).toBe(0)
+
+      Expect(generatedOutsideWorktree).toBe(true)
+      Expect(previousTreeStayedVisible).toBe(true)
+      Expect(await FS.readText(generatedAst)).toBe('generated 2\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('serializes independent generators and rechecks staleness after acquiring the lock', async () => {
+    const root = await repository()
+    const releasePath = FS.resolvePath('release-first', root)
+    const modulePath = Repo.resolvePath('packages/dev/dev-src/repository-tests/ParserGenerate.ts')
+    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const worker = (id: string, hold: boolean) => `
+      import { Errors, FS, Platform, Time } from ${JSON.stringify(sharedPath)}
+      import { runParserGenerate } from ${JSON.stringify(modulePath)}
+      const root = Platform.runtimeProcess.env['TAO_PARSER_GENERATE_ROOT']
+      if (!root) Errors.throwUnexpected('Missing parser generation root.')
+      const result = await runParserGenerate({
+        repositoryRoot: root,
+        generate: async parserRoot => {
+          await FS.writeText(FS.resolvePath(${JSON.stringify(`entered-${id}`)}, root), '')
+          ${hold ? `while (!await FS.exists(${JSON.stringify(releasePath)})) await Time.sleep(5)` : ''}
+          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          for (const path of ${JSON.stringify(GENERATED)}) {
+            await FS.writeText(FS.resolvePath(path, stagingRoot), ${JSON.stringify(`generated-${id}\n`)})
+          }
+          return { exitCode: 0, output: '' }
+        },
+      })
+      Platform.runtimeProcess.setExitCode(result)
+    `
+    const run = (id: string, hold: boolean) =>
+      CLI.run('bun', {
+        args: ['-e', worker(id, hold)],
+        env: { TAO_PARSER_GENERATE_ROOT: root },
+        stdio: 'pipe',
+      })
+    const first = run('first', true)
+    let second: Promise<CLI.CommandResult> | undefined
+    try {
+      Expect(
+        await Time.pollUntil(async () => await FS.exists(FS.resolvePath('entered-first', root)), {
+          intervalMs: 5,
+          timeoutMs: 2_000,
+        }),
+      ).toBe(true)
+      second = run('second', false)
+      await Time.sleep(100)
+      Expect(await FS.exists(FS.resolvePath('entered-second', root))).toBe(false)
+      await FS.writeText(releasePath, '')
+      const results = await Promise.all([first, second])
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0])
+      Expect(await FS.exists(FS.resolvePath('entered-second', root))).toBe(false)
+      Expect(await FS.readText(FS.resolvePath(GENERATED[1]!, root))).toBe('generated-first\n')
+    } finally {
+      await FS.writeText(releasePath, '').catch(() => {})
+      await first.catch(() => undefined)
+      await second?.catch(() => undefined)
+      await FS.remove(root)
+    }
+  })
+
+  Test('leaves the previous generated tree untouched when staged generation fails', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+
+      Expect(
+        await runParserGenerate({
+          generate: async parserRoot => {
+            const stagingRoot = FS.resolvePath('../..', parserRoot)
+            await FS.writeText(
+              FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', stagingRoot),
+              'partial failed generation\n',
+            )
+            return { exitCode: 1, output: 'generation failed\n' }
+          },
+          repositoryRoot: root,
+        }),
+      ).toBe(1)
+
+      Expect(await FS.readText(generatedAst)).toBe('generated 1\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('publishes using file-only move and remove operations', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedRoot = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser', root)
+    const staleFile = FS.resolvePath('stale.ts', generatedRoot)
+    const calls: string[] = []
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.writeText(staleFile, 'stale generated output\n')
+
+      Expect(
+        await runParserGenerate({
+          beforeMove: async (fromPath, toPath) => {
+            if (await FS.isDirectory(fromPath) || await FS.isDirectory(toPath)) {
+              Errors.throwUnexpected(`directory move attempted: ${fromPath}`)
+            }
+            calls.push(`move ${FS.basename(toPath)}`)
+          },
+          beforeRemove: async path => {
+            if (await FS.isDirectory(path)) {
+              Errors.throwUnexpected(`directory remove attempted: ${path}`)
+            }
+            calls.push(`remove ${FS.basename(path)}`)
+          },
+          generate: langium.generate,
+          repositoryRoot: root,
+        }),
+      ).toBe(0)
+
+      Expect(calls.some(call => call === 'remove stale.ts')).toBe(true)
+      Expect(calls.some(call => call === 'move ast.ts')).toBe(true)
+      Expect(await FS.exists(staleFile)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects a worktree file-directory shape conflict before publishing', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.remove(generatedAst)
+      await FS.mkdir(generatedAst)
+
+      await Expect(runParserGenerate({ generate: langium.generate, repositoryRoot: root }))
+        .rejects.toThrow('Parser generation cannot replace a directory with a file')
+      Expect(await FS.isDirectory(generatedAst)).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects a symbolic link in staged generated output without reading through it', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    const outside = FS.resolvePath('outside-source.ts', root)
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.writeText(outside, 'outside source bytes\n')
+
+      await Expect(runParserGenerate({
+        generate: async parserRoot => {
+          const result = await langium.generate(parserRoot)
+          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          const stagedAst = FS.resolvePath(
+            'packages/parser/parser-src/_gen_tao-parser/ast.ts',
+            stagingRoot,
+          )
+          await FS.remove(stagedAst)
+          await FS.symlink(outside, stagedAst)
+          return result
+        },
+        repositoryRoot: root,
+      })).rejects.toThrow('staged output contains a symbolic link')
+
+      Expect(await FS.readText(outside)).toBe('outside source bytes\n')
+      Expect(await FS.readText(generatedAst)).toBe('generated 1\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects a symbolic link in the worktree output without writing through it', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    const outside = FS.resolvePath('outside-target.ts', root)
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.writeText(outside, 'outside target bytes\n')
+      await FS.remove(generatedAst)
+      await FS.symlink(outside, generatedAst)
+
+      await Expect(runParserGenerate({ generate: langium.generate, repositoryRoot: root }))
+        .rejects.toThrow('output contains a symbolic link')
+      Expect(await FS.readText(outside)).toBe('outside target bytes\n')
+      Expect(await FS.isSymbolicLink(generatedAst)).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rechecks destination links immediately before publication', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    const outside = FS.resolvePath('outside-precommit.ts', root)
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.writeText(outside, 'outside precommit bytes\n')
+
+      await Expect(runParserGenerate({
+        beforePublication: async () => {
+          await FS.remove(generatedAst)
+          await FS.symlink(outside, generatedAst)
+        },
+        generate: langium.generate,
+        repositoryRoot: root,
+      })).rejects.toThrow('output shape changed before publication')
+
+      Expect(await FS.readText(outside)).toBe('outside precommit bytes\n')
+      Expect(await FS.isSymbolicLink(generatedAst)).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rechecks live grammar and configuration identity after the final publication hook', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    let mutated = false
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      const astBefore = await FS.readText(generatedAst)
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+
+      await Expect(runParserGenerate({
+        beforeMove: async () => {
+          if (mutated) {
+            return
+          }
+          mutated = true
+          await FS.writeText(grammar, 'ViewDeclaration: "changed again";\n')
+        },
+        generate: langium.generate,
+        repositoryRoot: root,
+      })).rejects.toThrow('inputs changed before publication')
+
+      Expect(mutated).toBe(true)
+      Expect(await FS.readText(generatedAst)).toBe(astBefore)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('preserves an external mid-commit write and reports both publication and rollback failures', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    let injected = false
+    let thrown: unknown
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      try {
+        await runParserGenerate({
+          beforeMove: async (_fromPath, toPath) => {
+            if (injected || FS.basename(toPath) !== 'grammar.ts') {
+              return
+            }
+            injected = true
+            await FS.writeText(generatedAst, 'external concurrent bytes\n')
+            Errors.throwUnexpected('primary parser publication failure')
+          },
+          generate: langium.generate,
+          repositoryRoot: root,
+        })
+      } catch (error) {
+        thrown = error
+      }
+
+      Expect(Errors.messageOf(thrown)).toBe('primary parser publication failure')
+      Expect(Errors.formatForLog(thrown)).toContain('Rollback preserved a concurrent write')
+      Expect(await FS.readText(generatedAst)).toBe('external concurrent bytes\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects a generated-output parent swap before it can publish outside the repository', async () => {
+    const root = await repository()
+    const external = await mkTestDir('tao-parser-external-')
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedRoot = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser', root)
+    let swapped = false
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      await FS.writeText(FS.resolvePath('sentinel.txt', external), 'outside\n')
+
+      await Expect(runParserGenerate({
+        beforeMove: async (_fromPath, toPath) => {
+          if (swapped || !FS.pathIsWithin(toPath, generatedRoot)) {
+            return
+          }
+          swapped = true
+          await FS.remove(generatedRoot)
+          await FS.symlink(external, generatedRoot)
+        },
+        generate: langium.generate,
+        repositoryRoot: root,
+      })).rejects.toThrow('move destination symbolic link')
+
+      Expect(await FS.readText(FS.resolvePath('sentinel.txt', external))).toBe('outside\n')
+      Expect(await FS.exists(FS.resolvePath('ast.ts', external))).toBe(false)
+    } finally {
+      await FS.remove(root)
+      await FS.remove(external)
+    }
+  })
+
+  Test('preserves the publication failure when staging cleanup also fails', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    let thrown: unknown
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+      try {
+        await runParserGenerate({
+          beforeCleanup: async () => Errors.throwUnexpected('secondary staging cleanup failure'),
+          beforeMove: async () => Errors.throwUnexpected('primary publication failure'),
+          generate: langium.generate,
+          repositoryRoot: root,
+        })
+      } catch (error) {
+        thrown = error
+      }
+
+      Expect(Errors.messageOf(thrown)).toBe('primary publication failure')
+      Expect(Errors.formatForLog(thrown)).toContain('secondary staging cleanup failure')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('restores every original file after an injected mid-publication move failure', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    const generatedGrammar = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/grammar.ts', root)
+    let injected = false
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      const astBefore = await FS.readText(generatedAst)
+      const grammarBefore = await FS.readText(generatedGrammar)
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+
+      await Expect(runParserGenerate({
+        beforeMove: async (_fromPath, toPath) => {
+          if (!injected && FS.basename(toPath) === 'grammar.ts') {
+            injected = true
+            Errors.throwUnexpected('injected generated-file move failure')
+          }
+        },
+        generate: langium.generate,
+        repositoryRoot: root,
+      })).rejects.toThrow('injected generated-file move failure')
+
+      Expect(injected).toBe(true)
+      Expect(await FS.readText(generatedAst)).toBe(astBefore)
+      Expect(await FS.readText(generatedGrammar)).toBe(grammarBefore)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('restores overwritten and stale files after an injected stale-file removal failure', async () => {
+    const root = await repository()
+    const langium = generator()
+    const grammar = FS.resolvePath('packages/parser/parser-grammar/views.langium', root)
+    const generatedAst = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/ast.ts', root)
+    const newlyGenerated = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/new.ts', root)
+    const staleFile = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/stale.ts', root)
+    let injected = false
+    try {
+      await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
+      const astBefore = await FS.readText(generatedAst)
+      await FS.writeText(staleFile, 'original stale bytes\n')
+      await FS.writeText(grammar, 'ViewDeclaration: "changed";\n')
+
+      await Expect(runParserGenerate({
+        beforeRemove: async path => {
+          if (!injected && path === staleFile) {
+            injected = true
+            Errors.throwUnexpected('injected stale-file removal failure')
+          }
+        },
+        generate: async parserRoot => {
+          const result = await langium.generate(parserRoot)
+          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          await FS.writeText(
+            FS.resolvePath('packages/parser/parser-src/_gen_tao-parser/new.ts', stagingRoot),
+            'new generated bytes\n',
+          )
+          return result
+        },
+        repositoryRoot: root,
+      })).rejects.toThrow('injected stale-file removal failure')
+
+      Expect(injected).toBe(true)
+      Expect(await FS.readText(generatedAst)).toBe(astBefore)
+      Expect(await FS.readText(staleFile)).toBe('original stale bytes\n')
+      Expect(await FS.exists(newlyGenerated)).toBe(false)
     } finally {
       await FS.remove(root)
     }

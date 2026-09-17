@@ -1,4 +1,4 @@
-import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 
 /**
@@ -117,14 +117,24 @@ export type ParserGenerateOutcome = {
 
 /** ParserGenerateOptions lets a test substitute the generator; the workflow always runs Langium. */
 export type ParserGenerateOptions = {
+  beforeCleanup?: () => Promise<void>
+  beforeLockRelease?: () => Promise<void>
+  beforeMkdir?: (path: string) => Promise<void>
+  beforeMove?: (fromPath: string, toPath: string) => Promise<void>
+  beforePublication?: () => Promise<void>
+  beforeRemove?: (path: string) => Promise<void>
   generate?: (parserRoot: string, repositoryRoot: string) => Promise<ParserGenerateOutcome>
   repositoryRoot?: string
 }
 
+type ParserGenerateFileHooks = Pick<
+  ParserGenerateOptions,
+  'beforeMkdir' | 'beforeMove' | 'beforeRemove'
+>
+
 /** runParserGenerate regenerates the parser and fails on any diagnostic that is not documented. */
 export async function runParserGenerate(options: ParserGenerateOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
-  const generate = options.generate ?? runLangiumGenerate
   const parserRoot = FS.resolvePath('packages/parser', repositoryRoot)
   const stampPath = FS.resolvePath(STAMP_PATH, repositoryRoot)
   const inputs = await parserGenerateInputHash(parserRoot)
@@ -133,43 +143,547 @@ export async function runParserGenerate(options: ParserGenerateOptions = {}): Pr
     return 0
   }
 
-  const result = await generate(parserRoot, repositoryRoot)
-  const output = result.output
-  HCI.write(output)
-  if (result.error !== undefined || result.exitCode !== 0) {
-    return result.exitCode ?? 1
-  }
+  return await FS.withFileMutationLock(stampPath, repositoryRoot, async () => {
+    // Every verification gate is a separate process. Another process may have completed generation
+    // while this one waited for the canonical repository lock, so never trust the pre-lock result.
+    const lockedInputs = await parserGenerateInputHash(parserRoot)
+    if (await parserGenerateIsUpToDate(parserRoot, repositoryRoot, stampPath, lockedInputs)) {
+      HCI.writeLine('parser generate: up to date')
+      return 0
+    }
+    return await runParserGenerateLocked(options, repositoryRoot, parserRoot, stampPath, lockedInputs)
+  }, { beforeRelease: options.beforeLockRelease })
+}
 
-  const review = reviewParserGenerateOutput(output, await readGrammarSources(parserRoot))
-  for (const diagnostic of review.unexpected) {
-    HCI.writeErrorLine(`parser generate: ${diagnostic}`)
+async function runParserGenerateLocked(
+  options: ParserGenerateOptions,
+  repositoryRoot: string,
+  parserRoot: string,
+  stampPath: string,
+  inputs: string,
+): Promise<number> {
+  // Langium recursively removes its output directory before regenerating, and macOS can deny both
+  // removal and rename for provenance-bearing worktree directories. Generate into a disposable
+  // host-temporary package instead, then publish files into the existing directory shape.
+  const stagingRepositoryRoot = await createParserGenerateStagingRepository(parserRoot)
+  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  const generate = options.generate
+    ?? (async () => await runLangiumGenerate(stagingParserRoot, repositoryRoot, parserRoot))
+  let outcome: number | undefined
+  let primaryError: unknown
+  try {
+    outcome = await (async () => {
+      // Langium deletes each configured output before writing it. Validate both mappings before the
+      // CLI sees the config so a typo or hostile checkout cannot turn the host-temporary safety copy
+      // into a deletion primitive outside the staging or live repository.
+      await validateDeclaredOutputBoundaries(stagingParserRoot, stagingRepositoryRoot, 'staged parser output')
+      await validateDeclaredOutputBoundaries(parserRoot, repositoryRoot, 'parser output')
+      const result = await generate(stagingParserRoot, stagingRepositoryRoot)
+      const output = result.output
+      HCI.write(output)
+      if (result.error !== undefined || result.exitCode !== 0) {
+        return result.exitCode ?? 1
+      }
+
+      const review = reviewParserGenerateOutput(output, await readGrammarSources(parserRoot))
+      for (const diagnostic of review.unexpected) {
+        HCI.writeErrorLine(`parser generate: ${diagnostic}`)
+      }
+      if (review.unexpected.length > 0) {
+        HCI.writeErrorLine(
+          'Fix the rule, or document the diagnostic in '
+            + 'packages/dev/dev-src/repository-tests/ParserGenerate.ts if the generator is wrong about it.',
+        )
+        return 1
+      }
+
+      await synchronizeGeneratedOutputs(stagingParserRoot, parserRoot, inputs, options)
+      if (await parserGenerateInputHash(parserRoot) !== inputs) {
+        Errors.throwUnexpected('Parser generation inputs changed before stamp publication; refusing stale metadata.')
+      }
+      await writeParserGenerateStamp(
+        stampPath,
+        {
+          inputs,
+          outputs: (await generatedFilePaths(parserRoot)).map(path => FS.relativePath(repositoryRoot, path)),
+          outputsHash: await parserGenerateOutputHash(parserRoot),
+          version: STAMP_VERSION,
+        },
+        repositoryRoot,
+        {
+          ...options,
+          beforeMove: async (fromPath, toPath) => {
+            await options.beforeMove?.(fromPath, toPath)
+            if (await parserGenerateInputHash(parserRoot) !== inputs) {
+              Errors.throwUnexpected(
+                'Parser generation inputs changed before stamp publication; refusing stale metadata.',
+              )
+            }
+          },
+        },
+      )
+      return 0
+    })()
+  } catch (error) {
+    primaryError = error
   }
-  if (review.unexpected.length > 0) {
-    HCI.writeErrorLine(
-      'Fix the rule, or document the diagnostic in '
-        + 'packages/dev/dev-src/repository-tests/ParserGenerate.ts if the generator is wrong about it.',
+  let cleanupError: unknown
+  try {
+    await FS.remove(stagingRepositoryRoot)
+  } catch (error) {
+    cleanupError = error
+  }
+  if (primaryError !== undefined) {
+    if (cleanupError !== undefined) {
+      throw combinedFailure(primaryError, 'stagingRepositoryCleanupError', Errors.messageOf(cleanupError))
+    }
+    throw primaryError
+  }
+  if (cleanupError !== undefined) {
+    throw cleanupError
+  }
+  return outcome!
+}
+
+async function validateDeclaredOutputBoundaries(
+  parserRoot: string,
+  repositoryRoot: string,
+  label: string,
+): Promise<void> {
+  for (const outputPath of await declaredOutputPaths(parserRoot)) {
+    if (outputPath === repositoryRoot || !FS.pathIsWithin(outputPath, repositoryRoot)) {
+      Errors.throwUnexpected(`The ${label} escapes its repository root: ${outputPath}`)
+    }
+    await assertNoSymbolicLinkComponents(repositoryRoot, outputPath, label)
+  }
+}
+
+/**
+ * createParserGenerateStagingRepository copies only Langium's inputs into host-temporary storage.
+ * Dependencies stay in the real parser package and are invoked by absolute path.
+ */
+async function createParserGenerateStagingRepository(parserRoot: string): Promise<string> {
+  const stagingRepositoryRoot = await FS.mkTmpDir('tao-parser-generate-')
+  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  try {
+    await FS.copyFile(
+      FS.resolvePath(LANGIUM_CONFIG, parserRoot),
+      FS.resolvePath(LANGIUM_CONFIG, stagingParserRoot),
     )
-    return 1
+    await FS.copyDirectory(
+      FS.resolvePath('parser-grammar', parserRoot),
+      FS.resolvePath('parser-grammar', stagingParserRoot),
+    )
+    return stagingRepositoryRoot
+  } catch (error) {
+    await FS.remove(stagingRepositoryRoot)
+    throw error
   }
-
-  await writeParserGenerateStamp(stampPath, {
-    inputs,
-    outputs: (await generatedFilePaths(parserRoot)).map(path => FS.relativePath(repositoryRoot, path)),
-    outputsHash: await parserGenerateOutputHash(parserRoot),
-    version: STAMP_VERSION,
-  })
-  return 0
 }
 
 /** runLangiumGenerate invokes the Langium CLI from the parser package, capturing what it printed. */
-async function runLangiumGenerate(parserRoot: string, repositoryRoot: string): Promise<ParserGenerateOutcome> {
+async function runLangiumGenerate(
+  parserRoot: string,
+  repositoryRoot: string,
+  dependencyParserRoot: string,
+): Promise<ParserGenerateOutcome> {
   const node = FS.resolvePath('.devenv/profile/bin/node', repositoryRoot)
+  const langiumCli = FS.resolvePath('node_modules/langium-cli/bin/langium.js', dependencyParserRoot)
   const result = await CLI.run(await FS.isFile(node) ? node : 'node', {
-    args: ['node_modules/langium-cli/bin/langium.js', 'generate'],
+    args: [langiumCli, 'generate'],
     cwd: parserRoot,
     stdio: 'pipe',
   })
   return { error: result.error, exitCode: result.exitCode, output: `${result.stdout}${result.stderr}` }
+}
+
+type DesiredGeneratedFile = { sourcePath: string; targetPath: string }
+type GeneratedPublicationPlan = {
+  desiredDirectories: readonly string[]
+  desiredFiles: readonly DesiredGeneratedFile[]
+  originalFiles: readonly string[]
+  outputPaths: readonly string[]
+  staleFiles: readonly string[]
+}
+
+/** synchronizeGeneratedOutputs publishes every declared output as one rollback-capable file transaction. */
+async function synchronizeGeneratedOutputs(
+  stagingParserRoot: string,
+  parserRoot: string,
+  expectedInputs: string,
+  options: ParserGenerateOptions,
+): Promise<void> {
+  const plan = await generatedPublicationPlan(stagingParserRoot, parserRoot)
+  const transactionRoot = await FS.mkTmpDir('tao-parser-publish-')
+  const repositoryRoot = FS.resolvePath('../..', parserRoot)
+  const publicationScratchRoot = FS.resolvePath('.artifacts', repositoryRoot)
+  const stagedFiles = new Map<string, string>()
+  const backups = new Map<string, string>()
+  const worktreeTemporaryFiles: string[] = []
+  const committedChanges: GeneratedPublicationChange[] = []
+  const publicationHooks: ParserGenerateFileHooks = {
+    beforeMkdir: options.beforeMkdir,
+    beforeMove: async (fromPath, toPath) => {
+      await options.beforeMove?.(fromPath, toPath)
+      if (await parserGenerateInputHash(parserRoot) !== expectedInputs) {
+        Errors.throwUnexpected('Parser generation inputs changed before publication; refusing stale generated output.')
+      }
+    },
+    beforeRemove: options.beforeRemove,
+  }
+  let commitStarted = false
+  let primaryError: unknown
+  try {
+    // Capture every desired and original byte before the first worktree mutation. The generator's
+    // own staging tree is already isolated, but this immutable transaction copy also protects the
+    // rollback source while publishing proceeds.
+    for (const [index, desired] of plan.desiredFiles.entries()) {
+      const stagedPath = FS.resolvePath(`desired/${index}`, transactionRoot)
+      await FS.copyFile(desired.sourcePath, stagedPath)
+      stagedFiles.set(desired.targetPath, stagedPath)
+    }
+    for (const [index, originalPath] of plan.originalFiles.entries()) {
+      const backupPath = FS.resolvePath(`original/${index}`, transactionRoot)
+      await FS.copyFile(originalPath, backupPath)
+      backups.set(originalPath, backupPath)
+    }
+    const originalIdentity = await generatedFileIdentity(
+      plan.originalFiles.map(originalPath => [
+        FS.relativePath(repositoryRoot, originalPath),
+        backups.get(originalPath)!,
+      ]),
+    )
+    await FS.mkdirWithinBoundary(publicationScratchRoot, repositoryRoot, publicationHooks)
+    for (const [index, desired] of plan.desiredFiles.entries()) {
+      const temporaryPath = FS.resolvePath(`parser-publish-${randomUUID()}-${index}.tmp`, publicationScratchRoot)
+      worktreeTemporaryFiles.push(temporaryPath)
+      await FS.copyFile(stagedFiles.get(desired.targetPath)!, temporaryPath)
+    }
+    await options.beforePublication?.()
+
+    // The lock coordinates other parser gates. This final link, shape, and content check also
+    // rejects unrelated tools that touched an output while generation ran.
+    await validatePublicationPrecommit(plan, parserRoot, repositoryRoot, originalIdentity, expectedInputs)
+    for (const directory of plan.desiredDirectories) {
+      await FS.mkdirWithinBoundary(directory, repositoryRoot, publicationHooks)
+    }
+    await validatePublicationPrecommit(plan, parserRoot, repositoryRoot, originalIdentity, expectedInputs)
+    commitStarted = true
+    for (const [index, desired] of plan.desiredFiles.entries()) {
+      const expectedIdentity = await generatedPathIdentity(worktreeTemporaryFiles[index]!)
+      try {
+        await FS.moveFileWithinBoundary(
+          worktreeTemporaryFiles[index]!,
+          desired.targetPath,
+          repositoryRoot,
+          publicationHooks,
+        )
+      } catch (error) {
+        if (await generatedPathIdentity(desired.targetPath) === expectedIdentity) {
+          committedChanges.push(generatedPublicationChange(desired.targetPath, backups, expectedIdentity))
+        }
+        throw error
+      }
+      committedChanges.push(generatedPublicationChange(desired.targetPath, backups, expectedIdentity))
+    }
+    for (const stalePath of plan.staleFiles) {
+      try {
+        await FS.removeFileWithinBoundary(stalePath, repositoryRoot, publicationHooks)
+      } catch (error) {
+        if (await generatedPathIdentity(stalePath) === 'missing') {
+          committedChanges.push(generatedPublicationChange(stalePath, backups, 'missing'))
+        }
+        throw error
+      }
+      committedChanges.push(generatedPublicationChange(stalePath, backups, 'missing'))
+    }
+  } catch (error) {
+    primaryError = error
+    if (commitStarted) {
+      const rollbackIssues = await rollbackGeneratedPublication(
+        committedChanges,
+        worktreeTemporaryFiles,
+        repositoryRoot,
+        publicationHooks,
+      )
+      if (rollbackIssues.length > 0) {
+        primaryError = combinedFailure(error, 'rollbackIssues', rollbackIssues)
+      }
+    }
+  }
+  const cleanupIssues: unknown[] = []
+  try {
+    await options.beforeCleanup?.()
+  } catch (error) {
+    cleanupIssues.push(error)
+  }
+  await removeExistingFiles(worktreeTemporaryFiles, repositoryRoot, cleanupIssues)
+  try {
+    await FS.remove(transactionRoot)
+  } catch (error) {
+    cleanupIssues.push(error)
+  }
+  if (primaryError !== undefined) {
+    if (cleanupIssues.length > 0) {
+      throw combinedFailure(primaryError, 'stagingCleanupIssues', cleanupIssues.map(Errors.messageOf))
+    }
+    throw primaryError
+  }
+  if (cleanupIssues.length > 0) {
+    throw combinedFailure(cleanupIssues[0], 'additionalCleanupIssues', cleanupIssues.slice(1).map(Errors.messageOf))
+  }
+}
+
+async function validatePublicationPrecommit(
+  plan: GeneratedPublicationPlan,
+  parserRoot: string,
+  repositoryRoot: string,
+  originalIdentity: string,
+  expectedInputs: string,
+): Promise<void> {
+  if (await parserGenerateInputHash(parserRoot) !== expectedInputs) {
+    Errors.throwUnexpected('Parser generation inputs changed before publication; refusing stale generated output.')
+  }
+  for (const outputPath of plan.outputPaths) {
+    await assertNoSymbolicLinkComponents(repositoryRoot, outputPath, 'parser output')
+  }
+  for (const directory of plan.desiredDirectories) {
+    if (await FS.isFile(directory) || await FS.isSymbolicLink(directory)) {
+      Errors.throwUnexpected(`Parser generation output shape changed before publication: ${directory}`)
+    }
+  }
+  for (const desired of plan.desiredFiles) {
+    if (await FS.isDirectory(desired.targetPath) || await FS.isSymbolicLink(desired.targetPath)) {
+      Errors.throwUnexpected(`Parser generation output shape changed before publication: ${desired.targetPath}`)
+    }
+  }
+  const currentFiles = new Set<string>()
+  for (const outputPath of await declaredOutputPaths(parserRoot)) {
+    await collectOriginalOutput(outputPath, currentFiles)
+  }
+  const currentIdentity = await generatedFileIdentity(
+    [...currentFiles].map(path => [FS.relativePath(repositoryRoot, path), path]),
+  )
+  if (currentIdentity !== originalIdentity) {
+    Errors.throwUnexpected(
+      'Parser generation outputs changed before publication; refusing to overwrite concurrent work.',
+    )
+  }
+}
+
+async function generatedFileIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
+  const identities: string[] = []
+  for (const [relative, path] of [...entries].sort(([left], [right]) => left.localeCompare(right))) {
+    identities.push(`${relative}\n${hashContent(await FS.readFile(path))}`)
+  }
+  return hashContent(identities.join('\n'))
+}
+
+/** generatedPublicationPlan rejects shape and symlink hazards before collecting any publication work. */
+async function generatedPublicationPlan(
+  stagingParserRoot: string,
+  parserRoot: string,
+): Promise<GeneratedPublicationPlan> {
+  const stagingRepositoryRoot = FS.resolvePath('../..', stagingParserRoot)
+  const repositoryRoot = FS.resolvePath('../..', parserRoot)
+  const stagedOutputs = await declaredOutputPaths(stagingParserRoot)
+  const outputs = await declaredOutputPaths(parserRoot)
+  if (stagedOutputs.length !== outputs.length) {
+    Errors.throwUnexpected('Parser generation staging changed the declared output count.')
+  }
+
+  const desiredDirectories = new Set<string>()
+  const desiredFiles = new Map<string, string>()
+  const originalFiles = new Set<string>()
+  for (let index = 0; index < outputs.length; index += 1) {
+    const stagedPath = stagedOutputs[index]!
+    const outputPath = outputs[index]!
+    await assertNoSymbolicLinkComponents(stagingRepositoryRoot, stagedPath, 'staged parser output')
+    await assertNoSymbolicLinkComponents(repositoryRoot, outputPath, 'parser output')
+    await collectDesiredOutput(stagedPath, outputPath, desiredDirectories, desiredFiles)
+    await collectOriginalOutput(outputPath, originalFiles)
+  }
+
+  for (const directory of desiredDirectories) {
+    if (originalFiles.has(directory)) {
+      Errors.throwUnexpected(`Parser generation cannot replace a file with a directory: ${directory}`)
+    }
+  }
+  for (const targetPath of desiredFiles.keys()) {
+    if (await FS.isDirectory(targetPath)) {
+      Errors.throwUnexpected(`Parser generation cannot replace a directory with a file: ${targetPath}`)
+    }
+  }
+
+  return {
+    desiredDirectories: [...desiredDirectories].sort((left, right) => left.length - right.length),
+    desiredFiles: [...desiredFiles].sort(([left], [right]) => left.localeCompare(right)).map(
+      ([targetPath, sourcePath]) => ({ sourcePath, targetPath }),
+    ),
+    originalFiles: [...originalFiles].sort(),
+    outputPaths: outputs,
+    staleFiles: [...originalFiles].filter(path => !desiredFiles.has(path)).sort(),
+  }
+}
+
+async function collectDesiredOutput(
+  stagedPath: string,
+  outputPath: string,
+  directories: Set<string>,
+  files: Map<string, string>,
+): Promise<void> {
+  if (await FS.isSymbolicLink(stagedPath)) {
+    Errors.throwUnexpected(`Parser generation staged output contains a symbolic link: ${stagedPath}`)
+  }
+  if (await FS.isFile(stagedPath)) {
+    files.set(outputPath, stagedPath)
+    return
+  }
+  if (!await FS.isDirectory(stagedPath)) {
+    Errors.throwUnexpected(`Parser generation did not produce its declared output: ${stagedPath}`)
+  }
+  directories.add(outputPath)
+  for await (const stagedEntry of FS.walk(stagedPath, { includeDirectories: true, includeHidden: true })) {
+    if (await FS.isSymbolicLink(stagedEntry)) {
+      Errors.throwUnexpected(`Parser generation staged output contains a symbolic link: ${stagedEntry}`)
+    }
+    const outputEntry = FS.resolvePath(FS.relativePath(stagedPath, stagedEntry), outputPath)
+    if (await FS.isDirectory(stagedEntry)) {
+      directories.add(outputEntry)
+    } else if (await FS.isFile(stagedEntry)) {
+      files.set(outputEntry, stagedEntry)
+    } else {
+      Errors.throwUnexpected(`Parser generation staged output has an unsupported file type: ${stagedEntry}`)
+    }
+  }
+}
+
+async function collectOriginalOutput(outputPath: string, files: Set<string>): Promise<void> {
+  if (await FS.isSymbolicLink(outputPath)) {
+    Errors.throwUnexpected(`Parser generation output contains a symbolic link: ${outputPath}`)
+  }
+  if (await FS.isFile(outputPath)) {
+    files.add(outputPath)
+    return
+  }
+  if (!await FS.exists(outputPath)) {
+    return
+  }
+  if (!await FS.isDirectory(outputPath)) {
+    Errors.throwUnexpected(`Parser generation output has an unsupported file type: ${outputPath}`)
+  }
+  for await (const outputEntry of FS.walk(outputPath, { includeDirectories: true, includeHidden: true })) {
+    if (await FS.isSymbolicLink(outputEntry)) {
+      Errors.throwUnexpected(`Parser generation output contains a symbolic link: ${outputEntry}`)
+    }
+    if (await FS.isFile(outputEntry)) {
+      files.add(outputEntry)
+    } else if (!await FS.isDirectory(outputEntry)) {
+      Errors.throwUnexpected(`Parser generation output has an unsupported file type: ${outputEntry}`)
+    }
+  }
+}
+
+/** assertNoSymbolicLinkComponents prevents an output root from escaping through a symlink ancestor. */
+async function assertNoSymbolicLinkComponents(boundary: string, path: string, label: string): Promise<void> {
+  if (!FS.pathIsWithin(path, boundary)) {
+    Errors.throwUnexpected(`The ${label} escapes its repository root: ${path}`)
+  }
+  if (await FS.isSymbolicLink(boundary)) {
+    Errors.throwUnexpected(`The ${label} repository root is a symbolic link: ${boundary}`)
+  }
+  let currentPath = boundary
+  for (const component of FS.relativePath(boundary, path).split('/').filter(Boolean)) {
+    currentPath = FS.resolvePath(component, currentPath)
+    if (await FS.isSymbolicLink(currentPath)) {
+      Errors.throwUnexpected(`The ${label} crosses a symbolic link: ${currentPath}`)
+    }
+  }
+}
+
+type GeneratedPublicationChange = {
+  backupPath?: string
+  expectedIdentity: string
+  path: string
+}
+
+function generatedPublicationChange(
+  path: string,
+  backups: ReadonlyMap<string, string>,
+  expectedIdentity: string,
+): GeneratedPublicationChange {
+  const backupPath = backups.get(path)
+  return { ...(backupPath === undefined ? {} : { backupPath }), expectedIdentity, path }
+}
+
+/** rollbackGeneratedPublication restores only bytes still owned by the failed publication. */
+async function rollbackGeneratedPublication(
+  changes: readonly GeneratedPublicationChange[],
+  siblingTemporaryFiles: string[],
+  repositoryRoot: string,
+  hooks: ParserGenerateFileHooks,
+): Promise<unknown[]> {
+  const issues: unknown[] = []
+  for (const [index, change] of [...changes].reverse().entries()) {
+    try {
+      const currentIdentity = await generatedPathIdentity(change.path)
+      if (currentIdentity !== change.expectedIdentity) {
+        issues.push(
+          `Rollback preserved a concurrent write at ${change.path}; expected ${change.expectedIdentity}, found ${currentIdentity}.`,
+        )
+        continue
+      }
+      if (change.backupPath === undefined) {
+        if (currentIdentity !== 'missing') {
+          await FS.removeFileWithinBoundary(change.path, repositoryRoot, hooks)
+        }
+        continue
+      }
+      const temporaryPath = FS.resolvePath(`parser-rollback-${randomUUID()}-${index}.tmp`, FS.dirname(change.path))
+      siblingTemporaryFiles.push(temporaryPath)
+      await FS.copyFile(change.backupPath, temporaryPath)
+      await FS.moveFileWithinBoundary(temporaryPath, change.path, repositoryRoot, hooks)
+    } catch (error) {
+      issues.push(error)
+    }
+  }
+  return issues
+}
+
+async function removeExistingFiles(
+  paths: readonly string[],
+  repositoryRoot: string,
+  issues: unknown[],
+): Promise<void> {
+  for (const path of paths) {
+    try {
+      if (await FS.isFile(path)) {
+        await FS.removeFileWithinBoundary(path, repositoryRoot)
+      }
+    } catch (error) {
+      issues.push(error)
+    }
+  }
+}
+
+async function generatedPathIdentity(path: string): Promise<string> {
+  if (!await FS.exists(path)) {
+    return 'missing'
+  }
+  if (await FS.isSymbolicLink(path)) {
+    return 'symbolic-link'
+  }
+  if (await FS.isDirectory(path)) {
+    return 'directory'
+  }
+  return `file:${hashContent(await FS.readFile(path))}`
+}
+
+function combinedFailure(primary: unknown, detailName: string, secondary: unknown): Error {
+  return new Errors.UnexpectedBehaviorError(Errors.messageOf(primary), {
+    cause: primary,
+    details: { [detailName]: secondary },
+  })
 }
 
 /**
@@ -305,13 +819,36 @@ async function readParserGenerateStamp(stampPath: string): Promise<ParserGenerat
  * file. It runs only after a clean generation: a failed or diagnostic-rejected run leaves the old
  * stamp in place and the next run repeats the work rather than inheriting the failure.
  */
-async function writeParserGenerateStamp(stampPath: string, stamp: ParserGenerateStamp): Promise<void> {
+async function writeParserGenerateStamp(
+  stampPath: string,
+  stamp: ParserGenerateStamp,
+  repositoryRoot: string,
+  hooks: ParserGenerateFileHooks,
+): Promise<void> {
   const temporaryPath = `${stampPath}.${randomUUID()}.tmp`
+  let primaryError: unknown
   try {
     await FS.writeJson(temporaryPath, stamp)
-    await FS.move(temporaryPath, stampPath)
-  } finally {
-    await FS.remove(temporaryPath)
+    await FS.moveFileWithinBoundary(temporaryPath, stampPath, repositoryRoot, hooks)
+  } catch (error) {
+    primaryError = error
+  }
+  let cleanupError: unknown
+  try {
+    if (await FS.isFile(temporaryPath)) {
+      await FS.removeFileWithinBoundary(temporaryPath, repositoryRoot)
+    }
+  } catch (error) {
+    cleanupError = error
+  }
+  if (primaryError !== undefined) {
+    if (cleanupError !== undefined) {
+      throw combinedFailure(primaryError, 'stampCleanupError', Errors.messageOf(cleanupError))
+    }
+    throw primaryError
+  }
+  if (cleanupError !== undefined) {
+    throw cleanupError
   }
 }
 
