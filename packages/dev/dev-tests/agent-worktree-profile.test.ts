@@ -12,6 +12,11 @@ type ProfileFixture = {
   worktree: string
 }
 
+/** The one quarantine `full-verify` reports as skipped, spelled exactly as the Justfile spells it. */
+const simulatedUserQuarantine = 'studio-smoke-simulated-user=quarantined; every step now passes up to '
+  + 'the component drag onto the editor; run just studio-smoke '
+  + 'packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce'
+
 Describe('agent worktree profile bootstrap', () => {
   Test('links and activates the primary pinned profile idempotently', async () => {
     const testRoot = await mkTestDir('tao-agent-profile-')
@@ -509,24 +514,18 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('full-verify-sandbox')).toContain('--green-tree full-verify-sandbox full-verify')
   })
 
-  Test('runs every stable browser and native lane while reporting its quarantines', async () => {
+  Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('full-verify')
 
     // The lanes are named for the public recipes that run the same files by hand; the graph runs
     // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-        + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
-    )
-    Expect(commands).toContain(
-      '"keyboard-navigation-smoke=temporarily quarantined; narrowing survives engage plus disengage, '
-        + 'item 1 of Docs/Roadmap/September squash-merge remediation.md; '
-        + 'run just keyboard-navigation-smoke to reproduce"',
+      `--skipped "${simulatedUserQuarantine}"`,
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
@@ -586,17 +585,10 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-      + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
-    const keyboardQuarantine =
-      '"keyboard-navigation-smoke=temporarily quarantined; narrowing survives engage plus disengage, '
-      + 'item 1 of Docs/Roadmap/September squash-merge remediation.md; '
-      + 'run just keyboard-navigation-smoke to reproduce"'
+    const quarantine = `--skipped "${simulatedUserQuarantine}"`
     Expect(fullVerify).toContain(quarantine)
-    Expect(fullVerify).toContain(keyboardQuarantine)
     Expect(sandbox).toContain('--skip-unsandboxed')
     Expect(sandbox).toContain(quarantine)
-    Expect(sandbox).toContain(keyboardQuarantine)
   })
 })
 

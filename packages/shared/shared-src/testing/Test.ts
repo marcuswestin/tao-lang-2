@@ -40,9 +40,13 @@ export function MockModule(specifier: string, factory: () => unknown): void {
 export const Test = createTestRunnerFunction('test')
 let temporaryProjectSequence = 0
 
-/** mkTestDir creates a unique temporary directory under the host temp directory. */
+/**
+ * mkTestDir creates a unique temporary directory under the host temp directory. The canonical path
+ * is returned because the host temp directory is a symlink on macOS: a test that builds a path from
+ * the uncanonical one and compares it with a path the code under test resolved would never match.
+ */
 export async function mkTestDir(prefix: string): Promise<string> {
-  return await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir()))
+  return await FS.realPath(await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir())))
 }
 
 /** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
