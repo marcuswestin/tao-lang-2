@@ -38,7 +38,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
-- Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
+- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls. A direct `git push` still stops for Ro — the landing command does its own pushing. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
 - `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` owns the opt-in native, local-services, release, and unsandboxed profiles, and `.rulesync/hooks.jsonc` owns the agent hooks; `.claude/settings.json`, every `.claude/settings.<profile>.json`, `.codex/config.toml`, and `.codex/hooks.json` are generated from them. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
 
 ## Guidance
@@ -59,18 +59,23 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Run `./agent verify --complete` as the final validation and before a commit that goes to review or
   merge; a work-in-progress commit may stand on `--changed`. `verify` refuses to run without a scope.
 - Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
-  host-only verification. Selection lanes are iteration aids, never merge evidence, and
-  `merge-with-main` is never an agent's own initiative: run it only when Ro asks for that merge in
-  the current request.
+  host-only verification. Selection lanes are iteration aids, never merge evidence.
 - Before reporting a branch ready to merge, write or update its merge message at
   `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
-  merge-ready without it, and the human command Ro then runs is
+  merge-ready without it, and the landing command is
   `just merge-with-main --execute --push --yes`.
-- Whenever the work looks complete, carry it all the way to that command without being asked: land
-  every change as commits on the feature branch, leave the worktree clean, run `verify --complete`
-  plus the host lanes the change reaches, refresh the roadmap or ledger documents the work changed,
-  and write the merge message. Ro's next action is then the merge command itself and nothing else.
-  Say plainly which evidence stands behind it and which gates did not run.
+- Whenever the work looks complete, carry it all the way without being asked: land every change as
+  commits on the feature branch, leave the worktree clean, refresh the roadmap or ledger documents
+  the work changed, verify, and write the merge message. Then decide whether to land it. An agent
+  lands on its own judgment when the gates can prove the change; it brings the branch to ready and
+  hands the landing to Ro when the change reaches what no gate can prove. The `verification-lanes`
+  skill owns that judgment. Either way, say plainly which evidence stands behind it and which gates
+  did not run.
+- Refresh the roadmap, ledger, and spec documents the work changed **before** verifying, not after.
+  A tracked edit made after a green lane changes the tree the lane proved, so the next lane runs
+  everything again.
+- Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
+  with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
 - Every later round works the same way. When Ro comes back with corrections, implement them, re-run
   the validation they invalidate, and update `.artifacts/merge/<branch>.msg` again so the branch
   stays immediately mergeable; never leave a reviewed branch whose message describes an earlier

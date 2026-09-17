@@ -48,10 +48,10 @@ description: >-
   `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.
 - `just merge-with-main --execute --push --yes` is the landing command; those are `just` long flags,
-  not `execute=true` positional assignments. Agents prepare the branch and message file and never
-  land on their own initiative, never automate the command, and never decide a merge is warranted;
-  they run it only when Ro asks for that merge in the current request, and say which verification
-  evidence stood behind it.
+  not `execute=true` positional assignments. An agent runs it on its own judgment once the branch is
+  ready, and says which verification evidence stood behind it and which gates did not run. It is a
+  judgment, never a rhythm: do not automate it, and do not land a branch Ro is still reviewing.
+  **Whether to land it yourself** below owns that judgment.
 - Write or update the message every time a branch becomes merge-ready, including when later commits
   change what the branch does. The command fails with `Merge message file does not exist` when the
   file is missing, so a branch handed over without it is not ready.
@@ -75,3 +75,31 @@ description: >-
   Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
   rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery
   guidance.
+
+## Whether to land it yourself
+
+The question is not how substantial the change is. It is whether the gates can prove it.
+
+- **Land it yourself** when the gates that ran green cover the change: documentation, roadmap, agent
+  instructions, developer tooling, and test-only changes always; product code whose behavior the
+  suites actually exercise.
+- **Bring it to ready and hand the landing to Ro** when the change reaches what no gate proves —
+  Studio's or an app's visible behavior, a language surface Ro has not seen, native or device paths,
+  or anything covered only by the lanes a person runs: `./dev studio-manual-checks`, a device
+  install, and everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why
+  the gates do not settle it.
+- A green `full-verify` is not by itself an answer. A change can pass every gate and still be one Ro
+  wants to see first, because the thing it changed is the thing Ro is designing.
+- When the two pull against each other, ask. A landing Ro did not want costs more than a question.
+
+## Working inside a busy machine
+
+- Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
+  with a timeout. The poll costs a model turn per iteration and rounds the wait up to its sleep, and
+  the gate is no faster for being backgrounded.
+- Refresh the roadmap, ledger, and spec documents the work changed **before** verifying. A tracked
+  edit made after a green lane changes the tree that lane proved, so the next lane runs everything
+  again from nothing.
+- A lane that is slow is usually not a regression. Read the `contention` block in
+  `.artifacts/logs/<lane>/latest/summary.json` before diagnosing anything: it names how many lanes
+  shared the machine and what the load reached.
