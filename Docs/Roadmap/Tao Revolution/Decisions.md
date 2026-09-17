@@ -1171,7 +1171,7 @@ Three constructs, one per context, so no word is asked to mean two things:
 ```swift
 file view RecipeScreen(Recipe) {
    guard Recipe { loading -> Spinner(), missing -> EmptyState(Title: "This is gone") }
-   render Col [screen] { Text(Recipe.Title) [title] }   // reached only once Recipe is available
+   render Col() [screen] { Text(Recipe.Title) [title] }   // reached only once Recipe is available
 }
 ```
 
@@ -1213,8 +1213,8 @@ function FirstOwner(Household is Household) returns Account {
 ```swift
 view RecipeScreen(Recipe) { … }                        // a link presents it (§10) — nothing marks that here
 file view RecipeCard(Recipe) { … }                     // a reusable leaf
-view Section(Title text) { render Col [card] { Text(Title) [sectionTitle]; @@content } }
-view Centered() { render Col [screen, content center center] { @@content } }
+view Section(Title text) { render Col() [card] { Text(Title) [sectionTitle]; @@content } }
+view Centered() { render Col() [screen, content center center] { @@content } }
 file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a typed value
 ```
 
@@ -1313,9 +1313,9 @@ navigator can describe itself when it is itself presented, without exposing its 
 - **`render` introduces the visual tree**, and the visible hierarchy is the primary shape of the code:
 
 ```swift
-render Col [screen] {
+render Col() [screen] {
    Text(Recipe.Title) [title]
-   Row [gap sm] { Text(Recipe.Course); Text(Recipe.Servings) }
+   Row() [gap sm] { Text(Recipe.Course); Text(Recipe.Servings) }
 }
 ```
 
@@ -1325,14 +1325,14 @@ render Col [screen] {
 
 ```swift
 // A condition postfixed to an entry. Several may sit in one list, independently.
-render Foo2 [ink green when Person.Happy, ink red when Person.Sad]
+render Foo2() [ink green when Person.Happy, ink red when Person.Sad]
 
 // A case map supplying one clause's value.
-render Foo [ink when Timer.EndsAt > Now { yes -> fine, no -> good }]
+render Foo() [ink when Timer.EndsAt > Now { yes -> fine, no -> good }]
 
 // A case map supplying whole clause lists, beside an ordinary postfix condition.
-render Row [card, when Tone { Neutral -> [background sunken], Good -> [ink good] },
-            ink accent when Tone is Warning]
+render Row() [card, when Tone { Neutral -> [background sunken], Good -> [ink good] },
+              ink accent when Tone is Warning]
 ```
 
 - The three are told apart by what is present, not by lookahead: an entry that _starts_ with `when`
@@ -1347,7 +1347,7 @@ render Row [card, when Tone { Neutral -> [background sunken], Good -> [ink good]
 - **Layout primitives express intent**, never device coordinates or flexbox mechanics:
 
 ```swift
-Row [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chevron.right") }
+Row() [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chevron.right") }
 ```
 
 - **`Grid` is a layout container in the `Col` / `Row` / `Scroll` family — it wraps a `loop`, never
@@ -1356,7 +1356,7 @@ Row [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chevro
   header, after it the footer; emptiness stays at the site (§5):
 
 ```swift
-Grid [cell min 220, gap md] {
+Grid() [cell min 220, gap md] {
    Text("This week's picks") [sectionTitle]              // header — scrolls with the grid
    loop Recipes / Recipe {
       RecipeCard(Recipe) [span 2 when Recipe is Featured]
@@ -1364,7 +1364,7 @@ Grid [cell min 220, gap md] {
    }
 }
 
-Grid [columns 7, gap sm] {                                // a generated collection: a calendar
+Grid() [columns 7, gap sm] {                              // a generated collection: a calendar
    loop WeekOf(WeekStart) / Day { DayCell(Day); on select -> { set Selected = Day } }
 }
 ```
@@ -1387,7 +1387,7 @@ Grid [columns 7, gap sm] {                                // a generated collect
 state StepNumber = 1
 Pages(Page: StepNumber) {
    loop Recipe.Steps / Step {
-      Col [gap md, content center center] {
+      Col() [gap md, content center center] {
          Text("Step { Step.Position } of { Recipe.Steps.Count }") [caption]
          Text(Step.Text) [pageTitle, center]
 }  }  }
@@ -1426,7 +1426,7 @@ file view TimerBar(Timer) {
    state Tick = Interval(1.s)                    // starts on mount, stops when the view unmounts
    let Left = Timer.EndsAt - Tick.Value          // Tick.Value: the time as of the latest tick
 
-   render Row [card, content spread center] {
+   render Row() [card, content spread center] {
       Text(Timer.Step.Text, Lines: 1) [label, claim 1]
       Text(when Left > 0 Left.Clock / not "Done") [pageTitle, ink good when Left <= 0]
    }
