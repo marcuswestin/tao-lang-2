@@ -1240,3 +1240,107 @@ an entry here may link one when the developer workflow is also affected.
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
   intact and reports one actionable failure.
 - **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+
+### DEVENV-065 — Simultaneous worktree finalizations collapse verification throughput
+
+- **Status:** Candidate
+- **Area:** Parallel verification
+- **Impact:** Every agent finishing its task runs the repository's heaviest lane at the same moment,
+  so the fair share per lane falls to one or two slots and a lane that takes well under a minute
+  alone takes many minutes. This is the largest single component of "finalizing takes far longer
+  than expected", and it grows with the number of active worktrees rather than with the change.
+- **Evidence:** 260 recorded non-`dev-test` lane runs across every checkout, bucketed by how many
+  other lane runs overlapped them: one lane median 37.8s (p90 88.1s), two 54.7s (p90 207.5s), three
+  75.8s (p90 390.4s), four 691.3s, five 366.3s — superlinear, not proportional. On 2026-09-17 at
+  17:01 local, `ps` showed eight gate-runner processes plus a `full-verify` and a
+  `merge-with-main`, and `~/.cache/tao/machine-lanes` held 13 live lane records — none stale —
+  holding **two admitted slots between them** while 16 of 18 CPUs' worth of budget went unissued.
+  A control `verify --complete` started in this worktree at that moment took **721.5s against a
+  32.5s uncontended median, 22x**, reporting `13 Tao lanes ran at once; load peaked at 36.2 on 18
+  CPUs`; within it `_test` took 266.6s against ~34s, `_fix-tao` 107.5s against 3.3s, and
+  `_compile-word-flower-app` 18.1s against 0.65s. Two candidate causes to separate: the fair-share
+  floor gives each of 13 lanes a ceiling of one or two slots, and every admission decision takes
+  the single advisory registry lock, so 13 contenders may spend admission in lock contention rather
+  than in work.
+- **Workaround:** Verify when the machine is quiet, or read the `contention` block in
+  `summary.json` before treating a slow lane as a regression.
+- **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting
+  the machine between all of them at once, so two or three lanes run at full width and the rest
+  queue with a printed position; reconcile admitted slots with real CPU use, since 13 lanes holding
+  one slot each drove load to 28 on 18 CPUs, which means a slot does not describe what a suite
+  actually spawns.
+- **Dependencies:** `MachineLanes.ts` `fairAllocations` and the `WorkGraph` reservation path;
+  builds on DEVENV-001 rather than replacing it.
+- **Acceptance:** With ten lanes requested at once, the median completion time of the first three is
+  within 1.5x of the uncontended median, and total wall time for all ten beats today's fair-share
+  behavior.
+- **Source:** 2026-09-17 merge-finalization performance investigation.
+
+### DEVENV-066 — Merge finalization is a prose protocol with no command behind it
+
+- **Status:** Candidate
+- **Area:** Agent harness performance
+- **Impact:** "Finalize and prepare the merge" is a deterministic sequence — land commits, refresh
+  the affected roadmap documents, integrate `main`, verify, write `.artifacts/merge/<branch>.msg`,
+  report — but it exists only as prose in `AGENTS.md` and the `verification-lanes` skill, so an
+  agent interprets it one model turn at a time at the point in a session where its context, and
+  therefore its per-turn latency, is largest.
+- **Evidence:** Finalization is not a terminal step but a loop: across 16 worktrees the same branch
+  re-enters it a median of 5 and a mean of 7.4 times, driven by Ro's corrections, by retries after a
+  red lane, and by the agent's own re-entry after a background job reports — and every round replays
+  the whole protocol, because nothing persists what the previous round established. 119 such
+  stretches across this repository's Claude Code transcripts,
+  17.0h wall: 58.6% is model generation and 41.4% is command execution; a stretch that reaches
+  `merge-with-main` averages 39 assistant turns and 22 tool calls, and 45% of all turns issue no
+  tool call at all. Those 45 stretches ran 50 `full-verify` and 46 `verify` invocations on top of
+  the `full-verify` that `merge-with-main` runs itself, about three full passes each, with one
+  stretch running six. Median cached context re-read per turn is 357k tokens; in the top quartile
+  (630k) mean per-turn model time is 11.0s against 4.0–5.4s in the lower three. Waiting on
+  backgrounded gates with `until [ -s … ]; do sleep 15; done` accounted for 6.0% of the total,
+  and commands blocked in permission review for 11.3%, still 37% of finalization Bash calls
+  carrying the `cd`/`export`/`VAR=` prefixes DEVENV-045 asked agents to drop.
+- **Workaround:** Run the superset lane once and let `merge-with-main`'s own `full-verify` be the
+  evidence; edit tracked documents before verifying, never after, so the green-tree record survives.
+- **Proposed change:** Add `./agent finalize`, which asserts the branch and clean worktree,
+  integrates `origin/main`, runs one verification lane, drafts `.artifacts/merge/<branch>.msg` from
+  `git log <base>..HEAD` for the agent to edit, and prints the short list of judgments that remain
+  (which roadmap documents to refresh, what the message should say). Point `AGENTS.md` and the
+  `verification-lanes` skill at the command instead of restating the sequence.
+- **Dependencies:** `MergeWithMain.ts` already owns the landing half; this is the preparation half.
+  The green-tree records in `GreenTree.ts` already make a repeated lane free when the tree is
+  unchanged, so the redundant passes come from ordering, not from missing caching.
+- **Acceptance:** A finalization from a clean feature branch completes in under ten model turns and
+  one verification lane, and the written merge message passes `merge-with-main`'s own validation
+  unedited.
+- **Source:** 2026-09-17 merge-finalization performance investigation.
+
+### DEVENV-067 — Nothing serializes landing, so ready branches convoy into each other
+
+- **Status:** Candidate
+- **Area:** Human merge workflow
+- **Impact:** Several agents reach "ready to merge" together, each runs the full suite on its own
+  branch, one lands, and the rest must integrate the new `main` and verify again — by which time
+  another has landed. Landing K branches costs work that grows with K rather than with the change,
+  and it spends that work in exactly the window when every lane is slowest.
+- **Evidence:** `main`'s own history shows the convoy: of 92 inter-merge gaps under six hours, 25%
+  are under five minutes and 43% under fifteen, against a `merge-with-main` verified window of two
+  to five minutes uncontended and far longer under load. `inspectMergePreflight` requires exactly
+  one `main` worktree and requires it to equal `origin/main`, and `MergeWithMain.ts` takes no lock
+  of any kind, so two concurrent `--execute` runs stage a squash in the same shared `main` checkout
+  and are caught only afterwards by `Repository state changed unexpectedly while preparing the
+  staged squash` — after both have already paid a `full-verify`. `stabilizeAndVerify` restarts the
+  whole lane when `origin/main` moves and gives up after three passes.
+- **Workaround:** Land one branch at a time by agreement, and re-run `merge-with-main` after the
+  preflight rejects a stale `main`.
+- **Proposed change:** Take a machine-wide landing lease for the whole preflight-to-push window, so
+  a second landing queues with a printed position instead of racing. Inside the lease, verify the
+  integration tree — `main` plus the branch — once, and treat the branch-side lane as iteration
+  evidence rather than the gate, which removes both the pre-merge pass and the restart. Consider
+  landing several ready branches as one verified batch that commits as separate squashes, so K
+  branches cost one pass.
+- **Dependencies:** DEVENV-065 (the lanes a batch would run); `MergeWithMain.ts` preflight and
+  `stabilizeAndVerify`; the lease can reuse the registry in `MachineLanes.ts`.
+- **Acceptance:** Two `merge-with-main --execute` runs started together land one after the other
+  with one verification pass each and no `Repository state changed unexpectedly` failure; landing
+  three ready branches costs one full verification, not three.
+- **Source:** 2026-09-17 merge-finalization performance investigation.
