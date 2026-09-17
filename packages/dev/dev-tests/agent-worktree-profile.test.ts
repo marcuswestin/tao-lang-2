@@ -509,19 +509,24 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('full-verify-sandbox')).toContain('--green-tree full-verify-sandbox full-verify')
   })
 
-  Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
+  Test('runs every stable browser and native lane while reporting its quarantines', async () => {
     const commands = await justCommands('full-verify')
 
     // The lanes are named for the public recipes that run the same files by hand; the graph runs
     // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
       '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
         + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
+    )
+    Expect(commands).toContain(
+      '"keyboard-navigation-smoke=temporarily quarantined; narrowing survives engage plus disengage, '
+        + 'item 1 of Docs/Roadmap/September squash-merge remediation.md; '
+        + 'run just keyboard-navigation-smoke to reproduce"',
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
@@ -583,9 +588,15 @@ Describe('agent worktree profile bootstrap', () => {
     }
     const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
       + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
+    const keyboardQuarantine =
+      '"keyboard-navigation-smoke=temporarily quarantined; narrowing survives engage plus disengage, '
+      + 'item 1 of Docs/Roadmap/September squash-merge remediation.md; '
+      + 'run just keyboard-navigation-smoke to reproduce"'
     Expect(fullVerify).toContain(quarantine)
+    Expect(fullVerify).toContain(keyboardQuarantine)
     Expect(sandbox).toContain('--skip-unsandboxed')
     Expect(sandbox).toContain(quarantine)
+    Expect(sandbox).toContain(keyboardQuarantine)
   })
 })
 
