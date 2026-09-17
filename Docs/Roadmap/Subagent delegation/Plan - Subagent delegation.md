@@ -69,10 +69,18 @@ Nothing asked yet. Each entry: the date, the choice, what Ro decided, and the ta
 
 | Slice | Outcome                                                                                                                                                                      |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A     | Harness parity: the Codex `[agents]` block through `CodexConfigGenerator.ts`, and Cursor `.cursor/agents/` with its column added to the routing table.                       |
 | B     | Saved workflow scripts for the recurring fan-outs: tranche review and squash-merge audit.                                                                                    |
 | C     | Cross-vendor second opinion, Claude calling `codex exec` and the reverse, opt-in per request and off by default.                                                             |
 | D     | A benchmark of three or four representative tasks timed with and without delegation, used to tune the thresholds the skill now states from research rather than measurement. |
+
+Slice A landed: Codex takes `[agents]` defaults generated from the standard row of the routing
+table, and Cursor takes the profiles through rulesync into `.cursor/agents/`, so all three harnesses
+read one source. Cursor's own permission and worktree files stay hand-maintained.
+
+Two of the Cursor model identifiers are inferred rather than quoted. Cursor's subagent documentation
+spells ids as `claude-opus-5`, `gpt-5.6-sol`, and `composer-2.5`, and its model list offers Claude
+Sonnet 5 and Claude Fable 5.1 without giving their config spellings; `claude-sonnet-5` and
+`claude-fable-5-1` follow that convention. If Cursor rejects one, the fix is the routing table.
 
 Slice C touches the rule in `AGENTS.md` against sending repository contents to a third party. Ro
 approved it for vendors already used on this repository, which is narrower than the general

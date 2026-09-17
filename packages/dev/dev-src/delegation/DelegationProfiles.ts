@@ -86,19 +86,28 @@ function assign(document: AgentDocument, section: string | undefined, key: strin
  * repository spells a model name in prose. A profile may only name a model the table offers, so
  * that a model release is one edit rather than a search.
  */
-export function tierModels(skillSource: string, column: 'claude' | 'codex'): Map<string, string> {
+export type HarnessColumn = 'claude' | 'codex' | 'cursor'
+
+const COLUMN_INDEX: Record<HarnessColumn, number> = { claude: 2, codex: 3, cursor: 4 }
+
+export function tierModels(skillSource: string, column: HarnessColumn): Map<string, string> {
   const tiers = new Map<string, string>()
   for (const line of skillSource.split('\n')) {
     const cells = line.split('|').map(cell => cell.trim())
     if (cells.length < 5 || cells[1] === undefined) {
       continue
     }
-    const model = (column === 'claude' ? cells[2] : cells[3])?.match(/^`([^`]+)`$/)?.[1]
+    const model = cells[COLUMN_INDEX[column]]?.match(/^`([^`]+)`$/)?.[1]
     if (model !== undefined && /^[a-z]+$/.test(cells[1])) {
       tiers.set(cells[1], model)
     }
   }
   return tiers
+}
+
+/** Cursor spells effort inside the model string, so the tier is the part before the parameters. */
+function baseModel(model: string): string {
+  return model.replace(/\[.*\]$/, '')
 }
 
 type DelegationSources = {
@@ -111,6 +120,7 @@ type DelegationSources = {
 export function delegationIssues(sources: DelegationSources): string[] {
   const issues: string[] = []
   const claudeModels = new Set(tierModels(sources.skillSource, 'claude').values())
+  const cursorModels = new Set(tierModels(sources.skillSource, 'cursor').values())
   if (claudeModels.size === 0) {
     issues.push(`${DELEGATION_SKILL_PATH} must keep a tier table naming a Claude Code model per tier.`)
   }
@@ -127,12 +137,8 @@ export function delegationIssues(sources: DelegationSources): string[] {
     if (!TRIGGER_PHRASES.some(phrase => description.toLowerCase().includes(phrase))) {
       issues.push(`${profile.path} description must say when to reach for the profile, not only what it is.`)
     }
-    const model = profile.sections['claudecode']?.['model']
-    if (model === undefined) {
-      issues.push(`${profile.path} must name a Claude Code model, so a caller inherits nothing by accident.`)
-    } else if (claudeModels.size > 0 && !claudeModels.has(model)) {
-      issues.push(`${profile.path} names model '${model}', which no tier in ${DELEGATION_SKILL_PATH} offers.`)
-    }
+    issues.push(...modelIssues(profile, 'claudecode', 'Claude Code', claudeModels))
+    issues.push(...modelIssues(profile, 'cursor', 'Cursor', cursorModels))
     issues.push(...readOnlyDriftIssues(profile))
   }
 
@@ -148,16 +154,37 @@ export function delegationIssues(sources: DelegationSources): string[] {
   return issues
 }
 
-/** A profile that cannot write under one harness must not be able to write under the other. */
+/** Each harness spells the model differently, and a profile that names none inherits its caller's. */
+function modelIssues(
+  profile: AgentDocument,
+  section: string,
+  harness: string,
+  offered: ReadonlySet<string>,
+): string[] {
+  const model = profile.sections[section]?.['model']
+  if (model === undefined) {
+    return [`${profile.path} must name a ${harness} model, so a caller inherits nothing by accident.`]
+  }
+  if (offered.size === 0 || offered.has(baseModel(model))) {
+    return []
+  }
+  return [`${profile.path} names ${harness} model '${model}', which no tier in ${DELEGATION_SKILL_PATH} offers.`]
+}
+
+/** A profile that cannot write under one harness must not be able to write under another. */
 function readOnlyDriftIssues(profile: AgentDocument): string[] {
-  const readOnlyForCodex = profile.sections['codexcli']?.['sandbox_mode'] === 'read-only'
-  const readOnlyForClaude = profile.sections['claudecode']?.['permissionMode'] === 'plan'
-  if (readOnlyForCodex === readOnlyForClaude) {
+  const readOnly = {
+    'Claude Code': profile.sections['claudecode']?.['permissionMode'] === 'plan',
+    Codex: profile.sections['codexcli']?.['sandbox_mode'] === 'read-only',
+    Cursor: profile.sections['cursor']?.['readonly'] === 'true',
+  }
+  const restricted = Object.entries(readOnly).filter(([, value]) => value).map(([harness]) => harness)
+  if (restricted.length === 0 || restricted.length === Object.keys(readOnly).length) {
     return []
   }
   return [
-    `${profile.path} is read-only under ${readOnlyForCodex ? 'Codex' : 'Claude Code'} but writable under the other; `
-    + 'pair `sandbox_mode: read-only` with `permissionMode: plan`.',
+    `${profile.path} is read-only under ${restricted.join(' and ')} but writable under the rest; `
+    + 'pair `sandbox_mode: read-only` with `permissionMode: plan` and `readonly: true`.',
   ]
 }
 

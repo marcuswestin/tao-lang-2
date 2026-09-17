@@ -8,6 +8,7 @@ node_modules
 .claude/agents/
 .claude/worktrees/
 .codex/agents/
+.cursor/agents/
 
 .android
 local.properties

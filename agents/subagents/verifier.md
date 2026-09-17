@@ -4,7 +4,7 @@ description: >-
   Runs a Tao validation lane and returns only what failed. Use proactively for `./agent verify`,
   focused test files, typecheck, lint, and build runs whose output is long and whose useful residue
   is a short list of failures.
-targets: [codexcli, claudecode]
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: low
   sandbox_mode: workspace-write
@@ -12,6 +12,9 @@ codexcli:
 claudecode:
   model: sonnet
   effort: low
+cursor:
+  model: claude-sonnet-5
+  readonly: false
 ---
 
 Run exactly the lane the brief names, from the worktree root, and let it finish.

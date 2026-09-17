@@ -4,7 +4,7 @@ description: >-
   Read-only Tao repository explorer. Use proactively whenever a question needs sweeping many files,
   directories, or naming conventions and only the conclusion matters: where something lives, which
   call sites exist, how a convention is spelled, what a subtree contains.
-targets: [codexcli, claudecode]
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: medium
   sandbox_mode: read-only
@@ -13,6 +13,9 @@ claudecode:
   model: sonnet
   effort: medium
   permissionMode: plan
+cursor:
+  model: claude-sonnet-5
+  readonly: true
 ---
 
 Answer the supplied question from live repository evidence, not from assumption about how a project

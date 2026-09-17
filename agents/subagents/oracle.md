@@ -4,7 +4,7 @@ description: >-
   One hard question, answered in isolation at a higher tier than the caller. Use proactively for a
   root cause that survived two attempts, a design fork whose branches are expensive, a diagnosis the
   caller keeps circling, or a judgment worth more than the caller's own model.
-targets: [codexcli, claudecode]
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
@@ -13,6 +13,9 @@ claudecode:
   model: opus
   effort: xhigh
   permissionMode: plan
+cursor:
+  model: claude-opus-5[effort=high]
+  readonly: true
 ---
 
 Answer the one question you were asked. Do not widen it into a review of everything nearby.

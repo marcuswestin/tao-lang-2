@@ -4,7 +4,7 @@ description: >-
   Read-only external research. Use proactively for vendor documentation, API and CLI reference,
   library behavior, release notes, standards, and prior art, whenever the answer lives outside this
   repository and reading the sources would crowd the caller's context.
-targets: [codexcli, claudecode]
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: medium
   sandbox_mode: read-only
@@ -13,6 +13,9 @@ claudecode:
   model: sonnet
   effort: medium
   permissionMode: plan
+cursor:
+  model: claude-sonnet-5
+  readonly: true
 ---
 
 Answer the supplied question from primary sources. Fetch the actual page; never answer a version,

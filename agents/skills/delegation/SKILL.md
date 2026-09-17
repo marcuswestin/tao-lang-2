@@ -66,16 +66,21 @@ release changes one table instead of every skill and profile.
 | Adversarial review, architectural judgment, root-cause dead ends           | deep                                        | xhigh  |
 | Language semantics, decisions that are expensive to reverse                | frontier                                    | xhigh  |
 
-| Tier     | Claude Code `model` | Codex CLI `model` | Relative token cost |
-| -------- | ------------------- | ----------------- | ------------------- |
-| fast     | `haiku`             | `gpt-5.6-luna`    | 1                   |
-| standard | `sonnet`            | `gpt-5.6-terra`   | 2                   |
-| deep     | `opus`              | `gpt-5.6-sol`     | 5                   |
-| frontier | `fable`             | `gpt-6-astra`     | 10                  |
+| Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     | Relative token cost |
+| -------- | ------------------- | ----------------- | ------------------ | ------------------- |
+| fast     | `haiku`             | `gpt-5.6-luna`    | `composer-2.5`     | 1                   |
+| standard | `sonnet`            | `gpt-5.6-terra`   | `claude-sonnet-5`  | 2                   |
+| deep     | `opus`              | `gpt-5.6-sol`     | `claude-opus-5`    | 5                   |
+| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` | 10                  |
 
 Cost is the Claude family's per-token ratio, and it is the reason the default is not the top tier.
-Both harnesses accept `low`, `medium`, `high`, and `xhigh` for effort, spelled `effort` in a Claude
-subagent profile and `model_reasoning_effort` in the Codex one.
+Claude Code and Codex accept `low`, `medium`, `high`, and `xhigh` for effort, spelled `effort` in a
+Claude subagent profile and `model_reasoning_effort` in the Codex one. Cursor carries effort inside
+the model string instead, as `claude-opus-5[effort=high]`.
+
+This table is not only documentation. `repo-lint` rejects a profile naming a model no row offers,
+and the Codex `[agents]` defaults are generated from the standard row, so a model release is an edit
+here and a regeneration.
 
 Two directions, both normal:
 

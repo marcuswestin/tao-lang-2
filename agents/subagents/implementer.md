@@ -4,7 +4,7 @@ description: >-
   Builds one already-specified workstream inside paths it exclusively owns. Use for a slice whose
   design is settled and whose files no concurrent agent touches, as the worker in a
   `parallel-implementation` fan-out. Not for exploratory or coupled changes.
-targets: [codexcli, claudecode]
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: high
   sandbox_mode: workspace-write
@@ -12,6 +12,9 @@ codexcli:
 claudecode:
   model: sonnet
   effort: high
+cursor:
+  model: claude-sonnet-5
+  readonly: false
 ---
 
 Build the workstream the brief specifies, inside the paths the brief gives you and nowhere else.
