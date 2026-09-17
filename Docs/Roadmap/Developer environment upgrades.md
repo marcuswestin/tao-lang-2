@@ -1134,3 +1134,27 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A simulated spawn failure appears as one failed capability while every other
   probe is still reported; `./agent capabilities` completes in the managed shell.
 - **Source:** 2026-09-15 HNReader simulator recovery.
+
+### DEVENV-061 — `bun test` from the repository root loses subprocess output
+
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** An agent debugging with a direct `bun test <path>` from the repository root sees tests
+  that assert on captured command output fail, while the same tests pass through the repository's own
+  lanes. The failures look like a red tree and invite a hunt for a regression that is not there.
+- **Evidence:** 2026-09-17, `bun test packages/dev/dev-tests` from the root reported 610 pass / 41
+  fail; `just verify --changed` ran the same suite through `./dev test` in the same checkout and
+  reported 651 pass / 0 fail, as did `sh -c 'cd packages/dev && bun test dev-tests/green-tree.test.ts'`
+  and `./dev test-file`. A probe inside a root-cwd `bun test` shows `spawn('git', …)` with a piped
+  stdout delivering no `data` event before `close`, so `CLI.run` returns an empty `stdout`; the same
+  probe under `bun run` captures normally. Sandboxed and unsandboxed runs behave identically, and no
+  `bunfig.toml` or `.env` file is involved.
+- **Workaround:** Run package tests through `./dev test-file <path>` or `just test <pattern>`, or from
+  the package directory; do not trust a raw root-cwd `bun test`.
+- **Proposed change:** Find what the root working directory changes about Bun's test runtime, then
+  either fix the capture path in `Platform.spawn` or make a root-cwd `bun test` refuse and name the
+  supported entry points.
+- **Dependencies:** None.
+- **Acceptance:** `bun test packages/dev/dev-tests` from the repository root agrees with `./dev test`,
+  or says why it cannot and points at the command that does.
+- **Source:** 2026-09-17 verification deduplication.
