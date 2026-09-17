@@ -160,7 +160,8 @@ unshardable test item at 19.7s, and it is pinned at `--maxWorkers=3` by a reserv
 test gate held only twelve slots. Widening both together is a one-line change that wants a quiet
 machine to prove.
 
-Work continues on `feat/verification-schedule-evidence`.
+Neither is assigned to a branch. Both are a measurement in a quiet window rather than a change, so
+whoever next has the machine to themselves can take them from here.
 
 ## Sources
 
