@@ -1,5 +1,5 @@
-import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Errors, FS } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   canaryExitCode,
   evaluateCanary,
@@ -8,6 +8,7 @@ import {
   resolveCanaryTarget,
 } from '../dev-src/studio/StudioCanary'
 import { StudioCanaryCommand } from '../dev-src/studio/StudioCanaryCommand'
+import type { StudioDevOptions } from '../dev-src/studio/StudioDev'
 import { STUDIO_MANUAL_CHECKS, StudioManualChecks } from '../dev-src/studio/StudioManualChecks'
 import {
   type ArtifactInventory,
@@ -171,6 +172,119 @@ Describe('Studio native canary', () => {
     })
   })
 
+  Test('reports the classified Studio startup failure instead of guessing AppKit rejected it', () => {
+    const disposition = StudioCanaryCommand.testing.canaryLaunchDisposition({
+      exitCode: 1,
+      failure: new Errors.HostEnvironmentError('The device trust store is read-only.'),
+    })
+
+    Expect(disposition).toEqual({
+      blockedReason: 'Studio failed before the native probe reported (host environment): '
+        + 'The device trust store is read-only.',
+    })
+    Expect(disposition.blockedReason).not.toContain('AppKit')
+  })
+
+  Test('classifies an unexpected startup failure as failed rather than blocked', () => {
+    const disposition = StudioCanaryCommand.testing.canaryLaunchDisposition({
+      exitCode: 1,
+      failure: new Errors.UnexpectedBehaviorError('The native completion invariant failed.'),
+    })
+    const report = evaluateCanary({ ...disposition, exitCode: 1 })
+
+    Expect(report.status).toBe('failed')
+    Expect(report.failureReason).toContain('unexpected behavior')
+    Expect(report.blockedReason).toBeUndefined()
+    Expect(formatCanaryReport(report)).toContain('FAIL      launch:')
+  })
+
+  Test('writes a classified report when Studio startup and its cleanup both fail', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-canary-startup-failure-')
+    const startupFailure = new Errors.HostEnvironmentError('The device trust store is read-only.')
+    try {
+      const exitCode = await StudioCanaryCommand.testing.runStudioCanary({
+        artifactRoot,
+        projectRoot: '/tmp/project',
+      }, {
+        blockedReason: async () => undefined,
+        readLaunches: async () => [],
+        readProbeResult: async () => undefined,
+        runStudioDev: async options => {
+          options.onFailure?.(startupFailure)
+          Errors.throwHostEnvironment('Studio cleanup failed.')
+        },
+        survivingOwnedPids: async () => [],
+      })
+
+      Expect(exitCode).toBe(1)
+      const invocationRoot = await onlyCanaryInvocationRoot(artifactRoot)
+      Expect(await FS.readJson(FS.resolvePath('canary.json', invocationRoot))).toMatchObject({
+        blockedReason: 'Studio failed before the native probe reported (host environment): '
+          + 'The device trust store is read-only.',
+        exitCode: 1,
+        status: 'blocked',
+      })
+    } finally {
+      await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('isolates overlapping probe and report artifacts by invocation', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-canary-overlap-')
+    const bothStarted = Deferred()
+    const release = Deferred()
+    const nativeRoots: string[] = []
+    let starts = 0
+    const dependencies = {
+      blockedReason: async () => undefined,
+      readLaunches: async () => [],
+      readProbeResult: async (path: string) => await FS.readJson<typeof passingProbe>(path),
+      runStudioDev: async (options: StudioDevOptions) => {
+        const nativeRoot = options.nativeArtifactRoot!
+        nativeRoots.push(nativeRoot)
+        options.onLaunch?.(`launch-${starts}`)
+        starts += 1
+        if (starts === 2) {
+          bothStarted.resolve()
+        }
+        await release.promise
+        await FS.writeJson(FS.resolvePath('artifacts/runtime-result.json', nativeRoot), passingProbe)
+        return 0
+      },
+      survivingOwnedPids: async () => [],
+    }
+    try {
+      const runs = [
+        StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/one' }, dependencies),
+        StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/two' }, dependencies),
+      ]
+      await bothStarted.promise
+      Expect(new Set(nativeRoots).size).toBe(2)
+      release.resolve()
+      Expect(await Promise.all(runs)).toEqual([0, 0])
+
+      const invocationNames = await FS.listDir(FS.resolvePath('invocations', artifactRoot))
+      Expect(invocationNames).toHaveLength(2)
+      for (const name of invocationNames) {
+        Expect(await FS.readJson(FS.resolvePath(`invocations/${name}/canary.json`, artifactRoot))).toMatchObject({
+          status: 'passed',
+        })
+        Expect(await FS.exists(FS.resolvePath(`invocations/${name}/electrobun`, artifactRoot))).toBe(false)
+      }
+    } finally {
+      release.resolve()
+      await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('binds survivor inspection to the launch id reported by this invocation', () => {
+    const selected = StudioCanaryCommand.testing.findCanaryLaunch('mine', [
+      { manifest: { launchId: 'concurrent' } },
+      { manifest: { launchId: 'mine' } },
+    ])
+    Expect(selected?.manifest.launchId).toBe('mine')
+  })
+
   Test('removes a prior native probe result before starting a new canary', async () => {
     const artifactRoot = await mkTestDir('tao-studio-canary-probe-')
     const stalePath = FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot)
@@ -283,6 +397,12 @@ Describe('Studio native canary', () => {
     })
   })
 })
+
+async function onlyCanaryInvocationRoot(artifactRoot: string): Promise<string> {
+  const names = await FS.listDir(FS.resolvePath('invocations', artifactRoot))
+  Expect(names).toHaveLength(1)
+  return FS.resolvePath(`invocations/${names[0]!}`, artifactRoot)
+}
 
 Describe('Studio native manual checks', () => {
   Test('launches a visible non-probe workflow and records every human result separately', async () => {

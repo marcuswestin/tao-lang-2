@@ -29,19 +29,39 @@ type CanaryOptions = {
   projectRoot?: string
 }
 
+type CanaryCommandDependencies = {
+  blockedReason: () => Promise<string | undefined>
+  readLaunches: typeof readLaunches
+  readProbeResult: typeof readProbeResult
+  runStudioDev: typeof runStudioDev
+  survivingOwnedPids: typeof survivingOwnedPids
+}
+
+const canaryCommandDependencies: CanaryCommandDependencies = {
+  blockedReason: canaryBlockedReason,
+  readLaunches,
+  readProbeResult,
+  runStudioDev,
+  survivingOwnedPids,
+}
+
 /**
  * Runs the native shell against a deterministic project and reports what it proved. A host that
  * cannot run an AppKit application at all is reported as blocked, which is neither a pass nor a
  * repository failure.
  */
-async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
+async function runStudioCanary(
+  options: CanaryOptions = {},
+  dependencies: CanaryCommandDependencies = canaryCommandDependencies,
+): Promise<number> {
   const repositoryRoot = Repo.getRoot()
-  const artifactRoot = FS.resolvePath(
+  const artifactBase = FS.resolvePath(
     options.artifactRoot ?? '.artifacts/tests/studio-canary',
     repositoryRoot,
   )
-  await FS.mkdir(artifactRoot)
-  const blockedReason = await canaryBlockedReason()
+  const invocation = await createCanaryInvocation(artifactBase)
+  const artifactRoot = invocation.root
+  const blockedReason = await dependencies.blockedReason()
   if (blockedReason !== undefined) {
     const report = evaluateCanary({ blockedReason })
     await writeCanaryReport(report, artifactRoot)
@@ -50,35 +70,60 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
 
   const { appName, projectRoot } = resolveCanaryTarget(options, repositoryRoot)
   const probePath = await freshProbeResultPath(artifactRoot)
-  const before = new Set((await readLaunches(repositoryRoot)).map(launch => launch.manifest.launchId))
-  const exitCode = await runStudioDev(canaryStudioDevOptions({
-    appName,
-    artifactRoot,
-    hutchPath: options.hutchPath,
-    projectRoot,
-  }))
-  const launch = (await readLaunches(repositoryRoot))
-    .find(candidate => !before.has(candidate.manifest.launchId))
+  let launchFailure: unknown
+  let launchId: string | undefined
+  let exitCode: number
+  try {
+    exitCode = await dependencies.runStudioDev(canaryStudioDevOptions({
+      appName,
+      artifactRoot,
+      hutchPath: options.hutchPath,
+      onFailure: error => {
+        launchFailure ??= error
+      },
+      onLaunch: id => {
+        launchId ??= id
+      },
+      projectRoot,
+    }))
+  } catch (error) {
+    launchFailure ??= error
+    exitCode = 1
+  }
+  const launch = launchId === undefined
+    ? undefined
+    : findCanaryLaunch(launchId, await dependencies.readLaunches(repositoryRoot))
   // The native shell writes its probe result beside its generated Electrobun project.
-  const probe = await readProbeResult(probePath)
+  const probe = await dependencies.readProbeResult(probePath)
+  const disposition = canaryLaunchDisposition({ exitCode, failure: launchFailure, probe })
   const report = evaluateCanary({
-    // A native shell that never reported means it never got far enough to run the probe. The
-    // usual cause is the window server refusing AppKit registration, which aborts the runtime.
-    blockedReason: probe === undefined && exitCode !== 0
-      ? `the native runtime exited ${exitCode} before reporting. If it terminated by a signal, `
-        + 'this host refused AppKit registration; run the canary from an ordinary Terminal.'
-      : undefined,
+    ...disposition,
     exitCode,
     probe,
     survivingPids: launch === undefined
       ? []
       : canarySurvivingPids(
         launch.manifest,
-        await survivingOwnedPids(launch.manifest.launchId, repositoryRoot),
+        await dependencies.survivingOwnedPids(launch.manifest.launchId, repositoryRoot),
       ),
   })
   await writeCanaryReport(report, artifactRoot)
+  if (report.status === 'passed') {
+    await pruneNativeBuild(artifactRoot)
+  }
   return canaryExitCode(report)
+}
+
+/**
+ * Every invocation builds its own Electrobun project (tens of megabytes). A passing run needs only
+ * its report, so its build is removed; a blocked or failed run keeps the build as evidence.
+ */
+async function pruneNativeBuild(artifactRoot: string): Promise<void> {
+  try {
+    await FS.remove(FS.resolvePath('electrobun', artifactRoot))
+  } catch (error) {
+    HCI.logProcessError('studio-canary', `Could not remove the passing canary build: ${Errors.formatForLog(error)}`)
+  }
 }
 
 /**
@@ -109,6 +154,8 @@ function canaryStudioDevOptions(options: {
   appName: string | undefined
   artifactRoot: string
   hutchPath: string | undefined
+  onFailure?: (error: unknown) => void
+  onLaunch?: (launchId: string) => void
   projectRoot: string
 }): StudioDevOptions {
   return {
@@ -122,8 +169,57 @@ function canaryStudioDevOptions(options: {
     nativeHostCommand: 'studio-canary',
     nativeProbe: true,
     nativeShowWindow: false,
+    onFailure: options.onFailure,
+    onLaunch: options.onLaunch,
     projectRoot: options.projectRoot,
   }
+}
+
+/**
+ * Keeps a pre-probe Studio failure truthful instead of guessing that every exit was AppKit. The
+ * failure can come from setup or from waiting on a native shell that already started, so the reason
+ * names only what is known: the probe never reported.
+ */
+function canaryLaunchDisposition(input: {
+  exitCode: number
+  failure?: unknown
+  probe?: StudioNativeProbeResult
+}): { blockedReason?: string; failureReason?: string } {
+  if (input.probe !== undefined || input.exitCode === 0) {
+    return {}
+  }
+  if (input.failure !== undefined) {
+    const failure = Errors.fromUnknown(input.failure)
+    const category = failure instanceof Errors.UserInputError
+      ? 'user input'
+      : failure instanceof Errors.HostEnvironmentError || failure instanceof Errors.CommandExecutionError
+      ? 'host environment'
+      : 'unexpected behavior'
+    const reason = `Studio failed before the native probe reported (${category}): ${failure.messageForUser}`
+    return failure instanceof Errors.UnexpectedBehaviorError
+      ? { failureReason: reason }
+      : { blockedReason: reason }
+  }
+  return {
+    blockedReason: `the native runtime exited ${input.exitCode} before reporting. If it terminated by a signal, `
+      + 'this host refused AppKit registration; run the canary from an ordinary Terminal.',
+  }
+}
+
+async function createCanaryInvocation(
+  artifactBase: string,
+  invocationId = Platform.randomUUID(),
+): Promise<{ id: string; root: string }> {
+  const root = FS.resolvePath(`invocations/${invocationId}`, artifactBase)
+  await FS.mkdir(root)
+  return { id: invocationId, root }
+}
+
+function findCanaryLaunch<T extends { manifest: { launchId: string } }>(
+  launchId: string,
+  launches: readonly T[],
+): T | undefined {
+  return launches.find(candidate => candidate.manifest.launchId === launchId)
 }
 
 async function readProbeResult(path: string): Promise<StudioNativeProbeResult | undefined> {
@@ -183,5 +279,13 @@ async function runStudioReleaseCheck(options: ReleaseCheckOptions): Promise<numb
 export const StudioCanaryCommand = {
   canary: runStudioCanary,
   releaseCheck: runStudioReleaseCheck,
-  testing: { canaryStudioDevOptions, canarySurvivingPids, freshProbeResultPath },
+  testing: {
+    canaryLaunchDisposition,
+    canaryStudioDevOptions,
+    canarySurvivingPids,
+    createCanaryInvocation,
+    findCanaryLaunch,
+    freshProbeResultPath,
+    runStudioCanary,
+  },
 }

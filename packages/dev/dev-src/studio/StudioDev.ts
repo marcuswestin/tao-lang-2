@@ -48,6 +48,10 @@ export type StudioDevOptions = {
   nativeHostCommand?: string
   nativeProbe?: boolean
   nativeShowWindow?: boolean
+  /** Receives the original classified startup failure for an in-process diagnostic caller. */
+  onFailure?: (error: unknown) => void
+  /** Receives this invocation's exact launch id once its durable record exists. */
+  onLaunch?: (launchId: string) => void
   port?: number
   projectRoot: string
   /** Where the dev data server persists app snapshots; defaults to the repository's user artifacts. */
@@ -60,7 +64,9 @@ export const StudioDev = {
   testing: {
     addStopSignalHandlers,
     cleanup: cleanupStudioDev,
+    cleanupAfterFailure,
     completeNativeProbe,
+    completeNativeLifecycle,
     createProjectOpeners,
     preferredExpoPort,
     publishPreviewBeforeBundling,
@@ -98,6 +104,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   const artifactRoot = FS.resolvePath(`launches/${mode}`, userStateRoot)
   let launch: StudioLaunchRecord | undefined
   let lifecycle: StudioLifecycleLog | undefined
+  let primaryFailure: unknown
 
   try {
     launch = await openLaunchRecord({
@@ -106,6 +113,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       mode,
       projectRoot: options.projectRoot,
     })
+    notifyObserver('launch observer', () => options.onLaunch?.(launch!.launchId))
     lifecycle = createStudioLifecycleLog({ artifactRoot, launchId: launch.launchId })
     lifecycle.record({ component: 'studio-server', event: 'launch-requested', pid: Platform.runtimeProcess.pid })
     const nativeHutchPath = options.native
@@ -237,15 +245,17 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       const nativeCompletion = options.nativeProbe === true
         ? completeNativeProbe(native)
         : native.waitForClose()
-      void nativeCompletion.then(
+      void completeNativeLifecycle(
+        nativeCompletion,
         exitCode => {
           lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
           stop(exitCode)
         },
+        // completeNativeLifecycle follows a failure with exit code 1, which records the exit once.
         error => {
-          lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
+          primaryFailure ??= error
+          notifyObserver('failure observer', () => options.onFailure?.(error))
           HCI.logProcessError('studio-native', Errors.formatForLog(error))
-          stop(1)
         },
       )
     }
@@ -298,6 +308,8 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     if (requestedStop) {
       return await finished
     }
+    primaryFailure = error
+    notifyObserver('failure observer', () => options.onFailure?.(error))
     HCI.writeErrorLine(Errors.formatForUser(error))
     HCI.logProcessError('studio', Errors.formatForLog(error))
     return 1
@@ -309,27 +321,34 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       HCI.logProcessInfo('studio-native', 'final cleanup: started')
     }
     try {
-      await cleanupStudioDev([
-        () => native?.stop(),
-        () => studioClientReload?.close(),
-        () => server?.stop(),
-        () => deviceGateway?.stop(),
-        () => devDataServer?.stop(),
-        () => manager?.closeAll(),
-        () => foundationModels?.stop(),
-        () => trustStore?.flush(),
-        () =>
-          recentProjects.flush().catch(error => {
-            HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
-          }),
-        async () => {
-          // The process record is kept, not cleared: a caller checking for survivors after shutdown
-          // needs to know what this launch owned. Liveness is decided by validation, not by absence.
-          await launch?.finalize({ shutdownReason: 'studio exited' })
-          lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
-          await lifecycle?.close()
-        },
-      ])
+      try {
+        await cleanupStudioDev([
+          () => native?.stop(),
+          () => studioClientReload?.close(),
+          () => server?.stop(),
+          () => deviceGateway?.stop(),
+          () => devDataServer?.stop(),
+          () => manager?.closeAll(),
+          () => foundationModels?.stop(),
+          () => trustStore?.flush(),
+          () =>
+            recentProjects.flush().catch(error => {
+              HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
+            }),
+          async () => {
+            // The process record is kept, not cleared: a caller checking for survivors after shutdown
+            // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+            await launch?.finalize({ shutdownReason: 'studio exited' })
+            lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+            await lifecycle?.close()
+          },
+        ])
+      } catch (cleanupError) {
+        if (primaryFailure === undefined) {
+          throw cleanupError
+        }
+        HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
+      }
     } finally {
       if (options.native === true) {
         HCI.logProcessInfo(
@@ -338,6 +357,27 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         )
       }
     }
+  }
+}
+
+async function completeNativeLifecycle(
+  completion: Promise<number>,
+  onExit: (exitCode: number) => void,
+  onFailure: (error: unknown) => void,
+): Promise<void> {
+  try {
+    onExit(await completion)
+  } catch (error) {
+    onFailure(error)
+    onExit(1)
+  }
+}
+
+function notifyObserver(label: string, notify: () => void): void {
+  try {
+    notify()
+  } catch (error) {
+    HCI.logProcessError('studio', `${label} also failed: ${Errors.formatForLog(error)}`)
   }
 }
 
@@ -509,7 +549,7 @@ export async function openStudioProjectResource(
       () => previewRuntime?.close(),
     ])
   } catch (error) {
-    await cleanupStudioDev([
+    return await cleanupAfterFailure(error, [
       () => tests?.close(),
       () => watcher?.close(),
       () => expoServer?.stop(),
@@ -517,7 +557,6 @@ export async function openStudioProjectResource(
       () => expo.releasePortReservation(),
       () => previewRuntime?.close(),
     ])
-    throw error
   }
 }
 
@@ -614,4 +653,18 @@ async function cleanupStudioDev(cleanups: ReadonlyArray<() => unknown | Promise<
   if (firstError !== undefined) {
     throw firstError
   }
+}
+
+async function cleanupAfterFailure(
+  primaryError: unknown,
+  cleanups: ReadonlyArray<() => unknown | Promise<unknown>>,
+  reportCleanupError: (error: unknown) => void = error =>
+    HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(error)}`),
+): Promise<never> {
+  try {
+    await cleanupStudioDev(cleanups)
+  } catch (cleanupError) {
+    reportCleanupError(cleanupError)
+  }
+  throw primaryError
 }

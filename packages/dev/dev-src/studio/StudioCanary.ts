@@ -55,6 +55,8 @@ export type CanaryReport = {
   exitCode?: number
   /** Why the canary could not run, when it could not. */
   blockedReason?: string
+  /** Why Studio itself failed before a native probe could report. */
+  failureReason?: string
   /** Capabilities the canary required that the probe never reported. */
   missingCapabilities: readonly string[]
   status: CanaryStatus
@@ -67,10 +69,23 @@ export type CanaryReport = {
 export function evaluateCanary(input: {
   blockedReason?: string
   exitCode?: number
+  failureReason?: string
   probe?: StudioNativeProbeResult
   survivingPids?: readonly number[]
 }): CanaryReport {
   const survivingPids = input.survivingPids ?? []
+  if (input.failureReason !== undefined) {
+    const capabilities = input.probe?.capabilities ?? {}
+    return {
+      capabilities,
+      exitCode: input.exitCode,
+      failureReason: input.failureReason,
+      missingCapabilities: REQUIRED_CAPABILITIES.filter(name => capabilities[name] === undefined),
+      status: 'failed',
+      survivingPids,
+      version: 2,
+    }
+  }
   if (input.blockedReason !== undefined || input.probe === undefined) {
     return {
       blockedReason: input.blockedReason ?? 'the native runtime probe produced no result',
@@ -111,6 +126,9 @@ export function formatCanaryReport(report: CanaryReport): string {
   const lines: string[] = []
   if (report.blockedReason !== undefined) {
     lines.push(`BLOCKED   ${report.blockedReason}`)
+  }
+  if (report.failureReason !== undefined) {
+    lines.push(`FAIL      launch: ${report.failureReason}`)
   }
   for (const [name, capability] of Object.entries(report.capabilities)) {
     const detail = capability.message === undefined ? '' : `: ${capability.message}`

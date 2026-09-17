@@ -1,10 +1,10 @@
 import { Errors, FS, Platform, Repo, Time } from '@shared'
 import type { CLI } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { DevDataServer } from '../dev-src/dev-data/DevDataServer'
 import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
-import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
+import { createRecentProjectStore, runStudioDev, StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { packagedExpoCommand, startStudioPackagedService } from '../dev-src/studio/StudioPackagedService'
 import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
@@ -884,12 +884,73 @@ Describe('Studio smoke resource isolation', () => {
     Expect(cleaned).toEqual(['watcher', 'metro', 'runtime'])
   })
 
+  Test('preserves a startup failure when rollback cleanup also fails', async () => {
+    const primary = new Errors.HostEnvironmentError('Metro could not start.')
+    const cleanup = new Errors.HostEnvironmentError('The preview root could not be removed.')
+    const reported: unknown[] = []
+
+    await Expect(StudioDev.testing.cleanupAfterFailure(primary, [
+      () => {
+        throw cleanup
+      },
+    ], error => reported.push(error))).rejects.toBe(primary)
+    Expect(reported).toEqual([cleanup])
+  })
+
+  Test('routes a rejected native completion through the failure observer before exiting', async () => {
+    const failure = new Errors.HostEnvironmentError('The native probe disconnected.')
+    const events: unknown[] = []
+
+    await StudioDev.testing.completeNativeLifecycle(
+      Promise.reject(failure),
+      exitCode => events.push(['exit', exitCode]),
+      error => events.push(['failure', error]),
+    )
+
+    Expect(events).toEqual([
+      ['failure', failure],
+      ['exit', 1],
+    ])
+  })
+
+  Test('delivers the original classified startup failure to an in-process observer', async () => {
+    const root = await mkTestDir('tao-studio-failure-observer-')
+    const failures: unknown[] = []
+    try {
+      const captured = await withCapturedOutput(async () =>
+        await runStudioDev({
+          native: true,
+          nativeHutchPath: FS.resolvePath('missing-hutch', root),
+          onFailure: error => failures.push(error),
+          projectRoot: Repo.getRoot(),
+          userStateRoot: FS.resolvePath('user-state', root),
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(failures).toHaveLength(1)
+      Expect(failures[0]).toBeInstanceOf(Errors.UserInputError)
+      Expect(Errors.messageOf(failures[0])).toContain('Hutch executable specified by --hutch was not found')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('creates disjoint preview runtime roots backed by the installed toolchain', async () => {
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
-    const first = await StudioPreviewRuntime.create(sourceRoot)
-    const second = await StudioPreviewRuntime.create(sourceRoot)
+    const artifactRoot = await mkTestDir('studio-preview-artifacts-')
+    let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    let second: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
     try {
+      first = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
+      second = await StudioPreviewRuntime.create(sourceRoot)
       Expect(first.root === second.root).toBe(false)
+      Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
+      // repository hoists it above the linked package node_modules.
+      Expect(await FS.realPath(Bun.resolveSync('typescript/package.json', second.root))).toBe(
+        await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
+      )
       Expect(await FS.readText(FS.resolvePath('index.ts', first.root))).toBe(
         await FS.readText(FS.resolvePath('index.ts', sourceRoot)),
       )
@@ -900,8 +961,9 @@ Describe('Studio smoke resource isolation', () => {
         'TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT',
       )
     } finally {
-      await first.close()
-      await second.close()
+      await first?.close()
+      await second?.close()
+      await FS.remove(artifactRoot)
     }
   })
 
@@ -921,7 +983,8 @@ Describe('Studio smoke resource isolation', () => {
         fileMapCacheDirectory?: string
       }
 
-      Expect(previewConfig.fileMapCacheDirectory).toStartWith(`${runtime.root}/`)
+      Expect(previewConfig.fileMapCacheDirectory).toBeDefined()
+      Expect(await FS.realPath(FS.dirname(previewConfig.fileMapCacheDirectory!))).toBe(await FS.realPath(runtime.root))
       // The toolchain project is stable and reuses its map, so it keeps Metro's shared default.
       Expect(toolchainConfig.fileMapCacheDirectory).toBe(undefined)
 

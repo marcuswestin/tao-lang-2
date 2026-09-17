@@ -1,4 +1,4 @@
-import { FS, Json, Repo } from '@shared'
+import { Errors, FS, HCI, Json, Repo } from '@shared'
 import { type DevDataManifest, DevDataProtocol } from '../dev-data/DevDataBootstrap'
 import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
@@ -38,6 +38,9 @@ async function create(
   options: StudioPreviewRuntimeOptions | string = {},
 ): Promise<CreatedStudioPreviewRuntime> {
   const settings = typeof options === 'string' ? { artifactRoot: options } : options
+  // The runtime must stay inside the repository: Expo and Metro resolve hoisted dependencies such
+  // as `typescript` by walking up to the repository's root node_modules, which a host-temp root
+  // cannot reach even with the package node_modules linked in.
   const artifactRoot = settings.artifactRoot ?? Repo.resolvePath('.artifacts/dev/studio-preview')
   await FS.mkdir(artifactRoot)
   const root = await FS.mkTmpDir(FS.resolvePath('runtime-', artifactRoot))
@@ -63,7 +66,14 @@ async function create(
       root,
     }
   } catch (error) {
-    await FS.remove(root)
+    try {
+      await FS.remove(root)
+    } catch (cleanupError) {
+      HCI.logProcessError(
+        'studio-preview',
+        `Preview runtime cleanup also failed: ${Errors.formatForLog(cleanupError)}`,
+      )
+    }
     throw error
   }
 }
