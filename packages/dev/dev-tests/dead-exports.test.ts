@@ -30,6 +30,30 @@ Describe('tao foreign binding forms', () => {
     Expect(names('action ApplySourceAction(Envelope text) fails Conflict "It changed." from ./Actions.ts'))
       .toEqual(['ApplySourceAction'])
     Expect(names('public action OpenFile(Path text) from ./Host.tsx')).toEqual(['OpenFile'])
+    Expect(names('action FetchRecipe(Link text) returns RecipeDraft from ./FetchRecipe.ts'))
+      .toEqual(['FetchRecipe'])
+    Expect(names('action FetchRecipe(Link text) returns { Title, Steps } from ./FetchRecipe.ts'))
+      .toEqual(['FetchRecipe'])
+  })
+
+  Test('reads a foreign action whose tails are laid out one per line', () => {
+    const declaration = 'action FetchRecipe(Link text) returns RecipeDraft\n'
+      + '   fails NotARecipe "No recipe was found on that page."\n'
+      + '   fails Unreachable "That page could not be read."\n'
+      + '   from ./FetchRecipe.ts\n'
+    Expect(names(declaration)).toEqual(['FetchRecipe'])
+    Expect(taoForeignBindings(declaration).unreadable).toEqual([])
+    // The binding is reported against the declaration's head, not the folded `from` line.
+    Expect(taoForeignBindings(declaration).bindings.map(binding => binding.line)).toEqual([1])
+  })
+
+  Test('leaves a mid-line `from` alone rather than folding an unrelated line onto its predecessor', () => {
+    const source = 'scene RecipeLibrary() {\n'
+      + '   query Recipes from MyKitchen.Recipes { }\n'
+      + '   draft Edit = Recipe from Recipe\n'
+      + '}\n'
+    Expect(names(source)).toEqual([])
+    Expect(taoForeignBindings(source).unreadable).toEqual([])
   })
 
   Test('reads a foreign view through its responds, accepts, and slots clauses', () => {

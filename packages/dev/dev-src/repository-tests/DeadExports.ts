@@ -55,18 +55,27 @@ const TAO_RELATIVE_PATH = String.raw`\.{1,2}/[\w.\-@/]*`
 /** `<expression> from <path>` and every declaration form that ends in it. */
 const TAO_FROM_BINDING = new RegExp(String.raw`\bfrom\s+(${TAO_RELATIVE_PATH})`, 'g')
 
+/**
+ * A continuation line of a foreign declaration: `fails <Case> "<sentence>"` or the trailing
+ * `from <path>` on its own line. Anything else keeps `from` mid-line, so nothing folds by accident.
+ */
+const TAO_DECLARATION_TAIL_LINE = new RegExp(
+  String.raw`^\s+(?:fails\s+[A-Za-z_]\w*\s|from\s+${TAO_RELATIVE_PATH}\s*$)`,
+)
+
 /** `action Name(…) = inject "<path>"`: the Revolution binding, which names a default export. */
 const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_PATH})"`)
 
 /**
  * Clauses the grammar allows between a foreign declaration's head and its `from`. Stripping them
  * leaves the head ending in its parameter list, so one backward scan reads the export name out of
- * every binding form: `runs latest` and `fails <case> "<sentence>"` (actions.langium), `responds`
- * and `accepts [content] [slots …]` (views.langium).
+ * every binding form: `runs latest`, `returns <type>`, and `fails <case> "<sentence>"`
+ * (actions.langium), `responds` and `accepts [content] [slots …]` (views.langium).
  */
 const TAO_BINDING_TAILS = [
   /\s+runs\s+latest$/,
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
+  /\s+returns\s+(?:[A-Za-z_][\w.]*|\{[^{}]*\})$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
 ]
@@ -161,12 +170,16 @@ export function unusedExportsOf(report: unknown): UnusedExport[] {
  *
  * `use … from <path>` (imports.langium) names a Tao package rather than a module and is skipped,
  * as is anything inside a ```ts injection, whose body the compiler emits as its own module.
+ *
+ * A foreign declaration may lay its tails out one per line (Decisions §15 writes the failure-case
+ * form that way), so continuation lines are folded onto their head before the scan and the binding
+ * is still reported against the head's line.
  */
 export function taoForeignBindings(source: string): TaoBindingScan {
   const bindings: TaoForeignBinding[] = []
   const unreadable: number[] = []
   let injecting = false
-  maskTaoComments(source).split('\n').forEach((rawLine, index) => {
+  foldTaoDeclarationTails(maskTaoComments(source).split('\n')).forEach((rawLine, index) => {
     const code = maskTaoStrings(rawLine)
     const fences = (code.match(/```/g) ?? []).length
     const insideInjection = injecting
@@ -195,6 +208,35 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     }
   })
   return { bindings, unreadable }
+}
+
+/**
+ * foldTaoDeclarationTails joins a foreign declaration written across several lines back into one,
+ * so the backward scan for its export name still has the head in front of it. Only a line that
+ * begins with `fails` or with `from <relative path>` folds, which is exactly the continuation shape
+ * the grammar allows; every other line, including `query X from Path` and `draft New = Row from
+ * Row`, keeps `from` mid-line and is left alone. Consumed lines become blank so the returned array
+ * still indexes by source line.
+ */
+function foldTaoDeclarationTails(lines: readonly string[]): string[] {
+  const folded = [...lines]
+  for (let index = 1; index < folded.length; index += 1) {
+    if (!TAO_DECLARATION_TAIL_LINE.test(folded[index]!)) {
+      continue
+    }
+    let head = index - 1
+    while (head >= 0 && folded[head]!.trim() === '') {
+      head -= 1
+    }
+    if (head < 0 || TAO_FROM_BINDING.test(folded[head]!)) {
+      TAO_FROM_BINDING.lastIndex = 0
+      continue
+    }
+    TAO_FROM_BINDING.lastIndex = 0
+    folded[head] = `${folded[head]!.trimEnd()} ${folded[index]!.trim()}`
+    folded[index] = ''
+  }
+  return folded
 }
 
 /** maskTaoComments preserves lines and strings while hiding both Tao comment forms from the binding scan. */

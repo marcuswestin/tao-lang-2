@@ -206,7 +206,7 @@ file view NewDaySheet(Trip) responds Day {
       Text("New day") [sectionTitle]
       #dayDate
       DateInput(Value: bind New.Date, Label: "Date")
-      TextInput(Value: bind New.Title, Label: "A name for the day?", Placeholder: "Southern Kyoto")
+      TextInput(Value: bind New.Title, Label: "A name for the day", Placeholder: "Southern Kyoto")
       Problems(New)
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }

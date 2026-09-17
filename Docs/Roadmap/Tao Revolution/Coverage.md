@@ -102,7 +102,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Sidecar stubs by declared case (§16)                          | Skillet · the import journey's two outcomes                             | Post-MVP | —                         |
 | World controls: clock, network, relaunch, collaborators (§16) | Skillet · a timer that outlives the window; Wayfare · a live conflict   | MVP      | partially in Current      |
 | Scenarios, pseudolocale, review gallery (§16)                 | WordFlower · scenario set                                               | TBD      | partially in Current      |
-| Sketch placeholders and flexible space (§16)                  | Test Apps · Placeholder journey                                         | MVP      | in Current                |
+| Sketch placeholders and flexible space (§16)                  | WordFlower · the Placeholder journey                                    | MVP      | in Current                |
 | Occurrence queries (§17)                                      | Hearth · routines in Today/Week                                         | Post-MVP | —                         |
 | Nearness, distance, places (§17)                              | Hearth · Around                                                         | Post-MVP | —                         |
 

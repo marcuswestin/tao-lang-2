@@ -1246,10 +1246,11 @@ an entry here may link one when the developer workflow is also affected.
 - **Status:** Candidate
 - **Area:** Verification coverage
 - **Impact:** `.tao-revolution` (and `.tao-mvp`, `.tao-next`) files are deliberately invisible to Tao
-  discovery, so no gate ever reads them. A malformed spec source — unbalanced braces, a retired
-  keyword, a reference to a declaration that no longer exists — can sit in the repository
-  indefinitely and only surfaces when a tranche graduates the file, which is exactly the moment the
-  process says a graduation must need nothing but a rename.
+  discovery, so nothing parses them. The dead-export scanner is the one gate that reads them at all,
+  and only for the single line that binds a TypeScript module. A malformed spec source — unbalanced
+  braces, a retired keyword, a reference to a declaration that no longer exists — can therefore sit
+  in the repository indefinitely and only surfaces when a tranche graduates the file, which is
+  exactly the moment the process says a graduation must need nothing but a rename.
 - **Evidence:** During the 2026-09-17 Tao Future consolidation,
   `Apps/Tao Future/Hearth/Lists.tao-revolution` was found to have one closing brace too many in the
   `ShoppingContent` view — present in the file as committed, and invisible to `verify --complete`,
