@@ -75,11 +75,16 @@ export async function withValidationParse<T>(
     result: ValidationResult
     workspace: Workspace
   }) => T | Promise<T>,
+  /** Sibling files the source names, such as a TypeScript sidecar a `from` bridge must resolve. */
+  siblingFiles: Record<string, string> = {},
 ): Promise<T> {
   const rootDir = await mkTestDir('tao-validator-parse-')
   try {
     const sourcePath = FS.resolvePath('Source.tao', rootDir)
     await FS.writeText(sourcePath, Text.stripIndent(source))
+    for (const [name, contents] of Object.entries(siblingFiles)) {
+      await FS.writeText(FS.resolvePath(name, rootDir), contents)
+    }
     if (!/\bproject\s*\{/u.test(source)) {
       await FS.writeText(
         FS.resolvePath('Project.tao', rootDir),
