@@ -48,7 +48,7 @@ Describe('validator: the TypeScript bridge', () => {
     'still resolves the arguments of a bridged call, which are ordinary Tao values',
     rejects(
       bridgeApp('function Words(Value text) returns number { return CountWords(Missing) from ./Text.ts }'),
-      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      "No value named 'Missing' is in scope.",
     ),
   )
 

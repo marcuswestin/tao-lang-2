@@ -1,6 +1,6 @@
 import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS } from '@shared'
 import { Langium } from './langium-exports'
-import { bridgesToATypeScriptExport } from './linker-diagnostics'
+import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 import { TaoDocumentValidator } from './tao-document-validator'
@@ -352,7 +352,7 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
 function referenceDiagnostic(reference: AST.Document['references'][number], document: AST.Document): Diagnostic {
   return {
     filePath: document.uri.path,
-    message: reference.error!.message,
+    message: unresolvedReferenceMessage(reference) ?? reference.error!.message,
     severity: 'error',
     source: 'linker',
     range: reference.$refNode?.range,

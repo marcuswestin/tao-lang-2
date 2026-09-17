@@ -64,6 +64,20 @@ export const packageAwareCliPathCases: readonly PackageAwareCliPathCase[] = [
   },
 ]
 
+/**
+ * checkedProjectFile gives a fixture the project identity `tao check` now requires of any file it
+ * validates. Tests whose subject is not project identity include it so its diagnostic does not
+ * crowd out theirs.
+ */
+export const checkedProjectFile = {
+  'Project.tao': 'project {\n   id "tao-cli-test"\n   name "Tao CLI test"\n}\n',
+} as const
+
+/** checkedView is a canonical view that validates cleanly, for tests whose subject is elsewhere. */
+export function checkedView(name: string): string {
+  return `use Text from @tao/ui\n\nview ${name}() {\n   render Text("${name}")\n}\n`
+}
+
 /** withTaoFixture writes the given files verbatim into a temp directory: the CLI sees exactly what the test wrote. */
 export async function withTaoFixture(
   files: Record<string, string>,

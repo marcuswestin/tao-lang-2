@@ -90,6 +90,31 @@ Describe('FS', () => {
     Expect(Repo.resolvePath('packages/shared')).toBe(sharedPath)
   })
 
+  Test('displays a path inside the cwd relatively and one outside it absolutely', async () => {
+    const inside = FS.resolvePath('packages/shared/shared-tests/shared.test.ts')
+
+    Expect(FS.displayPath(inside)).toBe('packages/shared/shared-tests/shared.test.ts')
+    Expect(FS.displayPath(FS.resolvePath('.'))).toBe('.')
+  })
+
+  Test('displays an escaping path without a run of parent segments longer than the path itself', async () => {
+    // A worktree nests several directories deep, so a sibling file is many `../` hops from the cwd.
+    const escaping = '/tmp/tao-display-path/Notes/Notes.tao'
+    const shown = FS.displayPath(escaping)
+
+    Expect(shown).toBe(escaping)
+    Expect(shown.startsWith('..')).toBe(false)
+    Expect(shown.length).toBeLessThanOrEqual(FS.relativePath(FS.resolvePath('.'), escaping).length)
+  })
+
+  Test('writes a path under the home directory as a tilde when that is shorter', async () => {
+    // Tests run from the checkout, which sits several directories under the home directory, so the
+    // relative spelling of a top-level home path is always the longer of the two.
+    const homePath = FS.resolvePath('some-directory/File.tao', FS.homeDir())
+
+    Expect(FS.displayPath(homePath)).toBe('~/some-directory/File.tao')
+  })
+
   Test('writes and reads text and json files', async () => {
     const root = await tmpDir()
     const textPath = FS.resolvePath('nested/hello.txt', root)

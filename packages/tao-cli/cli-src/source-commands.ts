@@ -1,12 +1,13 @@
 import Formatter, { type FormatterSession } from '@formatter'
-import { type Diagnostic, Diagnostics, FS } from '@shared'
+import { Diagnostic, Diagnostics, FS } from '@shared'
 import SourceActions from '@source-actions'
 import Workspace from '@workspace'
 import { type InPlace, inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
 
 type CanonicalSourceOptions = InPlace.PathOptions & {
-  reportWarnings?: boolean
+  /** validate runs semantic validation and reports its errors and warnings alongside canonicalization. */
+  validate?: boolean
   write: boolean
 }
 
@@ -15,9 +16,9 @@ type OwnedTaoFile = Readonly<{
   workspaceRoot: string
 }>
 
-/** runCheck checks canonical source and reports validation warnings without writing. */
+/** runCheck checks canonical source and reports syntax and validation diagnostics without writing. */
 export async function runCheck(path: string, options: InPlace.PathOptions = {}): Promise<InPlace.Result[]> {
-  return await runCanonicalSource(path, { ...options, reportWarnings: true, write: false })
+  return await runCanonicalSource(path, { ...options, validate: true, write: false })
 }
 
 /** runFix canonicalizes every .tao file at or under `path` in place: renders last, organized imports, formatted. */
@@ -53,12 +54,12 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
       existing.files.push(file.path)
     }
   }
-  const warningsByFile = new Map<string, readonly string[]>()
-  if (options.reportWarnings) {
+  const diagnosticsByFile = new Map<string, readonly Diagnostic[]>()
+  if (options.validate) {
     for (const partition of partitions.values()) {
-      const warnings = indexWarnings((await partition.workspace.validateFiles(partition.files)).diagnostics)
-      for (const [filePath, messages] of warnings) {
-        warningsByFile.set(filePath, messages)
+      const validated = await partition.workspace.validateFiles(partition.files)
+      for (const [filePath, diagnostics] of indexDiagnostics(validated.diagnostics)) {
+        diagnosticsByFile.set(filePath, diagnostics)
       }
     }
   }
@@ -73,7 +74,7 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
         partition.workspace,
         file.path,
         options.write,
-        warningsByFile.get(file.path) ?? [],
+        diagnosticsByFile.get(file.path) ?? [],
       ),
     )
   }
@@ -96,16 +97,30 @@ async function formatFile(session: FormatterSession, file: OwnedTaoFile): Promis
   )
 }
 
+/**
+ * canonicalizeFile canonicalizes one file, or reports its syntax errors instead. Source fixes and
+ * formatting both require a parsed document, so a file that does not parse is reported from its own
+ * lexer and parser diagnostics rather than through the assertion those transforms would raise.
+ */
 async function canonicalizeFile(
   workspace: Workspace,
   path: string,
   write: boolean,
-  warnings: readonly string[],
+  diagnostics: readonly Diagnostic[],
 ): Promise<InPlace.Result> {
+  let parsed: Awaited<ReturnType<Workspace['parse']>>
+  try {
+    parsed = await workspace.parse(path)
+  } catch (error) {
+    return inPlace.errorResult(path, error)
+  }
+  const syntaxError = firstSyntaxError(parsed.diagnostics, path)
+  if (syntaxError !== undefined) {
+    return { path, status: 'error', diagnostics: [syntaxError] }
+  }
   const result = await inPlace.processFile(
     path,
     async () => {
-      const parsed = await workspace.parse(path)
       return await SourceActions.fixSource(parsed.entry.document, {
         parseUpdatedDocument: async (document, text) => {
           return (await workspace.parseSource(text, document.uri)).entry.document
@@ -114,28 +129,30 @@ async function canonicalizeFile(
     },
     protectedWriteOptions(path, workspace.root, write),
   )
-  return warnings.length === 0 ? result : { ...result, warnings }
+  return diagnostics.length === 0 ? result : { ...result, diagnostics }
 }
 
-function indexWarnings(diagnostics: readonly Diagnostic[]): ReadonlyMap<string, readonly string[]> {
-  const byFile = new Map<string, string[]>()
-  for (const diagnostic of Diagnostics.warnings(diagnostics)) {
-    if (diagnostic.filePath === undefined) {
+/**
+ * firstSyntaxError returns the file's first lexer or parser error. Only the first is reported: a
+ * single misplaced token makes the parser mis-read everything after it, so the rest of the run is
+ * cascade rather than a list of separate mistakes.
+ */
+function firstSyntaxError(diagnostics: readonly Diagnostic[], path: string): Diagnostic | undefined {
+  return Diagnostics.errors(diagnostics, 'lexer', 'parser').find(diagnostic => diagnostic.filePath === path)
+}
+
+/** indexDiagnostics groups reportable diagnostics by the file they point into, keeping report order. */
+function indexDiagnostics(diagnostics: readonly Diagnostic[]): ReadonlyMap<string, readonly Diagnostic[]> {
+  const byFile = new Map<string, Diagnostic[]>()
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.filePath === undefined || Diagnostic.isInformation(diagnostic) || Diagnostic.isHint(diagnostic)) {
       continue
     }
-    const warnings = byFile.get(diagnostic.filePath) ?? []
-    warnings.push(formatCheckWarning(diagnostic))
-    byFile.set(diagnostic.filePath, warnings)
+    const forFile = byFile.get(diagnostic.filePath) ?? []
+    forFile.push(diagnostic)
+    byFile.set(diagnostic.filePath, forFile)
   }
   return byFile
-}
-
-function formatCheckWarning(diagnostic: Diagnostic): string {
-  const location = diagnostic.range === undefined
-    ? FS.displayPath(diagnostic.filePath ?? '')
-    : FS.displayPath(diagnostic.filePath ?? '') + ':' + String(diagnostic.range.start.line + 1) + ':'
-      + String(diagnostic.range.start.character + 1)
-  return location + ' - ' + diagnostic.message
 }
 
 function protectedWriteOptions(path: string, workspaceRoot: string, requestedWrite: boolean): InPlace.ProcessOptions {
