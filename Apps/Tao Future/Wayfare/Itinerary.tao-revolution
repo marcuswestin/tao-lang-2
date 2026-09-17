@@ -14,14 +14,14 @@ view NoStopSelected() {
 // -- One day ---------------------------------------------------------------------------------------------------
 
 scene DayPlan(Day) {
-   Title if Day.Title is empty then Day.Date.Long else Day.Title
+   Title when Day.Title is empty Day.Date.Long / not Day.Title
    Toolbar { AddStop }
    query DayStops from Day.Stops { }
 
    action CreateStop() runs single {
       // Visibility follows permission to create a Stop in Day.Stops, resolved by the store.
       let Stop = ask NewStopSheet(Day)
-      stop if Stop is none
+      check Stop is not none
       reveal StopDetails(Stop) in @details
    }
    command AddStop() {
@@ -40,29 +40,34 @@ scene DayPlan(Day) {
          // entity's `validate` keeps the date inside the trip.
          if can change Day {
             Row [gap md] {
-               TextInput(Value: Day.Title, Label: "A name for the day") [claim 2]
-               DateInput(Value: Day.Date, Label: "Date") [claim 1]
+               #dayTitle
+               TextInput(Value: bind Day.Title, Label: "A name for the day") [claim 2]
+               DateInput(Value: bind Day.Date, Label: "Date") [claim 1]
          }  }
-         OfflineNotice
+         OfflineNotice()
 
          guard DayStops
          if DayStops is empty {
-            EmptyState(Icon: "signpost.right", Title: "Shape the day", Body: "Add the first stop; drag to put the day in order.") { AddStop [primary] }
+            EmptyState(Icon: "signpost.right", Title: "Shape the day", Body: "Add the first stop; drag to put the day in order.") { Button(AddStop) [primary] }
          }
 
          // The list and the map side by side on a wide screen, one column on a phone. The pins follow
-         // the collection's order, so the route reads like the day.
+         // the collection's order, so the route reads like the day, and the map names the list as its
+         // non-map alternative over the same rows.
          Panes [gap lg] {
             Col [claim 2] {
                #stops
-               List(DayStops, Reorderable: can change Day) {
-                  StopCard(Stop)
-                  on select -> reveal StopDetails(Stop) in @details
-            }  }
-            if DayStops has any where Place is not none {
+               Col(Reorderable: can change Day) [gap xs] {
+                  loop DayStops / Stop {
+                     StopCard(Stop)
+                     on select -> { reveal StopDetails(Stop) in @details }
+            }  }  }
+            if DayStops[Place is not none] is not empty {
                Map(DayStops, Place: Stop.Place, Label: "The day on the map") [height min 320, radius lg] {
                   pin label "{ Stop.Position }. { Stop.Title }"
                   route
+               } alternative {
+                  loop DayStops / Stop { StopCard(Stop) }
 }  }  }  }  }  }
 
 // Creating: a draft, because the row does not exist yet. It commits once, so an abandoned stop never
@@ -73,16 +78,16 @@ file view NewStopSheet(Day) responds Stop {
    render Col [card, width max 520, gap md] {
       Text("New stop") [sectionTitle]
       #newStopTitle
-      TextInput(Value: New.Title, Label: "Stop", Placeholder: "Fushimi Inari", Focus: initial) { on submit Add }
+      TextInput(Value: bind New.Title, Label: "Stop", Placeholder: "Fushimi Inari", Focus: initial) { on submit -> { do Add() } }
       Row [gap md] {
-         Choice(Value: New.Kind, Label: "Kind") [claim 1]
-         TimeInput(Value: New.Starts, Label: "Starts") [claim 1]
+         Choice(Value: bind New.Kind, Label: "Kind") [claim 1]
+         TimeInput(Value: bind New.Starts, Label: "Starts") [claim 1]
       }
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #addStop
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
 }  }  }
 
 // -- One stop ---------------------------------------------------------------------------------------------------
@@ -96,7 +101,7 @@ scene StopDetails(Stop) {
    Title Stop.Title
    Toolbar { SaveStop ToggleVisited DeleteStop }
    draft Mine = Stop from Stop
-   presence Others on Stop
+   presence Editors on Stop
    query Attached from Stop.Attachments { }
 
    action SaveStopChanges() runs single {
@@ -111,7 +116,7 @@ scene StopDetails(Stop) {
       Title "Save"
       Icon "checkmark"
       Key primary + "s"
-      Enabled Mine changed
+      Enabled Mine.Changed
       do SaveStopChanges()
    }
    action ToggleVisitedState() {
@@ -122,14 +127,15 @@ scene StopDetails(Stop) {
    }
    command ToggleVisited() {
       Title "Toggle visited"
-      Label if Stop is Visited then "Mark as planned" else "Mark as visited"
+      Label when Stop is Visited "Mark as planned" / not "Mark as visited"
       Icon "checkmark.circle"
       do ToggleVisitedState()
    }
    action ConfirmDeleteStop() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
       // confirmation carry destructive behavior; the command adds no separate role marker.
-      stop unless ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
+      let Sure = ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
+      check Sure
       delete Stop
       dismiss
    }
@@ -138,8 +144,8 @@ scene StopDetails(Stop) {
       Icon "trash"
       do ConfirmDeleteStop()
    }
-   action Attach(Chosen file) runs parallel {
-      create Attachment in Stop.Attachments { File: Chosen, AddedBy: Me }
+   action Attach(Chosen file) {
+      create Attachment { Stop, File: Chosen, AddedBy: Me }
    }
 
    render ScrollView [screen] {
@@ -151,21 +157,21 @@ scene StopDetails(Stop) {
             Button(ToggleVisited)
             Button(DeleteStop)
          }
-         loop Others where Other is not Me { Status("{ Other.Name } is editing this stop", Announce: yes) }
-         if Mine changed { Status("Unsaved changes") }
+         loop Editors.Others / Other { Status("{ Other.Name } is editing this stop", Announce: yes) }
+         if Mine.Changed { Status("Unsaved changes") }
 
          Col [card, gap lg] {
             #stopTitle
-            TextInput(Value: Mine.Title, Label: "Stop")
+            TextInput(Value: bind Mine.Title, Label: "Stop")
             Row [gap md] {
-               Choice(Value: Mine.Kind, Label: "Kind") [claim 1]
+               Choice(Value: bind Mine.Kind, Label: "Kind") [claim 1]
                #stopStarts
-               TimeInput(Value: Mine.Starts, Label: "Starts") [claim 1]
-               DurationInput(Value: Mine.Duration, Label: "How long") [claim 1]
+               TimeInput(Value: bind Mine.Starts, Label: "Starts") [claim 1]
+               DurationInput(Value: bind Mine.Duration, Label: "How long") [claim 1]
             }
-            PlaceInput(Value: Mine.Place, Label: "Place")
-            TextInput(Value: Mine.Notes, Label: "Notes", Lines: 4)
-            TextInput(Value: Mine.Reservation, Label: "Reservation or confirmation number")
+            PlaceInput(Value: bind Mine.Place, Label: "Place")
+            TextInput(Value: bind Mine.Notes, Label: "Notes", Lines: 4)
+            TextInput(Value: bind Mine.Reservation, Label: "Reservation or confirmation number")
             Problems(Mine)
          }
 
@@ -173,13 +179,13 @@ scene StopDetails(Stop) {
             @actions FileInput(Label: "Add a file", Kinds: image, pdf) [quiet] { on change -> Chosen { do Attach(Chosen) } }
             guard Attached
             if Attached is empty { Text("Tickets, screenshots, a menu — anything for this stop.") [caption] }
-            loop Attached as Attachment {
-               Row [pattern Line] {
-                  Icon(if Attachment.File.Kind is image then "photo" else "doc") [@leading]
-                  Text(Attachment.File.Name, Lines: 1) [body, @content]
-                  Text(Attachment.AddedBy.Name) [caption, @trailing]
-                  Button(Icon: "arrow.down.circle", Label: "Open { Attachment.File.Name }") [quiet, @trailing] { on press -> open Attachment.File }
-                  if can delete Attachment { Button(Icon: "minus.circle", Label: "Remove { Attachment.File.Name }") [quiet, @trailing] { on press -> delete Attachment } }
+            loop Attached / Attachment {
+               Row [line] {
+                  Icon(when Attachment.File.Kind is image "photo" / not "doc") [lead]
+                  Text(Attachment.File.Name, Lines: 1) [body, main]
+                  Text(Attachment.AddedBy.Name) [caption, trail]
+                  Button(Icon: "arrow.down.circle", Label: "Open { Attachment.File.Name }") [quiet, trail] { on press -> { open Attachment.File } }
+                  if can delete Attachment { Button(Icon: "minus.circle", Label: "Remove { Attachment.File.Name }") [quiet, trail] { on press -> { delete Attachment } } }
 }  }  }  }  }  }
 
 // The conflict conversation. `ConflictComparison` is generated from the entity, like PublicationPreview:
@@ -201,7 +207,7 @@ file view ResolveStopConflict(Mine draft of Stop) {
          #discardMine
          Button("Discard mine") [secondary] { on press -> { discard Mine; dismiss } } // the draft re-reads the row
          #keepMine
-         Button("Keep mine", Busy: Resolve running) [primary] { on press Resolve }
+         Button("Keep mine", Busy: Resolve running) [primary] { on press -> { do Resolve() } }
 }  }  }
 
 // -- Today ------------------------------------------------------------------------------------------------------
@@ -209,7 +215,7 @@ file view ResolveStopConflict(Mine draft of Stop) {
 scene TodayScreen() {
    Title "Today"
    render ScrollView [screen] {
-      guard Me signed out -> { Text("Sign in to see today's plan.") [body]; SignInPanel }
+      guard Me { none -> { Text("Sign in to see today's plan.") [body]; SignInPanel() } }
       when MyTrip {
          loading -> Status("Opening Wayfare…")
          none -> EmptyState(Icon: "sun.max", Title: "No trip open", Body: "Open a trip and Today follows it.")
@@ -224,31 +230,33 @@ file view TodayForTrip(Trip) {
 
    render Col [page, width max 900] {
       // Named cases override the safety net with a way forward; everything else still falls to it.
-      guard Trip { missing -> LostTrip; unauthorized -> LostTrip }
+      guard Trip { missing -> LostTrip(); unauthorized -> LostTrip() }
       Text(Trip.Name) [caption]
-      OfflineNotice
-      guard TodayPlan missing -> {
+      OfflineNotice()
+      guard TodayPlan { missing -> {
          EmptyState(Icon: "sun.max", Title: "Nothing planned today", Body: "Enjoy the day, or open the trip and add one.") {
-            Button("Open { Trip.Name }") [secondary] { on press -> open TripLink(Trip) }
-      }  }
-      Text(if TodayPlan.Title is empty then TodayPlan.Date.Long else TodayPlan.Title) [title]
+            Button("Open { Trip.Name }") [secondary] { on press -> { open TripLink(Trip) } }
+      }  }  }
+      Text(when TodayPlan.Title is empty TodayPlan.Date.Long / not TodayPlan.Title) [title]
       Panes [gap lg] {
          Col [claim 2] {
             guard TodayStops
             if TodayStops is empty { Text("Nothing planned today.") [muted] }
             #todayStops
-            List(TodayStops) {
+            loop TodayStops / Stop {
                StopCard(Stop)
-               on select -> open StopLink(Stop)
+               on select -> { open StopLink(Stop) }
          }  }
-         if TodayStops has any where Place is not none {
+         if TodayStops[Place is not none] is not empty {
             Map(TodayStops, Place: Stop.Place, Label: "Today's map") [height min 280, radius lg] {
                pin label "{ Stop.Position }. { Stop.Title }"
                route
                me
+            } alternative {
+               loop TodayStops / Stop { StopCard(Stop) }
 }  }  }  }  }
 
 file view LostTrip() {
    render EmptyState(Icon: "sun.max", Title: "That trip is no longer yours", Body: "Pick another one from your trips.") {
-      Button("Choose another trip") [primary] { on press -> update Me { CurrentTrip: none } } // the tab re-reads `MyTrip`
+      Button("Choose another trip") [primary] { on press -> { update Me { CurrentTrip: none } } } // the tab re-reads `MyTrip`
 }  }

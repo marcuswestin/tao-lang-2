@@ -1,10 +1,11 @@
 // Getting in, who cooks here, and what you keep to yourself.
 
 use primary from @tao/keys
+use SignIn, SignOut from @tao/auth
 
 scene Loading() {
    Title "Skillet"
-   render Centered { Spinner(Label: "Opening Skillet…") }
+   render Centered() { Spinner(Label: "Opening Skillet…") }
 }
 
 // The only first-run surface. After a kitchen exists the app root becomes the kitchen — because
@@ -18,42 +19,43 @@ scene Welcome() {
          Text("Plan the week, cook the meal, shop the list — together.") [body, muted]
          when Me {
             loading -> Status("Opening Skillet…")
-            signed out -> SignInPanel
+            none -> SignInPanel()
             error -> Message { Status(Message, Tone: Warning) }
-            otherwise -> StartKitchenPanel
+            otherwise -> StartKitchenPanel()
 }  }  }  }
 
 file view SignInPanel() {
    state Email = ""
    // `runs single` is why a double press cannot send two links.
    action SendLink() runs single {
-      stop if Email is empty
-      // Rejections and errors are not named here: `guard default`'s `failed` shows them as a toast.
-      when sign in with email Email {
-         done -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
+      check Email is not empty
+      // Only the confirmed outcome is named: an unnamed outcome renders nothing, which is the
+      // write-side discipline the smaller read net buys.
+      when do SignIn(Email) {
+         saved -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
    }  }
    render Col [card, gap sm] {
       #email
-      TextInput(Value: Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit SendLink }
-      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press SendLink }
+      TextInput(Value: bind Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit -> { do SendLink() } }
+      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press -> { do SendLink() } }
 }  }
 
 file view StartKitchenPanel() {
    // No row exists yet, so this is a draft. `Name` carries the entity's own `required` sentence.
    draft New = Household for new
    action Create() runs single {
-      stop if New.Incomplete
-      when StartKitchen(New.Name) {
-         done -> discard New // the app root follows `MyKitchen`; nothing to navigate
+      check New.Incomplete is no
+      when do StartKitchen(New.Name) {
+         saved -> discard New // the app root follows `MyKitchen`; nothing to navigate
          rejected -> Problem { invalidate New with Problem } // beside the field, not in a toast
    }  }
    render Col [card, gap md] {
       Text("Start your kitchen") [sectionTitle]
       #kitchenName
-      TextInput(Value: New.Name, Label: "Kitchen name", Focus: initial) { on submit Create }
+      TextInput(Value: bind New.Name, Label: "Kitchen name", Focus: initial) { on submit -> { do Create() } }
       Problems(New)
       #createKitchen
-      Button("Create kitchen", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
+      Button("Create kitchen", Disabled: New.Incomplete, Busy: Create running) [primary] { on press -> { do Create() } }
 }  }
 
 // Opened by JoinLink, which carries a one-use secret rather than a kitchen id. The invitation projection
@@ -63,24 +65,24 @@ view JoinKitchen(Code secret) {
    state Refusal = ""
 
    action Join() runs single {
-      when JoinWithInvite(Code) {
-         done -> dismiss // the root follows the account; the kitchen appears behind the sheet
+      when do JoinWithInvite(Code) {
+         saved -> dismiss // the root follows the account; the kitchen appears behind the sheet
          rejected -> Problem { set Refusal = Problem } // shown in place: "sent to someone else", "already used"
    }  }
 
    render Col [gap lg, pad lg, width max 520] {
-      guard Me signed out -> {
+      guard Me { none -> {
          Text("Sign in first — this invitation will be waiting.") [body]
-         SignInPanel
-      }
+         SignInPanel()
+      }  }
       guard Invited // loading and missing fall to `guard default`; an expired invitation still shows its kitchen, and joining is refused with a sentence
       Text("You're invited to { Invited.Name }") [title]
       Text("You'll share its recipes, its plan, and its shopping list.") [body, muted]
       if Invited.Anyone { Text("Anyone with this link may join once, until it is used.") [caption] }
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       #join
-      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press Join }
-      Button("Not now") [quiet] { on press -> dismiss }
+      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press -> { do Join() } }
+      Button("Not now") [quiet] { on press -> { dismiss } }
 }  }
 
 scene KitchenScreen() {
@@ -91,7 +93,7 @@ scene KitchenScreen() {
    action CreateInviteLink() runs single {
       // Visibility is derived from whether the store permits creating an Invite in MyKitchen.Invites.
       let Invite = ask InviteSheet(MyKitchen)
-      stop if Invite is none
+      check Invite is not none
       share JoinLink(Invite.Code)
       present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite", Duration: 6)
    }
@@ -103,11 +105,14 @@ scene KitchenScreen() {
    }
 
    action ConfirmLeaveKitchen() runs single {
-      stop unless ask Confirm("Leave { MyKitchen.Name }?", Body: "You will lose access to its recipes, plan, and list.", Verb: "Leave")
+      let Sure = ask Confirm("Leave { MyKitchen.Name }?", Body: "You will lose access to its recipes, plan, and list.", Verb: "Leave")
+      check Sure
       // One write, no transaction needed. The store refuses the write that would leave the kitchen
-      // ownerless; the sentence is the entity's own `validate` copy, and `guard default` shows it. On
-      // success the root follows the account, so Welcome comes back — nothing to do here.
-      delete MyMembership
+      // ownerless. Effect outcomes belong to the calling site, so the rejection is named here or
+      // nothing renders; on success the root follows the account and Welcome comes back.
+      when delete MyMembership {
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command Leave() {
       Title "Leave kitchen"
@@ -118,8 +123,11 @@ scene KitchenScreen() {
    action ConfirmDeleteAccount() runs single {
       // The delete effect and explicit confirmation carry destructive behavior; commands need no
       // separate role marker.
-      stop unless ask Confirm("Delete your account?", Body: "Your kitchens stay with the people in them. This cannot be undone.", Verb: "Delete account")
-      do DeleteMyAccount() // a sole owner is refused with the kitchen's own sentence
+      let Sure = ask Confirm("Delete your account?", Body: "Your kitchens stay with the people in them. This cannot be undone.", Verb: "Delete account")
+      check Sure
+      when do DeleteMyAccount() { // a sole owner is refused with the kitchen's own sentence
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command DeleteAccount() {
       Title "Delete my account"
@@ -129,21 +137,21 @@ scene KitchenScreen() {
 
    render ScrollView [screen] {
       Col [page, width max 760] {
-         OfflineNotice
+         OfflineNotice()
 
          Section("Who cooks here") {
-            @actions InviteSomeone
+            @actions Button(InviteSomeone)
             guard Members
-            loop Members as Member {
-               Row [pattern Line] {
-                  Image(Member.Person.Photo, Description: Member.Person.Name) [size 32, radius pill, @leading]
-                  Col [@content, gap xxs] {
+            loop Members / Member {
+               Row [line] {
+                  Image(Member.Person.Photo, Description: Member.Person.Name) [size 32, radius pill, lead]
+                  Col [main, gap xxs] {
                      Text(Member.Person.Name) [body]
                      Text(Member.Role) [caption]
                   }
                   // Availability comes from the access rule, not from a hand-written role test.
-                  if can change Member.Role { Choice(Value: Member.Role, Label: "Role for { Member.Person.Name }") [@trailing] }
-                  if Member.Person is Me { Text("You") [chip, @trailing] }
+                  if can change Member.Role { Choice(Value: bind Member.Role, Label: "Role for { Member.Person.Name }") [trail] }
+                  if Member.Person is Me { Text("You") [chip, trail] }
          }  }  }
 
          Section("This kitchen") {
@@ -151,23 +159,22 @@ scene KitchenScreen() {
                // Bound to the row: it writes through as you type. No save button, and the entity's
                // `required` still surfaces through Problems.
                #kitchenName
-               TextInput(Value: MyKitchen.Name, Label: "Kitchen name")
-               Choice(Value: MyKitchen.TimeZone, Label: "Time zone")
+               TextInput(Value: bind MyKitchen.Name, Label: "Kitchen name")
+               Choice(Value: bind MyKitchen.TimeZone, Label: "Time zone")
                Problems(MyKitchen)
          }  }
 
          Section("You") {
-            Choice(Value: Me.Units, Label: "Measurements")
-            Choice(Value: Me.Language, Label: "Language", Options: project.languages)
-            Choice(Value: Me.Appearance, Label: "Appearance")
-            Toggle(Value: Me.KeepOffline, Label: "Keep this kitchen on my device")
-            PermissionRow(notifications, Label: "Timer alerts")
-            PermissionRow(location, Label: "Nearby shops")
+            Choice(Value: bind Me.Units, Label: "Measurements")
+            Choice(Value: bind Me.Appearance, Label: "Appearance")
+            Toggle(Value: bind Me.KeepOffline, Label: "Keep this kitchen on my device")
+            PermissionRow(NotificationAccess, Label: "Timer alerts")
+            PermissionRow(LocationAccess, Label: "Nearby shops")
             Text(Me.Email) [caption]
             #leave
-            Leave [quiet]
-            Button("Sign out") [quiet] { on press -> sign out }
-            DeleteAccount [quiet]
+            Button(Leave) [quiet]
+            Button("Sign out") [quiet] { on press -> { do SignOut() } }
+            Button(DeleteAccount) [quiet]
 }  }  }  }
 
 file view InviteSheet(Household) responds Invite {
@@ -175,18 +182,18 @@ file view InviteSheet(Household) responds Invite {
    // The roles I may hand out: only an owner may mint an owner, and the access rule says so.
    let Grantable = Role.Cases where can create Invite in Household.Invites { Role }
    action Send() runs single {
-      when InviteToKitchen(Household, New.Role, New.Email) {
-         done -> Invite { respond Invite }
+      when do InviteToKitchen(Household, New.Role, New.Email) {
+         saved -> Invite { respond Invite }
          rejected -> Problem { invalidate New with Problem } // a transaction's refusal, shown beside the draft
    }  }
    render Col [card, width max 480, gap md] {
       Text("Invite someone") [sectionTitle]
       #inviteEmail
-      TextInput(Value: New.Email, Label: "Email (optional — leave blank for a link anyone may use once)", Keyboard: email)
-      Choice(Value: New.Role, Label: "Role", Options: Grantable)
+      TextInput(Value: bind New.Email, Label: "Email (optional — leave blank for a link anyone may use once)", Keyboard: email)
+      Choice(Value: bind New.Role, Label: "Role", Options: Grantable)
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #sendInvite
-         Button("Create invite link", Busy: Send running) [primary] { on press Send }
+         Button("Create invite link", Busy: Send running) [primary] { on press -> { do Send() } }
 }  }  }

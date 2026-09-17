@@ -1,72 +1,92 @@
 // The states this app is reviewed, screenshotted, and audited in.
+//
+// Group clauses are inherited defaults; an entry clause of the same kind replaces the group's wholesale.
+// `prepare` is the scenario-local data delta — ordered updates to fixture handles — and an entry may
+// continue with an ordered interaction prefix spelled exactly like a test body.
 
 scenarios "Library" {
-   scenario "signedOut" { fixture Nobody; run Wayfare; at @trips; device phone }
-   scenario "laptop" { fixture KyotoPlan; run Wayfare; at @trips; device laptop 1440 x 900; pointer precise; keyboard present }
+   fixture KyotoPlan
+   run Wayfare
+   device phone
+
+   scenario "signedOut" { fixture Nobody }
+   scenario "laptop" { device laptop 1440 x 900 }
 }
 
 scenarios "Workspace" {
-   scenario "threePanes" { fixture KyotoPlan; run Wayfare at StopLink(Inari); device laptop 1440 x 900 }
-   scenario "tabletTwoPanes" { fixture KyotoPlan; run Wayfare at StopLink(Inari); device tablet landscape }
-   scenario "phoneStack" { fixture KyotoPlan; run Wayfare at StopLink(Inari); device phone }
+   fixture KyotoPlan
+   run Wayfare at StopLink(Inari)
+
+   scenario "threePanes" { device laptop 1440 x 900 }
+   scenario "tabletTwoPanes" { device tablet landscape }
+   scenario "phoneStack" { device phone }
 }
 
 scenarios "Stop" {
-   scenario "conflict" {
-      fixture KyotoPlan
-      prepare {
-         draft Mine = Stop from Inari { Title: "Fushimi Inari at dawn" } // Alex's unsaved draft, seeded
-         collaborator Maya { update Inari { Title: "Fushimi Inari early" } }
-      }
-      run Wayfare at StopLink(Inari)
-      device tablet landscape
-   }
+   fixture KyotoConflict
+   run Wayfare at StopLink(Inari)
+   device tablet landscape
+
+   // The draft and the newer row are both in the fixture, so the comparison is the state under review.
+   scenario "conflict" { press "Save" }
 }
 
 scenarios "Day" {
-   scenario "mapDark" { fixture KyotoPlan; run Wayfare at DayLink(Monday); device tablet landscape; appearance dark }
+   fixture KyotoPlan
+   run Wayfare at DayLink(Monday)
+   device tablet landscape
+
+   scenario "mapDark" { appearance dark }
+   scenario "reducedMotionHighContrast" { network offline; contrast high; motion reduced }
 }
 
 scenarios "Today" {
-   scenario "inTokyo" {
-      fixture KyotoPlan
-      clock 2027-04-12 08:00 Asia/Tokyo
-      run Wayfare
-      at @today
-      device phone
-      location 34.9671, 135.7727
-   }
+   fixture KyotoPlan
+   clock 2027-04-12 08:00 Asia/Tokyo
+   run Wayfare
+   press "Today"
+   device phone
+
+   scenario "inTokyo" { }
    scenario "spanishLargeText" {
-      fixture KyotoPlan
-      prepare { update Me { Language: "es" } }
-      clock 2027-04-12 08:00 Asia/Tokyo
-      run Wayfare
-      at @today
-      device phone
+      locale "es"
       textScale 200%
+   }
+   // Pseudolanguages are review modes, never shipped languages, and mirrored layout is reviewed with them.
+   scenario "pseudolocale" {
+      locale pseudolocale
+      direction rightToLeft
    }
 }
 
 scenarios "Documents" {
-   scenario "private" { fixture KyotoPlan; run Wayfare; at @documents; device phone }
-   scenario "asViewer" { fixture KyotoPlan; signed in as Rowan; run Wayfare; at @documents; device phone }
+   fixture KyotoPlan
+   run Wayfare
+   press "Documents"
+   device phone
+
+   scenario "private" { }
+   scenario "asViewer" { signed in as Rowan }
 }
 
 scenarios "Shared" {
-   scenario "public" { fixture KyotoPlan; prepare { do ShareTrip(Kyoto) }; signed out; run Wayfare at SharedTripLink(publish Kyoto as SharedTrip); device phone }
+   fixture KyotoShared
+   device phone
+
+   scenario "public" {
+      signed out
+      run Wayfare at SharedTripLink(KyotoPublic)
+   }
 }
 
-scenarios "Recovery" {
-   scenario "removedStop" { fixture KyotoPlan; run Wayfare at StopLink(Inari); prepare { delete Inari }; device phone }
-}
+// A focused view render rather than an app run.
+scenarios StopCard "card" {
+   fixture KyotoPlan
+   device phone
 
-scenarios "Offline" {
-   scenario "reducedMotionHighContrast" { fixture KyotoPlan; run Wayfare at DayLink(Monday); device tablet landscape; network offline; contrast high; motion reduced }
-}
-
-// Every rule in WayfareDesign's `rules { }` is checked in every scenario; these are the check-only requirements.
-design check WayfareDesign across all scenarios {
-   require no clipped text at 200%
-   require no horizontal scroll except maps
-   require meaning survives without colour or motion
+   scenario "eachKind" { render StopCard(Stop: Inari) }
+   scenario "visited" {
+      prepare { update Inari { Visited } }
+      render StopCard(Stop: Inari)
+   }
 }

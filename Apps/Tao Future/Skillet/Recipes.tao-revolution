@@ -8,7 +8,7 @@ action OpenNewRecipe() runs single {
    // No row yet, so a draft. It commits once, so an abandoned "New recipe" never syncs to the whole
    // kitchen.
    let Recipe = ask NewRecipeSheet(MyKitchen)
-   stop if Recipe is none
+   check Recipe is not none
    open RecipeLink(Recipe)
 }
 command NewRecipe() {
@@ -20,33 +20,38 @@ command NewRecipe() {
 
 scene RecipeLibrary() {
    Title "Recipes"
-   Search Query
    Toolbar { NewRecipe ImportRecipe }
+   state Query = ""
    state OnlyFavorites = no
    query Recipes from MyKitchen.Recipes {
-      search Query in Title, Notes, Ingredients.Name
+      search Query
       where is Favorite or OnlyFavorites is no
-      order by Favorite desc, Title
+      order by Favorite descending, Title
    }
 
    render ScrollView [screen] {
       Col [page] {
-         OfflineNotice
-         Toggle(Value: OnlyFavorites, Label: "Favorites only") [caption]
-         guard Recipes
-         if Recipes is empty {
-            if Query is empty {
-               EmptyState(Icon: "book", Title: "No recipes yet", Body: "Write one down, or import one from a link.") {
-                  NewRecipe [primary]
+         OfflineNotice()
+         Toggle(Value: bind OnlyFavorites, Label: "Favorites only") [caption]
+         // Emptiness is content, not failure, so it is handled here rather than in the safety net.
+         when Recipes {
+            loading -> Spinner(Label: "Opening your library…")
+            empty -> {
+               when Query is empty {
+                  yes -> {
+                     EmptyState(Icon: "book", Title: "No recipes yet", Body: "Write one down, or import one from a link.") {
+                        Button(NewRecipe) [primary]
+                     }
+                  }
+                  no -> { Text("Nothing matches “{ Query }”.") [body, muted] }
                }
-            } else {
-               Text("Nothing matches “{ Query }”.") [body, muted]
             }
-         }
-         Grid(Recipes) [cell min 220, gap md] {
-            RecipeCard(Recipe)
-            on select -> open RecipeLink(Recipe)
-}  }  }  }
+            otherwise -> {
+               Grid [cell min 220, gap md] {
+                  loop Recipes / Recipe {
+                     RecipeCard(Recipe)
+                     on select -> { open RecipeLink(Recipe) }
+}  }  }  }  }  }  }
 
 file view RecipeCard(Recipe) {
    render Col [card, pad none, gap none, clip] {
@@ -67,7 +72,7 @@ scene RecipeScreen(Recipe) {
    Title Recipe.Title
    Toolbar { Cook Plan Share Delete }
    // Who else has this open. Two cooks in one kitchen is the ordinary case, not an edge case.
-   presence Others on Recipe
+   presence Viewers on Recipe
 
    action StartCooking() {
       open CookLink(Recipe)
@@ -93,8 +98,8 @@ scene RecipeScreen(Recipe) {
    }
    command Favorite() {
       Title "Favorite"
-      Label if Recipe is Favorite then "Remove from favorites" else "Favorite"
-      Icon if Recipe is Favorite then "heart.fill" else "heart"
+      Label when Recipe is Favorite "Remove from favorites" / not "Favorite"
+      Icon when Recipe is Favorite "heart.fill" / not "heart"
       do ToggleFavorite()
    }
    action OpenRecipeEditor() {
@@ -113,14 +118,15 @@ scene RecipeScreen(Recipe) {
    }
    command Share() {
       Title "Share"
-      Label if Recipe is Shared then "Manage link" else "Share recipe"
+      Label when Recipe is Shared "Manage link" / not "Share recipe"
       Icon "square.and.arrow.up"
       do OpenRecipeSharing()
    }
    action ConfirmDeleteRecipe() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
       // confirmation carry destructive behavior; the command adds no separate role marker.
-      stop unless ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
+      let Sure = ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
+      check Sure
       delete Recipe
       dismiss
    }
@@ -145,18 +151,18 @@ scene RecipeScreen(Recipe) {
             Text("{ Recipe.Servings } servings") [chip]
             if Recipe.Duration is not none { Text(Recipe.Duration) [chip] }
             Text(Recipe.Course) [chip]
-            Favorite [quiet]
+            Button(Favorite) [quiet]
          }
-         loop first 3 of Others where Other is not Me {
+         loop first 3 of Viewers.Others / Other {
             Status("{ Other.Name } is looking at this too")
          }
 
          Panes [gap xl] {
             Section("Ingredients") {
-               loop Recipe.Ingredients { IngredientLine(Ingredient) }
+               loop Recipe.Ingredients / Ingredient { IngredientLine(Ingredient) }
             }
             Section("Steps") [claim 2] {
-               loop Recipe.Steps {
+               loop Recipe.Steps / Step {
                   Row [gap md, content left top] {
                      Text(Step.Position) [label, muted, width 24]
                      Col [gap xxs, claim 1] {
@@ -165,9 +171,9 @@ scene RecipeScreen(Recipe) {
          }  }  }  }  }
 
          if Recipe.Notes is not empty { Section("Notes") { Text(Recipe.Notes) [body] } }
-         Edit // hidden on its own when `can change Recipe` is no
+         Button(Edit) // hidden on its own when `can change Recipe` is no
          if Recipe.Source is not none {
-            Button("View the original", Icon: "globe") [quiet] { on press -> open Recipe.Source }
+            Button("View the original", Icon: "globe") [quiet] { on press -> { open Recipe.Source } }
 }  }  }  }
 
 // Creating: a draft, because the row does not exist yet.
@@ -180,16 +186,16 @@ file view NewRecipeSheet(Household) responds Recipe {
    render Col [card, width max 560, gap md] {
       Text("New recipe") [sectionTitle]
       #newTitle
-      TextInput(Value: New.Title, Label: "What are you making?", Focus: initial) { on submit Add }
+      TextInput(Value: bind New.Title, Label: "What are you making?", Focus: initial) { on submit -> { do Add() } }
       Row [gap md] {
-         NumberInput(Value: New.Servings, Label: "Serves", Min: 1) [claim 1]
-         Choice(Value: New.Course, Label: "Course") [claim 1]
+         NumberInput(Value: bind New.Servings, Label: "Serves", Min: 1) [claim 1]
+         Choice(Value: bind New.Course, Label: "Course") [claim 1]
       }
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #addRecipe
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
 }  }  }
 
 // Editing: the row exists and its fields stand on their own, so every input writes through. There is no
@@ -201,49 +207,51 @@ file view RecipeEditor(Recipe) {
    command Done() {
       Title "Done"
       Icon "checkmark"
-      Key "escape"
       do DismissEditor()
    }
 
    render ScrollView [pad lg] {
       Col [width max 720, gap lg] {
          Row [gap md, content left top] {
-            ImageInput(Value: Recipe.Photo, Label: "Photo", Sources: camera, library) [width 96, height 96, radius md]
+            ImageInput(Value: bind Recipe.Photo, Label: "Photo", Sources: camera, library) [width 96, height 96, radius md]
             Col [gap sm, claim 1] {
                #title
-               TextInput(Value: Recipe.Title, Label: "What are you making?")
-               Choice(Value: Recipe.Course, Label: "Course")
+               TextInput(Value: bind Recipe.Title, Label: "What are you making?")
+               Choice(Value: bind Recipe.Course, Label: "Course")
          }  }
          Row [gap md] {
-            NumberInput(Value: Recipe.Servings, Label: "Serves", Min: 1)
-            DurationInput(Value: Recipe.Duration, Label: "Total time")
+            NumberInput(Value: bind Recipe.Servings, Label: "Serves", Min: 1)
+            DurationInput(Value: bind Recipe.Duration, Label: "Total time")
          }
          Problems(Recipe)
 
          Section("Ingredients") {
-            @actions Button("Add", Icon: "plus") [quiet] { on press -> create Ingredient in Recipe.Ingredients { Name: "" } }
-            // Draggable because the collection is `(ordered)`; the store keeps the positions.
-            List(Recipe.Ingredients, Reorderable: yes) {
-               Row [gap sm, content left center, wrap] {
-                  // `together Amount, Unit` on the entity means these two land as one write.
-                  NumberInput(Value: Ingredient.Amount, Label: "Amount") [width 90]
-                  Choice(Value: Ingredient.Unit, Label: "Unit") [width 100]
-                  TextInput(Value: Ingredient.Name, Label: "Ingredient") [claim 1]
-                  Choice(Value: Ingredient.Aisle, Label: "Aisle") [width 130]
-                  Button(Icon: "minus.circle", Label: "Remove { Ingredient.Name }") [quiet] { on press -> delete Ingredient }
-         }  }  }
+            @actions Button("Add", Icon: "plus") [quiet] { on press -> { create Ingredient { Recipe, Name: "" } } }
+            // A container wraps and `loop` iterates. Dragging is possible because the collection is
+            // `(ordered)`; the store keeps the positions.
+            Col(Reorderable: yes) [gap xs] {
+               loop Recipe.Ingredients / Ingredient {
+                  Row [gap sm, content left center, wrap] {
+                     // `together Amount, Unit` on the entity means these two land as one write.
+                     NumberInput(Value: bind Ingredient.Amount, Label: "Amount") [width 90]
+                     Choice(Value: bind Ingredient.Unit, Label: "Unit") [width 100]
+                     TextInput(Value: bind Ingredient.Name, Label: "Ingredient") [claim 1]
+                     Choice(Value: bind Ingredient.Aisle, Label: "Aisle") [width 130]
+                     Button(Icon: "minus.circle", Label: "Remove { Ingredient.Name }") [quiet] { on press -> { delete Ingredient } }
+         }  }  }  }
 
          Section("Steps") {
-            @actions Button("Add", Icon: "plus") [quiet] { on press -> create Step in Recipe.Steps { Text: "" } }
-            List(Recipe.Steps, Reorderable: yes) {
-               Row [gap sm, content left top, wrap] {
-                  Text("{ Step.Position }.") [label, muted, width 24]
-                  TextInput(Value: Step.Text, Label: "Step", Lines: 3) [claim 1]
-                  DurationInput(Value: Step.Timer, Label: "Timer") [width 120]
-                  Button(Icon: "minus.circle", Label: "Remove step { Step.Position }") [quiet] { on press -> delete Step }
-         }  }  }
+            @actions Button("Add", Icon: "plus") [quiet] { on press -> { create Step { Recipe, Text: "" } } }
+            Col(Reorderable: yes) [gap xs] {
+               loop Recipe.Steps / Step {
+                  Row [gap sm, content left top, wrap] {
+                     Text("{ Step.Position }.") [label, muted, width 24]
+                     TextInput(Value: bind Step.Text, Label: "Step", Lines: 3) [claim 1]
+                     DurationInput(Value: bind Step.Timer, Label: "Timer") [width 120]
+                     Button(Icon: "minus.circle", Label: "Remove step { Step.Position }") [quiet] { on press -> { delete Step } }
+         }  }  }  }
 
-         Section("Notes") { TextInput(Value: Recipe.Notes, Label: "Notes", Lines: 4) }
+         Section("Notes") { TextInput(Value: bind Recipe.Notes, Label: "Notes", Lines: 4) }
          Row [content right center] { Button(Done) [primary] }
 }  }  }
 
@@ -251,7 +259,7 @@ file view RecipeEditor(Recipe) {
 
 file view ShareRecipe(Recipe) {
    action Start() runs single {
-      when StartSharing(Recipe) { done -> SharedRecipe { share SharedRecipeLink(SharedRecipe); dismiss } }
+      when do StartSharing(Recipe) { saved -> SharedRecipe { share SharedRecipeLink(SharedRecipe); dismiss } }
    }
    action Revoke() runs single {
       do StopSharing(Recipe)
@@ -265,19 +273,19 @@ file view ShareRecipe(Recipe) {
             // actually crosses the boundary.
             PublicationPreview(Recipe, As: SharedRecipe)
             Row [content right center, gap sm] {
-               Button("Cancel") [quiet] { on press -> dismiss }
+               Button("Cancel") [quiet] { on press -> { dismiss } }
                #createLink
-               Button("Create link", Busy: Start running) [primary] { on press Start }
+               Button("Create link", Busy: Start running) [primary] { on press -> { do Start() } }
          }  }
          Shared -> {
             Status("Anyone with the link can see this recipe", Tone: Good)
             PublicationPreview(Recipe, As: SharedRecipe)
             Text("Stopping means the link you already sent stops working.") [body]
             Row [content right center, gap sm] {
-               Button("Close") [quiet] { on press -> dismiss }
+               Button("Close") [quiet] { on press -> { dismiss } }
                #revokeLink
-               Button("Stop sharing", Busy: Revoke running) [destructive] { on press Revoke }
-               Button("Share link") [primary] { on press -> share SharedRecipeLink(publish Recipe as SharedRecipe) }
+               Button("Stop sharing", Busy: Revoke running) [destructive] { on press -> { do Revoke() } }
+               Button("Share link") [primary] { on press -> { share SharedRecipeLink(publish Recipe as SharedRecipe) } }
 }  }  }  }  }
 
 // The public face of a recipe. `SharedRecipe` is a different, read-only type: the private fields are
@@ -295,13 +303,13 @@ public scene SharedRecipeScreen(SharedRecipe) {
          // A projected ingredient has only Name, Amount, and Unit — it is not an `Ingredient`, so the
          // kitchen's `IngredientLine` (which reads Aisle) does not apply here.
          Section("Ingredients") {
-            loop SharedRecipe.Ingredients {
-               Row [pattern Line] {
-                  Measure(Ingredient.Amount, Ingredient.Unit) [@leading]
-                  Text(Ingredient.Name) [body, @content]
+            loop SharedRecipe.Ingredients / Ingredient {
+               Row [line] {
+                  Measure(Ingredient.Amount, Ingredient.Unit) [lead]
+                  Text(Ingredient.Name) [body, main]
          }  }  }
          Section("Steps") {
-            loop SharedRecipe.Steps {
+            loop SharedRecipe.Steps / Step {
                Row [gap md, content left top] {
                   Text(Step.Position) [label, muted, width 24]
                   Text(Step.Text) [body, claim 1]

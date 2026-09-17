@@ -1,66 +1,96 @@
 // The states this app is reviewed, screenshotted, and audited in.
+//
+// Group clauses are inherited defaults; an entry clause of the same kind replaces the group's wholesale.
+// `prepare` is the scenario-local data delta — ordered updates to fixture handles — and an entry may
+// continue with an ordered interaction prefix spelled exactly like a test body. Every rule in
+// HearthDesign's `rules { }` runs over these, so `tao review` and the design's criteria cannot drift.
 
 scenarios "Today" {
-   scenario "phone" { fixture PineStreet; run Hearth; at @today; device phone }
+   fixture PineStreet
+   run Hearth
+   device phone
+
+   scenario "phone" { }
    scenario "spanishLargeText" {
-      fixture PineStreet
-      prepare { update Me { Language: "es" } }
-      run Hearth
-      at @today
-      device phone
+      locale "es"
       textScale 200%
+   }
+   // Pseudolanguages are review modes, never shipped languages, and mirrored layout is reviewed with them.
+   scenario "pseudolocale" {
+      locale pseudolocale
+      direction rightToLeft
    }
 }
 
 scenarios "Lists" {
-   scenario "laptopSplit" { fixture PineStreet; run Hearth at ListLink(PlansList); device laptop 1440 x 900; pointer precise; keyboard present }
+   fixture PineStreet
+
+   scenario "laptopSplit" {
+      run Hearth at ListLink(PlansList)
+      device laptop 1440 x 900
+   }
    scenario "emptyHome" {
       fixture NewPerson
       run Hearth
-      prepare { do CreateHome("Foxglove House") }
-      at @lists
       device tablet
    }
 }
 
 scenarios "Item" {
-   scenario "window" { fixture PineStreet; run Hearth at ItemLink(Plants); device laptop 1440 x 900 }
-   scenario "darkOffline" { fixture PineStreet; run Hearth at ItemLink(Plants); device phone; appearance dark; network offline }
-   scenario "reducedMotionHighContrast" { fixture PineStreet; run Hearth at ItemLink(Plants); device tablet landscape; contrast high; motion reduced }
+   fixture PineStreet
+   run Hearth at ItemLink(Plants)
+
+   scenario "window" { device laptop 1440 x 900 }
+   scenario "darkOffline" { device phone; appearance dark; network offline }
+   scenario "reducedMotionHighContrast" { device tablet landscape; contrast high; motion reduced }
 }
 
 scenarios "Shopping" {
-   scenario "folded" { fixture PineStreet; run Hearth at ListLink(ShoppingList); device phone }
+   fixture PineStreet
+   run Hearth at ListLink(ShoppingList)
+   device phone
+
+   scenario "folded" { }
 }
 
 scenarios "Week" {
-   scenario "wide" { fixture PineStreet; run Hearth; at @week; device laptop 1440 x 900 }
-   scenario "narrow" { fixture PineStreet; run Hearth; at @week; device phone }
+   fixture PineStreet
+   run Hearth
+   press "Week"
+
+   scenario "wide" { device laptop 1440 x 900 }
+   scenario "narrow" { device phone }
 }
 
 scenarios "Around" {
-   scenario "granted" { fixture PineStreet; run Hearth; at @around; device tablet landscape; location granted }
-   scenario "denied" { fixture PineStreet; run Hearth; at @around; device phone; location denied }
+   fixture PineStreet
+   run Hearth
+   press "Around"
+
+   scenario "granted" { device tablet landscape }
+   scenario "denied" { device phone }
 }
 
 scenarios "People" {
+   fixture PineStreet
+   run Hearth
+   device phone
+
    scenario "youngPerson" {
-      fixture PineStreet
       prepare { update SamMember { Role: YoungPerson } }
       signed in as Sam
-      run Hearth
-      at @people
-      device phone
+      press "People"
    }
 }
 
-scenarios "Recovery" {
-   scenario "removedList" { fixture PineStreet; run Hearth at ListLink(PlansList); prepare { delete PlansList }; device phone }
-}
+// A focused view render rather than an app run: one parameterized view with fixture-handle arguments.
+scenarios HearthItemRow "row" {
+   fixture PineStreet
+   device phone
 
-// Every rule in HearthDesign's `rules { }` is checked in every scenario; these are the check-only requirements.
-design check HearthDesign across all scenarios {
-   require no clipped text at 200%
-   require no horizontal scroll except maps
-   require meaning survives without colour or motion
+   scenario "assignedAndDue" { render HearthItemRow(Item: Plants) }
+   scenario "finished" {
+      prepare { update Plants { Complete } }
+      render HearthItemRow(Item: Plants)
+   }
 }

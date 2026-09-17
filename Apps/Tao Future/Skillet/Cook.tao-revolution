@@ -2,11 +2,13 @@
 // takes the screen. One step at a time, big enough to read from across the counter, with the recipe's
 // own timers running.
 
-scene CookScreen(Recipe, Meal (optional)) {
+use Interval from @tao/time
+
+scene CookScreen(Recipe, Meal?) {
    Title "Cooking { Recipe.Title }"
    Toolbar { Close }
    state StepNumber = 1
-   let Scale = if Meal is none then 1 else Meal.Servings / Recipe.Servings
+   let Scale = when Meal is none { yes -> 1, no -> Meal.Servings / Recipe.Servings }
 
    // Timers are rows, so they are already running when this screen opens and keep running when it
    // closes. Their notification belongs to an automation, not to this screen.
@@ -14,14 +16,12 @@ scene CookScreen(Recipe, Meal (optional)) {
       where Step.Recipe is Recipe and is Running
       order by EndsAt
    }
-   presence Others on Recipe
+   presence Viewers on Recipe
 
    action Next() { if StepNumber < Recipe.Steps.Count { set StepNumber = StepNumber + 1 } }
    action Previous() { if StepNumber > 1 { set StepNumber = StepNumber - 1 } }
-   // Raw keys with no visible affordance stay `on key`; anything a person can also press for is a
-   // command with a `Key`.
-   on key "right" Next
-   on key "left" Previous
+   // Arrows are the attention reducer's own keys and an app never binds them: moving between steps is
+   // the pager's swipe and the two buttons below, and the runtime routes keyboard attention to them.
 
    // A window needs its own close, because a full-screen presentation has no frame to supply one.
    action DismissCooking() {
@@ -30,14 +30,13 @@ scene CookScreen(Recipe, Meal (optional)) {
    command Close() {
       Title "Close"
       Icon "xmark"
-      Key "escape"
       do DismissCooking()
    }
    action FinishCooking() runs single {
       if Meal is not none { update Meal { Cooked } }
       // Stopping every timer this recipe left running is the automation's cue to cancel its
       // notification; nothing here schedules or cancels an alert by hand.
-      update MyTimers { Stopped }
+      update each Timer where Step.Recipe is Recipe and StartedBy is Me and is Running { Stopped }
       dismiss
    }
    command Finish() {
@@ -49,52 +48,58 @@ scene CookScreen(Recipe, Meal (optional)) {
    render Panes [screen, gap xl] {
       guard Recipe // first, so both panes may read it
       Col [claim 2, gap lg] {
-         if Recipe.Steps is empty {
-            EmptyState(Icon: "list.bullet", Title: "No steps yet", Body: "Add steps to this recipe, then cook it.")
-         } else {
-            Progress(Value: StepNumber / Recipe.Steps.Count, Label: "Cooking progress")
-            loop Others where Other is not Me { Status("{ Other.Name } is cooking this too") }
-            loop MyTimers as Timer { TimerBar(Timer) }
+         when Recipe.Steps {
+            empty -> {
+               EmptyState(Icon: "list.bullet", Title: "No steps yet", Body: "Add steps to this recipe, then cook it.")
+            }
+            otherwise -> {
+               Progress(Value: StepNumber / Recipe.Steps.Count, Label: "Cooking progress")
+               loop Viewers.Others / Other { Status("{ Other.Name } is cooking this too") }
+               loop MyTimers / Timer { TimerBar(Timer) }
 
-            // Pages shows one at a time: swipe on a touch screen, arrow keys or the buttons anywhere.
-            // `Page:` is a position, two-way like `Value:`, so swiping keeps StepNumber true.
-            Pages(Recipe.Steps, Page: StepNumber) {
-               Col [gap md, content center center] {
-                  Text("Step { Step.Position } of { Recipe.Steps.Count }") [caption]
-                  Text(Step.Text) [pageTitle, center]
-                  if Step.Timer is not none { StartTimerFor(Step) }
-            }  }
+               // A container wraps and `loop` iterates: Pages shows one page at a time and binds the
+               // 1-based position two-way, so swiping keeps StepNumber true.
+               Pages(Page: StepNumber) {
+                  loop Recipe.Steps / Step {
+                     Col [gap md, content center center] {
+                        Text("Step { Step.Position } of { Recipe.Steps.Count }") [caption]
+                        Text(Step.Text) [pageTitle, center]
+                        if Step.Timer is not none { StartTimerFor(Step) }
+               }  }  }
 
-            Row [content spread center] {
-               Button("Back", Icon: "chevron.left", Disabled: StepNumber is 1) [quiet] { on press Previous }
-               if StepNumber is Recipe.Steps.Count { Finish [primary] }
-               else { Button("Next", Icon: "chevron.right") [primary] { on press Next } }
-      }  }  }
+               Row [content spread center] {
+                  Button("Back", Icon: "chevron.left", Disabled: StepNumber is 1) [quiet] { on press -> { do Previous() } }
+                  when StepNumber is Recipe.Steps.Count {
+                     yes -> { Button(Finish) [primary] }
+                     no -> { Button("Next", Icon: "chevron.right") [primary] { on press -> { do Next() } } }
+                  }
+      }  }  }  }
 
       Section("Ingredients") [width 300] {
-         loop Recipe.Ingredients { IngredientLine(Ingredient, Scale) }
+         loop Recipe.Ingredients / Ingredient { IngredientLine(Ingredient, Scale) }
 }  }  }
 
 file view StartTimerFor(Step) {
    // `runs single per Step` keys the guard to the step, so two taps on one step start one timer while
    // two different steps may each start their own.
    action Start() runs single per Step {
-      create Timer in Step.Recipe.Household.Timers { Step, StartedBy: Me, EndsAt: now + Step.Timer, Running }
+      create Timer { Household: Step.Recipe.Household, Step, StartedBy: Me, EndsAt: now + Step.Timer, Running }
       announce "Timer started for { Step.Text }" // for a screen reader; nothing visual needs saying
    }
    render Col {
       #startTimer
-      Button("Start { Step.Timer } timer", Icon: "timer", Busy: Start running) { on press Start }
+      Button("Start { Step.Timer } timer", Icon: "timer", Busy: Start running) { on press -> { do Start() } }
 }  }
 
-// A running timer, counting down. `now every second` ticks; the row outlives the view.
+// A running timer, counting down. `Interval` is an ordinary library value, not timer grammar: it starts
+// on mount and stops when the view unmounts, and the row outlives both.
 file view TimerBar(Timer) {
-   let Now = now every second
+   state Tick = Interval(1.s)
    action Stop() runs single { update Timer { Stopped } }
 
-   let Left = Timer.EndsAt - Now
+   let Left = Timer.EndsAt - Tick.Value // Tick.Value: the time as of the latest tick
    render Row [card, content spread center] {
       Text(Timer.Step.Text, Lines: 1) [label, claim 1]
-      Text(if Left > 0 then Left.Clock else "Done") [pageTitle, ink good when Left <= 0] // `.Clock`: "19:59"
-      Button("Stop", Label: "Stop the { Timer.Step.Text } timer") [quiet] { on press Stop }
+      Text(when Left > 0 Left.Clock / not "Done") [pageTitle, ink good when Left <= 0] // `.Clock`: "19:59"
+      Button("Stop", Label: "Stop the { Timer.Step.Text } timer") [quiet] { on press -> { do Stop() } }
 }  }

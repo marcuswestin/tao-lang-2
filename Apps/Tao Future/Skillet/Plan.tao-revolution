@@ -10,7 +10,7 @@ scene WeekPlan() {
    state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
    query Meals from MyKitchen.Meals {
       // A timezone-qualified range, so a household in another zone sees its own week.
-      where Day during WeekStart .. WeekStart + 6 days // Day is a date, so no zone qualifies it
+      where Day during WeekStart .. WeekStart + 6.days // Day is a date, so no zone qualifies it
       order by Day, Course
    }
 
@@ -36,8 +36,8 @@ scene WeekPlan() {
       // Visibility follows permission to create Grocery rows in MyKitchen.Groceries.
       // Single-flight plus the transaction's per-meal idempotence prevents a double press from
       // duplicating a week of groceries.
-      when ShopTheWeek(MyKitchen, WeekStart, WeekStart + 7 days) {
-               done -> present Notice("Added the week to your list") as toast (Key: "shop")
+      when do ShopTheWeek(MyKitchen, WeekStart, WeekStart + 7.days) {
+               saved -> present Notice("Added the week to your list") as toast (Key: "shop")
       }
    }
    command ShopThisWeek() {
@@ -48,32 +48,33 @@ scene WeekPlan() {
 
    render ScrollView [screen] {
       Col [page] {
-         OfflineNotice
+         OfflineNotice()
          Row [content spread center] {
-            Button(Icon: "chevron.left", Label: "Previous week") [quiet] { on press -> set WeekStart = WeekStart - 7 days }
+            Button(Icon: "chevron.left", Label: "Previous week") [quiet] { on press -> { set WeekStart = WeekStart - 7.days } }
             Text(WeekTitle(WeekStart)) [title]
-            Button(Icon: "chevron.right", Label: "Next week") [quiet] { on press -> set WeekStart = WeekStart + 7 days }
+            Button(Icon: "chevron.right", Label: "Next week") [quiet] { on press -> { set WeekStart = WeekStart + 7.days } }
          }
 
          guard Meals
          if Meals is empty {
             EmptyState(Icon: "calendar", Title: "Nothing planned yet", Body: "Add a meal to any day, then shop the whole week at once.") {
-               AddMeal [primary]
+               Button(AddMeal) [primary]
          }  }
 
          // One card per day; the grid fits as many across as the room allows.
          // The grid's row is named `Date`, not `Day`: inside `where`, bare names are the row's fields, and
          // a Meal has a `Day`.
-         Grid(WeekOf(WeekStart) as Date) [cell min 150, gap sm] {
-            Col(Label: Date.Long) [card, gap sm] {
-               Row [content spread center] {
-                  Text(if Date is today in MyKitchen.TimeZone then "Today" else Date.Weekday) [sectionTitle]
-                  Text(Date.Short) [caption]
-               }
-               loop Meals where Meal.Day is Date { MealRow(Meal) }
-               if can create Meal in MyKitchen.Meals {
-                  Button(Icon: "plus", Label: "Plan { Date.Weekday }") [quiet] { on press -> present PlanMeal(Day: Date) as sheet }
-}  }  }  }  }  }
+         Grid [cell min 150, gap sm] {
+            loop WeekOf(WeekStart) / Date {
+               Col(Label: Date.Long) [card, gap sm] {
+                  Row [content spread center] {
+                     Text(when Date is today in MyKitchen.TimeZone "Today" / not Date.Weekday) [sectionTitle]
+                     Text(Date.Short) [caption]
+                  }
+                  loop Meals / Meal where Meal.Day is Date { MealRow(Meal) }
+                  if can create Meal in MyKitchen.Meals {
+                     Button(Icon: "plus", Label: "Plan { Date.Weekday }") [quiet] { on press -> { present PlanMeal(Day: Date) as sheet } }
+}  }  }  }  }  }  }
 
 file view MealRow(Meal) {
    action StartCooking() {
@@ -86,8 +87,8 @@ file view MealRow(Meal) {
    }
    action AddMealGroceries() runs single {
       // The transaction is idempotent per meal, so this cannot double the list either.
-            when AddMealToList(Meal) {
-               done -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
+            when do AddMealToList(Meal) {
+               saved -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
       }
    }
    command AddToList() {
@@ -108,7 +109,7 @@ file view MealRow(Meal) {
    }
    command ToggleCooked() {
       Title "Toggle cooked"
-      Label if Meal is Cooked then "Mark as planned" else "Mark as cooked"
+      Label when Meal is Cooked "Mark as planned" / not "Mark as cooked"
       Icon "checkmark"
       do ToggleCookedState()
    }
@@ -124,21 +125,21 @@ file view MealRow(Meal) {
    }
    Commands { Cook, AddToList, Change, ToggleCooked, Remove }
 
-   render Row [pattern Line] {
-      Icon(if Meal is Cooked then "checkmark.circle" else "circle") [@leading, ink good when Meal is Cooked, muted when Meal is Planned]
-      Col [@content, gap xxs] {
+   render Row [line] {
+      Icon(when Meal is Cooked "checkmark.circle" / not "circle") [lead, ink good when Meal is Cooked, muted when Meal is Planned]
+      Col [main, gap xxs] {
          Text(Meal.Recipe.Title, Lines: 1) [body]
          Text("{ Meal.Course } · { Meal.Servings } servings") [caption]
 }  }  }
 
 // Planning a meal from either direction: from a day, or from a recipe. No row yet, so a draft.
-view PlanMeal(Recipe (optional), Day date (optional)) {
+view PlanMeal(Recipe?, Day date?) {
    draft New = Meal for new {
       Household: MyKitchen
       Recipe
-      Day: if Day is none then today in MyKitchen.TimeZone else Day
+      Day: when Day is none today in MyKitchen.TimeZone / not Day
       Course: Dinner
-      Servings: if Recipe is none then 4 else Recipe.Servings
+      Servings: when Recipe is none 4 / not Recipe.Servings
    }
    query Recipes from MyKitchen.Recipes { }
 
@@ -150,24 +151,32 @@ view PlanMeal(Recipe (optional), Day date (optional)) {
    }  }
 
    render Col [gap lg, pad lg, width max 560] {
-      if Recipe is none {
-         guard Recipes
-         if Recipes is empty { EmptyState(Icon: "book", Title: "No recipes yet", Body: "Add a recipe first, then plan it.") }
-         #pickRecipe
-         List(Recipes as Option, Selected: New.Recipe) [height 260] { Text(Option.Title) [body] } // `as Option`: the view's own `Recipe` stays visible
-      } else {
-         Text(Recipe.Title) [sectionTitle]
+      when Recipe is none {
+         yes -> {
+            guard Recipes
+            if Recipes is empty { EmptyState(Icon: "book", Title: "No recipes yet", Body: "Add a recipe first, then plan it.") }
+            #pickRecipe
+            // `on select` on the loop is the whole selection story: there is no separate row-selection
+            // binding. `/ Option` renames the row so the view's own `Recipe` parameter stays visible.
+            Col [height 260] {
+               loop Recipes / Option {
+                  Text(Option.Title) [body, selected when New.Recipe is Option]
+                  on select -> { set New.Recipe = Option }
+               }
+            }
+         }
+         no -> { Text(Recipe.Title) [sectionTitle] }
       }
-      Choice(Value: New.Day, Label: "Day", Options: WeekOf(New.Day))
-      Choice(Value: New.Course, Label: "Course")
+      Choice(Value: bind New.Day, Label: "Day", Options: WeekOf(New.Day))
+      Choice(Value: bind New.Course, Label: "Course")
       #mealServings
-      NumberInput(Value: New.Servings, Label: "Serves", Min: 1)
-      DurationInput(Value: New.Remind, Label: "Remind me before")
+      NumberInput(Value: bind New.Servings, Label: "Serves", Min: 1)
+      DurationInput(Value: bind New.Remind, Label: "Remind me before")
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> dismiss }
+         Button("Cancel") [secondary] { on press -> { dismiss } }
          #addMeal
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
 }  }  }
 
 // Changing a planned meal: the row exists, so every input writes through.
@@ -179,16 +188,15 @@ scene MealScreen(Meal) {
    command Done() {
       Title "Done"
       Icon "checkmark"
-      Key "escape"
       do DismissMealEditor()
    }
    render Col [gap lg, pad lg, width max 560] {
       guard Meal
       Text(Meal.Recipe.Title) [sectionTitle]
-      Choice(Value: Meal.Day, Label: "Day", Options: WeekOf(Meal.Day))
-      Choice(Value: Meal.Course, Label: "Course")
-      NumberInput(Value: Meal.Servings, Label: "Serves", Min: 1)
-      DurationInput(Value: Meal.Remind, Label: "Remind me before")
+      Choice(Value: bind Meal.Day, Label: "Day", Options: WeekOf(Meal.Day))
+      Choice(Value: bind Meal.Course, Label: "Course")
+      NumberInput(Value: bind Meal.Servings, Label: "Serves", Min: 1)
+      DurationInput(Value: bind Meal.Remind, Label: "Remind me before")
       Problems(Meal)
       Row [content right center] { Button(Done) [primary] }
 }  }

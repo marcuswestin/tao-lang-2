@@ -11,65 +11,71 @@ phrase StopCount(Count number) = one "{ Count } stop" / other "{ Count } stops"
 action OpenNewTrip() runs single {
    // Visibility follows the signed-in account required by the trip-creation flow.
    let Trip = ask NewTripSheet()
-   stop if Trip is none
+   check Trip is not none
    open TripLink(Trip)
 }
 command NewTrip() {
    Title "New trip"
    Icon "plus"
    Key primary + "n"
-   Enabled Me is signed in
+   Enabled Me is not none
    do OpenNewTrip()
 }
 
 scene TripLibrary() {
    Title "Trips"
    Toolbar { NewTrip }
-   query MyTrips from Trips { order by Begins desc } // the access rule already scopes this to my trips
+   query MyTrips from Trips { order by Begins descending } // the access rule already scopes this to my trips
 
    render ScrollView [screen] {
       Col [page] {
-         guard Me signed out -> {
+         guard Me { none -> {
             Text("Plan together. Travel with the plan in your hand.") [body, muted]
-            SignInPanel
-         }
-         OfflineNotice
+            SignInPanel()
+         }  }
+         OfflineNotice()
          guard MyTrips
          if MyTrips is empty {
-            EmptyState(Icon: "map", Title: "No trips yet", Body: "Start one, or open the invitation someone sent you.") { NewTrip [primary] }
+            EmptyState(Icon: "map", Title: "No trips yet", Body: "Start one, or open the invitation someone sent you.") { Button(NewTrip) [primary] }
          }
-         Grid(MyTrips as Trip) [cell min 280, gap md] {
-            Col [card, gap sm, clip] {
-               on press -> { update Me { CurrentTrip: Trip }; open TripLink(Trip) }
-               Image(Trip.Cover, Description: Trip.Name) [height 120, fit cover]
-               Col [gap xxs] {
-                  Text(Trip.Name) [sectionTitle]
-                  Text("{ Trip.Begins.Short } – { Trip.Ends.Short }") [caption]
-                  if Trip.Summary is not empty { Text(Trip.Summary, Lines: 2) [body, muted] }
-                  Text(TravelerCount(Trip.Members[is Joined].Count)) [chip]
-}  }  }  }  }  }
+         Grid [cell min 280, gap md] {
+            loop MyTrips / Trip {
+               Col [card, gap sm, clip] {
+                  Image(Trip.Cover, Description: Trip.Name) [height 120, fit cover]
+                  Col [gap xxs] {
+                     Text(Trip.Name) [sectionTitle]
+                     Text("{ Trip.Begins.Short } – { Trip.Ends.Short }") [caption]
+                     if Trip.Summary is not empty { Text(Trip.Summary, Lines: 2) [body, muted] }
+                     Text(TravelerCount(Trip.Members[is Joined].Count)) [chip]
+                  }
+               }
+               // A link body may write before it mounts, so opening a trip is what makes it the open one.
+               on select -> { update Me { CurrentTrip: Trip }; open TripLink(Trip) }
+}  }  }  }  }
 
 file view NewTripSheet() responds Trip {
-   draft New = Trip for new { Begins: today, Ends: today + 3 days }
+   draft New = Trip for new { Begins: today, Ends: today + 3.days }
    action Create() runs single {
-      when CreateTrip(New.Name, New.Summary, New.Begins, New.Ends) {
-         done -> Trip { respond Trip }
+      when do CreateTrip(New.Name, New.Summary, New.Begins, New.Ends) {
+         saved -> Trip { respond Trip }
          rejected -> Problem { invalidate New with Problem }
    }  }
    render Col [card, width max 560, gap md] {
       Text("New trip") [sectionTitle]
       #tripName
-      TextInput(Value: New.Name, Label: "Where to?", Placeholder: "Kyoto", Focus: initial)
-      TextInput(Value: New.Summary, Label: "A line about it", Placeholder: "Spring with friends")
+      TextInput(Value: bind New.Name, Label: "Where to?", Placeholder: "Kyoto", Focus: initial)
+      TextInput(Value: bind New.Summary, Label: "A line about it", Placeholder: "Spring with friends")
       Row [gap md] {
-         DateInput(Value: New.Begins, Label: "Begins") [claim 1]
-         DateInput(Value: New.Ends, Label: "Ends") [claim 1]
+         #tripBegins
+         DateInput(Value: bind New.Begins, Label: "Begins") [claim 1]
+         #tripEnds
+         DateInput(Value: bind New.Ends, Label: "Ends") [claim 1]
       }
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #createTrip
-         Button("Create trip", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
+         Button("Create trip", Disabled: New.Incomplete, Busy: Create running) [primary] { on press -> { do Create() } }
 }  }  }
 
 view NoTripOpen() {
@@ -87,7 +93,7 @@ scene TripOverview(Trip) {
    action OpenNewDay() runs single {
       // Visibility follows permission to create a Day in Trip.Days, resolved by the store.
       let Day = ask NewDaySheet(Trip)
-      stop if Day is none
+      check Day is not none
       open DayLink(Day)
    }
    command AddDay() {
@@ -111,13 +117,16 @@ scene TripOverview(Trip) {
    }
    command ShareThis() {
       Title "Share this"
-      Label if Trip is Shared then "Manage link" else "Share itinerary"
+      Label when Trip is Shared "Manage link" / not "Share itinerary"
       Icon "square.and.arrow.up"
       do OpenTripSharing()
    }
    action ConfirmLeaveTrip() runs single {
-      stop unless ask Confirm("Leave { Trip.Name }?", Body: "You will lose the itinerary, its notes, and its reminders.", Verb: "Leave")
-      do LeaveTrip(exactly one Trip.Members where Person is Me)
+      let Sure = ask Confirm("Leave { Trip.Name }?", Body: "You will lose the itinerary, its notes, and its reminders.", Verb: "Leave")
+      check Sure
+      when do LeaveTrip(exactly one Trip.Members where Person is Me) {
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command Leave() {
       Title "Leave trip"
@@ -130,8 +139,8 @@ scene TripOverview(Trip) {
       Col [page, width max 760] {
          Text("{ Trip.Begins.Long } – { Trip.Ends.Long }") [caption]
          if Trip.Summary is not empty { Text(Trip.Summary) [body] }
-         OfflineNotice
-         loop Planners where Planner is not Me { Status("{ Planner.Name } is planning too") }
+         OfflineNotice()
+         loop Planners.Others / Planner { Status("{ Planner.Name } is planning too") }
 
          Row [gap md] {
             Col [card, claim 1] { Text(DayCount(Trip.Days.Count)) [title] }
@@ -139,25 +148,25 @@ scene TripOverview(Trip) {
          }
 
          Section("Days") {
-            @actions AddDay
+            @actions Button(AddDay)
             guard TripDays
             if TripDays is empty {
-               EmptyState(Icon: "calendar", Title: "No days yet", Body: "Add the first day and start placing stops.") { AddDay [primary] }
+               EmptyState(Icon: "calendar", Title: "No days yet", Body: "Add the first day and start placing stops.") { Button(AddDay) [primary] }
             }
             #days
-            List(TripDays) {
-               Row [pattern Line] {
-                  Col [@content, gap xxs] {
+            loop TripDays / Day {
+               Row [line] {
+                  Col [main, gap xxs] {
                      Text(Day.Date.Weekday) [body]
-                     Text(if Day.Title is empty then Day.Date.Long else "{ Day.Date.Short } · { Day.Title }") [caption]
+                     Text(when Day.Title is empty Day.Date.Long / not "{ Day.Date.Short } · { Day.Title }") [caption]
                   }
-                  Text(StopCount(Day.Stops.Count)) [chip, @trailing]
+                  Text(StopCount(Day.Stops.Count)) [chip, trail]
                }
-               on select -> open DayLink(Day)
+               on select -> { open DayLink(Day) }
          }  }
 
          TravelerPanel(Trip)
-         Leave [quiet]
+         Button(Leave) [quiet]
 }  }  }
 
 // The trip's own fields stand on their own, so the editor writes through; `validate Ends >= Begins` holds
@@ -169,19 +178,18 @@ file view TripEditor(Trip) {
    command Done() {
       Title "Done"
       Icon "checkmark"
-      Key "escape"
       do DismissTripEditor()
    }
    render ScrollView [pad lg] {
       Col [width max 640, gap lg] {
-         ImageInput(Value: Trip.Cover, Label: "Cover photo", Sources: camera, library) [height 140, radius md]
-         TextInput(Value: Trip.Name, Label: "Where to?")
-         TextInput(Value: Trip.Summary, Label: "A line about it")
+         ImageInput(Value: bind Trip.Cover, Label: "Cover photo", Sources: camera, library) [height 140, radius md]
+         TextInput(Value: bind Trip.Name, Label: "Where to?")
+         TextInput(Value: bind Trip.Summary, Label: "A line about it")
          Row [gap md] {
-            DateInput(Value: Trip.Begins, Label: "Begins") [claim 1]
-            DateInput(Value: Trip.Ends, Label: "Ends") [claim 1]
+            DateInput(Value: bind Trip.Begins, Label: "Begins") [claim 1]
+            DateInput(Value: bind Trip.Ends, Label: "Ends") [claim 1]
          }
-         Choice(Value: Trip.HomeZone, Label: "Home time zone")
+         Choice(Value: bind Trip.HomeZone, Label: "Home time zone")
          Problems(Trip)
          Row [content right center] { Button(Done) [primary] }
 }  }  }
@@ -191,19 +199,19 @@ file view TripEditor(Trip) {
 file view NewDaySheet(Trip) responds Day {
    draft New = Day for new {
       Trip
-      Date: if Trip.Days is empty then Trip.Begins else Trip.Days.Last.Date + 1 day
+      Date: when Trip.Days is empty Trip.Begins / not Trip.Days.Last.Date + 1.day
    }
    action Add() runs single { when save New { saved -> Day { respond Day } } }
    render Col [card, width max 480, gap md] {
       Text("New day") [sectionTitle]
       #dayDate
-      DateInput(Value: New.Date, Label: "Date")
-      TextInput(Value: New.Title, Label: "A name for the day (optional)", Placeholder: "Southern Kyoto")
+      DateInput(Value: bind New.Date, Label: "Date")
+      TextInput(Value: bind New.Title, Label: "A name for the day?", Placeholder: "Southern Kyoto")
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #addDay
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
 }  }  }
 
 // -- Travelers ----------------------------------------------------------------------------------------------
@@ -214,7 +222,7 @@ view TravelerPanel(Trip) {
    action CreateTravelerInvite() runs single {
       // Visibility follows permission to create a Member in Trip.Members, resolved by the store.
       let Member = ask InviteSheet(Trip)
-      stop if Member is none
+      check Member is not none
       share JoinLink(Member.InviteCode)
       present Notice("Invitation ready — it works once, for { Member.Email }") as toast (Key: "invite")
    }
@@ -226,18 +234,20 @@ view TravelerPanel(Trip) {
    }
 
    render Section("Travelers") {
-      @actions InviteSomeone
+      @actions Button(InviteSomeone)
       guard Travelers
-      loop Travelers as Member {
-         Row [pattern Line] {
-            Icon("person") [@leading]
-            Col [@content, gap xxs] {
-               Text(if Member.Name is none then Member.Email else Member.Name) [body]
+      loop Travelers / Member {
+         Row [line] {
+            Icon("person") [lead]
+            Col [main, gap xxs] {
+               Text(when Member.Name is none Member.Email / not Member.Name) [body]
                if Member.Name is not none { Text(Member.Email) [caption] }
             }
-            Row [content right center, gap xs, @trailing] {
-               if can change Member.Role { Choice(Value: Member.Role, Label: "Role for { Member.Email }") }
-               else { Text(Member.Role) [chip] }
+            Row [content right center, gap xs, trail] {
+               when can change Member.Role {
+                  yes -> { Choice(Value: bind Member.Role, Label: "Role for { Member.Email }") }
+                  no -> { Text(Member.Role) [chip] }
+               }
                if Member is Invited { Text("Invited") [chip] }
                if Member.Person is Me { Text("You") [chip] }
       }  }  }
@@ -248,50 +258,50 @@ file view InviteSheet(Trip) responds Member {
    draft New = Member for new { Trip, Role: Editor }
    let Grantable = Role.Cases where can create Member in Trip.Members { Role } // editors mint editors and viewers; owners any
    action Send() runs single {
-      when InviteTraveler(Trip, New.Email, New.Role) {
-         done -> Member { respond Member }
+      when do InviteTraveler(Trip, New.Email, New.Role) {
+         saved -> Member { respond Member }
          queued -> Member { present Notice("Saved on this device — the invitation goes out when you're online") as toast (Key: "invite"); respond Member }
          rejected -> Problem { invalidate New with Problem }
    }  }
    render Col [card, width max 480, gap md] {
       Text("Invite a traveler") [sectionTitle]
       #inviteEmail
-      TextInput(Value: New.Email, Label: "Email", Keyboard: email, Focus: initial)
-      Choice(Value: New.Role, Label: "Role", Options: Grantable)
+      TextInput(Value: bind New.Email, Label: "Email", Keyboard: email, Focus: initial)
+      Choice(Value: bind New.Role, Label: "Role", Options: Grantable)
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #sendInvite
-         Button("Create invitation", Busy: Send running) [primary] { on press Send }
+         Button("Create invitation", Busy: Send running) [primary] { on press -> { do Send() } }
 }  }  }
 
 view JoinTrip(Code secret) {
    let Invited = InvitedTrip by Code
    state Refusal = ""
    action Join() runs single {
-      when JoinWithInvite(Code) {
-         done -> Trip { dismiss; open TripLink(Trip) }
+      when do JoinWithInvite(Code) {
+         saved -> Trip { dismiss; open TripLink(Trip) }
          rejected -> Problem { set Refusal = Problem }
    }  }
    render Col [gap lg, pad lg, width max 520] {
-      guard Me signed out -> {
+      guard Me { none -> {
          Text("Sign in first — this invitation will be waiting.") [body]
-         SignInPanel
-      }
+         SignInPanel()
+      }  }
       guard Invited
       Text("You're invited to { Invited.Name }") [title]
       Text("{ Invited.Begins.Long } – { Invited.Ends.Long }") [caption]
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       #join
-      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press Join }
-      Button("Not now") [quiet] { on press -> dismiss }
+      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press -> { do Join() } }
+      Button("Not now") [quiet] { on press -> { dismiss } }
 }  }
 
 // -- Sharing --------------------------------------------------------------------------------------------------
 
 file view ShareTripSheet(Trip) {
    action Start() runs single {
-      when ShareTrip(Trip) { done -> SharedTrip { share SharedTripLink(SharedTrip); dismiss } }
+      when do ShareTrip(Trip) { saved -> SharedTrip { share SharedTripLink(SharedTrip); dismiss } }
    }
    action Revoke() runs single { do StopSharing(Trip); dismiss }
    render Col [gap lg, pad lg, width max 620] {
@@ -300,18 +310,18 @@ file view ShareTripSheet(Trip) {
             Text("Anyone with the link sees the days and stops — names, kinds, places, and times. Notes, reservations, documents, and travelers stay private.") [body]
             PublicationPreview(Trip, As: SharedTrip)
             Row [content right center, gap sm] {
-               Button("Cancel") [quiet] { on press -> dismiss }
+               Button("Cancel") [quiet] { on press -> { dismiss } }
                #createLink
-               Button("Create link", Busy: Start running) [primary] { on press Start }
+               Button("Create link", Busy: Start running) [primary] { on press -> { do Start() } }
          }  }
          Shared -> {
             Status("Anyone with the link can see this itinerary", Tone: Good)
             PublicationPreview(Trip, As: SharedTrip)
             Row [content right center, gap sm] {
-               Button("Close") [quiet] { on press -> dismiss }
+               Button("Close") [quiet] { on press -> { dismiss } }
                #revokeLink
-               Button("Stop sharing", Busy: Revoke running) [destructive] { on press Revoke }
-               Button("Share link") [primary] { on press -> share SharedTripLink(publish Trip as SharedTrip) }
+               Button("Stop sharing", Busy: Revoke running) [destructive] { on press -> { do Revoke() } }
+               Button("Share link") [primary] { on press -> { share SharedTripLink(publish Trip as SharedTrip) } }
 }  }  }  }  }
 
 public scene SharedTripScreen(SharedTrip) {
@@ -323,18 +333,18 @@ public scene SharedTripScreen(SharedTrip) {
          Text(SharedTrip.Name) [pageTitle]
          Text("{ SharedTrip.Begins.Long } – { SharedTrip.Ends.Long }") [caption]
          if SharedTrip.Summary is not empty { Text(SharedTrip.Summary) [body] }
-         loop SharedTrip.Days {
-            Section(if Day.Title is empty then Day.Date.Long else "{ Day.Date.Long } · { Day.Title }") {
-               loop Day.Stops {
-                  Row [pattern Line] {
-                     Text("{ Stop.Position }.") [label, muted, @leading]
-                     Col [@content, gap xxs] {
+         loop SharedTrip.Days / Day {
+            Section(when Day.Title is empty Day.Date.Long / not "{ Day.Date.Long } · { Day.Title }") {
+               loop Day.Stops / Stop {
+                  Row [line] {
+                     Text("{ Stop.Position }.") [label, muted, lead]
+                     Col [main, gap xxs] {
                         Text(Stop.Title) [body]
                         Row [gap xs] {
-                           Text(if Stop.Starts is none then "Flexible" else Stop.Starts.Time) [caption]
+                           Text(when Stop.Starts is none "Flexible" / not Stop.Starts.Time) [caption]
                            if Stop.Place is not none { Text(Stop.Place.Name) [caption] }
                      }  }
-                     Text(Stop.Kind) [chip, @trailing]
+                     Text(Stop.Kind) [chip, trail]
          }  }  }  }
          Text("Shared from Wayfare") [caption, center]
 }  }  }

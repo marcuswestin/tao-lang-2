@@ -3,17 +3,17 @@
 // A `transaction` commits once. Every write inside it lands or none does, the access rules still apply
 // to each, and `refuse when … "…"` ends it with a sentence a person can read. `for Me` names the caller.
 // `returns` yields a value: callers write `let X = StartKitchen(Name)` for the result, `do ClearBought()`
-// when there is none, and `when StartKitchen(Name) { done -> … rejected -> … error -> … }` to handle
+// when there is none, and `when StartKitchen(Name) { saved -> … rejected -> … error -> … }` to handle
 // outcomes.
 
 transaction StartKitchen(Name text) for Me returns Household {
    let Household = create Household { Name, TimeZone: device.timeZone }
-   create Membership in Household.Memberships { Person: Me, Owner }
-   create Recipe in Household.Recipes { Title: "Weeknight pasta", Course: Dinner }
+   create Membership { Household, Person: Me, Role: Owner }
+   create Recipe { Household, Title: "Weeknight pasta", Course: Dinner }
    return Household
 }
 
-transaction InviteToKitchen(Household, Role, Email text (optional)) for Me returns Invite {
+transaction InviteToKitchen(Household, Role, Email text?) for Me returns Invite {
    refuse when cannot create Invite in Household.Invites { Role } "Only a cook can invite someone."
    return create Invite { Household, Role, Email, InvitedBy: Me }
 }
@@ -44,8 +44,9 @@ transaction AddMealToList(Meal) for Me {
    refuse when Meal.Groceries is not empty "That meal is already on the list."
    let Scale = Meal.Servings / Meal.Recipe.Servings
    let Stocked = Meal.Household.Pantry[PlentyUntil > today].Name
-   loop Meal.Recipe.Ingredients where Name not in Stocked {
-      create Grocery in Meal.Household.Groceries {
+   loop Meal.Recipe.Ingredients / Ingredient where Name not in Stocked {
+      create Grocery {
+         Household: Meal.Household
          Name: Ingredient.Name
          Amount: Ingredient.Amount * Scale
          Unit: Ingredient.Unit
@@ -56,28 +57,30 @@ transaction AddMealToList(Meal) for Me {
 // A `refuse` inside a nested transaction call refuses the outer one too — all or nothing — so this
 // skips meals already on the list instead of asking AddMealToList to refuse them.
 transaction ShopTheWeek(Household, From date, Until date) for Me {
-   loop Household.Meals where Day >= From and Day < Until and is Planned and Groceries is empty {
+   loop Household.Meals / Meal where Day >= From and Day < Until and is Planned and Groceries is empty {
       do AddMealToList(Meal)
 }  }
 
 // "We already have it" moves the line to the pantry, so next week's list leaves it out.
 transaction KeepInPantry(Grocery) for Me {
-   create PantryItem in Grocery.Household.Pantry {
+   create PantryItem {
+      Household: Grocery.Household
       Name: Grocery.Name
       Aisle: Grocery.Aisle
-      PlentyUntil: today + 30 days
+      PlentyUntil: today + 30.days
    }
    delete Grocery
 }
 
 transaction SaveImportedRecipe(Household, Imported RecipeDraft) for Me returns Recipe {
-   let Recipe = create Recipe in Household.Recipes {
+   let Recipe = create Recipe {
+      Household
       Title: Imported.Title
       Servings: Imported.Servings
       Source: Imported.Source
    }
-   loop Imported.Ingredients as Line { create Ingredient in Recipe.Ingredients { Name: Line } }
-   loop Imported.Steps as Line { create Step in Recipe.Steps { Text: Line } }
+   loop Imported.Ingredients / Line { create Ingredient { Recipe, Name: Line } }
+   loop Imported.Steps / Line { create Step { Recipe, Text: Line } }
    return Recipe
 }
 
@@ -102,7 +105,9 @@ automation TimerFinished for Timer {
    while Timer is Running
    once per Timer.EndsAt // the key is the row and the named field: one alert per timer per end time
    to Timer.StartedBy
-   notify urgent { // a timer rings through quiet hours; the meal reminder below waits for morning
+   // A timer must ring, so it is time sensitive: it may break through the person's Focus modes if they
+   // permit it. The meal reminder below is an ordinary `notify`.
+   notify time sensitive {
       Title Timer.Step.Recipe.Title
       Body "Timer done — { Timer.Step.Text }"
    }

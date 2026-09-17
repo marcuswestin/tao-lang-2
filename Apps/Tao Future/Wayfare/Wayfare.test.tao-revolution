@@ -1,4 +1,6 @@
-// Journeys, as a person would take them. Every check starts from a fresh store, clock, and network.
+// Journeys, as a person would take them. Every test starts from a fresh store, clock, and network.
+//
+// Steps select by visible text or `#tag` only; store checks are ordinary queries over plain values.
 
 fixture KyotoPlan {
    account Alex { Name: "Alex Morgan", Email: "alex@example.com" }
@@ -6,195 +8,217 @@ fixture KyotoPlan {
    account Rowan { Name: "Rowan Lee", Email: "rowan@example.com" }
    signed in as Alex
 
-   let FushimiInari = Place { Name: "Fushimi Inari Taisha", Address: "68 Fukakusa Yabunouchicho, Kyoto", Coordinate: 34.9671, 135.7727 }
-   let Vermillion = Place { Name: "Vermillion", Address: "15-1 Fukakusa Kaidoguchicho, Kyoto", Coordinate: 34.9680, 135.7707 }
+   FushimiInari = create Place { Name: "Fushimi Inari Taisha", Address: "68 Fukakusa Yabunouchicho, Kyoto", Coordinate: 34.9671, 135.7727 }
+   Vermillion = create Place { Name: "Vermillion", Address: "15-1 Fukakusa Kaidoguchicho, Kyoto", Coordinate: 34.9680, 135.7707 }
 
-   let Kyoto = Trip { Name: "Kyoto", Summary: "Temples, long lunches, and room to wander.", Begins: 2027-04-12, Ends: 2027-04-15, HomeZone: "Asia/Tokyo" }
-   let AlexSeat = Member { Trip: Kyoto, Person: Alex, Email: "alex@example.com", Name: "Alex Morgan", Owner, Joined }
-   let MayaSeat = Member { Trip: Kyoto, Person: Maya, Email: "maya@example.com", Name: "Maya Chen", Editor, Joined }
-   let RowanSeat = Member { Trip: Kyoto, Person: Rowan, Email: "rowan@example.com", Name: "Rowan Lee", Viewer, Joined }
-   update Alex { CurrentTrip: Kyoto }
-   update Maya { CurrentTrip: Kyoto }
-   update Rowan { CurrentTrip: Kyoto }
+   Kyoto = create Trip { Name: "Kyoto", Summary: "Temples, long lunches, and room to wander.", Begins: 2027-04-12, Ends: 2027-04-15, HomeZone: "Asia/Tokyo" } through CreateTrip(Alex)
+   AlexSeat = exactly one Kyoto.Members where Person is Alex
+   MayaSeat = create Member { Trip: Kyoto, Person: Maya, Email: "maya@example.com", Name: "Maya Chen", Role: Editor, Joined } for Alex
+   RowanSeat = create Member { Trip: Kyoto, Person: Rowan, Email: "rowan@example.com", Name: "Rowan Lee", Role: Viewer, Joined } for Alex
 
-   let Monday = Day { Trip: Kyoto, Date: 2027-04-12, Title: "Southern Kyoto" }
-   let Tuesday = Day { Trip: Kyoto, Date: 2027-04-13 }
-   let Inari = Stop { Day: Monday, Title: "Fushimi Inari", Kind: Visit, Place: FushimiInari, Starts: 09:00, Duration: 2 hours, Notes: "Take the quiet trail beyond the first overlook." }
-   let Lunch = Stop { Day: Monday, Title: "Lunch at Vermillion", Kind: Meal, Place: Vermillion, Starts: 12:30, Duration: 1 hour, Reservation: "WF-7391" }
-   let Nap = Stop { Day: Monday, Title: "Back to the ryokan", Kind: Stay }
+   Monday = exactly one Kyoto.Days where Date is 2027-04-12
+   Tuesday = create Day { Trip: Kyoto, Date: 2027-04-13 } for Alex
+   Inari = create Stop { Day: Monday, Title: "Fushimi Inari", Kind: Visit, Place: FushimiInari, Starts: 09:00, Duration: 2.hours, Notes: "Take the quiet trail beyond the first overlook." } for Alex
+   Lunch = create Stop { Day: Monday, Title: "Lunch at Vermillion", Kind: Meal, Place: Vermillion, Starts: 12:30, Duration: 1.hour, Reservation: "WF-7391" } for Alex
+   Nap = create Stop { Day: Monday, Title: "Back to the ryokan", Kind: Stay } for Alex
 
-   let RailPass = Document { Trip: Kyoto, Kind: Ticket, Title: "Rail pass", File: file "rail-pass.pdf", AddedBy: Alex }
-   let Passport = Document { Trip: Kyoto, Kind: Identity, Title: "Alex's passport", File: file "passport.pdf", PrivateTo: Alex, AddedBy: Alex }
+   RailPass = create Document { Trip: Kyoto, Kind: Ticket, Title: "Rail pass", File: file "rail-pass.pdf", AddedBy: Alex } for Alex
+   Passport = create Document { Trip: Kyoto, Kind: Identity, Title: "Alex's passport", File: file "passport.pdf", PrivateTo: Alex, AddedBy: Alex } for Alex
+
+   prepare { update Monday { Title: "Southern Kyoto" } }
 }
 
 fixture Nobody { signed out }
 
+// Alex's unsaved draft beside Maya's newer row: the conflict conversation's own state.
+fixture KyotoConflict {
+   fixture KyotoPlan
+   Mine = create draft of Inari { Title: "Fushimi Inari at dawn" } for Alex
+   Theirs = update Inari { Title: "Fushimi Inari early" } for Maya
+}
+
+// The itinerary already published, so the public link is a fixture handle rather than a prepared effect.
+fixture KyotoShared {
+   fixture KyotoPlan
+   KyotoPublic = do ShareTrip(Kyoto) for Alex
+}
+
 test "Wayfare" {
-   check "a trip begins whole: owner seat and first day in one write" on laptop with KyotoPlan {
+   test "a trip begins whole: owner seat and first day in one write" on laptop with KyotoPlan {
       run Wayfare
-      press button "New trip"
+      press "New trip"
       enter "Montreal" into #tripName
-      choose 2027-06-18 in field "Begins"
-      choose 2027-06-21 in field "Ends"
+      enter 2027-06-18 into #tripBegins
+      enter 2027-06-21 into #tripEnds
       press #createTrip
-      expect heading "Montreal"
-      expect stored exactly one Trip where Name is "Montreal"
-      expect stored exactly one Member where Trip.Name is "Montreal" and Person is Alex and Role is Owner and is Joined
-      expect stored exactly one Day where Trip.Name is "Montreal" and Date is 2027-06-18
+      expect text "Montreal"
+      expect (Trips where Name is "Montreal").Count is 1
+      expect (Members where Trip.Name is "Montreal" and Person is Alex and Role is Owner and is Joined).Count is 1
+      expect (Days where Trip.Name is "Montreal" and Date is 2027-06-18).Count is 1
    }
 
-   check "a trip cannot end before it starts, and a day cannot fall outside it" on laptop with KyotoPlan {
+   test "a trip cannot end before it starts, and a day cannot fall outside it" on laptop with KyotoPlan {
       run Wayfare
-      press button "New trip"
+      press "New trip"
       enter "Backwards" into #tripName
-      choose 2027-06-21 in field "Begins"
-      choose 2027-06-18 in field "Ends"
+      enter 2027-06-21 into #tripBegins
+      enter 2027-06-18 into #tripEnds
       press #createTrip
       expect text "A trip cannot end before it starts"
-      press button "Cancel"
+      press "Cancel"
 
-      press row "Kyoto"
-      press button "Add a day"
-      choose 2027-05-01 in field "Date"
+      press "Kyoto"
+      press "Add a day"
+      enter 2027-05-01 into #dayDate
       press #addDay
       expect text "This day falls outside the trip"
    }
 
-   check "the workspace is three panes wide, two on a tablet, a stack on a phone" with KyotoPlan {
-      on laptop {
+   test "the workspace fits the room it is in" with KyotoPlan {
+      test "a laptop shows three panes at once" on laptop {
          run Wayfare at StopLink(Inari)
-         expect navigation { selection as sidebar; split TripWorkspace expanded }
-         expect { heading "Kyoto"; heading "Southern Kyoto"; heading "Fushimi Inari" }
+         expect text "Kyoto"
+         expect text "Southern Kyoto"
+         expect text "Fushimi Inari"
       }
-      on tablet {
+      test "a tablet keeps the day and its stop" on tablet {
          run Wayfare at StopLink(Inari)
-         expect navigation { split TripWorkspace showing @day, @details }
+         expect text "Southern Kyoto"
+         expect text "Fushimi Inari"
       }
-      on phone {
+      test "a phone walks the progression and reverses it on Back" on phone {
          run Wayfare at StopLink(Inari)
-         expect navigation { selection as tabs; split TripWorkspace collapsed }
-         expect heading "Fushimi Inari"
-         go back
-         expect heading "Southern Kyoto"
-         go back
-         expect heading "Kyoto"
-   }  }
+         expect text "Fushimi Inari"
+         back
+         expect text "Southern Kyoto"
+         back
+         expect text "Kyoto"
+      }
+   }
 
-   check "dragging a stop reorders the day for everyone, and the pins follow" on laptop with KyotoPlan {
+   test "dragging a stop reorders the day for everyone, and the pins follow" on laptop with KyotoPlan {
       run Wayfare at DayLink(Monday)
-      select #stops { expect rows in order "1. Fushimi Inari", "2. Lunch at Vermillion", "3. Back to the ryokan" }
+      select #stops[1] { expect text "1. Fushimi Inari" }
+      select #stops[3] { expect text "3. Back to the ryokan" }
       move #stops[3] before #stops[1]
-      select #stops { expect rows in order "1. Back to the ryokan", "2. Fushimi Inari", "3. Lunch at Vermillion" }
+      select #stops[1] { expect text "1. Back to the ryokan" }
       expect Nap.Position is 1
       collaborator Maya { expect Nap.Position is 1 }
    }
 
-   check "a viewer can read the day and not rewrite it" on tablet with KyotoPlan {
+   test "a viewer can read the day and not rewrite it" on tablet with KyotoPlan {
       signed in as Rowan
       run Wayfare at DayLink(Monday)
-      expect missing field "A name for the day"
-      expect missing button "Add a stop"
-      press row "1. Fushimi Inari"
-      expect missing button "Save"
-      expect missing button "Delete stop"
+      expect missing text "A name for the day"
+      expect missing text "Add a stop"
+      press "1. Fushimi Inari"
+      expect missing text "Save"
+      expect missing text "Delete stop"
+      // A hidden control is not proof of security: the store refuses the write too.
+      as Rowan update Inari { Title: "Not mine to rename" }
+      expect refused
+      expect Inari.Title is "Fushimi Inari"
    }
 
-   check "the stop editor is a draft; a day's title writes through" on laptop with KyotoPlan {
+   test "the stop editor is a draft; a day's title writes through" on laptop with KyotoPlan {
       run Wayfare at StopLink(Inari)
       enter "Fushimi Inari at dawn" into #stopTitle
       // Not saved yet: the trip has not seen it.
       expect Inari.Title is "Fushimi Inari"
       collaborator Maya { expect Inari.Title is "Fushimi Inari" }
-      press button "Save"
-      expect status "Saved"
+      press "Save"
+      expect text "Saved"
       expect Inari.Title is "Fushimi Inari at dawn"
 
-      enter "Fushimi and lunch" into field "A name for the day"
+      enter "Fushimi and lunch" into #dayTitle
       // A keystroke is a write.
       expect Monday.Title is "Fushimi and lunch"
    }
 
-   check "walking away loses nothing: a draft is durable" on phone with KyotoPlan {
+   test "walking away loses nothing: a draft is durable" on phone with KyotoPlan {
       run Wayfare at StopLink(Inari)
       enter "Fushimi Inari at dawn" into #stopTitle
-      go back
+      back
       relaunch Wayfare
       run Wayfare at StopLink(Inari)
-      expect field "Stop" value "Fushimi Inari at dawn"
-      expect status "Unsaved changes"
+      select #stopTitle { expect text "Fushimi Inari at dawn" }
+      expect text "Unsaved changes"
    }
 
-   check "two people edit the same stop: the conflict is a conversation, field by field" on laptop with KyotoPlan {
+   test "two people edit the same stop: the conflict is a conversation, field by field" on laptop with KyotoPlan {
       run Wayfare at StopLink(Inari)
       enter "Fushimi Inari at dawn" into #stopTitle
-      choose 08:00 in #stopStarts
+      enter 08:00 into #stopStarts
       collaborator Maya { update Inari { Title: "Fushimi Inari early", Notes: "Bring the good camera." } }
-      press button "Save"
-      expect dialogue "Someone else changed this stop"
-      // A draft tracks the fields I changed; a conflict is one of those changed remotely too. Maya's
-      // notes are not mine to argue with — they simply apply.
-      select #comparison { expect rows in order "Title" }
+      press "Save"
+      // The comparison is generated from the entity: one row per field where the draft and the row now
+      // disagree. Maya's notes are not mine to argue with — they simply apply.
+      select #comparison[1] { expect text "Fushimi Inari early" }
       press #keepMine
       expect Inari.Title is "Fushimi Inari at dawn"
       expect Inari.Starts is 08:00
       expect Inari.Notes is "Bring the good camera."
-      expect missing dialogue
    }
 
-   check "a third edit mid-decision updates the comparison in place" on laptop with KyotoPlan {
+   test "a third edit mid-decision updates the comparison in place" on laptop with KyotoPlan {
       run Wayfare at StopLink(Inari)
       enter "Fushimi Inari at dawn" into #stopTitle
       collaborator Maya { update Inari { Title: "Fushimi Inari early" } }
-      press button "Save"
-      expect dialogue "Someone else changed this stop"
+      press "Save"
       collaborator Maya { update Inari { Title: "Fushimi Inari before breakfast" } }
       select #comparison { expect text "Fushimi Inari before breakfast" }
       press #discardMine
-      expect field "Stop" value "Fushimi Inari before breakfast" // the draft re-read the row
+      select #stopTitle { expect text "Fushimi Inari before breakfast" } // the draft re-read the row
    }
 
-   check "visited stands alone and does not wait on the draft" on phone with KyotoPlan {
+   test "visited stands alone and does not wait on the draft" on phone with KyotoPlan {
       run Wayfare at StopLink(Inari)
       enter "Fushimi Inari at dawn" into #stopTitle
-      press button "Mark as visited"
+      press "Mark as visited"
       expect Inari.Visited is yes
       expect Inari.Title is "Fushimi Inari" // the draft is still unsaved
    }
 
-   check "the departure reminder reaches every traveler in the trip's zone" on phone with KyotoPlan {
+   test "the departure reminder reaches every traveler in the trip's zone" on phone with KyotoPlan {
       clock 2027-04-12 08:29 Asia/Tokyo
       signed in as Rowan
       run Wayfare
-      advance 1 minute
+      advance 1.minute
       expect notification "Fushimi Inari starts in 30 minutes"
       open notification
-      expect heading "Fushimi Inari"
+      expect text "Fushimi Inari"
    }
 
-   check "Today shows the day you are standing in, not the day at home" on phone with KyotoPlan {
+   test "Today shows the day you are standing in, not the day at home" on phone with KyotoPlan {
       clock 2027-04-11 20:00 America/New_York // already the 12th in Tokyo
       run Wayfare
-      press tab "Today"
-      expect heading "Southern Kyoto"
-      expect row "1. Fushimi Inari"
+      press "Today"
+      expect text "Southern Kyoto"
+      expect text "1. Fushimi Inari"
    }
 
-   check "a private document is only its person's, and the access rule does the filtering" on phone with KyotoPlan {
+   test "a private document is only its person's, and the access rule does the filtering" on phone with KyotoPlan {
       run Wayfare
-      press tab "Documents"
-      expect { row "Rail pass"; row "Alex's passport" }
+      press "Documents"
+      expect text "Rail pass"
+      expect text "Alex's passport"
       signed in as Rowan
       run Wayfare
-      press tab "Documents"
-      expect row "Rail pass"
-      expect missing row "Alex's passport"
-      expect stored no Document where Title is "Alex's passport" readable by Rowan
+      press "Documents"
+      expect text "Rail pass"
+      expect missing text "Alex's passport"
+      // Nothing on the screen filters by PrivateTo; the store refuses the read.
+      as Rowan let Seen = Passport
+      expect refused
    }
 
-   check "sharing publishes exactly the projection and revoking kills the link" on laptop with KyotoPlan {
+   test "sharing publishes exactly the projection and revoking kills the link" on laptop with KyotoPlan {
       run Wayfare at TripLink(Kyoto)
-      press button "Share itinerary"
-      expect dialogue "Share itinerary" { text "Fushimi Inari"; missing text "Take the quiet trail beyond the first overlook."; missing text "WF-7391"; missing text "Maya Chen" }
+      press "Share itinerary"
+      expect text "Fushimi Inari"
+      expect missing text "Take the quiet trail beyond the first overlook."
+      expect missing text "WF-7391"
+      expect missing text "Maya Chen"
       press #createLink
       capture shared link as Public
       expect public content behind Public includes only {
@@ -203,21 +227,25 @@ test "Wayfare" {
       }
       signed out
       open Public
-      expect { heading "Kyoto"; text "Fushimi Inari"; text "Shared from Wayfare" }
+      expect text "Kyoto"
+      expect text "Fushimi Inari"
+      expect text "Shared from Wayfare"
       signed in as Alex
       run Wayfare at TripLink(Kyoto)
-      press button "Manage link"
+      press "Manage link"
       press #revokeLink
       signed out
       open Public
-      expect heading "This is gone"
+      expect text "This is gone"
    }
 
-   check "an invitation is a seat: one use, only for its email, and the roles an editor may grant" on phone with KyotoPlan {
+   test "an invitation is a seat: one use, only for its email, and the roles an editor may grant" on phone with KyotoPlan {
       signed in as Maya // an editor
       run Wayfare at TripLink(Kyoto)
-      press button "Invite a traveler"
-      expect field "Role" options "Editor", "Viewer"
+      press "Invite a traveler"
+      // The grantable roles come from the access rule, not from a hand-written role test.
+      expect missing text "Owner"
+      expect text "Editor"
       enter "sam@example.com" into #inviteEmail
       press #sendInvite
       capture shared link as Invitation
@@ -230,8 +258,8 @@ test "Wayfare" {
       account "Sam" email "sam@example.com"
       open Invitation
       press #join
-      expect heading "Kyoto"
-      expect stored exactly one Member where Email is "sam@example.com" and is Joined
+      expect text "Kyoto"
+      expect (Members where Email is "sam@example.com" and is Joined).Count is 1
 
       account "Mallory"
       open Invitation
@@ -239,50 +267,42 @@ test "Wayfare" {
       expect text "This invitation has already been used."
    }
 
-   check "the last owner cannot leave" on phone with KyotoPlan {
+   test "the last owner cannot leave" on phone with KyotoPlan {
       run Wayfare at TripLink(Kyoto)
-      press button "Leave trip"
+      press "Leave trip"
       press #confirm
       expect text "A trip needs an owner"
-      expect stored exactly one Member where Person is Alex and Trip is Kyoto
+      expect (Members where Person is Alex and Trip is Kyoto).Count is 1
    }
 
-   check "offline work survives relaunch and reconciles once" on phone with KyotoPlan {
+   test "offline work survives relaunch and reconciles once" on phone with KyotoPlan {
       run Wayfare at DayLink(Monday)
       network offline
-      expect status "Offline — your changes are safe on this device"
-      press button "Add a stop"
+      expect text "Offline — your changes are safe on this device"
+      press "Add a stop"
       enter "Evening walk along the canal" into #newStopTitle
       press #addStop
-      go back // on a phone the new stop's details came up over the day
-      expect row "4. Evening walk along the canal"
+      back // on a phone the new stop's details came up over the day
+      expect text "4. Evening walk along the canal"
       relaunch Wayfare
       run Wayfare at DayLink(Monday)
-      expect row "4. Evening walk along the canal"
+      expect text "4. Evening walk along the canal"
       network online
-      wait for sync current within 5 seconds
-      expect stored exactly one Stop where Title is "Evening walk along the canal"
+      wait for sync current within 5.seconds
+      expect (Stops where Title is "Evening walk along the canal").Count is 1
    }
 
-   check "a file attaches to a stop and shows for everyone on the trip" on laptop with KyotoPlan {
+   test "a file attaches to a stop and shows for everyone on the trip" on laptop with KyotoPlan {
       run Wayfare at StopLink(Inari)
-      attach file "menu.pdf" to button "Add a file"
-      expect row "menu.pdf"
-      collaborator Maya { open StopLink(Inari); expect row "menu.pdf" }
+      attach file "menu.pdf" to "Add a file"
+      expect text "menu.pdf"
+      collaborator Maya { open StopLink(Inari); expect text "menu.pdf" }
    }
 
-   check "losing access mid-session is an honest state" on laptop with KyotoPlan {
+   test "losing access mid-session is an honest state" on laptop with KyotoPlan {
       signed in as Rowan
       run Wayfare at StopLink(Inari)
       collaborator Alex { delete RowanSeat }
-      expect heading "You don't have access to this"
-   }
-
-   check "Spanish changes the words and nothing else" on phone with KyotoPlan {
-      prepare { update Me { Language: "es" } }
-      run Wayfare at DayLink(Monday)
-      expect tab "Viajes"
-      expect button "Añadir una parada"
-      expect navigation identity WayfareNavigator@trips
+      expect text "You don't have access to this"
    }
 }

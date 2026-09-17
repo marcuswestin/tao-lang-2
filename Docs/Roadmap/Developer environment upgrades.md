@@ -1240,3 +1240,29 @@ an entry here may link one when the developer workflow is also affected.
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
   intact and reports one actionable failure.
 - **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+
+### DEVENV-065 — No gate parses `.tao-revolution` spec sources
+
+- **Status:** Candidate
+- **Area:** Verification coverage
+- **Impact:** `.tao-revolution` (and `.tao-mvp`, `.tao-next`) files are deliberately invisible to Tao
+  discovery, so no gate ever reads them. A malformed spec source — unbalanced braces, a retired
+  keyword, a reference to a declaration that no longer exists — can sit in the repository
+  indefinitely and only surfaces when a tranche graduates the file, which is exactly the moment the
+  process says a graduation must need nothing but a rename.
+- **Evidence:** During the 2026-09-17 Tao Future consolidation,
+  `Apps/Tao Future/Hearth/Lists.tao-revolution` was found to have one closing brace too many in the
+  `ShoppingContent` view — present in the file as committed, and invisible to `verify --complete`,
+  `dprint`, and every test suite. A ten-line brace-depth script over the 40 spec sources found it
+  in under a second.
+- **Workaround:** Run an ad-hoc brace-depth pass (strip string literals before line comments, so a
+  URL's `//` is not read as a comment) over the tier and Tao Future sources after editing them.
+- **Proposed change:** Add a lint-lane check that parses every non-discovered Tao dialect source with
+  the ordinary parser and reports syntax errors only — no validation, no type checking, since these
+  files intentionally use constructs the validator has not implemented yet. A parse-only pass is
+  enough to catch the whole class and keeps the "graduation is a rename" promise honest. Discovering
+  which tiers to include is the existing extension mapping in `Apps/WordFlower/README.md`.
+- **Dependencies:** None; the parser already accepts a file path independently of discovery.
+- **Acceptance:** A deliberately unbalanced `.tao-revolution` file fails the lint lane with its file
+  and line, and the 40 current Tao Future sources plus the WordFlower tiers pass.
+- **Source:** 2026-09-17 Tao Future dialect consolidation (Process step 3).

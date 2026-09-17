@@ -1,6 +1,7 @@
 // Getting in, Today, who lives here, and settings.
 
 use primary from @tao/keys
+use SignIn, SignOut from @tao/auth
 
 scene Loading() {
    Title "Hearth"
@@ -16,22 +17,22 @@ scene Welcome() {
          Text("A shared place for the life you tend together.") [body, muted]
          when Me {
             loading -> Status("Opening Hearth…")
-            signed out -> SignInPanel
+            none -> SignInPanel()
             error -> Message { Status(Message, Tone: Warning) }
-            otherwise -> HomePicker
+            otherwise -> HomePicker()
 }  }  }  }
 
 file view SignInPanel() {
    state Email = ""
    action SendLink() runs single {
-      stop if Email is empty
-      when sign in with email Email {
-         done -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
+      check Email is not empty
+      when do SignIn(Email) {
+         saved -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
    }  }
    render Col [card, gap sm] {
       #email
-      TextInput(Value: Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit SendLink }
-      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press SendLink }
+      TextInput(Value: bind Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit -> { do SendLink() } }
+      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press -> { do SendLink() } }
 }  }
 
 // A person with two homes picks one; a person with none makes one. Choosing is a write to a preference.
@@ -41,58 +42,58 @@ file view HomePicker() {
       guard MyMemberships
       if MyMemberships is not empty {
          Text("Choose a home") [sectionTitle]
-         List(MyMemberships as Membership) {
-            Row [pattern Line, surface, pad md] {
-               Col [accentMark(Membership.Home.Accent), @leading, decorative]
-               Col [@content, gap xxs] {
+         loop MyMemberships / Membership {
+            Row [line, surface, pad md] {
+               Col [size 12, radius pill, background listAccent(Membership.Home.Accent), lead, decorative]
+               Col [main, gap xxs] {
                   Text(Membership.Home.Name) [sectionTitle]
                   Text(Membership.Role) [caption]
                }
-               Icon("chevron.right") [muted, @trailing]
+               Icon("chevron.right") [muted, trail]
             }
-            on select -> update Me { CurrentHome: Membership.Home }
+            on select -> { update Me { CurrentHome: Membership.Home } }
       }  }
-      StartHomePanel
+      StartHomePanel()
 }  }
 
 file view StartHomePanel() {
    draft New = Home for new
    action Create() runs single {
-      stop if New.Incomplete
-      when CreateHome(New.Name) {
-         done -> discard New // the root follows `MyHome`; nothing to navigate
+      check New.Incomplete is no
+      when do CreateHome(New.Name) {
+         saved -> discard New // the root follows `MyHome`; nothing to navigate
          rejected -> Problem { invalidate New with Problem }
    }  }
    render Col [card, gap md] {
       Text("Make a home") [sectionTitle]
       Text("One calm place for everything your household tends.") [body, muted]
       #homeName
-      TextInput(Value: New.Name, Label: "Home name", Focus: initial) { on submit Create }
+      TextInput(Value: bind New.Name, Label: "Home name", Focus: initial) { on submit -> { do Create() } }
       Problems(New)
       #createHome
-      Button("Create home", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
+      Button("Create home", Disabled: New.Incomplete, Busy: Create running) [primary] { on press -> { do Create() } }
 }  }
 
 view JoinHome(Code secret) {
    let Invited = InvitedHome by Code
    state Refusal = ""
    action Join() runs single {
-      when JoinWithInvite(Code) {
-         done -> dismiss // the root follows the account; the home appears behind the sheet
+      when do JoinWithInvite(Code) {
+         saved -> dismiss // the root follows the account; the home appears behind the sheet
          rejected -> Problem { set Refusal = Problem }
    }  }
    render Col [gap lg, pad lg, width max 520] {
-      guard Me signed out -> {
+      guard Me { none -> {
          Text("Sign in first — this invitation will be waiting.") [body]
-         SignInPanel
-      }
+         SignInPanel()
+      }  }
       guard Invited // loading and missing fall to `guard default`; an expired invitation is refused with a sentence on Join
       Text("You're invited to { Invited.Name }") [title]
       Text("You'll see its lists, add to them, and take care of things together.") [body, muted]
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       #join
-      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press Join }
-      Button("Not now") [quiet] { on press -> dismiss }
+      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press -> { do Join() } }
+      Button("Not now") [quiet] { on press -> { dismiss } }
 }  }
 
 // -- Today ---------------------------------------------------------------------------------------------------
@@ -107,25 +108,25 @@ scene TodayScreen() {
    }
    query Mine from MyHome.Lists.Items {
       where is Open and Assignee is Me and Due is none
-      order by CreatedAt desc
+      order by CreatedAt descending
       limit 5
    }
    render ScrollView [screen] {
       Col [page] {
          Text(today.Long) [muted] // a date prints in the reader's language
-         OfflineNotice
+         OfflineNotice()
          guard DueToday
          Section("Due today") {
             if DueToday is empty {
                EmptyState(Icon: "sun.max", Title: "Nothing due today", Body: "The day has room to breathe.") {
-                  AddSomething [secondary]
+                  Button(AddSomething) [secondary]
             }  }
             #todayItems
-            List(DueToday as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+            loop DueToday / Item { HearthItemRow(Item); on select -> { open ItemLink(Item) } }
          }
          if Mine is not empty { // a query read before its guard is empty while unavailable
             Section("Yours, whenever") {
-               List(Mine as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+               loop Mine / Item { HearthItemRow(Item); on select -> { open ItemLink(Item) } }
 }  }  }  }  }
 
 // -- People -----------------------------------------------------------------------------------------------------
@@ -139,7 +140,7 @@ scene PeopleScreen() {
       // Visibility is derived from whether the store permits creating an Invite in MyHome.Invites;
       // the command adds no second authorization rule.
       let Invite = ask InviteSheet(MyHome)
-      stop if Invite is none
+      check Invite is not none
       share JoinLink(Invite.Code)
       present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite")
    }
@@ -150,44 +151,52 @@ scene PeopleScreen() {
       do CreateInviteLink()
    }
 
+   // `ask` belongs in an action and `check` is the action-only early exit, so the confirmed removal is
+   // one procedure rather than a conditional at the press site.
+   action ConfirmRemove(Member Membership) runs single {
+      let Sure = ask Confirm("Remove { Member.Person.Name }?", Body: "They will lose access to this home.", Verb: "Remove")
+      check Sure
+      delete Member
+   }
+
    render ScrollView [screen] {
       Col [page, width max 760] {
-         OfflineNotice
+         OfflineNotice()
          Section("Who lives here") {
-            @actions InviteSomeone
+            @actions Button(InviteSomeone)
             guard Members
-            loop Members as Member {
-               Row [pattern Line] {
-                  Image(Member.Person.Photo, Description: Member.Person.Name) [size 32, radius pill, @leading]
-                  Col [@content, gap xxs] {
+            loop Members / Member {
+               Row [line] {
+                  Image(Member.Person.Photo, Description: Member.Person.Name) [size 32, radius pill, lead]
+                  Col [main, gap xxs] {
                      Text(Member.Person.Name) [body]
                      Text(Member.Role) [caption]
                   }
-                  if can change Member.Role { Choice(Value: Member.Role, Label: "Role for { Member.Person.Name }") [@trailing] }
-                  if Member.Person is Me { Text("You") [chip, @trailing] }
+                  if can change Member.Role { Choice(Value: bind Member.Role, Label: "Role for { Member.Person.Name }") [trail] }
+                  if Member.Person is Me { Text("You") [chip, trail] }
                   if can delete Member and Member.Person is not Me {
-                     Button(Icon: "minus.circle", Label: "Remove { Member.Person.Name }") [quiet, @trailing] {
-                        on press -> if ask Confirm("Remove { Member.Person.Name }?", Body: "They will lose access to this home.", Verb: "Remove") { delete Member }
+                     Button(Icon: "minus.circle", Label: "Remove { Member.Person.Name }") [quiet, trail] {
+                        on press -> { do ConfirmRemove(Member) }
 }  }  }  }  }  }  }  }
 
 file view InviteSheet(Home) responds Invite {
    draft New = Invite for new { Home, Role: Adult }
    let Grantable = Role.Cases where can create Invite in Home.Invites { Role } // only an owner may mint an owner
    action Send() runs single {
-      when InviteToHome(Home, New.Role, New.Email) {
-         done -> Invite { respond Invite }
+      when do InviteToHome(Home, New.Role, New.Email) {
+         saved -> Invite { respond Invite }
          rejected -> Problem { invalidate New with Problem }
    }  }
    render Col [card, width max 480, gap md] {
       Text("Invite someone") [sectionTitle]
       #inviteEmail
-      TextInput(Value: New.Email, Label: "Email (optional — leave blank for a link anyone may use once)", Keyboard: email)
-      Choice(Value: New.Role, Label: "Role", Options: Grantable)
+      TextInput(Value: bind New.Email, Label: "Email (optional — leave blank for a link anyone may use once)", Keyboard: email)
+      Choice(Value: bind New.Role, Label: "Role", Options: Grantable)
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #sendInvite
-         Button("Create invite link", Busy: Send running) [primary] { on press Send }
+         Button("Create invite link", Busy: Send running) [primary] { on press -> { do Send() } }
 }  }  }
 
 // -- Settings ------------------------------------------------------------------------------------------------------
@@ -196,8 +205,11 @@ scene SettingsScreen() {
    Title "Settings"
 
    action ConfirmLeave() runs single {
-      stop unless ask Confirm("Leave { MyHome.Name }?", Body: "You will lose access to its lists.", Verb: "Leave")
-      do LeaveHome(MyMembership) // a last owner is refused with the home's own sentence
+      let Sure = ask Confirm("Leave { MyHome.Name }?", Body: "You will lose access to its lists.", Verb: "Leave")
+      check Sure
+      when do LeaveHome(MyMembership) { // a last owner is refused with the home's own sentence
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command Leave() {
       Title "Leave this home"
@@ -207,8 +219,11 @@ scene SettingsScreen() {
    action ConfirmDeleteAccount() runs single {
       // The delete effect and explicit confirmation carry destructive behavior; the command needs
       // no separate role marker.
-      stop unless ask Confirm("Delete your account?", Body: "Your homes stay with the people in them. This cannot be undone.", Verb: "Delete account")
-      do DeleteMyAccount()
+      let Sure = ask Confirm("Delete your account?", Body: "Your homes stay with the people in them. This cannot be undone.", Verb: "Delete account")
+      check Sure
+      when do DeleteMyAccount() {
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command DeleteAccount() {
       Title "Delete my account"
@@ -221,26 +236,25 @@ scene SettingsScreen() {
          Section("This home") {
             if can change MyHome {
                #homeName
-               TextInput(Value: MyHome.Name, Label: "Home name")
-               Choice(Value: MyHome.Accent, Label: "Accent")
-               Choice(Value: MyHome.TimeZone, Label: "Time zone")
+               TextInput(Value: bind MyHome.Name, Label: "Home name")
+               Choice(Value: bind MyHome.Accent, Label: "Accent")
+               Choice(Value: bind MyHome.TimeZone, Label: "Time zone")
                Problems(MyHome)
          }  }
          Section("Reminders") {
             Text("A quiet reminder shortly before something is due, for whoever is taking care of it — never during quiet hours.") [caption]
-            PermissionRow(notifications, Label: "Upcoming items")
+            PermissionRow(NotificationAccess, Label: "Upcoming items")
          }
          Section("Around") {
-            PermissionRow(location, Label: "Errands near you")
+            PermissionRow(LocationAccess, Label: "Errands near you")
          }
          Section("You") {
-            Choice(Value: Me.Language, Label: "Language", Options: project.languages)
-            Toggle(Value: Me.KeepOffline, Label: "Keep this home on my device")
+            Toggle(Value: bind Me.KeepOffline, Label: "Keep this home on my device")
             Text(Me.Email) [caption]
             #switchHome
-            Button("Switch home", Icon: "house") [quiet] { on press -> update Me { CurrentHome: none } } // the root re-reads `MyHome`
+            Button("Switch home", Icon: "house") [quiet] { on press -> { update Me { CurrentHome: none } } } // the root re-reads `MyHome`
             #leave
-            Leave [quiet]
-            Button("Sign out") [quiet] { on press -> sign out }
-            DeleteAccount [quiet]
+            Button(Leave) [quiet]
+            Button("Sign out") [quiet] { on press -> { do SignOut() } }
+            Button(DeleteAccount) [quiet]
 }  }  }  }
