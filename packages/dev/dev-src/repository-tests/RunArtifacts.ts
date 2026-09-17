@@ -30,6 +30,12 @@ export type FinishRunOptions = {
    */
   recordTimings?: boolean
   states: readonly WorkState[]
+  /**
+   * Durations to record beside the nodes' own, for a name the run did not schedule directly. A
+   * sharded suite is the case: its shards are the nodes, and the suite still has to measure itself
+   * or its shard count can never change again.
+   */
+  extraDurations?: ReadonlyMap<string, number>
   /** The lane's own rollup, written as `summary.json`. */
   summary: unknown
 }
@@ -115,7 +121,7 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
   await refreshLatest(options.location)
   if (options.recordTimings !== false) {
     await RunTimings.record({
-      durations: measuredDurations(options.states),
+      durations: new Map([...measuredDurations(options.states), ...options.extraDurations ?? []]),
       lane: options.location.lane,
       repositoryRoot: options.location.repositoryRoot,
       stamp: options.location.stamp,
@@ -134,7 +140,15 @@ async function writeSummaryCopy(jsonPath: string, repositoryRoot: string, summar
   return path
 }
 
-/** refreshLatest repoints `<lane>/latest` at this run; a host that refuses links is not a failure. */
+/**
+ * refreshLatest repoints `<lane>/latest` at this run, atomically.
+ *
+ * Removing the link and recreating it leaves a window with no `latest` at all, and two lanes of one
+ * checkout finishing together make the loser's create fail outright. An agent reading `latest` in
+ * that window sees nothing rather than the previous run. Creating the new link under a unique name
+ * beside it and renaming it over the old one has no such window: a reader sees the old run or the
+ * new one, never neither. A host that refuses links loses the shortcut, not the run.
+ */
 async function refreshLatest(location: RunLocation): Promise<void> {
   try {
     await FS.replaceSymlink(FS.basename(location.logRoot), FS.resolvePath(LATEST_LINK, location.laneRoot))

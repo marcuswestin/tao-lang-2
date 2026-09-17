@@ -383,8 +383,8 @@ const NODE_IMPORT_ALLOWLIST = [
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/dev/dev-tests/repo-lint.test.ts:468',
   'packages/dev/dev-tests/repo-lint.test.ts:469',
-  'packages/dev/dev-tests/work-graph.test.ts:314',
-  'packages/dev/dev-tests/work-graph.test.ts:315',
+  'packages/dev/dev-tests/work-graph.test.ts:465',
+  'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
   'packages/tao-cli/cli-tests/compile-command.test.ts:3',
   'packages/tao-cli/cli-tests/create-command.test.ts:4',

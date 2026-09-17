@@ -3,6 +3,7 @@ import { OutputText } from '../cli/OutputText'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import type { WorkState } from './WorkGraph'
+import { type ScheduleReport, type ScheduleWait, WorkSchedule } from './WorkSchedule'
 
 /**
  * The rollup a run ends with, and the JSON artifact it writes. Just's `[parallel]` interleaves
@@ -60,6 +61,10 @@ export type GateResult = {
   /** True when the node first failed under machine contention and was run again on its own. */
   retried?: boolean
   status: GateStatus
+  /** The suite a sharded test node reports under; absent for a node that is not a test shard. */
+  suite?: string
+  /** What held this node before it started, longest reason first; absent for one that never waited. */
+  waits?: readonly ScheduleWait[]
 }
 
 /** GateSummary is the versioned rollup a run ends with, and the JSON artifact it can write. */
@@ -71,10 +76,12 @@ export type GateSummary = {
   firstFailure?: { logPath?: string; name: string; output: string }
   gates: readonly GateResult[]
   /** The earlier green run this one stood on instead of running; every gate is then `skipped`. */
-  greenTree?: { at: string; lane: string; logRoot: string; treeHash: string }
+  greenTree?: { at: string; lane: string; logRoot: string; toolchain: string; treeHash: string }
   /** The lane this run belongs to, which is also its artifact directory. */
   lane: string
   logRoot: string
+  /** What the schedule achieved and where it lost time; absent for a run that did not schedule. */
+  schedule?: ScheduleReport
   status: 'failed' | 'passed'
   version: 2
   warnings: readonly string[]
@@ -94,7 +101,11 @@ export type BuildSummaryOptions = {
   logRoot: string
   /** Node names in the order the caller declared them; the first failure is named from it. */
   order?: readonly string[]
+  /** This run's scheduling measurements, when the caller measured them. */
+  schedule?: ScheduleReport
   states: readonly WorkState[]
+  /** The suite each node reports under, for a lane whose nodes are test shards. */
+  suiteOf?: (name: string) => string | undefined
 }
 
 const FAILURE_OUTPUT_LINES = 40
@@ -199,8 +210,12 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */
 export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const declaredSkips = options.declaredSkips ?? []
-  const results = new Map(
-    options.states.map(state => [state.name, nodeResult(state, options.expectedMs, options.contention)]),
+  const results = new Map<string, GateResult>(
+    options.states.map(state => {
+      const suite = options.suiteOf?.(state.name)
+      const result = nodeResult(state, options.expectedMs, options.contention)
+      return [state.name, suite === undefined ? result : { ...result, suite }]
+    }),
   )
   const order = options.order ?? options.states.map(state => state.name)
   const ordered = [
@@ -221,6 +236,7 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
     gates: ordered,
     lane: options.lane,
     logRoot: options.logRoot,
+    schedule: options.schedule,
     status: options.interrupted === true || ordered.some(result => result.status === 'failed') ? 'failed' : 'passed',
     version: SUMMARY_VERSION,
     warnings: [...contentionWarnings(ordered, options.contention), ...collectWarnings(options.states)],
@@ -279,20 +295,28 @@ export function skippedResult(entry: string): GateResult {
 /** formatGateSummary renders the rollup a run ends with. */
 export function formatGateSummary(summary: GateSummary): string {
   const lines = ['', 'Verification summary:']
-  for (const gate of summary.gates) {
+  const rolled = rollupSuites(summary.gates)
+  for (const gate of rolled) {
     const cost = gate.status === 'skipped' ? '' : ` ${OutputText.formatElapsed(gate.elapsedMs)}`
     const reason = gate.reason === undefined ? '' : ` — ${gate.reason}`
     lines.push(`- ${gate.name}: ${gate.status}${cost}${reason}`)
+    // A failing suite has to name the shard that failed, or its log cannot be found.
+    for (const shard of failingShardsOf(gate, summary.gates)) {
+      lines.push(`  - ${shard.name}: failed — ${shard.reason ?? 'see its log'}`)
+    }
   }
   for (const warning of summary.warnings) {
     lines.push(`! ${warning}`)
   }
   lines.push(
-    `${summary.gates.filter(gate => gate.status === 'passed').length} passed, `
-      + `${summary.gates.filter(gate => gate.status === 'failed').length} failed, `
-      + `${summary.gates.filter(gate => gate.status === 'skipped').length} skipped `
+    `${rolled.filter(gate => gate.status === 'passed').length} passed, `
+      + `${rolled.filter(gate => gate.status === 'failed').length} failed, `
+      + `${rolled.filter(gate => gate.status === 'skipped').length} skipped `
       + `in ${OutputText.formatElapsed(summary.elapsedMs)}`,
   )
+  if (summary.schedule !== undefined) {
+    lines.push(WorkSchedule.formatScheduleReport(summary.schedule))
+  }
   lines.push(`Logs: ${FS.displayPath(summary.logRoot)}`)
   lines.push(`Summary: ${FS.displayPath(FS.resolvePath(RunArtifacts.SUMMARY_FILE, summary.logRoot))}`)
   if (summary.firstFailure !== undefined) {
@@ -303,6 +327,65 @@ export function formatGateSummary(summary: GateSummary): string {
     }
   }
   return lines.join('\n')
+}
+
+/**
+ * rollupSuites reports a sharded suite as one line. A suite is a unit of reporting, not of
+ * scheduling: `studio: passed in 6.1s (4 shards, 22.4s of work)` is what a reader needs, and the
+ * individual shard names only matter when one of them failed.
+ */
+export function rollupSuites(gates: readonly GateResult[]): readonly GateResult[] {
+  const rolled: GateResult[] = []
+  const reported = new Set<string>()
+  for (const gate of gates) {
+    if (gate.suite === undefined || gate.suite === gate.name) {
+      rolled.push(gate)
+      continue
+    }
+    if (reported.has(gate.suite)) {
+      continue
+    }
+    reported.add(gate.suite)
+    rolled.push(mergeShards(gate.suite, gates.filter(candidate => candidate.suite === gate.suite)))
+  }
+  return rolled
+}
+
+/**
+ * mergeShards states one suite's outcome from its shards'. The suite's wall time is its longest
+ * shard, because the shards ran at once; the work is their sum, which is the number that says what
+ * sharding bought.
+ */
+function mergeShards(suite: string, shards: readonly GateResult[]): GateResult {
+  const workMs = shards.reduce((total, shard) => total + shard.elapsedMs, 0)
+  const longest = Math.max(0, ...shards.map(shard => shard.elapsedMs))
+  const failed = shards.filter(shard => shard.status === 'failed')
+  const status: GateStatus = failed.length > 0
+    ? 'failed'
+    : shards.every(shard => shard.status === 'skipped')
+    ? 'skipped'
+    : 'passed'
+  return {
+    elapsedMs: longest,
+    failureKind: failed[0]?.failureKind,
+    logPath: failed[0]?.logPath ?? shards[0]?.logPath,
+    name: suite,
+    reason: status === 'skipped'
+      ? shards[0]?.reason
+      : `${shards.length} shards, ${OutputText.formatElapsed(workMs)} of work`,
+    retried: shards.some(shard => shard.retried === true),
+    status,
+    suite,
+  }
+}
+
+function failingShardsOf(gate: GateResult, gates: readonly GateResult[]): readonly GateResult[] {
+  if (gate.suite === undefined || gate.status !== 'failed') {
+    return []
+  }
+  return gates.filter(candidate =>
+    candidate.suite === gate.suite && candidate.name !== gate.suite && candidate.status === 'failed'
+  )
 }
 
 /** gateExitCode never hides the originating status: one failed node fails the wrapper. */
@@ -337,7 +420,18 @@ function nodeResult(
     resources: state.node.resources,
     retried: state.retried,
     status: state.status === 'passed' ? 'passed' : failed ? 'failed' : 'skipped',
+    waits: reportableWaits(state.waits),
   }
+}
+
+/**
+ * reportableWaits keeps only the waits worth acting on, and omits the field entirely when none are.
+ * An empty array would read as a finding — "this node was held, by nothing" — where absence reads
+ * as what it is.
+ */
+function reportableWaits(waits: WorkState['waits']): readonly ScheduleWait[] | undefined {
+  const reportable = (waits ?? []).filter(wait => wait.ms >= WorkSchedule.WAIT_NOISE_MS)
+  return reportable.length === 0 ? undefined : reportable
 }
 
 /** Warnings a node printed but did not fail on, so they are visible without scrolling. */

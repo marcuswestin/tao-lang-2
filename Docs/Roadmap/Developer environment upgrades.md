@@ -262,16 +262,32 @@ an entry here may link one when the developer workflow is also affected.
   otherwise valid signed Chrome application from this task namespace. Repository CDP tests remain green.
   On 2026-09-17 the same branch's headless browser journeys launched Chrome normally from an
   ordinary unsandboxed desktop shell, so the abort is specific to that managed task namespace.
+  On 2026-09-16 the host wrote 25 Chrome crash reports, one at 12:23 and 24 between 19:02 and 19:42.
+  Every one was launched inside the Codex app's coalition (`com.openai.codex`, responsible process
+  ChatGPT) and every one aborted at startup in `TransformProcessType -> _RegisterApplication`: macOS
+  refusing to register Chrome as an app from that process context, before any repository Chrome code
+  runs. Sandbox escalation did not help, and direct `--no-sandbox` launches aborted the same way; two
+  React Native DevTools crashes that evening are the same failure. No fix is known.
 - **Workaround:** From a normal terminal run
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
   `just full-verify`; when selecting another supported browser explicitly, set
   `TAO_STUDIO_CHROME_PATH` in that terminal.
 - **Proposed change:** After Studio branches land, evaluate headless Chromium and attach-to-existing-browser
   modes, then add a reliable CI or pre-merge host lane without slowing ordinary `verify`.
+- **Candidate mitigations:** None implemented yet. (a) Fail fast in `StudioCdp.launchChrome` using the
+  `hasWindowServerSession()` probe already in `StudioDoctor.ts` (`launchctl managername == Aqua`) plus a
+  single-abort latch, so one clear error replaces about twenty crash dialogs. (b) Probe
+  `chrome-headless-shell` through the existing `TAO_STUDIO_CHROME_PATH`: it has no `.app` bundle and
+  should never reach that registration step (unverified, roughly fifteen minutes to test). (c) Probe an
+  `open -na` or `launchctl asuser` handoff. (d) If those fail, run one persistent browser in the GUI
+  session and use the existing `StudioCdp.attach()` with a fresh browser context per run instead of
+  launching per run — noting that (d) turns per-run launches into shared state that no single lane owns,
+  which interacts with parallelization and with the rule that a lane may only stop processes it started.
 - **Dependencies:** Semantic-agent, companion, and freehand Studio changes must land first.
 - **Acceptance:** The full browser journey runs repeatably in its supported host and is required for
   Studio-heavy landing evidence.
-- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation acceptance.
+- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation acceptance;
+  2026-09-16 runaway-process investigation.
 
 ### DEVENV-016 — Studio process ownership and status
 
@@ -1150,16 +1166,24 @@ an entry here may link one when the developer workflow is also affected.
   and `./dev test-file`. A probe inside a root-cwd `bun test` shows `spawn('git', …)` with a piped
   stdout delivering no `data` event before `close`, so `CLI.run` returns an empty `stdout`; the same
   probe under `bun run` captures normally. Sandboxed and unsandboxed runs behave identically, and no
-  `bunfig.toml` or `.env` file is involved.
-- **Workaround:** Run package tests through `./dev test-file <path>` or `just test <pattern>`, or from
-  the package directory; do not trust a raw root-cwd `bun test`.
+  `bunfig.toml` or `.env` file is involved. The claim is narrower than first written: it holds for tests
+  that assert on captured subprocess output, not for a root-cwd `bun test` generally. On 2026-09-17
+  `bun test packages/dev/dev-tests/merge-with-main.test.ts` from the root gave complete output including
+  subprocess stack traces, and was the only way to see a failure while `./dev` itself was mid-edit and
+  broken; `bun test --cwd packages/<name> <relative-path>` was reliable throughout.
+- **Workaround:** Prefer `./dev test-file <path>` or `just test <pattern>`. When those are unavailable —
+  a broken `./dev`, or a shared module mid-edit (DEVENV-068) — `bun test --cwd packages/<name>
+  <relative-test-path>` resolves `@shared/test` correctly and reports the real stack, and a root-cwd
+  `bun test <file>` is usable for a file that does not assert on captured subprocess output. Do not
+  trust a root-cwd `bun test` for the suites that do.
 - **Proposed change:** Find what the root working directory changes about Bun's test runtime, then
   either fix the capture path in `Platform.spawn` or make a root-cwd `bun test` refuse and name the
   supported entry points.
 - **Dependencies:** None.
 - **Acceptance:** `bun test packages/dev/dev-tests` from the repository root agrees with `./dev test`,
-  or says why it cannot and points at the command that does.
-- **Source:** 2026-09-17 verification deduplication.
+  or says why it cannot and points at the command that does; the documented fallbacks stay usable when
+  `./dev` is broken.
+- **Source:** 2026-09-17 verification deduplication; 2026-09-17 branch-wide agent findings.
 
 ### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
 
@@ -1289,7 +1313,165 @@ an entry here may link one when the developer workflow is also affected.
   the covering element, instead of being absorbed by the page.
 - **Source:** 2026-09-17 September remediation follow-up.
 
-### DEVENV-067 — `./agent fix` cannot format the skills it is told to format
+### DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory
+
+- **Status:** In progress
+- **Area:** Test execution
+- **Impact:** One failing `toEqual` whose operands are Langium AST nodes allocates without bound until
+  macOS runs out of application memory. Nothing bounds it: no repository test node carries a timeout, an
+  interrupt on the wrapper command leaves the allocating child alive, and the sandbox where this happens
+  denies the process inspection needed to find that child.
+- **Evidence:** On 2026-09-16 macOS reported `Your system has run out of application memory` on a 128 GB
+  machine; system-wide memory pressure ran 18:00:03–18:44:25 local and macOS force-quit 675 idle
+  background services. macOS skipped writing its own jetsam reports (`File limit set to 0`), so no OS
+  report names the culprit. The culprit was `bun test packages/parser/parser-tests/design.test.ts`,
+  started through `./agent test-file` by a Codex agent lane in `~/.codex/worktrees/e91a/tao-lang-2`.
+  Three runs hung the same way (17:55:57, 18:07:48, 18:25:54); two produced no log at all, their
+  directories under `.artifacts/logs/dev-test/`
+  (`2026-09-16T21-55-57-025Z-93582-b8a2aab4` and `2026-09-16T22-07-48-549Z-11273-444f813e`) holding only
+  an empty `test-results` directory. The trigger was a failing deep-equality assertion (`toEqual`) whose
+  operands were Langium AST nodes; the lane later replaced those assertions with `toHaveLength`/`toBe`,
+  which fixed the tests but not the processes already running. Reproduced locally on bun 1.3.13: a
+  failing `expect([nodeA]).toEqual([nodeB])` on two parsed design declarations went from 185 MB to 4.1 GB
+  in two seconds (killed at a 3 GB cap), and a stray instance of the same probe reached 12.4 GB in
+  fifteen seconds before it was killed. Upstream this is bun issue #34178 (`Runaway native recursion …
+  allocates unboundedly until the machine dies`, 210 GB in that report); its fix, bun PR #34179, adds a
+  shared-reference budget of 1 MiB per side in assertion diffs and 64 MiB in snapshots, and was still
+  open and unreleased as of 2026-09-12, so there is no bun version to upgrade to. Per that PR the
+  formatter prints `[Circular]` only for true cycles, so a value reachable by several paths is printed
+  once per path and expands exponentially; Langium nodes are exactly that shape (`$container`,
+  `$document`, `$cstNode`). bun #21277 records that a synchronous runaway is not interrupted by
+  `--timeout`, so a bun-level per-test timeout cannot bound this and the bound has to be enforced by the
+  parent process; bun PR #34884 records the same formatter overflowing on deeply nested values. The same
+  formatter backs `console.log`, so this can also occur outside tests when something prints an AST node.
+  Three repository-side reasons it ran 45 minutes instead of two:
+  `packages/dev/dev-src/repository-tests/WorkGraph.ts` supports a per-node timeout (`timeoutMs`) but only
+  the ship bundle proof and `studio-canary` set it in `GateCatalog.ts`, so ordinary test nodes had no
+  bound; `CLI.start` in `packages/shared/shared-src/CLI.ts` signalled only the direct child, so an
+  interrupt to the `./agent test-file` wrapper left the `bun test` child running; and the leftovers could
+  not be found because the Codex sandbox denies process inspection
+  (`zsh:1: operation not permitted: ps`). Nothing in the logs shows what finally ended it at 18:44.
+- **Workaround:** Do not assert deep equality on parsed Langium nodes; assert named fields with
+  `toHaveLength`/`toBe`. Stop a surviving `bun test` child directly from a shell that can inspect
+  processes, because interrupting the wrapper command does not.
+- **Proposed change:** Implemented on `feat/one-verification-graph`, pending that branch landing.
+  `CLI.start`'s teardown stops a child's whole tracked descendant tree deepest-first, filtered by OS
+  process-start identity so a reused PID cannot be signalled, escalating SIGTERM to SIGKILL after a
+  grace period; it is selected by a per-call `processPolicy` of `test`, `tool` or `server`, where
+  `server` signals the direct child only and `resolveProcessBounds` refuses a bound on any policy but
+  `test` rather than dropping it. No policy changes spawn detachment: an earlier version detached by
+  default, which would have stopped the terminal's Ctrl-C reaching `./agent` lanes, and that was
+  rejected as worse than the incident. Test nodes carry a parent-enforced wall-clock bound and an
+  idle-output bound, derived in `packages/dev/dev-src/repository-tests/TestNodes.ts` from each node's
+  recorded duration against a floor (and, for the wall bound, a ceiling) rather than a fixed five
+  minutes; the idle bound is the one that catches this class, because the runaway allocates without
+  printing and bun #21277 means `bun test --timeout` cannot interrupt it. `@shared/test`'s `Expect`
+  refuses `toEqual`, `toStrictEqual`, `toMatchObject`, `toContainEqual` and the snapshot matchers on a
+  Langium-shaped value, through `.not`, `.resolves` and `.rejects` too, with one named escape hatch
+  (`Expect.Unguarded`); the existing repo-lint rule requiring test files to import `@shared/test`
+  rather than `bun:test` backstops it, and the six assertions in
+  `packages/parser/parser-tests/design.test.ts` that triggered the incident were rewritten to
+  `toHaveLength` plus `toBe` on identity. Explicitly not adopted: a per-process RSS cap — macOS does
+  not enforce `ulimit -v`/`-d`, per-pid RSS needs `ps`, and `ps` is denied in exactly the sandbox where
+  this happened (DEVENV-068).
+- **Dependencies:** bun PR #34179 is unreleased, so no upgrade removes the underlying allocation.
+  DEVENV-016, DEVENV-030 and DEVENV-068 own host process visibility and cleanup constraints.
+- **Acceptance:** A test node that allocates without bound is stopped by its parent within a recorded
+  bound and its whole process group ends, including after an interrupt; a deep-equality assertion on a
+  Langium-shaped value fails immediately with a named remedy; server, Metro, simulator, and Studio
+  processes are unaffected by the test-shaped stop policy.
+- **Source:** 2026-09-16 runaway-process investigation.
+
+### DEVENV-068 — A child process cannot execute `ps` inside the Bash sandbox
+
+- **Status:** Candidate
+- **Area:** Sandbox
+- **Impact:** Repository code that lists processes through a subprocess sees nothing in a sandboxed lane,
+  so a lane cannot find a leftover process it needs to stop, and the code path that would do it cannot
+  be exercised there. This was one of the three causes in DEVENV-067.
+- **Evidence:** `Platform.spawnSync('ps', { args: ['-axo', 'pid=,ppid=,lstart=,command='] })` returns
+  `status: undefined` with `error: EPERM: operation not permitted, posix_spawn 'ps'`, and the same for
+  `/bin/ps`, while the identical `ps` invocation typed into the sandboxed shell succeeds: the Seatbelt
+  policy denies the exec to the child, not the shape of the command. `AGENTS.md` already blesses that
+  exact fixed `ps` shape for an agent to run directly. Consequently `processTable()` in
+  `packages/shared/shared-src/ProcessTree.ts` returns an empty list in a sandboxed lane, which makes the
+  non-Darwin branch of `descendantProcesses` unusable and untestable there; on Darwin the libproc path
+  (`/usr/lib/libproc.dylib` through `bun:ffi`) supplies both child PIDs and process-start identity,
+  which is the stronger reason it is primary.
+- **Workaround:** Rely on the Darwin libproc path, and run a process-listing probe directly in the shell
+  rather than through repository code.
+- **Proposed change:** Either allow `/bin/ps` for child processes in `.rulesync/permissions.jsonc`'s
+  sandbox policy, or document `processTable` as a non-Darwin-only path so no lane depends on it here.
+- **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
+  the adjacent host process-visibility constraints.
+- **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
+  tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
+- **Source:** 2026-09-17 process-teardown implementation.
+
+### DEVENV-069 — An in-flight edit to a shared package fails other agents' test runs and names the wrong file
+
+- **Status:** Candidate
+- **Area:** Concurrent worktrees
+- **Impact:** While several workstreams share one checkout, a momentarily half-applied edit in a shared
+  package fails whatever suite another agent is running, reporting a bare `ReferenceError` from the
+  broken module with nothing to say the module is not the one under test. Two agents each spent time
+  debugging their own unrelated code.
+- **Evidence:** Half-applied edits in `packages/shared/shared-src/CLI.ts` and in
+  `packages/shared/shared-src/testing/Test.ts` each produced a bare `ReferenceError` naming a symbol in
+  that file, attributed to the suite being run. One agent saw
+  `ReferenceError: createSuiteState is not defined` pointing at
+  `packages/dev/dev-src/repository-tests/TestRunner.ts` while running a `packages/shared` test; the same
+  mid-migration state is still visible in this checkout, where `TestRunner.createSuiteState` is called by
+  `packages/dev/dev-tests/test-runner.test.ts` and defined nowhere.
+- **Workaround:** `bun test --cwd packages/<name> <relative-test-path>` resolves `@shared/test` correctly
+  and shows the real stack; otherwise wait for the shared module to load again, for example
+  `until bun test <file> 2>&1 | grep -q 'expect() calls'; do sleep 5; done`.
+- **Proposed change:** Have the test runner say when a failure came from a module outside the requested
+  suite — that a shared module failed to load and a worktree-mate may be mid-edit — and record the
+  `--cwd` idiom where agents will find it. Expect this routinely now that parallel workstreams share a
+  checkout.
+- **Dependencies:** DEVENV-061 owns the root-cwd `bun test` caveat that constrains the fallback.
+- **Acceptance:** A deliberately broken shared module produces a failure that names the module that
+  failed to load and distinguishes it from the suite under test.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-070 — This ledger no longer fits one agent read
+
+- **Status:** Candidate
+- **Area:** Repository documentation
+- **Impact:** The entry rules require searching this document by ID before adding an entry, but at about
+  1,240 lines and roughly 31k tokens it exceeds an agent harness's per-read limit, so every task that
+  touches it pays two paged reads and that context.
+- **Evidence:** A 2026-09-17 read of this file was truncated at its per-read cap and had to be continued
+  by offset; the file is the largest document under `Docs/Roadmap/`.
+- **Workaround:** Read it in pages, or grep for the one relevant ID and read the highest heading to find
+  the next free number.
+- **Proposed change:** Add an ID-to-title index at the top, or move `Resolved` and `Closed` entries into a
+  companion file, so an agent can find the next free ID and the one relevant entry without paging the
+  whole backlog.
+- **Dependencies:** None; the entry rules and section headings are part of the same change.
+- **Acceptance:** An agent can determine the next free ID and read any single entry without exceeding one
+  read.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-071 — `rg`'s `-r` is a replacement string, not grep's recursion flag
+
+- **Status:** Candidate
+- **Area:** Agent tooling
+- **Impact:** `rg -rn <pattern> <path>` prints every match with the matched text replaced by the literal
+  `n`, so the output reads as genuine source and can be quoted into a document or a review as fact.
+- **Evidence:** `rg -rn TAO_STUDIO_CHROME_PATH packages/` printed lines such as
+  `Platform.runtimeProcess.env['n']`, because `-r` consumed `n` as the replacement string rather than
+  combining with `-n` as `grep -rn` does.
+- **Workaround:** `rg` recurses by default; pass no `-r`, and use `-n` alone for line numbers.
+- **Proposed change:** One clause in the `AGENTS.md` search bullet noting that `rg` recurses by default
+  and that `-r` means replace.
+- **Dependencies:** None.
+- **Acceptance:** The search guidance names the `-r` difference where it tells agents to prefer `rg` over
+  `grep -r`.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-072 — `./agent fix` cannot format the skills it is told to format
 
 - **Status:** Candidate
 - **Area:** Sandbox policy

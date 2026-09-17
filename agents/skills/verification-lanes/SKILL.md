@@ -14,9 +14,21 @@ description: >-
   selects that package and every package importing it, a test file selects its own suite, an app
   change runs the Tao behavior tests under that app, and a path no rule owns widens the run to
   everything and says which path did it. It prints what it selected, why, and what it skipped.
-- Every verification lane records the tree it proved green. Running the same lane, or a lane it
-  contains, on a byte-identical tree prints the earlier run's evidence and stops instead of running;
-  add `--fresh` to run anyway. A red or interrupted run records nothing.
+- Every verification lane records the tree it proved green, keyed by the whole visible tree of this
+  checkout together with the resolved `.devenv/profile` toolchain. Running the same lane, or a lane
+  it contains, on a byte-identical tree with the same toolchain prints the earlier run's evidence and
+  stops instead of running; add `--fresh` to run anyway. A red or interrupted run records nothing,
+  and neither does a run whose tree changed under it — that run fails and names the paths that
+  changed, because several agents may be editing one checkout.
+- Three kinds of node are deliberately never skipped on a record: one that rewrites the tree or fills
+  a generated directory, one whose verdict depends on the host (the Studio smokes, the native shell,
+  the canary, the bundle proof), and a test node covering a file `just test-flakes` has seen flip
+  without changing. Do not add a time-to-live to records instead; the backstop for what a tree cannot
+  describe is a scheduled `just full-verify --fresh` on `main`.
+- Nothing verifies the same bytes twice, so do not run a lane again "to be sure". After
+  `verify --complete`, a `full-verify` at that same tree runs only the host-dependent gates; and the
+  merge command proves the staged squash by comparing it to the tree `full-verify` already proved
+  rather than by running a second lane.
 - Use `just test-changed` for the test suites alone, without the fix and typecheck gates; pass a
   ref only when the branch base is not the default merge base with `origin/main` or local `main`.
 - Use `just test-retry` after a red complete run. It selects files, not individual test names, and
@@ -47,11 +59,11 @@ description: >-
 - A gate that passes its machine-exclusive confirmation is green evidence, remains marked
   `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.
-- `just merge-with-main --execute --push --yes` is the landing command; those are `just` long flags,
-  not `execute=true` positional assignments. Agents prepare the branch and message file and never
-  land on their own initiative, never automate the command, and never decide a merge is warranted;
-  they run it only when Ro asks for that merge in the current request, and say which verification
-  evidence stood behind it.
+- `just merge-with-main` is the landing command, and it takes no flag to do its job: the plain
+  invocation verifies, squashes, commits, and pushes. Agents prepare the branch and message file and
+  never land on their own initiative, never automate the command, and never decide a merge is
+  warranted; they run it only when Ro asks for that merge in the current request, and say which
+  verification evidence stood behind it.
 - Write or update the message every time a branch becomes merge-ready, including when later commits
   change what the branch does. The command fails with `Merge message file does not exist` when the
   file is missing, so a branch handed over without it is not ready.
@@ -63,10 +75,13 @@ description: >-
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command
   validates the complete final message and appends Git's generated appendix itself.
-- `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
-  answers normal confirmation non-interactively, `--push` independently authorizes a
-  non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
-  intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
+- `merge-with-main`'s flags only remove work. `--skip-full-verify` omits `just full-verify` on the
+  feature branch, so the staged squash gets `just verify --complete` instead; `--skip-verify` omits
+  that staged-squash pass; `--skip-all` implies both, asks once with No as the default, and needs a
+  terminal, so there is no way to land unverified non-interactively. The staged-squash tree-equality
+  assertion runs under every combination including `--skip-all`, because the squash must be the tree
+  that was verified. `./dev merge-with-main --dry-run` reports the plan and changes nothing.
+  Preflight intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
   the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
   the landing. Successful execution leaves the invoking feature worktree clean and detached at the
   archived feature tip, deletes its local feature branch, and leaves worktree removal to archival of
