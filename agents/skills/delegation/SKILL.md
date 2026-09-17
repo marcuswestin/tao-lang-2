@@ -52,6 +52,12 @@ every report still has to be read and checked by you. Keep your own critical pat
 they run: launch, then continue, then collect. Reuse a finished agent for the next unblocked piece
 rather than waiting for the whole fan-out to land.
 
+Readers and a writer do not mix. A reader that opens a file while something else is rewriting it
+sees half of it and reports a defect that was never there — that has already happened here, four
+subagents into one task, and `Docs/Roadmap/Parallel agents on one machine.md` records it. Either the
+fan-out is read-only, or every agent in it owns its paths exclusively under
+`parallel-implementation`. Never both at once over the same seam.
+
 ## Model and effort routing
 
 Work is routed to a tier, and the tier is spelled per harness in one place below, so that a model

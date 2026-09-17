@@ -48,14 +48,18 @@ neither blocks a tranche.
 
 ## Subagent delegation
 
-How agents in this repository delegate, and at which model tier. The guidance and its tooling have
-landed; `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns the remaining slices
-and the calibration period that ends the ask-Ro clause.
+How agents in this repository delegate, and at which model tier. The guidance, the profiles, the
+three harnesses' defaults, and the fan-out and second-opinion procedures have landed;
+`Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns what is left and the
+calibration period that ends the ask-Ro clause.
 
-- [ ] Saved workflow scripts for the recurring fan-outs: tranche review and squash-merge audit.
-- [ ] Cross-vendor second opinion, opt-in per request and off by default.
-- [ ] Benchmark a few representative tasks with and without delegation, and tune the skill's
-      thresholds from the measurement rather than from research.
+- [ ] Decide whether the two fan-outs get saved `Workflow` scripts. The plan states the case against
+      shipping them unasked: one harness only, unprovable without a supervised run, and a fan-out at
+      September's scale is the machine-contention problem rather than a use of it.
+- [ ] Benchmark a few representative tasks with and without delegation, once load-aware admission
+      lands and the machine is quiet enough for the measurement to mean anything.
+- [ ] End calibration when the delegation log says the routing table is right, then delete the
+      ask-Ro clause and the three logging hooks.
 
 ## The Tao Revolution program
 
