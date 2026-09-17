@@ -1,7 +1,8 @@
-import { CommandExecutionError } from './core/Errors'
+import { CommandExecutionError, throwUnexpected } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
+import { ProcessTree, type TrackedProcess } from './ProcessTree'
 
 /** CommandOutputStream names a command output stream. */
 export type CommandOutputStream = 'stderr' | 'stdout'
@@ -22,21 +23,49 @@ type CommandOutputBuffer = {
 /** CommandStdio configures child process stdio handling. */
 export type CommandStdio = 'inherit' | 'pipe' | 'stream' | Platform.SpawnOptions['stdio']
 
+/**
+ * CommandProcessPolicy declares how a child is supervised.
+ *
+ * - `tool` is the default: a short-lived command. `kill` stops every descendant the wrapper tracked,
+ *   not just the direct child, so nothing the child started can outlive the signal.
+ * - `test` adds the parent-enforced `timeoutMs` and `idleOutputMs` bounds. A synchronous runaway
+ *   inside a test runner never reaches the runner's own timeout (bun issue #21277), so the only
+ *   bound that holds is one this process applies from outside.
+ * - `server` opts out of every bound and signals the direct child only. Metro, Studio, a simulator
+ *   and the dev servers idle legitimately and must never be stopped by test-shaped rules.
+ *
+ * No policy changes process-group membership. Detaching a child is the caller's own decision through
+ * `detached`, because a child that stays in the caller's process group is a child the terminal's
+ * Ctrl-C still reaches — and silently losing that is the failure the supervision exists to prevent.
+ * Teardown does not need detachment: the tracked-descendant signalling reaches a grandchild whether
+ * or not the child leads a group.
+ */
+export type CommandProcessPolicy = 'server' | 'test' | 'tool'
+
 /** CommandSpec describes process invocation options for shared CLI helpers. */
 export type CommandSpec = {
   args?: readonly string[]
   cwd?: string
   detached?: boolean
   env?: Platform.ProcessEnv
+  /** `test` policy only: stop the tree once the child has printed nothing for this long. */
+  idleOutputMs?: number
   onOutput?: (stream: CommandOutputStream, chunk: Buffer) => void
   prefixedOutput?: PrefixedOutputOptions
+  /** How this child is supervised. `tool` is the default; `server` opts out of every bound. */
+  processPolicy?: CommandProcessPolicy
   stdin?: string | Uint8Array
   stdio?: CommandStdio
+  /** `test` policy only: stop the tree once the child has been running this long. */
+  timeoutMs?: number
   unref?: boolean
 }
 
 /** CommandSyncSpec describes a synchronous process invocation. */
-export type CommandSyncSpec = Omit<CommandSpec, 'detached' | 'prefixedOutput' | 'unref'>
+export type CommandSyncSpec = Omit<
+  CommandSpec,
+  'detached' | 'idleOutputMs' | 'prefixedOutput' | 'processPolicy' | 'timeoutMs' | 'unref'
+>
 
 /** CommandResult records a completed process invocation. */
 export type CommandResult = {
@@ -66,6 +95,11 @@ export type StartedCommand = {
   readonly cwd?: string
   readonly error?: Error
   readonly exitCode: number | null
+  /**
+   * The child's PID, for a caller that must reach its process tree through `ProcessTree`. Optional
+   * so the test doubles that stand in for a started command keep satisfying this type.
+   */
+  readonly pid?: number
   readonly signalCode: Platform.ProcessSignal | null
   closeOutput: () => Promise<void>
   dispose: () => void
@@ -123,9 +157,13 @@ function startCommand(
     captureOutput: options.captureOutput,
     prefixedOutput: prefixedOutput !== undefined,
   })
+  const policy = spec.processPolicy ?? 'tool'
+  const bounds = resolveProcessBounds(command, policy, spec)
   const child = Platform.spawn(command, {
     args,
     cwd: spec.cwd,
+    // Detachment is the caller's call, never the policy's: a child in the caller's process group is
+    // one the terminal's Ctrl-C reaches, and the teardown below does not need a group leader.
     detached: spec.detached,
     env: spec.env,
     stdio: stdio.stdio,
@@ -135,36 +173,148 @@ function startCommand(
     child.unref()
   }
 
-  const attachOutputHandler = (
-    readable: typeof child.stdout,
-    stream: CommandOutputStream,
-    chunks: Buffer[],
-    writeToTerminal: (chunk: Buffer) => void,
-  ) => {
+  let closed = false
+  let boundFailure: string | undefined
+  let escalation: ReturnType<typeof setTimeout> | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let wallClockTimer: ReturnType<typeof setTimeout> | undefined
+  let trackedDescendants: TrackedProcess[] | undefined
+
+  /**
+   * A child whose output is inherited writes straight to the terminal, so nothing in this wrapper
+   * sees it — and a bound's reason line would have had nowhere to go. It goes to `HCI` instead,
+   * beside the output it explains, rather than being silently dropped.
+   */
+  const outputHasWrapperSink = options.captureOutput
+    || spec.onOutput !== undefined
+    || stdio.streamOutput
+    || prefixedOutput !== undefined
+
+  const deliverOutput = (stream: CommandOutputStream, buffer: Buffer) => {
+    if (options.captureOutput) {
+      ;(stream === 'stdout' ? stdoutChunks : stderrChunks).push(buffer)
+    }
+    spec.onOutput?.(stream, buffer)
+    if (stdio.streamOutput) {
+      if (stream === 'stdout') {
+        HCI.write(buffer)
+      } else {
+        HCI.writeError(buffer)
+      }
+    } else if (prefixedOutput) {
+      prefixedOutput.write(stream, buffer)
+    }
+  }
+
+  /**
+   * stopProcessTree is the whole point of a supervised policy: the tracked descendants are signalled
+   * deepest-first by start identity, then the child, and SIGTERM escalates to SIGKILL. A child
+   * stopped for hanging may ignore SIGTERM and would otherwise hold the lane open forever.
+   *
+   * The `signalGroup` call beside them is belt and braces for a caller that did pass `detached`: it
+   * catches a descendant that re-parented away and so left the tracked snapshot, and it fails
+   * harmlessly when the pid leads no group, which is the ordinary case.
+   */
+  const stopProcessTree = (signal: Platform.ProcessSignal): boolean => {
+    const pid = child.pid
+    if (policy === 'server' || pid === undefined || closed) {
+      return child.kill(signal)
+    }
+    // Snapshot once: after the first signal the tree is already coming apart, and a second walk
+    // would miss exactly the descendants that have not died yet.
+    trackedDescendants ??= ProcessTree.descendants(pid)
+    const descendants = trackedDescendants
+    ProcessTree.signalTracked(descendants, signal)
+    const groupSignalled = ProcessTree.signalGroup(pid, signal)
+    const directSignalled = child.kill(signal)
+    if (signal !== 'SIGKILL' && escalation === undefined) {
+      escalation = setTimeout(() => {
+        ProcessTree.signalTracked(descendants, 'SIGKILL')
+        ProcessTree.signalGroup(pid, 'SIGKILL')
+        child.kill('SIGKILL')
+      }, ProcessTree.FORCE_KILL_GRACE_MS)
+    }
+    return directSignalled || groupSignalled
+  }
+
+  const clearBounds = () => {
+    if (idleTimer !== undefined) {
+      clearTimeout(idleTimer)
+      idleTimer = undefined
+    }
+    if (wallClockTimer !== undefined) {
+      clearTimeout(wallClockTimer)
+      wallClockTimer = undefined
+    }
+  }
+
+  const exceedBound = (reason: string) => {
+    if (closed || boundFailure !== undefined) {
+      return
+    }
+    boundFailure = reason
+    clearBounds()
+    const line = Buffer.from(`${reason}\n`, 'utf8')
+    if (outputHasWrapperSink) {
+      deliverOutput('stderr', line)
+    } else {
+      HCI.writeError(line)
+    }
+    stopProcessTree('SIGTERM')
+  }
+
+  const restartIdleBound = () => {
+    const idleOutputMs = bounds.idleOutputMs
+    if (idleOutputMs === undefined || closed || boundFailure !== undefined) {
+      return
+    }
+    if (idleTimer !== undefined) {
+      clearTimeout(idleTimer)
+    }
+    idleTimer = setTimeout(
+      () => exceedBound(`timed out with no output for ${formatBoundDuration(idleOutputMs)}`),
+      idleOutputMs,
+    )
+  }
+
+  const attachOutputHandler = (readable: typeof child.stdout, stream: CommandOutputStream) => {
     readable?.on('data', chunk => {
-      const buffer = Buffer.from(chunk)
-      if (options.captureOutput) {
-        chunks.push(buffer)
-      }
-      spec.onOutput?.(stream, buffer)
-      if (stdio.streamOutput) {
-        writeToTerminal(buffer)
-      } else if (prefixedOutput) {
-        prefixedOutput.write(stream, buffer)
-      }
+      deliverOutput(stream, Buffer.from(chunk))
+      restartIdleBound()
     })
   }
-  attachOutputHandler(child.stdout, 'stdout', stdoutChunks, buffer => HCI.write(buffer))
-  attachOutputHandler(child.stderr, 'stderr', stderrChunks, buffer => HCI.writeError(buffer))
+  attachOutputHandler(child.stdout, 'stdout')
+  attachOutputHandler(child.stderr, 'stderr')
+
+  const timeoutMs = bounds.timeoutMs
+  if (timeoutMs !== undefined) {
+    wallClockTimer = setTimeout(() => exceedBound(`timed out after ${formatBoundDuration(timeoutMs)}`), timeoutMs)
+  }
+  restartIdleBound()
 
   if (spec.stdin !== undefined) {
     child.stdin?.end(spec.stdin)
   }
 
+  /** closeResultFor reports the bound that stopped the tree, so a caller never reads a clean exit. */
+  const closeResultFor = (
+    exitCode: number | null,
+    signal: Platform.ProcessSignal | null,
+  ): CommandCloseResult => ({
+    exitCode,
+    signal: boundFailure === undefined ? signal : signal ?? 'SIGTERM',
+  })
+
   let spawnError: Error | undefined
   const closePromise = new Promise<CommandCloseResult>(resolve => {
     child.once('close', (exitCode, signal) => {
-      resolve({ exitCode, signal })
+      closed = true
+      clearBounds()
+      if (escalation !== undefined) {
+        clearTimeout(escalation)
+        escalation = undefined
+      }
+      resolve(closeResultFor(exitCode, signal))
     })
   })
 
@@ -194,12 +344,18 @@ function startCommand(
     get exitCode() {
       return child.exitCode
     },
+    get pid() {
+      return child.pid
+    },
     get signalCode() {
       return child.signalCode
     },
-    kill: signal => child.kill(signal),
+    kill: signal => stopProcessTree(signal ?? 'SIGTERM'),
     onceClose: listener => {
-      child.once('close', listener)
+      child.once('close', (exitCode, signal) => {
+        const result = closeResultFor(exitCode, signal)
+        listener(result.exitCode, result.signal)
+      })
     },
     onceError: listener => {
       child.once('error', listener)
@@ -241,6 +397,41 @@ function runSync(command: string, spec: CommandSyncSpec = {}): CommandResult {
     stderr,
     error: result.error,
   }
+}
+
+/** ProcessBounds is the parent-enforced budget a `test` policy child runs under. */
+type ProcessBounds = {
+  idleOutputMs?: number
+  timeoutMs?: number
+}
+
+/**
+ * resolveProcessBounds refuses a bound the policy does not enforce rather than dropping it: a spec
+ * that asks for a timeout and silently gets none is how an unbounded child reached 12 GB.
+ */
+function resolveProcessBounds(command: string, policy: CommandProcessPolicy, spec: CommandSpec): ProcessBounds {
+  const declared = (['idleOutputMs', 'timeoutMs'] as const).filter(key => spec[key] !== undefined)
+  if (declared.length === 0) {
+    return {}
+  }
+  if (policy !== 'test') {
+    throwUnexpected(
+      `Expected: ${declared.join(' and ')} only on a 'test' process policy, but '${command}' declared`
+        + ` ${declared.join(' and ')} with the '${policy}' policy.`,
+    )
+  }
+  for (const key of declared) {
+    const value = spec[key]
+    if (value === undefined || !Number.isFinite(value) || value <= 0) {
+      throwUnexpected(`Expected: a positive ${key} for '${command}', but it was ${String(value)}.`)
+    }
+  }
+  return { idleOutputMs: spec.idleOutputMs, timeoutMs: spec.timeoutMs }
+}
+
+/** formatBoundDuration spells a bound the way its reason line reads, seconds first. */
+function formatBoundDuration(ms: number): string {
+  return ms % 1_000 === 0 ? `${ms / 1_000}s` : `${ms}ms`
 }
 
 function isCommandStdioMode(stdio: CommandStdio | undefined): stdio is 'inherit' | 'pipe' | 'stream' {

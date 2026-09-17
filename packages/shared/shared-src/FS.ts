@@ -1003,12 +1003,24 @@ export async function symlink(targetPath: string, linkPath: string): Promise<voi
 }
 
 /**
- * replaceSymlink points a symlink at `targetPath`, replacing whatever the link path held. Removing
- * a symlink never follows it, so an existing link is unlinked rather than its target deleted.
+ * replaceSymlink points a symlink at `targetPath`, replacing whatever the link path held, without
+ * ever leaving the link path empty.
+ *
+ * Unlinking and recreating would be simpler and is wrong: between the two calls the link does not
+ * exist, so a concurrent reader resolves nothing, and two writers racing make the loser's create
+ * fail outright. Creating the new link under a unique name in the same directory and renaming it
+ * over the old one is atomic — a reader sees the old target or the new one, never neither. Removing
+ * a symlink never follows it, so an existing link is replaced rather than its target deleted.
  */
 export async function replaceSymlink(targetPath: string, linkPath: string): Promise<void> {
-  await remove(linkPath)
-  await symlink(targetPath, linkPath)
+  const stagedPath = `${linkPath}.${randomUUID()}.tmp`
+  try {
+    await symlink(targetPath, stagedPath)
+    await move(stagedPath, linkPath)
+  } catch (error) {
+    await remove(stagedPath).catch(() => {})
+    throw error
+  }
 }
 
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */

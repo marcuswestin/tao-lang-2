@@ -8,6 +8,10 @@ language target and the program that reaches it â€” first MVP, then Revolution â
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
+The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
+agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
+judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
+
 ## Ro STACK
 
 - [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
@@ -17,6 +21,11 @@ app feature and Tao test proves each capability).
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in
     `Docs/Roadmap/Developer environment upgrades.md`.
+- [ ] Decide how parallel agents share one machine.
+  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
+    wall time and starved suites past their hang guards. What to share, what to serialize, what is
+    duplicated per worktree for no reason, and where a single orchestrator does and does not help
+    live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
 ## Documentation cleanup
 

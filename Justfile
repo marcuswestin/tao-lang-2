@@ -158,15 +158,14 @@ test-flakes limit="20":
 test-slowest limit="20":
     ./dev test-slowest --limit "{{ limit }}"
 
-# Dry-run the human-only feature landing workflow; pass --execute explicitly to mutate refs
+# Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
-[arg('execute', long='execute', value='true')]
 [arg('message_file', long='message-file')]
-[arg('push', long='push', value='true')]
+[arg('skip_all', long='skip-all', value='true')]
 [arg('skip_full_verify', long='skip-full-verify', value='true')]
-[arg('yes', long='yes', value='true')]
-merge-with-main execute='false' yes='false' push='false' skip_full_verify='false' message_file='' abort='':
-    ./dev merge-with-main {{ if execute == "true" { "--execute" } else { "" } }} {{ if yes == "true" { "--yes" } else { "" } }} {{ if push == "true" { "--push" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+[arg('skip_verify', long='skip-verify', value='true')]
+merge-with-main skip_verify='false' skip_full_verify='false' skip_all='false' message_file='' abort='':
+    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen
@@ -302,12 +301,12 @@ _repo-lint:
 _typecheck:
     bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json
 
+# `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
+# all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the
+# suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
+# `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
     bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
-
-# The suites the branch diff reaches, as the `verify --changed` graph runs them
-_test-changed:
-    bun run packages/dev/dev-src/dev.ts test-changed
 
 # `verify` without a scope: name the choices and refuse, so the complete lane is a decision, not a default
 _verify-scope-menu:
