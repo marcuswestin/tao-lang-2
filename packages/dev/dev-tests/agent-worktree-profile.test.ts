@@ -12,6 +12,11 @@ type ProfileFixture = {
   worktree: string
 }
 
+/** The one quarantine `full-verify` reports as skipped, spelled exactly as the Justfile spells it. */
+const simulatedUserQuarantine = 'studio-smoke-simulated-user=quarantined; every step now passes up to '
+  + 'the component drag onto the editor; run just studio-smoke '
+  + 'packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce'
+
 Describe('agent worktree profile bootstrap', () => {
   Test('links and activates the primary pinned profile idempotently', async () => {
     const testRoot = await mkTestDir('tao-agent-profile-')
@@ -520,8 +525,7 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-        + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
+      `--skipped "${simulatedUserQuarantine}"`,
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
@@ -581,8 +585,7 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-      + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
+    const quarantine = `--skipped "${simulatedUserQuarantine}"`
     Expect(fullVerify).toContain(quarantine)
     Expect(sandbox).toContain('--skip-unsandboxed')
     Expect(sandbox).toContain(quarantine)

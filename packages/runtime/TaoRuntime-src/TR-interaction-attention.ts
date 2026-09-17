@@ -14,6 +14,7 @@ import {
   type TaoOutlineLiveNode,
   visualOrder,
 } from './TR-interaction-outline'
+import type { Evaluable } from './TR-navigation-presentables'
 
 export type { TaoAttentionKey } from './TR-interaction-keys'
 
@@ -63,7 +64,7 @@ type PendingVerb = {
 export type TaoPendingSearchResult = Readonly<{
   identity: string
   label: string
-  value: { evaluate(): { jsValue: unknown } }
+  value: Evaluable
 }>
 
 type PendingAllocatedKey = Readonly<{ prefix: string; surface: string }>
@@ -299,6 +300,14 @@ export class InteractionAttention {
       return
     }
     this.#engaged = identity
+    // Narrowing has done its work once it has selected the target being engaged. Clearing it here
+    // keeps narrowing from outliving that engagement, so the first letter typed after disengaging
+    // starts a fresh narrowing instead of extending the one that chose the input.
+    const memory = this.memory()
+    if (memory.narrowing.length > 0) {
+      memory.narrowing = ''
+      this.recomputeCandidates()
+    }
     node.live?.engage?.()
     this.emit()
   }
@@ -381,7 +390,7 @@ export class InteractionAttention {
   }
 
   /** choosePendingSearchResult fills an entity slot from the store picker's real runtime handle. */
-  choosePendingSearchResult(value: { evaluate(): { jsValue: unknown } }): boolean {
+  choosePendingSearchResult(value: Evaluable): boolean {
     const pending = this.#verbPending
     const entity = DataControls.EntityInteraction(value.evaluate().jsValue)
     if (!pending || !pending.slot.entity || entity?.entity !== pending.slot.type) {
@@ -424,7 +433,7 @@ export class InteractionAttention {
   }
 
   /** providePendingValue fills one inline text/duration request through a runtime value. */
-  providePendingValue(value: { evaluate(): { jsValue: unknown } }): boolean {
+  providePendingValue(value: Evaluable): boolean {
     if (!this.#verbPending || this.#verbPending.slot.entity) {
       return false
     }
@@ -780,7 +789,7 @@ export class InteractionAttention {
     this.emit()
   }
 
-  private advancePending(value: { evaluate(): { jsValue: unknown } }): void {
+  private advancePending(value: Evaluable): void {
     const pending = this.#verbPending
     if (!pending) {
       return
@@ -1226,8 +1235,15 @@ function cyclicIdentity(
   return entries[(index + delta + entries.length) % entries.length]!.identity
 }
 
-function runtimeInteractionValue(jsValue: unknown): { evaluate(): { jsValue: unknown } } {
-  return Object.freeze({ evaluate: () => ({ jsValue }) })
+/**
+ * runtimeInteractionValue wraps one interaction-supplied fill as a runtime value. Generated command
+ * bodies evaluate a fill and hand the result to a runtime action, which evaluates it again, so the
+ * wrapper has to evaluate to itself exactly as `TR.Value` does. A wrapper that evaluated to a bare
+ * `{ jsValue }` would fail that second evaluation inside the action instead of at the fill site.
+ */
+export function runtimeInteractionValue(jsValue: unknown): Evaluable {
+  const value: Evaluable & { jsValue: unknown } = { evaluate: () => value, jsValue }
+  return Object.freeze(value)
 }
 
 function isBareLetter(value: string): boolean {

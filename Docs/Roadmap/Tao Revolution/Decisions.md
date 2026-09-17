@@ -990,8 +990,10 @@ part has landed.
   descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
   selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
   word-prefix subsequences across rendered text, and a sole candidate becomes the target.
-- **Keyboard and pointer input share semantic operations.** Enter activates or engages; Escape
-  clears narrowing, disengages without losing the target, ascends, then opens overview; arrows move
+- **Keyboard and pointer input share semantic operations.** Enter activates or engages, and
+  engaging clears the narrowing that selected the target so narrowing never outlives its
+  engagement; Escape disengages without losing the target, clears narrowing, ascends, then opens
+  overview; arrows move
   region or target attention; `.` opens verbs; physical `Slash` toggles hints; and `primary+K`
   opens the palette. In the palette and pending-slot chooser, arrows cycle the displayed choices and
   Enter invokes or accepts the selected choice. Authored bare-letter command keys invoke only as verb

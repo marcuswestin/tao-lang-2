@@ -8,9 +8,7 @@ import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import type { TaoProps } from './TR-TaoProps'
 import { TaoPropsControls } from './TR-TaoProps'
 
-export type Evaluable = {
-  evaluate(): { jsValue: unknown }
-}
+export type { Evaluable } from './TR-action-values'
 
 /** RuntimePresentable is the evaluable view descriptor used by every presentation and ask site. */
 export class RuntimePresentable {
