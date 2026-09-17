@@ -70,6 +70,32 @@ Describe('tao foreign binding forms', () => {
     Expect(scan.bindings.map(binding => binding.line)).toEqual([1, 3])
     Expect(scan.unreadable).toEqual([])
   })
+
+  Test('reads a head that wraps before its from, which is how several fails clauses are written', () => {
+    const scan = taoForeignBindings([
+      'action Publish(Value text) returns text',
+      '   fails Offline "Publishing is unavailable."',
+      '   fails Rejected "Publishing was rejected."',
+      '   from ./Api.ts',
+    ].join('\n'))
+
+    Expect(scan.bindings).toEqual([{ line: 4, name: 'Publish', path: './Api.ts' }])
+    Expect(scan.unreadable).toEqual([])
+  })
+
+  Test('does not complete a wrapped head across a blank line, since no declaration spans one', () => {
+    const scan = taoForeignBindings('action Publish(Value text)\n\n   from ./Api.ts')
+
+    Expect(scan.bindings).toEqual([])
+    Expect(scan.unreadable).toEqual([3])
+  })
+
+  Test('never completes a line that carries head text of its own from its neighbour', () => {
+    const scan = taoForeignBindings('action Publish(Value text)\n   retries 3 from ./Api.ts')
+
+    Expect(scan.bindings).toEqual([])
+    Expect(scan.unreadable).toEqual([2])
+  })
 })
 
 Describe('tao foreign binding exclusions', () => {
