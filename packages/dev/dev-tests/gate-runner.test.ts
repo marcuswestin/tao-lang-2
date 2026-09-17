@@ -389,11 +389,17 @@ Describe('gate runner under a shared machine', () => {
 Describe('gate runner green trees', () => {
   async function runOnce(
     root: string,
-    options: { fresh?: boolean; hash: string; lanes: readonly string[]; script?: GateScript },
+    options: {
+      fresh?: boolean
+      gates?: readonly string[]
+      hash: string
+      lanes: readonly string[]
+      script?: GateScript
+    },
   ) {
     const started: string[] = []
     const summary = await runGates({
-      gates: ['_repo-lint', '_typecheck'],
+      gates: options.gates ?? ['_repo-lint', '_typecheck'],
       greenTree: { fresh: options.fresh, hashTree: async () => options.hash, lanes: options.lanes },
       jobs: 2,
       lane: options.lanes[0],
@@ -465,7 +471,77 @@ Describe('gate runner green trees', () => {
 
       await runOnce(root, { hash: 'tree-2', lanes: ['verify', 'full-verify'] })
       const full = await runOnce(root, { hash: 'tree-2', lanes: ['full-verify'] })
-      Expect(full.started.length).toBe(2)
+      // The subset lane's record is not accepted as the superset's, so this run happens — but the
+      // gates that record proved at this exact tree are not run a second time.
+      Expect(full.summary.greenTree).toBeUndefined()
+      Expect(full.started).toEqual([])
+      Expect(full.summary.gates.map(gate => gate.status)).toEqual(['skipped', 'skipped'])
+      Expect(full.summary.gates[0]?.reason).toContain('proved green at this tree')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a lane runs the gates no record covers, and always runs the gates that rewrite the tree', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-gates-')
+    try {
+      const verify = await runOnce(root, {
+        gates: ['_parser-gen', '_repo-lint', '_typecheck'],
+        hash: 'tree-1',
+        lanes: ['verify'],
+      })
+      Expect(verify.started.sort()).toEqual(['_parser-gen', '_repo-lint', '_typecheck'])
+
+      const full = await runOnce(root, {
+        gates: ['_parser-gen', '_repo-lint', '_typecheck', 'dead-exports'],
+        hash: 'tree-1',
+        lanes: ['full-verify'],
+      })
+      // `_parser-gen` fills a generated directory the tree hash does not describe, so a record can
+      // never stand for it; `dead-exports` has no record of its own yet.
+      Expect(full.started.sort()).toEqual(['_parser-gen', 'dead-exports'])
+      Expect(full.summary.status).toBe('passed')
+
+      // What the superset run proved is now recorded too, so the subset lane stands on its record.
+      const again = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+      Expect(again.started).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a run that skipped gates on an earlier proof is not green evidence once the tree moves', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-moved-')
+    try {
+      await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+
+      // The fix gates rewrote the tree after the skip decision was made on the old one.
+      let hash = 'tree-1'
+      const moved = await runGates({
+        gates: ['_repo-lint', '_typecheck', 'dead-exports'],
+        greenTree: {
+          hashTree: async () => {
+            const current = hash
+            hash = 'tree-2'
+            return current
+          },
+          // A lane no whole-lane record covers, so the run happens and reaches its gate records.
+          lanes: ['full-verify'],
+        },
+        jobs: 2,
+        lane: 'full-verify',
+        logRoot: FS.resolvePath('logs-moved', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async (_name, logPath) => {
+          await FS.writeText(logPath, '')
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(moved.warnings.some(warning => warning.includes('not green evidence'))).toBe(true)
+      // Nothing was recorded against the tree this run left behind.
+      Expect((await runOnce(root, { hash: 'tree-2', lanes: ['verify'] })).started.length).toBe(2)
     } finally {
       await FS.remove(root)
     }
