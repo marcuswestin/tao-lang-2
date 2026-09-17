@@ -149,11 +149,12 @@ Host-only replace/dismiss initially acts on the focused or latest dynamic occurr
 
 Reusing a Toast key preserves the wrapper occurrence and refreshes its timer. Before interactive toasts are implemented, decide whether changed content retires and recreates the child UI occurrence, or whether Toast content must be non-interactive and safely reusable. An old callback must never inherit the refreshed wrapper's mount identity accidentally.
 
-### DEF-NAV-018: Cross-Module App Variants
+### DEF-NAV-018: Cross-Module App Variants (resolved)
 
-App variants are currently confined to the entry file. Before apps can cross module boundaries,
-generated variants must derive declaration identity, navigator, and datasource lazily from the
-immediate base variant's runtime value rather than emitting references to module-local root symbols.
+App values use ordinary module placement and visibility. A generated variant that crosses a module
+boundary inherits lazily from its immediate base runtime app value, including declaration identity,
+navigator, datasource, design, auxiliaries, restoration, and app setup, rather than re-emitting the
+base module's private symbols.
 
 ## Post-Implementation Audit
 

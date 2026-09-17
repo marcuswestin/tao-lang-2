@@ -16,9 +16,9 @@ export const AppCompiler = {
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
-  AppValue(app: AST.AppValueDeclaration): Compiled {
+  AppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
     configureActionInstrumentation(false)
-    return compileAppValue(app)
+    return compileAppValue(app, options)
   },
 
   /** PrimitiveValueDeclaration binds one complete nav or datasource descriptor as an immutable Tao value. */
@@ -41,19 +41,33 @@ export const AppCompiler = {
 } as const
 
 function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
-  const configuration = ASTUtils.effectiveAppConfiguration(app)
-  const navigator = configuration.get('Navigator')
-  Assert.defined(navigator, 'validated app value has a Navigator')
-  const name = configuration.get('Name')
-  const design = configuration.get('Design')
-  const restoration = effectiveRestorationPolicy(app)
+  const base = directAppBase(app)
   const root = ASTUtils.rootAppValue(app)
   Assert.defined(root, 'validated app derivation is acyclic')
+  const crossModuleBase = base && appInheritanceLeavesModule(app, base) ? base : undefined
+  const configuration = crossModuleBase ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
+  const baseReference = crossModuleBase ? appDefinitionReference(crossModuleBase) : undefined
+  const inheritedConfiguration = crossModuleBase ? ASTUtils.effectiveAppConfiguration(crossModuleBase) : undefined
+  const navigator = compileResolvedAppProperty(configuration.get('Navigator'), 'Navigator', baseReference)
+  Assert.defined(navigator, 'validated app value has a Navigator')
+  const name = compileResolvedAppProperty(
+    configuration.get('Name'),
+    'Name',
+    inheritedConfiguration?.has('Name') ? baseReference : undefined,
+  )
+  const design = compileResolvedAppProperty(
+    configuration.get('Design'),
+    'Design',
+    inheritedConfiguration?.has('Design') ? baseReference : undefined,
+  )
+  const restoration = effectiveRestorationPolicy(app)
   const definition = { name: `_TaoAppDefinition_${app.name}` }
-  const rootDeclaration = root === app
+  const rootDeclaration = crossModuleBase
+    ? gen`${baseReference}.declaration`
+    : root === app
     ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
     : gen`${appDefinitionReference(root)}.declaration`
-  const auxiliaries = rootAuxiliaryNavigators(root)
+  const auxiliaries = crossModuleBase ? [] : rootAuxiliaryNavigators(root)
   const persistedStates = AST.isAppDeclaration(root) && root.block
     ? root.block.statements.filter(AST.isStateDeclaration)
     : []
@@ -65,39 +79,34 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const selectedDatasourceConfiguration = app.name === options.selectedAppName
     ? options.selectedAppDatasourceConfiguration
     : undefined
-  const datasources = compileAppDatasourceBindings(app, selectedDatasourceConfiguration)
+  const datasources = compileAppDatasources(app, crossModuleBase, selectedDatasourceConfiguration)
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
     const ${gen.Name(definition)} = TR.Navigation.App({
       declaration: ${rootDeclaration},
-      name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
-      navigator: () => ${compileAppProperty(navigator, 'Navigator')},
+      name: ${name ? gen`${name}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
+      navigator: () => ${navigator},
+      useSetup: () => {
+        ${
+    crossModuleBase
+      ? gen`${baseReference}.definition.useSetup?.()`
+      : gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)
+  }
+      },
       restoration: {
         exclusions: ${gen.jsLiteral(restoration.exclusions)},
         mode: ${gen.jsLiteral(restoration.mode)},
         variant: ${gen.jsLiteral(app.name)},
-        ${
-    // Restoration keys saved navigation state by the providers it was written against. An app with one
-    // store keeps the identity it always had; an app with several lists them all, so changing any one
-    // member's configuration starts restoration afresh rather than restoring handles it cannot resolve.
-    datasources.length === 1
-      ? gen`providerIdentity: () => ${datasources[0]!.compiled}.bindingIdentity(),`
-      : datasources.length > 1
-      // A member whose identity cannot be represented leaves the whole app unkeyed, exactly as a
-      // single unrepresentable store does: restoring against a provider that cannot be recognised
-      // again would restore handles into the wrong data.
-      ? gen`providerIdentity: () => TR.Data.CombinedIdentity([${
-        gen.join(datasources, binding => gen`${binding.compiled}.bindingIdentity()`, { separator: ', ' })
-      }]),`
-      : gen.noop()}
       },
+      ${datasources ? gen`datasources: () => ${datasources},` : gen.noop()}
       ${
-    design && !AST.isNoneLiteral(design.value)
-      ? gen`design: () => ${compileAppProperty(design, 'Design')},`
+    design
+      ? gen`design: () => ${design},`
       : gen.noop()
   }
       auxiliaries: () => ({
+        ${crossModuleBase ? gen`...${baseReference}.definition.auxiliaries(),` : gen.noop()}
         ${
     gen.list(auxiliaries, auxiliary =>
       gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
@@ -105,18 +114,8 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       }),
     })
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
-      ${gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)}
-      ${
-    gen.list(
-      datasources,
-      binding =>
-        gen`TR.Data.UseConfigured(
-          ${gen.scopeName({ name: binding.catalog })},
-          ${binding.compiled},
-          ${binding.storageName === undefined ? gen.noop() : gen`${gen.jsLiteral(binding.storageName)},`}
-        )`,
-    )
-  }
+      ${gen.Name(definition)}.definition.useSetup?.()
+      ${datasources ? gen`TR.Data.UseAppDatasources(${gen.Name(definition)}.definition)` : gen.noop()}
       ${
     options.localDataCatalog
       ? gen`TR.Data.UseConfigured(
@@ -147,8 +146,8 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
     return gen.noop()
   }
   return gen`
-    const _TaoStudioScenario = TR.Studio.Environment.useScenario()
-    const _TaoStudioFixture = TR.Studio.Environment.useFixture(${
+    const _TaoStudioScenario = useTaoGeneratedStudioScenario()
+    const _TaoStudioFixture = useTaoGeneratedStudioFixture(${
     options.studioDataCatalog ? compileStudioStores() : 'undefined'
   })
     if (_TaoStudioScenario?.kind === 'view') {
@@ -307,40 +306,125 @@ function restorationPolicy(
   }
 }
 
-function compileAppProperty(
-  property: ASTUtils.EffectiveAppProperty,
+/** directAppBase returns the immediate app value a reference or refinement derives from. */
+function directAppBase(app: AST.AppValueDeclaration): AST.AppValueDeclaration | undefined {
+  const expression = app.value
+  if (!expression || (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression))) {
+    return undefined
+  }
+  const target = resolveRef(expression.target)
+  Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
+  return target
+}
+
+/** appInheritanceLeavesModule keeps every chain containing a foreign ancestor on runtime values. */
+function appInheritanceLeavesModule(
+  app: AST.AppValueDeclaration,
+  base: AST.AppValueDeclaration,
+): boolean {
+  const appPath = AST.getDocument(app).uri.path
+  const seen = new Set<AST.AppValueDeclaration>()
+  let current: AST.AppValueDeclaration | undefined = base
+  while (current && !seen.has(current)) {
+    if (AST.getDocument(current).uri.path !== appPath) {
+      return true
+    }
+    seen.add(current)
+    current = directAppBase(current)
+  }
+  return false
+}
+
+/** directAppConfiguration keeps cross-module inheritance on the imported runtime app value. */
+function directAppConfiguration(app: AST.AppValueDeclaration): ASTUtils.EffectiveAppConfiguration {
+  const configuration: ASTUtils.EffectiveAppConfiguration = new Map()
+  const expression = app.value
+  Assert.defined(expression, 'cross-module app value has an initializer')
+  if (AST.isRefinementExpression(expression)) {
+    applyDirectConfigurationBlock(configuration, expression.patchBlock)
+  }
+  return configuration
+}
+
+function applyDirectConfigurationBlock(
+  configuration: ASTUtils.EffectiveAppConfiguration,
+  block: AST.ConfigurationBlock,
+): void {
+  for (const entry of block.entries) {
+    if (entry.rootView) {
+      configuration.set('Navigator', { patches: [], value: entry.rootView })
+      continue
+    }
+    if (!entry.name || !entry.value) {
+      continue
+    }
+    if (AST.isPropertyConfigurationPatch(entry.value)) {
+      const property = configuration.get(entry.name)
+      if (property) {
+        property.patches.push(entry.value.block)
+      } else {
+        configuration.set(entry.name, { patches: [entry.value.block] })
+      }
+    } else {
+      configuration.set(entry.name, { patches: [], value: entry.value })
+    }
+  }
+}
+
+function compileResolvedAppProperty(
+  property: ASTUtils.EffectiveAppProperty | undefined,
   name: 'Name' | 'Navigator' | 'Design',
-): Compiled {
-  Assert.defined(property.value, `validated app ${name} supplies a value`)
-  let result = compileAppPropertySource(property.value)
-  for (const patch of property.patches) {
-    Assert(name === 'Navigator', `validated app ${name} cannot be patched`)
-    result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+  base: Compiled | undefined,
+): Compiled | undefined {
+  let result = property?.value
+    ? name === 'Design' && AST.isNoneLiteral(property.value)
+      ? gen`undefined`
+      : compileAppPropertySource(property.value)
+    : base
+    ? inheritedAppProperty(base, name)
+    : undefined
+  if (!result) {
+    return undefined
+  }
+  for (const patch of property?.patches ?? []) {
+    if (name === 'Navigator') {
+      result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else {
+      Assert(false, `validated app ${name} cannot be patched`)
+    }
   }
   return result
 }
 
-/** CompiledDatasourceBinding pairs one mounted store's catalog binding with the datasource filling it. */
-type CompiledDatasourceBinding = {
+function inheritedAppProperty(
+  base: Compiled,
+  name: 'Name' | 'Navigator' | 'Design',
+): Compiled {
+  if (name === 'Name') {
+    return gen`TR.Value(${base}.definition.name)`
+  }
+  if (name === 'Navigator') {
+    return gen`${base}.definition.navigator()`
+  }
+  return gen`${base}.definition.design?.()`
+}
+
+/** PlannedDatasourceBinding is one datasource an app binds, with the store it fills. */
+type PlannedDatasourceBinding = {
+  binding: ASTUtils.AppDatasourceBinding
   catalog: string
-  compiled: Compiled
   /** storageName is the bound declaration's name, passed only for a store a `Data` slot declares. */
   storageName?: string
 }
 
 /**
- * compileAppDatasourceBindings mounts one datasource per store the app binds. A patch written on
- * the listed name (`Personal with { … }`), a slot patch, and the ship-time release override all layer
- * onto the same configured value, so the app holds its own copy and the declaration is never mutated.
+ * plannedDatasourceBindings resolves one binding per store the app mounts.
  *
  * A datasource that declares membership fills the store its `Data` names, and passes its own name as
  * the storage key that store defaults to. One that declares none fills the default store and keeps the
  * `Data` key every single-datasource app has always used, so no existing store moves.
  */
-function compileAppDatasourceBindings(
-  app: AST.AppValueDeclaration,
-  datasourceConfiguration: Readonly<Record<string, string>> | undefined,
-): readonly CompiledDatasourceBinding[] {
+function plannedDatasourceBindings(app: AST.AppValueDeclaration): readonly PlannedDatasourceBinding[] {
   const plan = activeDataStorePlan()
   const bindings = ASTUtils.appBoundDatasources(app)
   if (bindings.length === 0) {
@@ -348,12 +432,6 @@ function compileAppDatasourceBindings(
   }
   Assert.defined(plan, 'an app that binds a datasource has a store plan')
   return bindings.flatMap(binding => {
-    const source = binding.value
-      ? compileAppPropertySource(binding.value)
-      : binding.declaration
-      ? Compile.ValueDeclarationReference(binding.declaration)
-      : undefined
-    Assert.defined(source, 'validated datasource binding names a declaration or supplies a value')
     const claims = binding.declaration && ASTUtils.datasourceCollectionNames(binding.declaration) !== undefined
     const store = claims ? ASTUtils.storeOfDatasource(plan, binding.declaration!) : plan.defaultStore
     // A catch-all in a project whose datasources claim everything has nothing left to hold.
@@ -361,27 +439,95 @@ function compileAppDatasourceBindings(
       return []
     }
     Assert.defined(store, 'validated datasource with membership fills a planned store')
-    let compiled = source
-    for (const patch of binding.patches) {
-      compiled = gen`TR.Data.Patch(${compiled}, ${Compile.ConfigurationPatchObject(patch)})`
-    }
-    const release = releaseConfigurationFor(binding, datasourceConfiguration)
-    if (Object.keys(release).length > 0) {
-      compiled = gen`TR.Data.Patch(${compiled}, {
-        ${
-        gen.list(
-          Object.entries(release).toSorted(([left], [right]) => left.localeCompare(right)),
-          ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
-        )
-      }
-      })`
-    }
-    return [{
-      catalog: store.binding,
-      compiled,
-      ...claims ? { storageName: binding.declaration!.name } : {},
-    }]
+    return [{ binding, catalog: store.binding, ...claims ? { storageName: binding.declaration!.name } : {} }]
   })
+}
+
+/**
+ * compileAppDatasources lists the stores an app mounts, or nothing for an app that mounts none.
+ *
+ * A variant whose base lives in another module and which names no datasource of its own inherits
+ * its base's bindings as runtime values, exactly as it inherits the base's navigator: the base's
+ * datasource was written against names imported only where the base is declared. The variant's own
+ * slot patches and the ship-time release override still land on those inherited values, one patch
+ * list per binding in the order the base mounts them.
+ */
+function compileAppDatasources(
+  app: AST.AppValueDeclaration,
+  crossModuleBase: AST.AppValueDeclaration | undefined,
+  datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+): Compiled | undefined {
+  const planned = plannedDatasourceBindings(app)
+  if (planned.length === 0) {
+    return undefined
+  }
+  const own = crossModuleBase ? directAppConfiguration(app).get('Datasource') : undefined
+  if (crossModuleBase && !own?.value) {
+    const inherited = gen`${appDefinitionReference(crossModuleBase)}.definition.datasources()`
+    const patches = planned.map(({ binding }) => [
+      ...(own?.patches ?? []).map(patch => Compile.ConfigurationPatchObject(patch)),
+      ...compileReleasePatch(binding, datasourceConfiguration),
+    ])
+    return patches.every(list => list.length === 0)
+      ? inherited
+      : gen`TR.Data.PatchBindings(${inherited}, [${
+        gen.join(patches, list => gen`[${gen.join(list, patch => patch, { separator: ', ' })}]`, {
+          separator: ', ',
+        })
+      }])`
+  }
+  return gen`[${
+    gen.join(
+      planned,
+      ({ binding, catalog, storageName }) =>
+        gen`{
+          store: ${gen.scopeName({ name: catalog })},
+          source: ${compileDatasourceSource(binding, datasourceConfiguration)},
+          ${storageName === undefined ? gen.noop() : gen`storageName: ${gen.jsLiteral(storageName)},`}
+        }`,
+      { separator: ', ' },
+    )
+  }]`
+}
+
+/**
+ * A patch written on the listed name (`Personal with { … }`), a slot patch, and the ship-time release
+ * override all layer onto the same configured value, so the app holds its own copy and the
+ * declaration is never mutated.
+ */
+function compileDatasourceSource(
+  binding: ASTUtils.AppDatasourceBinding,
+  datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+): Compiled {
+  const source = binding.value
+    ? compileAppPropertySource(binding.value)
+    : binding.declaration
+    ? Compile.ValueDeclarationReference(binding.declaration)
+    : undefined
+  Assert.defined(source, 'validated datasource binding names a declaration or supplies a value')
+  const patches = [
+    ...binding.patches.map(patch => Compile.ConfigurationPatchObject(patch)),
+    ...compileReleasePatch(binding, datasourceConfiguration),
+  ]
+  return patches.reduce<Compiled>((compiled, patch) => gen`TR.Data.Patch(${compiled}, ${patch})`, source)
+}
+
+function compileReleasePatch(
+  binding: ASTUtils.AppDatasourceBinding,
+  datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+): readonly Compiled[] {
+  const release = releaseConfigurationFor(binding, datasourceConfiguration)
+  if (Object.keys(release).length === 0) {
+    return []
+  }
+  return [gen`{
+    ${
+    gen.list(
+      Object.entries(release).toSorted(([left], [right]) => left.localeCompare(right)),
+      ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
+    )
+  }
+  }`]
 }
 
 /**

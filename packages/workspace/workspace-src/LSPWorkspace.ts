@@ -44,7 +44,7 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
   // workspace rather than assumed to be inside it. It only sits inside the workspace root when Tao
   // itself is the open project; a packaged extension carries the stdlib in its own directory.
   private async loadWorkspaceDocuments(): Promise<void> {
-    for (const root of [this.root, this.project.packagesContext.stdlibRoot]) {
+    for (const root of [this.project.packagesContext.index.projectRoot, this.project.packagesContext.stdlibRoot]) {
       await this.loadDocumentsUnder(root)
     }
   }

@@ -78,13 +78,14 @@ export type GeneratedApp = {
 
 const generationQueues = new Map<string, Promise<void>>()
 const previewPublications = new Map<string, StudioPreviewPublication>()
-
-/**
- * previewInspectionLink is the stable path a human opens to read the generated graph. It points at
- * the newest revision root instead of duplicating it, and stays out of every import: no generated
- * module resolves through it, so Metro and the bundlers only ever see one copy of each module.
- */
-const previewInspectionLink = 'current'
+const studioPublicationPath = 'TaoStudioPublication.ts'
+const legacyPreviewPaths = [
+  'current',
+  'revisions',
+  'TaoStudioActivePreview.ts',
+  'TaoStudioProject.ts',
+  'TaoStudioRevision.ts',
+] as const
 
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
@@ -126,22 +127,15 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const generatedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
-    const previousPreview = preview === undefined ? undefined : previewPublications.get(generatedAppRoot)
-
     await writeGeneratedFiles(
       generatedAppRoot,
       generatedFiles,
-      preview === undefined ? undefined : 'TaoStudioActivePreview.ts',
-      preview === undefined ? [] : [
-        previewInspectionLink,
-        ...(previousPreview === undefined ? [] : [previewRevisionRoot(previousPreview.revision)]),
-      ],
+      preview === undefined ? undefined : studioPublicationPath,
     )
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
       previewPublications.set(generatedAppRoot, preview)
-      await linkNewestPreviewRevision(generatedAppRoot, previewRevisionRoot(preview.revision))
     }
 
     const generatedAppCode = generatedFiles.find(file => file.relativePath === 'App.tsx')?.code
@@ -170,7 +164,7 @@ async function compileStudioPreview(
   const generatedEntries = Object.keys(preview.sourceVersions)
     .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
     .map(path => FS.resolvePath(path, preview.project))
-  if (generatedEntries.length === 0) {
+  if (!await FS.isDirectory(preview.project)) {
     return await Workspace.compile(sourcePath, options)
   }
   const workspace = await Workspace.open(preview.project)
@@ -196,11 +190,15 @@ const Runtime = {
 
 export default Runtime
 
-/** appNames returns the declared app keys in an entry file without generating output. */
+/** appNames returns the declared app keys reachable from an entry file without generating output. */
 async function appNames(appPath: string, opts: { cwd?: string } = {}): Promise<string[]> {
   const sourcePath = FS.resolvePath(appPath, opts.cwd)
   const parsed = await Workspace.parse(sourcePath)
-  return AST.appValueDeclarationsInFile(parsed.entry.ast).map(statement => statement.name)
+  const entryApps = AST.appValueDeclarationsInFile(parsed.entry.ast).map(statement => statement.name)
+  if (entryApps.length > 0) {
+    return entryApps
+  }
+  return parsed.files.flatMap(file => AST.appValueDeclarationsInFile(file.ast).map(statement => statement.name))
 }
 
 function defaultRuntimePackageRoot(): string {
@@ -225,124 +223,188 @@ async function writeGeneratedFiles(
   outputRoot: string,
   files: Array<{ relativePath: string; code: string }>,
   publishLast?: string,
-  preserveRoots: readonly string[] = [],
 ): Promise<void> {
-  const publication = publishLast === undefined
-    ? undefined
-    : files.find(file => file.relativePath === publishLast)
-  Assert(
-    publishLast === undefined || publication !== undefined,
-    'generated publication marker is present',
-    { publishLast },
-  )
+  if (publishLast !== undefined) {
+    await publishGeneratedFiles(outputRoot, files, publishLast)
+    return
+  }
   for (const file of files) {
-    if (file === publication) {
-      continue
-    }
     await writeGeneratedApp(FS.resolvePath(file.relativePath, outputRoot), file.code)
   }
-  if (publication !== undefined) {
-    await publishGeneratedApp(FS.resolvePath(publication.relativePath, outputRoot), publication.code)
-  }
-  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)), preserveRoots)
+  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
   await removeEmptyGeneratedDirectories(outputRoot)
+}
+
+type GeneratedFileChange = {
+  previousCode?: string
+  stagedPath: string
+  targetPath: string
+}
+
+type RemovedGeneratedFile = {
+  code: string
+  path: string
+}
+
+/** publishGeneratedFiles stages changed stable modules and makes their publication marker visible last. */
+async function publishGeneratedFiles(
+  outputRoot: string,
+  files: Array<{ relativePath: string; code: string }>,
+  publishLast: string,
+): Promise<void> {
+  const publication = files.find(file => file.relativePath === publishLast)
+  Assert.defined(publication, 'generated publication marker is present', { publishLast })
+  const stableRoot = files.find(file => file.relativePath === 'App.tsx')
+  Assert.defined(stableRoot, 'generated Studio preview root is present')
+  const stableRootPath = FS.resolvePath(stableRoot.relativePath, outputRoot)
+  const previousStableRoot = await readGeneratedCode(stableRootPath)
+  const isStableRootMigration = previousStableRoot !== stableRoot.code
+  const graphFiles = files.filter(file => file !== publication && file !== stableRoot)
+  // During the one-time migration, leave the revision-addressed root live until all of its stable
+  // replacements exist. Subsequent publications keep the unchanged root in place and publish the
+  // identity marker last.
+  const orderedFiles = !isStableRootMigration
+    ? [...graphFiles, stableRoot, publication]
+    : [...graphFiles, publication, stableRoot]
+  const changes: GeneratedFileChange[] = []
+  const staleFiles = await readStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
+  try {
+    for (const file of orderedFiles) {
+      const targetPath = FS.resolvePath(file.relativePath, outputRoot)
+      const previousCode = await readGeneratedCode(targetPath)
+      if (previousCode === file.code) {
+        continue
+      }
+      const stagedPath = `${targetPath}.tao-next`
+      await FS.remove(stagedPath)
+      await FS.writeText(stagedPath, file.code)
+      changes.push({ previousCode, stagedPath, targetPath })
+    }
+    for (const change of changes) {
+      await FS.move(change.stagedPath, change.targetPath)
+    }
+    for (const staleFile of staleFiles) {
+      await FS.remove(staleFile.path)
+    }
+    await removeEmptyGeneratedDirectories(outputRoot)
+  } catch (error) {
+    await rollbackGeneratedFileChanges(changes, isStableRootMigration ? stableRootPath : undefined)
+    for (const staleFile of staleFiles) {
+      await writeGeneratedApp(staleFile.path, staleFile.code)
+    }
+    throw error
+  } finally {
+    for (const change of changes) {
+      await FS.remove(change.stagedPath).catch(() => {})
+    }
+  }
+  // These paths belong only to the retired revision publisher. They are outside the stable graph,
+  // so a cleanup failure cannot invalidate the publication that just committed.
+  for (const legacyPath of legacyPreviewPaths) {
+    await FS.remove(FS.resolvePath(legacyPath, outputRoot)).catch(() => {})
+  }
+}
+
+async function readGeneratedCode(path: string): Promise<string | undefined> {
+  try {
+    return await FS.readText(path)
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return undefined
+    }
+    throw error
+  }
+}
+
+async function rollbackGeneratedFileChanges(
+  changes: readonly GeneratedFileChange[],
+  migrationRootPath?: string,
+): Promise<void> {
+  // A steady-state rollback restores graph files before the publication marker. A migration must
+  // first restore the retired App.tsx importer, whose revision-addressed graph remains untouched,
+  // before removing its stable replacement graph.
+  const orderedChanges = migrationRootPath === undefined
+    ? changes
+    : [
+      ...changes.filter(change => change.targetPath === migrationRootPath),
+      ...changes.filter(change => change.targetPath !== migrationRootPath),
+    ]
+  for (const change of orderedChanges) {
+    if (await FS.exists(change.stagedPath)) {
+      continue
+    }
+    if (change.previousCode === undefined) {
+      await FS.remove(change.targetPath)
+      continue
+    }
+    const rollbackPath = `${change.targetPath}.tao-rollback`
+    await FS.writeText(rollbackPath, change.previousCode)
+    await FS.move(rollbackPath, change.targetPath)
+  }
+}
+
+async function readStaleGeneratedFiles(
+  outputRoot: string,
+  expectedPaths: ReadonlySet<string>,
+): Promise<RemovedGeneratedFile[]> {
+  if (!await FS.exists(outputRoot)) {
+    return []
+  }
+  const staleFiles: RemovedGeneratedFile[] = []
+  for await (const path of FS.walk(outputRoot)) {
+    const relativePath = FS.relativePath(outputRoot, path)
+    const legacy = legacyPreviewPaths.some(root => relativePath === root || relativePath.startsWith(`${root}/`))
+    if (!expectedPaths.has(relativePath) && !legacy) {
+      staleFiles.push({ code: await FS.readText(path), path })
+    }
+  }
+  return staleFiles
 }
 
 function filesWithStablePreviewRoot(
   files: Array<{ relativePath: string; code: string }>,
   preview: StudioPreviewPublication,
 ): Array<{ relativePath: string; code: string }> {
-  const revisionRoot = previewRevisionRoot(preview.revision)
-  return [
-    {
-      relativePath: 'App.tsx',
-      code: stablePreviewRootSource(),
-    },
-    {
-      relativePath: 'TaoStudioRevision.ts',
-      code: `const TaoStudioRevision = ${
-        JSON.stringify({
-          compileRevision: preview.revision,
-          sourceVersions: preview.sourceVersions,
-        })
-      } as const\n\nexport default TaoStudioRevision\n`,
-    },
-    {
-      relativePath: 'TaoStudioProject.ts',
-      code: `const TaoStudioProject = ${
-        JSON.stringify({
-          appName: preview.appName,
-          project: preview.project,
-        })
-      } as const\n\nexport default TaoStudioProject\n`,
-    },
-    ...files.map(file => previewRevisionFile(file, revisionRoot)),
-    {
-      relativePath: 'TaoStudioActivePreview.ts',
-      code: activePreviewSource(revisionRoot, preview),
-    },
-  ]
-}
-
-function previewRevisionRoot(revision: number): string {
-  return `revisions/revision-${revision}`
-}
-
-/** previewRevisionFile places one compiled module in its revision root, freeing App.tsx for the stable preview root. */
-function previewRevisionFile(
-  file: { relativePath: string; code: string },
-  revisionRoot: string,
-): { relativePath: string; code: string } {
-  if (file.relativePath === 'App.tsx') {
-    return { ...file, relativePath: `${revisionRoot}/TaoApp.tsx` }
-  }
-  const appImport = relativeModuleImport(file.relativePath, 'App.tsx')
-  const taoAppImport = relativeModuleImport(file.relativePath, 'TaoApp.tsx')
-  return {
-    relativePath: `${revisionRoot}/${file.relativePath}`,
-    code: file.code
-      .replaceAll(`'${appImport}'`, `'${taoAppImport}'`)
-      .replaceAll(`"${appImport}"`, `"${taoAppImport}"`),
-  }
-}
-
-/**
- * linkNewestPreviewRevision repoints the stable inspection path at the revision root just published.
- * A staged rename replaces the existing link in place, so an inspector never catches it missing, and
- * a filesystem that refuses symlinks degrades to a one-line pointer file at the same path.
- */
-async function linkNewestPreviewRevision(outputRoot: string, revisionRoot: string): Promise<void> {
-  const linkPath = FS.resolvePath(previewInspectionLink, outputRoot)
-  const stagedPath = `${linkPath}.next`
-  await FS.remove(stagedPath)
-  try {
-    await FS.symlink(FS.joinPath(revisionRoot), stagedPath)
-  } catch {
-    await FS.writeText(stagedPath, `${revisionRoot}\n`)
-  }
-  try {
-    await FS.move(stagedPath, linkPath)
-  } catch {
-    // Only a real directory left at the stable path blocks the rename; the generator owns that path.
-    await FS.remove(linkPath)
-    await FS.move(stagedPath, linkPath)
-  }
-}
-
-function activePreviewSource(revisionRoot: string, preview: StudioPreviewPublication): string {
   const publication = {
     appName: preview.appName,
     compileRevision: preview.revision,
     project: preview.project,
     sourceVersions: preview.sourceVersions,
   }
-  return `import TaoApp from './${revisionRoot}/TaoApp'
-import TaoStudioManifest from './${revisionRoot}/TaoStudioManifest'
+  return [
+    {
+      relativePath: 'App.tsx',
+      code: stablePreviewRootSource(),
+    },
+    ...files.map(stablePreviewFile),
+    {
+      relativePath: 'TaoAppRefresh.tsx',
+      code: `import TaoApp from './TaoApp'\n\nexport default function TaoAppRefresh() {\n  return <TaoApp />\n}\n`,
+    },
+    {
+      relativePath: studioPublicationPath,
+      code: `const TaoStudioPublication = ${
+        JSON.stringify(publication)
+      } as const\n\nexport default TaoStudioPublication\n`,
+    },
+  ]
+}
 
-const TaoStudioPublication = ${JSON.stringify(publication)} as const
-
-export { TaoApp, TaoStudioManifest, TaoStudioPublication }
-`
+/** stablePreviewFile gives the compiled app a stable path while reserving App.tsx for the Studio host. */
+function stablePreviewFile(
+  file: { relativePath: string; code: string },
+): { relativePath: string; code: string } {
+  if (file.relativePath === 'App.tsx') {
+    return { ...file, relativePath: 'TaoApp.tsx' }
+  }
+  const appImport = relativeModuleImport(file.relativePath, 'App.tsx')
+  const taoAppImport = relativeModuleImport(file.relativePath, 'TaoApp.tsx')
+  return {
+    relativePath: file.relativePath,
+    code: file.code
+      .replaceAll(`'${appImport}'`, `'${taoAppImport}'`)
+      .replaceAll(`"${appImport}"`, `"${taoAppImport}"`),
+  }
 }
 
 function relativeModuleImport(fromOutputPath: string, toOutputPath: string): string {
@@ -361,7 +423,9 @@ function relativeModuleImport(fromOutputPath: string, toOutputPath: string): str
 function stablePreviewRootSource(): string {
   return `import React from 'react'
 import TR from '@runtime/TR'
-import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'
+import TaoApp from './TaoAppRefresh'
+import TaoStudioManifest from './TaoStudioManifest'
+import TaoStudioPublication from './TaoStudioPublication'
 
 // React Native aliases \`window\` to its global, so only the platform says whether this is a browser.
 const TaoStudioNativeDevice = require('react-native').Platform?.OS !== 'web'
@@ -385,8 +449,16 @@ export default function App() {
 }
 
 function StudioBrowserApp() {
-  const [cell, setCell] = React.useState<any>()
+  // The generated app remains the live Fast Refresh family so safe source edits preserve its hook
+  // state and appear immediately. Only the coupled manifest/cell runtime is held stale: those two
+  // values must advance together, while the refreshed app is deliberately allowed to render against
+  // the last accepted environment until its matching runtime arrives.
+  const [appliedRuntime, setAppliedRuntime] = React.useState<any>()
   const [bootstrapError, setBootstrapError] = React.useState<unknown>()
+  const wholeApp = React.useMemo(
+    () => ({ cell: undefined, manifest: TaoStudioManifest, publication: TaoStudioPublication }),
+    [TaoStudioPublication.compileRevision],
+  )
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
@@ -399,7 +471,9 @@ function StudioBrowserApp() {
     void fetch(url).then(async response => {
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
-      if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) setCell(nextCell)
+      if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) {
+        setAppliedRuntime({ cell: nextCell, manifest: TaoStudioManifest, publication: TaoStudioPublication })
+      }
     }).catch(error => {
       if (!cancelled) setBootstrapError(error)
     })
@@ -414,26 +488,30 @@ function StudioBrowserApp() {
         || !isRuntimeUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
       ) return
       setBootstrapError(undefined)
-      setCell(event.data.runtime)
+      setAppliedRuntime({
+        cell: event.data.runtime,
+        manifest: TaoStudioManifest,
+        publication: TaoStudioPublication,
+      })
     }
     window.addEventListener('message', receiveRuntime)
     return () => window.removeEventListener('message', receiveRuntime)
   }, [TaoStudioPublication])
-  const waitingForCell = TaoStudioPreviewBootstrap?.cell === true
-    && !runtimeMatchesPublication(cell, TaoStudioPublication)
+  const active = TaoStudioPreviewBootstrap?.cell === true ? appliedRuntime : wholeApp
+  const waitingForInitialCell = TaoStudioPreviewBootstrap?.cell === true && active === undefined
   // Memoized for the same reason as the cell runtime below: this object is a prop, and
   // PreviewBridge keys an effect on it. A fresh literal every render re-mounts the Studio bridge
   // every render.
   const TaoStudioPreviewConfig = React.useMemo(
     () =>
-      TaoStudioPreviewBootstrap === undefined || waitingForCell ? undefined : {
+      TaoStudioPreviewBootstrap === undefined || active === undefined ? undefined : {
         ...TaoStudioPreviewBootstrap,
-        ...(cell?.identity ?? {}),
-        ...TaoStudioPublication,
+        ...(active.cell?.identity ?? {}),
+        ...active.publication,
       },
-    [cell, waitingForCell],
+    [active],
   )
-  if (waitingForCell) {
+  if (waitingForInitialCell) {
     return bootstrapError === undefined
       ? <TR.Studio.Pending />
       : <TR.Studio.Failure error={bootstrapError} />
@@ -442,18 +520,22 @@ function StudioBrowserApp() {
     return <TaoApp />
   }
   return (
-    <TR.Studio.ErrorBoundary key={[
+    <TR.Studio.ErrorBoundary resetKey={[
       TaoStudioPreviewConfig.compileRevision,
       TaoStudioPreviewConfig.cellRevision,
       TaoStudioPreviewConfig.manifestRevision,
       TaoStudioPreviewConfig.previewInstanceId,
     ].join(':')}>
-      <StudioPreviewContent cell={cell} config={TaoStudioPreviewConfig} />
+      <StudioPreviewContent
+        cell={active.cell}
+        config={TaoStudioPreviewConfig}
+        manifest={active.manifest}
+      />
     </TR.Studio.ErrorBoundary>
   )
 }
 
-function StudioPreviewContent({ cell, config }: any) {
+function StudioPreviewContent({ cell, config, manifest }: any) {
   React.useEffect(() => {
     const environment = cell?.cell?.environment
     if (environment === undefined) return
@@ -467,8 +549,8 @@ function StudioPreviewContent({ cell, config }: any) {
   // them a new object every render, and an effect keyed on one of those restarts forever. The native
   // device host memoizes the same call for the same reason.
   const TaoStudioCell = React.useMemo(
-    () => cell === undefined ? undefined : studioCellRuntime(cell, TaoStudioManifest),
-    [cell],
+    () => cell === undefined ? undefined : studioCellRuntime(cell, manifest),
+    [cell, manifest],
   )
   return (
     TaoStudioCell === undefined
@@ -620,15 +702,13 @@ function canonicalSourceVersions(
 async function removeStaleGeneratedFiles(
   outputRoot: string,
   currentRelativePaths: ReadonlySet<string>,
-  preserveRoots: readonly string[] = [],
 ): Promise<void> {
   if (!await FS.exists(outputRoot)) {
     return
   }
   for await (const path of FS.walk(outputRoot)) {
     const relativePath = FS.relativePath(outputRoot, path)
-    const preserved = preserveRoots.some(root => relativePath === root || relativePath.startsWith(`${root}/`))
-    if (!currentRelativePaths.has(relativePath) && !preserved) {
+    if (!currentRelativePaths.has(relativePath)) {
       await FS.remove(path)
     }
   }
@@ -662,22 +742,6 @@ async function writeGeneratedApp(path: string, code: string): Promise<void> {
     }
   }
   await FS.writeText(path, code)
-}
-
-/** publishGeneratedApp atomically switches the one module that makes a complete revision live. */
-async function publishGeneratedApp(path: string, code: string): Promise<void> {
-  try {
-    if (await FS.readText(path) === code) {
-      return
-    }
-  } catch (error) {
-    if (!isMissingPathError(error)) {
-      throw error
-    }
-  }
-  const nextPath = `${path}.next`
-  await FS.writeText(nextPath, code)
-  await FS.move(nextPath, path)
 }
 
 function isMissingPathError(error: unknown): boolean {

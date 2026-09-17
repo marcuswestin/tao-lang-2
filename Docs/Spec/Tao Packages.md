@@ -148,6 +148,12 @@ surfaces through checked-in `@folder` names. A consuming app project installs th
 imports only its public declarations from those package surfaces. The defining project supplies the
 canonical identity of each declaration; consumers read that identity and never recompute it.
 
+Package names are local to their defining project. Two independent projects may both declare
+`@data`, and each project's files resolve `use ... from @data` only against its own folder. Package
+lookup never climbs above the owning project root or enters a nested project. When external package
+installation lands, dependency declarations inside `project { ... }` will explicitly select which
+package surfaces from another project enter the consumer's namespace.
+
 The top-level data declaration supplies singular and plural values. The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
 transition and reads a directly presented scene's reactive `Title` and optional `Toolbar`; a plain

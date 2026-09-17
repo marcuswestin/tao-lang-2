@@ -1,6 +1,7 @@
 import type React from 'react'
 import { beginActionLaunch, deferTransactionCommit, suspendAcrossLaunch } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
+import type { TaoAppDatasourceBinding } from './TR-data'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import { resetInteractionRuntime } from './TR-interaction-catalog'
@@ -90,18 +91,23 @@ export type TaoAppDeclaration = Readonly<{
 
 export type TaoAppDefinition = {
   auxiliaries(): Record<string, TaoNavigationInput>
+  /**
+   * The stores the app mounts. A variant in another module inherits these values rather than
+   * recompiling its base's datasource, whose names are not in scope there.
+   */
+  datasources?(): readonly TaoAppDatasourceBinding[]
   declaration?: TaoAppDeclaration
   /** A definition built for a Studio cell forwards the app's design, which an app may not declare. */
   design?(): TaoDesign | undefined
   name: string
   navigator(): TaoNavigationInput
   restoration?: TaoAppRestorationDefinition
+  useSetup?(): void
 }
 
 type TaoAppRestorationDefinition = Readonly<{
   exclusions: readonly ('menus' | 'sheets' | 'toasts')[]
   mode: 'automatic' | 'fresh'
-  providerIdentity?(): string | undefined
   variant: string
 }>
 

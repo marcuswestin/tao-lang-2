@@ -1,4 +1,3 @@
-use View1 from @/studio
 use CloudKit from @tao/data/providers/cloudkit
 use Http from @tao/data/providers/http
 use OpenUrl from @tao/linking

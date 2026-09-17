@@ -1,5 +1,6 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import type { ReactNode } from 'react'
 import { Debug } from '../TaoRuntime-src/TR-debug'
 import {
   collectStudioPreviewLayoutMeasurements,
@@ -7,6 +8,7 @@ import {
   publishStudioJourneyReplayResult,
   publishStudioScheme,
   replayStudioJourney,
+  StudioPreview,
   type StudioPreviewConfig,
   type StudioPreviewElement,
   type StudioPreviewHost,
@@ -45,6 +47,42 @@ const config: StudioPreviewConfig = {
 }
 
 Describe('Studio preview runtime bridge', () => {
+  Test('clears a caught preview failure when the reset key changes', () => {
+    const child = { type: 'stateful-preview' } as unknown as ReactNode
+    const Boundary = StudioPreview.ErrorBoundary
+    const instance = new Boundary({ children: child, resetKey: 'revision-7' })
+    const failure = new Error('render failed')
+    instance.state = {
+      ...instance.state,
+      ...Boundary.getDerivedStateFromError(failure),
+    }
+
+    Expect(instance.render()).toMatchObject({ props: { error: failure } })
+
+    const nextProps = { children: child, resetKey: 'revision-8' }
+    const reset = Boundary.getDerivedStateFromProps(nextProps, instance.state)
+    Expect(reset).toEqual({ error: undefined, resetKey: 'revision-8' })
+    ;(instance as unknown as { props: typeof nextProps }).props = nextProps
+    instance.state = { ...instance.state, ...reset }
+
+    Expect(instance.render()).toBe(child)
+    Expect(Boundary.getDerivedStateFromProps(nextProps, instance.state)).toBeNull()
+  })
+
+  Test('does not reset a caught preview failure until the reset key changes', () => {
+    const Boundary = StudioPreview.ErrorBoundary
+    const props = { children: 'healthy preview', resetKey: 'revision-7' }
+    const instance = new Boundary(props)
+    const failure = new Error('render failed')
+    instance.state = {
+      ...instance.state,
+      ...Boundary.getDerivedStateFromError(failure),
+    }
+
+    Expect(Boundary.getDerivedStateFromProps(props, instance.state)).toBeNull()
+    Expect(instance.render()).toMatchObject({ props: { error: failure } })
+  })
+
   Test('collects finite non-negative render geometry relative to the cell content root', () => {
     const measured = renderElement('/project/Main.tao', 10, 20, {
       height: 40,

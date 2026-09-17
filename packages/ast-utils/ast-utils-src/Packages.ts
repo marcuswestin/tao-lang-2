@@ -1,4 +1,4 @@
-import { AST, type PackageResolver } from '@parser'
+import { AST, Langium, type PackageResolver, Parser } from '@parser'
 import { FS, Repo, TaoFiles } from '@shared'
 import { Stdlib } from '@stdlib'
 
@@ -13,6 +13,7 @@ export namespace Packages {
   /** Index maps `@package` names to all matching package folder paths. */
   export type Index = {
     projectRoot: string
+    projectRoots: readonly string[]
     packages: ReadonlyMap<string, readonly string[]>
   }
 
@@ -41,6 +42,8 @@ export namespace Packages {
     | 'duplicate-package'
     | 'package-not-found'
     | 'package-boundary'
+    | 'package-path-escape'
+    | 'project-boundary'
 
   /** Resolution declares resolved lookup metadata for a use statement. */
   export type Resolution = {
@@ -52,6 +55,7 @@ export namespace Packages {
     duplicatePackagePaths?: readonly string[]
     invalidReason?: InvalidReason
     reservedPackagePath?: string
+    excludedProjectRoots?: readonly string[]
   }
 
   /** ResolveRequest declares one import resolution request. */
@@ -107,7 +111,7 @@ export namespace Packages {
       if (await FS.isFile(project)) {
         return project
       }
-      if (await FS.isDirectory(FS.resolvePath('.git', current))) {
+      if (await FS.exists(FS.resolvePath('.git', current))) {
         return undefined
       }
       previous = current
@@ -125,9 +129,11 @@ export namespace Packages {
     }
   }
 
-  /** createIndex scans a project root, and the directories above it, for Tao package directories. */
+  /** createIndex scans one project root for project-local Tao package directories. */
   export async function createIndex(projectRoot: string): Promise<Index> {
-    const resolvedRoot = FS.resolvePath(projectRoot)
+    const requestedRoot = FS.resolvePath(projectRoot)
+    const resolvedRoot = await containingProjectRoot(requestedRoot) ?? requestedRoot
+    const projectRoots = await discoverProjectRoots(resolvedRoot)
     const packages = new Map<string, string[]>()
     const record = (path: string) => {
       const name = FS.basename(path)
@@ -144,8 +150,14 @@ export namespace Packages {
         // is empty. Studio may populate it after the package context has been created.
         record(generatedPackage)
       }
+      for (const root of projectRoots) {
+        const projectGeneratedPackage = FS.resolvePath('@', root)
+        if (projectGeneratedPackage !== generatedPackage && await FS.isDirectory(projectGeneratedPackage)) {
+          record(projectGeneratedPackage)
+        }
+      }
       for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
-        if (FS.basename(path) === '@' && path !== generatedPackage) {
+        if (FS.basename(path) === '@') {
           continue
         }
         if (await containsTaoSource(path)) {
@@ -153,42 +165,86 @@ export namespace Packages {
         }
       }
     }
-    // A workspace is often rooted below the project — at one test sidecar's own folder, say — so a
-    // package declared above that root is still in scope. Without this, whether `@data` resolves
-    // would depend on which file the workspace happened to be opened for.
-    for (const ancestor of await ancestorPackageDirectories(resolvedRoot)) {
-      if (await containsTaoSource(ancestor)) {
-        record(ancestor)
-      }
-    }
     for (const paths of packages.values()) {
       paths.sort()
     }
-    return { projectRoot: resolvedRoot, packages }
+    return { projectRoot: resolvedRoot, projectRoots, packages }
   }
 
   async function containsTaoSource(path: string): Promise<boolean> {
     return (await Repo.filesUnder(path, { extensions: ['.tao'] })).length > 0
   }
 
-  async function ancestorPackageDirectories(root: string): Promise<string[]> {
-    const found: string[] = []
-    let current = FS.dirname(root)
-    let previous = root
-    while (current !== previous) {
-      for (const name of await FS.listDir(current).catch(() => [])) {
-        const path = FS.resolvePath(name, current)
-        if (name.startsWith('@') && await FS.isDirectory(path)) {
-          found.push(path)
-        }
+  /** containingProjectRoot finds the nearest ancestor directory that directly declares a project. */
+  export async function containingProjectRoot(start: string): Promise<string | undefined> {
+    const parserContext = Parser.createContext()
+    let directory = start
+    while (true) {
+      if (await directoryDeclaresProject(directory, parserContext)) {
+        return directory
       }
-      if (await FS.isDirectory(FS.resolvePath('.git', current))) {
-        break
+      if (await FS.exists(FS.resolvePath('.git', directory))) {
+        return undefined
       }
-      previous = current
-      current = FS.dirname(current)
+      const parent = FS.dirname(directory)
+      if (parent === directory) {
+        return undefined
+      }
+      directory = parent
     }
-    return found
+  }
+
+  async function directoryDeclaresProject(directory: string, parserContext: Parser.Context): Promise<boolean> {
+    for (const name of await FS.listDir(directory).catch(() => [])) {
+      const path = FS.resolvePath(name, directory)
+      if (FS.extname(path) !== '.tao' || !await FS.isFile(path)) {
+        continue
+      }
+      const source = await FS.readText(path)
+      if (!source.includes('project')) {
+        continue
+      }
+      const parsed = await Parser.parseSource(parserContext, source, {
+        uri: Langium.URI.file(path),
+        validation: false,
+      })
+      if (parsed.entry.ast.statements.some(AST.isProjectDeclaration)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  async function discoverProjectRoots(root: string): Promise<string[]> {
+    const parserContext = Parser.createContext()
+    const roots = new Set<string>()
+    for (
+      const path of await Repo.filesUnder(root, {
+        excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
+        extensions: ['.tao'],
+      })
+    ) {
+      const source = await FS.readText(path)
+      if (!source.includes('project')) {
+        continue
+      }
+      const parsed = await Parser.parseSource(parserContext, source, {
+        uri: Langium.URI.file(path),
+        validation: false,
+      })
+      if (parsed.entry.ast.statements.some(AST.isProjectDeclaration)) {
+        roots.add(FS.dirname(path))
+      }
+    }
+    return [...roots].sort()
+  }
+
+  /** projectRootForPath returns the nearest project namespace owning `path`. */
+  export function projectRootForPath(index: Index, path: string): string {
+    return index.projectRoots
+      .filter(root => FS.pathIsWithin(path, root))
+      .toSorted((left, right) => right.length - left.length)[0]
+      ?? index.projectRoot
   }
 
   /** resolve resolves a Tao use path using local packages, relative paths, and the stdlib root. */
@@ -203,10 +259,15 @@ export namespace Packages {
     if (isStdLibImport(importPath)) {
       // The stdlib lives in a real `@tao` package directory, so the import path maps to it
       // literally rather than having its `@` stripped.
+      const packageRoot = FS.resolvePath('@tao', context.stdlibRoot)
+      const targetPath = FS.resolvePath(importPath, context.stdlibRoot)
+      if (!FS.pathIsWithin(targetPath, packageRoot)) {
+        return invalidResolution(importPath, 'package-path-escape', { packageName: '@tao' })
+      }
       return {
         importPath,
         relation: 'stdlib',
-        targetPath: FS.resolvePath(importPath, context.stdlibRoot),
+        targetPath,
         candidateMode: 'direct',
       }
     }
@@ -230,12 +291,14 @@ export namespace Packages {
   function resolveBareUse(context: Context, request: ResolveRequest): Resolution {
     const containingPackage = containingPath(request.fromFilePath, context.index)
     if (containingPackage) {
+      const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
       return {
         relation: 'same-package',
         targetPath: containingPackage.path,
         candidateMode: 'recursive',
         packageName: containingPackage.name,
         reservedPackagePath: FS.resolvePath('@', context.index.projectRoot),
+        excludedProjectRoots: nestedProjectRoots(context.index, sourceProjectRoot, containingPackage.path),
       }
     }
     return {
@@ -252,7 +315,9 @@ export namespace Packages {
     request: ResolveRequest,
   ): Resolution {
     const packageName = nameFromImportPath(importPath)
-    const packagePaths = context.index.packages.get(packageName) ?? []
+    const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
+    const packagePaths = (context.index.packages.get(packageName) ?? [])
+      .filter(path => projectRootForPath(context.index, path) === sourceProjectRoot)
     if (packagePaths.length === 0) {
       return invalidResolution(importPath, 'package-not-found', { packageName })
     }
@@ -266,6 +331,12 @@ export namespace Packages {
     const packagePath = packagePaths[0]!
     const subpath = importPath === packageName ? '' : importPath.slice(packageName.length + 1)
     const targetPath = subpath ? FS.resolvePath(subpath, packagePath) : packagePath
+    if (!FS.pathIsWithin(targetPath, packagePath)) {
+      return invalidResolution(importPath, 'package-path-escape', { packageName })
+    }
+    if (projectRootForPath(context.index, targetPath) !== sourceProjectRoot) {
+      return invalidResolution(importPath, 'project-boundary', { packageName })
+    }
     const containingPackage = containingPath(request.fromFilePath, context.index)
     return {
       importPath,
@@ -287,6 +358,16 @@ export namespace Packages {
   ): Resolution {
     const fromDirectory = FS.dirname(request.fromFilePath)
     const targetPath = FS.resolvePath(importPath, fromDirectory)
+    const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
+    if (
+      FS.pathIsWithin(request.fromFilePath, context.index.projectRoot)
+      && (
+        !FS.pathIsWithin(targetPath, sourceProjectRoot)
+        || sourceProjectRoot !== projectRootForPath(context.index, targetPath)
+      )
+    ) {
+      return invalidResolution(importPath, 'project-boundary')
+    }
     const sourcePackage = containingPath(request.fromFilePath, context.index)
     const targetPackage = containingPath(targetPath, context.index)
 
@@ -348,9 +429,10 @@ export namespace Packages {
 
   function containingPath(path: string, index: Index): Indexed | undefined {
     const matches: Indexed[] = []
+    const projectRoot = projectRootForPath(index, path)
     for (const [name, paths] of index.packages) {
       for (const packagePath of paths) {
-        if (FS.pathIsWithin(path, packagePath)) {
+        if (projectRootForPath(index, packagePath) === projectRoot && FS.pathIsWithin(path, packagePath)) {
           matches.push({ name, path: packagePath, duplicatePaths: paths })
         }
       }
@@ -416,6 +498,7 @@ export namespace Packages {
     }))
       .filter(isImportableTaoSourcePath)
       .filter(path => !pathCrossesPackageDirectory(targetPath, path, resolution.reservedPackagePath))
+      .filter(path => !isUnderExcludedProject(path, resolution))
   }
 
   /** targetMatches returns whether a resolution target includes a Tao file path. */
@@ -506,7 +589,11 @@ export namespace Packages {
     if (filePath === targetPath || filePath === `${targetPath}.tao`) {
       return true
     }
-    if (FS.extname(filePath) !== '.tao' || !FS.pathIsWithin(filePath, targetPath)) {
+    if (
+      FS.extname(filePath) !== '.tao'
+      || !FS.pathIsWithin(filePath, targetPath)
+      || isUnderExcludedProject(filePath, resolution)
+    ) {
       return false
     }
     const relativeDirectory = FS.dirname(FS.relativePath(targetPath, filePath))
@@ -518,6 +605,14 @@ export namespace Packages {
       directory = FS.resolvePath(segment, directory)
       return segment.length > 0 && !isPackageDirectory(segment, directory, resolution.reservedPackagePath)
     })
+  }
+
+  function nestedProjectRoots(index: Index, projectRoot: string, targetPath: string): string[] {
+    return index.projectRoots.filter(root => root !== projectRoot && FS.pathIsWithin(root, targetPath))
+  }
+
+  function isUnderExcludedProject(path: string, resolution: Resolution): boolean {
+    return resolution.excludedProjectRoots?.some(root => FS.pathIsWithin(path, root)) ?? false
   }
 
   function pathCrossesPackageDirectory(
@@ -572,6 +667,11 @@ export namespace Packages {
   /** visibilityOf returns the optional visibility marker on a declaration. */
   export function visibilityOf(declaration: AST.Declaration): AST.DeclarationVisibility | undefined {
     const visibility = 'visibility' in declaration ? declaration.visibility : undefined
+    // Direct apps predate visibility markers and have always been importable by companion files in
+    // their folder. Preserve that source compatibility while letting an explicit `file app` opt out.
+    if (AST.isAppDeclaration(declaration) && visibility === undefined) {
+      return 'folder'
+    }
     return visibility === 'file' ? undefined : visibility
   }
 

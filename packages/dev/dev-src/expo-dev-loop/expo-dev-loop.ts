@@ -146,7 +146,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     if (!initialCompileSucceeded) {
       return { kind: 'exit', exitCode: 1 }
     }
-    watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
+    watcher = new DevFileWatcher(selection.projectRoot, shouldRunParserGen => {
       void Run.compileApp({ repoRoot, appPath, appName, reason: 'file change', shouldRunParserGen })
     })
     await expoServer.start()

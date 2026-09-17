@@ -12,6 +12,10 @@ export const useValidationMessages = {
     `Package '${name}' is ambiguous because multiple folders declare it: ${paths.join(', ')}.`,
   packageBoundary: (importPath: string) =>
     `Relative import '${importPath}' crosses a package boundary; use an @package import instead.`,
+  packagePathEscape: (importPath: string, packageName: string) =>
+    `Package import '${importPath}' must stay inside package '${packageName}'.`,
+  projectBoundary: (importPath: string) =>
+    `Import '${importPath}' crosses a project boundary; cross-project imports will require a dependency declaration in project { ... }.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
   unusedImport: (name: string) => `Imported name '${name}' is not used in this file.`,
@@ -24,11 +28,9 @@ export const useValidationMessages = {
   missingImport: (name: string, importPath: string) => `'${name}' is not visible from '${importPath}'.`,
   notVisible: (name: string) =>
     `'${name}' is not visible from here; mark it as 'folder', 'package', 'workspace', or 'public'.`,
-  appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 
 type DeclarationRecord = {
-  isAppValue: boolean
   name: string
   namespace: AST.DeclarationNamespace
   visibility?: AST.DeclarationVisibility
@@ -131,6 +133,17 @@ function reportInvalidResolution(
     ctx.error(useStatement, useValidationMessages.packageBoundary(useStatement.importPath))
     return
   }
+  if (resolution.invalidReason === 'project-boundary' && useStatement.importPath) {
+    ctx.error(useStatement, useValidationMessages.projectBoundary(useStatement.importPath))
+    return
+  }
+  if (resolution.invalidReason === 'package-path-escape' && useStatement.importPath && resolution.packageName) {
+    ctx.error(
+      useStatement,
+      useValidationMessages.packagePathEscape(useStatement.importPath, resolution.packageName),
+    )
+    return
+  }
   ctx.error(useStatement, unresolvedMessage(useStatement))
 }
 
@@ -158,12 +171,7 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     ctx.error(useStatement, useValidationMessages.missingImport(importedName, importLabel(useStatement)))
     return
   }
-  const importableMatches = matches.filter(declaration => !declaration.isAppValue || canImportApp(resolution))
-  if (importableMatches.length === 0 && matches.some(declaration => declaration.isAppValue)) {
-    ctx.error(useStatement, useValidationMessages.appImport(importedName))
-    return
-  }
-  const visibleMatches = importableMatches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
+  const visibleMatches = matches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
   if (visibleMatches.length === 0) {
     ctx.error(useStatement, useValidationMessages.notVisible(importedName))
     return
@@ -199,14 +207,7 @@ function importedDeclarationIsVisible(
   declaration: DeclarationRecord,
   resolution: Packages.Resolution,
 ): boolean {
-  if (declaration.isAppValue) {
-    return canImportApp(resolution)
-  }
   return Packages.isVisible(declaration.visibility, resolution)
-}
-
-function canImportApp(resolution: Packages.Resolution): boolean {
-  return resolution.relation === 'same-file' || resolution.relation === 'same-directory'
 }
 
 function importLabel(useStatement: AST.UseStatement): string {
@@ -258,7 +259,6 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
   return file.statements
     .filter(AST.isDeclaration)
     .map((declaration) => ({
-      isAppValue: AST.isConcreteAppValueDeclaration(declaration),
       name: declaration.name,
       namespace: AST.declarationNamespace(declaration),
       visibility: Packages.visibilityOf(declaration),

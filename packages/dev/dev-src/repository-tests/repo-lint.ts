@@ -221,6 +221,7 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
 const RAW_THROW_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts',
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
   'packages/studio/studio-src/StudioWelcome.ts',
 ]
@@ -257,6 +258,7 @@ const RAW_ERROR_ALLOWLIST = [
   // Emitted text: browser-evaluated bodies, the Electrobun main, an inline page script, where no Tao module loads.
   'packages/dev/dev-src/studio/StudioCdp.ts',
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
   'packages/studio/studio-src/StudioWelcome.ts',
   // The leaf that builds the taxonomy's own cancellation error.

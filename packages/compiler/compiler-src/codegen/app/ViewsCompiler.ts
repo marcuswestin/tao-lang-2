@@ -140,8 +140,9 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
     return gen.noop()
   }
   if (renderable.foreign) {
-    return compileForeignView(renderable)
+    return compileForeignView(renderable, options)
   }
+  const functionName = { name: options.studio ? `TaoGeneratedView_${renderable.name}` : renderable.name }
   const parameterList = Compile.ViewParameterList(renderable)
   const statements = renderable.block?.statements ?? []
   const renderIndex = statements.findIndex(AST.isRenderStatement)
@@ -159,7 +160,9 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
     })`
     : gen.noop()
   return gen`
-    ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
+    ${options.studio ? gen`function` : gen`${gen.scopeName(renderable)} = function`} ${
+    gen.Name(functionName)
+  }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
@@ -171,6 +174,7 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
         ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
       })
     }
+    ${options.studio ? gen`${gen.scopeName(renderable)} = ${gen.Name(functionName)}` : gen.noop()}
   `
 }
 
@@ -192,11 +196,14 @@ function compileCommandSurface(view: AST.ViewDeclaration): Compiled {
 }
 
 /** A foreign component owns its native root, including applying Layout/Tag and placing content once. */
-function compileForeignView(view: AST.ViewDeclaration): Compiled {
+function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions): Compiled {
   const parameterList = Compile.ViewParameterList(view)
   const implementation = { name: foreignViewBindingName(view) }
+  const functionName = { name: options.studio ? `TaoGeneratedView_${view.name}` : view.name }
   return gen`
-    ${gen.scopeName(view)} = function ${gen.Name(view)}(_ViewProps: ${parameterList}) {
+    ${options.studio ? gen`function` : gen`${gen.scopeName(view)} = function`} ${
+    gen.Name(functionName)
+  }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
@@ -216,6 +223,7 @@ function compileForeignView(view: AST.ViewDeclaration): Compiled {
         </${gen.Name(implementation)}>
       })
     }
+    ${options.studio ? gen`${gen.scopeName(view)} = ${gen.Name(functionName)}` : gen.noop()}
   `
 }
 
