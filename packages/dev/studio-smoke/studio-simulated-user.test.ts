@@ -222,29 +222,40 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
         ),
       ).toBe(designPreviewWide)
+      // Both dividers are dragged in the workbench layout, which is the only one that mounts them:
+      // the Run preset hands the whole window to the preview. A divider runs the full height of the
+      // body and the floating agent panel covers its lower half, so each is grabbed near its top,
+      // where it is exposed and where a person reaching for it would take hold.
+      const dividerGrip = { x: 2, y: 24 }
+      const initialLeft = await dividerSize(browser, 'left')
+      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 }, { offset: dividerGrip })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
+          initialLeft + 48
+        }`,
+      )
+      // Design mode derives the canvas width from whatever the rest of the workbench leaves, so
+      // widening the file tree just narrowed it. Read it again instead of predicting it.
+      const initialPreview = await dividerSize(browser, 'preview')
+      // The preview is the right-hand pane, so moving its left divider left increases its width.
+      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 }, { offset: dividerGrip })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
+          initialPreview + 40
+        }`,
+      )
+      await browser.captureScreenshot('studio-resized-workbench')
+
       await browser.click('[data-preset="run"]')
       await browser.waitFor(
         `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'run'`,
       )
-
-      const initialPaneSizes = await browser.evaluate<{ left: number; preview: number }>(`(() => ({
-        left: Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')),
-        preview: Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')),
-      }))()`)
-      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 })
+      // Run leaves nothing but the preview, so the rest of the journey — editing, the lens, the
+      // canvas — needs the workbench back.
+      await browser.click('[data-preset="design"]')
       await browser.waitFor(
-        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
-          initialPaneSizes.left + 48
-        }`,
+        `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'design'`,
       )
-      // The preview is the right-hand pane, so moving its left divider left increases its width.
-      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 })
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
-          initialPaneSizes.preview + 40
-        }`,
-      )
-      await browser.captureScreenshot('studio-resized-workbench')
 
       await browser.pressShortcut('k')
       await browser.waitFor(
@@ -278,29 +289,37 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
         .toContain('Text("First typed")')
 
+      // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
+      // reveal the one region involved and leave every other fold alone, and neither changes the
+      // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
+      // lands on its edge opens it rather than sitting in text the person cannot see.
+      const revealedHead = 'app Smoke { view MainView }'
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      const outlineFolds = await foldedRegions(browser)
+      Expect(outlineFolds).toBeGreaterThan(1)
+      await browser.click('.cm-line:has(.cm-lens-glyph)')
       await browser.pressKey('End')
       await browser.pressKey('Backspace')
-      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("Second")')
+        .toContain(revealedHead)
       await browser.pressShortcut('s')
       await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       await browser.click('[data-testid="studio-lens-refold"]')
-      await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds}`)
+      await browser.click('.cm-line:has(.cm-lens-glyph)')
       await browser.pressKey('End')
       await browser.pressKey('ArrowLeft')
-      await browser.pressKey('Delete')
-      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("Second")')
-      await browser.pressShortcut('s')
+        .toContain(revealedHead)
       await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
+      // Back to the whole file: the steps after this one read and edit source the outline hides.
+      await browser.click('[data-testid="studio-lens-preset-all"]')
+      await browser.waitFor("document.querySelector('.cm-lens-glyph') === null")
 
       const selectedText = 'Text("First typed")'
       const currentFile = await session.readFile('Smoke.tao')
@@ -315,14 +334,21 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       if (selectedInspection.owner === undefined) {
         Errors.throwUnexpected('The smoke selection must have an owning view render.')
       }
+      // The preview republishes after the save above. Install the identity only once it has settled,
+      // or the reload that follows drops the global the measurement reads.
+      await waitForPreviewSourceIdentity(browser, preview.url)
+      // The preview's own handler reads this global, so it has to be written in the page's world
+      // rather than the isolated one every other probe uses.
       await browser.evaluateInFrame(
         preview.url,
         `window.taoSmokeOwnerRenderId = ${JSON.stringify(selectedInspection.owner.renderId)}`,
+        { world: 'page' },
       )
       await clickPreviewAndWaitForState(browser, preview.url, '#measure-owner', 'measurement sent')
       const measuredIdentity = await browser.evaluateInFrame<Record<string, unknown>>(
         preview.url,
         `window.taoSmokeMeasuredIdentity`,
+        { world: 'page' },
       )
       const measured = await Time.pollUntil(async () => {
         const inspection = await session.inspectRender({
@@ -1455,6 +1481,18 @@ async function clickPreviewUntilSource(
     `Timed out applying the Studio preview interaction; last status=${JSON.stringify(lastStatus)}; `
       + `last source:\n${lastSource}`,
   )
+}
+
+/** dividerSize reads one pane divider's reported size, which is the pane width the shell applied. */
+async function dividerSize(browser: StudioCdp, pane: string): Promise<number> {
+  return await browser.evaluate<number>(
+    `Number(document.querySelector('[data-divider="${pane}"]')?.getAttribute('aria-valuenow'))`,
+  )
+}
+
+/** foldedRegions counts the syntax regions the lens currently collapses behind a glyph. */
+async function foldedRegions(browser: StudioCdp): Promise<number> {
+  return await browser.evaluate<number>("document.querySelectorAll('.cm-lens-glyph').length")
 }
 
 async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: string): Promise<void> {

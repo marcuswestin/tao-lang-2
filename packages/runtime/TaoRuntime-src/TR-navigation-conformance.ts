@@ -10,7 +10,7 @@ import type {
 } from './TR-navigation'
 import { createNavDeclaration } from './TR-navigation-configuration'
 import { assertNavKind } from './TR-navigation-kinds'
-import { RuntimePresentable } from './TR-navigation-presentables'
+import { type Evaluable, RuntimePresentable } from './TR-navigation-presentables'
 import RuntimeSwitch from './TR-switch'
 
 /** testNavKind runs the published navigation protocol suite without depending on a test runner. */
@@ -85,21 +85,28 @@ function conformanceConfiguration(
 {
   if (profile === 'selection') {
     return {
-      display: { evaluate: () => ({ jsValue: 'automatic' }) },
+      display: conformanceValue('automatic'),
       initial: 'home',
       items: {
-        home: { content: home, label: { evaluate: () => ({ jsValue: 'Home' }) } },
-        settings: { content: detail, label: { evaluate: () => ({ jsValue: 'Settings' }) } },
+        home: { content: home, label: conformanceValue('Home') },
+        settings: { content: detail, label: conformanceValue('Settings') },
       },
     }
   }
   if (profile === 'split') {
-    const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
-    return { items: { home: { content: home, resizable: scalar(false), width: scalar(320) } } }
+    return {
+      items: { home: { content: home, resizable: conformanceValue(false), width: conformanceValue(320) } },
+    }
   }
   return {
     initial: home,
   }
+}
+
+/** conformanceValue is one runtime value for the conformance fixtures: it evaluates to itself. */
+function conformanceValue(jsValue: unknown): Evaluable {
+  const value: Evaluable & { jsValue: unknown } = { evaluate: () => value, jsValue }
+  return value
 }
 
 function testNavKindProfile(
