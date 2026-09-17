@@ -2,7 +2,7 @@ import { StudioInspector, type studioPaletteComponents } from '../../StudioInspe
 import type { StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import type { StudioFile } from '../StudioApiClient'
 import { projectRelativePath } from '../StudioEditor'
-import type { StudioActivePreview, StudioPreviewConnection } from '../StudioMatrixView'
+import { revealCanvasNode, type StudioActivePreview, type StudioPreviewConnection } from '../StudioMatrixView'
 import {
   renderCommandResults,
   type StudioCommandItem,
@@ -73,7 +73,7 @@ export function mountStudioCommandPalette(deps: StudioCommandPaletteDeps): Studi
       if (preview !== undefined) {
         deps.activePreview.activate(preview)
         deps.onScenarioActivated()
-        preview.frame?.scrollIntoView({ block: 'center' })
+        revealCanvasNode(preview.frame)
         preview.iframe.focus()
       }
     } else if (target.kind === 'insert-component') {

@@ -2083,6 +2083,61 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(container.text).toBeUndefined()
   })
 
+  Test('inspection recognizes standard text leaves by declaration and omits enum bindings', async () => {
+    const standard = await parseDocument(`
+      use Text from @tao/ui
+
+      type Status is one of Ready, Done
+
+      view Main(Status Status, Caption text) {
+         render Text("Label")
+      }
+    `)
+    const inspection = SourceActions.inspectStudioRender(
+      standard,
+      renderId(requireRenderByText(standard, 'Label')),
+    )
+    Expect(inspection.text?.candidates).toEqual([{ expression: 'Caption', type: 'text' }])
+
+    const custom = await parseDocument(`
+      view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
+      view Main() { render Text("Custom") }
+    `)
+    const customInspection = SourceActions.inspectStudioRender(
+      custom,
+      renderId(requireRenderByText(custom, 'Custom')),
+    )
+    Expect(customInspection.text).toBeUndefined()
+    await Expect(SourceActions.applyStudioPatch(custom, {
+      content: 'Changed',
+      kind: 'set-text-content',
+      renderId: renderId(requireRenderByText(custom, 'Custom')),
+    })).rejects.toThrow('Text or TextMultiline leaf')
+  })
+
+  Test('inspection decodes escaped literals and includes locals before a root text render', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+
+      view Main(Caption text) {
+         let Local = "local"
+         render Text("literal \\{ brace, \\"quote\\", and \\\\ slash")
+      }
+    `)
+    const inspection = SourceActions.inspectStudioRender(
+      document,
+      renderId(requireRenderByText(document, 'literal')),
+    )
+    Expect(inspection.text).toEqual({
+      candidates: [
+        { expression: 'Caption', type: 'text' },
+        { expression: 'Local', type: 'text' },
+      ],
+      expression: '"literal \\{ brace, \\"quote\\", and \\\\ slash"',
+      literal: 'literal { brace, "quote", and \\ slash',
+    })
+  })
+
   Test('text-binding candidates carry the enclosing loop item and stop at the render statement', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui
@@ -2202,6 +2257,29 @@ Describe('Studio canvas-mode source actions', () => {
     })).rejects.toThrow('root render stays')
   })
 
+  Test('remove-render owns its leading comments without deleting the next render comments', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+            // Explanation for Second.
+            #second
+            Text("Second")
+            // Explanation for Third.
+            Text("Third")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Second')),
+    })
+    Expect(patch.content).not.toContain('Explanation for Second')
+    Expect(patch.content).toContain('// Explanation for Third.')
+    Expect(patch.content).toContain('Text("Third")')
+  })
+
   Test("remove-render keeps a snapped render and a container's only child", async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui
@@ -2235,6 +2313,25 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(patch.content).not.toContain('Text("Plain")')
   })
 
+  Test('remove-render refuses a container that owns a snapped descendant', async () => {
+    const document = await parseDocument(`
+      use Col, Stack, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Stack() {
+               #studio_rect_00720031
+               Text("Snapped")
+            }
+            Text("Plain")
+      }  }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Stack()')),
+    })).rejects.toThrow('Unsnap the sketch first')
+  })
+
   Test('wrap-render accepts Row and Col and imports the wrapper it introduces', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui
@@ -2251,6 +2348,64 @@ Describe('Studio canvas-mode source actions', () => {
     })
     Expect(patch.content).toContain('use Col, Row, Text from @tao/ui')
     Expect(patch.content).toContain('Row() [gap 8, pad 8] {')
+  })
+
+  Test('wrap-render refuses a wrapper name already owned by a local declaration', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+
+      view Row() { render Text("Custom Row") }
+      view MainView() { render Text("First") }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'wrap-render',
+      renderId: renderId(requireRenderByText(document, 'First')),
+      wrapper: 'Row',
+    })).rejects.toThrow("cannot import 'Row' from @tao/ui")
+  })
+
+  Test('wrap-render refuses a wrapper name owned by a folder-visible sibling declaration', async () => {
+    await withTaoFiles('tao-source-actions-sibling-wrapper-', {
+      'Main.tao': `
+        use Text from @tao/ui
+
+        view MainView() { render Text("First") }
+      `,
+      'Sibling.tao': `
+        use Text from @tao/ui
+
+        folder view Row() { render Text("Project Row") }
+      `,
+    }, async paths => {
+      const workspace = await Workspace.open(FS.dirname(paths['Main.tao']))
+      const sibling = await workspace.parse(paths['Sibling.tao'])
+      const parsed = await workspace.parse(paths['Main.tao'])
+      await Expect(SourceActions.applyStudioPatch(parsed.entry.document, {
+        kind: 'wrap-render',
+        renderId: renderId(requireRenderByText(parsed.entry.document, 'First')),
+        wrapper: 'Row',
+      }, { files: [parsed.entry.ast, sibling.entry.ast] })).rejects.toThrow("cannot import 'Row' from @tao/ui")
+    })
+  })
+
+  Test('wrap-render keeps a Snap marker attached to the render it identifies', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            #studio_rect_00720031
+            Text("Snapped")
+            Text("Plain")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'wrap-render',
+      renderId: renderId(requireRenderByText(document, 'Snapped')),
+      wrapper: 'Row',
+    })
+    Expect(patch.content).toContain('Row() [gap 8, pad 8] {\n         #studio_rect_00720031\n         Text("Snapped")')
+    Expect(patch.content.indexOf('Row()')).toBeLessThan(patch.content.indexOf('#studio_rect_00720031'))
   })
 })
 

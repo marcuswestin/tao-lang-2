@@ -927,7 +927,7 @@ kbd {
 .studio-ship-progress small { color: var(--studio-text-muted); font-size: 11px; line-height: 1.5; }
 
 /* ---------- dialogs ---------- */
-.studio-dialog-backdrop { align-items: center; background: rgba(0, 0, 0, .6); display: grid; inset: 0; justify-items: center; padding: 24px; position: fixed; z-index: 80; }
+.studio-dialog-backdrop { align-items: center; background: rgba(0, 0, 0, .6); display: grid; inset: 0; justify-items: center; padding: 24px; position: fixed; z-index: 110; }
 .studio-dialog {
   background: var(--studio-panel); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 24px 80px rgba(0, 0, 0, .75);
   display: grid; gap: 12px; max-height: calc(100vh - 48px); max-width: 640px; overflow: auto; padding: 18px 20px; width: min(100%, 640px);
@@ -1101,6 +1101,9 @@ kbd {
   .studio-editor-pane, .studio-preview { min-width: 0; }
   .tao-studio-product-host[data-layout-preset="code"] .studio-center {
     grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
+  }
+  .tao-studio-product-host[data-layout-preset="design"] .studio-center {
+    grid-template-columns: 0 0 minmax(0, 1fr) 4px minmax(0, 1fr);
   }
   .tao-studio-product-host[data-layout-preset="run"] .studio-center,
   .tao-studio-product-host[data-layout-preset="draw"] .studio-center {

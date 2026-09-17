@@ -3,9 +3,19 @@ import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Errors, Time } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
+import { mountStudioCanvasFocus, StudioCanvasFocusLane } from '../studio-src/client/app/StudioCanvasFocus'
+import { studioInspectionRequest } from '../studio-src/client/app/StudioInspection'
 import { mountStudioPreviewReload, StudioPreviewNotice } from '../studio-src/client/app/StudioPreviewStatus'
+import {
+  forwardPreviewCanvasGesture,
+  studioPreviewMessageListener,
+} from '../studio-src/client/app/StudioPreviewWiring'
 import { StudioSourceMutations } from '../studio-src/client/app/StudioSourceMutations'
-import { nextStop } from '../studio-src/client/matrix/StudioCanvasViewport'
+import {
+  canvasIframeGestureAnchor,
+  canvasRevealDelta,
+  nextStop,
+} from '../studio-src/client/matrix/StudioCanvasViewport'
 import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
 import {
   StudioApiClient,
@@ -43,6 +53,7 @@ import {
   currentSourceIdentity,
   disconnectPreviews,
   handlePreviewMessage,
+  postCanvasGestureOwnership,
   postEditorSelection,
   previewBundleNoticeFor,
   previewMatrixPlan,
@@ -53,6 +64,7 @@ import {
   StudioFixtureProposal,
   StudioJourneyRecorder,
   StudioMatrixLayout,
+  studioPreviewCaptureError,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
   StudioPreviewSourceSync,
@@ -62,6 +74,7 @@ import {
   StudioReviewDom,
   StudioRuntimeData,
 } from '../studio-src/client/StudioMatrixView'
+
 import {
   StudioCommandPalette,
   StudioPanelBounds,
@@ -70,7 +83,9 @@ import {
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import {
+  studioDesignPreviewSize,
   StudioGlobalLoading,
+  studioLayoutOwnsCanvasGestures,
   StudioPaneMinimums,
   StudioPaneSizes,
   studioSearchBlurIntent,
@@ -111,6 +126,13 @@ import {
 } from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 import { cellEnvironment } from './test-studio-fixtures'
+
+Test('Studio rebuilds preview capture failures with their original Tao error category', () => {
+  Expect(studioPreviewCaptureError('UserInputError', 'bad data')).toBeInstanceOf(Errors.UserInputError)
+  Expect(studioPreviewCaptureError('HostEnvironmentError', 'offline')).toBeInstanceOf(Errors.HostEnvironmentError)
+  Expect(studioPreviewCaptureError('UnexpectedBehaviorError', 'broken invariant'))
+    .toBeInstanceOf(Errors.UnexpectedBehaviorError)
+})
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
@@ -376,7 +398,7 @@ Test('Studio API client addresses every loopback device route with the contract 
     await StudioApiClient.deviceRevoke('key-3')
     await StudioApiClient.deviceReconnect()
     await StudioApiClient.deviceSelectCell('cell-home')
-    await StudioApiClient.deviceLaunchOpen('host-1')
+    await StudioApiClient.deviceLaunchOpen('host-1', 'cable')
     let launchFailure: unknown
     try {
       await StudioApiClient.deviceLaunch()
@@ -394,7 +416,7 @@ Test('Studio API client addresses every loopback device route with the contract 
       { body: { devicePublicKey: 'key-3' }, method: 'POST', url: '/sessions/window-7/api/device/revoke' },
       { body: {}, method: 'POST', url: '/sessions/window-7/api/device/reconnect' },
       { body: { cellId: 'cell-home' }, method: 'POST', url: '/sessions/window-7/api/device/select-cell' },
-      { body: { hostId: 'host-1' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
+      { body: { hostId: 'host-1', route: 'cable' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
       { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/launch' },
     ])
   } finally {
@@ -575,6 +597,8 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
       activeFile: {
         content: 'view Main() { }',
         path: 'Main.tao',
+        revealRevision: 2,
+        saved: true,
         selectionAnchor: 4,
         selectionHead: 8,
         sourceVersion: 'version:1',
@@ -902,6 +926,33 @@ Test('Studio invalidates a browser-local recording when its iframe reloads', () 
   Expect(messages.at(-1)).toMatchObject({ type: 'set-interaction-mode' })
 })
 
+Test('Studio advertises canvas gesture ownership explicitly per preview', () => {
+  const messages: unknown[] = []
+  const target = {
+    postMessage(message: unknown) {
+      messages.push(message)
+    },
+  }
+  const preview = previewConnection('preview-design', 'design', target)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+
+  postCanvasGestureOwnership(preview, handshake, true)
+  postCanvasGestureOwnership(preview, handshake, false)
+
+  Expect(messages).toMatchObject([{
+    identity: {
+      appName: 'Garden',
+      cellId: 'design',
+      previewInstanceId: 'preview-design',
+      project: '/workspace',
+    },
+    owned: true,
+    type: 'set-canvas-gestures',
+  }, {
+    owned: false,
+    type: 'set-canvas-gestures',
+  }])
+})
 Test('Studio expects a new preview revision without automatically reloading its iframe', () => {
   const iframe = { src: 'http://127.0.0.1:56102/' } as HTMLIFrameElement
   const preview = { ...previewConnection('preview-revision', 'novel', {}), iframe }
@@ -1638,13 +1689,41 @@ Test('Studio canvas mode focuses only a group whose every scenario renders one v
   const groupId = (group: string): string => StudioScenarioControls.groupId('/Garden.tao', group)
 
   Expect(StudioMatrixLayout.subjectView(manifest, groupId('states'))).toBe('StoryRow')
+  Expect(StudioMatrixLayout.subjectViewId(manifest, groupId('states'))).toBe('view:StoryRow')
   Expect(StudioMatrixLayout.subjectView(manifest, groupId('devices'))).toBeUndefined()
   Expect(StudioMatrixLayout.subjectView(manifest, groupId('mixed'))).toBeUndefined()
   const groups = ['states', 'devices', 'mixed'].map(group => ({
-    subjectView: StudioMatrixLayout.subjectView(manifest, groupId(group)),
+    subjectViewId: StudioMatrixLayout.subjectViewId(manifest, groupId(group)),
   }))
-  Expect(StudioMatrixLayout.focusable(groups, 'StoryRow')).toBe(true)
-  Expect(StudioMatrixLayout.focusable(groups, 'CommentRow')).toBe(false)
+  Expect(StudioMatrixLayout.focusable(groups, 'view:StoryRow')).toBe(true)
+  Expect(StudioMatrixLayout.focusable(groups, 'view:CommentRow')).toBe(false)
+})
+
+Test('Studio canvas Focus keeps same-named declarations distinct by canonical subject identity', () => {
+  const shared = { kind: 'view' as const, viewName: 'Card' }
+  const manifest = {
+    scenarios: [
+      { ...scenario('first', 'first', '/First.tao'), subjectId: '/First.tao#Card' },
+      { ...scenario('second', 'second', '/Second.tao'), subjectId: '/Second.tao#Card' },
+    ],
+    subjects: [
+      {
+        ...shared,
+        source: { kind: 'tao' as const, path: '/First.tao', range: { end: 10, start: 0 } },
+        subjectId: '/First.tao#Card',
+      },
+      {
+        ...shared,
+        source: { kind: 'tao' as const, path: '/Second.tao', range: { end: 10, start: 0 } },
+        subjectId: '/Second.tao#Card',
+      },
+    ],
+  }
+  const first = StudioMatrixLayout.subjectViewId(manifest, StudioScenarioControls.groupId('/First.tao', 'first'))
+  const second = StudioMatrixLayout.subjectViewId(manifest, StudioScenarioControls.groupId('/Second.tao', 'second'))
+  Expect(first).toBe('/First.tao#Card')
+  Expect(second).toBe('/Second.tao#Card')
+  Expect(first).not.toBe(second)
 })
 
 Test('Studio matrix maps generated sketch views to their source versions', () => {
@@ -2051,6 +2130,10 @@ Test('Studio Screens and Search rails derive navigable manifest and project matc
       kind: 'text',
       label: 'Card.tao:2',
       path: 'Card.tao',
+      range: {
+        end: { character: 14, line: 1 },
+        start: { character: 9, line: 1 },
+      },
       sourceVersion: 'card-2',
       start: 23,
     },
@@ -2080,42 +2163,53 @@ Test('Studio selection from a second scenario group makes that cell active for t
   const active = new StudioActivePreview(previews)
   const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
   let selected: unknown
-  await handlePreviewMessage(
-    {
-      data: {
-        channel: studioProtocolChannel,
-        identity: {
-          ...previews[1]!.cellIdentity,
-          occurrence: { nodeKind: 'render', renderOwner: 'Main' },
-          path: '/workspace/Garden.tao',
-          previewInstanceId: 'preview-second',
-          sourceVersion: 'source-2',
-        },
-        protocolVersion: studioProtocolVersion,
-        range: { end: 12, start: 4 },
-        type: 'preview-select-source',
+  let dispatches = 0
+  let reveals = 0
+  const event = {
+    data: {
+      channel: studioProtocolChannel,
+      identity: {
+        ...previews[1]!.cellIdentity,
+        occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+        path: '/workspace/Garden.tao',
+        previewInstanceId: 'preview-second',
+        sourceVersion: 'source-2',
       },
-      origin: 'http://127.0.0.1:56102',
-      source: secondWindow,
-    } as MessageEvent,
+      protocolVersion: studioProtocolVersion,
+      range: { end: 12, start: 4 },
+      type: 'preview-select-source',
+    },
+    origin: 'http://127.0.0.1:56102',
+    source: secondWindow,
+  } as MessageEvent
+  const actions = {
+    activate: () => active.activate(previews[1]!),
+    async applySourceAction() {},
+    inspect(selection: unknown) {
+      selected = selection
+    },
+    reveal() {
+      reveals += 1
+    },
+  }
+  const openFile = async () => ({
+    editor: {
+      dispatch() {
+        dispatches += 1
+      },
+      focus() {},
+      state: { doc: { length: 40 } },
+    } as unknown as EditorView,
+    file: { content: 'view Main() {}', path: 'Garden.tao', sourceVersion: 'source-2' },
+  })
+  await handlePreviewMessage(
+    event,
     previews[1]!,
     handshake,
-    async () => ({
-      editor: {
-        dispatch() {},
-        focus() {},
-        state: { doc: { length: 40 } },
-      } as unknown as EditorView,
-      file: { content: 'view Main() {}', path: 'Garden.tao', sourceVersion: 'source-2' },
-    }),
-    {
-      activate: () => active.activate(previews[1]!),
-      async applySourceAction() {},
-      inspect(selection) {
-        selected = selection
-      },
-    },
+    openFile,
+    actions,
   )
+  await handlePreviewMessage(event, previews[1]!, handshake, openFile, actions)
 
   Expect(selected).toMatchObject({
     identity: {
@@ -2123,6 +2217,8 @@ Test('Studio selection from a second scenario group makes that cell active for t
       scenarioId: 'second',
     },
   })
+  Expect(dispatches).toBe(2)
+  Expect(reveals).toBe(2)
   Expect(active.current()).toBe(previews[1])
   Expect(currentSourceIdentity(handshake, active.current(), {
     content: 'view Main() {}',
@@ -2140,6 +2236,71 @@ Test('Studio selection from a second scenario group makes that cell active for t
     path: 'Garden.tao',
     sourceVersion: 'source-2',
   })).toBeUndefined()
+})
+
+Test('Studio preview message wiring dispatches one editor selection per incoming source pick', async () => {
+  const contentWindow = {}
+  const preview = previewConnection('preview-wiring', 'default', contentWindow)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  let dispatches = 0
+  let inspections = 0
+  const listener = studioPreviewMessageListener({
+    activePreview: new StudioActivePreview([preview]),
+    canvasGesturesOwned: () => false,
+    drawer: { loadDataIfVisible() {}, renderIfLogs() {} },
+    handshake,
+    inspection: {
+      highlightOnDevice: async () => {},
+      inspect: async () => {},
+      select() {
+        inspections += 1
+      },
+      // Reintroducing the old second selection path records another editor dispatch here.
+      selectSourceInEditor() {
+        dispatches += 1
+      },
+    },
+    mutations: { submitPreview: async () => {} },
+    onInspected() {},
+    onReveal() {},
+    preview: {} as HTMLElement,
+    previews: [preview],
+    publish() {},
+    session: {
+      openFile: async () => ({
+        editor: {
+          dispatch() {
+            dispatches += 1
+          },
+          focus() {},
+          state: { doc: { length: 40 } },
+        } as unknown as EditorView,
+        file: { content: 'view Main() {}', path: 'Garden.tao', sourceVersion: 'source-2' },
+      }),
+    },
+    status: {} as HTMLElement,
+  } as never)
+
+  listener({
+    data: {
+      channel: studioProtocolChannel,
+      identity: {
+        appName: 'Garden',
+        path: '/workspace/Garden.tao',
+        previewInstanceId: preview.previewInstanceId,
+        project: '/workspace',
+        sourceVersion: 'source-2',
+      },
+      protocolVersion: studioProtocolVersion,
+      range: { end: 12, start: 4 },
+      type: 'preview-select-source',
+    },
+    origin: preview.origin,
+    source: contentWindow,
+  } as MessageEvent)
+
+  await until(() => inspections === 1)
+  Expect(dispatches).toBe(1)
 })
 
 Test('Studio attaches the active cell scenario to preview-originated source actions', async () => {
@@ -3021,6 +3182,163 @@ Test('Studio canvas zoom steps land on round percentages and stop at the ends of
   // The ladder is bounded: zooming past either end clamps instead of running away.
   Expect(nextStop(4, 1)).toBe(4)
   Expect(nextStop(0.1, -1)).toBe(0.1)
+})
+
+Test('Studio canvas reveal pans the transformed plane without scrolling its clipped host', () => {
+  const host = { bottom: 600, left: 100, right: 900, top: 100 }
+  Expect(canvasRevealDelta(host, { bottom: 300, left: 950, right: 1150, top: 150 })).toEqual({ x: -274, y: 0 })
+  Expect(canvasRevealDelta(host, { bottom: 50, left: 150, right: 250, top: -50 })).toEqual({ x: 0, y: 174 })
+  Expect(canvasRevealDelta(host, { bottom: 300, left: 200, right: 400, top: 150 })).toEqual({ x: 0, y: 0 })
+})
+
+Test('Studio forwarded gestures use iframe geometry rather than the differently positioned cell frame', () => {
+  const hostRect = { left: 100, top: 50 }
+  const frame = { getBoundingClientRect: () => ({ left: 120, top: 80 }) } as unknown as HTMLElement
+  const iframe = { getBoundingClientRect: () => ({ left: 200, top: 150 }) } as unknown as HTMLIFrameElement
+  let anchor: Readonly<{ x: number; y: number }> | undefined
+  const gesture = {
+    channel: 'tao-studio',
+    clientX: 10,
+    clientY: 20,
+    deltaX: 0,
+    deltaY: 4,
+    identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+    protocolVersion: 1,
+    type: 'preview-canvas-gesture',
+    zoom: false,
+  } as const
+
+  forwardPreviewCanvasGesture(
+    {
+      iframeWheel: (forwarded, target) => {
+        anchor = canvasIframeGestureAnchor(hostRect, target.getBoundingClientRect(), forwarded)
+      },
+    },
+    { frame, iframe } as StudioPreviewConnection,
+    gesture,
+  )
+
+  Expect(anchor).toEqual({ x: 110, y: 120 })
+})
+
+Test('Studio Design split recomputes from each current host width', () => {
+  Expect(studioDesignPreviewSize(1_400, 320)).toBe(700)
+  Expect(studioDesignPreviewSize(1_000, 320)).toBe(432)
+  Expect(studioDesignPreviewSize(700, 320)).toBe(280)
+})
+
+Test('Studio canvas gesture ownership is exclusive to Design layout', () => {
+  Expect(studioLayoutOwnsCanvasGestures('design')).toBe(true)
+  Expect(studioLayoutOwnsCanvasGestures('run')).toBe(false)
+  Expect(studioLayoutOwnsCanvasGestures(undefined)).toBe(false)
+})
+
+Test('Studio inspection carries the selecting cell identity needed for owner geometry', () => {
+  const identity = {
+    appName: 'Garden',
+    cellId: 'phone',
+    cellRevision: 2,
+    compileRevision: 3,
+    manifestRevision: 'manifest-3',
+    occurrence: { nodeKind: 'render', renderOwner: 'Card' },
+    path: '/project/Card.tao',
+    previewInstanceId: 'preview-3',
+    project: '/project',
+    sourceVersion: 'source-3',
+  }
+  Expect(studioInspectionRequest('/project', {
+    identity,
+    range: { end: 20, start: 10 },
+    renderId: '/project/Card.tao:10:20',
+  })).toEqual({ identity, path: 'Card.tao', renderId: '/project/Card.tao:10:20', sourceVersion: 'source-3' })
+})
+
+Test('Studio Focus serializes a late enter before leave restoration', async () => {
+  const enter = Deferred<void>()
+  const order: string[] = []
+  const lane = new StudioCanvasFocusLane(error => {
+    throw error
+  })
+  lane.enqueue(async () => {
+    order.push('enter:start')
+    await enter.promise
+    order.push('enter:end')
+  })
+  lane.enqueue(async () => {
+    order.push('leave')
+  })
+  await Promise.resolve()
+  Expect(order).toEqual(['enter:start'])
+  enter.resolve()
+  await lane.settled()
+  Expect(order).toEqual(['enter:start', 'enter:end', 'leave'])
+})
+
+Test('Studio Focus restores only successful reframes after Back, in serialized request order', async () => {
+  const owner = { id: '/project/A"B.tao#Card', name: 'Card' }
+  const firstFrame = {} as HTMLElement
+  const secondFrame = {} as HTMLElement
+  const row = {
+    contains: (candidate: unknown) => candidate === firstFrame || candidate === secondFrame,
+    dataset: { taoStudioGroupViewId: owner.id },
+  } as unknown as HTMLElement
+  const preview = {
+    querySelectorAll: () => [row],
+  } as unknown as HTMLElement
+  let click: (() => void) | undefined
+  const button = {
+    addEventListener: (_type: string, listener: () => void) => {
+      click = listener
+    },
+    dataset: {} as Record<string, string>,
+    hidden: true,
+    removeEventListener() {},
+    textContent: '',
+  } as unknown as HTMLButtonElement
+  let focused: string | undefined
+  const matrix = {
+    focusedView: () => focused,
+    focusView: (_parent: HTMLElement, viewId: string | undefined) => {
+      focused = viewId
+    },
+  }
+  const firstGate = Deferred<void>()
+  const first = { ...previewConnection('first-preview', 'first', {}), frame: firstFrame }
+  const second = { ...previewConnection('second-preview', 'second', {}), frame: secondFrame }
+  const firstViewports: Array<{ height: number; width: number }> = []
+  const secondViewports: Array<{ height: number; width: number }> = []
+  first.reconfigureEnvironment = async environment => {
+    firstViewports.push(environment.viewport)
+    if (firstViewports.length === 1) {
+      await firstGate.promise
+    }
+  }
+  second.reconfigureEnvironment = async environment => {
+    secondViewports.push(environment.viewport)
+    Errors.throwUnexpected('second reframe rejected')
+  }
+  const errors: unknown[] = []
+  mountStudioCanvasFocus({
+    button,
+    matrix,
+    onError: error => errors.push(error),
+    ownerFrame: viewId => viewId === owner.id ? { height: 120.2, width: 240.1, x: 0, y: 0 } : undefined,
+    preview,
+    previews: () => [first, second],
+    selectedOwner: () => owner,
+    status: { dataset: {}, textContent: '' } as unknown as HTMLElement,
+  })
+
+  click?.()
+  click?.()
+  await Promise.resolve()
+  Expect(firstViewports).toEqual([{ height: 121, width: 241 }])
+  Expect(secondViewports).toEqual([])
+  firstGate.resolve()
+  await until(() => errors.length === 1 && firstViewports.length === 2)
+  Expect(firstViewports).toEqual([{ height: 121, width: 241 }, cell('first').environment.viewport])
+  Expect(secondViewports).toEqual([{ height: 121, width: 241 }])
+  Expect(focused).toBeUndefined()
 })
 
 function scenario(scenarioId: string, group: string, path: string): StudioPreviewManifestV2['scenarios'][number] {

@@ -7,8 +7,8 @@
   "profiles": {
     "native": {
       "description": "Tao native host: add Simulator and Xcode working directories; host commands still follow project rules.",
-      // Device and simulator control is prompted, never automatic, and runs outside the sandbox.
-      "ask": ["adb *", "emulator *", "open -a Simulator *", "xcrun simctl *"],
+      // The default rules auto-approve only read-only discovery. Every unlisted device or simulator
+      // mutation remains reviewed without a broad ask glob shadowing those discovery commands.
       "allowWrite": [
         "~/Library/Developer/CoreSimulator",
         "~/Library/Developer/Xcode/DerivedData",
@@ -25,7 +25,8 @@
     "release": {
       "description": "Tao release: add the local Xcode archive destination; credentials and publication remain denied or reviewed.",
       "extends": "native",
-      "ask": ["codesign *", "hdiutil *", "spctl *", "xcrun notarytool *", "xcrun stapler *"],
+      // Signing and publication commands are deliberately absent from the allow rules, so they
+      // remain reviewed without a catch-all ask rule that could shadow a future read-only probe.
       "allowWrite": ["~/Library/Developer/Xcode/Archives"],
     },
     "unsandboxed": {

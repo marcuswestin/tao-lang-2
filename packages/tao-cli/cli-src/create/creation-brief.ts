@@ -107,7 +107,7 @@ async function readUrl(url: string, options: BuildCreationBriefOptions): Promise
     if (!/text\/|json|xml/iu.test(contentType)) {
       return { kind: 'url', url, error: `not a text page (${contentType || 'unknown type'})` }
     }
-    const raw = (await response.text()).slice(0, MAX_RESPONSE_CHARS)
+    const raw = await readCappedResponse(response, MAX_RESPONSE_CHARS, controller)
     const limit = options.maxSourceChars ?? 6_000
     if (/html/iu.test(contentType) || /<html|<body|<div|<p[\s>]/iu.test(raw.slice(0, 2_000))) {
       const page = htmlToText(raw)
@@ -126,6 +126,37 @@ async function readUrl(url: string, options: BuildCreationBriefOptions): Promise
     return { kind: 'url', url, error: error instanceof Error ? error.message : String(error) }
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/** readCappedResponse stops the network body as soon as the parsing ceiling has been reached. */
+async function readCappedResponse(response: Response, maxChars: number, controller: AbortController): Promise<string> {
+  if (response.body === null) {
+    return ''
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  let receivedBytes = 0
+  try {
+    while (receivedBytes < maxChars) {
+      const next = await reader.read()
+      if (next.done) {
+        text += decoder.decode()
+        break
+      }
+      const remaining = maxChars - receivedBytes
+      const bounded = next.value.byteLength > remaining ? next.value.subarray(0, remaining) : next.value
+      receivedBytes += bounded.byteLength
+      text += decoder.decode(bounded, { stream: receivedBytes < maxChars })
+    }
+    return text.slice(0, maxChars)
+  } finally {
+    if (receivedBytes >= maxChars) {
+      controller.abort()
+      await reader.cancel('Tao create source limit reached').catch(() => undefined)
+    }
+    reader.releaseLock()
   }
 }
 

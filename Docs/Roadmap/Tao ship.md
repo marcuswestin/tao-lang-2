@@ -1,10 +1,18 @@
 # Tao ship — design exploration
 
-Status: **exploration, open dialogue**. This is the thousand-mile overview of the third leg of
-Tao's product loop — write (language), preview (Studio), **ship** — plus the option spaces for
-the decisions the dialogue with Ro will settle. Rulings land in dated "Direction settled"
-sections below. Nothing here is language law until it reaches `Tao Revolution/Decisions.md`,
-which wins wherever the two collide; amendments to it are proposed, never made here.
+Status: **historical exploration with landed-contract reconciliation, 2026-09-16**. This is the
+thousand-mile overview of the third leg of Tao's product loop — write, preview, ship — and preserves
+the option spaces considered before implementation. `Tao Revolution/Decisions.md` and the current
+contract below win over dated recommendations elsewhere in this document.
+
+The landed command is `tao ship [path] --app <App>` (or source-owned `DefaultApp`). It builds
+locally through Xcode, uses App Store Connect/TestFlight for binary lifecycle, and uses Tao's
+Expo-protocol service for compatible OTA. It is filesystem-only: source version and the `ship`
+concern of the single `.tao-project/lock.jsonc` may change atomically, but Git index, refs, commits,
+tags, and remotes never do. Runtime identity plus canonical semantic schema identity gate publication
+and rollback against every supported binary. Unknown export-compliance status is omitted. Repository
+tests do not establish App Store success, a TestFlight/device install, installed OTA, or signed and
+notarized Studio.
 
 The first slice is planned concretely in `Tao ship/Plan - Beta distribution in one command.md`,
 with the substrate facts it rests on in `Tao ship/Research - Beta distribution lanes.md`.
@@ -27,18 +35,18 @@ The same day settled the first slice's decisions, recorded with their reasoning 
   `tao build` placeholders are retired. Builds are local, through Xcode and the App Store
   Connect API key; EAS is a later option, not a requirement.
 - **Identifier facts are accepted project metadata** in the `ship` section of the project's one
-  committed `.tao-project/lock.jsonc`, written by `tao ship`, never hand-edited, following the old
-  design lock's contract (identity, input hash, accepted or suggested status, provenance). Later
-  locks take sections of the same file. The bundle identifier rule is
+  repository-tracked `.tao-project/lock.jsonc`, written by `tao ship`, never hand-edited, following the old
+  design lock's contract (identity, input hash, accepted or suggested status, provenance). Package
+  resolution already owns the independent `installs` section of the same file. The bundle identifier rule is
   `<namespace>.<project id>[.<variant>]`.
 - **A non-primary variant is its own bundle identifier and store record.**
 - **The icon is a Tao default asset with a badged variant default**; an `Icon` slot on `app` is a
   separate grammar argument.
 - **No Expo Go bridge**; the companion app covers the zero-account case.
 
-## Framing
+## Historical framing
 
-A Tao app today can be written and previewed but not shipped: the CLI ends at `compile`, the
+A Tao app at the time of this exploration could be written and previewed but not shipped: the CLI ended at `compile`, the
 Expo host project is a single checked-in shell named "Tao Runtime" with no bundle identifier,
 and the only store-adjacent sentence in the repository is a placeholder (`tao publish --app`,
 `Docs/Spec/Tao Packages.md`). Meanwhile the language has already decided almost everything a
@@ -72,7 +80,7 @@ declaration that already exists for a non-shipping reason. Where a fact is genui
 signing credential, a store listing screenshot), it is named as declared-or-provided, never
 smuggled in as inference.
 
-## Where things stand (grounded 2026-08-30)
+## Historical baseline (grounded 2026-08-30)
 
 What exists, what is decided-but-unbuilt, and what is a hole:
 
@@ -109,17 +117,18 @@ External facts that bound the design (researched 2026-08-30):
   would sit squarely in the enforcement zone. The language's own posture and the platform's are
   the same posture.
 
-## The publish pipeline
+## The publish pipeline — reconciled command spelling
 
 The motion, end to end, as the developer experiences it:
 
 ```bash
-tao ship WordFlowerStage         # build + sign + submit the stage variant to TestFlight
-tao ship WordFlower              # the production variant, to the stores
-tao ship WordFlower --update     # OTA: compiled-bundle update to the shipped binary, when compatible
+tao ship . --app WordFlowerStage --beta  # build + sign + submit the stage variant to TestFlight
+tao ship . --app WordFlower              # the production variant, to the App Store
+tao ship . --app WordFlower --update     # OTA, when every supported binary is compatible
 ```
 
-One argument: an app declaration name. Everything else is derived or remembered.
+The positional argument is a project path; app selection is explicit with `--app` or comes from
+source-owned `DefaultApp`. Everything else is derived or remembered.
 
 ### What is derived, from declarations that already exist
 
@@ -147,7 +156,7 @@ One argument: an app declaration name. Everything else is derived or remembered.
   can render screenshots from named states; an icon slot on `app`), but v1 treats them as
   provided files with sensible defaults.
 
-### Substrate: build on EAS vs own pipeline
+### Historical substrate options: EAS vs own pipeline
 
 The option space, for the record (dialogue decision #1):
 
@@ -162,7 +171,7 @@ The option space, for the record (dialogue decision #1):
   server. Maximum control and margin; a large standing operational commitment that competes
   with language work, for capabilities that are commodity.
 
-Recommended: **EAS as substrate (never C for v1), B's mechanics first, A as the commercial
+Historical recommendation, superseded by the local-Xcode implementation: **EAS as substrate (never C for v1), B's mechanics first, A as the commercial
 layer** — `tao ship` v1 drives EAS with the developer's accounts (this is also what
 `eas build --local` needs, keeping a fully-local lane), and the Tao-managed front grows over
 the same seam. The update plane's open protocol preserves the self-host exit if EAS pricing or
@@ -181,10 +190,10 @@ Five versions coexist and must be told apart, not unified:
 5. **Project version** — `tao publish`'s package-registry version (Tao Packages.md), a
    different product surface that happens to share the word.
 
-Open: where the authored piece lives (`project { version "1.4" }`? ship-time prompt? derived
-date-version?), and the bundle-identifier derivation rule (`project id` is an opaque immutable
-string like `"wordflower"`; reverse-DNS needs an owned namespace — `app.tao.wordflower` under a
-Tao-managed lane vs a declared `bundle` fact under BYO).
+Settled: the authored piece is numeric three-component SemVer in `project { version "1.4.2" }`.
+The same project may declare `DefaultApp AppName`; an explicit `--app` wins. `DefaultApp` is parsed
+as a capitalized identifier and validated, not reserved as a grammar keyword. Accepted bundle
+identifier facts live in the lock's `ship` concern.
 
 ### OTA, within the rules
 
@@ -193,14 +202,10 @@ Tao-managed lane vs a declared `bundle` fact under BYO).
   compilation path in production; the repo's standing prohibition and Apple's 2.5.2 enforcement
   agree, and this document treats that as a constraint, not a choice.
 - **Compatibility is double-gated, both gates derived**: an update reaches a binary only when
-  the runtime fingerprint matches (native closure unchanged) _and_ the schema fingerprint is
-  compatible (see Schema migration). EAS enforces the first natively; the second is Tao's own
-  gate on top — `tao ship --update` refuses to publish an update whose schema change the
-  installed base can't survive, which no general-purpose OTA product can offer because none of
-  them can see the schema.
-- **Rollback** rides the channel (EAS republish/rollback), with the same double gate pointed
-  backwards — rolling back past a schema migration is refused unless the migration is
-  reversible (recorded as an honest limitation, not solved away).
+  its native/runtime identity matches and its canonical semantic schema identity is compatible.
+  Tao evaluates that contract against every supported binary before publication.
+- **Rollback** walks the compatible Tao publication history and republishes an earlier immutable
+  artifact. It cannot cross native or schema incompatibility.
 - Internal-preview builds (TestFlight) take signed compatible updates per the native-device
   exploration's "limit" verdict; the Studio pairing/instrumentation machinery stays out of
   production profiles entirely, and slice work must add the missing production-bundle assertion.
@@ -216,7 +221,7 @@ Almost nothing new. The candidates, in decreasing confidence:
   in project files the CLI reads, not in the grammar. The bar from the AI program applies:
   a keyword must carry a guarantee a file cannot.
 - **Possible small additions**, each to be argued individually: an `Icon` slot on `app` (it
-  varies per variant — stage builds want a badged icon); `version` in `project`; a `bundle`
+  varies per variant — stage builds want a badged icon); a `bundle`
   identity fact if BYO custody needs one.
 - **Naming**: `tao ship` vs the placeholder `tao publish --app`. Recommended: `ship` for the
   app motion (build/submit/update/backend), leaving `publish` for the package registry — two
@@ -484,14 +489,14 @@ What people pay for, and why it is defensible:
   with a compiler-proven privacy label, error reports that replay as test cases. Every paid
   feature above is a compiler feature wearing a service; that is the pitch and the defense.
 
-## Driving use case — WordFlower on TestFlight, three acts
+## Historical acceptance narrative — WordFlower on TestFlight, three acts
 
 The acceptance narrative for the whole program, in the canonical app:
 
-1. **Clean checkout → installable build.** `tao ship WordFlowerInstantDB` on a fresh clone:
-   derives name/bundle-id/targets/permission strings, builds via EAS with the developer's
+1. **Clean checkout → installable build.** `tao ship . --app WordFlowerInstantDB --beta` on a fresh clone:
+   derives name/bundle-id/targets/permission strings, builds locally with Xcode and the developer's
    accounts, submits to TestFlight. A phone installs it; documents sync through InstantDB.
-2. **A one-line copy change, over the air.** Edit a string; `tao ship WordFlowerInstantDB
+2. **A one-line copy change, over the air.** Edit a string; `tao ship . --app WordFlowerInstantDB
    --update`. Runtime fingerprint unchanged, schema fingerprint unchanged → the update
    publishes to the variant's channel; the installed app picks it up on next launch. No store
    review, no build.
@@ -522,12 +527,17 @@ forces it — WordFlower's `2 - Next` tier grows the ship-forcing features as sl
 - **`tao publish` (packages)**: name and version-word collision; recommendation above keeps
   the verbs separate.
 
-## Promptable slices
+## Historical slice plan and current boundary
+
+The list below is preserved as the original sequencing record. Slices 1 and 2 have landed with the
+local-Xcode, filesystem-only, fleet-compatible contracts stated at the top; their device/store
+acceptance narratives remain unproven externally. Later hosted provisioning and commercial slices
+remain roadmap work.
 
 Slice 1 is constructed to need **no unsettled decisions beyond substrate custody defaults**
 (BYO accounts, which every option keeps as a lane):
 
-1. **`tao ship` v0 — WordFlower on TestFlight.** BYO Apple + Expo accounts. Implement
+1. **`tao ship` v0 — WordFlower on TestFlight.** Historical proposal: BYO Apple + Expo accounts. Implement
    `project { targets }` (minimum for iOS), generate a real per-app Expo config from
    declarations (bundle id via a provided value if the derivation rule is unsettled, name,
    icon default, version prompt), wrap `eas build` + `eas submit`, prove the release bundle
@@ -551,11 +561,12 @@ settle.
 
 ## Open questions, gathered
 
-1. Substrate and custody (decision #1): EAS under BYO vs Tao-managed front, and the sequencing
-   between them.
+1. ~~Substrate and custody for the implemented lane~~ — local Xcode and App Store Connect for
+   binaries; Tao's Expo-protocol service for OTA. A future managed commercial front remains open.
 2. ~~The verb~~ — settled 2026-09-02: `tao ship`, with `--beta`; the placeholder is retired.
-3. ~~Bundle-identifier derivation; where the authored version lives~~ — settled 2026-09-02:
-   `<namespace>.<project id>[.<variant>]`, held with the version in `.tao-project/lock.jsonc`.
+3. ~~Bundle-identifier derivation; where the authored version lives~~ — the identifier is accepted
+   ship metadata derived as `<namespace>.<project id>[.<variant>]`; the numeric SemVer is source-owned
+   in `project { version "…" }`.
 4. Migration composite: ratify O1+O2+O4+O3-with-gate? What may the additive classifier accept
    without a declaration? `migrate` spelling and its ship-held-history check.
 5. Automation authority: what identity does a server-side scheduled `do` carry? (A §12 gap

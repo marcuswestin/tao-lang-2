@@ -1,5 +1,5 @@
 import React from 'react'
-import { allocateInteractionKeys, type TaoInteractionKeyAssignments } from './TR-interaction-allocation'
+import { DataControls } from './TR-data'
 import {
   commandCatalog,
   interactionAttention,
@@ -24,6 +24,7 @@ type InteractionSurfaceRow = Readonly<{
   identity: string
   key?: string
   label: string
+  selected?: boolean
 }>
 
 /** InteractionLayersHost is the one snapshot-derived visual projection mounted by the app host. */
@@ -35,6 +36,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   )
   React.useSyncExternalStore(interactionOutline.subscribe, interactionOutline.snapshot, interactionOutline.snapshot)
   React.useSyncExternalStore(commandCatalog.subscribe, commandCatalog.snapshot, commandCatalog.snapshot)
+  React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
   React.useSyncExternalStore(
     interactionKeyboardPresence.subscribe,
     interactionKeyboardPresence.snapshot,
@@ -51,14 +53,13 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   // One index per render. Every surface below resolves identities against it rather than scanning
   // the mounted outline once per candidate on every keystroke.
   const nodesByIdentity = new Map(nodes.map(node => [node.identity, node]))
-  const explicitKeys = commandCatalog.explicitKeys()
-  const previous = React.useRef<Record<string, TaoInteractionKeyAssignments>>({})
   const visible = interactionKeyboardPresence.read()
     && (attention.mode === 'hints'
       || attention.mode === 'overview'
       || attention.mode === 'narrowing'
       || attention.mode === 'verbs'
-      || attention.mode === 'palette')
+      || attention.mode === 'palette'
+      || attention.mode === 'verb-pending')
   let heading: string | undefined
   let kind: 'Hint' | 'Overview' = 'Overview'
   let rows: readonly InteractionSurfaceRow[] = []
@@ -66,28 +67,24 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   if (visible && attention.mode === 'hints') {
     heading = 'Interaction hints'
     kind = 'Hint'
-    rows = allocatedRows(
+    rows = assignedRows(
       attention.candidates.flatMap(identity => {
         const node = nodesByIdentity.get(identity)
         const label = node?.label()
         return !node || !label ? [] : [{ bounds: node.live?.measure?.(), identity, label }]
       }),
-      explicitKeys,
-      previous.current,
-      'hints',
+      interactionAttention.keyAssignments('hints'),
     )
   } else if (visible && attention.mode === 'overview') {
     heading = 'Interaction overview'
-    rows = allocatedRows(
+    rows = assignedRows(
       nodes.filter(node => node.kind === 'region' && active(node, nodesByIdentity)).flatMap(node => {
         const label = node.label()
         return label === undefined
           ? []
           : [{ bounds: regionBounds(node.identity, nodes, nodesByIdentity), identity: node.identity, label }]
       }),
-      explicitKeys,
-      previous.current,
-      'overview',
+      interactionAttention.keyAssignments('overview'),
     )
   } else if (visible && attention.mode === 'narrowing') {
     heading = `Narrowing “${attention.narrowing}”`
@@ -101,45 +98,78 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     }
   } else if (visible && attention.mode === 'verbs') {
     heading = `Actions for ${attention.targetLabel ?? 'target'}`
-    rows = keyedRows(attention.verbs, explicitKeys, previous.current, 'verbs')
+    rows = assignedRows(attention.verbs, interactionAttention.keyAssignments('verbs'))
   } else if (visible && attention.mode === 'palette') {
     heading = 'Command palette'
-    rows = keyedRows(attention.palette, explicitKeys, previous.current, 'palette')
+    rows = attention.palette.map(candidate => ({
+      ...candidate,
+      selected: candidate.identity === attention.target,
+    }))
+  } else if (visible && attention.mode === 'verb-pending' && attention.verbPending !== undefined) {
+    heading = pendingHeading(attention.verbPending)
+    if (attention.verbPending.request === 'targets') {
+      rows = attention.candidates.flatMap(identity => {
+        const node = nodesByIdentity.get(identity)
+        const label = node?.label()
+        return !node || !label
+          ? []
+          : [{ identity, label, selected: identity === attention.target }]
+      })
+    } else if (attention.verbPending.request === 'search') {
+      rows = interactionAttention.pendingSearchResults().map(result => ({
+        identity: result.identity,
+        label: result.label,
+        selected: result.identity === attention.target,
+      }))
+    }
   }
 
   const runtime = requireReactNativeRuntime()
   const hidden = !visible || heading === undefined
   const anchored = attention.mode === 'hints' || attention.mode === 'overview'
-  const rowElements = rows.map(row =>
-    React.createElement(
-      runtime.View,
-      {
-        accessibilityLabel: rowText(attention.mode, row),
-        accessibilityRole: 'text',
-        accessibilityState: row.enabled === false ? { disabled: true } : undefined,
-        accessible: true,
-        key: row.identity,
-        style: [
-          rowStyle,
-          mountedDesignStyle(props.taoProps, kind),
-          row.bounds === undefined ? undefined : anchoredStyle(row.bounds),
-        ],
-        testID: `tao-interaction-row:${row.identity}`,
-      },
-      attention.mode === 'palette'
-        ? React.createElement(
-          React.Fragment,
-          null,
-          React.createElement(runtime.Text, { accessible: false }, `${displayKey(row.key)} — `),
-          React.createElement(runtime.Text, { accessible: false }, row.label),
-        )
-        : React.createElement(
+  const rowElements = rows.map(row => {
+    const pending = attention.mode === 'verb-pending' ? attention.verbPending : undefined
+    const searchResult = pending?.request === 'search'
+      ? interactionAttention.pendingSearchResults().find(result => result.identity === row.identity)
+      : undefined
+    const onPress = pending === undefined
+      ? undefined
+      : searchResult === undefined
+      ? () => interactionAttention.choosePendingTarget(row.identity)
+      : () => interactionAttention.choosePendingSearchResult(searchResult.value)
+    return (
+      React.createElement(
+        pending === undefined ? runtime.View : runtime.Pressable,
+        {
+          accessibilityLabel: rowText(attention.mode, row),
+          accessibilityRole: pending === undefined ? 'text' : 'button',
+          accessibilityState: row.enabled === false || row.selected === true
+            ? {
+              ...(row.enabled === false ? { disabled: true } : {}),
+              ...(row.selected === true ? { selected: true } : {}),
+            }
+            : undefined,
+          accessible: true,
+          key: row.identity,
+          ...(onPress === undefined ? {} : { onPress }),
+          style: [
+            rowStyle,
+            mountedDesignStyle(props.taoProps, kind),
+            row.bounds === undefined ? undefined : anchoredStyle(row.bounds),
+          ],
+          testID: `tao-interaction-row:${row.identity}`,
+        },
+        React.createElement(
           runtime.Text,
           { accessible: false },
           rowText(attention.mode, row),
         ),
+      )
     )
-  )
+  })
+  const pendingControls = attention.mode !== 'verb-pending' || attention.verbPending === undefined
+    ? []
+    : pendingSurfaceControls(runtime, attention.verbPending)
   return React.createElement(
     runtime.View,
     {
@@ -148,9 +178,11 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       // The full-screen positioning host is never an accessibility stop. Its visible semantic
       // heading and rows remain traversable while the hidden state removes every descendant.
       importantForAccessibility: hidden ? 'no-hide-descendants' : 'no',
-      // Generated rows are keyboard affordances, not pointer controls. Let taps continue through
-      // both the full-screen host and its visible descendants to the semantic control underneath.
-      style: interactionLayerHostStyle,
+      // Ordinary generated rows are keyboard affordances; pending rows become pointer controls so
+      // entity and scalar slots can be completed without leaving the interaction surface.
+      style: attention.mode === 'verb-pending'
+        ? [interactionLayerHostStyle, interactiveLayerHostStyle]
+        : interactionLayerHostStyle,
       testID: 'tao-interaction-layers',
     },
     hidden
@@ -169,6 +201,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
             accessibilityRole: 'header',
             style: headingStyle,
           }, heading),
+          ...pendingControls,
           ...(anchored ? [] : rowElements),
         ),
         ...(anchored ? rowElements : []),
@@ -176,26 +209,10 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   )
 }
 
-function allocatedRows(
-  candidates: readonly Omit<InteractionSurfaceRow, 'key'>[],
-  explicitKeys: readonly string[],
-  previous: Record<string, TaoInteractionKeyAssignments>,
-  surface: string,
+function assignedRows(
+  candidates: readonly InteractionSurfaceRow[],
+  assignments: Readonly<Record<string, string>>,
 ): readonly InteractionSurfaceRow[] {
-  const assignments = allocateInteractionKeys(candidates, { explicitKeys, previous: previous[surface] })
-  previous[surface] = assignments
-  return candidates.map(candidate => ({ ...candidate, key: assignments[candidate.identity] }))
-}
-
-function keyedRows(
-  candidates: readonly Readonly<{ enabled: boolean; identity: string; key?: string; label: string }>[],
-  explicitKeys: readonly string[],
-  previous: Record<string, TaoInteractionKeyAssignments>,
-  surface: string,
-): readonly InteractionSurfaceRow[] {
-  const generated = candidates.filter(candidate => candidate.key === undefined)
-  const assignments = allocateInteractionKeys(generated, { explicitKeys, previous: previous[surface] })
-  previous[surface] = assignments
   return candidates.map(candidate => ({ ...candidate, key: candidate.key ?? assignments[candidate.identity] }))
 }
 
@@ -204,7 +221,71 @@ function displayKey(key: string | undefined): string {
 }
 
 function rowText(mode: string, row: InteractionSurfaceRow): string {
-  return mode === 'narrowing' ? row.label : `${displayKey(row.key)} — ${row.label}`
+  return mode === 'narrowing' || mode === 'palette' || mode === 'verb-pending'
+    ? row.label
+    : `${displayKey(row.key)} — ${row.label}`
+}
+
+function pendingHeading(pending: NonNullable<ReturnType<typeof interactionAttention.read>['verbPending']>): string {
+  return pending.request === 'input'
+    ? `${pending.label}: enter ${pending.slot}`
+    : `Choose ${pending.slot} for ${pending.label}`
+}
+
+function pendingSurfaceControls(
+  runtime: ReturnType<typeof requireReactNativeRuntime>,
+  pending: NonNullable<ReturnType<typeof interactionAttention.read>['verbPending']>,
+): React.ReactElement[] {
+  if (pending.request === 'input') {
+    return [React.createElement(PendingScalarInput, { key: 'pending-input', pending, runtime })]
+  }
+  if (pending.request === 'targets') {
+    return [React.createElement(
+      runtime.Pressable,
+      {
+        accessibilityLabel: `Search stores for ${pending.type}`,
+        accessibilityRole: 'button',
+        key: 'pending-search',
+        onPress: () => interactionAttention.searchPendingStore(),
+        style: pendingControlStyle,
+        testID: 'tao-interaction-pending-search',
+      },
+      React.createElement(runtime.Text, { accessible: false }, `Search all ${pending.type}`),
+    )]
+  }
+  return []
+}
+
+function PendingScalarInput({ pending, runtime }: {
+  pending: NonNullable<ReturnType<typeof interactionAttention.read>['verbPending']>
+  runtime: ReturnType<typeof requireReactNativeRuntime>
+}): React.JSX.Element {
+  const [value, setValue] = React.useState('')
+  React.useEffect(() => setValue(''), [pending.identity, pending.slot])
+  const submit = () => {
+    const scalar = pendingScalarValue(pending.type, value)
+    if (scalar !== undefined) {
+      interactionAttention.providePendingValue({ evaluate: () => ({ jsValue: scalar }) })
+    }
+  }
+  return React.createElement(runtime.TextInput, {
+    accessibilityLabel: `${pending.slot} for ${pending.label}`,
+    autoFocus: true,
+    onChangeText: setValue,
+    onSubmitEditing: submit,
+    placeholder: pending.type === 'duration' ? 'Seconds' : pending.slot,
+    style: pendingInputStyle,
+    testID: 'tao-interaction-pending-input',
+    value,
+  })
+}
+
+function pendingScalarValue(type: string, value: string): string | number | undefined {
+  if (type !== 'duration') {
+    return value
+  }
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1e9 : undefined
 }
 
 function active(node: TaoOutlineLiveNode, nodesByIdentity: OutlineIndex): boolean {
@@ -269,6 +350,7 @@ const interactionLayerHostStyle = {
   top: 0,
   zIndex: 4,
 } as const
+const interactiveLayerHostStyle = { pointerEvents: 'box-none' } as const
 
 const surfaceStyle = {
   alignSelf: 'center',
@@ -283,4 +365,6 @@ const surfaceStyle = {
 } as const
 
 const headingStyle = { fontSize: 16, fontWeight: '600' } as const
+const pendingControlStyle = { padding: 6 } as const
+const pendingInputStyle = { borderWidth: 1, minWidth: 240, padding: 8 } as const
 const rowStyle = { backgroundColor: '#ffffff', borderRadius: 6, flexDirection: 'row', padding: 6 } as const

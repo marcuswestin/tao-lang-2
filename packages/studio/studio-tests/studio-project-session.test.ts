@@ -1,5 +1,5 @@
-import { Errors, FS } from '@shared'
-import { Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
   StudioProjectSession,
@@ -53,6 +53,32 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(file.sourceVersion.startsWith('text-v1:')).toBe(true)
     Expect(file.content).toContain('app Garden')
     await Expect(session.readFile('../outside.tao')).rejects.toThrow('not a Tao file in the project')
+  })
+})
+
+Test('Agent undo shows its reverse diff and refuses to overwrite a later manual edit', async () => {
+  await withStudioProject(async (session, paths) => {
+    const original = await session.readFile('Garden.tao')
+    const appliedContent = original.content.replace('Text("Before")', 'Text("Agent")')
+    const applied = await session.applyAgentFiles({
+      edits: [{ content: appliedContent, path: 'Garden.tao' }],
+      expect: [{ path: 'Garden.tao', sourceVersion: original.sourceVersion }],
+      writeId: 'agent-apply',
+    })
+
+    Expect(applied.rolledBack).toBe(false)
+    const preview = session.agentUndoPreview()
+    Expect(preview?.restored).toEqual(['Garden.tao'])
+    Expect(preview?.diff.includes('Text("Agent")')).toBe(true)
+    Expect(preview?.diff.includes('Text("Before")')).toBe(true)
+
+    const manualContent = appliedContent.replace('Text("Agent")', 'Text("Manual")')
+    await FS.writeText(paths['Garden.tao'], manualContent)
+
+    await Expect(session.undoAgentFiles('agent-undo')).rejects.toThrow(
+      'Studio source changed before the edit was applied',
+    )
+    Expect(await FS.readText(paths['Garden.tao'])).toBe(manualContent)
   })
 })
 
@@ -223,6 +249,98 @@ Test('Move to package restores source, imports, catalog, and compile state after
   })
 })
 
+Test('Move to package serializes source and catalog rollback against an independent Studio create', async () => {
+  const moveCompileEntered = Deferred<void>()
+  const releaseMoveCompile = Deferred<void>()
+  let pauseMove = false
+  await withTaoFiles('tao-studio-move-process-rollback-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {
+        if (pauseMove) {
+          pauseMove = false
+          moveCompileEntered.resolve()
+          await releaseMoveCompile.promise
+          Errors.throwUserInput('Moved source does not compile.')
+        }
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const created = await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-process-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-process-sketch',
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    pauseMove = true
+    const failedMove = session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-process-failure',
+    })
+    await moveCompileEntered.promise
+    const marker = FS.resolvePath('independent-move-create-finished', root)
+    const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+    const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const independent = CLI.run('bun', {
+      args: [
+        '-e',
+        `
+      import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
+      import { FS } from ${JSON.stringify(sharedModule)}
+      const root = ${JSON.stringify(root)}
+      const project = await FS.realPath(root)
+      const session = await StudioProjectSession.open({
+        async compile() {},
+        entryPath: FS.resolvePath('Garden.tao', root),
+        projectRoot: root,
+      })
+      await session.applySketchAction({
+        action: {
+          height: 40,
+          id: 'independent-move-sketch',
+          kind: 'create-sketch',
+          project,
+          rects: [],
+          width: 100,
+        },
+        expectedRevision: ${created.catalog.revision},
+        requestId: 'independent-move-create',
+      })
+      await FS.writeText(${JSON.stringify(marker)}, 'done')
+    `,
+      ],
+      stdio: 'pipe',
+    })
+    await Time.sleep(40)
+    Expect(await FS.exists(marker)).toBe(false)
+    releaseMoveCompile.resolve()
+    await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
+    const independentResult = await independent
+    Expect(independentResult.stderr).toBe('')
+    Expect(independentResult.exitCode).toBe(0)
+    Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    const catalog = await session.sketchCatalog()
+    Expect(catalog.revision).toBe(created.catalog.revision + 1)
+    Expect(catalog.sketches.map(sketch => sketch.id).toSorted()).toEqual([
+      'independent-move-sketch',
+      'move-process-sketch',
+    ])
+  })
+})
+
 Test('Move to package requests a different destination only when the target package declares the name', async () => {
   let compileCount = 0
   await withTaoFiles('tao-studio-move-generated-conflict-', {
@@ -293,6 +411,23 @@ Test('Studio project session opens the project DefaultApp when the command line 
 
     const explicit = await StudioProjectSession.open({ appName: 'First', async compile() {}, projectRoot: root })
     Expect(explicit.appName).toBe('First')
+  })
+})
+
+Test('Studio project session lets an explicit entry override the project DefaultApp', async () => {
+  await withTaoFiles('tao-studio-explicit-entry-', {
+    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'First.tao': 'app First { view FirstMain }\nview FirstMain() { }\n',
+    'Second.tao': 'app Second { view SecondMain }\nview SecondMain() { }\n',
+  }, async (_paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: 'First.tao',
+      projectRoot: root,
+    })
+
+    Expect(session.appName).toBe('First')
+    Expect(session.entryPath).toBe(FS.resolvePath('First.tao', await FS.realPath(root)))
   })
 })
 
@@ -664,6 +799,27 @@ Test('Studio lists project files from one scan kept current by writes and watche
       Expect(reads).toBe(initialReads + 1)
     },
   )
+})
+
+Test('Studio file reconciliation repairs changes missed by the OS watcher', async () => {
+  await withStudioProject(async (session, paths, root) => {
+    const before = await session.files()
+    const supportBefore = before.find(file => file.path === 'Support.tao')!.sourceVersion
+    await FS.writeText(paths['Support.tao'], 'view Support() { render Text("reconciled") }\n')
+    await FS.writeText(FS.resolvePath('Added.tao', root), 'view Added() { }\n')
+
+    // The cache remains a cheap in-memory view until its watcher-owned reconciliation pass runs.
+    Expect((await session.files()).some(file => file.path === 'Added.tao')).toBe(false)
+    const reconciled = await session.reconcileProjectFiles()
+    const after = await session.files()
+    Expect(reconciled?.compile?.status).toBe('compiled')
+    Expect(after.map(file => file.path)).toContain('Added.tao')
+    Expect(after.find(file => file.path === 'Support.tao')?.sourceVersion).not.toBe(supportBefore)
+
+    await FS.remove(paths['Support.tao'])
+    await session.reconcileProjectFiles()
+    Expect((await session.files()).some(file => file.path === 'Support.tao')).toBe(false)
+  })
 })
 
 Test('Studio draft writes keep invalid source off disk and acknowledge their exact watcher echo', async () => {

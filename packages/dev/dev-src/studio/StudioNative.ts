@@ -29,7 +29,9 @@ const probeTimeoutMs = 30_000
 // probe, and process-tree shutdown. Healthy local runs complete both commands in under ten seconds.
 const hutchInstallTimeoutMs = 30_000
 const electrobunPrepareTimeoutMs = 45_000
-const electrobunBuildTimeoutMs = 120_000
+// Release packaging can include signing, notarization, and artifact assembly. It is intentionally
+// independent of the 120-second native smoke lane that launches an already-built development app.
+const electrobunReleaseBuildTimeoutMs = 30 * 60_000
 const hutchShutdownTimeoutMs = 5_000
 const hutchDiagnosticOutputLimit = 8_000
 const defaultAppName = 'Tao Studio'
@@ -69,6 +71,7 @@ export type StartedStudioNative = {
 
 type StudioNativePackageOptions = {
   appName?: string
+  buildTimeoutMs?: number
   bundleIdentifier?: string
   channel?: 'canary' | 'stable'
   hutchPath?: string
@@ -95,6 +98,8 @@ type StartProcessTree = typeof startStudioProcessTree
 type NativeStartLifecycleOptions = {
   nativeHost?: NativeHostLeaseDependencies
   onProcessSignal?: typeof Platform.onProcessSignal
+  resolveHutch?: typeof resolveHutchExecutablePath
+  startWithLease?: typeof startWithInterruption
 }
 
 /** NativeHostLeaseDependencies are the seams a test replaces to drive the busy-host prompt without a terminal or a victim. */
@@ -144,11 +149,13 @@ export const StudioNative = {
     materializeStudioServicePayload,
     nativeRuntimeCloseResult,
     nativeDevelopmentProcessIds,
+    electrobunReleaseBuildTimeoutMs,
     prepareElectrobun,
     runNativePhase,
     portableStudioClientBundle,
     processGroupKillSpec,
     resolveHutchExecutablePath,
+    runElectrobunReleaseBuild,
     stageStudioClientBundle,
     stageStudioPackagedServiceBundle,
     stopExistingNativeDevelopmentProcesses,
@@ -166,14 +173,14 @@ async function start(
   const interruption = createNativeInterruption(options.signal, lifecycleOptions.onProcessSignal)
   let nativeHostLease: MachineResourceLease | undefined
   try {
-    const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
+    const hutchPath = await (lifecycleOptions.resolveHutch ?? resolveHutchExecutablePath)(options.hutchPath)
     nativeHostLease = await runNativePhase(
       'native host lease',
       async () =>
         await acquireNativeHostLease(options.nativeHostCommand ?? 'studio-native', lifecycleOptions.nativeHost),
       { signal: interruption.signal },
     )
-    return await startWithInterruption(
+    return await (lifecycleOptions.startWithLease ?? startWithInterruption)(
       { ...options, hutchPath, signal: interruption.signal },
       interruption.close,
       nativeHostLease,
@@ -629,10 +636,7 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   const artifactsRoot = FS.resolvePath('artifacts', project.root)
   await FS.remove(artifactsRoot)
   await prepareElectrobun(hutchPath, project.root)
-  await runHutchCommand(hutchPath, ['electrobun', 'build', `--env=${channel}`], project.root, {
-    failureKind: 'electrobun-build-timeout',
-    timeoutMs: electrobunBuildTimeoutMs,
-  })
+  await runElectrobunReleaseBuild(hutchPath, project.root, channel, options.buildTimeoutMs)
   const artifactPaths = await builtArtifacts(artifactsRoot)
   verifyReleaseArtifacts(artifactPaths, channel)
   return { artifactPaths, artifactsRoot, channel, projectRoot }
@@ -1122,10 +1126,7 @@ async function runHutchCommand(
       args,
       cwd: projectRoot,
       env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
-      // Hutch can leave its engine holding captured output pipes after a finite command reports
-      // completion. Let the finite command inherit terminal output so completion does not wait on
-      // a descendant that still owns those pipes.
-      stdio: ['ignore', 'inherit', 'inherit'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
     if (result.error !== undefined || result.exitCode !== 0) {
       throw new Errors.CommandExecutionError(result)
@@ -1139,8 +1140,10 @@ async function runHutchCommand(
   const commandSpec: Parameters<StartProcessTree>[1] = {
     args,
     cwd: projectRoot,
-    // Preserve the same no-captured-pipe lifecycle when the bounded process-tree runner is used.
-    stdio: ['ignore', 'inherit', 'inherit'],
+    // The detached process-tree runner owns timeout cleanup, so retain output for actionable
+    // diagnostics instead of inheriting it and reporting every timeout as "no Hutch output".
+    stdio: ['ignore', 'pipe', 'pipe'],
+    settleOnExit: true,
     env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
     onError(error) {
       spawnError = error
@@ -1189,6 +1192,12 @@ async function runHutchCommand(
       },
     )
   }
+  // A finite Hutch phase is complete only when its complete process group is gone. The launcher can
+  // exit before an engine descendant closes inherited output pipes, so settle on the launcher's
+  // exit and then retire any surviving descendant explicitly.
+  if (command.isRunning()) {
+    await stopProcessTreeBoundedly(command, waitForClose, options.stopCommand)
+  }
   if (spawnError !== undefined || outcome.result.exitCode !== 0) {
     throw new Errors.CommandExecutionError({
       args,
@@ -1201,6 +1210,19 @@ async function runHutchCommand(
       stdout: output,
     })
   }
+}
+
+async function runElectrobunReleaseBuild(
+  hutchPath: string,
+  projectRoot: string,
+  channel: 'canary' | 'stable',
+  buildTimeoutMs = electrobunReleaseBuildTimeoutMs,
+  run: typeof runHutchCommand = runHutchCommand,
+): Promise<void> {
+  await run(hutchPath, ['electrobun', 'build', `--env=${channel}`], projectRoot, {
+    failureKind: 'electrobun-build-timeout',
+    timeoutMs: buildTimeoutMs,
+  })
 }
 
 type HutchCommandOutcome =

@@ -4,6 +4,7 @@ import type { StudioDraftFile } from '../../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../../StudioInspector'
 import {
   type StudioDebugCommandMessage,
+  type StudioPreviewCanvasGestureMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -22,6 +23,7 @@ import {
 } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
+import { revealCanvasNode } from './StudioCanvasViewport'
 import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
 import type { StudioInteractionMode, StudioPreviewConnection } from './StudioPreviewConnection'
@@ -33,8 +35,10 @@ import { openRuntimeFailureSource, showRuntimeFailure, type StudioOpenFile } fro
 type StudioPreviewMessageActions = {
   activate?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
+  canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
   changed?: () => void
   inspect: (selection: StudioInspectorSelection) => void
+  reveal?: () => void
 }
 
 type StudioOpenFileRequest = (path: string) => Promise<StudioOpenFile | undefined>
@@ -85,6 +89,28 @@ export function postInteractionMode(preview: StudioPreviewConnection, handshake:
     mode: preview.interactionMode,
     protocolVersion: studioProtocolVersion,
     type: 'set-interaction-mode',
+  }, preview.origin)
+}
+
+/** Publishes whether the current Studio layout synchronously owns wheel gestures inside this iframe. */
+export function postCanvasGestureOwnership(
+  preview: StudioPreviewConnection,
+  handshake: StudioHandshake,
+  owned: boolean,
+): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  target.postMessage({
+    channel: studioProtocolChannel,
+    identity: {
+      ...(preview.cellIdentity ?? handshake.identity),
+      previewInstanceId: preview.previewInstanceId,
+    },
+    owned,
+    protocolVersion: studioProtocolVersion,
+    type: 'set-canvas-gestures',
   }, preview.origin)
 }
 
@@ -200,6 +226,7 @@ export async function handlePreviewMessage(
     'highlight-source': ignored,
     'preview-applied': type => receivePreviewApplied(preview, received(message, type), handshake),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
+    'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
@@ -218,6 +245,7 @@ export async function handlePreviewMessage(
     'preview-scheme-changed': type => receiveSchemeChange(preview, received(message, type), actions),
     'preview-select-source': type =>
       receiveSelectSource(preview, received(message, type), handshake, openFile, actions),
+    'set-canvas-gestures': ignored,
     'set-journey-recording': ignored,
     'source-action': type => receiveSourceAction(preview, received(message, type), actions),
     'source-action-undo': ignored,
@@ -313,10 +341,24 @@ function receiveRuntimeCapture(
   clearTimeout(request.timeout)
   preview.runtimeCaptureRequest = undefined
   if (message.type === 'preview-runtime-capture-failed') {
-    request.reject(new Errors.HostEnvironmentError(message.error))
+    request.reject(studioPreviewCaptureError(message.errorName, message.error))
   } else {
     request.resolve(message.capture)
   }
+}
+
+/** Rebuilds the runtime's three-category Tao error after it crosses the preview window protocol. */
+export function studioPreviewCaptureError(
+  name: 'HostEnvironmentError' | 'UnexpectedBehaviorError' | 'UserInputError',
+  message: string,
+): Error {
+  if (name === 'HostEnvironmentError') {
+    return new Errors.HostEnvironmentError(message)
+  }
+  if (name === 'UserInputError') {
+    return new Errors.UserInputError(message)
+  }
+  return new Errors.UnexpectedBehaviorError(message)
 }
 
 async function receivePreviewApplied(
@@ -375,7 +417,7 @@ function receiveRuntimeFailure(
   if (preview.frame !== undefined) {
     StudioReviewDom.status(preview.frame, 'failed', capture.failure?.error.message ?? 'Runtime failure')
   }
-  preview.frame?.scrollIntoView({ block: 'center' })
+  revealCanvasNode(preview.frame)
   showRuntimeFailure(preview, capture, () => openRuntimeFailureSource(capture, handshake, openFile))
   preview.changed?.()
 }
@@ -446,6 +488,7 @@ async function receiveSelectSource(
   if (opened === undefined) {
     return
   }
+  actions.reveal?.()
   actions.inspect(StudioInspector.selection({
     ...message,
     identity: {

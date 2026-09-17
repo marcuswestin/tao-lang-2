@@ -18,6 +18,9 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
   const updates = ship.updates === undefined
     ? {}
     : {
+      // Tao computes the native closure before building and publishes updates under that exact
+      // identity. Asking Expo to fingerprint again here includes generated ship state and produces
+      // a different client request header from the publication runtime.
       runtimeVersion: ship.updates.runtimeVersion,
       updates: {
         enabled: true,
@@ -30,7 +33,14 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
   // the manifest names the containers so the plugin never has to guess from the bundle identifier.
   const icloudPlugins = ship.icloud === undefined
     ? []
-    : [['tao-icloud-native', { containers: ship.icloud.containers, services: ship.icloud.services }]]
+    : [[
+      'tao-icloud-native',
+      {
+        containers: ship.icloud.containers,
+        documentContainers: ship.icloud.documentContainers,
+        services: ship.icloud.services,
+      },
+    ]]
 
   return {
     ...config,
@@ -50,7 +60,9 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
       bundleIdentifier: ship.bundleIdentifier,
       config: {
         ...config.ios?.config,
-        usesNonExemptEncryption: ship.ios.usesNonExemptEncryption,
+        ...(ship.ios.usesNonExemptEncryption === undefined
+          ? {}
+          : { usesNonExemptEncryption: ship.ios.usesNonExemptEncryption }),
       },
     },
     ...updates,
@@ -78,14 +90,19 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
 function withDevData(config, env) {
   const port = Number(env.TAO_DEV_DATA_PORT)
   const app = env.TAO_DEV_DATA_APP
-  if (!Number.isInteger(port) || port <= 0 || port > 65_535 || typeof app !== 'string' || app === '') {
+  const capability = env.TAO_DEV_DATA_CAPABILITY
+  if (
+    !Number.isInteger(port) || port <= 0 || port > 65_535
+    || typeof app !== 'string' || app === ''
+    || typeof capability !== 'string' || !/^[A-Za-z0-9_-]{32,256}$/.test(capability)
+  ) {
     return config
   }
   return {
     ...config,
     extra: {
       ...config.extra,
-      taoDevData: { app, port, protocol: 'tao-dev-data-v1' },
+      taoDevData: { app, capability, port, protocol: 'tao-dev-data-v1' },
     },
   }
 }

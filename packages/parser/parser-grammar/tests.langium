@@ -21,10 +21,10 @@ TestDeclaration:
 // slot fill. That is what lets the ID-headed `narrow "..."` seam remain spelling-validated without
 // becoming grammatically indistinguishable from `Title "..."` in an ordinary view body.
 TestBlock returns Block:
-    '{' statements+=(AppBlockDiagnosticStatement | NarrowStep)* '}';
+    '{' statements+=(AppBlockDiagnosticStatement | InteractionWordStep)* '}';
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
-    | PressKeyStep | NarrowStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
+type CheckStep = RunStep | PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
+    | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
     | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep
     | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep
     | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep
@@ -41,25 +41,16 @@ TagPressStep:
 
 // Phase and pointer steps are ordinary test steps as well as the deliberately narrow journey
 // surface scenarios may replay. A phase press keeps the same selector family as plain `press`.
-PressPhaseStep:
-    'press' phase=('down' | 'up') (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+PressWordStep:
+    'press' subject=ID (selector=TestSelector? target=STRING | tag=TagOrHexColor);
 
-HoverStep:
-    'hover' (selector=TestSelector? target=STRING | tag=TagOrHexColor);
-
-// Focus is intentionally tag-only: focus is about one stable element identity, not matching text.
-// Keep the head ID-based so `focus` remains available to `expect focus region` and ordinary names.
-FocusStep:
-    head=ID tag=TagOrHexColor;
+// The ID-headed interaction seam keeps hover, focus, and narrow available as ordinary declaration
+// names. Their distinct target shapes and scenario eligibility are semantic validation concerns.
+InteractionWordStep:
+    head=ID (selector=TestSelector? target=STRING | tag=TagOrHexColor);
 
 // Interaction vocabulary stays ID-headed and spelling-validated. `key`, `narrow`, `target`,
 // `focus`, `region`, and `verbs` therefore remain available as ordinary names elsewhere.
-PressKeyStep:
-    'press' subject=ID value=STRING;
-
-NarrowStep:
-    head=ID value=STRING;
-
 PressToolbarCommandStep:
     'press' surface=ID 'command' value=Expression;
 

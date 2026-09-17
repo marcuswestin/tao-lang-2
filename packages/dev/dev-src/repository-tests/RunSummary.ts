@@ -99,6 +99,9 @@ export type BuildSummaryOptions = {
 
 const FAILURE_OUTPUT_LINES = 40
 const SUMMARY_VERSION = 2
+const CHROME_PRE_DEVTOOLS_HOST_ABORT =
+  /^HostEnvironmentError: Chrome exited before exposing DevTools \(exit none, signal SIGABRT\)$/m
+const ASSERTION_DETAIL = /AssertionError|expect\(received\)/i
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
@@ -107,13 +110,21 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   {
     kind: 'native-runtime-exit',
     pattern:
-      /(?:native runtime exited .* before (?:reporting|producing)|Electrobun exited before writing its runtime probe)/i,
+      /(?:native runtime exited .* before (?:reporting|producing)|Native Studio runtime (?:exited with code|terminated by signal) \d+|Electrobun exited before writing its runtime probe)/i,
   },
   { kind: 'native-probe-timeout', pattern: /Timed out waiting for the Electrobun runtime probe/i },
   { kind: 'user-interruption', pattern: /\b(?:user interruption|was interrupted|interrupted before completion)\b/i },
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
   { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
+  // macOS can reject recursive cleanup inside generated and artifact trees even though those paths
+  // are writable. Keep this narrower than EFAULT itself: a bad address from another syscall or a
+  // source path is still a repository failure that needs investigation.
+  {
+    kind: 'sandbox-restriction',
+    pattern:
+      /\b(?:EFAULT:\s*bad address in system call argument|EPERM:\s*operation not permitted),\s*(?:rm|rmdir)\s+['"][^'"\r\n]*(?:[/\\](?:_gen_[^/\\'"\r\n]+|\.artifacts)(?:[/\\]|['"]))/im,
+  },
   // Last, and anchored to a line of its own: `EPERM` inside a test's own assertion text is a
   // repository failure, not a host restriction, and it is far more common than the real thing.
   {
@@ -163,11 +174,26 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
   if (context.interrupted === true) {
     return 'user-interruption'
   }
-  const signature = FAILURE_SIGNATURES.find(candidate => candidate.pattern.test(output))
+  // Bun appends `(fail)` to every failed test, including one whose browser process was rejected by
+  // the host before CDP existed. Recognize that exact boundary without letting it outrank a real
+  // assertion reported elsewhere in the same browser run.
+  if (CHROME_PRE_DEVTOOLS_HOST_ABORT.test(output) && !ASSERTION_DETAIL.test(output)) {
+    return 'sandbox-restriction'
+  }
+  // A runner prints FAIL/(fail) for a timed-out test as well as for a wrong answer. Classify the
+  // specific host/native signatures first, then the timeout with measured contention, and only
+  // then fall back to the generic assertion banner.
+  const signature = FAILURE_SIGNATURES.find(candidate =>
+    candidate.kind !== 'test-assertion' && candidate.pattern.test(output)
+  )
   if (signature !== undefined) {
     return signature.kind
   }
-  return context.contention?.contended === true && describesTimeout(output) ? 'machine-contention' : 'repository'
+  if (describesTimeout(output)) {
+    return context.contention?.contended === true ? 'machine-contention' : 'repository'
+  }
+  return FAILURE_SIGNATURES.find(candidate => candidate.kind === 'test-assertion' && candidate.pattern.test(output))
+    ?.kind ?? 'repository'
 }
 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */

@@ -1,4 +1,5 @@
-import { CLI, Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, Time } from '@shared'
+import { dlopen, FFIType, type Pointer, ptr } from 'bun:ffi'
 import { OutputText } from '../cli/OutputText'
 
 /**
@@ -55,7 +56,7 @@ export type WorkAdmission = {
 export type WorkNode = {
   name: string
   /**
-   * The process the node runs, through `CLI.start` with piped output: a command, or a builder
+   * The process the node runs with piped output in its own process group: a command, or a builder
    * handed what the graph admitted so the command can carry its granted width or worker index.
    */
   run: WorkCommand | ((admission: WorkAdmission) => WorkCommand)
@@ -176,6 +177,15 @@ type RunningNode = {
   promise: Promise<void>
 }
 
+type TrackedProcess = {
+  command: string
+  pid: number
+  /** Kernel process start time, including microseconds on Darwin, protects against PID reuse. */
+  startedAt: string
+}
+
+type ProcessTableEntry = TrackedProcess & { ppid: number }
+
 const OUTPUT_LINE_LIMIT = 6
 /**
  * Cold-start duration for a node with no measured history. Scaling by `cost` keeps the hand-tuned
@@ -185,7 +195,7 @@ const COLD_START_MS_PER_SLOT = 1_000
 const INTERRUPTED_REASON = 'interrupted'
 const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
 /** How long a cancelled process gets to honor SIGTERM before it is killed outright. */
-const FORCE_KILL_GRACE_MS = 10_000
+const FORCE_KILL_GRACE_MS = 250
 /** Env keys the nested runners read their own worker budget from. */
 const BUDGET_ENV_KEYS = {
   devTest: 'TAO_DEV_TEST_JOBS',
@@ -248,6 +258,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
           await options.slotBroker?.waitForAvailability()
           continue
         }
+        if (admission.settled > 0) {
+          // A dependency skip can make an earlier pending node newly skippable. Re-scan before
+          // deciding the remainder is a cycle; priority ordering does not guarantee dependencies
+          // appear before every descendant.
+          continue
+        }
         if (admission.started === 0) {
           // Nothing runs, nothing can start: what is left needs something this run never provides.
           // That is a defect in the catalog, not a skip, so the lane fails rather than passing green
@@ -258,7 +274,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         }
         continue
       }
-      await Promise.race([...running.values()].map(node => node.promise))
+      const localCompletion = [...running.values()].map(node => node.promise)
+      await Promise.race(
+        admission.machineBlocked && options.slotBroker !== undefined
+          ? [...localCompletion, options.slotBroker.waitForAvailability()]
+          : localCompletion,
+      )
     }
   } catch (error) {
     // A scheduler/broker failure must not let already-admitted children outlive the lane record
@@ -273,8 +294,9 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   emit({ kind: 'done', interrupted, states })
   return { interrupted, states }
 
-  async function admit(): Promise<{ machineBlocked: boolean; started: number }> {
+  async function admit(): Promise<{ machineBlocked: boolean; settled: number; started: number }> {
     let started = 0
+    let settled = 0
     let machineBlocked = false
     for (let index = 0; index < pending.length;) {
       const state = pending[index]!
@@ -282,6 +304,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       if (failedDependency !== undefined) {
         pending.splice(index, 1)
         finishWithoutRunning(state, `dependency failed: ${failedDependency}`, emit)
+        settled += 1
         continue
       }
       if (!isReady(state, states) || !resourcesAvailable(state, heldResources)) {
@@ -300,7 +323,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       )
       if (interrupted || pending[index] !== state || state.status !== 'pending') {
         await machineReservation?.release()
-        return { machineBlocked: false, started }
+        return { machineBlocked: false, settled, started }
       }
       if (options.slotBroker !== undefined && machineReservation === undefined) {
         machineBlocked = true
@@ -319,7 +342,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       startNode(state, slots, machineReservation)
       started += 1
     }
-    return { machineBlocked, started }
+    return { machineBlocked, settled, started }
   }
 
   function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
@@ -356,7 +379,6 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       for (const resource of state.node.resources ?? []) {
         heldResources.delete(resource)
       }
-      running.delete(state)
       if (timedOut) {
         state.status = 'failed'
         state.reason = `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
@@ -371,6 +393,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
       }
       await machineReservation?.release()
+      // Keep the node in `running` through asynchronous broker cleanup. The scheduler uses this map
+      // as its drain condition; deleting first lets the graph return and its caller remove the
+      // registry root while a reservation is still trying to lock it.
+      running.delete(state)
       emit({ kind: 'complete', state })
     })
     running.set(state, { cancel: () => cancel(), promise })
@@ -419,35 +445,233 @@ async function executeNode(
 
 /** runProcess is the default runner: one child process with its output piped back to the graph. */
 async function runProcess(_state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
-  let command: CLI.StartedCommand | undefined
+  const child = Platform.spawn(context.run.command, {
+    args: [...context.run.args],
+    cwd: context.run.cwd,
+    detached: true,
+    env: context.env,
+    stdio: 'pipe',
+  })
   let forceKill: ReturnType<typeof setTimeout> | undefined
+  let trackedDescendants: TrackedProcess[] = []
+  child.stdout?.on('data', chunk => context.onOutput(String(chunk)))
+  child.stderr?.on('data', chunk => context.onOutput(String(chunk)))
+  let cancelled = false
   try {
-    command = CLI.start(context.run.command, {
-      args: [...context.run.args],
-      cwd: context.run.cwd,
-      env: context.env,
-      onOutput: (_stream, chunk) => context.onOutput(String(chunk)),
-      stdio: 'pipe',
-    })
-    const started = command
     context.onCancel(() => {
-      started.kill('SIGTERM')
+      cancelled = true
+      trackedDescendants = child.pid === undefined ? [] : descendantProcesses(child.pid)
+      signalTrackedProcesses(trackedDescendants, 'SIGTERM')
+      signalProcessGroup(child.pid, 'SIGTERM')
       // A node cancelled for hanging may ignore SIGTERM — the canary's surviving launch process
       // did — and would then hold the lane open through the very mechanism meant to unblock it.
-      forceKill = setTimeout(() => started.kill('SIGKILL'), FORCE_KILL_GRACE_MS)
+      forceKill = setTimeout(() => {
+        signalTrackedProcesses(trackedDescendants, 'SIGKILL')
+        signalProcessGroup(child.pid, 'SIGKILL')
+      }, FORCE_KILL_GRACE_MS)
     })
-    return await waitForCommand(started)
+    const outcome = await waitForProcess(child)
+    if (cancelled) {
+      await Promise.all([
+        waitForProcessGroupExit(child.pid),
+        waitForTrackedProcessesExit(trackedDescendants),
+      ])
+    }
+    return outcome
   } finally {
     if (forceKill !== undefined) {
       clearTimeout(forceKill)
     }
-    command?.dispose()
+    child.stdin?.destroy()
+    child.stdout?.destroy()
+    child.stderr?.destroy()
+    child.removeAllListeners()
   }
 }
 
-async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome> {
+/**
+ * descendantProcesses snapshots the whole owned tree before cancellation can orphan an escaped
+ * process group. Each PID carries its OS start identity so a later signal cannot hit a reused PID.
+ */
+function descendantProcesses(rootPid: number): TrackedProcess[] {
+  if (process.platform === 'darwin') {
+    return darwinDescendantProcesses(rootPid)
+  }
+  const byParent = new Map<number, TrackedProcess[]>()
+  for (const process of processTable()) {
+    const children = byParent.get(process.ppid) ?? []
+    children.push(process)
+    byParent.set(process.ppid, children)
+  }
+  const descendants: Array<TrackedProcess & { depth: number }> = []
+  const visit = (pid: number, depth: number) => {
+    for (const child of byParent.get(pid) ?? []) {
+      descendants.push({ ...child, depth })
+      visit(child.pid, depth + 1)
+    }
+  }
+  visit(rootPid, 1)
+  return descendants.toSorted((left, right) => right.depth - left.depth).map(({ depth: _depth, ...process }) => process)
+}
+
+/** Darwin's libproc gives child PIDs and microsecond process-start identity inside the sandbox. */
+function darwinDescendantProcesses(rootPid: number): TrackedProcess[] {
+  const library = dlopen('/usr/lib/libproc.dylib', {
+    proc_listchildpids: {
+      args: [FFIType.i32, FFIType.ptr, FFIType.i32],
+      returns: FFIType.i32,
+    },
+    proc_pidinfo: {
+      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
+      returns: FFIType.i32,
+    },
+  })
+  try {
+    const descendants: Array<TrackedProcess & { depth: number }> = []
+    const visited = new Set<number>([rootPid])
+    const visit = (pid: number, depth: number) => {
+      const children = new Int32Array(4_096)
+      const count = library.symbols.proc_listchildpids(pid, ptr(children), children.byteLength)
+      for (const childPid of children.subarray(0, Math.min(Math.max(0, count), children.length))) {
+        if (!Number.isSafeInteger(childPid) || childPid <= 1 || visited.has(childPid)) {
+          continue
+        }
+        visited.add(childPid)
+        const child = darwinProcessIdentity(childPid, library.symbols.proc_pidinfo)
+        if (child === undefined) {
+          continue
+        }
+        descendants.push({ ...child, depth })
+        visit(childPid, depth + 1)
+      }
+    }
+    visit(rootPid, 1)
+    return descendants.toSorted((left, right) => right.depth - left.depth)
+      .map(({ depth: _depth, ...process }) => process)
+  } finally {
+    library.close()
+  }
+}
+
+function darwinProcessIdentity(
+  pid: number,
+  inspect: (pid: number, flavor: number, arg: number, buffer: Pointer, size: number) => number,
+): TrackedProcess | undefined {
+  const bytes = new Uint8Array(136)
+  if (inspect(pid, 3, 0, ptr(bytes), bytes.byteLength) < bytes.byteLength) {
+    return undefined
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (view.getUint32(12, true) !== pid) {
+    return undefined
+  }
+  return {
+    command: darwinProcessName(bytes),
+    pid,
+    startedAt: `${view.getBigUint64(120, true)}:${view.getBigUint64(128, true)}`,
+  }
+}
+
+function darwinProcessName(bytes: Uint8Array): string {
+  const decode = (offset: number, length: number) =>
+    new TextDecoder().decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '')
+  return decode(64, 32) || decode(48, 16)
+}
+
+/** processTable uses the repository-approved fixed process listing, not caller-shaped ps arguments. */
+function processTable(): ProcessTableEntry[] {
+  const result = Platform.spawnSync('ps', {
+    args: ['-axo', 'pid=,ppid=,lstart=,command='],
+  })
+  if (result.status !== 0) {
+    return []
+  }
+  const processes: ProcessTableEntry[] = []
+  for (const line of String(result.stdout).split('\n')) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\d+\s+\d+:\d+:\d+\s+\d+)\s+(.+)$/)
+    if (match === null) {
+      continue
+    }
+    const pid = Number(match[1])
+    const ppid = Number(match[2])
+    if (Number.isSafeInteger(pid) && pid > 1 && Number.isSafeInteger(ppid) && ppid >= 0) {
+      processes.push({ command: match[4]!, pid, ppid, startedAt: match[3]! })
+    }
+  }
+  return processes
+}
+
+/** signalTrackedProcesses signals only PIDs whose start identities still match the owned snapshot. */
+type ProcessSignalSeams = {
+  identities: (pids: readonly number[]) => Map<number, TrackedProcess>
+  signal: (pids: readonly number[], signal: Platform.ProcessSignal) => void
+}
+
+function signalTrackedProcesses(
+  processes: readonly TrackedProcess[],
+  signal: Platform.ProcessSignal,
+  seams: ProcessSignalSeams = systemProcessSignalSeams,
+): void {
+  if (processes.length === 0) {
+    return
+  }
+  const current = seams.identities(processes.map(process => process.pid))
+  const pids = processes
+    .filter(process => sameProcess(current.get(process.pid), process))
+    .map(process => process.pid)
+  if (pids.length > 0) {
+    seams.signal(pids, signal)
+  }
+}
+
+const systemProcessSignalSeams: ProcessSignalSeams = {
+  identities: currentProcessIdentities,
+  signal: (pids, signal) => {
+    Platform.spawnSync('/bin/kill', {
+      args: [`-${signal.replace(/^SIG/, '')}`, '--', ...pids.map(String)],
+      stdio: 'ignore',
+    })
+  },
+}
+
+function sameProcess(current: TrackedProcess | undefined, expected: TrackedProcess): boolean {
+  return current?.startedAt === expected.startedAt && current.command === expected.command
+}
+
+function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
+  if (process.platform !== 'darwin') {
+    return new Map(processTable().map(process => [process.pid, process]))
+  }
+  const library = dlopen('/usr/lib/libproc.dylib', {
+    proc_pidinfo: {
+      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
+      returns: FFIType.i32,
+    },
+  })
+  try {
+    return new Map(pids.flatMap(pid => {
+      const process = darwinProcessIdentity(pid, library.symbols.proc_pidinfo)
+      return process === undefined ? [] : [[pid, process] as const]
+    }))
+  } finally {
+    library.close()
+  }
+}
+
+async function waitForTrackedProcessesExit(processes: readonly TrackedProcess[]): Promise<void> {
+  const expected = new Map(processes.map(process => [process.pid, process.startedAt]))
+  while (
+    [...currentProcessIdentities([...expected.keys()]).values()]
+      .some(process => sameProcess(process, processes.find(expected => expected.pid === process.pid)!))
+  ) {
+    await Time.sleep(25)
+  }
+}
+
+async function waitForProcess(child: ReturnType<typeof Platform.spawn>): Promise<WorkOutcome> {
   return await new Promise(resolve => {
     let settled = false
+    let processError: Error | undefined
     const finish = (outcome: WorkOutcome) => {
       if (settled) {
         return
@@ -455,14 +679,40 @@ async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome>
       settled = true
       resolve(outcome)
     }
-    command.onceError(error => {
+    child.once('error', error => {
+      processError = error
       finish({ error, exitCode: null })
     })
-    command.waitForClose().then(result => {
-      finish({ error: command.error, exitCode: result.exitCode })
-      return result
+    child.once('close', exitCode => {
+      finish({ error: processError, exitCode })
     })
   })
+}
+
+/** signalProcessGroup stops the detached command and every descendant that inherited its pipes. */
+function signalProcessGroup(pid: number | undefined, signal: Platform.ProcessSignal): boolean {
+  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) {
+    return false
+  }
+  const result = Platform.spawnSync('/bin/kill', {
+    args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`],
+    stdio: 'ignore',
+  })
+  return result.status === 0
+}
+
+/** waitForProcessGroupExit keeps cancellation pending until no descendant remains signalable. */
+async function waitForProcessGroupExit(pid: number | undefined): Promise<void> {
+  if (pid === undefined) {
+    return
+  }
+  while (processGroupIsAlive(pid)) {
+    await Time.sleep(25)
+  }
+}
+
+function processGroupIsAlive(pid: number): boolean {
+  return Platform.spawnSync('/bin/kill', { args: ['-0', '--', `-${pid}`], stdio: 'ignore' }).status === 0
 }
 
 function finishWithoutRunning(
@@ -641,4 +891,5 @@ export const WorkGraph = {
   exitCodeFor,
   nodeLabel,
   run,
+  signalTrackedProcesses,
 } as const

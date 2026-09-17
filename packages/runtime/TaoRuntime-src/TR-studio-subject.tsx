@@ -2,7 +2,14 @@ import React from 'react'
 import type { TaoAppDefinition, TaoNavigationArguments } from './TR-navigation'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
-import { registerNavigationApp } from './TR-navigation-registry'
+
+/** Creates an inert synthetic app; only a committed host activates it in process-wide registries. */
+export function createStudioSubjectApp(
+  definition: (arguments_: TaoNavigationArguments) => TaoAppDefinition,
+  arguments_: TaoNavigationArguments,
+): RuntimeAppDefinition {
+  return new RuntimeAppDefinition(definition(arguments_), { deferredRegistration: true })
+}
 
 /**
  * The navigation host a Studio cell gives one focused view.
@@ -30,7 +37,22 @@ export function StudioSubjectHost(props: {
   // Lazy initial state rather than a memo: a cell remounts whenever its scenario or revision
   // changes, so "once per mount" is exactly the lifetime this host wants, and there is no
   // dependency list to keep honest.
-  const [app] = React.useState(() => registerNavigationApp(new RuntimeAppDefinition(props.definition(props.arguments))))
-  React.useEffect(() => () => app.dispose(), [app])
+  const [app] = React.useState(() => createStudioSubjectApp(props.definition, props.arguments))
+  const lifecycleGeneration = React.useRef(0)
+  React.useEffect(() => {
+    lifecycleGeneration.current += 1
+    app.commitRegistration()
+    return () => {
+      const cleanupGeneration = ++lifecycleGeneration.current
+      // StrictMode deliberately replays an effect's setup/cleanup/setup against the same state
+      // object. Defer destructive disposal by one microtask so the second setup can claim the app;
+      // a real unmount has no setup to advance the generation and therefore still releases it.
+      queueMicrotask(() => {
+        if (lifecycleGeneration.current === cleanupGeneration) {
+          app.dispose()
+        }
+      })
+    }
+  }, [app])
   return React.createElement(NavigationAppHost, { app })
 }

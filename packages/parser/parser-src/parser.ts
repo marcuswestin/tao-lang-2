@@ -266,8 +266,17 @@ async function buildDocuments(
   documents: readonly AST.Document[],
   options: ParseOptions,
 ): Promise<ParseResult> {
+  const langiumDocuments = services.shared.workspace.LangiumDocuments
+  const currentUris = new Set(documents.map(document => document.uri.toString()))
+  for (const retained of Array.from(langiumDocuments.all)) {
+    if (!currentUris.has(retained.uri.toString())) {
+      langiumDocuments.deleteDocument(retained.uri)
+    }
+  }
+  AST.rememberVisibleWorkspaceFiles(
+    documents.map(document => document.parseResult.value).filter(AST.isTaoFile),
+  )
   for (const document of documents) {
-    const langiumDocuments = services.shared.workspace.LangiumDocuments
     if (langiumDocuments.hasDocument(document.uri)) {
       langiumDocuments.deleteDocument(document.uri)
     }

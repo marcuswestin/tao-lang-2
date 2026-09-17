@@ -259,6 +259,53 @@ Describe('navigation across a relaunch', () => {
     }
   })
 
+  Test('isolates overlapping old- and new-launch async continuations', async () => {
+    const device = memoryKeyValueStorage()
+    const restoreStorage = TR.Persisted.setStorageForTests(device)
+    try {
+      const width = persistedWidth('OldContinuationAfterNewAction')
+      let releaseOld!: () => void
+      const oldGate = new Promise<void>(resolve => {
+        releaseOld = resolve
+      })
+      const oldAction = TR.Action(async () => {
+        const continuation = TR.ActionContinuation()
+        await oldGate
+        TR.ResumeActionContinuation(continuation)
+        width.set(TR.Value(360))
+      }, { name: 'OldWiden' })
+
+      const oldPending = oldAction.jsValue.invoke()
+      await TR.Navigation.beginLaunch()
+      let releaseNew!: () => void
+      let startedNew!: () => void
+      const newGate = new Promise<void>(resolve => {
+        releaseNew = resolve
+      })
+      const newStarted = new Promise<void>(resolve => {
+        startedNew = resolve
+      })
+      const newAction = TR.Action(async () => {
+        width.set(TR.Value(400))
+        startedNew()
+        await newGate
+      }, { name: 'NewWiden' })
+      const newPending = newAction.jsValue.invoke()
+      await newStarted
+
+      releaseOld()
+      await oldPending
+      Expect(width.evaluate().jsValue).toBe(280)
+
+      releaseNew()
+      await newPending
+
+      Expect(width.evaluate().jsValue).toBe(400)
+    } finally {
+      restoreStorage()
+    }
+  })
+
   Test('settles a coalesced write before the relaunched instance reads the device', async () => {
     const values = new Map<string, string>()
     const restoreDevice = setNavigationRestorationStorageForTests(unhurriedStorage(values))

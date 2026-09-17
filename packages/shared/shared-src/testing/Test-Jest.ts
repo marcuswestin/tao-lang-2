@@ -1,7 +1,15 @@
 import { throwHostEnvironment } from '../core/Errors'
 import { type JestApi, setTestRuntime, type TestRuntime } from './Test'
 
-export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
+export {
+  app,
+  fence,
+  primitiveAppValueSpellings,
+  promptTagsApp,
+  stubContainer,
+  stubView,
+  tsFence,
+} from './TaoFixtures'
 export {
   AfterAll,
   AfterEach,

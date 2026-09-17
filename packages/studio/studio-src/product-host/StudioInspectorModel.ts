@@ -46,7 +46,11 @@ export function StudioInspectorSummaryLines(
     : ''
   return [
     `Source: ${path}${lines}`,
-    ...(selected.identity.sourceVersion === currentSourceVersion ? [] : ['Waiting for the refreshed preview']),
+    ...(currentSourceVersion === ''
+      ? ['Save the active draft to refresh source locations']
+      : selected.identity.sourceVersion === currentSourceVersion
+      ? []
+      : ['Waiting for the refreshed preview']),
     ...(occurrence?.renderOwner === undefined ? [] : [`View: ${occurrence.renderOwner}`]),
     ...(parsed?.elementName === undefined ? [] : [`Element: ${parsed.elementName}`]),
   ]

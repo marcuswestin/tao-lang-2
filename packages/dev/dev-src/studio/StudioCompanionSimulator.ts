@@ -98,7 +98,16 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
 
   /** show brings Simulator or Device Hub forward so a person watching sees the launch. */
   async function show(id?: string): Promise<void> {
-    await presentIosSimulator(id, run)
+    const presented = await presentIosSimulator(id, run)
+    if (presented.result.exitCode !== 0 || presented.result.error !== undefined) {
+      throwStudioDeviceFailure(
+        'simulator',
+        `Could not open ${presented.host}: ${
+          presented.result.stderr.trim() || presented.result.error?.message || 'unknown error'
+        }`,
+        { cause: presented.result.error },
+      )
+    }
   }
 
   async function open(input: { id: string; url: string }): Promise<void> {
@@ -227,7 +236,7 @@ export function matchCompanionSimulator(
 
 /** companionSimulatorInstallCommand is the command a person runs to put the shell on a simulator. */
 export function companionSimulatorInstallCommand(name = '<name>'): string {
-  return `just studio-companion-install simulator="${name}"`
+  return `just studio-companion-simulator simulator="${name}"`
 }
 
 /**
@@ -259,7 +268,7 @@ export async function runStudioCompanionInstallOnSimulator(
 }
 
 /**
- * `just studio-companion-install simulator="iPhone 17 Pro"` passes the whole `simulator=…` word
+ * `just studio-companion-simulator simulator="iPhone 17 Pro"` passes the whole `simulator=…` word
  * through, so the tooling accepts that spelling as well as the bare name.
  */
 export function companionSimulatorNameFromArgument(argument: string): string {

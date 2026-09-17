@@ -1,7 +1,12 @@
 import { Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
-import { buildSummary, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
+import {
+  buildSummary,
+  classifyFailure,
+  formatGateSummary,
+  gateExitCode,
+} from '../dev-src/repository-tests/RunSummary'
 import { WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
 function finishedState(node: Partial<WorkNode> & { name: string }, outcome: Partial<WorkState> = {}): WorkState {
@@ -91,5 +96,52 @@ Describe('versioned run summary', () => {
 
     Expect(formatGateSummary(summary)).toContain('logs/verify/stamp')
     Expect(formatGateSummary(summary)).toContain('logs/verify/stamp/summary.json')
+  })
+
+  Test('a test-runner timeout under measured contention is not hidden by its FAIL banner', () => {
+    const contention = { contended: true, cpuCount: 8, peakLanes: 2, peakLoadAverage: 12 }
+
+    Expect(classifyFailure(
+      'FAIL packages/example.test.ts\n(fail) renders\nerror: Test "renders" timed out after 5000ms',
+      { contention },
+    )).toBe('machine-contention')
+  })
+
+  Test('recognizes the native runtime exit messages emitted by Studio', () => {
+    Expect(classifyFailure('Native Studio runtime exited with code 7.')).toBe('native-runtime-exit')
+    Expect(classifyFailure('Native Studio runtime terminated by signal 6.')).toBe('native-runtime-exit')
+  })
+
+  Test('recognizes generated-tree cleanup failures imposed by the host', () => {
+    Expect(classifyFailure(
+      "EFAULT: bad address in system call argument, rm '/repo/packages/ide-extension/_gen_ide-extension/@tao'",
+    )).toBe('sandbox-restriction')
+    Expect(classifyFailure(
+      "EPERM: operation not permitted, rmdir '/repo/packages/runtime-toolchain/.artifacts/tests/run/_gen_tao-app'",
+    )).toBe('sandbox-restriction')
+  })
+
+  Test('keeps unrelated bad-address failures assigned to the repository', () => {
+    Expect(classifyFailure("EFAULT: bad address in system call argument, read '/repo/Apps/HNReader/App.tao'"))
+      .toBe('repository')
+    Expect(classifyFailure("EFAULT: bad address in system call argument, rm '/repo/Apps/HNReader/App.tao'"))
+      .toBe('repository')
+  })
+
+  Test('recognizes a Chrome abort before DevTools despite the Bun failure banner', () => {
+    Expect(classifyFailure([
+      'HostEnvironmentError: Chrome exited before exposing DevTools (exit none, signal SIGABRT)',
+      '(fail) Studio dialog restores its live background in Chrome [310.05ms]',
+      '0 pass',
+      '1 fail',
+    ].join('\n'))).toBe('sandbox-restriction')
+  })
+
+  Test('does not let a Chrome host abort hide a browser assertion failure', () => {
+    Expect(classifyFailure([
+      'HostEnvironmentError: Chrome exited before exposing DevTools (exit none, signal SIGABRT)',
+      '(fail) another browser test',
+      'error: expect(received).toBe(expected)',
+    ].join('\n'))).toBe('test-assertion')
   })
 })

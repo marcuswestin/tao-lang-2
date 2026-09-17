@@ -1,22 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "permissions": {
-    "ask": [
-      "Bash(codesign *)",
-      "Bash(hdiutil *)",
-      "Bash(spctl *)",
-      "Bash(xcrun notarytool *)",
-      "Bash(xcrun stapler *)"
-    ]
-  },
   "sandbox": {
-    "excludedCommands": [
-      "codesign *",
-      "hdiutil *",
-      "spctl *",
-      "xcrun notarytool *",
-      "xcrun stapler *"
-    ],
     "filesystem": {
       "allowWrite": [
         "~/Library/Developer/CoreSimulator",

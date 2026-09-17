@@ -2,9 +2,9 @@ import { Errors, Http } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   assertUpdateCompatibility,
-  type ExpoUpdateManifest,
   expoUpdateRequestHeaders,
   expoUpdateResponseHeaders,
+  type TaoPublishedUpdate,
   TaoUpdateClient,
   type TaoUpdateFetch,
 } from '../cli-src/tao-update-client'
@@ -160,6 +160,44 @@ Describe('Tao expo-updates service client', () => {
     })
   })
 
+  Test('selects rollback from compatible history instead of toggling between the last two publications', async () => {
+    const oldestCompatible = publication('update-1', '2026-09-02T13:00:00.000Z')
+    const previousSource = publication('update-2', '2026-09-02T14:00:00.000Z')
+    const incompatible = publication('update-3', '2026-09-02T15:00:00.000Z', {
+      runtimeVersion: 'native-2',
+    })
+    const current = publication('update-4', '2026-09-02T16:00:00.000Z', {
+      sourceUpdateId: 'update-2',
+    })
+    const nextRollback = publication('update-5', '2026-09-02T17:00:00.000Z', {
+      sourceUpdateId: 'update-1',
+    })
+    const recorded = recordedFetch([
+      Http.jsonResponse({ updates: [current, incompatible, previousSource, oldestCompatible] }),
+      Http.jsonResponse(nextRollback),
+    ])
+    const client = updateClient(recorded.fetch)
+
+    Expect(
+      await client.rollbackCompatible({
+        applicationId: 'wordflower',
+        channel: 'wordflower-instantdb',
+        currentUpdateId: 'update-4',
+        supportedBinaries: [{
+          dataSchemaFingerprint: 'schema-1',
+          platform: 'ios',
+          runtimeVersion: 'native-1',
+        }],
+      }),
+    ).toEqual(nextRollback)
+
+    Expect(recorded.requests.map(request => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
+      'GET /v1/apps/wordflower/channels/wordflower-instantdb/updates',
+      'POST /v1/apps/wordflower/channels/wordflower-instantdb/updates',
+    ])
+    Expect((recorded.requests[1]?.body as { data: { sourceUpdateId: string } }).data.sourceUpdateId).toBe('update-1')
+  })
+
   Test('checks the same public manifest request the installed expo-updates client makes', async () => {
     const published = publication('update-2', '2026-09-02T16:00:00.000Z')
     const recorded = recordedFetch([
@@ -211,6 +249,16 @@ Describe('Tao expo-updates service client', () => {
         runtimeVersion: 'native-1',
       }, installed)
     ).not.toThrow()
+
+    Expect(() =>
+      assertUpdateCompatibility({
+        dataSchemaFingerprint: 'schema-1',
+        runtimeVersion: 'native-1',
+      }, [
+        { dataSchemaFingerprint: 'schema-1', platform: 'ios', runtimeVersion: 'native-1' },
+        { dataSchemaFingerprint: 'schema-old', platform: 'ios', runtimeVersion: 'native-old' },
+      ])
+    ).toThrow('every supported build')
   })
 
   Test('rejects mutable or insecure asset locations before sending authorization', async () => {
@@ -241,16 +289,19 @@ function updateClient(fetch: TaoUpdateFetch): TaoUpdateClient {
   })
 }
 
-function publication(id: string, createdAt: string): {
-  applicationId: string
-  channel: string
-  dataSchemaFingerprint: string
-  manifest: ExpoUpdateManifest
-} {
+function publication(
+  id: string,
+  createdAt: string,
+  overrides: {
+    dataSchemaFingerprint?: string
+    runtimeVersion?: string
+    sourceUpdateId?: string
+  } = {},
+): TaoPublishedUpdate {
   return {
     applicationId: 'wordflower',
     channel: 'wordflower-instantdb',
-    dataSchemaFingerprint: 'schema-1',
+    dataSchemaFingerprint: overrides.dataSchemaFingerprint ?? 'schema-1',
     manifest: {
       assets: [{
         contentType: 'image/png',
@@ -269,8 +320,9 @@ function publication(id: string, createdAt: string): {
         url: 'https://updates.tao-lang.dev/assets/launch-hash.js',
       },
       metadata: { channel: 'wordflower-instantdb' },
-      runtimeVersion: 'native-1',
+      runtimeVersion: overrides.runtimeVersion ?? 'native-1',
     },
+    ...(overrides.sourceUpdateId === undefined ? {} : { sourceUpdateId: overrides.sourceUpdateId }),
   }
 }
 

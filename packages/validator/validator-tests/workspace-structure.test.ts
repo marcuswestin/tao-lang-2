@@ -572,6 +572,11 @@ Describe('validator: workspace structure', () => {
         message: projectValidationMessages.duplicateDefaultApp(),
       },
       {
+        title: 'rejects misspelled default app metadata through the identifier seam',
+        source: `project { id "one" name "One" PrimaryApp First }\napp First { }`,
+        message: projectValidationMessages.defaultAppSpelling('PrimaryApp'),
+      },
+      {
         title: 'rejects duplicate project remotes',
         source: `project { id "one" name "One" remote none remote none }\n${stubApp()}`,
         message: projectValidationMessages.duplicateRemote(),

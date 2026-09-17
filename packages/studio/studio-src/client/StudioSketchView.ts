@@ -293,6 +293,55 @@ export const StudioSketchDragOneIn = {
   },
 } as const
 
+type StudioSketchClosestTarget = Readonly<{
+  closest(selector: string): Readonly<{ dataset?: DOMStringMap | Readonly<Record<string, string>> }> | null
+}>
+
+/** StudioSketchDragTarget authenticates the visible drop affordance as belonging to this sketch. */
+export const StudioSketchDragTarget = {
+  owns(target: StudioSketchClosestTarget | null, sketchId: string): boolean {
+    const dropTarget = target?.closest('[data-tao-studio-sketch-drop-target]')
+    return dropTarget?.dataset?.['taoStudioSketchDropTarget'] === sketchId
+  },
+  ownsAny(targets: readonly StudioSketchClosestTarget[], sketchId: string): boolean {
+    return targets.some(target => StudioSketchDragTarget.owns(target, sketchId))
+  },
+} as const
+
+type StudioSketchErrorElement = Readonly<{
+  dataset: Record<string, string | undefined> | DOMStringMap
+  closest(selector: string): unknown
+}>
+
+/** Successful sketch operations clear both the board marker and the longer-lived Draw host marker. */
+export const StudioSketchErrors = {
+  clear(board: StudioSketchErrorElement): void {
+    delete board.dataset['taoStudioSketchError']
+    const host = board.closest('[data-tao-studio-sketch-error]') as
+      | Readonly<{ dataset: Record<string, string | undefined> | DOMStringMap }>
+      | null
+    if (host !== null) {
+      delete host.dataset['taoStudioSketchError']
+    }
+  },
+} as const
+
+/** A captured pointer is released only after its catalog commit has settled and queued its render. */
+export const StudioSketchPointerRelease = {
+  afterCommit(commit: () => Promise<unknown> | unknown, release: () => void): void {
+    try {
+      const result = commit()
+      if (result instanceof Promise) {
+        void result.then(release, release)
+      } else {
+        release()
+      }
+    } catch {
+      release()
+    }
+  },
+} as const
+
 export type MountedStudioSketchView = Readonly<{
   dispose(): void
   render(sketches: readonly StudioSketch[], sourceVersions?: Readonly<Record<string, string>>): void
@@ -351,13 +400,15 @@ function rectFromPoints(
   origin: StudioSketchPoint,
   point: StudioSketchPoint,
 ): Readonly<{ height: number; width: number; x: number; y: number }> {
-  const width = Math.round(Math.abs(point.x - origin.x))
-  const height = Math.round(Math.abs(point.y - origin.y))
+  const first = { x: Math.max(0, origin.x), y: Math.max(0, origin.y) }
+  const second = { x: Math.max(0, point.x), y: Math.max(0, point.y) }
+  const width = Math.round(Math.abs(second.x - first.x))
+  const height = Math.round(Math.abs(second.y - first.y))
   return {
     height,
     width,
-    x: Math.round(Math.min(origin.x, point.x)),
-    y: Math.round(Math.min(origin.y, point.y)),
+    x: Math.round(Math.min(first.x, second.x)),
+    y: Math.round(Math.min(first.y, second.y)),
   }
 }
 
@@ -413,7 +464,7 @@ export const StudioSketchView = {
       selected = { rectId: change.rect.id, rectIds: new Set([change.rect.id]), sketchId: change.sketchId }
       render(sketches)
     }
-    const commit = (change: StudioSketchRectChange): void => {
+    const commit = (change: StudioSketchRectChange): Promise<void> | void => {
       const settle = (authoritative: readonly StudioSketch[] | void): void => {
         if (authoritative === undefined) {
           applyChange(change)
@@ -424,7 +475,7 @@ export const StudioSketchView = {
       try {
         const result = options.onRectChange?.(change)
         if (result instanceof Promise) {
-          void result.then(settle, error => {
+          return result.then(settle, error => {
             options.onError?.(error)
             render(sketches)
           })
@@ -600,7 +651,7 @@ function renderSketch(
   snapState: StudioSketchSnapUiState,
   selection: () => Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined,
   select: (value: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined) => void,
-  onChange: StudioSketchViewOptions['onRectChange'],
+  onChange: (change: StudioSketchRectChange) => Promise<void> | void,
   onFlowAction: StudioSketchViewOptions['onFlowAction'],
   onSnap: StudioSketchViewOptions['onSnap'],
   onUnsnap: StudioSketchViewOptions['onUnsnap'],
@@ -641,6 +692,7 @@ function renderSketch(
     board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
     onError?.(error)
   }
+  const clearError = (): void => StudioSketchErrors.clear(board)
   let state: StudioSketchGeometryState = StudioSketchGeometry.initial(sketch.rects)
   // The in-flight gesture is published on the board so a person, a stylesheet, or a browser lane
   // can see that the pointer reached it before any catalog write is expected.
@@ -743,24 +795,27 @@ function renderSketch(
   snapped.addEventListener('change', updateFlowControls)
   updateFlowControls()
   toolbar.append(snap, undo, snapped, unsnap, direction, separator, spacerLabel)
-  frame.append(name, board, toolbar)
+  const dropTarget = document.createElement('div')
+  dropTarget.dataset['taoStudioSketchDropTarget'] = sketch.id
+  dropTarget.textContent = 'Drop a moved rectangle here to Snap it into this running view'
+  dropTarget.style.alignItems = 'center'
+  dropTarget.style.border = '1px dashed currentColor'
+  dropTarget.style.display = 'flex'
+  dropTarget.style.justifyContent = 'center'
+  dropTarget.style.minHeight = '44px'
+  dropTarget.style.width = `${sketch.width}px`
+  frame.append(name, board, dropTarget, toolbar)
   const gapIndicator = document.createElement('div')
   gapIndicator.dataset['taoStudioSketchGapIndicator'] = 'true'
   gapIndicator.textContent = 'Release over the running cell to Snap this rectangle into its flow'
   gapIndicator.hidden = true
-  /**
-   * The sketch's running cell is a sibling of the sketch host inside the same matrix row.
-   *
-   * UNREACHABLE ON THE DRAW CANVAS: boards now mount on `.studio-draw-canvas`, a sibling of the
-   * preview grid rather than a cell inside a matrix row, and the Draw preset hides the cells outright.
-   * `row` is therefore always null, so drag-one-in (FS-D11) can never resolve to 'snap' and the
-   * toolbar's Snap button is the only way to put a rectangle into the flow.
-   */
+  /** Pointer capture keeps events on the board; hit-test the visible sibling target underneath it. */
   const overOwnCell = (event: PointerEvent): boolean => {
-    const row = board.closest('.studio-preview-group-cells')
-    const target = document.elementFromPoint(event.clientX, event.clientY)
-    const cell = target?.closest('.studio-preview-cell') ?? null
-    return cell !== null && row !== null && row.contains(cell)
+    // The moved rectangle is the topmost element at the pointer. Inspect the whole hit-test stack so
+    // the visible sibling target underneath the free-geometry overlay remains reachable.
+    const targets = document.elementsFromPoint?.(event.clientX, event.clientY)
+      ?? [document.elementFromPoint(event.clientX, event.clientY)].filter(candidate => candidate !== null)
+    return StudioSketchDragTarget.ownsAny(targets, sketch.id)
   }
   const moveRelease = (event: PointerEvent): StudioSketchMoveRelease => ({
     duplicate: duplicateSourceId !== undefined,
@@ -783,6 +838,7 @@ function renderSketch(
         sketchId: sketch.id,
         sourceVersion: snapState.sourceVersion,
       })
+      clearError()
       if ('catalog' in result) {
         snapState.pending = undefined
         snapState.pendingCheckpointId = undefined
@@ -815,6 +871,7 @@ function renderSketch(
         sketchId: sketch.id,
         sourceVersion: snapState.sourceVersion,
       })
+      clearError()
       snapState.lastCheckpointId = result.checkpoint.id
       snapState.sourceVersion = result.file.sourceVersion
       renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
@@ -875,6 +932,7 @@ function renderSketch(
     undo.disabled = true
     void onUndoSnap({ checkpointId: snapState.lastCheckpointId, sourceVersion: snapState.sourceVersion }).then(
       result => {
+        clearError()
         snapState.lastCheckpointId = undefined
         snapState.sourceVersion = result.file.sourceVersion
         renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
@@ -904,6 +962,7 @@ function renderSketch(
       sketchId: sketch.id,
       sourceVersion: snapState.sourceVersion,
     }).then(result => {
+      clearError()
       snapState.lastCheckpointId = result.checkpoint.id
       snapState.sourceVersion = result.file.sourceVersion
       undo.disabled = false
@@ -1040,16 +1099,16 @@ function renderSketch(
       // Drag-one-in: the free geometry stays where it was and the rectangle joins the flow.
       state = StudioSketchGeometry.cancelPointer(state)
       duplicateSourceId = undefined
-      releasePointer(event.pointerId)
       paint()
-      void requestSnap([gesture.id])
+      StudioSketchPointerRelease.afterCommit(
+        () => requestSnap([gesture.id]),
+        () => releasePointer(event.pointerId),
+      )
       return
     }
     state = StudioSketchGeometry.endPointer(state, point(event))
-    // Release before committing: a render deferred during the gesture flushes first, and the
-    // optimistic change then settles on top of that authoritative catalog.
-    releasePointer(event.pointerId)
     const rect = state.rects.find(candidate => candidate.id === state.selectedId)
+    let change: StudioSketchRectChange | undefined
     if (rect !== undefined) {
       const kind = gesture.kind === 'draw'
         ? 'add'
@@ -1057,16 +1116,20 @@ function renderSketch(
         ? 'duplicate'
         : 'update'
       if (kind !== 'update' || !StudioSketchChanges.equal(rect, gesture.original)) {
-        onChange?.({
+        change = {
           kind,
           rect,
           sketchId: sketch.id,
           ...(kind === 'duplicate' ? { sourceRectId: duplicateSourceId } : {}),
-        })
+        }
       }
     }
     duplicateSourceId = undefined
     paint()
+    StudioSketchPointerRelease.afterCommit(
+      () => change === undefined ? undefined : onChange?.(change),
+      () => releasePointer(event.pointerId),
+    )
   })
   paint()
   return frame

@@ -82,9 +82,10 @@ When approved, applyChange writes the files, compiles once, and restores every f
 If a compile fails, read the message, look up what you need, and propose a corrected change. Do not repeat
 the same source.
 
-When you have applied a change, run the app's own tests with runTests and say plainly what happened,
-including which tests were already failing before you touched anything. If the change broke a test, say so
-first, before describing what you built, and offer to undo it.`,
+applyChange runs the app's own tests immediately before and after that exact change and returns the verdict.
+Do not call runTests again after applying. Say plainly what applyChange reports, including which tests were
+already failing before you touched anything. If the change broke a test, say so first, before describing what
+you built, and offer to undo it.`,
 )
 
 /** scenarioInstructions is the mode that develops against a state, and pins behavior with checks. */

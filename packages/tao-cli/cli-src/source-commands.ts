@@ -33,7 +33,7 @@ export async function runFmt(path: string, options: InPlace.PathOptions = {}): P
   const session = Formatter.createSession()
   const results: InPlace.Result[] = []
   for (const file of files) {
-    results.push(await formatFile(session, file.path))
+    results.push(await formatFile(session, file))
   }
   return results
 }
@@ -88,11 +88,11 @@ async function ownedTaoFiles(root: string, options: InPlace.PathOptions): Promis
   })))
 }
 
-async function formatFile(session: FormatterSession, path: string): Promise<InPlace.Result> {
+async function formatFile(session: FormatterSession, file: OwnedTaoFile): Promise<InPlace.Result> {
   return await inPlace.processFile(
-    path,
-    () => session.formatFile(path),
-    protectedWriteOptions(path, true),
+    file.path,
+    () => session.formatFile(file.path),
+    protectedWriteOptions(file.path, file.workspaceRoot, true),
   )
 }
 
@@ -112,7 +112,7 @@ async function canonicalizeFile(
         },
       })
     },
-    protectedWriteOptions(path, write),
+    protectedWriteOptions(path, workspace.root, write),
   )
   return warnings.length === 0 ? result : { ...result, warnings }
 }
@@ -138,8 +138,8 @@ function formatCheckWarning(diagnostic: Diagnostic): string {
   return location + ' - ' + diagnostic.message
 }
 
-function protectedWriteOptions(path: string, requestedWrite: boolean): InPlace.ProcessOptions {
-  const generated = inPlace.generatedRootPackageFile(path)
+function protectedWriteOptions(path: string, workspaceRoot: string, requestedWrite: boolean): InPlace.ProcessOptions {
+  const generated = inPlace.generatedRootPackageFile(path, workspaceRoot)
   return {
     ...(requestedWrite && generated
       ? { changedIsError: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.' }

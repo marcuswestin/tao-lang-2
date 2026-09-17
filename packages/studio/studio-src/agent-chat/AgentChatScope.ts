@@ -18,6 +18,8 @@ type DeclarationChange = {
   altered: readonly string[]
 }
 
+type DeclarationOccurrence = { key: string; source: string }
+
 let context: ReturnType<typeof Parser.createContext> | undefined
 
 function kindOf(node: AST.Node): string | undefined {
@@ -37,7 +39,9 @@ function kindOf(node: AST.Node): string | undefined {
     return 'app'
   }
   if (AST.isEntityDataDeclaration(node)) {
-    return 'data'
+    // The semantic snapshot and proposeEdit call this declaration an entity. The scope gate must use the
+    // same public kind or every legitimate entity replacement is refused as an unrelated data declaration.
+    return 'entity'
   }
   if (AST.isDesignDeclaration(node)) {
     return 'design'
@@ -45,14 +49,45 @@ function kindOf(node: AST.Node): string | undefined {
   if (AST.isTestDeclaration(node)) {
     return 'test'
   }
-  return undefined
+  if (AST.isAliasDeclaration(node)) {
+    return 'alias'
+  }
+  if (AST.isCommandDeclaration(node)) {
+    return 'command'
+  }
+  if (AST.isDatasourceDeclaration(node)) {
+    return 'datasource'
+  }
+  if (AST.isFunctionDeclaration(node)) {
+    return 'function'
+  }
+  if (AST.isNavDeclaration(node)) {
+    return 'nav'
+  }
+  if (AST.isPrimitiveDeclaration(node)) {
+    return 'primitive'
+  }
+  if (AST.isProjectDeclaration(node)) {
+    return 'project'
+  }
+  if (AST.isTypeDeclaration(node)) {
+    return 'type'
+  }
+  // ParsedStatement is intentionally broader than Tao's valid file declarations so validators can explain
+  // bad placement. A future or context-only statement at file level must still be visible to this security
+  // gate; silently ignoring an unfamiliar AST kind turns the next grammar addition into a scope escape.
+  const type = node.$type
+  const words = type.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+  return type.endsWith('Declaration')
+    ? words.replace(/-declaration$/, '')
+    : `statement-${words}`
 }
 
-/** declarations lists a file's top-level declarations as `kind Name`, with the text of each. */
-async function declarations(source: string): Promise<Map<string, string>> {
+/** declarations lists every top-level declaration occurrence. An array preserves duplicate names. */
+async function declarations(source: string): Promise<DeclarationOccurrence[]> {
   context ??= Parser.createContext()
   const parsed = await Parser.parseSource(context, source, { validation: false })
-  const found = new Map<string, string>()
+  const found: DeclarationOccurrence[] = []
   for (const file of parsed.files) {
     for (const node of AST.streamAllContents(file.ast)) {
       const kind = kindOf(node)
@@ -61,7 +96,7 @@ async function declarations(source: string): Promise<Map<string, string>> {
         continue
       }
       const name = (node as { name?: string }).name ?? '(unnamed)'
-      found.set(`${kind} ${name}`, node.$cstNode?.text ?? '')
+      found.push({ key: `${kind} ${name}`, source: node.$cstNode?.text ?? '' })
     }
   }
   return found
@@ -70,9 +105,27 @@ async function declarations(source: string): Promise<Map<string, string>> {
 /** declarationChange says what one edit did to a file's top-level declarations. */
 async function declarationChange(before: string, after: string): Promise<DeclarationChange> {
   const [was, now] = await Promise.all([declarations(before), declarations(after)])
-  const added = [...now.keys()].filter(key => !was.has(key))
-  const removed = [...was.keys()].filter(key => !now.has(key))
-  const altered = [...now.keys()].filter(key => was.has(key) && was.get(key) !== now.get(key))
+  const keys = new Set([...was.map(entry => entry.key), ...now.map(entry => entry.key)])
+  const added: string[] = []
+  const removed: string[] = []
+  const altered: string[] = []
+  for (const key of keys) {
+    const beforeBodies = was.filter(entry => entry.key === key).map(entry => entry.source)
+    const afterBodies = now.filter(entry => entry.key === key).map(entry => entry.source)
+    // First cancel bodies that stayed byte-for-byte equal. What remains is either an altered occurrence or
+    // a genuinely added/removed duplicate. A Map keyed only by name silently discarded all of these cases.
+    for (let index = beforeBodies.length - 1; index >= 0; index -= 1) {
+      const match = afterBodies.indexOf(beforeBodies[index]!)
+      if (match >= 0) {
+        beforeBodies.splice(index, 1)
+        afterBodies.splice(match, 1)
+      }
+    }
+    const changed = Math.min(beforeBodies.length, afterBodies.length)
+    altered.push(...Array.from({ length: changed }, () => key))
+    removed.push(...beforeBodies.slice(changed).map(() => key))
+    added.push(...afterBodies.slice(changed).map(() => key))
+  }
   return { added, altered, removed }
 }
 
@@ -87,10 +140,27 @@ export async function requireOnly(
   allowedKinds: readonly string[],
   /** Declarations this change is expected to rewrite, as `kind Name` — a suite gaining a check, say. */
   allowedAltered: readonly string[] = [],
+  /** Exact declarations expected to be added. Supplying this also limits how many duplicates may appear. */
+  allowedAdded?: readonly string[],
 ): Promise<string | undefined> {
   const change = await declarationChange(before, after)
+  const additionsLeft = allowedAdded === undefined ? undefined : [...allowedAdded]
+  const disallowedAdded = change.added.filter(entry => {
+    if (!allowedKinds.includes(entry.split(' ')[0]!)) {
+      return true
+    }
+    if (additionsLeft === undefined) {
+      return false
+    }
+    const expected = additionsLeft.indexOf(entry)
+    if (expected < 0) {
+      return true
+    }
+    additionsLeft.splice(expected, 1)
+    return false
+  })
   const offending = [
-    ...change.added.filter(entry => !allowedKinds.includes(entry.split(' ')[0]!)),
+    ...disallowedAdded,
     ...change.removed.map(entry => `removed ${entry}`),
     ...change.altered.filter(entry => !allowedAltered.includes(entry)).map(entry => `changed ${entry}`),
   ]

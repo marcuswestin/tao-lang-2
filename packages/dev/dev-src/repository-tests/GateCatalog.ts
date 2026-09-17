@@ -201,6 +201,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       studioSmoke('keyboard-navigation-smoke', 'packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts'),
     ],
     [
+      'studio-dialog-browser',
+      studioSmoke('studio-dialog-browser', 'packages/dev/studio-smoke/studio-dialog-browser.test.ts'),
+    ],
+    [
+      'studio-agent-browser',
+      studioSmoke('studio-agent-browser', 'packages/dev/studio-smoke/studio-agent-browser.test.ts'),
+    ],
+    [
       'studio-smoke-native',
       studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
         native: true,

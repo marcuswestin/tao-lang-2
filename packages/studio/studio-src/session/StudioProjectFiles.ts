@@ -54,6 +54,35 @@ export class StudioProjectFiles {
 
   /** rescan rebuilds the listing from disk; open uses it once and nothing else needs to. */
   async rescan(): Promise<void> {
+    const next = await this.#scan()
+    this.#versions.clear()
+    for (const [path, sourceVersion] of next) {
+      this.#versions.set(path, sourceVersion)
+    }
+  }
+
+  /**
+   * changesOnDisk reconciles the cached listing with a fresh scan without mutating it. The caller feeds
+   * the returned changes through the same compile/write-acknowledgement lane as watcher events, so a
+   * missed OS event cannot leave the file tree or compiler permanently stale.
+   */
+  async changesOnDisk(): Promise<StudioSourceChange[]> {
+    const next = await this.#scan()
+    const changes: StudioSourceChange[] = []
+    for (const [path, sourceVersion] of next) {
+      if (this.#versions.get(path) !== sourceVersion) {
+        changes.push({ path: FS.resolvePath(path, this.projectRoot), sourceVersion })
+      }
+    }
+    for (const path of this.#versions.keys()) {
+      if (!next.has(path)) {
+        changes.push({ path: FS.resolvePath(path, this.projectRoot) })
+      }
+    }
+    return changes.toSorted((left, right) => left.path.localeCompare(right.path))
+  }
+
+  async #scan(): Promise<Map<string, string>> {
     const paths = await this.io.listTaoFiles(this.projectRoot)
     const entries = await Promise.all(paths.map(async path => {
       try {
@@ -66,12 +95,13 @@ export class StudioProjectFiles {
         throw error
       }
     }))
-    this.#versions.clear()
+    const versions = new Map<string, string>()
     for (const entry of entries) {
       if (entry !== undefined) {
-        this.#versions.set(entry[0], entry[1])
+        versions.set(entry[0], entry[1])
       }
     }
+    return versions
   }
 
   /** list describes every tracked file with its current draft and diagnostic state, in path order. */

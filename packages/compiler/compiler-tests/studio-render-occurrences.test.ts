@@ -64,7 +64,7 @@ Describe('compiler: Studio render occurrences', () => {
           scenario "held" {
             render ()
             press down label "Revert"
-            advance 600.ms
+            advance 1.5.ms
             press up #revertSave
             hover placeholder "Revert save"
             focus #revertSave
@@ -83,7 +83,7 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(scenario).toMatchObject({
         steps: [
           { kind: 'pressDown', selector: 'label', target: 'Revert' },
-          { kind: 'advance', milliseconds: 600 },
+          { kind: 'advance', milliseconds: 1.5 },
           { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
           { kind: 'hover', selector: 'placeholder', target: 'Revert save' },
           { kind: 'focus', tag: 'revertSave' },

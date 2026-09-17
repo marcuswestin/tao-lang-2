@@ -4,9 +4,23 @@ import { TaoFormatter } from 'tao-formatter'
 import { AST, codeProjectRoot, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { LSPWorkspace } from 'tao-workspace'
+import { workspaceServerPlan, workspaceServerRoots } from '../ide-extension-src/extension/workspace-server-roots'
 import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
 Describe('Tao IDE extension smoke', () => {
+  Test('keeps multi-root workspaces in independent language-server package contexts', () => {
+    Expect(workspaceServerRoots(['/work/First', '/work/Second', '/work/First'], '/fallback')).toEqual([
+      '/work/First',
+      '/work/Second',
+    ])
+    Expect(workspaceServerRoots([], '/fallback')).toEqual(['/fallback'])
+    Expect(workspaceServerPlan(['/work/First', '/work/Old'], ['/work/First', '/work/Second'], '/fallback'))
+      .toEqual({
+        add: ['/work/Second'],
+        remove: ['/work/Old'],
+        roots: ['/work/First', '/work/Second'],
+      })
+  })
   Test('points the extension manifest at its built entrypoint and language configuration', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
       FS.resolvePath('../package.json', import.meta.dir),

@@ -12,6 +12,7 @@ export type StudioDebugJournalRow = Readonly<{
   failureCase?: string
   frames: readonly string[]
   outcome: string
+  rootId: number
   startedAt: number
 }>
 
@@ -53,6 +54,9 @@ export const StudioDebugEvents = {
     if (event['kind'] === 'resumed') {
       return { journal: state.journal }
     }
+    if (event['kind'] === 'reset') {
+      return { journal: [] }
+    }
     if (event['kind'] === 'paused') {
       const pause = pauseSnapshot(event['pause'])
       return pause === undefined ? state : { journal: state.journal, pause }
@@ -66,14 +70,14 @@ export const StudioDebugEvents = {
 } as const
 
 /**
- * A root is journaled twice: once as it starts and once as it settles. The pair shares an action and
- * a start time, so the settled entry replaces the running one in place rather than repeating it.
+ * A root is journaled twice: once as it starts and once as it settles. Its monotonic runtime identity
+ * makes the pair unambiguous even when repeated same-name roots start in one clock tick.
  */
 function mergeJournal(
   journal: readonly StudioDebugJournalRow[],
   entry: StudioDebugJournalRow,
 ): readonly StudioDebugJournalRow[] {
-  const index = journal.findIndex(row => row.action === entry.action && row.startedAt === entry.startedAt)
+  const index = journal.findIndex(row => row.rootId === entry.rootId)
   const merged = index < 0
     ? [...journal, entry]
     : [...journal.slice(0, index), entry, ...journal.slice(index + 1)]
@@ -85,6 +89,7 @@ function journalRow(value: unknown): StudioDebugJournalRow | undefined {
     !isObject(value)
     || typeof value['action'] !== 'string'
     || typeof value['outcome'] !== 'string'
+    || typeof value['rootId'] !== 'number'
     || typeof value['startedAt'] !== 'number'
   ) {
     return undefined
@@ -95,6 +100,7 @@ function journalRow(value: unknown): StudioDebugJournalRow | undefined {
     ...(typeof failureCase === 'string' ? { failureCase } : {}),
     frames: textList(value['frames']),
     outcome: value['outcome'],
+    rootId: value['rootId'],
     startedAt: value['startedAt'],
   }
 }

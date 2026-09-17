@@ -2,6 +2,8 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import type { ReactNode } from 'react'
 import { Debug } from '../TaoRuntime-src/TR-debug'
+import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from '../TaoRuntime-src/TR-errors'
+import { registerRuntimeCaptureDomain } from '../TaoRuntime-src/TR-runtime-capture'
 import {
   collectStudioPreviewLayoutMeasurements,
   mountStudioPreviewBridge,
@@ -138,6 +140,57 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-layout-measurements'))
       .toHaveLength(2)
     cleanup()
+  })
+
+  Test('cancels iframe gestures only while the parent advertises Design canvas ownership', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    let cancellations = 0
+    const gesture = {
+      clientX: 25,
+      clientY: 40,
+      ctrlKey: true,
+      deltaX: 3,
+      deltaY: -12,
+      preventDefault: () => {
+        cancellations += 1
+      },
+    }
+    const initialMessages = fake.messages.length
+    fake.dispatchDocument('wheel', gesture)
+    Expect(cancellations).toBe(0)
+    Expect(fake.messages).toHaveLength(initialMessages)
+
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('wheel', {
+      ...gesture,
+    })
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages.at(-1)).toEqual({
+      message: {
+        channel: 'tao-studio',
+        clientX: 25,
+        clientY: 40,
+        deltaX: 3,
+        deltaY: -12,
+        identity: {
+          appName: 'Demo',
+          previewInstanceId: 'preview-1',
+          project: '/project',
+        },
+        protocolVersion: 1,
+        type: 'preview-canvas-gesture',
+        zoom: true,
+      },
+      targetOrigin: config.parentOrigin,
+    })
+
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('wheel', gesture)
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages).toHaveLength(initialMessages + 1)
+    cleanup()
+    Expect(fake.listenerCount()).toBe(0)
   })
   Test('replays text steps against the deepest exact match instead of its matching ancestors', async () => {
     const events: string[] = []
@@ -563,7 +616,10 @@ Describe('Studio preview runtime bridge', () => {
     fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, true))
     fake.dispatchDocument('click', { target: first })
     cleanup()
-    Expect(fake.messages.at(-2)?.message).toMatchObject({
+    const recorded = fake.messages
+      .map(post => post.message as { type?: string })
+      .filter(message => message.type === 'preview-journey-step-recorded')
+    Expect(recorded.at(-1)).toMatchObject({
       sequence: 1,
       step: {
         action: 'press',
@@ -573,6 +629,9 @@ Describe('Studio preview runtime bridge', () => {
       type: 'preview-journey-step-recorded',
     })
     Expect(fake.messages.at(-1)?.message).toMatchObject({ sequence: 1, status: 'invalidated' })
+    Expect(fake.messages.some(post => (post.message as { event?: { kind?: string } }).event?.kind === 'reset')).toBe(
+      true,
+    )
   })
 
   Test('captures fixture data only for an exact trusted parent request', async () => {
@@ -607,6 +666,56 @@ Describe('Studio preview runtime bridge', () => {
       targetOrigin: config.parentOrigin,
     })
     cleanup()
+  })
+
+  Test('preserves Tao error taxonomy when runtime capture fails across the preview protocol', async () => {
+    const failures = [
+      { error: new UserInputError('invalid capture'), message: 'invalid capture' },
+      { error: new HostEnvironmentError('capture host unavailable'), message: 'capture host unavailable' },
+      { error: new UnexpectedBehaviorError('capture invariant failed'), message: 'capture invariant failed' },
+      { error: 'unknown capture failure', message: 'unknown capture failure' },
+    ] as const
+    const expectedNames = [
+      'UserInputError',
+      'HostEnvironmentError',
+      'UnexpectedBehaviorError',
+      'UnexpectedBehaviorError',
+    ] as const
+
+    for (const [index, failure] of failures.entries()) {
+      const fake = previewHost([])
+      const unregister = registerRuntimeCaptureDomain({
+        capture: () => {
+          throw failure.error
+        },
+        domain: `capture-failure-${index}`,
+        version: 1,
+      })
+      const cleanup = mountStudioPreviewBridge(config, fake.host)
+      try {
+        fake.dispatchWindow('message', {
+          data: {
+            channel: 'tao-studio',
+            identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+            protocolVersion: 1,
+            requestId: `runtime-capture-${index}`,
+            type: 'capture-runtime',
+          },
+          origin: config.parentOrigin,
+          source: fake.parent,
+        })
+        await settled()
+        Expect(fake.messages.at(-1)?.message).toMatchObject({
+          error: failure.message,
+          errorName: expectedNames[index],
+          requestId: `runtime-capture-${index}`,
+          type: 'preview-runtime-capture-failed',
+        })
+      } finally {
+        cleanup()
+        unregister()
+      }
+    }
   })
 
   Test('forwards bounded preview console records and restores the console on cleanup', () => {
@@ -684,7 +793,8 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.overlays[0]?.removed).toBe(true)
     Expect(fake.listenerCount()).toBe(0)
     fake.dispatchDocument('click', { target: render })
-    Expect(fake.messages.length).toBe(3)
+    Expect(fake.messages.length).toBe(4)
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ event: { kind: 'reset' }, type: 'preview-debug' })
   })
 
   Test('accepts source highlights only from the configured parent and current source version', () => {
@@ -909,6 +1019,28 @@ function interactionModeMessage(mode: 'edit' | 'run', parent: StudioPreviewHost[
       mode,
       protocolVersion: 1,
       type: 'set-interaction-mode',
+    },
+    origin: config.parentOrigin,
+    source: parent,
+  }
+}
+
+function canvasGestureOwnershipMessage(owned: boolean, parent: StudioPreviewHost['parent']): {
+  data: Record<string, unknown>
+  origin: string
+  source: StudioPreviewHost['parent']
+} {
+  return {
+    data: {
+      channel: 'tao-studio',
+      identity: {
+        appName: config.appName,
+        previewInstanceId: config.previewInstanceId,
+        project: config.project,
+      },
+      owned,
+      protocolVersion: 1,
+      type: 'set-canvas-gestures',
     },
     origin: config.parentOrigin,
     source: parent,

@@ -152,6 +152,14 @@ type SourceActionUndoCacheEntry = {
   result: StudioSourceActionUndoResult
 }
 
+type AgentUndoFile = {
+  path: string
+  beforeContent: string
+  beforeSourceVersion: string
+  appliedContent: string
+  appliedSourceVersion: string
+}
+
 const sourceActionResultLimit = 100
 
 type PreparedSketchSnap = Readonly<{
@@ -279,7 +287,7 @@ export class StudioProjectSession {
    * One entry per applied agent change, most recent last. A chat applies several changes in a conversation,
    * and a single slot would make every change but the last one unrecoverable while still offering "undo".
    */
-  #agentUndoStack: { path: string; content: string; sourceVersion: string }[][] = []
+  #agentUndoStack: AgentUndoFile[][] = []
 
   /**
    * applyAgentFiles writes several files as one mutation, compiles once, and rolls every
@@ -299,6 +307,7 @@ export class StudioProjectSession {
   ): Promise<{
     compile: StudioCompileCompletion
     rolledBack: boolean
+    sourceVersions: readonly { path: string; sourceVersion: string }[]
   }> {
     return this.#mutate(async () => {
       const before = await Promise.all(request.edits.map(async edit => {
@@ -324,13 +333,30 @@ export class StudioProjectSession {
       const compile = await this.#coordinator.noteStudioFileMutation(writes)
       if (compile.status === 'error') {
         await this.#restoreAgentFiles(before, `rollback:${request.writeId}`)
-        return { compile, rolledBack: true }
+        return {
+          compile,
+          rolledBack: true,
+          sourceVersions: before.map(file => ({ path: file.path, sourceVersion: file.sourceVersion })),
+        }
       }
-      this.#agentUndoStack.push(before)
+      this.#agentUndoStack.push(before.map((file, index) => ({
+        appliedContent: request.edits[index]!.content,
+        appliedSourceVersion: writes[index]!.sourceVersion,
+        beforeContent: file.content,
+        beforeSourceVersion: file.sourceVersion,
+        path: file.path,
+      })))
       for (const [index, write] of writes.entries()) {
         this.#emitFile(this.#files.projectFile(before[index]!.path, write.sourceVersion))
       }
-      return { compile, rolledBack: false }
+      return {
+        compile,
+        rolledBack: false,
+        sourceVersions: writes.map((write, index) => ({
+          path: before[index]!.path,
+          sourceVersion: write.sourceVersion,
+        })),
+      }
     })
   }
 
@@ -338,10 +364,39 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
       Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
-      const compile = await this.#restoreAgentFiles(before, writeId)
+      // Undo is another delayed source write. A person may have edited one of these files after the agent
+      // changed it; restoring the old body without this check would erase that work under an innocent Undo.
+      for (const file of before) {
+        const current = await this.readFile(file.path)
+        if (current.sourceVersion !== file.appliedSourceVersion) {
+          throw new StudioSourceConflictError(file.path, file.appliedSourceVersion, current.sourceVersion)
+        }
+      }
+      const compile = await this.#restoreAgentFiles(
+        before.map(file => ({
+          content: file.beforeContent,
+          path: file.path,
+          sourceVersion: file.beforeSourceVersion,
+        })),
+        writeId,
+      )
       this.#agentUndoStack.pop()
       return { compile, restored: before.map(file => file.path) }
     })
+  }
+
+  /** The exact reverse patch the next agent undo would apply, shown before a person approves it. */
+  agentUndoPreview(): { diff: string; restored: readonly string[] } | undefined {
+    const files = this.#agentUndoStack[this.#agentUndoStack.length - 1]
+    if (files === undefined) {
+      return undefined
+    }
+    return {
+      diff: files.map(file => sourceActionProposalDiff(file.path, file.appliedContent, file.beforeContent)).join(
+        '\n\n',
+      ),
+      restored: files.map(file => file.path),
+    }
   }
 
   async #restoreAgentFiles(
@@ -635,88 +690,95 @@ export class StudioProjectSession {
       return { ...catalog, sketches }
     }
     const reconciled = { ...catalog, revision: catalog.revision + 1, sketches }
-    await this.#sketchCatalog.restore(reconciled)
+    await this.#sketchCatalog.restore(reconciled, catalog.revision)
     this.#emitSketchCatalog(reconciled)
     return reconciled
   }
 
   applySketchAction(input: unknown): Promise<StudioSketchActionResult> {
-    return this.#mutate(async () => {
-      const request = input as StudioSketchCatalogRequest
-      const fingerprint = JSON.stringify(input)
-      const requestId = Json.isRecord(input) && typeof input['requestId'] === 'string' ? input['requestId'] : undefined
-      const cached = requestId === undefined ? undefined : this.#sketchResults.get(requestId)
-      if (cached !== undefined) {
-        Assert.input(cached.fingerprint === fingerprint, `Studio sketch request id was reused: ${requestId}`)
-        return cached.result
-      }
-      const action = Json.isRecord(input) && Json.isRecord(input['action']) ? input['action'] : undefined
-      if (action?.['kind'] === 'create-sketch') {
-        Assert.input(
-          action['project'] === this.identity().project,
-          'A Studio sketch can only be created in the active project.',
-        )
-      }
-      if (action?.['kind'] === 'delete-sketch') {
-        Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
-      }
-      if (action?.['kind'] === 'refresh-snap-targets') {
-        Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
-      }
+    return this.#mutate(() =>
+      this.#sketchCatalog.transaction(async transaction => {
+        const request = input as StudioSketchCatalogRequest
+        const fingerprint = JSON.stringify(input)
+        const requestId = Json.isRecord(input) && typeof input['requestId'] === 'string'
+          ? input['requestId']
+          : undefined
+        const cached = requestId === undefined ? undefined : this.#sketchResults.get(requestId)
+        if (cached !== undefined) {
+          Assert.input(cached.fingerprint === fingerprint, `Studio sketch request id was reused: ${requestId}`)
+          if ((await transaction.read()).revision === cached.result.catalog.revision) {
+            return cached.result
+          }
+          this.#sketchResults.delete(requestId!)
+        }
+        const action = Json.isRecord(input) && Json.isRecord(input['action']) ? input['action'] : undefined
+        if (action?.['kind'] === 'create-sketch') {
+          Assert.input(
+            action['project'] === this.identity().project,
+            'A Studio sketch can only be created in the active project.',
+          )
+        }
+        if (action?.['kind'] === 'delete-sketch') {
+          Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
+        }
+        if (action?.['kind'] === 'refresh-snap-targets') {
+          Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
+        }
 
-      const prior = await this.#sketchCatalog.read()
-      let applied = false
-      let createdName: string | undefined
-      let createdPath: string | undefined
-      let writeRegistered = false
-      try {
-        const catalogResult = await this.#sketchCatalog.apply(request)
-        applied = true
-        let result: StudioSketchActionResult = catalogResult
-        if (request.action.kind === 'create-sketch') {
-          const created = catalogResult.createdSketch
-          Assert.defined(created, 'create-sketch catalog result includes the allocated sketch')
-          createdName = created.name
-          const body = await StudioSketchSource.generate(created)
-          const generated = new StudioGeneratedSources(this.projectRoot)
-          createdPath = await generated.createView(created.name, body)
-          const file = await this.readFile(FS.relativePath(this.projectRoot, createdPath))
-          writeRegistered = true
-          const compile = await this.#coordinator.noteStudioFileMutation([{
-            path: createdPath,
-            sourceVersion: file.sourceVersion,
-            writeId: request.requestId,
-          }])
-          if (compile.status === 'error') {
-            Errors.throwUserInput(
-              `Studio did not create ${created.name} because its generated source failed to compile: ${compile.message}`,
-            )
-          }
-          result = { ...catalogResult, compile, generatedFile: file }
-          this.#emitFile(file)
-          this.#emitFiles(await this.files())
-        }
-        this.#sketchResults.set(request.requestId, { fingerprint, result })
-        trimMap(this.#sketchResults, sourceActionResultLimit)
-        this.#emitSketchCatalog(result.catalog)
-        return result
-      } catch (error) {
-        if (applied) {
-          if (createdName !== undefined && createdPath !== undefined && await FS.isFile(createdPath)) {
-            await new StudioGeneratedSources(this.projectRoot).removeView(createdName)
-            this.#files.forget(createdPath)
-          }
-          await this.#sketchCatalog.restore(prior)
-          if (writeRegistered && createdPath !== undefined) {
-            await this.#coordinator.noteStudioFileMutation([{
+        const prior = await transaction.read()
+        let applied = false
+        let createdName: string | undefined
+        let createdPath: string | undefined
+        let writeRegistered = false
+        try {
+          const catalogResult = await transaction.apply(request)
+          applied = true
+          let result: StudioSketchActionResult = catalogResult
+          if (request.action.kind === 'create-sketch') {
+            const created = catalogResult.createdSketch
+            Assert.defined(created, 'create-sketch catalog result includes the allocated sketch')
+            createdName = created.name
+            const body = await StudioSketchSource.generate(created)
+            const generated = new StudioGeneratedSources(this.projectRoot)
+            createdPath = await generated.createView(created.name, body)
+            const file = await this.readFile(FS.relativePath(this.projectRoot, createdPath))
+            writeRegistered = true
+            const compile = await this.#coordinator.noteStudioFileMutation([{
               path: createdPath,
-              writeId: `rollback:${request.requestId}`,
+              sourceVersion: file.sourceVersion,
+              writeId: request.requestId,
             }])
+            if (compile.status === 'error') {
+              Errors.throwUserInput(
+                `Studio did not create ${created.name} because its generated source failed to compile: ${compile.message}`,
+              )
+            }
+            result = { ...catalogResult, compile, generatedFile: file }
+            this.#emitFile(file)
+            this.#emitFiles(await this.files())
           }
+          this.#sketchResults.set(request.requestId, { fingerprint, result })
+          trimMap(this.#sketchResults, sourceActionResultLimit)
+          this.#emitSketchCatalog(result.catalog)
+          return result
+        } catch (error) {
+          if (applied) {
+            if (createdName !== undefined && createdPath !== undefined && await FS.isFile(createdPath)) {
+              await new StudioGeneratedSources(this.projectRoot).removeView(createdName)
+              this.#files.forget(createdPath)
+            }
+            await transaction.restore(prior, prior.revision + 1)
+            if (writeRegistered && createdPath !== undefined) {
+              await this.#coordinator.noteStudioFileMutation([{
+                path: createdPath,
+                writeId: `rollback:${request.requestId}`,
+              }])
+            }
+          }
+          throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-action' })
         }
-        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-action' })
-      }
-    })
+      })
+    )
   }
 
   proposeSketchSnap(input: unknown): Promise<StudioSketchSnapProposalResult> {
@@ -837,149 +899,154 @@ export class StudioProjectSession {
 
   /** Applies an authenticated rect-based flow edit as one generated-source/catalog checkpoint. */
   applySketchFlowAction(input: unknown): Promise<StudioSketchSnapApplyResult> {
-    return this.#mutate(async () => {
-      const request = StudioSessionRequests.parseSketchFlowActionRequest(input)
-      const fingerprint = JSON.stringify(request)
-      const cached = this.#sketchSnapResults.get(request.requestId)
-      if (cached !== undefined) {
-        Assert.input(cached.fingerprint === fingerprint, `Studio flow request id was reused: ${request.requestId}`)
-        return cached.result
-      }
-      const catalog = await this.#sketchCatalog.read()
-      if (catalog.revision !== request.expectedCatalogRevision) {
-        throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
-      }
-      const sketch = catalog.sketches.find(candidate => candidate.id === request.sketchId)
-      Assert.input(sketch, `Studio sketch does not exist: ${request.sketchId}`)
-      const generatedSources = new StudioGeneratedSources(this.projectRoot)
-      const generated = await generatedSources.readView(sketch.view)
-      const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
-      requireSourceVersion(current, request.sourceVersion)
-      const expectedPath = FS.relativePath(this.projectRoot, generated.path)
-      const associations = new Map(sketch.snapped.map(item => [item.rect.id, item.target]))
-      for (const item of sketch.snapped) {
+    return this.#mutate(() =>
+      this.#sketchCatalog.transaction(async transaction => {
+        const request = StudioSessionRequests.parseSketchFlowActionRequest(input)
+        const fingerprint = JSON.stringify(request)
+        const catalog = await transaction.read()
+        const cached = this.#sketchSnapResults.get(request.requestId)
+        if (cached !== undefined) {
+          Assert.input(cached.fingerprint === fingerprint, `Studio flow request id was reused: ${request.requestId}`)
+          if (catalog.revision === cached.result.catalog.revision) {
+            return cached.result
+          }
+          this.#sketchSnapResults.delete(request.requestId)
+        }
+        if (catalog.revision !== request.expectedCatalogRevision) {
+          throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
+        }
+        const sketch = catalog.sketches.find(candidate => candidate.id === request.sketchId)
+        Assert.input(sketch, `Studio sketch does not exist: ${request.sketchId}`)
+        const generatedSources = new StudioGeneratedSources(this.projectRoot)
+        const generated = await generatedSources.readView(sketch.view)
+        const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
+        requireSourceVersion(current, request.sourceVersion)
+        const expectedPath = FS.relativePath(this.projectRoot, generated.path)
+        const associations = new Map(sketch.snapped.map(item => [item.rect.id, item.target]))
+        for (const item of sketch.snapped) {
+          Assert.input(
+            item.target.path === expectedPath
+              && item.target.view === sketch.view
+              && item.target.studioRectId === item.rect.id
+              && item.target.sourceVersion === current.sourceVersion,
+            `Studio snapped rectangle target is stale or not owned by ${sketch.view}: ${item.rect.id}`,
+          )
+        }
+        const target = (rectId: string): StudioSketchRenderTarget => {
+          const resolved = associations.get(rectId)
+          Assert.input(resolved, `Studio snapped rectangle does not exist: ${rectId}`)
+          return resolved
+        }
+        const action: StudioSourcePatchRequest = request.action.kind === 'toggle-direction'
+          ? { kind: 'toggle-flow-direction', renderId: target(request.action.rectId).renderId }
+          : request.action.kind === 'insert-separator'
+          ? {
+            afterId: target(request.action.afterRectId).renderId,
+            ...(request.action.beforeRectId === undefined
+              ? {}
+              : { beforeId: target(request.action.beforeRectId).renderId }),
+            kind: 'insert-separator',
+          }
+          : {
+            afterId: target(request.action.afterRectId).renderId,
+            beforeId: target(request.action.beforeRectId).renderId,
+            kind: 'insert-spacer',
+            ratio: request.action.ratio,
+          }
+        const parsed = await this.#workspace.parse(generated.path)
         Assert.input(
-          item.target.path === expectedPath
-            && item.target.view === sketch.view
-            && item.target.studioRectId === item.rect.id
-            && item.target.sourceVersion === current.sourceVersion,
-          `Studio snapped rectangle target is stale or not owned by ${sketch.view}: ${item.rect.id}`,
+          !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+          `Cannot edit flow until ${current.path} parses.`,
         )
-      }
-      const target = (rectId: string): StudioSketchRenderTarget => {
-        const resolved = associations.get(rectId)
-        Assert.input(resolved, `Studio snapped rectangle does not exist: ${rectId}`)
-        return resolved
-      }
-      const action: StudioSourcePatchRequest = request.action.kind === 'toggle-direction'
-        ? { kind: 'toggle-flow-direction', renderId: target(request.action.rectId).renderId }
-        : request.action.kind === 'insert-separator'
-        ? {
-          afterId: target(request.action.afterRectId).renderId,
-          ...(request.action.beforeRectId === undefined
-            ? {}
-            : { beforeId: target(request.action.beforeRectId).renderId }),
-          kind: 'insert-separator',
-        }
-        : {
-          afterId: target(request.action.afterRectId).renderId,
-          beforeId: target(request.action.beforeRectId).renderId,
-          kind: 'insert-spacer',
-          ratio: request.action.ratio,
-        }
-      const parsed = await this.#workspace.parse(generated.path)
-      Assert.input(
-        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-        `Cannot edit flow until ${current.path} parses.`,
-      )
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, action, {
-        files: parsed.files.map(file => file.ast),
-        occurrence: { nodeKind: 'render', renderOwner: sketch.view },
-      })
-      this.#ledger.requireSketchCheckpointSlot(request.checkpointId)
-      let sourceWritten = false
-      let catalogWritten = false
-      try {
-        await this.#rewriteGenerated(generatedSources, generated.path, patch.content, patch.sourceVersion)
-        sourceWritten = true
-        const compile = await this.#coordinator.noteStudioWrite({
-          path: generated.path,
-          sourceVersion: patch.sourceVersion,
-          writeId: request.requestId,
+        const patch = await SourceActions.applyStudioPatch(parsed.entry.document, action, {
+          files: parsed.files.map(file => file.ast),
+          occurrence: { nodeKind: 'render', renderOwner: sketch.view },
         })
-        if (compile.status === 'error') {
-          Errors.throwUserInput(
-            `Studio did not edit flow because the generated Tao source failed to compile: ${compile.message}`,
-          )
-        }
-        const refreshedTargets = await this.#sketchRenderTargets(
-          generated.path,
-          patch.content,
-          patch.sourceVersion,
-          sketch.snapped.map(item => item.rect.id),
-        )
-        const catalogResult = await this.#sketchCatalog.apply({
-          action: { kind: 'refresh-snap-targets', sketchId: sketch.id, targets: refreshedTargets },
-          expectedRevision: catalog.revision,
-          requestId: `catalog:${request.requestId}`,
-        })
-        catalogWritten = true
-        const file: StudioProjectFileContent = {
-          content: patch.content,
-          ...this.#files.projectFile(current.path, patch.sourceVersion),
-        }
-        const checkpoint: SketchSnapCheckpoint = {
-          afterCatalogRevision: catalogResult.catalog.revision,
-          afterContent: patch.content,
-          afterSourceVersion: patch.sourceVersion,
-          beforeContent: current.content,
-          beforeSourceVersion: current.sourceVersion,
-          id: request.checkpointId,
-          path: generated.path,
-          status: 'committed',
-          undoAction: {
-            kind: 'refresh-snap-targets',
-            sketchId: sketch.id,
-            targets: sketch.snapped.map(item => item.target),
-          },
-        }
-        this.#ledger.recordSketchSnap(checkpoint)
-        const rectIds = request.action.kind === 'toggle-direction'
-          ? [request.action.rectId]
-          : [
-            request.action.afterRectId,
-            ...(request.action.beforeRectId === undefined ? [] : [request.action.beforeRectId]),
-          ]
-        const result: StudioSketchSnapApplyResult = {
-          catalog: catalogResult.catalog,
-          checkpoint: { id: checkpoint.id, status: 'committed' },
-          compile,
-          file,
-          projectedRectIds: rectIds,
-          requestId: request.requestId,
-        }
-        this.#sketchSnapResults.set(request.requestId, { fingerprint, result })
-        trimMap(this.#sketchSnapResults, sourceActionResultLimit)
-        this.#emitCheckpoint(result.checkpoint)
-        this.#emitFile(file)
-        this.#emitSketchCatalog(result.catalog)
-        return result
-      } catch (error) {
-        if (catalogWritten) {
-          await this.#sketchCatalog.restore(catalog)
-        }
-        if (sourceWritten && (await FS.readText(generated.path)) !== current.content) {
-          await this.#restoreGeneratedContent(
-            generatedSources,
+        this.#ledger.requireSketchCheckpointSlot(request.checkpointId)
+        let sourceWritten = false
+        let catalogWritten = false
+        try {
+          await this.#rewriteGenerated(generatedSources, generated.path, patch.content, patch.sourceVersion)
+          sourceWritten = true
+          const compile = await this.#coordinator.noteStudioWrite({
+            path: generated.path,
+            sourceVersion: patch.sourceVersion,
+            writeId: request.requestId,
+          })
+          if (compile.status === 'error') {
+            Errors.throwUserInput(
+              `Studio did not edit flow because the generated Tao source failed to compile: ${compile.message}`,
+            )
+          }
+          const refreshedTargets = await this.#sketchRenderTargets(
             generated.path,
-            current.content,
-            current.sourceVersion,
-            `rollback:${request.requestId}`,
+            patch.content,
+            patch.sourceVersion,
+            sketch.snapped.map(item => item.rect.id),
           )
+          const catalogResult = await transaction.apply({
+            action: { kind: 'refresh-snap-targets', sketchId: sketch.id, targets: refreshedTargets },
+            expectedRevision: catalog.revision,
+            requestId: `catalog:${request.requestId}`,
+          })
+          catalogWritten = true
+          const file: StudioProjectFileContent = {
+            content: patch.content,
+            ...this.#files.projectFile(current.path, patch.sourceVersion),
+          }
+          const checkpoint: SketchSnapCheckpoint = {
+            afterCatalogRevision: catalogResult.catalog.revision,
+            afterContent: patch.content,
+            afterSourceVersion: patch.sourceVersion,
+            beforeContent: current.content,
+            beforeSourceVersion: current.sourceVersion,
+            id: request.checkpointId,
+            path: generated.path,
+            status: 'committed',
+            undoAction: {
+              kind: 'refresh-snap-targets',
+              sketchId: sketch.id,
+              targets: sketch.snapped.map(item => item.target),
+            },
+          }
+          this.#ledger.recordSketchSnap(checkpoint)
+          const rectIds = request.action.kind === 'toggle-direction'
+            ? [request.action.rectId]
+            : [
+              request.action.afterRectId,
+              ...(request.action.beforeRectId === undefined ? [] : [request.action.beforeRectId]),
+            ]
+          const result: StudioSketchSnapApplyResult = {
+            catalog: catalogResult.catalog,
+            checkpoint: { id: checkpoint.id, status: 'committed' },
+            compile,
+            file,
+            projectedRectIds: rectIds,
+            requestId: request.requestId,
+          }
+          this.#sketchSnapResults.set(request.requestId, { fingerprint, result })
+          trimMap(this.#sketchSnapResults, sourceActionResultLimit)
+          this.#emitCheckpoint(result.checkpoint)
+          this.#emitFile(file)
+          this.#emitSketchCatalog(result.catalog)
+          return result
+        } catch (error) {
+          if (catalogWritten) {
+            await transaction.restore(catalog, catalog.revision + 1)
+          }
+          if (sourceWritten && (await FS.readText(generated.path)) !== current.content) {
+            await this.#restoreGeneratedContent(
+              generatedSources,
+              generated.path,
+              current.content,
+              current.sourceVersion,
+              `rollback:${request.requestId}`,
+            )
+          }
+          throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-flow-action' })
         }
-        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-flow-action' })
-      }
-    })
+      })
+    )
   }
 
   applySketchUnsnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
@@ -1406,7 +1473,7 @@ export class StudioProjectSession {
       revision: catalog.revision + 1,
       sketches: catalog.sketches.map(candidate => candidate.id === sketch.id ? replacement : candidate),
     }
-    await this.#sketchCatalog.restore(next)
+    await this.#sketchCatalog.restore(next, catalog.revision)
     return { catalog: next, requestId: `catalog:${requestId}` }
   }
 
@@ -1540,8 +1607,19 @@ export class StudioProjectSession {
     StudioSessionRequests.requireSourceActionPreconditions(envelope, request)
     this.#requireScenarioActionIdentity(envelope, request)
     try {
+      const workspaceFiles = parsed.files.map(file => file.ast)
+      if (request.kind === 'wrap-render') {
+        const directory = FS.dirname(path)
+        for (const siblingPath of this.#files.absolutePaths()) {
+          if (siblingPath === path || FS.dirname(siblingPath) !== directory) {
+            continue
+          }
+          const sibling = await this.#workspace.parse(siblingPath)
+          workspaceFiles.push(sibling.entry.ast)
+        }
+      }
       const patch = await SourceActions.applyStudioPatch(parsed.entry.document, request, {
-        files: parsed.files.map(file => file.ast),
+        files: workspaceFiles,
         ...(envelope.identity.occurrence === undefined ? {} : { occurrence: envelope.identity.occurrence }),
       })
       return { current, envelope, patch, path }
@@ -1666,6 +1744,18 @@ export class StudioProjectSession {
   }
 
   async noteWatchChanges(changes: readonly StudioSourceChange[]): Promise<StudioWatchResult> {
+    return this.#mutate(() => this.#applyWatchChanges(changes))
+  }
+
+  /** Reconciles the cached file map after watcher startup and periodically while the session is open. */
+  async reconcileProjectFiles(): Promise<StudioWatchResult | undefined> {
+    return this.#mutate(async () => {
+      const changes = await this.#files.changesOnDisk()
+      return changes.length === 0 ? undefined : await this.#applyWatchChanges(changes)
+    })
+  }
+
+  async #applyWatchChanges(changes: readonly StudioSourceChange[]): Promise<StudioWatchResult> {
     const normalized = await Promise.all(changes.map(async change => ({
       ...change,
       path: await this.#files.resolveTaoWatchPath(change.path),

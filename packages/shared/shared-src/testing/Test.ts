@@ -29,6 +29,10 @@ export const Jest: JestApi = {
  * a virtual module rather than an error, on both runners.
  */
 export function MockModule(specifier: string, factory: () => unknown): void {
+  Assert.input(
+    !specifier.startsWith('.'),
+    `MockModule cannot resolve relative specifier '${specifier}'; use a package or configured alias.`,
+  )
   getTestRuntime().mockModule(specifier, factory)
 }
 

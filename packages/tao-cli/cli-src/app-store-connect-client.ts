@@ -59,10 +59,16 @@ export type AppStoreVersion = JsonApiResource<'appStoreVersions', {
 }>
 
 export type AppStoreReviewSubmission = JsonApiResource<'reviewSubmissions', {
-  platform: 'IOS'
+  platform: string
   state?: string
   submitted: boolean
 }>
+
+type AppStoreReviewSubmissionItem = JsonApiResource<'reviewSubmissionItems', Record<string, never>> & {
+  relationships?: {
+    appStoreVersion?: JsonApiRelationship
+  }
+}
 
 export type BetaGroup = JsonApiResource<'betaGroups', {
   createdDate?: string
@@ -129,6 +135,7 @@ export type AppStoreUserInvitation = JsonApiResource<'userInvitations', {
 export type WaitForBuildOptions = {
   appId: string
   buildNumber: string
+  onTerminalBuild?: (build: AppStoreBuild) => Promise<void>
   pollIntervalMs?: number
   timeoutMs?: number
 }
@@ -214,6 +221,7 @@ export class AppStoreConnectClient {
         return build
       }
       if (build !== undefined && ['FAILED', 'INVALID'].includes(build.attributes.processingState)) {
+        await options.onTerminalBuild?.(build)
         Errors.throwHostEnvironment(
           `Apple finished processing build ${options.buildNumber} with state ${build.attributes.processingState}.`,
         )
@@ -255,18 +263,47 @@ export class AppStoreConnectClient {
   }
 
   async submitVersionForReview(appId: string, versionId: string): Promise<AppStoreReviewSubmission> {
-    const submission = await this.#create<AppStoreReviewSubmission>('/v1/reviewSubmissions', {
-      attributes: { platform: 'IOS' },
-      relationships: { app: relationship('apps', appId) },
-      type: 'reviewSubmissions',
-    })
-    await this.#create('/v1/reviewSubmissionItems', {
-      relationships: {
-        appStoreVersion: relationship('appStoreVersions', versionId),
-        reviewSubmission: relationship('reviewSubmissions', submission.id),
-      },
-      type: 'reviewSubmissionItems',
-    })
+    const submissions = (await this.#list<AppStoreReviewSubmission>('/v1/reviewSubmissions', {
+      'filter[app]': appId,
+      limit: '200',
+    })).filter(candidate => candidate.attributes.platform === 'IOS')
+    const inspectedItems = new Map<string, AppStoreReviewSubmissionItem[]>()
+    let submission: AppStoreReviewSubmission | undefined
+    for (const candidate of submissions) {
+      const items = await this.#list<AppStoreReviewSubmissionItem>('/v1/reviewSubmissionItems', {
+        'filter[reviewSubmission]': candidate.id,
+        limit: '200',
+      })
+      inspectedItems.set(candidate.id, items)
+      if (items.some(item => relationshipId(item.relationships?.appStoreVersion) === versionId)) {
+        if (candidate.attributes.submitted) {
+          return candidate
+        }
+        submission = candidate
+        break
+      }
+    }
+    submission ??= submissions.find(candidate =>
+      !candidate.attributes.submitted && inspectedItems.get(candidate.id)?.length === 0
+    )
+    if (submission === undefined) {
+      submission = await this.#create<AppStoreReviewSubmission>('/v1/reviewSubmissions', {
+        attributes: { platform: 'IOS' },
+        relationships: { app: relationship('apps', appId) },
+        type: 'reviewSubmissions',
+      })
+      inspectedItems.set(submission.id, [])
+    }
+    const existingItems = inspectedItems.get(submission.id) ?? []
+    if (!existingItems.some(item => relationshipId(item.relationships?.appStoreVersion) === versionId)) {
+      await this.#create('/v1/reviewSubmissionItems', {
+        relationships: {
+          appStoreVersion: relationship('appStoreVersions', versionId),
+          reviewSubmission: relationship('reviewSubmissions', submission.id),
+        },
+        type: 'reviewSubmissionItems',
+      })
+    }
     return await this.#update<AppStoreReviewSubmission>(`/v1/reviewSubmissions/${encodeURIComponent(submission.id)}`, {
       attributes: { submitted: true },
       id: submission.id,
@@ -535,6 +572,13 @@ export class AppStoreConnectClient {
 
 function relationship(type: string, id: string): JsonApiRelationship {
   return { data: { id, type } }
+}
+
+function relationshipId(value: JsonApiRelationship | undefined): string | undefined {
+  if (value === undefined || Array.isArray(value.data)) {
+    return undefined
+  }
+  return (value.data as { id: string }).id
 }
 
 function requestUrl(baseUrl: URL, path: string, query: Readonly<Record<string, string>>): URL {

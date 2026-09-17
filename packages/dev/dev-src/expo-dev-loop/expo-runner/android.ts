@@ -4,7 +4,7 @@ import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
-const EXPO_GO_SDK_VERSION = '57.0.0'
+export const EXPO_GO_SDK_VERSION = '57.0.0'
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
 const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'
@@ -22,16 +22,29 @@ const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so
 
 export type AndroidSession = ReturnType<typeof createAndroid>
 
+export type AndroidCompatibilityDependencies = {
+  findRunningEmulator?: typeof findRunningEmulator
+  installExpoGo?: (serial: string) => Promise<void>
+  installedExpoGoVersion?: typeof installedExpoGoVersion
+  isEmulatorBooted?: typeof isEmulatorBooted
+  requireAdb?: () => Promise<void>
+  reverseMetroPort?: typeof reverseMetroPort
+}
+
 /** createAndroid binds Android Expo helpers to one Expo session. */
-export function createAndroid(config: ExpoSessionConfig, metro: ExpoMetroSession = createExpoMetro(config)) {
+export function createAndroid(
+  config: ExpoSessionConfig,
+  metro: ExpoMetroSession = createExpoMetro(config),
+  compatibility: AndroidCompatibilityDependencies = {},
+) {
   return {
     ensureEmulator,
-    ensureExpoGo,
-    ensureExpoGoOnSerial,
+    ensureExpoGo: () => ensureExpoGo(compatibility),
+    ensureExpoGoOnSerial: (serial: string) => ensureExpoGoOnSerial(serial, compatibility),
     listPhysicalDevices,
     openExpoGo: (url: string = config.EXPO_GO_URL) => openExpoGo(config, metro, url),
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
-    prepareAvailableExpoGo: () => prepareAvailableExpoGo(config),
+    prepareAvailableExpoGo: () => prepareAvailableExpoGo(config, compatibility),
     reverseMetroPort: (serial: string) => reverseMetroPort(config, serial),
   }
 }
@@ -96,20 +109,33 @@ async function ensureEmulator(): Promise<void> {
   }
 }
 
-async function ensureExpoGo(): Promise<void> {
-  await requireCommand('adb', androidAdbMissingMessage)
-  await ensureExpoGoOnSerial(await requireBootedEmulator())
+async function ensureExpoGo(compatibility: AndroidCompatibilityDependencies): Promise<void> {
+  await (compatibility.requireAdb ?? requireAdb)()
+  await ensureExpoGoOnSerial(await requireBootedEmulator(), compatibility)
 }
 
-async function ensureExpoGoOnSerial(serial: string): Promise<void> {
-  await requireCommand('adb', androidAdbMissingMessage)
-  if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
-    DevLoopTUI.logDevLoop('dev', `Expo Go is already installed on ${serial}.`)
+async function ensureExpoGoOnSerial(
+  serial: string,
+  compatibility: AndroidCompatibilityDependencies,
+): Promise<void> {
+  await (compatibility.requireAdb ?? requireAdb)()
+  const installedVersion = await (compatibility.installedExpoGoVersion ?? installedExpoGoVersion)(serial)
+  if (expoGoSupportsSdk(installedVersion)) {
+    DevLoopTUI.logDevLoop('dev', `Compatible Expo Go ${installedVersion} is already installed on ${serial}.`)
     return
   }
 
+  DevLoopTUI.logDevLoop(
+    'dev',
+    installedVersion === undefined
+      ? `Installing Expo Go for SDK ${EXPO_GO_SDK_VERSION} on ${serial}.`
+      : `Replacing incompatible Expo Go ${installedVersion} on ${serial} for SDK ${EXPO_GO_SDK_VERSION}.`,
+  )
+  await (compatibility.installExpoGo ?? installExpoGo)(serial)
+}
+
+async function installExpoGo(serial: string): Promise<void> {
   const apkPath = await downloadExpoGoApk()
-  DevLoopTUI.logDevLoop('dev', `Installing Expo Go on ${serial}.`)
   await CLI.mustRun('adb', {
     args: ['-s', serial, 'install', '-r', '-d', '--user', EXPO_ADB_USER, apkPath],
     stdio: 'inherit',
@@ -122,21 +148,27 @@ async function listPhysicalDevices(): Promise<string[]> {
   return (await listAdbDevices()).filter(serial => !serial.startsWith('emulator-'))
 }
 
-async function prepareAvailableExpoGo(config: ExpoSessionConfig): Promise<boolean> {
-  await requireCommand('adb', androidAdbMissingMessage)
-  const serial = await findRunningEmulator()
-  if (!serial || !await isEmulatorBooted(serial)) {
+async function prepareAvailableExpoGo(
+  config: ExpoSessionConfig,
+  compatibility: AndroidCompatibilityDependencies,
+): Promise<boolean> {
+  await (compatibility.requireAdb ?? requireAdb)()
+  const serial = await (compatibility.findRunningEmulator ?? findRunningEmulator)()
+  if (!serial || !await (compatibility.isEmulatorBooted ?? isEmulatorBooted)(serial)) {
     DevLoopTUI.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
     return false
   }
-  if (!await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
+  const installedVersion = await (compatibility.installedExpoGoVersion ?? installedExpoGoVersion)(serial)
+  if (!expoGoSupportsSdk(installedVersion)) {
     DevLoopTUI.logDevLoop(
       'dev',
-      `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`,
+      installedVersion === undefined
+        ? `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`
+        : `Expo Go ${installedVersion} on ${serial} does not support SDK ${EXPO_GO_SDK_VERSION}; run ./dev android-expo-go to replace it.`,
     )
     return false
   }
-  await reverseMetroPort(config, serial)
+  await (compatibility.reverseMetroPort ?? reverseMetroPort)(config, serial)
   return true
 }
 
@@ -153,6 +185,10 @@ async function requireCommand(command: string, missingMessage: string): Promise<
   if (!await CLI.commandExists(command)) {
     Errors.throwUserInput(missingMessage)
   }
+}
+
+async function requireAdb(): Promise<void> {
+  await requireCommand('adb', androidAdbMissingMessage)
 }
 
 async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
@@ -274,6 +310,33 @@ async function isPackageInstalled(serial: string, appId: string): Promise<boolea
   })
   return !result.error && result.exitCode === 0
     && result.stdout.split(/\r?\n/).some(line => line.trim() === `package:${appId}`)
+}
+
+/** expoGoVersionFromPackageInfo reads Android's stable package-manager versionName field. */
+export function expoGoVersionFromPackageInfo(output: string): string | undefined {
+  return /^\s*versionName=([^\s]+)\s*$/mu.exec(output)?.[1]
+}
+
+/** expoGoSupportsSdk accepts only an Expo Go client built for this repository's SDK major. */
+export function expoGoSupportsSdk(
+  version: string | undefined,
+  sdkVersion = EXPO_GO_SDK_VERSION,
+): boolean {
+  const installedMajor = version?.match(/^(\d+)\./u)?.[1]
+  const sdkMajor = sdkVersion.match(/^(\d+)\./u)?.[1]
+  return installedMajor !== undefined && sdkMajor !== undefined && installedMajor === sdkMajor
+}
+
+async function installedExpoGoVersion(serial: string): Promise<string | undefined> {
+  if (!await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
+    return undefined
+  }
+  const result = await CLI.run('adb', {
+    args: ['-s', serial, 'shell', 'dumpsys', 'package', EXPO_GO_APP_ID],
+  })
+  return result.error === undefined && result.exitCode === 0
+    ? expoGoVersionFromPackageInfo(result.stdout)
+    : undefined
 }
 
 async function downloadExpoGoApk(): Promise<string> {

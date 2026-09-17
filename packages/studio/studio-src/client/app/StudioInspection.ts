@@ -1,5 +1,6 @@
 import type { StudioRenderInspection } from '@source-actions'
 import type { StudioInspectorSelection } from '../../StudioInspector'
+import type { StudioInspectRenderRequest } from '../../StudioProtocol'
 import { StudioApiClient } from '../StudioApiClient'
 import { projectRelativePath } from '../StudioEditor'
 import { showOpenFile, type StudioClientView } from '../StudioShell'
@@ -12,6 +13,18 @@ export type StudioInspectionDeps = Readonly<{
   publish: () => void
   view: StudioClientView
 }>
+
+export function studioInspectionRequest(
+  project: string,
+  selection: StudioInspectorSelection,
+): StudioInspectRenderRequest {
+  return {
+    identity: selection.identity,
+    path: projectRelativePath(project, selection.identity.path) ?? selection.identity.path,
+    renderId: selection.renderId,
+    sourceVersion: selection.identity.sourceVersion,
+  }
+}
 
 /**
  * The element selected in a preview and what the server says about its render. The Tao product host
@@ -41,6 +54,13 @@ export class StudioInspection {
     return this.#selected?.identity.occurrence?.renderOwner
   }
 
+  /** Canonical owner identity matches the compiler's Studio scenario subject id. */
+  selectedOwnerIdentity(): Readonly<{ id: string; name: string }> | undefined {
+    const selected = this.#selected
+    const name = selected?.identity.occurrence?.renderOwner
+    return selected === undefined || name === undefined ? undefined : { id: `${selected.identity.path}#${name}`, name }
+  }
+
   select(selection: StudioInspectorSelection): void {
     this.#selected = selection
   }
@@ -63,13 +83,8 @@ export class StudioInspection {
     const revision = ++this.#requestRevision
     this.#inspection = undefined
     this.render()
-    const path = projectRelativePath(this.#deps.project, selection.identity.path) ?? selection.identity.path
     try {
-      const result = await StudioApiClient.inspectRender({
-        path,
-        renderId: selection.renderId,
-        sourceVersion: selection.identity.sourceVersion,
-      })
+      const result = await StudioApiClient.inspectRender(studioInspectionRequest(this.#deps.project, selection))
       if (revision === this.#requestRevision && this.#selected?.renderId === selection.renderId) {
         this.#inspection = result
         this.render()
@@ -79,27 +94,6 @@ export class StudioInspection {
         showSourceActionError(this.#deps.view.status, error)
       }
     }
-  }
-
-  /**
-   * Selecting an element in the preview selects its source in the editor, the other half of
-   * "click both ways". The model tab publishes the selection and the visible editor scrolls to it;
-   * a preview built from older source is left alone because its ranges no longer line up.
-   */
-  selectSourceInEditor(selection: StudioInspectorSelection): void {
-    const active = this.#deps.active()
-    if (active === undefined) {
-      return
-    }
-    const path = projectRelativePath(this.#deps.project, selection.identity.path) ?? selection.identity.path
-    if (path !== active.file.path || selection.identity.sourceVersion !== active.file.sourceVersion) {
-      return
-    }
-    const length = active.editor.state.doc.length
-    if (selection.range.start > length || selection.range.end > length) {
-      return
-    }
-    active.editor.dispatch({ selection: { anchor: selection.range.start, head: selection.range.end } })
   }
 
   /**

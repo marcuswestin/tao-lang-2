@@ -1,6 +1,6 @@
 import { Errors, FS, Time } from '@shared'
-import { Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
-import { startStudioFileWatcher } from '../studio-src/StudioFileWatcher'
+import { Deferred, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
+import { startStudioFileWatcher, StudioFileWatcherTesting } from '../studio-src/StudioFileWatcher'
 import { openStudioPreviewSession } from '../studio-src/StudioPreviewSession'
 
 Test(
@@ -410,6 +410,65 @@ Test('Studio file watching acknowledges its own write once and compiles later ex
   } finally {
     await FS.remove(previewRuntimeRoot)
   }
+})
+
+Test('Studio file watcher reconciles files created between the initial scan and watcher readiness', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-watch-reconcile-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-watch-reconcile-project-',
+      {
+        'Garden.tao': `
+          use Text from @tao/ui
+          app Garden { view Main }
+          view Main() { render Text("Garden") }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Garden.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        await FS.writeText(FS.resolvePath('Missed.tao', root), 'view Missed() { render Text("Found") }\n')
+        const watcher = await startStudioFileWatcher(preview.session, {
+          batchDelayMs: 5,
+          reconcileIntervalMs: 0,
+        })
+        try {
+          Expect((await preview.session.files()).map(file => file.path)).toContain('Missed.tao')
+        } finally {
+          await watcher.close()
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
+Test('Studio file watcher preserves event order while an older hash is still pending', async () => {
+  const oldHash = Deferred<void>()
+  const applied: Array<[string, boolean]> = []
+  const lane = StudioFileWatcherTesting.createChangeLane(async (path, exists) => {
+    if (exists) {
+      await oldHash.promise
+    }
+    applied.push([path, exists])
+  })
+
+  lane.note('/project/App.tao', true)
+  lane.note('/project/App.tao', false)
+  await Time.sleep(0)
+  Expect(applied).toEqual([])
+  oldHash.resolve()
+  await lane.drain()
+
+  Expect(applied).toEqual([
+    ['/project/App.tao', true],
+    ['/project/App.tao', false],
+  ])
 })
 
 async function waitFor(predicate: () => boolean): Promise<void> {

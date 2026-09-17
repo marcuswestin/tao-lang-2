@@ -17,6 +17,8 @@ const STUDIO_SMOKES = [
   'studio-proof-real-app',
   'studio-smoke-simulated-user',
   'keyboard-navigation-smoke',
+  'studio-dialog-browser',
+  'studio-agent-browser',
   'studio-smoke-native',
 ]
 /** Every gate that needs a host the managed sandbox denies: the smokes plus the native canary. */
@@ -106,6 +108,8 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_fix-tao').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('studio-smoke-simulated-user').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('keyboard-navigation-smoke').needs).toEqual(['_parser-gen'])
+    Expect(nodeOf('studio-dialog-browser').needs).toEqual(['_parser-gen'])
+    Expect(nodeOf('studio-agent-browser').needs).toEqual(['_parser-gen'])
   })
 
   Test('waits for the compiled WordFlower app before the test lane runs', () => {
@@ -189,9 +193,11 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('studio-proof-real-app').resources).toBeUndefined()
     Expect(nodeOf('studio-smoke-simulated-user').resources).toBeUndefined()
     Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
+    Expect(nodeOf('studio-dialog-browser').resources).toBeUndefined()
+    Expect(nodeOf('studio-agent-browser').resources).toBeUndefined()
   })
 
-  Test('marks exactly the six browser and native UI lanes as requiring an unsandboxed host', () => {
+  Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {
     for (const name of HOST_ONLY_GATES) {
       Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)
     }

@@ -83,11 +83,11 @@ Describe('agent capabilities', () => {
   })
 
   Test('classifies every declared probe from its own result', async () => {
-    const probed: string[] = []
+    const probed: Array<{ args: readonly string[]; command: string; display: string }> = []
     const report = await readAgentCapabilities({
       env: {},
       runProbe: async candidate => {
-        probed.push(candidate.command)
+        probed.push(candidate)
         return candidate.command === 'docker'
           ? { exitCode: 1, stderr: 'Cannot connect to the Docker daemon: operation not permitted', stdout: '' }
           : { exitCode: 0, stderr: '', stdout: 'ok' }
@@ -95,7 +95,12 @@ Describe('agent capabilities', () => {
     })
 
     Expect(report.version).toBe(1)
-    Expect(probed).toContain('docker')
+    Expect(probed.map(candidate => candidate.command)).toContain('docker')
+    Expect(probed.find(candidate => candidate.command === 'ps')).toMatchObject({
+      args: ['-axo', 'pid=,ppid=,lstart=,command='],
+      command: 'ps',
+      display: 'ps -axo pid=,ppid=,lstart=,command=',
+    })
     Expect(report.checks.length).toBe(probed.length)
     Expect(report.checks.find(check => check.name === 'Docker daemon')?.status).toBe('denied')
     Expect(report.checks.filter(check => check.status === 'available').length).toBe(report.checks.length - 1)

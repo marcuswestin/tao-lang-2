@@ -22,6 +22,11 @@ type Probe = {
   packageDir: string
 }
 
+type DependencyHealthDependencies = {
+  isFile?: (path: string) => Promise<boolean>
+  run?: typeof CLI.run
+}
+
 const PROBES: readonly Probe[] = [
   // Node resolution for the Expo toolchain, which the runtime package's jest harness needs.
   { modules: ['expo/metro-config', 'jest-expo/jest-preset'], node: true, packageDir: 'packages/runtime-toolchain' },
@@ -38,14 +43,17 @@ const PROBES: readonly Probe[] = [
  * The devenv profile is the Expo probe's interpreter, so its absence skips that probe rather than
  * failing it: a checkout without the profile has a different problem, which the doctor names.
  */
-export async function dependencyHealthError(repositoryRoot = Repo.getRoot()): Promise<string | undefined> {
+export async function dependencyHealthError(
+  repositoryRoot = Repo.getRoot(),
+  dependencies: DependencyHealthDependencies = {},
+): Promise<string | undefined> {
   const node = FS.resolvePath('.devenv/profile/bin/node', repositoryRoot)
-  const nodePresent = await FS.isFile(node)
+  const nodePresent = await (dependencies.isFile ?? FS.isFile)(node)
   for (const probe of PROBES) {
     if (probe.node === true && !nodePresent) {
       continue
     }
-    const failure = await probeFailure(probe, repositoryRoot, node)
+    const failure = await probeFailure(probe, repositoryRoot, node, dependencies.run ?? CLI.run)
     if (failure !== undefined) {
       return failure
     }
@@ -53,20 +61,30 @@ export async function dependencyHealthError(repositoryRoot = Repo.getRoot()): Pr
   return undefined
 }
 
-async function probeFailure(probe: Probe, repositoryRoot: string, node: string): Promise<string | undefined> {
+async function probeFailure(
+  probe: Probe,
+  repositoryRoot: string,
+  node: string,
+  run: typeof CLI.run,
+): Promise<string | undefined> {
   const result = probe.node === true
-    ? await CLI.run(node, {
+    ? await run(node, {
       args: ['-e', probe.modules.map(module => `require(${JSON.stringify(module)})`).join('; ')],
       cwd: FS.resolvePath(probe.packageDir, repositoryRoot),
     })
-    : await CLI.run('bun', {
+    : await run('bun', {
       args: ['-e', probe.modules.map(module => `await import(${JSON.stringify(module)})`).join('\n')],
       cwd: FS.resolvePath(probe.packageDir, repositoryRoot),
     })
   if (result.error === undefined && result.exitCode === 0) {
     return undefined
   }
-  const detail = (result.stderr.trim().split('\n')[0] ?? result.error?.message ?? 'unknown failure').trim()
+  const stderr = result.stderr.trim()
+  const detail = result.error?.message
+    ?? [...stderr.split('\n')].reverse().find(line => /(?:error|failed|cannot|could not|not found)/iu.test(line))
+      ?.trim()
+    ?? stderr.split('\n').find(line => line.trim() !== '')?.trim()
+    ?? `exit code ${result.exitCode ?? 'unknown'}`
   return `${probe.packageDir}: ${detail}`
 }
 

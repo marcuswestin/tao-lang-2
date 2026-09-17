@@ -14,6 +14,8 @@ export type StudioMatrixGroup<Item> = {
   sketchView?: string
   /** The one view every scenario in the group focuses, when the group is a focused-view group. */
   subjectView?: string
+  /** Compiler-owned declaration identity; unlike the display name, this distinguishes same-named views. */
+  subjectViewId?: string
 }
 
 export type StudioMatrixGroupLayout = {
@@ -56,6 +58,22 @@ export const StudioMatrixLayout = {
     )
     return viewNames.size === 1 ? [...viewNames][0] : undefined
   },
+  /** subjectViewId preserves the compiler's canonical declaration identity for canvas Focus. */
+  subjectViewId(
+    manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>,
+    groupId: string,
+  ): string | undefined {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    const viewIds = new Set(
+      manifest.scenarios
+        .filter(scenario => StudioScenarioControls.groupId(scenario.source.path, scenario.group) === groupId)
+        .map(scenario => {
+          const subject = subjects.get(scenario.subjectId)
+          return subject?.kind === 'view' ? subject.subjectId : undefined
+        }),
+    )
+    return viewIds.size === 1 ? [...viewIds][0] : undefined
+  },
   /** sketchSourceVersions maps each generated sketch view to the source version of its Tao file. */
   sketchSourceVersions(
     manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'sourceVersions' | 'subjects'>,
@@ -78,8 +96,8 @@ export const StudioMatrixLayout = {
     return versions
   },
   /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
-  focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectView'>[], viewName: string): boolean {
-    return groups.some(group => group.subjectView === viewName)
+  focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectViewId'>[], viewId: string): boolean {
+    return groups.some(group => group.subjectViewId === viewId)
   },
   reconcile(previous: readonly string[], next: readonly string[]): {
     added: readonly string[]

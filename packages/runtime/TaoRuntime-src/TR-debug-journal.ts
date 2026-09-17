@@ -6,16 +6,21 @@ import type { TaoDebugPendingWrite } from './TR-action-transactions'
  * debugger controller reads and emits through it, so neither has to import the other.
  */
 
-/** TaoDebugStep is the stable identity of one action statement: owning action and statement path. */
-export type TaoDebugStep = Readonly<{ action: string; path: string }>
+/** TaoDebugStep carries both readable labels and canonical compiler-owned structural identity. */
+export type TaoDebugStep = Readonly<{
+  action: string
+  declaration?: string
+  path: string
+  statement?: string
+}>
 
 export type TaoDebugJournalEntry = Readonly<{
   action: string
-  arguments: readonly unknown[]
   outcome: 'running' | 'committed' | 'failed' | 'abandoned'
   failureCase?: string
   externalEffect: boolean
   frames: readonly string[]
+  rootId: number
   startedAt: number
   settledAt?: number
 }>
@@ -31,11 +36,13 @@ export type TaoDebugEvent =
   | Readonly<{ kind: 'journal'; entry: TaoDebugJournalEntry }>
   | Readonly<{ kind: 'paused'; pause: TaoDebugPause }>
   | Readonly<{ kind: 'resumed' }>
+  | Readonly<{ kind: 'reset' }>
 
 const journalLimit = 200
 
 const listeners = new Set<(event: TaoDebugEvent) => void>()
 const journal: TaoDebugJournalEntry[] = []
+let nextRootId = 0
 
 export function emitDebugEvent(event: TaoDebugEvent): void {
   for (const listener of listeners) {
@@ -57,13 +64,18 @@ export function clearDebugJournal(): void {
 }
 
 /** journalStart records a root beginning; the transaction runtime calls it. */
-export function journalStart(action: string, arguments_: readonly unknown[]): TaoDebugJournalEntry {
+export function journalStart(action: string, frames: readonly string[]): TaoDebugJournalEntry | undefined {
+  // Release and ordinary development builds have no debugger bridge. Do not retain action roots or
+  // their values unless tooling is actively listening for the journal.
+  if (listeners.size === 0) {
+    return undefined
+  }
   const entry: TaoDebugJournalEntry = {
     action,
-    arguments: arguments_,
     outcome: 'running',
     externalEffect: false,
-    frames: [],
+    frames: [...frames],
+    rootId: ++nextRootId,
     startedAt: Date.now(),
   }
   journal.push(entry)
@@ -88,9 +100,9 @@ export function journalSettle(
     failureCase: details.failureCase,
     settledAt: Date.now(),
   }
-  const index = journal.indexOf(entry)
+  const index = journal.findIndex(candidate => candidate.rootId === entry.rootId)
   if (index >= 0) {
     journal[index] = settled
+    emitDebugEvent({ kind: 'journal', entry: settled })
   }
-  emitDebugEvent({ kind: 'journal', entry: settled })
 }

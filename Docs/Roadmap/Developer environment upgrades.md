@@ -256,16 +256,22 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Studio browser smoke
 - **Impact:** The complete simulated-user journey cannot run in the managed host when Chrome aborts with
   `SIGABRT` before exposing DevTools; ordinary `verify` intentionally omits this proof.
-- **Evidence:** The smoke's two non-browser checks passed, but the browser journey never began.
+- **Evidence:** The smoke's non-browser checks pass, but every exact and reduced Chrome launch aborts
+  before DevTools dispatch. The macOS crash stack ends in
+  `TransformProcessType -> _RegisterApplication -> abort`, and LaunchServices cannot resolve the
+  otherwise valid signed Chrome application from this task namespace. Repository CDP tests remain green.
+  On 2026-09-17 the same branch's headless browser journeys launched Chrome normally from an
+  ordinary unsandboxed desktop shell, so the abort is specific to that managed task namespace.
 - **Workaround:** From a normal terminal run
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
-  `just full-verify`.
+  `just full-verify`; when selecting another supported browser explicitly, set
+  `TAO_STUDIO_CHROME_PATH` in that terminal.
 - **Proposed change:** After Studio branches land, evaluate headless Chromium and attach-to-existing-browser
   modes, then add a reliable CI or pre-merge host lane without slowing ordinary `verify`.
 - **Dependencies:** Semantic-agent, companion, and freehand Studio changes must land first.
 - **Acceptance:** The full browser journey runs repeatably in its supported host and is required for
   Studio-heavy landing evidence.
-- **Source:** 2026-09-03 freehand implementation summary.
+- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation acceptance.
 
 ### DEVENV-016 — Studio process ownership and status
 
@@ -632,7 +638,8 @@ an entry here may link one when the developer workflow is also affected.
   mutable Hutch project registry backed by copy-on-write clones of the installed immutable store,
   and clear only the current generated project's transient locks after proving its process tree
   stopped.
-- **Also observed:** from a managed shell the canary wrote `.artifacts/tests/studio-canary/canary.json`
+- **Also observed:** from a managed shell the canary wrote an invocation-scoped
+  `.artifacts/tests/studio-canary/invocations/<id>/canary.json`
   with `"status": "blocked"` within seconds, recorded its own pid in `survivingPids`, and was still
   alive 40 minutes later on a surviving `hutch-engine electrobun prepare` child, holding the whole
   `just full-verify` run open. The owned-process-group stop above should close this; re-verify it when
@@ -721,23 +728,17 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Test reliability
 - **Impact:** The simulated Studio journey blocks otherwise green merge verification at synthetic
   sketch interactions, so it cannot yet serve as reliable merge evidence.
-- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 showed the failures were product
-  defects, not pointer nondeterminism. The board's absolutely positioned toolbar wrapped down over the
-  76-pixel drawing surface, so the first real pointer landed on the Unsnap button; drag-one-in relied on
-  an HTML5 drag that the move gesture's `preventDefault` suppressed, so it could never start; and a
-  catalog or manifest re-render could replace a board mid-gesture. With those fixed the lane passes
-  Draw, four further draws, Snap, and reload from a normal terminal, and stalls at drag-one-in: the
-  release reaches the board and requests the one-rectangle Snap, which the server refuses with
-  `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
-  rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
-  the element under the pointer, the gesture state, host errors, and a screenshot.
+- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 exposed real toolbar, gesture,
+  rerender, interleaved-Snap, editor-ownership, source-identity, geometry, and transaction defects.
+  Those product fixes now have focused coverage, including a real pointer-release drag-one-in target.
+  The lane has not yet supplied the required ten consecutive complete normal-terminal runs, so it
+  remains reliability evidence in progress rather than a green merge gate.
 - **Workaround:** The full-verification graph reports `studio-smoke-simulated-user` as explicitly skipped;
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
-- **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
-  route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
-  keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
-  single-shot rather than retrying requests that may already be live.
+- **Proposed change:** Run the complete journey ten consecutive times from a normal Terminal, retain
+  its hit-tested preconditions and single-shot mutations, investigate any remaining nondeterminism,
+  then remove the quarantine only when that acceptance is green.
 - **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
 - **Acceptance:** `studio-smoke-simulated-user` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
@@ -1020,7 +1021,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Package tests
 - **Impact:** Under the dev suite's `--concurrent` flag, a test that stops a `Bun.serve` with
   `stop(true)` while another test's same-process `WebSocket` client is mid-dial to a different
@@ -1029,16 +1030,17 @@ an entry here may link one when the developer workflow is also affected.
   several server tests in one file.
 - **Evidence:** `bun test --concurrent packages/dev/dev-tests/dev-data.test.ts` on bun 1.3.13 hung the
   sync and conformance tests 12 of 12 runs until the client bounded its dials; a socket trace showed
-  the dial coinciding with another test's `close 1006 Connection ended`. Serial runs and a scratch
-  script with the same steps never reproduced it.
-- **Workaround:** Bound every in-process dial and redial when it neither opens nor fails, as the
-  `Dev` datasource client now does; or keep tests that stop a server with a live client in files
-  that do not also dial other servers.
-- **Proposed change:** A shared test helper for `Bun.serve`-backed tests that stops servers only
-  after their own clients closed, or a note in the test-quality skill naming this hazard.
+  the dial coinciding with another test's `close 1006 Connection ended`. The server-backed cases now
+  acquire a file-local serial turn through their completed teardown while retaining concurrency
+  inside the two-authority and independent-process assertions; ten consecutive ordinary
+  `--concurrent` runs passed, including an eight-cycle server/WebSocket ownership stress case.
+- **Workaround:** None required after the fix. Server-backed tests in this file register through the
+  local ownership helper so one case's forced stop cannot overlap another case's dial.
+- **Proposed change:** Implemented with an explicit serial registration queue around only the
+  in-process server/WebSocket cases; bootstrap-only cases remain ordinarily concurrent.
 - **Dependencies:** None.
-- **Acceptance:** A test file with several servers and clients passes under `--concurrent` without
-  each client needing its own dial bound.
+- **Acceptance:** Met: the normal `--concurrent` file command passes repeatedly without a test-host
+  dial timeout, while the independent-process CAS/auth coverage remains intact.
 - **Source:** 2026-09-05 Dev datasource implementation.
 
 ### DEVENV-056 — Visual review can lose its renderer context during preview reload
@@ -1158,3 +1160,83 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** `bun test packages/dev/dev-tests` from the repository root agrees with `./dev test`,
   or says why it cannot and points at the command that does.
 - **Source:** 2026-09-17 verification deduplication.
+
+### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
+
+- **Status:** Candidate
+- **Area:** Agent configuration
+- **Impact:** Canonical `.rulesync` changes can leave `.codex/config.toml` or
+  `.codex/rules/tao.rules` stale even though `./agent setup` and `just _agent-config` otherwise
+  succeed, so generated-parity tests fail after the documented regeneration command.
+- **Evidence:** During the 2026-09-16 verification-foundation work, both commands reported the Codex
+  outputs as not writable under the default Codex workspace profile; an escalated retry retained the
+  same protection boundary.
+- **Workaround:** Regenerate from a host/profile allowed to update the generated `.codex` outputs,
+  then run `codex-config-generation.test.ts` to prove exact parity.
+- **Proposed change:** Provide a repository-owned regeneration path that can replace the generated
+  Codex files without granting general writes to mutable harness configuration, or document the
+  required host/profile transition in the canonical setup workflow.
+- **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/profiles.jsonc`, and
+  `packages/dev/dev-src/agent-config/CodexConfigGenerator.ts`.
+- **Acceptance:** Starting from deliberately stale generated Codex files, the documented setup command
+  refreshes them and the exact-parity test passes in the default supported Codex workflow.
+- **Source:** 2026-09-16 September remediation Wave 1.
+
+### DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells
+
+- **Status:** Candidate
+- **Area:** Studio preview host
+- **Impact:** Studio can reach Expo successfully and then fail before browser dispatch with
+  `EMFILE: too many open files, watch`, preventing the browser and native acceptance lanes from
+  distinguishing product behavior from host watcher exhaustion.
+- **Evidence:** During September-remediation acceptance, the task shell omitted the linked
+  `.devenv/profile/bin` from `PATH`, so Metro could not find Watchman and fell back to Node watching.
+  The shell reported a high `ulimit -n`, but `launchctl limit maxfiles` retained a 256 soft limit.
+  The pinned `.devenv/profile/bin/watchman --version` succeeded as `2026.01.19.00`.
+- **Workaround:** Run Studio acceptance from a shell that has loaded the materialized devenv profile;
+  in a managed task shell, prepend this checkout's `.devenv/profile/bin` once before launching the
+  lane.
+- **Proposed change:** Make the Studio launch preflight resolve the pinned Watchman executable or fail
+  early with the exact profile remediation before Metro falls back to the launchd-limited watcher.
+- **Dependencies:** DEVENV-015 remains the later Chrome/LaunchServices boundary once Metro starts.
+- **Acceptance:** A managed-shell Studio launch either uses the pinned Watchman and reaches browser
+  dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node
+  watcher's `EMFILE` fallback.
+- **Source:** 2026-09-16 September remediation acceptance.
+
+### DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance
+
+- **Status:** In progress
+- **Area:** Generated artifacts
+- **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
+  parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
+  resulting `EPERM` or `EFAULT` turns cleanup into broad, unrelated test failures.
+- **Evidence:** During the 2026-09-16 verification-foundation work, `verify --changed` and
+  `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
+  scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
+  `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
+  attempt had already emptied its live output before the same cleanup denial surfaced. A focused
+  probe then established the narrower host rule: file unlink and replacement work inside the
+  checkout, while directory rename and removal fail; host-temporary directories remain removable.
+  The same boundary left an old `.studio-device-trust.lock` directory undeletable, while a
+  monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
+  2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
+  a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
+  provenance alone.
+- **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
+  at the same source revision and verify that its generator reports `up to date`. Focused tests that
+  do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
+  and test roots in the host temporary directory; publish persistent generated output with
+  transactional file replacement instead of checkout-directory replacement.
+- **Proposed change:** The September remediation branch moves disposable runtime-test roots to host
+  temp and makes parser and IDE generated-file publication rollback-capable without renaming or
+  removing checkout directories. The Studio preview runtime is the exception and stays under
+  `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
+  root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
+  failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
+  task namespace prevents directory lifecycle operations.
+- **Dependencies:** None.
+- **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
+  and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
+  intact and reports one actionable failure.
+- **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.

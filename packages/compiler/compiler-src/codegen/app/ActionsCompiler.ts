@@ -27,6 +27,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+        const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
           ${Compile.ActionBlockBody(action.block)}
@@ -124,6 +125,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       TR.Action(${asyncKeyword}() => {
+        const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
@@ -173,14 +175,22 @@ export const ActionsCompiler = {
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
     if (!actionInstrumentationEnabled() || !block) {
-      return gen.list(block?.statements ?? [], Compile.ActionStatement)
+      return gen.list(block?.statements ?? [], statement =>
+        gen`
+        TR.ResumeActionContinuation(_TaoActionContinuation)
+        ${Compile.ActionStatement(statement)}
+      `)
     }
-    const owner = enclosingActionName(block)
+    const owner = debugOwner(block)
     return gen.list(block.statements.map((statement, index) => ({ index, statement })), ({ index, statement }) =>
       gen`
-        await TR.Debug.At({ action: ${gen.jsLiteral(owner)}, path: ${
+        TR.ResumeActionContinuation(_TaoActionContinuation)
+        await TR.Debug.At({ action: ${gen.jsLiteral(owner.name)}, path: ${
         gen.jsLiteral(statementPath(block, index))
+      }, declaration: ${compileDeclarationIdentity(owner.declaration)}.canonical, statement: ${
+        gen.jsLiteral(structuralStatementIdentity(statement, owner.declaration))
       } }, _Scope)
+        TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
       `)
   },
@@ -192,11 +202,12 @@ export const ActionsCompiler = {
 
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
-    return gen`TR.Async(() =>
-      TR.BlockScope(_Scope, async _Scope => {
+    return gen`TR.Async(() => {
+      const _TaoActionContinuation = TR.ActionContinuation()
+      return TR.BlockScope(_Scope, async _Scope => {
         ${Compile.ActionBlockBody(statement.block)}
       })
-    )`
+    })`
   },
 
   /** DoStatement compiles Tao action invocation. */
@@ -373,16 +384,38 @@ function compileForeignActionParameterBinding(parameter: ActionParameter): Compi
       : TR.Value(${runtimeParameter})`
 }
 
-/** enclosingActionName finds the named action or command an action block belongs to. */
-function enclosingActionName(block: AST.ActionBlock): string {
+/** debugOwner finds the canonical declaration and human label an action block belongs to. */
+function debugOwner(block: AST.ActionBlock): { declaration: AST.Declaration; name: string } {
   let node: AST.Node | undefined = block
+  let declaration: AST.Declaration | undefined
+  let name = 'action'
   while (node) {
     if (AST.isActionDeclaration(node) || AST.isCommandDeclaration(node)) {
-      return node.name
+      name = node.name
+    }
+    if (AST.isDeclaration(node)) {
+      // Continue to the outer authored declaration. Nested actions with the same spelling are then
+      // separated by the structural route from their view/app owner to the statement.
+      declaration = node
     }
     node = node.$container
   }
-  return 'action'
+  Assert.defined(declaration, 'an action block belongs to a declaration')
+  return { declaration, name }
+}
+
+/** structuralStatementIdentity is one statement's AST route from its canonical owning declaration. */
+function structuralStatementIdentity(statement: AST.ActionStatement, owner: AST.Declaration): string {
+  const segments: string[] = []
+  let node: AST.Node | undefined = statement
+  while (node && node !== owner) {
+    const property: string | undefined = node.$containerProperty
+    Assert.defined(property, 'a debugger statement route has a container property')
+    segments.unshift(node.$containerIndex === undefined ? property : `${property}[${node.$containerIndex}]`)
+    node = node.$container
+  }
+  Assert(node === owner, 'a debugger statement route reaches its owning declaration')
+  return segments.join('.')
 }
 
 /** statementPath is the statement's position through nested blocks, root block first. */

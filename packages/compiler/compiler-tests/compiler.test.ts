@@ -405,6 +405,59 @@ Describe('compiler: language lowering', () => {
     )
   })
 
+  Test('gives collection sets with the same underscore join distinct store identities', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data A_B / One { Value text }
+      data C / Two { Value text }
+      data A / Three { Value text }
+      data B_C / Four { Value text }
+      datasource First = Memory { Data { A_B, C } }
+      datasource Second = Memory { Data { A, B_C } }
+      app Distinct {
+        Name "Distinct"
+        Navigator StackNav { Initial Main }
+        Datasource { First, Second }
+      }
+      ${stubView('Main')}
+    `)
+
+    Expect(compiled.code).toContain("name: '$3_A_B1_C'")
+    Expect(compiled.code).toContain("name: '$1_A3_B_C'")
+    Expect(compiled.code).toContain('_TaoDataCatalog_$3_A_B1_C')
+    Expect(compiled.code).toContain('_TaoDataCatalog_$1_A3_B_C')
+  })
+
+  Test('patches a folder-visible datasource declared in a sibling file', async () => {
+    await withTaoFiles('tao-folder-datasource-', {
+      'Main.tao': `
+        use StackNav from @tao/nav
+        app Reader {
+          Name "Reader"
+          Navigator StackNav { Initial Main }
+          Datasource { Feed, Personal with { StorageKey "prod" } }
+        }
+        ${stubView('Main')}
+      `,
+      'Sources.tao': `
+        use Local from @tao/data/providers/local
+        use Memory from @tao/data/providers/memory
+        folder data Stories / Story { Title text }
+        folder data Bookmarks / Bookmark { Note text }
+        folder datasource Feed = Memory { Data { Stories } }
+        folder datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const code = result.files.map(file => file.code).join('\n')
+
+      Expect(code).toContain('TR.Data.Patch(_Scope.Personal.evaluate(), {')
+      Expect(code).toContain('"StorageKey": TR.Value("prod")')
+      Expect(code).toContain('_Scope.Feed.evaluate()')
+    })
+  })
+
   Test('keeps one catalog for an app whose datasource claims no collections', async () => {
     const compiled = await Compiler.compileCode(`
       use Memory from @tao/data/providers/memory
@@ -995,6 +1048,8 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('await TR.Navigation.Ask(')
     Expect(compiled.code).toContain('TR.Navigation.Respond(')
     Expect(compiled.code).toContain('TR.Action(async')
+    Expect(compiled.code).toContain('const _TaoActionContinuation = TR.ActionContinuation()')
+    Expect(compiled.code).toContain('TR.ResumeActionContinuation(_TaoActionContinuation)')
     Expect(compiled.code).toContain('await TR.If(')
     Expect(compiled.code).toContain('...TR.TaoContext(_ViewProps.__tao)')
   })

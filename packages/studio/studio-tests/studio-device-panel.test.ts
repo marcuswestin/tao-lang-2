@@ -149,7 +149,13 @@ Test('Studio device panel model marks a connected device applied or behind the S
     state: 'connected',
     transport: 'LAN',
   })
-  Expect(applied.install.hosts).toEqual([{ canOpen: true, id: 'host-1', installed: 'installed', name: 'Ro’s iPhone' }])
+  Expect(applied.install.hosts).toEqual([{
+    canOpen: true,
+    id: 'host-1',
+    installed: 'installed',
+    kind: 'device',
+    name: 'Ro’s iPhone',
+  }])
   Expect(applied.install.installCommand).toBeUndefined()
 
   const behind = StudioDevicePanelModel.fromStatus(connected, undefined, { compileRevision: 7 })
@@ -230,8 +236,14 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
     studioFingerprint: 'AB12 CD34 EF56',
   })
   Expect(model.install.hosts).toEqual([
-    { canOpen: false, id: 'host-1', installed: 'not installed', name: 'Ro’s iPhone' },
-    { canOpen: true, id: 'host-2', installed: 'unknown', name: 'iPhone 17 Pro (iOS 26.5 Simulator)' },
+    { canOpen: false, id: 'host-1', installed: 'not installed', kind: 'device', name: 'Ro’s iPhone' },
+    {
+      canOpen: true,
+      id: 'host-2',
+      installed: 'unknown',
+      kind: 'simulator',
+      name: 'iPhone 17 Pro (iOS 26.5 Simulator)',
+    },
   ])
   Expect(model.install.installCommand).toBe('just studio-companion-install device="Ro’s iPhone"')
   Expect(model.install.diagnostics).toEqual([{
@@ -267,8 +279,8 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
         launchDescriptions += 1
         return launchInfo
       },
-      async deviceLaunchOpen(hostId) {
-        calls.push(`open:${hostId}`)
+      async deviceLaunchOpen(hostId, route) {
+        calls.push(`open:${hostId}:${route}`)
         return { hostName: 'Ro’s iPhone', launched: true, url: deviceUrl }
       },
       async deviceOpenPairing() {
@@ -327,9 +339,21 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
     dom.click(dom.find(popover, 'studio-device-trust')!)
     await until(() => calls.includes(`confirm:${phoneKey}`))
     await until(() => dom.find(popover, 'studio-device-status')?.textContent === 'Trusted Ro’s iPhone (iPhone 16 Pro).')
-    dom.click(dom.find(popover, 'studio-device-open')!)
-    await until(() => calls.includes('open:host-1'))
-    await until(() => dom.find(popover, 'studio-device-status')?.textContent === 'Opened Tao Companion on Ro’s iPhone.')
+    const lanOpen = dom.find(popover, 'studio-device-open')!
+    Expect(lanOpen.textContent).toBe('Open over LAN')
+    Expect(lanOpen.parent?.children.find(child => child.dataset['route'] === 'cable')?.textContent).toBe(
+      'Open over cable',
+    )
+    dom.click(lanOpen)
+    await until(() => calls.includes('open:host-1:auto'))
+    await until(() =>
+      dom.find(popover, 'studio-device-status')?.textContent === 'Opened Tao Companion on Ro’s iPhone over LAN.'
+    )
+    const cableOpen = dom.find(popover, 'studio-device-open')!.parent?.children.find(
+      child => child.dataset['route'] === 'cable',
+    )
+    dom.click(cableOpen!)
+    await until(() => calls.includes('open:host-1:cable'))
     dom.click(dom.find(popover, 'studio-device-revoke')!)
     await until(() => calls.includes(`revoke:${tabletKey}`))
     dom.click(dom.find(popover, 'studio-device-reconnect')!)
@@ -354,7 +378,8 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
 
     Expect(calls).toEqual([
       `confirm:${phoneKey}`,
-      'open:host-1',
+      'open:host-1:auto',
+      'open:host-1:cable',
       `revoke:${tabletKey}`,
       'reconnect',
       'select:cell-settings',

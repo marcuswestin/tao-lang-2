@@ -189,6 +189,9 @@ export function visibleRenderValues(render: AST.Render): ReadonlyMap<string, Stu
   if (statement !== undefined && AST.isBlock(statement.$container)) {
     return visibleInsertionValues(statement.$container, statement.$cstNode?.offset ?? 0)
   }
+  if (AST.isRenderStatement(render) && AST.isBlock(render.$container)) {
+    return visibleInsertionValues(render.$container, render.$cstNode?.offset ?? 0)
+  }
   const values = new Map<string, StudioLexicalValue>()
   const owner = AST.findOwningView(render)
   for (const parameter of owner === undefined ? [] : AST.parametersOf(owner)) {

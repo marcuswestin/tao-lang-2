@@ -32,7 +32,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Generated interaction surfaces and key allocation (§8, §13) | WordFlower · hints, overview, draft verbs, and command palette          | MVP      | in Current[^12]           |
 | Narrowing feedback and off-window targeting (§9)            | WordFlower · subdued nonmatches; virtualized libraries                  | MVP      | partially in Current[^13] |
 | Pointer/touch attention parity (§9)                         | WordFlower · contextual verbs and region focus                          | MVP      | partially in Current[^13] |
-| Verb-pending chooser and input surfaces (§8–§9)             | WordFlower · commands with open entity and scalar slots                 | MVP      | partially in Current[^13] |
+| Verb-pending chooser and input surfaces (§8–§9)             | WordFlower · commands with open entity and scalar slots                 | MVP      | in Current[^13]           |
 | Generated contextual Help (§9, §13)                         | WordFlower · explain the focused region and target                      | MVP      | pending[^13]              |
 | Accessibility projection (§9)                               | WordFlower · selectable rows, controls, and generated surfaces          | MVP      | partially in Current[^13] |
 | Multi-target interaction (§9)                               | Story 12 · bulk operations                                              | TBD      | pending[^13]              |
@@ -137,11 +137,14 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     defaults; hidden layers do not participate in accessibility traversal.
 
 [^13]: The landed interaction core narrows mounted nodes, routes press/focus/hover through semantic
-    operations, models verb-pending requests, and projects roles, names, and state to controls.
+    operations, presents verb-pending entity and scalar slots, and projects roles, names, and state
+    to controls. Required entity slots accept an already-decided candidate or use mounted and
+    store-backed choices; scalar slots use inline input. Focused runtime coverage proves displayed
+    choices and dispatched values share one canonical resolver.
     Selectable rows additionally feed accessibility focus into Tao attention and expose custom
     actions. The keyboard plan's **Remaining decided implementation** ledger owns subdued
     nonmatches, off-window loop rows and scroll-to-target, long-press/right-click and empty-region
-    adapters, mounted picker/input and Help layers, multi-target behavior, broader custom actions,
+    adapters, the Help layer, multi-target behavior, broader custom actions,
     and real-device assistive-technology validation.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP

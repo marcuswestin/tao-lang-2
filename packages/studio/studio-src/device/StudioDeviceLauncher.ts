@@ -36,7 +36,7 @@ export type StudioDeviceLaunchInfo = {
  * plugged and unplugged; `cable` is for when the phone is not on the Mac's network at all, which
  * the Mac cannot detect for itself.
  */
-type StudioDeviceLaunchRoute = 'auto' | 'cable'
+export type StudioDeviceLaunchRoute = 'auto' | 'cable'
 
 export type StudioDeviceLaunchOpenResult = {
   hostName: string

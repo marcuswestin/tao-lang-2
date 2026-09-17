@@ -170,6 +170,34 @@ Describe('TR.Data provider foundation', () => {
     )
   })
 
+  Test('offers deterministic interaction candidates across stores without deleted rows or placeholders', () => {
+    const definition = (name: string): TaoDataSchemaDefinition => ({
+      name,
+      entities: {
+        InteractionPickerChoice: {
+          collection: 'InteractionPickerChoices',
+          fields: { Name: { kind: 'text', unique: true } },
+        },
+      },
+    })
+    const first = TR.Data.Schema(definition('InteractionPickerFirst'), memoryConnection())
+    const second = TR.Data.Schema(definition('InteractionPickerSecond'), memoryConnection())
+    TR.Data.Create(first, 'InteractionPickerChoice', { Name: TR.Value('First') })
+    TR.Data.Create(first, 'InteractionPickerChoice', { Name: TR.Value('Deleted') })
+    TR.Data.Create(second, 'InteractionPickerChoice', { Name: TR.Value('Second') })
+    const deleted = first.query({ entity: 'InteractionPickerChoice', filters: [] })[1]
+    TR.Data.Delete(TR.Value(deleted))
+    const placeholder = first.referencedHandle('InteractionPickerChoice', 'Name', 'Missing')
+
+    const candidates = TR.Data.interactionCandidates('InteractionPickerChoice')
+    const identities = candidates.map(candidate => TR.Data.interactionCandidateIdentity(candidate))
+
+    Expect(candidates.map(candidate => TR.Data.Read(candidate, 'Name'))).toEqual(['First', 'Second'])
+    Expect(identities[0]).not.toBe(identities[1])
+    Expect(candidates).not.toContain(deleted)
+    Expect(candidates).not.toContain(placeholder)
+  })
+
   Test('derives entity guard availability while preserving a deleted handle identifier', () => {
     const schema = TR.Data.Schema(noteDefinition, memoryConnection())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Transient') })
@@ -430,6 +458,34 @@ Describe('TR.Data provider foundation', () => {
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Fresh') })
     await TR.Data.Settle(schema)
     Expect(stored).toContain('Fresh')
+  })
+
+  Test('settle waits for an automatic reset and the replacement load', async () => {
+    const reset = Deferred<void>()
+    let stored: string | undefined = '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}'
+    const connection: TaoDataConnection = {
+      automaticReset: true,
+      load: () => stored,
+      reset: async () => {
+        await reset.promise
+        stored = undefined
+      },
+      save: value => {
+        stored = value
+      },
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    let settled = false
+    const settling = schema.settle().then(() => {
+      settled = true
+    })
+    await flushMicrotasks()
+    Expect(settled).toBe(false)
+
+    reset.resolve()
+    await settling
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows.Error).toBe('')
   })
 
   Test('spends one automatic reset per corrupt load and then reports the failure', async () => {

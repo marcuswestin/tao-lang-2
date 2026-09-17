@@ -29,9 +29,12 @@ export const commandValidationMessages = {
   titleOverride: (name: string) => `Command '${name}' may not override Title.`,
   unknownBinding: (name: string, slot: string) => `Command '${name}' has no slot or member named '${slot}'.`,
   shortcutKey: 'A shortcut needs one key after its modifiers.',
+  shortcutDuplicateModifier: (modifier: string) => `Shortcut modifier '${modifier}' is repeated.`,
   shortcutModifier: (modifier: string) =>
     `Shortcut modifier '${modifier}' is not registered; Tao registers ${registeredShortcutModifiers.join(', ')}.`,
   shortcutPlatformModifier: (modifier: string) => `A shortcut names 'primary', never the platform key '${modifier}'.`,
+  shortcutReserved: (shortcut: string) =>
+    `Shortcut '${shortcut}' is owned by Tao's interaction reducer and cannot invoke a command.`,
 } as const
 
 /**
@@ -226,16 +229,19 @@ function reportMemberValue(
  * is the whole vocabulary any current feature writes; a computed shortcut is checked by its type.
  */
 function validateShortcut(value: AST.Expression, ctx: ValidationContext): void {
-  const segments = shortcutSegments(value)
-  if (!segments) {
+  const shortcut = ASTUtils.parseShortcut(value)
+  if (!shortcut) {
     return
   }
-  const key = segments.at(-1)
-  if (key === undefined || key.length === 0) {
+  if (!shortcut.ok) {
+    if (shortcut.reason === 'duplicate-modifier') {
+      ctx.error(value, commandValidationMessages.shortcutDuplicateModifier(shortcut.duplicateModifier!))
+      return
+    }
     ctx.error(value, commandValidationMessages.shortcutKey)
     return
   }
-  for (const modifier of segments.slice(0, -1)) {
+  for (const modifier of shortcut.modifiers) {
     const normalized = modifier.toLowerCase()
     if (platformShortcutModifiers.includes(normalized)) {
       ctx.error(value, commandValidationMessages.shortcutPlatformModifier(modifier))
@@ -245,33 +251,7 @@ function validateShortcut(value: AST.Expression, ctx: ValidationContext): void {
       ctx.error(value, commandValidationMessages.shortcutModifier(modifier))
     }
   }
-}
-
-/** shortcutSegments reads a literal shortcut as its `+`-separated words, or nothing when computed. */
-function shortcutSegments(value: AST.Expression): readonly string[] | undefined {
-  const literal = literalShortcutText(value)
-  return literal === undefined ? undefined : literal.split('+').map(segment => segment.trim())
-}
-
-function literalShortcutText(value: AST.Expression): string | undefined {
-  if (AST.isStringLiteral(value)) {
-    return unquoted(value.value)
+  if (ASTUtils.reservedCommandShortcuts.has(shortcut.canonical)) {
+    ctx.error(value, commandValidationMessages.shortcutReserved(shortcut.canonical))
   }
-  if (AST.isValueReference(value)) {
-    const target = value.target.ref
-    return AST.isAliasDeclaration(target) && AST.isExpression(target.value)
-      ? literalShortcutText(target.value)
-      : undefined
-  }
-  if (AST.isBinaryExpression(value) && value.operator === '+') {
-    const left = literalShortcutText(value.left)
-    const right = literalShortcutText(value.right)
-    // A modifier carries its own separator, so the chain is a plain concatenation.
-    return left === undefined || right === undefined ? undefined : `${left}${right}`
-  }
-  return undefined
-}
-
-function unquoted(value: string): string {
-  return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value
 }

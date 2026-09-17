@@ -1,19 +1,26 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 
-let instrumented = false
+let activeInstrumentation: boolean | undefined
 
 /**
- * configureActionInstrumentation turns debugger gates on for the compilation that follows. An
+ * withActionInstrumentation scopes debugger gates to one synchronous generated-module pass. An
  * instrumented body awaits `TR.Debug.At` before every statement, so every action block is async.
  */
-export function configureActionInstrumentation(enabled: boolean): void {
-  instrumented = enabled
+export function withActionInstrumentation<ResultT>(enabled: boolean, compile: () => ResultT): ResultT {
+  Assert(activeInstrumentation === undefined, 'action instrumentation compilation is not nested')
+  activeInstrumentation = enabled
+  try {
+    return compile()
+  } finally {
+    activeInstrumentation = undefined
+  }
 }
 
 /** Whether this compilation emits debugger gates. */
 export function actionInstrumentationEnabled(): boolean {
-  return instrumented
+  return activeInstrumentation === true
 }
 
 /** Whether executing this block can suspend its owning action transaction. */
@@ -21,7 +28,7 @@ export function actionBlockRequiresAsync(
   block: AST.ActionBlock | undefined,
   seen: ReadonlySet<AST.ActionDeclaration> = new Set(),
 ): boolean {
-  if (instrumented) {
+  if (actionInstrumentationEnabled()) {
     return true
   }
   return block?.statements.some(statement => {

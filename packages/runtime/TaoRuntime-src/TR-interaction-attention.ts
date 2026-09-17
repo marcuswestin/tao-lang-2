@@ -60,7 +60,14 @@ type PendingVerb = {
   verb: TaoInteractionVerb
 }
 
+export type TaoPendingSearchResult = Readonly<{
+  identity: string
+  label: string
+  value: { evaluate(): { jsValue: unknown } }
+}>
+
 type PendingAllocatedKey = Readonly<{ prefix: string; surface: string }>
+export type TaoInteractionKeySurface = 'hints' | 'overview' | 'palette' | 'verbs'
 
 /** InteractionAttention is the sole mutable owner of modality-neutral attention state. */
 export class InteractionAttention {
@@ -77,6 +84,9 @@ export class InteractionAttention {
   #overview = false
   #palette = false
   #paletteTarget: string | undefined
+  #pendingSearch = false
+  #pendingSearchTarget: string | undefined
+  #pendingTarget: string | undefined
   #pressed = new Set<string>()
   #hovered = new Set<string>()
   #revision = 0
@@ -122,11 +132,28 @@ export class InteractionAttention {
       && occurrence.region === this.#focusRegion
   }
 
+  /** keyAssignments is the one identity-to-key resolver used by dispatch and visible surfaces. */
+  keyAssignments(surface: TaoInteractionKeySurface): TaoInteractionKeyAssignments {
+    // Palette letters always narrow. It therefore has no letter accelerators to display or dispatch.
+    if (surface === 'palette') {
+      return Object.freeze({})
+    }
+    const assignments = allocateInteractionKeys(this.allocationCandidates(surface), {
+      explicitKeys: this.catalog.explicitKeys(),
+      previous: this.#allocations.get(surface),
+    })
+    this.#allocations.set(surface, assignments)
+    return assignments
+  }
+
   read(): TaoAttentionSnapshot {
     const region = this.node(this.#focusRegion)
     const target = this.node(this.targetIdentity())
     const palette = this.paletteVerbs()
     const paletteTarget = palette.find(entry => entry.identity === this.#paletteTarget)
+    const pendingTarget = this.node(this.#pendingTarget)
+    const pendingSearchTarget = this.pendingSearchResults()
+      .find(entry => entry.identity === this.#pendingSearchTarget)
     return Object.freeze({
       candidates: Object.freeze([...this.#candidates]),
       ...(this.#engaged === undefined ? {} : { engaged: this.#engaged }),
@@ -146,10 +173,18 @@ export class InteractionAttention {
           label: verb.label,
         })
       )),
-      ...(target === undefined && paletteTarget === undefined
+      ...(target === undefined && paletteTarget === undefined && pendingTarget === undefined
+          && pendingSearchTarget === undefined
         ? {}
         : paletteTarget !== undefined
         ? { target: paletteTarget!.identity, targetLabel: paletteTarget!.label }
+        : pendingSearchTarget !== undefined
+        ? { target: pendingSearchTarget.identity, targetLabel: pendingSearchTarget.label }
+        : pendingTarget !== undefined
+        ? {
+          target: pendingTarget.identity,
+          ...(pendingTarget.label() === undefined ? {} : { targetLabel: pendingTarget.label() }),
+        }
         : { target: target!.identity, ...(target!.label() === undefined ? {} : { targetLabel: target!.label() }) }),
       ...(this.#verbPending === undefined
         ? {}
@@ -221,6 +256,9 @@ export class InteractionAttention {
     this.#verbs = []
     this.#verbsOpen = false
     this.#verbPending = undefined
+    this.#pendingSearch = false
+    this.#pendingSearchTarget = undefined
+    this.#pendingTarget = undefined
     this.recomputeCandidates()
     this.emit()
   }
@@ -241,6 +279,9 @@ export class InteractionAttention {
     this.#verbs = []
     this.#verbsOpen = false
     this.#verbPending = undefined
+    this.#pendingSearch = false
+    this.#pendingSearchTarget = undefined
+    this.#pendingTarget = undefined
     this.#palette = false
     this.#paletteTarget = undefined
     node.live?.focus?.()
@@ -282,7 +323,13 @@ export class InteractionAttention {
     this.#allocatedPrefix = undefined
     this.#overview = false
     this.#hints = false
-    this.#palette ? this.recomputePaletteCandidates() : this.recomputeCandidates()
+    if (this.#palette) {
+      this.recomputePaletteCandidates()
+    } else if (this.#verbPending) {
+      this.recomputePendingCandidates()
+    } else {
+      this.recomputeCandidates()
+    }
     this.emit()
   }
 
@@ -291,6 +338,9 @@ export class InteractionAttention {
     this.#verbs = this.catalog.verbsFor(this.node(this.targetIdentity()), this.outline)
     this.#verbsOpen = this.#verbs.length > 0
     this.#verbPending = undefined
+    this.#pendingSearch = false
+    this.#pendingSearchTarget = undefined
+    this.#pendingTarget = undefined
     this.emit()
   }
 
@@ -338,6 +388,38 @@ export class InteractionAttention {
       return false
     }
     this.advancePending(value)
+    return true
+  }
+
+  /** pendingSearchResults projects stored handles into stable picker entries for the active slot. */
+  pendingSearchResults(): readonly TaoPendingSearchResult[] {
+    const pending = this.#verbPending
+    if (!pending?.slot.entity || !this.#pendingSearch) {
+      return []
+    }
+    const narrowing = this.memory().narrowing
+    return DataControls.interactionCandidates(pending.slot.type).flatMap(value => {
+      const identity = DataControls.interactionCandidateIdentity(value)
+      const label = DataControls.interactionCandidateLabel(value)
+      if (
+        identity === undefined
+        || label === undefined
+        || (narrowing.length > 0 && !matchesNarrowing([label], narrowing))
+      ) {
+        return []
+      }
+      return [{ identity, label, value: runtimeInteractionValue(value) }]
+    })
+  }
+
+  /** searchPendingStore switches an entity request from mounted targets to its store-backed picker. */
+  searchPendingStore(): boolean {
+    if (!this.#verbPending?.slot.entity) {
+      return false
+    }
+    this.#pendingSearch = true
+    this.recomputePendingCandidates()
+    this.emit()
     return true
   }
 
@@ -390,7 +472,12 @@ export class InteractionAttention {
         return true
       }
       if (this.#verbPending) {
-        const target = this.#candidates[0]
+        if (this.#pendingSearch) {
+          const result = this.pendingSearchResults()
+            .find(candidate => candidate.identity === this.#pendingSearchTarget)
+          return result ? this.choosePendingSearchResult(result.value) : true
+        }
+        const target = this.#pendingTarget ?? this.#candidates[0]
         return target ? this.choosePendingTarget(target) : true
       }
       const target = this.targetIdentity()
@@ -410,6 +497,14 @@ export class InteractionAttention {
           this.targetAndActivate(target)
         }
       }
+      return true
+    }
+    if (this.#palette && ['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(key)) {
+      this.movePalette(key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1)
+      return true
+    }
+    if (this.#verbPending && ['ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(key)) {
+      this.movePending(key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1)
       return true
     }
     if (key === '.') {
@@ -434,6 +529,9 @@ export class InteractionAttention {
       }
       this.#allocatedPrefix = undefined
       this.#verbPending = undefined
+      this.#pendingSearch = false
+      this.#pendingSearchTarget = undefined
+      this.#pendingTarget = undefined
       this.#verbs = []
       this.#verbsOpen = false
       this.#hints = false
@@ -447,7 +545,13 @@ export class InteractionAttention {
     if (key === 'Backspace') {
       const memory = this.memory()
       memory.narrowing = [...memory.narrowing].slice(0, -1).join('')
-      this.#palette ? this.recomputePaletteCandidates() : this.recomputeCandidates()
+      if (this.#palette) {
+        this.recomputePaletteCandidates()
+      } else if (this.#verbPending) {
+        this.recomputePendingCandidates()
+      } else {
+        this.recomputeCandidates()
+      }
       this.emit()
       return true
     }
@@ -484,12 +588,6 @@ export class InteractionAttention {
       this.move(key === 'ArrowUp' ? -1 : 1)
       return true
     }
-    // A bare declared key dispatches here and nowhere earlier: every key the reducer owns has
-    // already returned above, and key allocation excludes declared keys, so a generated hint never
-    // shadows this one. What it does preempt is narrowing, which is the whole point of declaring it.
-    if (!key.includes('+') && this.runShortcut(key)) {
-      return true
-    }
     if (isPrintable(key) && !isReservedPunctuation(key)) {
       this.narrow(key)
       return true
@@ -518,6 +616,9 @@ export class InteractionAttention {
     this.#overview = false
     this.#palette = false
     this.#paletteTarget = undefined
+    this.#pendingSearch = false
+    this.#pendingSearchTarget = undefined
+    this.#pendingTarget = undefined
     this.#pressed.clear()
     this.#verbPending = undefined
     this.#verbs = []
@@ -600,6 +701,9 @@ export class InteractionAttention {
       this.#verbs = []
       this.#verbsOpen = false
       this.#verbPending = undefined
+      this.#pendingSearch = false
+      this.#pendingSearchTarget = undefined
+      this.#pendingTarget = undefined
       this.emit()
       return
     }
@@ -660,6 +764,8 @@ export class InteractionAttention {
     const required = verb.slots?.filter(slot => slot.required && command?.unfilledSlots().includes(slot.name)) ?? []
     if (command && required.length > 0) {
       this.#verbPending = { command, slot: required[0]!, slots: required, verb }
+      this.#pendingSearch = false
+      this.memory().narrowing = ''
       this.recomputePendingCandidates()
       this.emit()
       return
@@ -683,6 +789,10 @@ export class InteractionAttention {
     const slots = pending.slots.slice(1)
     if (slots.length === 0) {
       this.#verbPending = undefined
+      this.#pendingSearch = false
+      this.#pendingSearchTarget = undefined
+      this.#pendingTarget = undefined
+      this.memory().narrowing = ''
       const current = command.read()
       if (current.enabled) {
         current.invoke()
@@ -692,6 +802,10 @@ export class InteractionAttention {
       return
     }
     this.#verbPending = { ...pending, command, slot: slots[0]!, slots }
+    this.#pendingSearch = false
+    this.#pendingSearchTarget = undefined
+    this.#pendingTarget = undefined
+    this.memory().narrowing = ''
     this.recomputePendingCandidates()
     this.emit()
   }
@@ -700,6 +814,8 @@ export class InteractionAttention {
     const pending = this.#verbPending
     if (!pending?.slot.entity) {
       this.#candidates = []
+      this.#pendingTarget = undefined
+      this.#pendingSearchTarget = undefined
       return
     }
     this.#candidates = this.outline.liveNodes()
@@ -709,13 +825,23 @@ export class InteractionAttention {
         || matchesNarrowing(node.corpus?.() ?? [node.label() ?? ''], this.memory().narrowing)
       )
       .map(node => node.identity)
+    if (this.#candidates.length === 0) {
+      this.#pendingSearch = true
+    }
+    if (!this.#candidates.includes(this.#pendingTarget ?? '')) {
+      this.#pendingTarget = this.#candidates[0]
+    }
+    const searchResults = this.pendingSearchResults()
+    if (!searchResults.some(entry => entry.identity === this.#pendingSearchTarget)) {
+      this.#pendingSearchTarget = searchResults[0]?.identity
+    }
   }
 
   private pendingRequest(slot: TaoCommandSlotDescription): 'input' | 'search' | 'targets' {
     if (!slot.entity) {
       return 'input'
     }
-    return this.#candidates.length > 0 ? 'targets' : 'search'
+    return !this.#pendingSearch && this.#candidates.length > 0 ? 'targets' : 'search'
   }
 
   private recomputeCandidates(): void {
@@ -784,9 +910,7 @@ export class InteractionAttention {
 
   private runAllocatedKey(key: string): boolean {
     if (this.#verbsOpen) {
-      const candidates = this.#verbs.filter(verb => verb.key === undefined)
-        .map(verb => ({ identity: verb.identity, label: verb.label }))
-      return this.dispatchAllocatedKey('verbs', candidates, key, identity => {
+      return this.dispatchAllocatedKey('verbs', key, identity => {
         const verb = this.#verbs.find(candidate => candidate.identity === identity)
         if (verb) {
           this.runVerb(verb)
@@ -794,32 +918,14 @@ export class InteractionAttention {
       })
     }
     if (this.#hints) {
-      const candidates = this.#candidates.flatMap(identity => {
-        const label = this.node(identity)?.label()
-        return label === undefined ? [] : [{ identity, label }]
-      })
-      return this.dispatchAllocatedKey('hints', candidates, key, identity => {
+      return this.dispatchAllocatedKey('hints', key, identity => {
         this.#hints = false
         this.target(identity)
       })
     }
     if (this.#overview) {
-      const candidates = this.outline.liveNodes()
-        .filter(node => node.kind === 'region' && this.active(node))
-        .flatMap(node => {
-          const label = node.label()
-          return label === undefined ? [] : [{ identity: node.identity, label }]
-        })
-      return this.dispatchAllocatedKey('overview', candidates, key, identity => {
+      return this.dispatchAllocatedKey('overview', key, identity => {
         this.focusRegion(identity)
-      })
-    }
-    if (this.#palette) {
-      const candidates = this.paletteVerbs().filter(verb => verb.key === undefined)
-        .map(verb => ({ identity: verb.identity, label: verb.label }))
-      return this.dispatchAllocatedKey('palette', candidates, key, identity => {
-        this.#paletteTarget = identity
-        this.emit()
       })
     }
     this.#allocatedPrefix = undefined
@@ -827,24 +933,19 @@ export class InteractionAttention {
   }
 
   private dispatchAllocatedKey(
-    surface: string,
-    candidates: readonly Readonly<{ identity: string; label: string }>[],
+    surface: TaoInteractionKeySurface,
     key: string,
     dispatch: (identity: string) => void,
   ): boolean {
-    const assignments = allocateInteractionKeys(candidates, {
-      explicitKeys: this.catalog.explicitKeys(),
-      previous: this.#allocations.get(surface),
-    })
-    this.#allocations.set(surface, assignments)
-    const normalized = key.toLocaleLowerCase()
+    const assignments = this.keyAssignments(surface)
+    const normalized = key.toLowerCase()
     const pending = this.#allocatedPrefix?.surface === surface ? this.#allocatedPrefix.prefix : undefined
     const attempts = pending === undefined ? [normalized] : [`${pending}${normalized}`, normalized]
     for (const attempt of attempts) {
-      const exact = candidates.find(candidate => assignments[candidate.identity] === attempt)
+      const exact = Object.entries(assignments).find(([, assignment]) => assignment === attempt)
       if (exact) {
         this.#allocatedPrefix = undefined
-        dispatch(exact.identity)
+        dispatch(exact[0])
         return true
       }
       if (Object.values(assignments).some(assignment => assignment.startsWith(attempt))) {
@@ -859,11 +960,57 @@ export class InteractionAttention {
   private recomputePaletteCandidates(): void {
     const entries = this.paletteVerbs()
     this.#candidates = entries.map(entry => entry.identity)
-    if (entries.length === 1) {
-      this.#paletteTarget = entries[0]!.identity
-    } else if (!entries.some(entry => entry.identity === this.#paletteTarget)) {
-      this.#paletteTarget = undefined
+    if (!entries.some(entry => entry.identity === this.#paletteTarget)) {
+      this.#paletteTarget = entries[0]?.identity
     }
+  }
+
+  private movePalette(delta: number): void {
+    const entries = this.paletteVerbs()
+    if (entries.length === 0) {
+      this.#paletteTarget = undefined
+      this.emit()
+      return
+    }
+    const current = entries.findIndex(entry => entry.identity === this.#paletteTarget)
+    const index = current < 0 ? (delta > 0 ? -1 : 0) : current
+    this.#paletteTarget = entries[(index + delta + entries.length) % entries.length]!.identity
+    this.emit()
+  }
+
+  private movePending(delta: number): void {
+    if (this.#pendingSearch) {
+      const entries = this.pendingSearchResults()
+      this.#pendingSearchTarget = cyclicIdentity(entries, this.#pendingSearchTarget, delta)
+    } else {
+      const entries = this.#candidates.map(identity => ({ identity }))
+      this.#pendingTarget = cyclicIdentity(entries, this.#pendingTarget, delta)
+    }
+    this.emit()
+  }
+
+  private allocationCandidates(
+    surface: TaoInteractionKeySurface,
+  ): readonly Readonly<{ identity: string; label: string }>[] {
+    if (surface === 'verbs') {
+      return this.#verbs.filter(verb => verb.key === undefined)
+        .map(verb => ({ identity: verb.identity, label: verb.label }))
+    }
+    if (surface === 'hints') {
+      return this.#candidates.flatMap(identity => {
+        const label = this.node(identity)?.label()
+        return label === undefined ? [] : [{ identity, label }]
+      })
+    }
+    if (surface === 'overview') {
+      return this.outline.liveNodes()
+        .filter(node => node.kind === 'region' && this.active(node))
+        .flatMap(node => {
+          const label = node.label()
+          return label === undefined ? [] : [{ identity: node.identity, label }]
+        })
+    }
+    return []
   }
 
   private regionOf(node: TaoOutlineLiveNode): TaoOutlineLiveNode | undefined {
@@ -1064,6 +1211,23 @@ function paletteEntityIdentity(node: TaoOutlineLiveNode): string {
   return typeof entity === 'string' && typeof handle === 'string'
     ? `@entity/${encodeURIComponent(entity)}/${encodeURIComponent(handle)}`
     : node.identity
+}
+
+function cyclicIdentity(
+  entries: readonly Readonly<{ identity: string }>[],
+  current: string | undefined,
+  delta: number,
+): string | undefined {
+  if (entries.length === 0) {
+    return undefined
+  }
+  const currentIndex = entries.findIndex(entry => entry.identity === current)
+  const index = currentIndex < 0 ? (delta > 0 ? -1 : 0) : currentIndex
+  return entries[(index + delta + entries.length) % entries.length]!.identity
+}
+
+function runtimeInteractionValue(jsValue: unknown): { evaluate(): { jsValue: unknown } } {
+  return Object.freeze({ evaluate: () => ({ jsValue }) })
 }
 
 function isBareLetter(value: string): boolean {

@@ -31,6 +31,11 @@ export type TaoPublishedUpdate = {
   sourceUpdateId?: string
 }
 
+/** TaoUpdateHistory is newest-first publication history for one application channel. */
+export type TaoUpdateHistory = {
+  updates: readonly TaoPublishedUpdate[]
+}
+
 /** TaoUpdatePublicationData is the POST /updates data envelope emitted by TaoUpdateClient. */
 export type TaoUpdatePublicationData = {
   assets: readonly ExpoUpdateAsset[]

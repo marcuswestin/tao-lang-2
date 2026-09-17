@@ -166,7 +166,7 @@ function createCommands(): Command {
       ignoreGit?: boolean
       major?: boolean
       minor?: boolean
-      noWait?: boolean
+      wait?: boolean
       notes?: string
       patch?: boolean
       rollback?: boolean
@@ -181,7 +181,7 @@ function createCommands(): Command {
           bump: shipBump(options),
           dryRun: options.dryRun,
           ignoreGit: options.ignoreGit,
-          noWait: options.noWait,
+          noWait: options.wait === false,
           notes: options.notes,
           rollback: options.rollback,
           update: options.update,

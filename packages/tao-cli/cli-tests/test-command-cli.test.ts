@@ -383,7 +383,15 @@ Describe('tao test CLI', () => {
     }, async rootDir => {
       await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
         await withJestStub(rootDir, async () => {
-          const result = await runTaoCliForTest(['test', rootDir])
+          const oneRoot = FS.resolvePath('One', rootDir)
+          const twoRoot = FS.resolvePath('Two', rootDir)
+          const result = await runTaoCliForTest([
+            'test',
+            oneRoot,
+            twoRoot,
+            // An overlapping explicit file must not compile or run the same declaration twice.
+            FS.resolvePath('App.test.tao', oneRoot),
+          ])
 
           Expect(result.exitCode).toBe(0)
           Expect(result.stdout).toContain('Found 2 Tao test files')

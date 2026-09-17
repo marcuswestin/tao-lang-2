@@ -21,28 +21,18 @@ export const TestsFormatter = {
     f.oneSpaceAfter('press')
   },
 
-  /** PressPhaseStep preserves the phase before the ordinary selector target. */
-  PressPhaseStep(f) {
-    f.oneSpaceAfter('press', 'down', 'up')
-    f.oneSpaceBetweenProperties('selector', 'target')
-  },
-
-  HoverStep(f) {
-    f.oneSpaceAfter('hover')
-    f.oneSpaceBetweenProperties('selector', 'target')
-  },
-
-  FocusStep(f) {
-    f.oneSpaceAfter('head')
-  },
-
-  PressKeyStep(f) {
+  /** PressWordStep preserves the ID-based verb before the ordinary selector target. */
+  PressWordStep(f) {
     f.oneSpaceAfter('press')
-    f.oneSpaceBetweenProperties('subject', 'value')
+    f.oneSpaceBeforeProperty('tag')
+    f.oneSpaceBetweenProperties('subject', 'target')
+    f.oneSpaceBetweenProperties('selector', 'target')
   },
 
-  NarrowStep(f) {
-    f.oneSpaceBetweenProperties('head', 'value')
+  InteractionWordStep(f) {
+    f.oneSpaceBeforeProperty('tag')
+    f.oneSpaceBetweenProperties('selector', 'target')
+    f.oneSpaceBetweenProperties('head', 'target')
   },
 
   PressToolbarCommandStep(f) {

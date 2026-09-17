@@ -6,6 +6,7 @@ import type {
   StudioMoveRenderRequest,
   StudioRemoveRenderPatchRequest,
   StudioRenderGap,
+  StudioWorkspaceDesignContext,
   StudioWrapRenderContainer,
   StudioWrapRenderPatchRequest,
 } from './studio-contract'
@@ -33,7 +34,11 @@ import { ensureUiNamesImported } from './studio-use-imports'
  * element like any palette insertion, so the file's `use … from @tao/ui` gains it when it is missing;
  * otherwise the wrap compiles into "Could not resolve reference to RenderTarget named 'Stack'".
  */
-export async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
+export async function wrapRender(
+  document: AST.Document,
+  request: StudioWrapRenderPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<string> {
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'wrap renders')
   if (request.wrapper !== 'Col' && request.wrapper !== 'Row' && request.wrapper !== 'Stack') {
@@ -41,10 +46,14 @@ export async function wrapRender(document: AST.Document, request: StudioWrapRend
   }
   const file = document.parseResult.value
   const render = requireRenderById(file, request.renderId)
+  // Resolve namespace ownership before constructing an edit. A same-spelled local or foreign import
+  // would otherwise turn a valid source tree into an ambiguous or validator-invalid one.
+  ensureUiNamesImported(document.textDocument.getText(), file, [request.wrapper], context.files)
   return await Formatter.formatCode(ensureUiNamesImported(
     wrapRenderSource(document.textDocument.getText(), render, request.wrapper),
     file,
     [request.wrapper],
+    context.files,
   ))
 }
 
@@ -58,15 +67,26 @@ function wrapRenderSource(source: string, render: AST.Render, wrapper: StudioWra
   if (AST.isRenderStatement(render) && render.injection !== undefined) {
     Errors.throwUserInput('Cannot wrap an injected root render.')
   }
-  const selectedSource = source.slice(cstNode.offset, cstNode.end).trimEnd()
+  const tag = AST.attachedTag(render)
+  const statement = directViewRenderStatement(render)
+  const slice = tag !== undefined && statement !== undefined && AST.isBlock(statement.$container)
+    ? blockStatementSlices(source, statement.$container).find(candidate => candidate.statement === statement)
+    : undefined
+  const editStart = slice?.start ?? cstNode.offset
+  const selectedSource = source.slice(editStart, cstNode.end).trimEnd()
+  const normalizedSource = editStart === cstNode.offset
+    ? selectedSource
+    : selectedSource.split('\n').map(line => line.startsWith(indent) ? line.slice(indent.length) : line).join('\n')
   const childSource = AST.isRenderStatement(render)
-    ? selectedSource.replace(/^render\s+/, '')
-    : selectedSource
+    ? normalizedSource.replace(/^render\s+/, '')
+    : normalizedSource
   const rootPrefix = AST.isRenderStatement(render) ? 'render ' : ''
   return applySourceEdits(source, [{
     end: cstNode.end,
-    replacement: `${rootPrefix}${wrapper}() [gap 8, pad 8] {\n${indentSnippet(childSource, childIndent)}\n${indent}}`,
-    start: cstNode.offset,
+    replacement: `${editStart === cstNode.offset ? '' : indent}${rootPrefix}${wrapper}() [gap 8, pad 8] {\n${
+      indentSnippet(childSource, childIndent)
+    }\n${indent}}`,
+    start: editStart,
   }])
 }
 
@@ -261,7 +281,9 @@ export async function removeRender(document: AST.Document, request: StudioRemove
   const tag = AST.attachedTag(render)
   // A `#studio_rect_` tag is the private marker that ties this render back to its sketch rectangle.
   // Deleting the render would take the marker with it and leave Unsnap with nothing to undo.
-  if (tag?.tag.startsWith('#studio_rect_') === true) {
+  const snapped = [render, ...AST.streamAllContents(render).filter(AST.isRender)]
+    .some(candidate => AST.attachedTag(candidate)?.tag.startsWith('#studio_rect_') === true)
+  if (snapped) {
     Errors.throwUserInput(
       'Studio cannot remove a render snapped in from a sketch; Unsnap the sketch first.',
     )

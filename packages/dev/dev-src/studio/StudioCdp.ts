@@ -248,6 +248,45 @@ export class StudioCdp {
     })
   }
 
+  /** Clicks one point inside an element's box, for targets whose own center is not the live hit area. */
+  async clickAtOffset(selector: string, offset: Point): Promise<void> {
+    requireFiniteNumber(offset.x, 'Studio browser horizontal click offset')
+    requireFiniteNumber(offset.y, 'Studio browser vertical click offset')
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
+    const point = await this.evaluate<Point>(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing clickable element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      const rect = element.getBoundingClientRect()
+      const x = rect.left + Math.max(1, Math.min(rect.width - 1, ${offset.x}))
+      const y = rect.top + Math.max(1, Math.min(rect.height - 1, ${offset.y}))
+      return { x, y }
+    })()`)
+    await this.clickAt(point)
+  }
+
+  async wheel(
+    selector: string,
+    delta: Point,
+    options: { primary?: boolean } = {},
+  ): Promise<void> {
+    requireFiniteNumber(delta.x, 'Studio browser horizontal wheel delta')
+    requireFiniteNumber(delta.y, 'Studio browser vertical wheel delta')
+    const point = await this.elementCenter(selector, 'wheel target')
+    const primaryModifier = options.primary === true
+      ? await this.evaluate<boolean>("navigator.platform.toLowerCase().includes('mac')") ? 4 : 2
+      : 0
+    await this.client.send('Input.dispatchMouseEvent', {
+      deltaX: delta.x,
+      deltaY: delta.y,
+      modifiers: primaryModifier,
+      type: 'mouseWheel',
+      ...point,
+    })
+  }
+
   async drag(fromSelector: string, toSelector: string, options: { steps?: number } = {}): Promise<void> {
     const steps = options.steps ?? 8
     requirePositiveInteger(steps, 'Studio browser drag steps')
@@ -285,21 +324,6 @@ export class StudioCdp {
     })()`)
     const start = await this.elementCenter(selector, 'drag source')
     await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
-  }
-
-  /**
-   * Drags the pointer between two viewport points without scrolling anything first. Use it when the
-   * caller has already established, by hit-testing, exactly where the gesture must start and end.
-   */
-  async dragBetween(start: Point, end: Point, options: { steps?: number } = {}): Promise<void> {
-    const steps = options.steps ?? 8
-    requirePositiveInteger(steps, 'Studio browser drag steps')
-    for (
-      const [value, label] of [[start.x, 'start x'], [start.y, 'start y'], [end.x, 'end x'], [end.y, 'end y']] as const
-    ) {
-      requireFiniteNumber(value, `Studio browser drag ${label}`)
-    }
-    await this.dispatchDrag(start, end, steps)
   }
 
   /**
@@ -684,17 +708,37 @@ export class StudioCdp {
   }
 
   async evaluateInFrame<Result>(urlPrefix: string, expression: string): Promise<Result> {
-    const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
-    const frameId = findFrameId(tree.frameTree, urlPrefix)
-    if (frameId === undefined) {
+    let lastContextFailure: Error | undefined
+    const contextId = await Time.pollUntil(async () => {
+      try {
+        const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
+        const frameId = findFrameId(tree.frameTree, urlPrefix)
+        if (frameId === undefined) {
+          return undefined
+        }
+        const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
+          frameId,
+          grantUniveralAccess: true,
+          worldName: 'tao-studio-smoke',
+        })
+        return world.executionContextId
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        lastContextFailure = Errors.asError(error)
+        return undefined
+      }
+    }, { intervalMs: 100, timeoutMs: 10_000 })
+    if (contextId === undefined) {
+      if (lastContextFailure !== undefined) {
+        throw lastContextFailure
+      }
       Errors.throwHostEnvironment(`Studio preview frame is missing: ${urlPrefix}`)
     }
-    const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
-      frameId,
-      grantUniveralAccess: true,
-      worldName: 'tao-studio-smoke',
-    })
-    return await this.evaluateInContext(expression, world.executionContextId)
+    // Do not retry after Runtime.evaluate begins: the page action may already have dispatched even
+    // when navigation destroys its response context. Repeating it could duplicate a user action.
+    return await this.evaluateInContext(expression, contextId)
   }
 
   async waitFor(expression: string, options: { timeoutMs?: number } = {}): Promise<void> {
@@ -704,6 +748,9 @@ export class StudioCdp {
         last = await this.evaluate(expression)
         return !!last
       } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
         last = Errors.messageOf(error)
         return false
       }
@@ -712,6 +759,32 @@ export class StudioCdp {
       return
     }
     Errors.throwHostEnvironment(`Timed out waiting for browser expression: ${expression}; last=${String(last)}`)
+  }
+
+  async waitForInFrame(
+    urlPrefix: string,
+    expression: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<void> {
+    let last: unknown
+    const satisfied = await Time.pollUntil(async () => {
+      try {
+        last = await this.evaluateInFrame(urlPrefix, expression)
+        return !!last
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        last = Errors.messageOf(error)
+        return false
+      }
+    }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 15_000 })
+    if (satisfied) {
+      return
+    }
+    Errors.throwHostEnvironment(
+      `Timed out waiting for browser frame expression: ${expression}; last=${String(last)}`,
+    )
   }
 
   private async evaluateInContext<Result>(expression: string, contextId?: number): Promise<Result> {

@@ -76,6 +76,8 @@ export type CodeEditorProps = {
   Layout?: TR.TaoVisualLayout
   Lens?: CodeEditorLensProps
   Lsp?: CodeEditorLsp
+  /** Changes whenever the host wants an already-selected range revealed again. */
+  RevealRevision?: number
   Selection?: Readonly<{ anchor: number; head?: number }>
   SelectionChange?: (selection: Readonly<{ anchor: number; head: number }>) => void
   Slots?: Readonly<Record<string, React.ReactNode>>
@@ -131,6 +133,7 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const selectionChange = React.useRef(props.SelectionChange)
   const drop = React.useRef(props.Drop)
   const lens = React.useRef(props.Lens)
+  const handledRevealRevision = React.useRef(0)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
@@ -306,7 +309,7 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     applyingExternalContent.current = true
     try {
       const length = props.Content.length
-      const selection = props.Selection === undefined
+      const requestedSelection = props.Selection === undefined
         ? {
           anchor: Math.min(view.state.selection.main.anchor, length),
           head: Math.min(view.state.selection.main.head, length),
@@ -315,9 +318,10 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
           anchor: Math.max(0, Math.min(props.Selection.anchor, length)),
           head: Math.max(0, Math.min(props.Selection.head ?? props.Selection.anchor, length)),
         }
+      const selection = codeEditorExternalSelection(view.state.selection.main, requestedSelection)
       view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: props.Content },
-        selection,
+        ...codeEditorExternalUpdate(view.state.doc.toString(), props.Content, selection),
+        effects: CodeEditorLens.effects.externalEdit.of(null),
       })
     } finally {
       applyingExternalContent.current = false
@@ -349,36 +353,23 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     }
     const anchor = Math.max(0, Math.min(props.Selection.anchor, view.state.doc.length))
     const head = Math.max(0, Math.min(props.Selection.head ?? anchor, view.state.doc.length))
-    if (view.state.selection.main.anchor !== anchor || view.state.selection.main.head !== head) {
+    const revealRevision = props.RevealRevision ?? 0
+    if (
+      view.state.selection.main.anchor !== anchor
+      || view.state.selection.main.head !== head
+      || handledRevealRevision.current !== revealRevision
+    ) {
       // A selection the host sets is a navigation: a search hit, a screen, a token, a diagnostic, or
       // an element picked in the preview. Bring it on screen; the person's own cursor moves never
       // reach here because they already equal the view's selection.
-      view.dispatch({ scrollIntoView: true, selection: { anchor, head } })
-      // CodeMirror scrolls the selection's end into view on its next frame, which in a narrow editor
-      // drags a long selection sideways until its start is hidden. Correct on the frame after that:
-      // keep the line's first character in view so a selected line is never read from the middle.
-      const frame = requestAnimationFrame(() => {
-        if (editor.current !== view) {
-          return
-        }
-        view.requestMeasure({
-          read: measured => {
-            const lineStart = measured.coordsAtPos(measured.state.doc.lineAt(anchor).from)
-            const gutters = measured.dom.querySelector('.cm-gutters')
-            const contentLeft = (gutters ?? measured.scrollDOM).getBoundingClientRect()[gutters ? 'right' : 'left']
-            return lineStart === null ? 0 : Math.min(0, lineStart.left - contentLeft)
-          },
-          write: (overflow, measured) => {
-            if (overflow < 0) {
-              measured.scrollDOM.scrollLeft = Math.max(0, measured.scrollDOM.scrollLeft + overflow)
-            }
-          },
-        })
+      view.dispatch({
+        effects: EditorView.scrollIntoView(anchor, { x: 'start', y: 'center' }),
+        selection: { anchor, head },
       })
-      return () => cancelAnimationFrame(frame)
+      handledRevealRevision.current = revealRevision
     }
     return undefined
-  }, [props.Selection?.anchor, props.Selection?.head])
+  }, [props.RevealRevision, props.Selection?.anchor, props.Selection?.head])
 
   const native = TR.VisualNativeProps(props.Layout, props.Tag)
   const dataSet = native['dataSet']
@@ -397,6 +388,46 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       </React.Fragment>)}
     </div>
   )
+}
+
+/** An unchanged host selection belongs to the content update; only a changed range is navigation. */
+export function codeEditorExternalSelection(
+  current: Readonly<{ anchor: number; head: number }>,
+  requested: Readonly<{ anchor: number; head: number }>,
+): Readonly<{ anchor: number; head: number }> | undefined {
+  return current.anchor === requested.anchor && current.head === requested.head ? undefined : requested
+}
+
+/** Keeps CodeMirror state fields mapped by changing only the differing middle of a host update. */
+export function codeEditorExternalUpdate(
+  current: string,
+  next: string,
+  selection?: Readonly<{ anchor: number; head: number }>,
+): {
+  changes: { from: number; insert: string; to: number }
+  selection?: { anchor: number; head: number }
+} {
+  let from = 0
+  const sharedLength = Math.min(current.length, next.length)
+  while (from < sharedLength && current[from] === next[from]) {
+    from += 1
+  }
+  let suffix = 0
+  while (
+    suffix < current.length - from
+    && suffix < next.length - from
+    && current[current.length - suffix - 1] === next[next.length - suffix - 1]
+  ) {
+    suffix += 1
+  }
+  return {
+    changes: {
+      from,
+      insert: next.slice(from, next.length - suffix),
+      to: current.length - suffix,
+    },
+    ...(selection === undefined ? {} : { selection }),
+  }
 }
 
 function buildCodeEditorHighlightDecorations(

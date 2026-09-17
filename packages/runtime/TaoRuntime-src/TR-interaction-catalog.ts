@@ -191,7 +191,8 @@ export class CommandCatalog {
     const inFocusedRegion = [...this.#surfaces.values()]
       .filter(surface => {
         const parent = nodes.find(node => node.identity === surface.parent)
-        return (!parent || isActive(parent, nodes)) && (focusRegion === undefined || (modal
+        const regionScoped = parent?.kind === 'region' || isWithinNavigationSiblingRegion(surface.parent, nodes)
+        return regionScoped && (!parent || isActive(parent, nodes)) && (focusRegion === undefined || (modal
           ? surface.parent === modal.identity || isAncestor(modal.identity, surface.parent ?? '', nodes)
           : surface.parent === focusRegion
             || isAncestor(focusRegion, surface.parent ?? '', nodes)

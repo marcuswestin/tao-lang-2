@@ -14,6 +14,8 @@ export interface ValidationRunContext {
    * decide, so it is read from here rather than from `workspaceFiles`. Defaults to `workspaceFiles`.
    */
   readonly projectFiles?: readonly AST.TaoFile[]
+  /** One Langium document-build batch shares read-only workspace indexes across its file checks. */
+  readonly memoStore?: Map<string, unknown>
 }
 
 /** ValidationContext carries validation run state and diagnostic reporting. */
@@ -46,7 +48,7 @@ function createContext(
   accept: Langium.ValidationAcceptor,
   runContext: ValidationRunContext,
 ): ValidationContext {
-  const memos = new Map<string, unknown>()
+  const memos = runContext.memoStore ?? new Map<string, unknown>()
   return {
     ...runContext,
     memo<T>(key: string, compute: () => T): T {

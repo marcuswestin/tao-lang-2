@@ -4,16 +4,21 @@ import type { ConfigPlugin } from 'expo/config-plugins'
 export type TaoICloudService = 'CloudDocuments' | 'CloudKit'
 
 /**
- * TaoICloudPluginProps names the iCloud containers to grant (omitted, the bundle identifier's own)
- * and the services to enable (omitted, iCloud Documents alone).
+ * TaoICloudPluginProps names the iCloud containers to grant (omitted, the bundle identifier's own),
+ * the subset used for Documents ubiquity, and the services to enable (omitted, Documents alone).
  */
-export type TaoICloudPluginProps = { containers?: readonly string[]; services?: readonly TaoICloudService[] }
+export type TaoICloudPluginProps = {
+  containers?: readonly string[]
+  documentContainers?: readonly string[]
+  services?: readonly TaoICloudService[]
+}
 
 /** iCloudEntitlements merges the iCloud entitlements for the given services into a plist. */
 export function iCloudEntitlements(
   entitlements: Record<string, unknown>,
   containers: readonly string[],
   services?: readonly TaoICloudService[],
+  documentContainers?: readonly string[],
 ): Record<string, unknown>
 
 /** resolveContainers picks the declared containers, defaulting to the bundle identifier's own. */

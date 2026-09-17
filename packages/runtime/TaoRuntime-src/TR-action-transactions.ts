@@ -32,12 +32,25 @@ class ActionTransaction {
   readonly afterCommit: Array<() => void> = []
   readonly detached: Array<() => PromiseLike<unknown>> = []
   readonly frames: string[] = []
+  readonly frameTrail: string[] = []
   readonly launch = launchGeneration
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
   committed = false
   journal: TaoDebugJournalEntry | undefined
   failure: unknown
+  settled = false
+
+  pushFrame(name: string): void {
+    this.frames.push(name)
+    if (this.frames.length >= this.frameTrail.length) {
+      this.frameTrail.splice(0, this.frameTrail.length, ...this.frames)
+    }
+  }
+
+  popFrame(): void {
+    this.frames.pop()
+  }
 
   resource<ValueT>(
     key: object,
@@ -98,6 +111,22 @@ let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
 
+/** TaoActionContinuation is the compiler-carried transaction identity for one async action root. */
+export type TaoActionContinuation = Readonly<{ transaction?: object }>
+
+/** captureActionContinuation binds generated continuation segments to their invoking transaction. */
+export function captureActionContinuation(): TaoActionContinuation {
+  return { ...(activeTransaction ? { transaction: activeTransaction } : {}) }
+}
+
+/** resumeActionContinuation selects the transaction owned by the generated segment about to run. */
+export function resumeActionContinuation(continuation: TaoActionContinuation): void {
+  const transaction = continuation.transaction as ActionTransaction | undefined
+  if (transaction && !transaction.settled) {
+    activeTransaction = transaction
+  }
+}
+
 /**
  * beginActionLaunch ends the launch every running action root belongs to. A root the ending launch
  * started can still be suspended — on an `ask`, or on any other await — and the instance it was
@@ -150,8 +179,8 @@ export function runAction(
     const transaction = new ActionTransaction()
     let pending = false
     activeTransaction = transaction
-    transaction.journal = journalStart(name, arguments_)
-    transaction.frames.push(name)
+    transaction.pushFrame(name)
+    transaction.journal = journalStart(name, transaction.frameTrail)
     try {
       const result = body()
       if (isPromiseLike(result)) {
@@ -198,7 +227,9 @@ export function runAction(
 }
 
 function finishRootSuccess(transaction: ActionTransaction): void {
-  activeTransaction = undefined
+  if (activeTransaction === transaction) {
+    activeTransaction = undefined
+  }
   if (abandonedByLaunch(transaction)) {
     // Every resource this root touched is still private to the transaction, so dropping it without
     // committing is the rollback. Publishing here would write the ended launch's work into the one
@@ -215,7 +246,9 @@ function finishRootFailure(
   name: string,
   arguments_: readonly unknown[],
 ): void {
-  activeTransaction = undefined
+  if (activeTransaction === transaction) {
+    activeTransaction = undefined
+  }
   transaction.rollback()
   transaction.failure = error
   if (abandonedByLaunch(transaction)) {
@@ -225,8 +258,11 @@ function finishRootFailure(
 }
 
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
-  activeTransaction = suspendedTransaction
-  transaction.frames.pop()
+  transaction.settled = true
+  if (activeTransaction === undefined && suspendedTransaction && !suspendedTransaction.settled) {
+    activeTransaction = suspendedTransaction
+  }
+  transaction.popFrame()
   settleJournal(transaction)
   if (transaction.committed) {
     for (const effect of transaction.afterCommit) {
@@ -256,7 +292,7 @@ function settleJournal(transaction: ActionTransaction): void {
   const failure = transaction.failure
   journalSettle(transaction.journal, outcome, {
     externalEffect: transaction.externalEffects,
-    frames: transaction.frames,
+    frames: transaction.frameTrail,
     failureCase: failure instanceof TaoActionFailure ? failure.caseName : undefined,
   })
 }
@@ -294,7 +330,7 @@ function runJoinedAction(
   name: string,
   body: () => unknown,
 ): void | Promise<void> {
-  transaction.frames.push(name)
+  transaction.pushFrame(name)
   let pending = false
   try {
     const result = body()
@@ -306,14 +342,14 @@ function runJoinedAction(
           recordActionFailureFrames(error, transaction.frames)
           throw error
         },
-      ).finally(() => transaction.frames.pop())
+      ).finally(() => transaction.popFrame())
     }
   } catch (error) {
     recordActionFailureFrames(error, transaction.frames)
     throw error
   } finally {
     if (!pending) {
-      transaction.frames.pop()
+      transaction.popFrame()
     }
   }
 }

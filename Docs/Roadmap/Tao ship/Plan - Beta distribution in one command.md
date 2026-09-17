@@ -1,10 +1,9 @@
 # Plan - Beta distribution in one command
 
-Status: **plan with every decision settled** as of 2026-09-02; slice 1 is ready for an
-implementation prompt. This plan cuts the first implementable slice out of `../Tao ship.md` — the exploration
-that owns the whole ship program — and narrows it to one outcome: a developer runs one `tao`
-command, and a beta tester installs the app on their phone. Nothing here is language law; where
-it touches grammar it proposes and defers to `../Tao Revolution/Decisions.md`.
+Status: **implemented software contract, reconciled 2026-09-16**. The dated research and original
+slice proposals remain below to preserve how the direction was chosen; this status and _Command
+surface_ describe what landed. External App Store/TestFlight success, an installed OTA, signed or
+notarized Studio, and physical-device acceptance have not been established by repository tests.
 
 **Direction settled, 2026-09-02.** Two spellings, ruled by Ro:
 
@@ -13,23 +12,22 @@ tao ship            # build locally, upload, and submit to App Store review, aut
 tao ship --beta     # the same build to TestFlight, with the recipients who should receive it
 ```
 
-Over the day the ruling was refined three times; _Command surface_ below is the authoritative
-form. Plain `tao ship` is the App Store motion. `--beta` is TestFlight, with recipients. The
-companion app's delivery lane gets its own flag when that app exists. Android and Expo
-publishing are out of scope. The sections below were written before these rulings; where they
-say TestFlight is "the beta channel", read it as `--beta`, and where they assume EAS cloud
-builds, read _Build lane_ below.
+Over the day the ruling was refined three times; _Command surface_ below is authoritative. Plain
+`tao ship` is the App Store motion and `--beta` is TestFlight. Shipping is filesystem-only: it
+may inspect Git for provenance, but never stages, commits, tags, or pushes. Android and Expo/EAS
+publishing are out of scope. The EAS and Android analysis below is historical research, not the
+current implementation.
 
 ## The outcome
 
 ```bash
-tao ship WordFlowerInstantDB
+tao ship . --app WordFlowerInstantDB --beta
 ```
 
-From a clean checkout, with the developer's own Expo and Apple accounts, that one command
-compiles the variant in release mode, derives the native app configuration from the
-declarations, builds a signed iOS binary in the cloud, uploads it to TestFlight, and prints the
-state the developer needs next:
+With the developer's Apple prerequisites, that command compiles the variant in release mode,
+derives native configuration from source and the project lock, builds a signed iOS binary locally
+through Xcode, uploads it to TestFlight through App Store Connect, and prints the state the developer
+needs next:
 
 ```text
 Compiled WordFlowerInstantDB (release)                       2s
@@ -43,10 +41,9 @@ The tester's experience: an email from TestFlight, one tap to install, the app u
 icon and name. The second and later rounds get faster in the next slice: a compiled-bundle update
 reaches the installed build in about a minute without a new binary or a store upload.
 
-Android rides the same command with a flag, `tao ship WordFlowerInstantDB --android`, and ends
-in an install link and QR code for an APK, because that path needs no store account at all.
+The original Android/APK proposal did not land and remains out of scope.
 
-## Why TestFlight plus an APK link, and not the alternatives
+## Historical research — TestFlight, APK, and alternative lanes
 
 The research behind this section was done on 2026-09-01 against Expo's and Apple's current
 documentation; the facts are in `Research - Beta distribution lanes.md` beside this file. The
@@ -81,15 +78,22 @@ runtime version can be a computed native fingerprint, which is exactly the "comp
 hand-declared" compatibility gate `../Tao ship.md` wants, so the update slice inherits a working
 mechanism instead of designing one.
 
-The substrate ruling this plan assumes is the exploration's recommendation: EAS underneath,
-the developer's own accounts, no Tao service in the path. Everything below is the mechanics of
-that lane, and every mechanism is one a later Tao-managed front can reuse unchanged.
+This comparison predates the local-Xcode ruling. EAS was not adopted; the implemented binary lane
+uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol update service.
 
 ## Where things stand
 
-- `tao compile` writes `_gen_tao-app/` into one checked-in Expo host, `packages/runtime-toolchain`,
-  whose `app.json` names the app "Tao Runtime" and declares no bundle identifier, no version
-  source, no updates client, no icon. There is no `eas.json` and no `expo-updates` dependency.
+- `tao ship` implements release compilation, the no-Studio bundle proof, local Expo prebuild and
+  Xcode archive/export, resumable App Store Connect/TestFlight lifecycle, and Tao-hosted OTA publish
+  and compatible rollback.
+- The command is serialized per repository and filesystem-only. It atomically writes the authored
+  project version and the `ship` concern of `.tao-project/lock.jsonc`, while preserving concurrent
+  lock concerns, the Git index, refs, and commit history byte-for-byte.
+- Release provenance records the exact HEAD and dirty-tree fingerprint without requiring a clean
+  checkout. Build numbers are monotonic over local and remote history.
+- Runtime compatibility combines the native fingerprint used as the Expo runtime version with a
+  canonical semantic data-schema fingerprint. Publication and rollback must be compatible with
+  every supported binary; assets are exported and published as resolvable Expo artifacts.
 - `tao dev` starts Metro with `expo start --host lan` and opens Expo Go on simulators and connected
   phones. Tao moved to Expo SDK 57 on 2026-09-15, so the physical-iPhone lane can no longer depend
   on the App Store's SDK 54 Expo Go; it now needs a development build. The build this plan produces
@@ -99,15 +103,12 @@ that lane, and every mechanism is one a later Tao-managed front can reuse unchan
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
   WordFlowerInstantDBStore }`. Its InstantDB datasource points at `localhost:9020`, so the first
   real beta needs a hosted Instant app id; the local stack is not reachable from a tester's phone.
-- The compiler already has a `release` validation mode, exercised only by design tests. Nothing
-  proves a release bundle carries no Studio machinery; the exploration names that proof as a ship
-  requirement.
+- The release bundle proof rejects Studio markers before native packaging.
 - The previous repository ran a development client on physical devices with `expo prebuild` and
   `expo run:ios --device`, and pinned `eas-cli` as a dependency. Its `app.json` is a usable
   reference for the fields the derived configuration must fill.
-- The agent sandbox already allows egress to `expo.dev` hosts and writes to `~/.expo`, so an agent
-  can run the cloud lane from a sandboxed shell. Apple's hosts are not on the allowlist, which only
-  matters for `eas build --local`, where signing talks to Apple from the developer's machine.
+- Repository tests prove orchestration and artifacts with injected clients. They do not prove a
+  real App Store submission, TestFlight install, installed-binary OTA, or signed/notarized Studio.
 
 ## The design
 
@@ -118,6 +119,7 @@ that lane, and every mechanism is one a later Tao-managed front can reuse unchan
 ```bash
 tao ship [path] [--app NAME] [--patch | --minor | --major] [--yes] [--ignore-git] [--dry-run]   # App Store
 tao ship [path] ... --beta[=a@example.com,b@example.com]                                        # TestFlight
+tao ship [path] ... --update [--rollback]                                                        # compatible OTA
 ```
 
 - **Project discovery.** `path` defaults to the current directory; `tao ship` climbs from there
@@ -132,27 +134,29 @@ tao ship [path] ... --beta[=a@example.com,b@example.com]                        
   three to force a bump of an unconsumed version. A `--beta` build of an unconsumed version
   never bumps, and neither does the first store submission of one, which is what makes a tested
   beta and the store release the same version. Every build gets a distinct build number, a UTC
-  timestamp `yyyyMMddHHmm`, which Apple requires to increase within a version and which needs no
-  counter. The bump is written into source, the lock is updated, and when the project is inside
-  a git repository the command commits the bump and tags it `v<semver>`; a beta build is not
-  tagged, but every build embeds the commit hash and a dirty flag in its bundle so a tester's
-  report maps back to source. Before touching anything the command checks that the repository
-  is clean; a dirty tree is a precursor to fix, unless `--ignore-git` says to proceed regardless.
+  timestamp-derived floor made monotonic against every locally or remotely observed build number.
+  The bump is written into source and the lock is updated atomically. The command never stages,
+  commits, tags, or pushes. Every build embeds the exact HEAD plus clean/dirty provenance and a
+  dirty-content fingerprint so a tester's report maps back to the bytes built. A dirty tree is
+  rejected by default; `--ignore-git` permits it without weakening or hiding that provenance.
 - **Ship what was tested.** When the current version already has a processed TestFlight build
   whose embedded commit is the working tree's commit, plain `tao ship` submits that build for
-  review instead of building again; the action list says so.
+  review instead of building again; the action list says so. A dirty TestFlight artifact is never
+  eligible for App Store promotion.
 - **After the upload.** Apple processes a build for minutes before it can join a TestFlight
   group or a review submission. The command waits with progress by default, `--no-wait` returns
   at once, and every step is recorded in the lock so a rerun resumes where it stopped rather
-  than uploading twice. TestFlight's "What to Test" text is derived from the git log since the
-  previous build's commit, editable through `--notes`.
+  than uploading twice. TestFlight's "What to Test" text uses explicit `--notes` when provided
+  and otherwise derives bounded notes from recorded release provenance. Drafts and partially
+  completed submissions resume; a terminally failed or invalid build is rejected, not polled into
+  apparent success.
 - **Precursors, automated where possible.** Every step that needs the developer, such as the
-  Apple membership, the App Store Connect API key, the app record, or the dirty tree above, is
+  Apple membership, the App Store Connect API key, or the app record, is
   handled in order: automated when Apple's tooling allows, and otherwise the command states
   exactly what to do, with the URL, and waits for a keypress once it is done. Nothing ships until
   every precursor is satisfied. _What the developer provides_ below is that list.
 - **The action list and the gate.** With precursors done, the command prints the actions it will
-  take, in order: bump, commit and tag when in git, prebuild, archive, upload, and either the
+  take, in order: source/lock writes, prebuild, archive, upload, and either the
   App Store review submission or the TestFlight distribution. Unless `--yes` was passed, it asks
   whether to proceed, Y/n. `--dry-run` stops after the list, so the whole command up to the gate
   is exercised at no cost; implement it first and test against it.
@@ -173,6 +177,10 @@ tao ship [path] ... --beta[=a@example.com,b@example.com]                        
   with recipients covers the need. Slice 2's update server is therefore Tao's own, on the Tao
   Lang servers the companion app needs anyway, speaking the open expo-updates protocol the
   runtime client already implements.
+- **`--update` and `--rollback`.** An update publishes a real Expo bundle and resolvable assets only
+  when its native runtime and canonical semantic schema are compatible with every supported binary.
+  Rollback walks compatible publication history and republishes an earlier artifact; it never jumps
+  outside that compatibility set.
 
 Flags stay few on purpose. Profiles, credentials, and identifiers are derived or remembered,
 never passed.
@@ -198,8 +206,9 @@ The local pipeline, all Apple-owned tooling, runs on the derived host:
    and whose `destination` is `upload` signs the archive and uploads it to App Store Connect in
    one step with the same key. Xcode 15 or later is required: Xcode 14 accepted the key for
    signing only. Neither `altool`, rewritten and deprecated for uploads in Xcode 26, nor
-   Transporter is involved. The derived configuration sets `usesNonExemptEncryption: false`, so
-   the upload never stops at the export-compliance question.
+   Transporter is involved. The derived configuration includes an export-compliance declaration
+   only when source/configuration proves it; unknown status is omitted rather than falsely declared
+   exempt, so Apple may require the developer to answer the question.
 4. The App Store Connect API, called with the same key, does what Xcode does not: create the
    App Store version and submit it for review, create the TestFlight groups, add testers, assign
    the build, and invite people to the team. A small typed client over the handful of endpoints
@@ -243,7 +252,7 @@ and where a human remains.
 | Archive and upload                    | Yes, Xcode 15+ | `xcodebuild -exportArchive` with `destination: upload` and the key                                           | none                                                                                                                  |
 | A person on the team                  | Yes, to send   | `POST /v1/userInvitations` with an Admin key                                                                 | the invitee clicks the activation link, once                                                                          |
 | TestFlight groups and testers         | Yes            | `POST /v1/betaGroups`, `POST /v1/betaTesters`, `POST /v1/betaAppReviewSubmissions` for external groups       | a tester accepts the TestFlight invitation, once; Apple's beta review wait for externals                              |
-| Export compliance                     | Yes            | `usesNonExemptEncryption: false` in the derived configuration                                                | none                                                                                                                  |
+| Export compliance                     | Only if proven | include the declaration only from authoritative project facts                                                | answer in App Store Connect when Tao cannot prove status                                                              |
 
 So the developer provides three things, once per team, and one thing per app; `tao ship`
 derives, creates, or dictates everything else.
@@ -294,18 +303,19 @@ the one credential the tool needs.
    cannot be created due to an invalid Program License Agreement" message seen on 2026-09-02, are
    this precursor, named with the two URLs where the Account Holder accepts it), the app name
    resolving to one declaration, `project { id, name, version }` present, the lock's accepted
-   identifiers complete, a clean git tree unless `--ignore-git`, and for the InstantDB variant a
+   identifiers complete, exact Git/dirty provenance when a repository exists, and for the InstantDB variant a
    non-localhost `ApiURI`. Every miss is a `UserInputError` or `HostEnvironmentError` with the
    exact fix; in an interactive terminal the missing accepted identifiers are prompted and
    written, and each dictated precursor waits for a keypress.
-2. **Version and git.** Decide whether the version is consumed and bump it per _Command surface_;
-   compute the timestamp build number; when in a git repository, commit the bump and tag
-   `v<semver>` for a store build. Nothing here runs before the action list and the gate; preflight
-   only reports what will happen.
+2. **Version and provenance.** Decide whether the version is consumed and bump it per _Command
+   surface_; allocate a monotonic build number; record exact HEAD and dirty content. The source and
+   lock writes are one serialized filesystem transaction. Git index, refs, and history are never
+   mutated. Nothing here runs before the action list and gate; preflight only reports what will happen.
 3. **Release compile.** `Runtime.generateApp` with `validationMode: 'release'` and no Studio
    preview, into the host's `_gen_tao-app/` as today, plus a generated `_gen_tao-app/ship.json`
-   carrying the derived configuration: name, bundle identifier, version and build number,
-   `usesNonExemptEncryption: false`, the embedded commit hash and dirty flag, icon and splash. The
+   carrying the derived configuration: name, bundle identifier, version and build number, the
+   embedded commit hash and dirty fingerprint, proven export-compliance metadata when known, icon
+   and splash. The
    checked-in host gains an `app.config.js` that reads `ship.json` when present and falls back to
    today's "Tao Runtime" values when absent, so `tao dev` and every existing test see no change.
 4. **Bundle proof.** `expo export` of the release bundle, then an assertion that no Studio module
@@ -329,12 +339,10 @@ the one credential the tool needs.
 
 ### Cost and time per round
 
-| Round                                  | Wall clock                                       | Plan cost                                               |
-| -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
-| First binary to TestFlight             | cloud build 10–20 min, Apple processing 5–30 min | 1 of 15 free iOS builds per month, low-priority queue   |
-| Android APK link                       | cloud build 5–15 min                             | 1 of 15 free Android builds per month                   |
-| Update to an installed build (slice 2) | about a minute, picked up on next launch         | free to 1,000 monthly active users                      |
-| Local build on this Mac (slice 4)      | as fast as Xcode                                 | no build quota; needs Xcode, fastlane, and Apple egress |
+| Round                                  | Wall clock                                | Direct cost                                |
+| -------------------------------------- | ----------------------------------------- | ------------------------------------------ |
+| First binary to TestFlight             | local Xcode build + Apple processing      | no build quota; Apple Developer membership |
+| Update to an installed build (slice 2) | upload plus the client's next-launch poll | Tao update-service hosting                 |
 
 The update round is the one a beta tester's feedback loop actually runs on, which is why slice 2
 follows slice 1 immediately rather than waiting for the migration program.
@@ -349,15 +357,17 @@ decisions 2 and 4 and can be pulled into a tranche independently.
 
 ### Slice 0 — now the `--expo` flag
 
-An Expo Go bridge was planned here for the zero-account case. Ro's rulings of 2026-09-02 first
-gave that case to `tao ship --beta` through the companion app, then kept the Expo lane as
-`tao ship --expo`; it lands with slice 2, whose update machinery it reuses. The account
+**Historical proposal, not implemented.**
+
+An Expo Go bridge was planned here for the zero-account case. An intermediate 2026-09-02 ruling
+gave that case to `tao ship --beta` through the companion app, then considered `tao ship --expo`.
+Neither proposal landed; `--beta` is TestFlight and there is no Expo ship lane. The account
 walkthrough for it is preserved in `Research - Beta distribution lanes.md`.
 
 ### Slice 1 — `tao ship` to the App Store and `--beta` to TestFlight
 
 Scope: the command as _Command surface_ settles it — project discovery, app selection through
-`--app`, `DefaultApp`, or a prompt, the semver bump with commit and tag, precursors with their
+`--app`, `DefaultApp`, or a prompt, the filesystem-only semver/lock transaction, precursors with their
 automation and keypress waits, `--dry-run`, the action list and the Y/n gate — plus preflight,
 the lock, derived host configuration, release compile, the bundle proof, the local pipeline of
 _Build lane_, the App Store Connect client for review submission and TestFlight groups and
@@ -377,32 +387,28 @@ Tests, in `packages/tao-cli/cli-tests/ship-command.test.ts` and the toolchain su
   control.
 - Preflight tests cover every miss and its message, interactive and non-interactive.
 
-Live acceptance: from a fresh clone, `tao ship --app WordFlowerInstantDB` bumps, commits, tags,
-builds, and submits; the build installs on Ro's phone from TestFlight and documents sync through
-the hosted Instant app. Act 1 of the exploration's driving use case.
+Acceptance boundary: repository tests cover orchestration, atomic writes, unchanged Git index/refs,
+resumption, and derived artifacts. A real TestFlight submission/install and hosted-data device run
+remain external acceptance and are not claimed by this record.
 
 ### Slice 2 — `--update`
 
-Scope: `expo-updates` in the host, `updates.url` and the fingerprint runtime-version policy in the
-derived configuration, a channel per variant, publishing the release bundle to Tao's own update
-server on the Tao Lang servers, which speaks the open expo-updates protocol, and rollback as a
-republish of the previous bundle. Standing up that server is this slice's first task.
-The summary states whether the update is compatible with the installed builds: same fingerprint
-means it lands, a changed fingerprint means a new binary is required and the command says so
-instead of publishing an update nothing will load.
+Scope: `expo-updates` in the host, Tao's Expo-protocol update service, a channel per variant, real
+exported assets, and compatible rollback. Runtime identity comes from the native fingerprint and
+schema identity from canonical semantics rather than CST text. Publication and rollback are checked
+against every supported binary, not only the most recent build.
 
 Tests: the fingerprint is computed from the host and asserted stable across a copy-only change and
 changed by a new native dependency; the driver tests extend to the update and republish vectors.
 
-Live acceptance: a one-line copy change reaches the phone from slice 1 on next launch with no
-build. Act 2 of the driving use case. The exploration's schema gate stays out of this slice; a
-`data` change today is refused by the runtime envelope on device, and `--update` should say so in
-preflight rather than let the migration program's problem surface as a bricked beta.
+Acceptance boundary: repository artifact/protocol tests cover runtime headers, exported assets,
+semantic schema hashing, fleet compatibility, and rollback history. An installed-binary OTA remains
+external acceptance and is not claimed here.
 
 ### Slice 3 — testers
 
 Scope: `--invite <email>` adds a tester to the variant's TestFlight group through the App Store
-Connect API with the key EAS already created; an external group with a public link and the
+Connect API with the configured App Store Connect key; an external group with a public link and the
 one-time Beta App Review submission for testers outside the team; TestFlight feedback surfaced
 through `eas testflight:feedback` in a summary line. Android stays out of scope.
 
@@ -422,13 +428,14 @@ the exploration's slices 1 and 2 made concrete.
 
 Each has a recommended default so slice 1 can start on the ruling alone.
 
-1. **The verb.** Settled on 2026-09-02: `tao ship` for the app motion, with `--beta` for the
-   companion app. `tao publish` stays the package registry's verb. The MVP Justfile's
+1. **The verb.** Settled on 2026-09-02: `tao ship` for the app motion, with `--beta` for
+   TestFlight. `tao publish` stays the package registry's verb. The MVP Justfile's
    `tao build --profile` recipes and the Tao Future Justfiles' `build` and `publish` recipes are
    replaced by `tao ship` recipes.
 2. **Where the identifier facts live.** Settled on 2026-09-02, after the search Ro asked for;
    see _Precedent: accepted project metadata_ below. The ship facts are accepted project metadata
-   in the project's `.tao-project/` folder: the `ship` section of one committed `lock.jsonc`,
+   in the project's `.tao-project/` folder: the `ship` section of one repository-tracked
+   `lock.jsonc` that the developer commits,
    written by `tao ship` and never hand-edited, with the bundle identifier rule
    `<namespace>.<project id>[.<variant>]`. Ro's follow-up ruling the same day: one lock file for
    the whole project, sectioned, rather than one file per concern with a shared envelope.
@@ -439,8 +446,8 @@ Each has a recommended default so slice 1 can start on the ruling alone.
    already gives it.
 4. **The icon.** Settled on 2026-09-02: a Tao default asset and a badged variant default now; an
    `Icon` slot on `app` is argued separately as a grammar addition.
-5. **The Expo Go bridge.** Settled on 2026-09-02: not built; `tao ship --beta` through the
-   companion app covers the zero-account case.
+5. **The Expo Go bridge.** Settled on 2026-09-02: not built; `--beta` is TestFlight, not a
+   companion-app delivery path.
 6. **The Tao Studio companion app.** Settled on 2026-09-02: build it, for the development
    experience first and for pre-release testing by invited project members with Tao Lang
    accounts. See _The Tao Studio companion app_.
@@ -471,10 +478,9 @@ on 2026-09-02 found it in three places, and together they say what decision 2 sh
   `maxEditScope` bounds what generation may touch. Its rules are the useful ones: never rewrite a
   user-locked value, keep generated changes explainable, prefer edits at the token and recipe
   level.
-- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, already names the directory:
-  `.tao-project/` at the project root, holding `installs/`, `installs-lock.jsonc`, `cache/`, "and
-  more". The ship exploration's deploy-configuration sketch points at the same folder for the
-  fully-local lane.
+- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, names `.tao-project/` at the
+  project root. The single Tao-written `.tao-project/lock.jsonc` has independent `installs` and
+  `ship` concerns plus top-level `schemaVersion`; writers atomically merge fresh state.
 
 What the precedent settles for ship. The identifier facts are exactly this category of data:
 Tao derives or accepts them once, production builds read them, nobody types them into source,
@@ -482,10 +488,10 @@ and a stale or missing entry must fail the build rather than ship something wron
 belong in `.tao-project/`, not in a bespoke file beside the entry declaration, and they follow
 the design lock's contract rather than inventing one:
 
-- `.tao-project/lock.jsonc` is the project's one Tao-written lock, committed, with a top-level
-  section per concern. `tao ship` owns the `ship` section: per app variant, the bundle
-  identifier and Android package, the EAS project link, the version, the update channel and
-  runtime fingerprint, and provenance, which `tao ship` version wrote each entry and when. Every
+- `.tao-project/lock.jsonc` is the project's one Tao-written lock, with a top-level section per
+  concern. `tao ship` owns the `ship` section: per app variant, the bundle identifier, lifecycle
+  checkpoints, build provenance, update channel, supported binaries, runtime identity, and
+  semantic schema identity. Every
   entry has an identity, an input hash over the declarations it was derived from, and a status.
 - Prompted values arrive as `suggested` and are promoted to `accepted` by the same run that
   confirms them, which is the accept operation the design lock defined; `tao ship` refuses to
@@ -493,11 +499,9 @@ the design lock's contract rather than inventing one:
   hidden sibling file; the sibling is the design lock's answer for suggestions that outlive a run.
 - Secrets never enter the folder. Credentials stay in the substrate's stores, as this plan
   already says; the exploration's `config` resolution for provider ids reads the same lock.
-- The ship-held schema history the exploration wants for the migration gate is the same kind of
-  record and takes its own section when that slice lands; the design lock and the installs lock,
-  both unimplemented today, take sections of the same file when they arrive. That dissolves the
-  question of a shared envelope across files: there is one file, and the first section written
-  sets the entry shape the others reuse.
+- The single lock reserves the `installs` section (`lockfileVersion`, `requires`, and `projects`) for
+  package resolution, while the implemented shipping path owns `ship`; neither concern's writer may
+  interpret or erase the other.
 
 ## The Tao Studio companion app
 
@@ -509,7 +513,7 @@ are the assessment that preceded the decision and the design rules it carries; t
 itself is opened in `Roadmap.md`. Its dedicated product and implementation plan is
 `../Tao Studio companion app/Plan - Tao Studio companion app.md`.
 
-The original proposal: an iOS app published by Tao, paired with Tao Studio while developing,
+**Historical companion assessment.** The original proposal was an iOS app published by Tao, paired with Tao Studio while developing,
 whose first job is to put a build of your own Tao app on your phone without a native install,
 and whose second job is collaboration: invite people to your Tao project, and anyone with the
 app can accept the invitation, join the project, and run the app for beta testing. The key is
@@ -530,7 +534,7 @@ membership, and the invitation flow.
 **Does it make sense?** As a developer's tool, strongly. A Tao developer today needs the App
 Store Expo Go on their phone, and Expo has been unable to ship a new one since spring. The Tao
 app is the phone lane of `tao dev` and of Studio, under Tao's control, and it is where the
-on-device visual edit mode lives if that ever ships. As a beta channel it is the Expo Go model
+on-device visual edit mode lives if that ever ships. As a proposed collaboration preview channel it is the Expo Go model
 exactly: the tester installs the Tao app, accepts a project invitation, and runs the app inside
 Tao's shell with no Apple account on either side. It is not a replacement for TestFlight when
 the beta is a store rehearsal: the app runs under Tao's icon and name, not its own.
@@ -564,19 +568,20 @@ standing production posture; the Studio native-device canvas as the first custom
 shell release cadence that is rare and deliberate. The program needs slices 1 and 2 here, the
 derived host and the compiled-bundle update lane, and sequences after them.
 
-## Limits recorded honestly
+## Historical research limits, and current acceptance boundary
 
 - iOS requires the developer's paid Apple Developer Program membership and a first interactive
   Apple login with two-factor authentication, once; no design removes either.
-- Cloud builds on the free plan queue at low priority; a slow day can push the first round past an
-  hour. `--local` exists for that reason.
+- EAS cloud-build queue and APK observations below are retained research; the implemented iOS lane
+  builds locally with Xcode.
 - Internal TestFlight testers must be App Store Connect team members; a friend who is not one is
   an external tester, and external testers wait on a one-time Beta App Review per version.
 - An APK link works for a friend anywhere today, but Google's developer verification reaches
   four countries on 2026-09-30 and every certified device in 2027; from then the developer needs
   at least the free limited-distribution account, and Google's own pages disagree on whether
   direct APK installs in the four pilot countries are blocked at the regional deadline.
-- Any `data` change between rounds still refuses every existing snapshot until the migration
-  program lands. Slice 2's preflight must say so.
-- `tao ship` in slice 1 runs from this repository, as `tao dev` does today; a Tao user's own
-  project outside the repository is a later concern of the toolchain packaging, not of this plan.
+- OTA schema compatibility is derived from canonical semantic schema identity and checked against
+  every supported binary. Incompatible changes require a new binary rather than publishing an update
+  that existing installs cannot consume.
+- Repository tests include a relocated CLI/runtime artifact; that proof does not imply a signed,
+  notarized, installed, or store-accepted application.

@@ -18,6 +18,10 @@ export const datasourceMembershipValidationMessages = {
     `Datasource '${datasource}' stores unknown data collection '${name}'.`,
   derivedMembership: (datasource: string, base: string) =>
     `Datasource '${datasource}' derives from '${base}' and stores what it stores; which collections a datasource holds is not something a derivation changes.`,
+  emptyMembership: (datasource: string) =>
+    `Datasource '${datasource}' declares an empty Data list; omit Data to hold the unclaimed collections, or name the collections this datasource stores.`,
+  ambiguousBindingPatch: (app: string) =>
+    `App ${app} patches a Datasource set without naming the datasource to patch; write the patch on one listed binding, such as \`Datasource { Personal with { ... } }\`.`,
   alternativesBound: (app: string, left: string, right: string) =>
     `App ${app} binds '${left}' and '${right}', which store the same collections; an app binds one datasource per store.`,
   unboundStore: (app: string, collections: readonly string[], datasources: readonly string[]) =>
@@ -97,6 +101,10 @@ function validateMembershipLists(
     )
     if (base && own) {
       ctx.error(own, datasourceMembershipValidationMessages.derivedMembership(datasource.name, base.name))
+      continue
+    }
+    if (own?.block && own.block.entries.length === 0) {
+      ctx.error(own.block, datasourceMembershipValidationMessages.emptyMembership(datasource.name))
       continue
     }
     for (const member of own?.block?.entries ?? []) {
@@ -197,6 +205,12 @@ function validateCrossStoreRelations(
  * query.
  */
 function validateAppBinding(app: AST.AppValueDeclaration, scope: ProjectDataScope, ctx: ValidationContext): void {
+  const datasourceSlot = ASTUtils.effectiveAppConfiguration(app).get('Datasource')
+  if (datasourceSlot?.block) {
+    for (const patch of datasourceSlot.patches) {
+      ctx.error(patch, datasourceMembershipValidationMessages.ambiguousBindingPatch(app.name))
+    }
+  }
   const bindings = ASTUtils.appBoundDatasources(app)
   if (bindings.length === 0) {
     return

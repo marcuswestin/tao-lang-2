@@ -10,6 +10,7 @@ import {
   type TaoSyncProvider,
   testSyncProvider,
 } from '../TaoRuntime-src/TR-data-sync'
+import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 
 const definition: TaoDataSchemaDefinition = {
   entities: {
@@ -82,7 +83,7 @@ Describe('granular sync over the snapshot bridge', () => {
     const a = await world.replica('aaaaaaaa', { online: false })
     await a.connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'Offline' }], Paragraph: [] }))
     Expect(world.authority.history).toHaveLength(0)
-    Expect(JSON.parse(a.storage.values.get('tao-sync:default:SyncTest:Notes')!) as { pending: unknown[] })
+    Expect(JSON.parse(a.storage.values.get('tao-sync:["default","Notes"]')!) as { pending: unknown[] })
       .toMatchObject({
         pending: [{ origin: 'aaaaaaaa' }],
       })
@@ -91,7 +92,7 @@ Describe('granular sync over the snapshot bridge', () => {
     const relaunched = await world.replica('aaaaaaaa', { storage: a.storage })
     await settle()
     Expect(world.authority.history).toHaveLength(1)
-    Expect(JSON.parse(relaunched.storage.values.get('tao-sync:default:SyncTest:Notes')!) as { pending: unknown[] })
+    Expect(JSON.parse(relaunched.storage.values.get('tao-sync:["default","Notes"]')!) as { pending: unknown[] })
       .toMatchObject({
         pending: [],
       })
@@ -249,6 +250,135 @@ Describe('granular sync over the snapshot bridge', () => {
     // The bridge handed the remote row back after the save that predated it, and holds both.
     Expect(rows(latest(snapshots)).Note).toEqual(expected)
     Expect(rows((await connection.load()) ?? '').Note).toEqual(expected)
+  })
+
+  Test('rolls back a remote fold whose checkpoint failed, so the same batch can be retried', async () => {
+    let remote: TaoSyncObserver | undefined
+    let rejectPersist = true
+    const values = new Map<string, string>()
+    const storage: TaoKeyValueStorage = {
+      getItem: async key => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        if (rejectPersist) {
+          throw new HostEnvironmentError('checkpoint unavailable')
+        }
+        values.set(key, value)
+      },
+    }
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: () => undefined,
+          subscribe: observer => {
+            remote = observer
+            return () => undefined
+          },
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage },
+    )
+    const snapshots: string[] = []
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: value => snapshots.push(value ?? '') })
+    const changeSet: TaoChangeSet = {
+      id: '0000000000200000bbbbbbbb',
+      ops: [{
+        entity: 'Note',
+        fields: {
+          Pinned: { stamp: '0000000000200000bbbbbbbb', value: false },
+          Title: { stamp: '0000000000200000bbbbbbbb', value: 'Retry me' },
+        },
+        kind: 'upsert',
+        row: { id: 'Note-1', origin: 'bbbbbbbb' },
+      }],
+      origin: 'bbbbbbbb',
+      stamp: '0000000000200000bbbbbbbb',
+    }
+
+    await Expect(Promise.resolve(remote!.remote(changeSet))).rejects.toThrow('checkpoint unavailable')
+    rejectPersist = false
+    await remote!.remote(changeSet)
+
+    Expect(rows(latest(snapshots)).Note).toEqual([{
+      Id: 'Note-1~bbbbbbbb',
+      Pinned: false,
+      Title: 'Retry me',
+    }])
+  })
+
+  Test('continues with later pending commits when one transport push is rejected', async () => {
+    const attempts: string[] = []
+    let refused: string | undefined
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: changeSet => {
+            attempts.push(changeSet.id)
+            refused ??= changeSet.id
+            if (changeSet.id === refused) {
+              throw new HostEnvironmentError('record refused')
+            }
+          },
+          subscribe: () => () => undefined,
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      {
+        now: (() => {
+          let now = 10_000
+          return () => now++
+        })(),
+        origin: 'aaaaaaaa',
+        storage: memoryKeyValueStorage(),
+      },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: true, Title: 'Second' }], Paragraph: [] }))
+    await settle()
+
+    Expect(new Set(attempts).size).toBe(2)
+    Expect(attempts.filter(id => id === refused).length).toBeGreaterThan(1)
+  })
+
+  Test('keeps a checkpoint across schema-name changes and structurally separates scope/key pairs', async () => {
+    const storage = memoryKeyValueStorage()
+    const provider: TaoSyncProvider = {
+      connect: () => ({ push: () => undefined, subscribe: () => () => undefined }),
+    }
+    const first = snapshotConnectionOverSync(
+      provider,
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', scope: 'cloud:one', storage },
+    )
+    await first.load()
+    first.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await first.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'Kept' }], Paragraph: [] }))
+
+    const renamed = { ...definition, name: 'SyncTestWithAnotherCollection' }
+    const relaunched = snapshotConnectionOverSync(
+      provider,
+      { configuration: {}, schema: renamed, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', scope: 'cloud:one', storage },
+    )
+    Expect(rows((await relaunched.load()) ?? '').Note[0]?.Title).toBe('Kept')
+
+    const aliasA = snapshotConnectionOverSync(
+      provider,
+      { configuration: {}, schema: definition, storageKey: 'b:c' },
+      { origin: 'aaaaaaaa', scope: 'a', storage },
+    )
+    const aliasB = snapshotConnectionOverSync(
+      provider,
+      { configuration: {}, schema: definition, storageKey: 'c' },
+      { origin: 'bbbbbbbb', scope: 'a:b', storage },
+    )
+    await aliasA.load()
+    await aliasB.load()
+    await aliasA.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'A' }], Paragraph: [] }))
+    Expect(rows((await aliasB.load()) ?? '').Note).toEqual([])
   })
 
   Test('orders transport-minted stamps by wall time, then origin, below any later local edit', () => {

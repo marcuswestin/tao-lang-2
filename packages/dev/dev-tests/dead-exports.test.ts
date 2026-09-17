@@ -81,6 +81,19 @@ Describe('tao foreign binding exclusions', () => {
   Test('skips comments and prose that merely contain the word from', () => {
     Expect(names('// a view imported from ./Somewhere.tsx under a local name')).toEqual([])
     Expect(names('   Text("Shared from Skillet")')).toEqual([])
+    Expect(names('   Text("Fake from ./Somewhere.tsx")')).toEqual([])
+    Expect(names('/*\n view Fake() from ./Somewhere.tsx\n*/\nview Real() from ./Real.tsx')).toEqual(['Real'])
+  })
+
+  Test('does not treat injection fences inside strings or comments as syntax', () => {
+    const source = [
+      'Text("```")',
+      '// ```',
+      '/* ``` */',
+      'view Real() from ./Real.tsx',
+    ].join('\n')
+
+    Expect(names(source)).toEqual(['Real'])
   })
 
   Test('skips an inline TypeScript injection, which the compiler emits as its own module', () => {

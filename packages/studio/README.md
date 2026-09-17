@@ -169,7 +169,7 @@ likely to belong to another worktree as to this one — check before killing it.
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
 | `.artifacts/reviews/<reviewId>/`                              | Immutable web scenario visual-review bundles         |
-| `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
+| `.artifacts/tests/studio-canary/invocations/<id>/canary.json` | One native-canary invocation's isolated report       |
 | `.artifacts/logs/<lane>/<timestamp>/`                         | One lane run's per-node logs plus `summary.json`     |
 | `.artifacts/logs/<lane>/latest`                               | Symlink to that lane's newest run                    |
 | `.artifacts/timings/`                                         | Measured node durations the scheduler orders by      |

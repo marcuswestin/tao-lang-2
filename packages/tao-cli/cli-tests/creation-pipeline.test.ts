@@ -17,15 +17,17 @@ const outline = answer({
 const goodFields = answer({
   fields: [
     { name: 'Title', type: 'text', title: true },
-    { name: 'Days', type: 'number' },
-    { name: 'Booked', type: 'yesno' },
+    { name: 'Days', type: 'number', title: false },
+    { name: 'Booked', type: 'yesno', title: false },
   ],
 })
 const twoTitles = answer({
   fields: [{ name: 'Title', type: 'text', title: true }, { name: 'Where', type: 'text', title: true }],
 })
 const palette = answer({ canvas: '#ffffff', ink: '#111111', accent: '#ff6600' })
-const samples = answer({ rows: [{ Title: 'Lisbon', Days: 4, Booked: true }, { Title: 'Kyoto', Days: 10 }] })
+const samples = answer({
+  rows: [{ Title: 'Lisbon', Days: 4, Booked: true }, { Title: 'Kyoto', Days: 10, Booked: false }],
+})
 
 Describe('tao create pipeline', () => {
   Test('shapes a plan one small question at a time on a narrow window and heals the id', async () => {
@@ -108,9 +110,10 @@ Describe('tao create pipeline', () => {
         plural: 'Trips',
         singular: 'Trip',
         purpose: 'One trip.',
-        fields: [{ name: 'Title', type: 'text', title: true }, { name: 'Days', type: 'number' }, {
+        fields: [{ name: 'Title', type: 'text', title: true }, { name: 'Days', type: 'number', title: false }, {
           name: 'Booked',
           type: 'yesno',
+          title: false,
         }],
       }],
       palette: { canvas: '#ffffff', ink: '#111111', accent: '#ff6600' },

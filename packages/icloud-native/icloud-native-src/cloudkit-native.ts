@@ -35,6 +35,7 @@ export type TaoCloudKitNativeModule = {
   acknowledgeFetched(sessionId: string, batchId: string): Promise<void>
   addListener(event: 'cloudKitEvent', listener: (event: CloudKitEvent) => void): { remove(): void }
   fetchChanges(sessionId: string): Promise<void>
+  replayInbox(sessionId: string): Promise<void>
   sendChanges(sessionId: string, records: readonly CloudKitRecord[]): Promise<void>
   start(sessionId: string, container: string | null, zoneName: string, stateFileName: string): Promise<void>
   stop(sessionId: string): Promise<void>
@@ -85,15 +86,51 @@ export function cloudKitZonesOver(native: TaoCloudKitNativeModule): CloudKitZone
   return (container, zoneName) => {
     nextSessionId += 1
     const sessionId = `zone-${nextSessionId}`
-    const stateFileName = `${encodeURIComponent(container ?? 'default')}.${encodeURIComponent(zoneName)}.state`
-    const started = hostCall(native.start(sessionId, container ?? null, zoneName, stateFileName))
+    const stateFileName = cloudKitStateFileName(container, zoneName)
     let closed = false
+    let observer: CloudKitZoneObserver | undefined
+    const queued: CloudKitEvent[] = []
+    const dispatch = (event: CloudKitEvent): void => {
+      if (closed || event.sessionId !== sessionId) {
+        return
+      }
+      if (observer === undefined) {
+        queued.push(event)
+        return
+      }
+      if (event.kind === 'fetched') {
+        const batchId = event.batchId
+        observer.fetched(
+          event.modifications ?? [],
+          event.deletions ?? [],
+          () => (batchId === undefined
+            ? Promise.resolve()
+            : hostCall(native.acknowledgeFetched(sessionId, batchId))),
+        )
+      } else if (event.kind === 'sent') {
+        observer.sent(event.savedRecords ?? [], event.conflicts ?? [], event.failures ?? [])
+      } else if (event.kind === 'zoneDeleted') {
+        observer.zoneReset()
+      } else if (event.kind === 'accountChanged') {
+        observer.accountChanged(event.message ?? 'The iCloud account changed.')
+      } else {
+        observer.failed(event.message ?? 'CloudKit reported a failure.')
+      }
+    }
+    // Listen before start: CKSyncEngine may report live work immediately, and replay is explicitly
+    // requested only after the JavaScript observer is attached below.
+    const subscription = native.addListener('cloudKitEvent', dispatch)
+    const started = hostCall(native.start(sessionId, container ?? null, zoneName, stateFileName))
+    void started.catch(() => undefined)
     return {
       close: () => {
         if (closed) {
           return
         }
         closed = true
+        observer = undefined
+        queued.length = 0
+        subscription.remove()
         void started.then(() => native.stop(sessionId), () => undefined)
       },
       fetch: async () => {
@@ -104,39 +141,34 @@ export function cloudKitZonesOver(native: TaoCloudKitNativeModule): CloudKitZone
         await started
         await hostCall(native.sendChanges(sessionId, records))
       },
-      subscribe: observer => {
-        const subscription = native.addListener('cloudKitEvent', event => {
-          if (closed || event.sessionId !== sessionId) {
-            return
-          }
-          if (event.kind === 'fetched') {
-            const batchId = event.batchId
-            observer.fetched(
-              event.modifications ?? [],
-              event.deletions ?? [],
-              () => (batchId === undefined
-                ? Promise.resolve()
-                : hostCall(native.acknowledgeFetched(sessionId, batchId))),
-            )
-          } else if (event.kind === 'sent') {
-            observer.sent(event.savedRecords ?? [], event.conflicts ?? [], event.failures ?? [])
-          } else if (event.kind === 'zoneDeleted') {
-            observer.zoneReset()
-          } else if (event.kind === 'accountChanged') {
-            observer.accountChanged(event.message ?? 'The iCloud account changed.')
-          } else {
-            observer.failed(event.message ?? 'CloudKit reported a failure.')
+      subscribe: next => {
+        observer = next
+        for (const event of queued.splice(0)) {
+          dispatch(event)
+        }
+        void started.then(
+          () => hostCall(native.replayInbox(sessionId)),
+          (error: unknown) => Promise.reject(error),
+        ).catch((error: unknown) => {
+          if (!closed && observer === next) {
+            next.failed(Errors.messageOf(error))
           }
         })
-        started.catch((error: unknown) => {
-          if (!closed) {
-            observer.failed(Errors.messageOf(error))
+        return () => {
+          if (observer === next) {
+            observer = undefined
           }
-        })
-        return () => subscription.remove()
+        }
       },
     }
   }
+}
+
+/** cloudKitStateFileName structurally identifies a container/zone pair without delimiter aliases. */
+export function cloudKitStateFileName(container: string | undefined, zoneName: string): string {
+  const encodedContainer = encodeURIComponent(container ?? 'default')
+  const encodedZone = encodeURIComponent(zoneName)
+  return `v1-c${encodedContainer.length}-${encodedContainer}-z${encodedZone.length}-${encodedZone}.state`
 }
 
 /**

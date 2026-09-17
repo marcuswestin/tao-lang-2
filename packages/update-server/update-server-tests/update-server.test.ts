@@ -99,6 +99,21 @@ Describe('Tao update protocol server', () => {
     Expect(await noCompatibleUpdate.text()).toBe('')
   })
 
+  Test('rejects rollback aliases that do not exactly preserve the immutable source envelope', async () => {
+    const ids = ['source-1', 'rollback-2']
+    const updateService = service({ createUpdateId: () => ids.shift()! })
+    const asset = await uploadLaunchAsset(updateService.handle)
+    const source = await publish(updateService.handle, asset)
+
+    const response = await updateService.handle(publicationRequest(asset, {
+      runtimeVersion: 'native-2',
+      sourceUpdateId: source.manifest.id,
+    }))
+
+    Expect(response.status).toBe(400)
+    Expect(await response.text()).toContain('exact immutable source')
+  })
+
   Test('requires management authorization without reflecting or recording tokens', async () => {
     const recorded = recordedService(service())
     const secret = 'do-not-reflect-this-token'
@@ -217,33 +232,45 @@ async function publish(
   handle: (request: Request) => Promise<Response>,
   asset: ExpoUpdateAsset,
   overrides: {
+    dataSchemaFingerprint?: string
     message?: string
     metadata?: Readonly<Record<string, string>>
+    runtimeVersion?: string
     sourceUpdateId?: string
   } = {},
 ): Promise<{ manifest: { id: string }; sourceUpdateId?: string }> {
-  const response = await handle(authorizedRequest(
-    `${baseUrl}/v1/apps/wordflower/channels/stable/updates`,
-    {
-      body: JSON.stringify({
-        data: {
-          assets: [],
-          dataSchemaFingerprint: 'schema-1',
-          extra: { tao: { commit: 'abc123' } },
-          launchAsset: asset,
-          message: overrides.message,
-          metadata: overrides.metadata ?? {},
-          runtimeVersion: 'native-1',
-          sourceUpdateId: overrides.sourceUpdateId,
-        },
-        protocolVersion: 1,
-      }),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    },
-  ))
+  const response = await handle(publicationRequest(asset, overrides))
   Expect(response.status).toBe(201)
   return await response.json() as { manifest: { id: string }; sourceUpdateId?: string }
+}
+
+function publicationRequest(
+  asset: ExpoUpdateAsset,
+  overrides: {
+    dataSchemaFingerprint?: string
+    message?: string
+    metadata?: Readonly<Record<string, string>>
+    runtimeVersion?: string
+    sourceUpdateId?: string
+  } = {},
+): Request {
+  return authorizedRequest(`${baseUrl}/v1/apps/wordflower/channels/stable/updates`, {
+    body: JSON.stringify({
+      data: {
+        assets: [],
+        dataSchemaFingerprint: overrides.dataSchemaFingerprint ?? 'schema-1',
+        extra: { tao: { commit: 'abc123' } },
+        launchAsset: asset,
+        message: overrides.message,
+        metadata: overrides.metadata ?? {},
+        runtimeVersion: overrides.runtimeVersion ?? 'native-1',
+        sourceUpdateId: overrides.sourceUpdateId,
+      },
+      protocolVersion: 1,
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
 }
 
 function manifestRequest(channel: string, platform: 'android' | 'ios', runtimeVersion: string): Request {

@@ -1,11 +1,12 @@
 import { Errors, FS, Platform, Repo, Time } from '@shared'
 import type { CLI } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { StudioClientAssets } from '@studio'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
+import { DevDataServer } from '../dev-src/dev-data/DevDataServer'
 import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
-import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
+import { createRecentProjectStore, runStudioDev, StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
-import { packagedExpoCommand } from '../dev-src/studio/StudioPackagedService'
+import { packagedExpoCommand, startStudioPackagedService } from '../dev-src/studio/StudioPackagedService'
 import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
 import { stopStudioProcessTree, type StudioProcessTree } from '../dev-src/studio/StudioProcessTree'
 import { StudioSmoke } from '../dev-src/studio/StudioSmoke'
@@ -120,6 +121,126 @@ Describe('Studio native wrapper foundation', () => {
       argsPrefix: ['/Applications/Tao Studio.app/Contents/Resources/service/node_modules/expo/bin/cli'],
       executable: '/Applications/Tao Studio.app/Contents/Resources/service/bin/node',
     })
+  })
+
+  Test('starts and tears down the packaged Studio data and device authorities', async () => {
+    const root = await mkTestDir('tao-studio-packaged-data-')
+    const bundlePath = FS.resolvePath('studio.js', root)
+    await FS.writeText(bundlePath, 'globalThis.__TAO_STUDIO_PACKAGED__ = true')
+    const service = await startStudioPackagedService({
+      runtimeToolchainRoot: root,
+      stdlibRoot: root,
+      studioClientBundlePath: bundlePath,
+      testCommandPath: FS.resolvePath('tao', root),
+      testNodePath: Platform.runtimeProcess.execPath,
+      userStateRoot: FS.resolvePath('state', root),
+    })
+    const probe = `http://127.0.0.1:${service.devDataPort}/data/probe`
+    const deviceProbe = `http://127.0.0.1:${service.deviceGatewayPort}/device/probe`
+    try {
+      Expect((await fetch(probe)).status).toBe(401)
+      Expect(await (await fetch(deviceProbe)).json()).toEqual({ protocol: 'tao-studio-device-v1' })
+    } finally {
+      await service.stop()
+    }
+    await Expect(fetch(probe)).rejects.toThrow()
+    await Expect(fetch(deviceProbe)).rejects.toThrow()
+  })
+
+  Test('rolls back every packaged authority when a later startup stage fails', async () => {
+    const root = await mkTestDir('tao-studio-packaged-rollback-')
+    const bundlePath = FS.resolvePath('studio.js', root)
+    await FS.writeText(bundlePath, 'globalThis.__TAO_STUDIO_PACKAGED__ = true')
+    const options = {
+      runtimeToolchainRoot: root,
+      stdlibRoot: root,
+      studioClientBundlePath: bundlePath,
+      testCommandPath: FS.resolvePath('tao', root),
+      testNodePath: Platform.runtimeProcess.execPath,
+      userStateRoot: FS.resolvePath('state', root),
+    }
+    try {
+      for (const failedStage of ['trust', 'gateway', 'recent', 'server'] as const) {
+        const events: string[] = []
+        const devData = {
+          capability: 'capability',
+          port: 7001,
+          stop: async () => {
+            events.push('dev.stop')
+          },
+        } as unknown as Awaited<ReturnType<typeof DevDataServer.start>>
+        const trust = {
+          flush: async () => {
+            events.push('trust.flush')
+          },
+        } as unknown as StudioDeviceTrustStore
+        const gateway = {
+          port: 7002,
+          stop: () => {
+            events.push('gateway.stop')
+          },
+        } as unknown as StudioDeviceGateway
+        await Expect(startStudioPackagedService(options, {
+          async loadRecentProjects() {
+            events.push('recent.load')
+            if (failedStage === 'recent') {
+              return Errors.throwHostEnvironment('recent failed')
+            }
+            return []
+          },
+          async openTrustStore() {
+            events.push('trust.open')
+            if (failedStage === 'trust') {
+              return Errors.throwHostEnvironment('trust failed')
+            }
+            return trust
+          },
+          async startDevDataServer() {
+            events.push('dev.start')
+            return devData
+          },
+          async startDeviceGateway() {
+            events.push('gateway.start')
+            if (failedStage === 'gateway') {
+              return Errors.throwHostEnvironment('gateway failed')
+            }
+            return gateway
+          },
+          async startSessionServer() {
+            events.push('server.start')
+            return Errors.throwHostEnvironment('server failed')
+          },
+        })).rejects.toThrow(`${failedStage} failed`)
+        Expect(events).toEqual(
+          failedStage === 'trust'
+            ? ['dev.start', 'trust.open', 'dev.stop']
+            : failedStage === 'gateway'
+            ? ['dev.start', 'trust.open', 'gateway.start', 'trust.flush', 'dev.stop']
+            : failedStage === 'recent'
+            ? [
+              'dev.start',
+              'trust.open',
+              'gateway.start',
+              'recent.load',
+              'gateway.stop',
+              'trust.flush',
+              'dev.stop',
+            ]
+            : [
+              'dev.start',
+              'trust.open',
+              'gateway.start',
+              'recent.load',
+              'server.start',
+              'gateway.stop',
+              'trust.flush',
+              'dev.stop',
+            ],
+        )
+      }
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('recognizes an explicit Hutch executable instead of accepting a missing candidate', async () => {
@@ -322,13 +443,13 @@ Describe('Studio native wrapper foundation', () => {
         args: ['install'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
       {
         args: ['electrobun', 'prepare'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
-        stdio: ['ignore', 'inherit', 'inherit'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
     ])
   })
@@ -763,12 +884,73 @@ Describe('Studio smoke resource isolation', () => {
     Expect(cleaned).toEqual(['watcher', 'metro', 'runtime'])
   })
 
+  Test('preserves a startup failure when rollback cleanup also fails', async () => {
+    const primary = new Errors.HostEnvironmentError('Metro could not start.')
+    const cleanup = new Errors.HostEnvironmentError('The preview root could not be removed.')
+    const reported: unknown[] = []
+
+    await Expect(StudioDev.testing.cleanupAfterFailure(primary, [
+      () => {
+        throw cleanup
+      },
+    ], error => reported.push(error))).rejects.toBe(primary)
+    Expect(reported).toEqual([cleanup])
+  })
+
+  Test('routes a rejected native completion through the failure observer before exiting', async () => {
+    const failure = new Errors.HostEnvironmentError('The native probe disconnected.')
+    const events: unknown[] = []
+
+    await StudioDev.testing.completeNativeLifecycle(
+      Promise.reject(failure),
+      exitCode => events.push(['exit', exitCode]),
+      error => events.push(['failure', error]),
+    )
+
+    Expect(events).toEqual([
+      ['failure', failure],
+      ['exit', 1],
+    ])
+  })
+
+  Test('delivers the original classified startup failure to an in-process observer', async () => {
+    const root = await mkTestDir('tao-studio-failure-observer-')
+    const failures: unknown[] = []
+    try {
+      const captured = await withCapturedOutput(async () =>
+        await runStudioDev({
+          native: true,
+          nativeHutchPath: FS.resolvePath('missing-hutch', root),
+          onFailure: error => failures.push(error),
+          projectRoot: Repo.getRoot(),
+          userStateRoot: FS.resolvePath('user-state', root),
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(failures).toHaveLength(1)
+      Expect(failures[0]).toBeInstanceOf(Errors.UserInputError)
+      Expect(Errors.messageOf(failures[0])).toContain('Hutch executable specified by --hutch was not found')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('creates disjoint preview runtime roots backed by the installed toolchain', async () => {
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
-    const first = await StudioPreviewRuntime.create(sourceRoot)
-    const second = await StudioPreviewRuntime.create(sourceRoot)
+    const artifactRoot = await mkTestDir('studio-preview-artifacts-')
+    let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    let second: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
     try {
+      first = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
+      second = await StudioPreviewRuntime.create(sourceRoot)
       Expect(first.root === second.root).toBe(false)
+      Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
+      // repository hoists it above the linked package node_modules.
+      Expect(await FS.realPath(Bun.resolveSync('typescript/package.json', second.root))).toBe(
+        await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
+      )
       Expect(await FS.readText(FS.resolvePath('index.ts', first.root))).toBe(
         await FS.readText(FS.resolvePath('index.ts', sourceRoot)),
       )
@@ -779,8 +961,9 @@ Describe('Studio smoke resource isolation', () => {
         'TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT',
       )
     } finally {
-      await first.close()
-      await second.close()
+      await first?.close()
+      await second?.close()
+      await FS.remove(artifactRoot)
     }
   })
 
@@ -800,7 +983,8 @@ Describe('Studio smoke resource isolation', () => {
         fileMapCacheDirectory?: string
       }
 
-      Expect(previewConfig.fileMapCacheDirectory).toStartWith(`${runtime.root}/`)
+      Expect(previewConfig.fileMapCacheDirectory).toBeDefined()
+      Expect(await FS.realPath(FS.dirname(previewConfig.fileMapCacheDirectory!))).toBe(await FS.realPath(runtime.root))
       // The toolchain project is stable and reuses its map, so it keeps Metro's shared default.
       Expect(toolchainConfig.fileMapCacheDirectory).toBe(undefined)
 
@@ -831,10 +1015,22 @@ Describe('Studio smoke resource isolation', () => {
       Expect(JSON.stringify(preview)).not.toContain('secret')
 
       // The dev data fact arrives once the session has resolved its app, and keeps the gateway fact.
-      await runtime.configure({ devData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' } })
+      await runtime.configure({
+        devData: {
+          app: 'Notes-0123abcd',
+          capability: 'test_capability_0123456789abcdef0123456789abcdef',
+          port: 4_321,
+          protocol: 'tao-dev-data-v1',
+        },
+      })
       const configured = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
       Expect(configured.expo['extra']).toEqual({
-        taoDevData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' },
+        taoDevData: {
+          app: 'Notes-0123abcd',
+          capability: 'test_capability_0123456789abcdef0123456789abcdef',
+          port: 4_321,
+          protocol: 'tao-dev-data-v1',
+        },
         taoStudioDevice: { gatewayPort: 43_210, protocol: 'tao-studio-device-v1' },
       })
       Expect(configured.expo['scheme']).toBe('taostudiocompanion')

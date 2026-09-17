@@ -35,11 +35,12 @@ remains on the implementation-ready Studio path.
 
 - Slices 1, 3, 4, and 5 are implemented through the current Tao/ProductHost strangler boundary. Tao owns
   Files, inventories, Search, drawer panels, detailed scenario controls, and all inspector contexts; the
-  trusted TypeScript controller and primitive leaves remain the intentional host boundary. Inspector Data
-  explicitly reports unavailable binding metadata because the render DTO has no binding graph, and Actions
-  exposes only the supported Wrap in Stack operation because there is no runtime action inventory. Slice 6 is
-  implemented for the structured design subset listed in the spec; the richer §13 behaviors explicitly
-  listed there remain deferred language work rather than inferred Studio semantics.
+  trusted TypeScript controller and primitive leaves remain the intentional host boundary. The Text section
+  consumes declaration-resolved, scope-checked binding candidates for the selected render without claiming a
+  general runtime binding graph. Actions exposes only implemented, preflighted source actions: wrap in
+  `Row`, `Col`, or `Stack`, remove a direct child, set text, and bind text; it does not invent a runtime action
+  inventory. Slice 6 is implemented for the structured design subset listed in the spec; the richer §13
+  behaviors explicitly listed there remain deferred language work rather than inferred Studio semantics.
 - Slice 2's proposed view-instance persistence is superseded: persistence is top-level only. Studio threads
   one top-level persisted collapsed-folder set through its recursive Files views.
 - Slices 7 and 8 are decision-blocked on fixture-through-action result/handle, multiplicity, transaction,
@@ -115,12 +116,15 @@ Source identity is also synchronized on tab activation, immediately when a previ
 reloads, saves, and selection changes. The load-time send assumes a synchronously installed preview
 listener; the later activation/save/selection paths republish for receivers that mount after load.
 
-The full simulated-browser journey now runs in the `full-verify` graph. It proves typed editor save, isolated
-palette-drop undo, preview insertion and undo, preview-origin move and undo, responsive layout, and a clean
-browser console. Visual actions report their completed compile revision even when the event stream wins the
-race, Undo remains available after the edited selection is cleared, replacement preview frames receive a
-fresh source identity before interacting, and only the visible editor owns an LSP view. The native capability
-probe remains complementary rather than a substitute for this editor and source-action coverage.
+The full simulated-browser journey remains explicitly quarantined from the `full-verify` graph. Focused
+browser runs have exercised typed editor save, isolated palette-drop undo, preview insertion and undo,
+preview-origin move and undo, responsive layout, and console checks, but that evidence is not final
+acceptance. It rejoins automatic verification only after the Draw/Snap/drag-one-in path completes ten
+consecutive reliable normal-terminal runs. Visual actions report their completed compile revision even when
+the event stream wins the race, Undo remains available after the edited selection is cleared, replacement
+preview frames receive a fresh source identity before interacting, and only the visible editor owns an LSP
+view. The native capability probe remains complementary rather than a substitute for this editor and
+source-action coverage.
 
 **Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview previously built its
 identity by fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint

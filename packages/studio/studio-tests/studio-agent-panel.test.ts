@@ -1,4 +1,5 @@
 import { Expect, Test } from '@shared/test'
+import { StudioAgentAnnouncements } from '../studio-src/agent-chat/StudioAgentChatPanel'
 import { StudioAgentPosition } from '../studio-src/agent-chat/StudioAgentPanel'
 
 Test('Studio agent position clamp: clamps within viewport bounds', () => {
@@ -104,4 +105,21 @@ Test('Studio agent position: expanding a pill in a corner pulls it back into vie
     height: 768,
     width: 1024,
   })).toEqual({ left: 1024 - 480 - 8, top: 768 - 500 - 8 })
+})
+
+Test('Studio agent position: restoring a minimized pill does not clamp it as an expanded panel', () => {
+  const stored = JSON.stringify({ left: 800, top: 700 })
+  const viewport = { height: 768, width: 1024 }
+
+  Expect(StudioAgentPosition.restore(stored, true, viewport)).toEqual({ left: 800, top: 700 })
+  Expect(StudioAgentPosition.restore(stored, false, viewport)).toEqual({
+    left: 1024 - 480 - 8,
+    top: 768 - 500 - 8,
+  })
+})
+
+Test('Studio agent announcements keep streaming silent and announce the completed response once', () => {
+  Expect(StudioAgentAnnouncements.streamingAriaLive).toBe('off')
+  Expect(StudioAgentAnnouncements.completed({ text: 'The complete answer.' })).toBe('The complete answer.')
+  Expect(StudioAgentAnnouncements.completed({ text: '' })).toBeUndefined()
 })

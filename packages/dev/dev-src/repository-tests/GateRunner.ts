@@ -76,9 +76,11 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const now = options.now ?? Time.nowMs
   const startedAt = now()
   const hashTree = options.greenTree?.hashTree ?? GreenTree.hashTree
+  // Hashed before anything runs. A --fresh run reads no proof but still needs this seed, because
+  // the drift guard below compares what the readers proved against what the run leaves behind.
+  const startingTreeHash = options.greenTree === undefined ? undefined : await hashTree(location.repositoryRoot)
   const readsGreenTree = options.greenTree !== undefined && options.greenTree.fresh !== true
-  const startingTreeHash = readsGreenTree ? await hashTree(location.repositoryRoot) : undefined
-  if (startingTreeHash !== undefined) {
+  if (readsGreenTree && startingTreeHash !== undefined) {
     const match = await GreenTree.find(
       location.repositoryRoot,
       startingTreeHash,
@@ -101,7 +103,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // Gates another lane already proved at this exact tree. Only tree-readers qualify: a gate that
   // rewrites the tree or fills a generated directory produces state the tree hash does not
   // describe, so it runs every time and its output is there for the gates that read it.
-  const provedGates: Map<string, GreenTreeRecord> = startingTreeHash === undefined
+  const provedGates: Map<string, GreenTreeRecord> = !readsGreenTree || startingTreeHash === undefined
     ? new Map()
     : await GreenTree.findGates(
       location.repositoryRoot,
@@ -127,6 +129,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
+  const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   // Every worktree on this machine reserves against the same CPUs. Registration establishes this
   // lane's ceiling; the broker recomputes its fair share at every node admission.
   const machineLane = await MachineLanes.acquire({
@@ -138,15 +141,48 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
 
   const runNode = options.runGate === undefined ? undefined : injectedRunner(options.runGate)
+  let verifiedTreeHash = startingTreeHash
   const { contention, result } = await runUnderLane(async () => {
-    const runResult = await WorkGraph.run(states, {
+    const graphOptions = {
       env: machineLane.id === undefined ? undefined : { [MachineLanes.LANE_ID_ENV_KEY]: machineLane.id },
       expectedMs,
       jobs: machineLane.ceiling,
-      onEvent: event => reporter.handle(event),
+      onEvent: (event: Parameters<typeof liveArtifacts.handle>[0]) => {
+        if (event.kind !== 'planned' && event.kind !== 'done') {
+          liveArtifacts.handle(event)
+        }
+      },
       runNode,
       slotBroker: machineLane,
-    })
+    }
+    const mutatingStates = states.filter(state => state.node.mutatesTree === true)
+    const readerStates = states.filter(state => state.node.mutatesTree !== true)
+    liveArtifacts.handle({ kind: 'planned', states })
+    const mutationResult = mutatingStates.length === 0
+      ? { interrupted: false, states: mutatingStates }
+      : await WorkGraph.run(mutatingStates, graphOptions)
+    let interrupted = mutationResult.interrupted
+    if (!interrupted && mutatingStates.every(state => state.status === 'passed')) {
+      if (options.greenTree !== undefined && mutatingStates.length > 0) {
+        // Mutators intentionally rewrite the tree. Snapshot only after they settle and before any
+        // reader starts, so a later edit cannot be mistaken for bytes the readers proved.
+        verifiedTreeHash = await hashTree(location.repositoryRoot)
+      }
+      if (readerStates.length > 0) {
+        const readerResult = await WorkGraph.run(readerStates, graphOptions)
+        interrupted = readerResult.interrupted
+      }
+    } else {
+      const failed = mutatingStates.filter(state => state.status !== 'passed').map(state => state.name)
+      for (const state of readerStates) {
+        state.status = 'skipped'
+        state.reason = interrupted ? 'interrupted' : `dependency failed: ${failed.join(', ')}`
+        liveArtifacts.handle({ kind: 'complete', state })
+      }
+    }
+    const runResult = { interrupted, states }
+    liveArtifacts.handle({ kind: 'done', interrupted, states })
+    await liveArtifacts.finish()
     await reporter.finish()
     if (!runResult.interrupted) {
       // A contended timeout is a claim about this machine, and one isolated re-run is what settles it.
@@ -172,11 +208,18 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     order: runnableGates,
     states,
   })
+  // The readers proved the tree as it stood when they started. Anything that changed it after
+  // that — a concurrent edit, not this run's own fix gates — means this run is not evidence.
+  const finalTreeHash = verifiedTreeHash === undefined ? undefined : await hashTree(location.repositoryRoot)
+  if (verifiedTreeHash !== undefined && finalTreeHash !== verifiedTreeHash) {
+    summary.status = 'failed'
+    summary.warnings = [
+      ...summary.warnings,
+      'working tree changed while verification was running; this run is not green evidence',
+    ]
+  }
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
-    // The tree is hashed after the run because the fix gates may have rewritten it; what was
-    // proved green is the tree the run left behind, which is the one the next run would see.
-    const treeHash = await hashTree(location.repositoryRoot)
-    if (provedGates.size > 0 && treeHash !== startingTreeHash) {
+    if (provedGates.size > 0 && verifiedTreeHash !== startingTreeHash) {
       // A gate skipped on an earlier proof was proved against the tree this run started from. If
       // the fix gates then rewrote that tree, this run proves nothing about the tree it leaves.
       summary.warnings = [
@@ -188,7 +231,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       await GreenTree.record(
         location.repositoryRoot,
         options.greenTree.lanes[0] ?? location.lane,
-        { at: new Date().toISOString(), logRoot: location.logRoot, treeHash },
+        { at: new Date().toISOString(), logRoot: location.logRoot, treeHash: verifiedTreeHash! },
         // Only what this run actually proved about this tree, and only gates whose verdict the
         // tree hash fully describes.
         states

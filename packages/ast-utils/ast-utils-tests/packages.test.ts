@@ -160,6 +160,86 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('does not assign external documents to the first indexed project', async () => {
+    const root = await mkTestDir('tao-packages-external-')
+    try {
+      const firstRoot = FS.resolvePath('First', root)
+      const externalFile = FS.resolvePath('External.tao', root)
+      await FS.writeText(FS.resolvePath('Project.tao', firstRoot), 'project { id "first" name "First" }')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', firstRoot), '')
+      await FS.writeText(externalFile, '')
+      const context = await Packages.createContext(firstRoot)
+
+      Expect(Packages.projectRootForPath(context.index, externalFile)).toBeUndefined()
+      Expect(Packages.resolve(context, { fromFilePath: externalFile, importPath: '@data' })).toMatchObject({
+        invalidReason: 'project-boundary',
+        relation: 'invalid',
+      })
+      Expect(Packages.resolve(context, { fromFilePath: externalFile, importPath: './First' })).toMatchObject({
+        invalidReason: 'project-boundary',
+        relation: 'invalid',
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects package candidates whose symlink target escapes the physical package root', async () => {
+    const root = await mkTestDir('tao-packages-symlink-')
+    try {
+      const projectRoot = FS.resolvePath('Project', root)
+      const outside = FS.resolvePath('Outside', root)
+      const packageRoot = FS.resolvePath('@data', projectRoot)
+      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('Seed.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Secret.tao', outside), 'public let Secret = "outside"')
+      await FS.symlink(outside, FS.resolvePath('escaped', packageRoot))
+      const context = await Packages.createContext(projectRoot)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '@data/escaped',
+      })
+
+      Expect(resolution).toMatchObject({
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('escaped', packageRoot),
+      })
+      Expect(await Packages.candidateFilePaths(resolution)).toEqual([])
+      const escapedFile = FS.resolvePath('escaped/Secret.tao', packageRoot)
+      Expect(Packages.targetMatches(resolution, {
+        filePath: escapedFile,
+        workspaceFilePaths: new Set([escapedFile]),
+      })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('keeps a project opened through a symlink in its lexical workspace namespace', async () => {
+    const root = await mkTestDir('tao-packages-project-symlink-')
+    try {
+      const physicalRoot = FS.resolvePath('Physical', root)
+      const linkedRoot = FS.resolvePath('Linked', root)
+      await FS.writeText(FS.resolvePath('Project.tao', physicalRoot), 'project { id "linked" name "Linked" }')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', physicalRoot), '')
+      await FS.symlink(physicalRoot, linkedRoot)
+      const context = await Packages.createContext(linkedRoot)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', linkedRoot),
+        importPath: '@data',
+      })
+
+      Expect(context.index.projectRoot).toBe(linkedRoot)
+      Expect(resolution).toMatchObject({
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@data', linkedRoot),
+      })
+      Expect(await Packages.candidateFilePaths(resolution)).toEqual([FS.resolvePath('@data/Data.tao', linkedRoot)])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('does not enter a nested project through a package subpath or bare package import', async () => {
     const root = await mkTestDir('tao-packages-nested-project-boundary-')
     try {

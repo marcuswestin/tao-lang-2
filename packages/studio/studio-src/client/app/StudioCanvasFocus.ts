@@ -5,33 +5,60 @@ export type StudioCanvasFocusRect = Readonly<{ height: number; width: number; x:
 export type StudioCanvasFocusDeps = Readonly<{
   button: HTMLButtonElement
   /** The measured rectangle of that view's root render, when the selecting cell reported one. */
-  ownerFrame: (view: string) => StudioCanvasFocusRect | undefined
+  ownerFrame: (viewId: string) => StudioCanvasFocusRect | undefined
   onError: (error: unknown) => void
   preview: HTMLElement
   previews: () => readonly StudioPreviewConnection[]
   /** The view owning the selected element, when the inspector has one. */
-  selectedOwner: () => string | undefined
+  selectedOwner: () => Readonly<{ id: string; name: string }> | undefined
   status: HTMLElement
+  /** Test seam for keyed matrix state; production uses StudioMatrixView. */
+  matrix?: Pick<typeof StudioMatrixView, 'focusedView' | 'focusView'>
 }>
+
+/** Serial mutation lane for persistent cell viewport overrides. */
+export class StudioCanvasFocusLane {
+  #tail = Promise.resolve()
+  readonly #onError: (error: unknown) => void
+
+  constructor(onError: (error: unknown) => void) {
+    this.#onError = onError
+  }
+
+  enqueue(operation: () => Promise<void>): void {
+    this.#tail = this.#tail.then(operation).catch(this.#onError)
+  }
+
+  async settled(): Promise<void> {
+    await this.#tail
+  }
+}
 
 /**
  * Canvas mode: the selected element's owning view is shown alone when the project already renders
  * that view in a focused scenario group, and every edit then lands in that one definition.
  */
-export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ update: () => void }> {
+export function mountStudioCanvasFocus(
+  deps: StudioCanvasFocusDeps,
+): Readonly<{ dispose: () => void; update: () => void }> {
   const { button, preview } = deps
+  const matrix = deps.matrix ?? StudioMatrixView
 
-  function focusableView(): string | undefined {
+  function group(viewId: string): HTMLElement | undefined {
+    return [...preview.querySelectorAll<HTMLElement>('[data-tao-studio-group-view-id]')]
+      .find(candidate => candidate.dataset['taoStudioGroupViewId'] === viewId)
+  }
+
+  function focusableView(): Readonly<{ id: string; name: string }> | undefined {
     const owner = deps.selectedOwner()
     if (owner === undefined) {
       return undefined
     }
-    const escaped = owner.replace(/"/g, '\\"')
-    return preview.querySelector(`[data-tao-studio-group-view="${escaped}"]`) === null ? undefined : owner
+    return group(owner.id) === undefined ? undefined : owner
   }
 
   function update(): void {
-    const focused = StudioMatrixView.focusedView(preview)
+    const focused = matrix.focusedView(preview)
     const candidate = focusableView()
     if (focused !== undefined) {
       button.hidden = false
@@ -41,7 +68,7 @@ export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ 
     }
     delete button.dataset['state']
     button.hidden = candidate === undefined
-    button.textContent = candidate === undefined ? 'Focus view' : `Focus ${candidate}`
+    button.textContent = candidate === undefined ? 'Focus view' : `Focus ${candidate.name}`
   }
 
   /**
@@ -53,11 +80,10 @@ export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ 
     StudioPreviewConnection,
     NonNullable<StudioPreviewConnection['cell']>['environment']['viewport']
   >()
-  async function frameCells(candidate: string): Promise<void> {
-    const rect = deps.ownerFrame(candidate)
-    const escaped = candidate.replace(/"/g, '\\"')
-    const row = preview.querySelector(`[data-tao-studio-group-view="${escaped}"]`)
-    if (rect === undefined || row === null || rect.width < 1 || rect.height < 1) {
+  async function frameCells(candidate: Readonly<{ id: string; name: string }>): Promise<void> {
+    const rect = deps.ownerFrame(candidate.id)
+    const row = group(candidate.id)
+    if (rect === undefined || row === undefined || rect.width < 1 || rect.height < 1) {
       return
     }
     const viewport = { height: Math.ceil(rect.height), width: Math.ceil(rect.width) }
@@ -70,10 +96,21 @@ export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ 
       ) {
         continue
       }
-      framedViewports.set(connection, cell.environment.viewport)
       await connection.reconfigureEnvironment({ ...cell.environment, viewport })
+      // Record only successful reframes. A queued leave restores every recorded cell even when a
+      // later cell rejects, and the lane prevents that restore from racing this request.
+      framedViewports.set(connection, cell.environment.viewport)
     }
   }
+
+  // Reconfiguration persists on the server. Serialize enter/leave so Back cannot restore first and
+  // then be overwritten by an older enter completion.
+  let disposed = false
+  const lane = new StudioCanvasFocusLane(error => {
+    if (!disposed) {
+      deps.onError(error)
+    }
+  })
   async function unframeCells(): Promise<void> {
     const framed = [...framedViewports]
     framedViewports.clear()
@@ -85,13 +122,13 @@ export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ 
   }
 
   function leave(): void {
-    StudioMatrixView.focusView(preview, undefined, leave)
+    matrix.focusView(preview, undefined, leave)
     update()
-    void unframeCells().catch(deps.onError)
+    lane.enqueue(unframeCells)
   }
 
-  button.addEventListener('click', () => {
-    if (StudioMatrixView.focusedView(preview) !== undefined) {
+  const onClick = (): void => {
+    if (matrix.focusedView(preview) !== undefined) {
       leave()
       return
     }
@@ -101,9 +138,20 @@ export function mountStudioCanvasFocus(deps: StudioCanvasFocusDeps): Readonly<{ 
       deps.status.textContent = 'Select an element whose view has a focused scenario group before entering canvas mode.'
       return
     }
-    StudioMatrixView.focusView(preview, candidate, leave)
+    matrix.focusView(preview, candidate.id, leave)
     update()
-    void frameCells(candidate).catch(deps.onError)
-  })
-  return { update }
+    lane.enqueue(async () => await frameCells(candidate))
+  }
+  button.addEventListener('click', onClick)
+  return {
+    dispose() {
+      if (disposed) {
+        return
+      }
+      disposed = true
+      button.removeEventListener('click', onClick)
+      lane.enqueue(unframeCells)
+    },
+    update,
+  }
 }

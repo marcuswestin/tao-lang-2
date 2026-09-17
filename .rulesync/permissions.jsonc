@@ -8,13 +8,8 @@
       // The repository's own workflow surface. Agents run these without asking.
       "./agent *": "allow",
       "./dev *": "allow",
-      // Browser smoke is a deliberate host escape: StudioCdp forces headless mode, a fresh
-      // tao-studio-chrome-* temporary profile, and an ephemeral DevTools port.
-      "./dev studio-smoke *": "allow",
       "./tao *": "allow",
       "just *": "allow",
-      "just studio-smoke *": "allow",
-      "just studio-proof-real-app *": "allow",
       "bun install *": "allow",
       "bun run *": "allow",
       "bun test *": "allow",
@@ -53,18 +48,11 @@
       "git ls-files *": "allow",
       "git remote -v": "allow",
       "git tag --list *": "allow",
-      // The macOS sandbox denies process-table access. Keep the permitted ps output shapes fixed,
-      // while allowing agents to terminate a PID now that Ro has explicitly authorized it.
-      "ps -o comm=,lstart= -p *": "allow",
-      "ps -o pid=,ppid=,lstart=,command= -p *": "allow",
+      // The macOS sandbox denies process-table access. Only the exact, read-only whole-table shape
+      // is automatic: wildcard PID queries and termination prefixes accept trailing arguments that
+      // change their meaning, so those stay reviewed.
       "ps -axo pid=,ppid=,lstart=,command=": "allow",
       "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
-      "kill -0 *": "allow",
-      "/bin/kill -0 *": "allow",
-      "kill -TERM *": "allow",
-      "/bin/kill -TERM *": "allow",
-      "kill -KILL *": "allow",
-      "/bin/kill -KILL *": "allow",
       // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
       // remain approval boundaries and belong to an explicitly selected native workflow.
       "adb devices *": "allow",
@@ -113,25 +101,11 @@
         // These commands need host process or native-service access the sandbox cannot express.
         // Every entry also has a matching allow rule above; the Codex generator derives the
         // project-local outside-sandbox rules from that intersection.
-        "ps -o comm=,lstart= -p *",
-        "ps -o pid=,ppid=,lstart=,command= -p *",
         "ps -axo pid=,ppid=,lstart=,command=",
-        "kill -0 *",
-        "/bin/kill -0 *",
-        "kill -TERM *",
-        "/bin/kill -TERM *",
-        "kill -KILL *",
-        "/bin/kill -KILL *",
         "adb devices *",
         "adb get-state *",
         "emulator -list-avds",
         "xcrun simctl list *",
-        // macOS may abort Chrome before DevTools starts when its process is launched inside the
-        // shell sandbox. Only the repository browser-smoke entrypoints escape; arbitrary Chrome
-        // launches and native Studio remain sandboxed or reviewed.
-        "./dev studio-smoke *",
-        "just studio-smoke *",
-        "just studio-proof-real-app *",
         "gh *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
@@ -153,7 +127,7 @@
         // main, and when, is still Ro's decision: an agent merges because Ro asked, not on its own
         // initiative.
         "git merge *",
-        "git reset --merge*",
+        "git reset --merge",
         "git reset --hard HEAD",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell

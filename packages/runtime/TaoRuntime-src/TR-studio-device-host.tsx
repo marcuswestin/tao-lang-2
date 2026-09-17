@@ -42,11 +42,12 @@ import {
   type StudioInspectRect,
 } from './TR-studio-device-inspect'
 import { captureStudioDeviceLogs, formatStack, type StudioDeviceLogConsole } from './TR-studio-device-logs'
-import type {
-  TaoStudioDeviceCellIdentity,
-  TaoStudioDeviceDescription,
-  TaoStudioDeviceNetworkCondition,
-  TaoStudioDeviceOccurrence,
+import {
+  type TaoStudioDeviceCellIdentity,
+  type TaoStudioDeviceDescription,
+  type TaoStudioDeviceNetworkCondition,
+  type TaoStudioDeviceOccurrence,
+  TaoStudioDeviceProtocol,
 } from './TR-studio-device-protocol'
 import { StudioDeviceTrust } from './TR-studio-device-trust'
 import { StudioEnvironmentControls, type TaoStudioCellRuntime } from './TR-studio-environment'
@@ -116,6 +117,14 @@ type SecureStoreModule = {
   deleteItemAsync(key: string): Promise<void>
   getItemAsync(key: string): Promise<string | null>
   setItemAsync(key: string, value: string): Promise<void>
+}
+
+type StudioBonjourNativeModule = {
+  discover(timeoutMs: number): Promise<unknown>
+}
+
+type ExpoModulesCore = {
+  requireOptionalNativeModule<T>(name: string): T | null
 }
 
 type NativePlatform = {
@@ -414,17 +423,65 @@ export function createNativeStudioDeviceClient(): {
   if (WebSocketImplementation === undefined || secureStore === undefined || missing.length > 0) {
     return { kind: 'missing', missing }
   }
+  const discover = nativeStudioBonjourDiscovery()
   return {
     client: createStudioDeviceClient({
       bootstrap: resolution.bootstrap,
       // The capture domains register at module scope on every platform, so the device already has a
       // complete artifact to give; Studio just had no way to ask for one.
       captureRuntime: () => captureRuntime(),
+      ...(discover === undefined ? {} : { discover }),
       storage: secureStoreStorage(secureStore),
       transport: webSocketTransport(WebSocketImplementation),
     }),
     kind: 'ready',
   }
+}
+
+/** Parses untrusted native discovery output; key matching remains the device client's responsibility. */
+export function studioBonjourGateways(value: unknown): readonly { studioPublicKey: string; url: string }[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const gateways: { studioPublicKey: string; url: string }[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    const host = typeof record['host'] === 'string' ? record['host'].replace(/\.$/, '') : undefined
+    const port = typeof record['port'] === 'number' ? record['port'] : Number(record['port'])
+    const studioPublicKey = record['studioPublicKey']
+    if (
+      record['protocol'] !== TaoStudioDeviceProtocol.name
+      || host === undefined
+      || !validBonjourHost(host)
+      || !Number.isSafeInteger(port)
+      || port <= 0
+      || port > 65_535
+      || typeof studioPublicKey !== 'string'
+      || !StudioDeviceTrust.validPublicKey(studioPublicKey)
+    ) {
+      continue
+    }
+    const address = host.includes(':') ? `[${host}]` : host
+    gateways.push({ studioPublicKey, url: `ws://${address}:${port}/device` })
+  }
+  return gateways
+}
+
+function validBonjourHost(host: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(host) || /^[0-9a-fA-F:]+$/.test(host)
+}
+
+function nativeStudioBonjourDiscovery():
+  | (() => Promise<readonly { studioPublicKey: string; url: string }[]>)
+  | undefined
+{
+  const native = NativeModules.optional<ExpoModulesCore>('Studio device discovery', 'expo-modules-core')
+    ?.requireOptionalNativeModule<StudioBonjourNativeModule>('TaoStudioDiscovery')
+  // The generic development client has no Tao module; QR/deep-link bootstrap remains functional.
+  return native == null ? undefined : async () => studioBonjourGateways(await native.discover(750))
 }
 
 /** The trust primitives draw randomness from `crypto.getRandomValues`, which Hermes lacks without the polyfill. */

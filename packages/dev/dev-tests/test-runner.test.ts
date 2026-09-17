@@ -1,4 +1,5 @@
-import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
+import { FS } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
 import { TestRunner } from '../dev-src/repository-tests/TestRunner'
@@ -164,6 +165,29 @@ Describe('test runner suite registry', () => {
         'packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx',
       )).suite,
     ).toBe('runtime-jest')
+  })
+
+  Test('an exact-file subset does not teach the full-suite timing estimate', async () => {
+    const root = await mkTestDir('tao-test-runner-subset-timing-')
+    const file = 'packages/example/example-tests/example.test.ts'
+    try {
+      await FS.writeText(
+        FS.resolvePath(file, root),
+        `import { expect, test } from '${['bun', 'test'].join(':')}'\ntest('passes', () => expect(1).toBe(1))\n`,
+      )
+      const captured = await withCapturedOutput(() =>
+        TestRunner.runTestRequest({ kind: 'file', path: file }, {
+          jobs: 1,
+          outputMode: 'quiet',
+          repositoryRoot: root,
+        })
+      )
+
+      Expect(captured.result).toBe(0)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('a costly suite reserves the whole capacity before cheap suites start', async () => {

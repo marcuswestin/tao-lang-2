@@ -3,6 +3,7 @@ import {
   bumpShipVersion,
   decideShipVersion,
   deriveShipIdentity,
+  nextBuildNumber,
   parseShipVersion,
   shipInputHash,
   timestampBuildNumber,
@@ -39,8 +40,14 @@ Describe('tao ship pure derivation', () => {
     })
   })
 
-  Test('derives a UTC minute build number and stable input hash', () => {
+  Test('allocates monotonically above same-minute local and remote build numbers', () => {
     Expect(timestampBuildNumber(new Date('2026-09-02T14:05:59Z'))).toBe('202609021405')
+    Expect(nextBuildNumber('202609021405', [])).toBe('202609021405')
+    Expect(nextBuildNumber('202609021405', ['202609021405', '202609021407'])).toBe('202609021408')
+    Expect(nextBuildNumber('202609021405', ['not-a-number', '202609021404'])).toBe('202609021405')
+  })
+
+  Test('derives a stable input hash', () => {
     Expect(shipInputHash({ b: 2, a: 1 })).toBe(shipInputHash({ a: 1, b: 2 }))
     Expect(shipInputHash({ a: 1 })).not.toBe(shipInputHash({ a: 2 }))
   })

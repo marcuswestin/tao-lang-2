@@ -9,10 +9,14 @@ import type { StudioMatrixGroup } from './matrix/StudioMatrixLayout'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 
 export {
+  canvasIframeGestureAnchor,
+  canvasRevealDelta,
   canvasScale,
   mountCanvasViewport,
+  revealCanvasNode,
   type StudioCanvasViewportControls,
   type StudioCanvasViewportState,
+  type StudioCanvasWheelGesture,
 } from './matrix/StudioCanvasViewport'
 export {
   StudioDebugEvents,
@@ -35,9 +39,11 @@ export {
   configureInteractionMode,
   currentSourceIdentity,
   handlePreviewMessage,
+  postCanvasGestureOwnership,
   postDebugCommand,
   postEditorSelection,
   requestRuntimeCapture,
+  studioPreviewCaptureError,
 } from './matrix/StudioPreviewBridge'
 export {
   disconnectPreviews,

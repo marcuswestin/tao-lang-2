@@ -1,4 +1,5 @@
-import { Errors, FS, Json, Text } from '@shared'
+import { Errors, FS, Json, Platform, Text } from '@shared'
+import { withShipLockWrite } from './ship-transaction'
 
 type ShipLockStatus = 'accepted' | 'suggested'
 
@@ -26,8 +27,13 @@ export type ShipLockEntry = {
   lastBuild?: {
     buildId?: string
     commit: string
+    dirty?: boolean
+    dirtyFingerprint?: string
+    distribution?: 'app-store' | 'testflight'
     number: string
     processed?: boolean
+    processingState?: 'FAILED' | 'INVALID' | 'PROCESSING' | 'VALID'
+    releaseNotesFromCommit?: string
     submittedForReview?: boolean
     version: string
   }
@@ -43,14 +49,38 @@ export type ShipLockEntry = {
   update?: {
     channel: string
     dataSchemaFingerprint?: string
-    previousPublicationId?: string
     publicationId?: string
     runtimeFingerprint?: string
     serverUrl?: string
+    supportedBinaries?: Array<{
+      buildNumber: string
+      dataSchemaFingerprint: string
+      platform: 'ios'
+      runtimeVersion: string
+      version: string
+    }>
   }
 }
 
+/**
+ * The package resolver owns this section as one complete snapshot. Shipping never interprets it; it only
+ * preserves it while updating the independent `ship` concern in the same Tao-written project lock.
+ */
+export type InstallsLock = {
+  lockfileVersion: 1
+  projects: Record<string, {
+    projectId: string
+    resolvedCommit: string
+    resolvedVersion?: string
+  }>
+  requires: Record<string, {
+    ref?: string
+    version?: string
+  }>
+}
+
 export type TaoProjectLock = {
+  installs?: InstallsLock
   schemaVersion: 1
   ship?: {
     apps: Record<string, ShipLockEntry>
@@ -79,8 +109,63 @@ export async function readProjectLock(projectRoot: string): Promise<TaoProjectLo
 /** writeProjectLock writes the Tao-owned lock in deterministic, reviewable JSONC form. */
 export async function writeProjectLock(projectRoot: string, lock: TaoProjectLock): Promise<string> {
   const path = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, projectRoot)
-  await FS.writeText(path, `${JSON.stringify(lock, null, 2)}\n`)
-  return path
+  return await withShipLockWrite(projectRoot, async () => {
+    const fresh = await readProjectLock(projectRoot)
+    const merged = mergeProjectLocks(fresh, lock)
+    const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
+    try {
+      await FS.writeText(temporary, `${JSON.stringify(merged, null, 2)}\n`)
+      await FS.move(temporary, path)
+      return path
+    } finally {
+      await FS.remove(temporary).catch(() => {})
+    }
+  })
+}
+
+/** mergeProjectLocks preserves independently written app state while applying the caller's checkpoint. */
+export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLock): TaoProjectLock {
+  const identities = new Set([
+    ...Object.keys(fresh.ship?.apps ?? {}),
+    ...Object.keys(incoming.ship?.apps ?? {}),
+  ])
+  const apps = Object.fromEntries(
+    [...identities].toSorted().map(identity => {
+      const before = fresh.ship?.apps[identity]
+      const after = incoming.ship?.apps[identity]
+      if (before === undefined) {
+        return [identity, after!]
+      }
+      if (after === undefined) {
+        return [identity, before]
+      }
+      return [
+        identity,
+        {
+          ...before,
+          ...after,
+          ...(before.accepted === undefined && after.accepted === undefined
+            ? {}
+            : { accepted: { ...before.accepted, ...after.accepted } as NonNullable<ShipLockEntry['accepted']> }),
+          ...(before.lastBuild === undefined && after.lastBuild === undefined
+            ? {}
+            : { lastBuild: { ...before.lastBuild, ...after.lastBuild } as NonNullable<ShipLockEntry['lastBuild']> }),
+          ...(before.update === undefined && after.update === undefined
+            ? {}
+            : { update: { ...before.update, ...after.update } as NonNullable<ShipLockEntry['update']> }),
+        } satisfies ShipLockEntry,
+      ]
+    }),
+  )
+  return {
+    ...fresh,
+    ...incoming,
+    ship: {
+      ...fresh.ship,
+      ...incoming.ship,
+      apps,
+    },
+  }
 }
 
 function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {
@@ -98,6 +183,11 @@ export function putShipLockEntry(lock: TaoProjectLock, entry: ShipLockEntry): Ta
       },
     },
   }
+}
+
+/** putInstallsLock replaces the resolver-owned graph without disturbing other lock concerns. */
+export function putInstallsLock(lock: TaoProjectLock, installs: InstallsLock): TaoProjectLock {
+  return { ...lock, installs }
 }
 
 /** acceptedShipEntry refuses suggestions and declaration-stale accepted values. */

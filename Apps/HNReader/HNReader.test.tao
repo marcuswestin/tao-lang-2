@@ -1,4 +1,72 @@
-use HNReaderStub from ./
+use Http from @tao/data/providers/http
+use Local from @tao/data/providers/local
+use StackNav from @tao/nav
+use Col, FormButton, ScrollView, Text from @tao/ui
+use Bookmarks, Comments, HNDesign, HNReaderStub, ReadingEntries, ReadingHistoryRow, Stories, TrackedStoryRow from ./
+
+app HNReaderAvailabilityHarness {
+   Name "HNReader availability harness"
+   Navigator StackNav {
+      Initial HistoryAvailabilityHarness
+   }
+   Datasource {
+      UnavailableHistoryNews,
+      UnavailableHistoryStore,
+      UnavailableBookmarkStore
+   }
+   Design HNDesign
+}
+
+// This test-only app makes reference unavailability deterministic. Its adapter serves two feed
+// rows initially, then returns no row for one by-id lookup and a typed failure for the other.
+type UnavailableHistorySource is Http with {
+   Adapter item is UnavailableHistoryAdapter from ./UnavailableHistoryAdapter.ts
+}
+
+datasource UnavailableHistoryNews = UnavailableHistorySource {
+   Data {
+      Stories,
+      Comments
+}  }
+
+datasource UnavailableHistoryStore = Local {
+   StorageKey "HNReaderUnavailableHistoryTest"
+   Data {
+      ReadingEntries
+}  }
+
+datasource UnavailableBookmarkStore = Local {
+   StorageKey "HNReaderUnavailableBookmarkTest"
+   Data {
+      Bookmarks
+}  }
+
+scene HistoryAvailabilityHarness() {
+   Title "History availability"
+   query Stories as ProbeStories {
+      order by Rank
+   }
+   query ReadingEntries {
+      order by OpenedAt desc
+   }
+   render ScrollView() [screen] {
+      Col() [feed] {
+         #probeStories
+         loop ProbeStories / Story {
+            TrackedStoryRow(Story)
+         }
+
+         #removeProbes
+         loop ProbeStories / Story {
+            FormButton("Remove { Story.Title }") {
+               on press -> { delete Story }
+         }  }
+         Text("{ ReadingEntries.Count } history rows") [notice]
+
+         #historyProbes
+         loop ReadingEntries / ReadingEntry {
+            ReadingHistoryRow(ReadingEntry)
+}  }  }  }
 
 test "hn reader" {
    test "fills the front page from the feed" {
@@ -23,23 +91,77 @@ test "hn reader" {
       back
       expect text "Why local-first sync wins"
    }
-   // The bar's right-hand control switches to Reading, which lists what this device opened and
-   // keeps the feed's place behind it.
-   test "keeps opened stories in the Reading stack" {
+   // The bar's right-hand control switches to Reading, whose order and rows survive a real relaunch
+   // because they belong to a dedicated device store rather than the refilled feed store.
+   test "keeps reading history across a relaunch in most-recent order" {
       run HNReaderStub
-      press label "Reading"
-      expect navigation title "Reading"
-      expect text "Nothing opened yet"
-      press label "Top"
       press "Show HN: A Tao reader"
       press label "Back"
+      advance 1.s
+      press "Why local-first sync wins"
+      press label "Back"
       press label "Reading"
-      expect text "Show HN: A Tao reader"
-      expect missing text "Why local-first sync wins"
-      press "Show HN: A Tao reader"
-      expect navigation title "Show HN: A Tao reader"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Why local-first sync wins"
+      }
+      select #reading[2] {
+         expect text "Show HN: A Tao reader"
+      }
       press label "Top"
       expect navigation title "Hacker News"
+      relaunch
+      expect navigation title "Hacker News"
+      press label "Reading"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Why local-first sync wins"
+      }
+      select #reading[2] {
+         expect text "Show HN: A Tao reader"
+      }
+   }
+   test "refreshes recency without duplicating a reading-history row" {
+      run HNReaderStub
+      press "Show HN: A Tao reader"
+      press label "Back"
+      advance 1.s
+      press "Why local-first sync wins"
+      press label "Back"
+      press label "Reading"
+      advance 1.s
+      select #reading[2] {
+         press "Show HN: A Tao reader"
+      }
+      expect navigation title "Show HN: A Tao reader"
+      press label "Back"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Show HN: A Tao reader"
+      }
+      select #reading[2] {
+         expect text "Why local-first sync wins"
+      }
+   }
+   test "keeps unavailable history rows and renders their honest reference states" {
+      run HNReaderAvailabilityHarness
+      press "Missing history probe"
+      back
+      advance 1.s
+      press "Error history probe"
+      back
+      expect text "2 history rows"
+      press "Remove Missing history probe"
+      press "Remove Error history probe"
+      expect text "2 history rows"
+      select #historyProbes[1] {
+         expect text "Deterministic history lookup failure."
+         expect missing text "Error history probe"
+      }
+      select #historyProbes[2] {
+         expect text "This story is not in the feed right now."
+         expect missing text "Missing history probe"
+      }
    }
    test "shows an empty thread as content, not failure" {
       run HNReaderStub
@@ -49,8 +171,8 @@ test "hn reader" {
       expect text "No comments yet"
    }
 
-   // The two datasources are the point of these. A bookmark is written to the reader's own store
-   // while the story it names stays in the feed, and reading it back crosses the boundary.
+   // This datasource boundary is the point of these. A bookmark is written to the reader's own
+   // synced store while the story it names stays in the feed; reading it back crosses between them.
    test "keeps a bookmark in its own store and reads the story back through the feed" {
       run HNReaderStub
       press toolbar command "Bookmarks"

@@ -136,7 +136,16 @@ export function authoringTools(
             }),
           )
         }
-        const outOfScope = await requireOnly(before, after, ['fixture', 'scenarios'])
+        const outOfScope = await requireOnly(
+          before,
+          after,
+          ['fixture', 'scenarios'],
+          [],
+          [
+            ...(rows.length === 0 ? [] : [`fixture ${fixtureName}`]),
+            `scenarios ${groupName}`,
+          ],
+        )
         if (outOfScope !== undefined) {
           return capture('proposeScenario', { view }, refusal(outOfScope))
         }

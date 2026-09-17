@@ -9,7 +9,7 @@ async function writeWorkspace(root: string, files: Record<string, string>): Prom
 }
 
 Describe('workspace package graph', () => {
-  Test('reads imports through the tsconfig aliases, not the package manifests', async () => {
+  Test('reads alias, published-name, and relative cross-package imports from source', async () => {
     const root = await mkTestDir('tao-package-graph-')
     try {
       await writeWorkspace(root, {
@@ -26,13 +26,14 @@ Describe('workspace package graph', () => {
         'packages/shared/package.json': '{ "name": "tao-shared" }',
         'packages/shared/shared-src/shared.ts': 'export const shared = 1\n',
         'packages/parser/package.json': '{ "name": "tao-parser" }',
-        'packages/parser/parser-src/parser.ts':
-          "import { shared } from '@shared'\nimport type { X } from '@shared/core'\nexport const parser = shared\n",
+        'packages/parser/parser-src/parser.ts': `import { shared } from '${
+          ['..', '..', 'shared', 'shared-src', 'shared'].join('/')
+        }'\nimport type { X } from '@shared/core'\nexport const parser = shared\n`,
         // The manifest declares nothing; the import is what counts. A dynamic import and a scoped
         // npm package are in the same file so both branches are exercised.
         'packages/editor/package.json': '{ "name": "@tao/editor" }',
         'packages/editor/editor-src/editor.ts':
-          "import { view } from '@codemirror/view'\nexport async function load() { return import('@parser') }\n",
+          "import { view } from '@codemirror/view'\nimport 'tao-parser/parser'\nexport async function load() { return import('@parser') }\n",
         'packages/editor/editor-tests/editor.test.ts': "import '@shared/test'\n",
       })
 
@@ -81,6 +82,15 @@ Describe('workspace package graph', () => {
     Expect(graph.imports.get('validator')!.has('workspace')).toBe(true)
     Expect(graph.imports.get('parser')!.has('workspace')).toBe(true)
     Expect(graph.imports.get('compiler')!.has('runtime')).toBe(true)
+    Expect([...graph.imports.get('ide-extension')!].sort()).toEqual([
+      'formatter',
+      'parser',
+      'shared',
+      'source-actions',
+      'workspace',
+    ])
+    Expect(graph.imports.get('code-editor')!.has('runtime')).toBe(true)
+    Expect(graph.imports.get('stdlib')!.has('icloud-native')).toBe(true)
     Expect(graph.imports.get('shared')!.size).toBe(0)
     const fromShared = PackageGraph.affected(graph, ['shared']).map(entry => entry.package)
     for (const name of ['compiler', 'dev', 'studio', 'tao-cli', 'runtime-toolchain']) {

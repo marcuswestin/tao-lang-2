@@ -86,6 +86,10 @@ class RuntimeClock {
   private virtualNowMs: number | undefined
   private scheduled = new Map<number, ScheduledCallback>()
   private nextScheduleId = 1
+  private nextHoldId = 1
+  private replayHolds = new Set<number>()
+  private holdGeneration = 0
+  private testOwnsClock = false
 
   /** now returns the current time in milliseconds, virtual while a test holds the clock. */
   now(): number {
@@ -95,6 +99,7 @@ class RuntimeClock {
   /** beginTest holds the clock at a fixed instant so every check starts from the same time. */
   beginTest(startMs = TEST_EPOCH_MS): void {
     this.endTest()
+    this.testOwnsClock = true
     this.virtualNowMs = startMs
   }
 
@@ -105,23 +110,30 @@ class RuntimeClock {
    * to that test; the returned release then does nothing.
    */
   hold(): () => void {
-    if (this.virtualNowMs !== undefined) {
+    if (this.testOwnsClock) {
       return () => {}
     }
-    const now = Date.now()
-    this.virtualNowMs = now
-    for (const callback of this.scheduled.values()) {
-      callback.cancelPlatformTimer?.()
-      callback.cancelPlatformTimer = undefined
-      // A platform entry carries no due time; it restarts its full interval from the hold.
-      callback.dueMs = now + callback.intervalMs
+    const holdId = this.nextHoldId++
+    const generation = this.holdGeneration
+    this.replayHolds.add(holdId)
+    if (this.virtualNowMs === undefined) {
+      const now = Date.now()
+      this.virtualNowMs = now
+      for (const callback of this.scheduled.values()) {
+        callback.cancelPlatformTimer?.()
+        callback.cancelPlatformTimer = undefined
+      }
     }
     let released = false
     return () => {
-      if (released || this.virtualNowMs === undefined) {
+      if (released || generation !== this.holdGeneration) {
         return
       }
       released = true
+      this.replayHolds.delete(holdId)
+      if (this.replayHolds.size > 0 || this.virtualNowMs === undefined) {
+        return
+      }
       const releaseAt = this.virtualNowMs
       this.virtualNowMs = undefined
       for (const callback of [...this.scheduled.values()]) {
@@ -133,8 +145,23 @@ class RuntimeClock {
   private rearm(callback: ScheduledCallback, delayMs: number): void {
     const forget = () => this.scheduled.delete(callback.id)
     if (callback.repeating) {
-      const timer = setInterval(callback.fire, callback.intervalMs)
-      callback.cancelPlatformTimer = () => clearInterval(timer)
+      let interval: ReturnType<typeof setInterval> | undefined
+      const fire = () => {
+        callback.dueMs = Date.now() + callback.intervalMs
+        callback.fire()
+      }
+      const initial = setTimeout(() => {
+        fire()
+        if (this.scheduled.has(callback.id) && this.virtualNowMs === undefined) {
+          interval = setInterval(fire, callback.intervalMs)
+        }
+      }, delayMs)
+      callback.cancelPlatformTimer = () => {
+        clearTimeout(initial)
+        if (interval !== undefined) {
+          clearInterval(interval)
+        }
+      }
       return
     }
     const timer = setTimeout(() => {
@@ -150,6 +177,9 @@ class RuntimeClock {
       callback.cancelPlatformTimer?.()
     }
     this.virtualNowMs = undefined
+    this.holdGeneration += 1
+    this.testOwnsClock = false
+    this.replayHolds.clear()
     this.scheduled = new Map()
   }
 
@@ -194,16 +224,12 @@ class RuntimeClock {
   private schedule(intervalMs: number, fire: () => void, repeating: boolean): () => void {
     const id = this.nextScheduleId++
     if (this.virtualNowMs === undefined) {
-      const forget = () => this.scheduled.delete(id)
-      const timer = repeating ? setInterval(fire, intervalMs) : setTimeout(() => {
-        forget()
-        fire()
-      }, intervalMs)
-      const cancel = () => repeating ? clearInterval(timer) : clearTimeout(timer)
-      this.scheduled.set(id, { id, dueMs: 0, intervalMs, repeating, fire, cancelPlatformTimer: cancel })
+      const callback: ScheduledCallback = { id, dueMs: Date.now() + intervalMs, intervalMs, repeating, fire }
+      this.scheduled.set(id, callback)
+      this.rearm(callback, intervalMs)
       return () => {
-        cancel()
-        forget()
+        callback.cancelPlatformTimer?.()
+        this.scheduled.delete(id)
       }
     }
     this.scheduled.set(id, { id, dueMs: this.now() + intervalMs, intervalMs, repeating, fire })

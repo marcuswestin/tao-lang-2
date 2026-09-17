@@ -1,4 +1,4 @@
-import { type CLI, Errors, FS, type Platform, Repo } from '@shared'
+import { CLI, Errors, FS, type Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import type { StudioDeviceLaunchDiagnostic } from '@studio'
 import type { ExpoFetch } from '../dev-src/expo-dev-loop/expo-runner/metro'
@@ -929,7 +929,13 @@ Describe('Tao Companion shell configuration', () => {
     Expect(config.expo.ios?.supportsTablet).toBe(true)
     Expect(typeof config.expo.ios?.infoPlist?.['NSLocalNetworkUsageDescription']).toBe('string')
     Expect(config.expo.ios?.infoPlist?.['NSAppTransportSecurity']).toEqual({ NSAllowsLocalNetworking: true })
-    Expect(config.expo.ios?.infoPlist?.['NSBonjourServices']).toBeUndefined()
+    Expect(config.expo.ios?.infoPlist?.['NSBonjourServices']).toEqual(['_tao-studio._tcp'])
+    Expect(
+      await FS.isFile(FS.resolvePath(
+        'modules/tao-studio-discovery/ios/TaoStudioDiscoveryModule.swift',
+        packageRoot,
+      )),
+    ).toBe(true)
     Expect(config.expo.plugins?.[0]).toBe('expo-dev-client')
     Expect(config.expo.plugins?.[1]).toEqual([
       'expo-build-properties',
@@ -969,6 +975,20 @@ const SIMCTL_LIST_FIXTURE = JSON.stringify({
 })
 
 Describe('Tao Companion simulator tooling', () => {
+  Test('recommends the public simulator recipe and its dry run selects --simulator', async () => {
+    const command = companionSimulatorInstallCommand('iPad (A16)')
+    Expect(command).toBe('just studio-companion-simulator simulator="iPad (A16)"')
+
+    const dryRun = await CLI.run('just', {
+      args: ['--dry-run', 'studio-companion-simulator', 'simulator=iPad (A16)'],
+      cwd: Repo.getRoot(),
+    })
+    const output = `${dryRun.stdout}${dryRun.stderr}`
+    Expect(dryRun.exitCode).toBe(0)
+    Expect(output).toContain('./dev studio-companion-install --simulator "simulator=iPad (A16)"')
+    Expect(output).not.toContain('--device')
+  })
+
   Test('reads the available iOS simulators, booted first, and skips other platforms', () => {
     const simulators = simulatorsFromSimctl(SIMCTL_LIST_FIXTURE)
 
@@ -1075,6 +1095,24 @@ Describe('Tao Companion simulator tooling', () => {
 })
 
 Describe('Tao Companion simulator install outcome', () => {
+  Test('surfaces failure when neither Simulator nor Device Hub can be presented', async () => {
+    const simulator = createStudioCompanionSimulator({
+      run: (async (command: string, spec: CLI.CommandSpec) => ({
+        args: [...(spec.args ?? [])],
+        command,
+        error: new Errors.HostEnvironmentError('no GUI session'),
+        exitCode: 1,
+        signal: null,
+        stderr: 'The application could not be opened.',
+        stdout: '',
+      })) as typeof CLI.run,
+    })
+
+    await Expect(simulator.show('SIM-PAD')).rejects.toThrow(
+      'Could not open Device Hub: The application could not be opened.',
+    )
+  })
+
   Test('accepts an Expo exit code when the app did reach the simulator, and reports one when it did not', async () => {
     const commands: string[][] = []
     const simulator = (installedAfterwards: boolean) =>

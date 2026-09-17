@@ -5,6 +5,7 @@ import {
   type TaoJourneyAdapter,
   type TaoJourneyEvent,
   type TaoJourneySelector,
+  waitForTaoJourneyTarget,
 } from '../TaoRuntime-src/TR-studio-journey'
 
 Describe('Studio scenario journey replay', () => {
@@ -164,5 +165,69 @@ Describe('Studio scenario journey replay', () => {
       'enter:root/rows[2]/label:Name:Tao',
       'submit:root/rows[2]/label:Name',
     ])
+  })
+
+  Test('re-resolves a selected row before every nested step', async () => {
+    const observed: string[] = []
+    let generation = 1
+    const adapter: TaoJourneyAdapter<string> = {
+      advance: () => {},
+      dispatch(target, event) {
+        observed.push(`${event}:${target}`)
+      },
+      find(_selector, target, scope) {
+        return `${scope}/${target}`
+      },
+      select(tag, index) {
+        observed.push(`select:${tag}:${index}:generation-${generation}`)
+        return `row-${generation}`
+      },
+      settle() {
+        generation += 1
+      },
+    }
+
+    await replayTaoJourney([{
+      index: 1,
+      kind: 'select',
+      steps: [
+        { kind: 'press', selector: 'tag', target: 'rename' },
+        { kind: 'press', selector: 'tag', target: 'save' },
+      ],
+      tag: 'rows',
+    }], adapter)
+
+    Expect(observed).toEqual([
+      'select:rows:1:generation-1',
+      'press:row-1/rename',
+      'select:rows:1:generation-2',
+      'press:row-2/save',
+    ])
+  })
+
+  Test('accepts the fractional millisecond advance the Tao validator accepts', async () => {
+    const observed: number[] = []
+    const adapter: TaoJourneyAdapter<string> = {
+      advance: milliseconds => {
+        observed.push(milliseconds)
+      },
+      dispatch: () => {},
+      find: () => 'target',
+      select: () => 'selected',
+      settle: () => {},
+    }
+
+    await replayTaoJourney([{ kind: 'advance', milliseconds: 0.5 }], adapter)
+
+    Expect(observed).toEqual([0.5])
+  })
+
+  Test('interrupts target polling as soon as a replacement replay aborts it', async () => {
+    const abort = new AbortController()
+    const pending = waitForTaoJourneyTarget(() => undefined, 10_000, abort.signal)
+
+    abort.abort()
+
+    await Expect(pending).rejects.toThrow('superseded before it finished')
   })
 })

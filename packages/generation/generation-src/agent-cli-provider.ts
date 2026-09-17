@@ -34,8 +34,6 @@ export type AgentCliRunResult = {
 export type AgentCliRunner = (command: string, spec: AgentCliRunSpec) => Promise<AgentCliRunResult>
 
 export type AgentCliGenerationProviderOptions = {
-  /** Web fetching may be allowed when the prompt cites URLs the agent should read itself. */
-  readonly allowWeb?: boolean
   /** Local image files the agent may open; their directories are granted read access. */
   readonly attachments?: readonly string[]
   readonly command?: string
@@ -49,10 +47,10 @@ export type AgentCliGenerationProviderOptions = {
 /**
  * AgentCliGenerationProvider drives an installed coding agent in its non-interactive print mode and
  * reads back one schema-checked JSON value. The agent brings its own model and login, so no key is
- * configured here; it also reads images and web pages itself when the prompt points at them.
+ * configured here. Named images are copied into an isolated scratch directory before the agent can
+ * read them; fetched web-page text is already part of the prompt and does not grant a web tool.
  */
 export class AgentCliGenerationProvider implements GenerationProvider {
-  readonly #allowWeb: boolean
   readonly #attachments: readonly string[]
   readonly #command: string
   readonly #cwd: string | undefined
@@ -62,7 +60,6 @@ export class AgentCliGenerationProvider implements GenerationProvider {
   readonly #timeoutMs: number
 
   constructor(options: AgentCliGenerationProviderOptions) {
-    this.#allowWeb = options.allowWeb ?? false
     this.#attachments = options.attachments ?? []
     this.#command = options.command ?? options.kind
     this.#cwd = options.cwd
@@ -74,9 +71,21 @@ export class AgentCliGenerationProvider implements GenerationProvider {
 
   async availability(): Promise<GenerationAvailability> {
     try {
-      const result = await this.#run(this.#command, { args: ['--version'], env: this.#childEnv(), timeoutMs: 15_000 })
+      const args = this.#kind === 'codex' ? ['exec', '--help'] : ['--help']
+      const result = await this.#run(this.#command, { args, env: this.#childEnv(), timeoutMs: 15_000 })
       if (result.exitCode !== 0) {
-        return { status: 'unavailable', reason: `${this.#command} --version exited with ${result.exitCode}.` }
+        return { status: 'unavailable', reason: `${this.#command} ${args.join(' ')} exited with ${result.exitCode}.` }
+      }
+      const missing = requiredCliOptions(this.#kind).filter(option =>
+        !`${result.stdout}\n${result.stderr}`.includes(option)
+      )
+      if (missing.length > 0) {
+        return {
+          status: 'unavailable',
+          reason: `${this.#command} does not support the required ${missing.join(', ')} option${
+            missing.length === 1 ? '' : 's'
+          }.`,
+        }
       }
       return { status: 'available' }
     } catch (error) {
@@ -97,11 +106,10 @@ export class AgentCliGenerationProvider implements GenerationProvider {
     inputs: readonly GenerationInput[],
     guide: string,
   ): Promise<GenerationResult<Value>> {
-    const prompt = agentPrompt(inputs, guide, this.#attachments)
     try {
       const value = this.#kind === 'claude'
-        ? await this.#generateWithClaude(schema, prompt)
-        : await this.#generateWithCodex(schema, prompt)
+        ? await this.#generateWithClaude(schema, inputs, guide)
+        : await this.#generateWithCodex(schema, agentPrompt(inputs, guide, this.#attachments))
       if (value.status === 'failure') {
         return value
       }
@@ -114,44 +122,62 @@ export class AgentCliGenerationProvider implements GenerationProvider {
     }
   }
 
-  async #generateWithClaude(schema: GenerationJsonSchema, prompt: string): Promise<GenerationResult<JsonValue>> {
-    const args = ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--no-session-persistence']
-    const tools = [...(this.#attachments.length > 0 ? ['Read'] : []), ...(this.#allowWeb ? ['WebFetch'] : [])]
-    if (tools.length > 0) {
-      args.push('--allowedTools', ...tools)
+  async #generateWithClaude(
+    schema: GenerationJsonSchema,
+    inputs: readonly GenerationInput[],
+    guide: string,
+  ): Promise<GenerationResult<JsonValue>> {
+    const scratch = await FS.mkTmpDir('tao-create-claude-')
+    try {
+      const attachments = await stageAttachments(this.#attachments, scratch)
+      const tools = attachments.length > 0 ? ['Read'] : ['']
+      const args = [
+        '-p',
+        '--output-format',
+        'json',
+        '--json-schema',
+        JSON.stringify(schema),
+        '--no-session-persistence',
+        '--safe-mode',
+        '--permission-mode',
+        'dontAsk',
+        '--tools',
+        ...tools,
+      ]
+      if (attachments.length > 0) {
+        args.push('--allowedTools', 'Read')
+      }
+      const result = await this.#run(this.#command, {
+        args,
+        cwd: scratch,
+        env: this.#childEnv(),
+        stdin: agentPrompt(inputs, guide, attachments),
+        timeoutMs: this.#timeoutMs,
+      })
+      if (result.timedOut) {
+        return failure('cancelled', `${this.#label()} did not answer within ${this.#timeoutMs} ms.`)
+      }
+      const envelope = parseJsonText(result.stdout)
+      if (!isObject(envelope)) {
+        return failure('provider_error', trimmedOr(result.stderr, `${this.#label()} printed no JSON result.`))
+      }
+      if (envelope['is_error'] === true) {
+        return failure(
+          'provider_error',
+          trimmedOr(String(envelope['result'] ?? ''), `${this.#label()} reported an error.`),
+        )
+      }
+      const structured = envelope['structured_output']
+      if (structured !== undefined && structured !== null) {
+        return { status: 'success', value: structured }
+      }
+      const fromText = typeof envelope['result'] === 'string' ? parseJsonText(envelope['result']) : undefined
+      return fromText === undefined
+        ? failure('provider_error', `${this.#label()} answered without JSON.`)
+        : { status: 'success', value: fromText }
+    } finally {
+      await FS.remove(scratch).catch(() => undefined)
     }
-    const directories = [...new Set(this.#attachments.map(path => FS.dirname(path)))]
-    if (directories.length > 0) {
-      args.push('--add-dir', ...directories)
-    }
-    const result = await this.#run(this.#command, {
-      args,
-      cwd: this.#cwd,
-      env: this.#childEnv(),
-      stdin: prompt,
-      timeoutMs: this.#timeoutMs,
-    })
-    if (result.timedOut) {
-      return failure('cancelled', `${this.#label()} did not answer within ${this.#timeoutMs} ms.`)
-    }
-    const envelope = parseJsonText(result.stdout)
-    if (!isObject(envelope)) {
-      return failure('provider_error', trimmedOr(result.stderr, `${this.#label()} printed no JSON result.`))
-    }
-    if (envelope['is_error'] === true) {
-      return failure(
-        'provider_error',
-        trimmedOr(String(envelope['result'] ?? ''), `${this.#label()} reported an error.`),
-      )
-    }
-    const structured = envelope['structured_output']
-    if (structured !== undefined && structured !== null) {
-      return { status: 'success', value: structured }
-    }
-    const fromText = typeof envelope['result'] === 'string' ? parseJsonText(envelope['result']) : undefined
-    return fromText === undefined
-      ? failure('provider_error', `${this.#label()} answered without JSON.`)
-      : { status: 'success', value: fromText }
   }
 
   async #generateWithCodex(schema: GenerationJsonSchema, prompt: string): Promise<GenerationResult<JsonValue>> {
@@ -160,7 +186,17 @@ export class AgentCliGenerationProvider implements GenerationProvider {
       const schemaPath = FS.resolvePath('schema.json', scratch)
       const outputPath = FS.resolvePath('answer.txt', scratch)
       await FS.writeText(schemaPath, JSON.stringify(schema))
-      const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--output-schema', schemaPath]
+      const args = [
+        'exec',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'read-only',
+        '--ephemeral',
+        '--ignore-user-config',
+        '--ignore-rules',
+        '--output-schema',
+        schemaPath,
+      ]
       args.push('--output-last-message', outputPath)
       for (const attachment of this.#attachments) {
         args.push('--image', attachment)
@@ -196,6 +232,22 @@ export class AgentCliGenerationProvider implements GenerationProvider {
   #label(): string {
     return this.#kind === 'claude' ? 'Claude Code' : 'Codex'
   }
+}
+
+function requiredCliOptions(kind: AgentCliKind): readonly string[] {
+  return kind === 'claude'
+    ? ['--json-schema', '--no-session-persistence', '--safe-mode', '--permission-mode', '--tools']
+    : ['--sandbox', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--output-schema', '--output-last-message']
+}
+
+async function stageAttachments(attachments: readonly string[], scratch: string): Promise<string[]> {
+  const staged: string[] = []
+  for (const [index, attachment] of attachments.entries()) {
+    const path = FS.resolvePath(`${index + 1}-${FS.basename(attachment)}`, scratch)
+    await FS.copyFile(attachment, path)
+    staged.push(path)
+  }
+  return staged
 }
 
 function agentPrompt(inputs: readonly GenerationInput[], guide: string, attachments: readonly string[]): string {

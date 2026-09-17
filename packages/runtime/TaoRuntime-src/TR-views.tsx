@@ -511,7 +511,6 @@ function TaoInteractiveTextInput({ merged, occurrence, props, runtime }: {
     occurrence.capabilities.blur = () => inputRef.current?.blur?.()
     occurrence.capabilities.enabled = () => props.disabled !== true
     occurrence.capabilities.engage = () => inputRef.current?.focus?.()
-    occurrence.capabilities.focus = () => inputRef.current?.focus?.()
     occurrence.capabilities.label = () => props.label
   }
   return renderTaoTextInput(props, runtime, merged, occurrence, inputRef)

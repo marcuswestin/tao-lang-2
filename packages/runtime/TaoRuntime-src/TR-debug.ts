@@ -29,10 +29,13 @@ const breakpoints = new Set<string>()
 const entryBreakpoints = new Set<string>()
 let stepMode: StepMode = 'continue'
 let pauseDepth = 0
+let debugEpoch = 0
 let paused: { resolve(mode: StepMode): void; pause: TaoDebugPause; depth: number } | undefined
 
 function stepKey(step: TaoDebugStep): string {
-  return `${step.action}#${step.path}`
+  return step.declaration !== undefined && step.statement !== undefined
+    ? JSON.stringify([step.declaration, step.statement])
+    : JSON.stringify([step.action, step.path])
 }
 
 /** shouldPause decides whether the gate stops at this statement. */
@@ -57,7 +60,7 @@ const stepModeStops: Record<StepMode, (depth: number) => boolean> = {
 
 function scopeSnapshot(scope: object): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {}
-  for (const key of Object.keys(scope)) {
+  for (const key in scope) {
     const value = (scope as Record<string, unknown>)[key]
     const evaluable = value as { evaluate?: () => { jsValue: unknown } } | undefined
     snapshot[key] = typeof evaluable?.evaluate === 'function' ? evaluable.evaluate().jsValue : value
@@ -122,16 +125,19 @@ export const Debug = {
 
   /** Reset clears journal, breakpoints, and any pause; tests call it between checks. */
   Reset(): void {
+    debugEpoch += 1
     clearDebugJournal()
     breakpoints.clear()
     entryBreakpoints.clear()
     stepMode = 'continue'
     paused?.resolve('continue')
     paused = undefined
+    emitDebugEvent({ kind: 'reset' })
   },
 } as const
 
 async function pauseAt(step: TaoDebugStep, scope: object, suspended: SuspendedTransaction): Promise<void> {
+  const epoch = debugEpoch
   const pause: TaoDebugPause = {
     step,
     frames: [...suspended.frames],
@@ -148,7 +154,9 @@ async function pauseAt(step: TaoDebugStep, scope: object, suspended: SuspendedTr
   releaseClock()
   stepMode = mode
   resumeSuspendedTransaction(suspended)
-  emitDebugEvent({ kind: 'resumed' })
+  if (epoch === debugEpoch) {
+    emitDebugEvent({ kind: 'resumed' })
+  }
 }
 
 function resume(mode: StepMode): void {

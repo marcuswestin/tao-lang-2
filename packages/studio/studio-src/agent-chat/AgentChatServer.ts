@@ -84,7 +84,16 @@ export type AgentChatHistoryEntry =
     toolCalls?: readonly AgentChatToolCall[]
     usage?: { inputTokens?: number; outputTokens?: number }
     verdict?: FeatureTestVerdict
+    verdicts?: readonly BoundFeatureTestVerdict[]
   }
+
+export type BoundFeatureTestVerdict = FeatureTestVerdict & {
+  changeId: string
+  beforeVersions: readonly { path: string; sourceVersion: string }[]
+  afterVersions: readonly { path: string; sourceVersion: string }[]
+  currentVersions: readonly { path: string; sourceVersion: string }[]
+  versionStatus: 'current' | 'stale'
+}
 
 /**
  * AgentChatConversation is one chat against one project. It is deliberately server-side: the messages, the
@@ -98,16 +107,24 @@ class AgentChatConversation {
   #calls: AgentChatToolCall[] = []
   #staged = new Map<string, StagedChange>()
   #issuedTexts = new Map<string, string>()
-  /** The app's tests as they stood before this conversation changed anything. */
-  #testBaseline: TestRunSummary | undefined
   #tests: StudioTestRunner | undefined
-  #lastVerdict: FeatureTestVerdict | undefined
+  #lastTestRun: TestRunSummary | undefined
+  #changeBaselines = new Map<string, {
+    run: TestRunSummary | undefined
+    beforeVersions: readonly { path: string; sourceVersion: string }[]
+    appliedVersions?: readonly { path: string; sourceVersion: string }[]
+  }>()
+  #turnVerdicts: BoundFeatureTestVerdict[] = []
+  #recordedVerdicts = 0
   #mode: 'chat' | 'scenario' = 'chat'
   #codeChangesGranted = false
   #codeChangeRequests: CodeChangeRequest[] = []
   /** How many requests existed when this turn began, so only the new ones raise a card. */
   #requestsBeforeTurn = 0
   #history: AgentChatHistoryEntry[] = []
+  #nextChangeNumber = 0
+  #lane: Promise<void> = Promise.resolve()
+  #generation = 0
 
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
     this.#provider = provider
@@ -127,7 +144,7 @@ class AgentChatConversation {
     return this.#history
   }
 
-  reset(): void {
+  #resetNow(): void {
     this.#chat = undefined
     this.#calls = []
     this.#history = []
@@ -137,15 +154,30 @@ class AgentChatConversation {
     this.#codeChangesGranted = false
     this.#codeChangeRequests.length = 0
     this.#requestsBeforeTurn = 0
-    this.#lastVerdict = undefined
+    this.#changeBaselines.clear()
+    this.#turnVerdicts = []
+    this.#recordedVerdicts = 0
+    this.#nextChangeNumber = 0
+  }
+
+  reset(): Promise<void> {
+    this.#generation += 1
+    return this.#serialize(async () => this.#resetNow())
   }
 
   /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
-  setMode(mode: 'chat' | 'scenario'): void {
+  setMode(mode: 'chat' | 'scenario'): Promise<void> {
     if (mode !== this.#mode) {
-      this.#mode = mode
-      this.reset()
+      // Invalidate a completion already in flight immediately. The actual reset still takes its ordered
+      // place behind that turn, so no two operations mutate the conversation at once.
+      this.#generation += 1
     }
+    return this.#serialize(async () => {
+      if (mode !== this.#mode) {
+        this.#mode = mode
+        this.#resetNow()
+      }
+    })
   }
 
   get mode(): 'chat' | 'scenario' {
@@ -157,14 +189,23 @@ class AgentChatConversation {
     return { granted: this.#codeChangesGranted, requests: this.#codeChangeRequests }
   }
 
+  /** Every stateful command takes one server-owned lane; browser button state is only a convenience. */
+  #serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.#lane.then(operation, operation)
+    this.#lane = run.then(() => {}, () => {})
+    return run
+  }
+
   /**
    * grantCodeChanges is the person's answer to "this also needs the app to change". It adds the change tools
    * to the conversation already in progress rather than starting a new one, because the conversation is where
    * the request was made and understood.
    */
-  grantCodeChanges(): void {
-    this.#codeChangesGranted = true
-    this.#chat?.replaceTools(this.#toolsFor(), [...APPROVAL_REQUIRED])
+  grantCodeChanges(): Promise<void> {
+    return this.#serialize(async () => {
+      this.#codeChangesGranted = true
+      this.#chat?.replaceTools(this.#toolsFor(), [...APPROVAL_REQUIRED])
+    })
   }
 
   /**
@@ -174,7 +215,9 @@ class AgentChatConversation {
   #toolsFor(): ToolSet {
     const record = (call: AgentChatToolCall) => this.#calls.push(call)
     const writes = this.#writeWorld()
-    const all = writeTools(writes, this.#staged, record, this.#issuedTexts)
+    const issueChangeId = () => `change-${++this.#nextChangeNumber}`
+    const stage = stageChange(writes, this.#staged, issueChangeId)
+    const all = writeTools(writes, this.#staged, record, this.#issuedTexts, issueChangeId)
     if (this.#mode === 'chat') {
       return { ...readTools(this.#reading(), record), ...all }
     }
@@ -183,7 +226,7 @@ class AgentChatConversation {
     )
     return {
       ...readTools(this.#reading(), record),
-      ...authoringTools(writes, stageChange(writes, this.#staged), this.#codeChangeRequests, record),
+      ...authoringTools(writes, stage, this.#codeChangeRequests, record),
       ...landing,
       // Applying and undoing are needed for an authored scenario or check; changing app code is not, and is
       // withheld until the person answers the agent's request for it.
@@ -191,7 +234,12 @@ class AgentChatConversation {
     }
   }
 
-  async send(text: string, onEvent?: (event: AgentChatEvent) => void): Promise<Json> {
+  send(text: string, onEvent?: (event: AgentChatEvent) => void): Promise<Json> {
+    const generation = this.#generation
+    return this.#serialize(async () => await this.#send(text, generation, onEvent))
+  }
+
+  async #send(text: string, generation: number, onEvent?: (event: AgentChatEvent) => void): Promise<Json> {
     const model = this.#provider.model()
     if (model === undefined) {
       return { availability: this.#provider.availability(), status: 'unavailable' }
@@ -212,10 +260,15 @@ class AgentChatConversation {
     // A verdict belongs to the turn that ran the checks, and history now outlives the turn: without
     // this, every later turn is recorded carrying it and replays the same card on reload. `respond`
     // continues this turn deliberately, so only a new message clears it.
-    this.#lastVerdict = undefined
+    this.#turnVerdicts = []
+    this.#recordedVerdicts = 0
     this.#history.push({ role: 'user', text })
-    const turn = await this.#chat.send(text, onEvent)
-    return await this.#record(turn)
+    const turn = await this.#chat.send(text, event => {
+      if (generation === this.#generation) {
+        onEvent?.(event)
+      }
+    })
+    return await this.#record(turn, generation)
   }
 
   /**
@@ -226,10 +279,9 @@ class AgentChatConversation {
     return {
       ...this.#world,
       runTests: async () => {
-        const run = await this.#runTests()
-        this.#testBaseline ??= run
-        return run
+        return await this.#runTests()
       },
+      testStatus: () => this.#lastTestRun,
     }
   }
 
@@ -238,16 +290,35 @@ class AgentChatConversation {
     return {
       ...this.#reading(),
       apply: async change => {
+        // The baseline is taken immediately before this exact write, not whenever the model happened to call
+        // runTests earlier. Each applied change in a multi-change turn therefore gets its own attribution.
+        const baseline = await this.#runTests()
+        this.#changeBaselines.set(change.id, { beforeVersions: change.expect, run: baseline })
         const unique = new Map<string, string>()
         for (const edit of change.edits) {
           unique.set(edit.path, edit.after)
         }
         const fileEdits = [...unique.entries()].map(([path, content]) => ({ content, path }))
-        const result = await this.#session.applyAgentFiles({
-          edits: fileEdits,
-          expect: change.expect,
-          writeId: crypto.randomUUID(),
-        })
+        let result: Awaited<ReturnType<StudioProjectSession['applyAgentFiles']>>
+        try {
+          result = await this.#session.applyAgentFiles({
+            edits: fileEdits,
+            expect: change.expect,
+            writeId: crypto.randomUUID(),
+          })
+        } catch (error) {
+          this.#changeBaselines.delete(change.id)
+          throw error
+        }
+        if (result.rolledBack) {
+          this.#changeBaselines.delete(change.id)
+        } else {
+          this.#changeBaselines.set(change.id, {
+            appliedVersions: result.sourceVersions,
+            beforeVersions: change.expect,
+            run: baseline,
+          })
+        }
         // The project just changed, so the next tool call must not answer from the graph it had before.
         this.#world.invalidate()
         return {
@@ -261,41 +332,97 @@ class AgentChatConversation {
       sourceVersionOf: async path =>
         (await this.#world.files()).find(file => file.path === path)?.sourceVersion
           ?? (await this.#session.readFile(path)).sourceVersion,
-      verdict: async () => {
+      verdict: async change => {
+        const baseline = this.#changeBaselines.get(change.id)
         const after = await this.#runTests()
-        // Without a baseline the verdict says so rather than blaming or excusing this change.
-        this.#lastVerdict = featureTestVerdict(this.#testBaseline, after)
-        this.#testBaseline = after
-        return this.#lastVerdict
+        this.#changeBaselines.delete(change.id)
+        const currentVersions = await Promise.all(change.expect.map(async expected => ({
+          path: expected.path,
+          sourceVersion: (await this.#session.readFile(expected.path)).sourceVersion,
+        })))
+        const appliedVersions = baseline?.appliedVersions ?? currentVersions
+        const versionsHeld = appliedVersions.every(applied =>
+          currentVersions.some(current =>
+            current.path === applied.path && current.sourceVersion === applied.sourceVersion
+          )
+        )
+        const verdict: BoundFeatureTestVerdict = {
+          ...(versionsHeld
+            ? featureTestVerdict(baseline?.run, after)
+            : {
+              broke: [],
+              detail:
+                'Another source edit landed before the run finished, so these results cannot be attributed to this change.',
+              heading: 'The source changed while tests ran; this change has no test verdict.',
+              repaired: [],
+              status: 'unknown' as const,
+            }),
+          afterVersions: appliedVersions,
+          beforeVersions: baseline?.beforeVersions ?? change.expect,
+          changeId: change.id,
+          currentVersions,
+          versionStatus: versionsHeld ? 'current' : 'stale',
+        }
+        this.#turnVerdicts.push(verdict)
+        return verdict
       },
       undo: async () => {
         const result = await this.#session.undoAgentFiles(crypto.randomUUID())
         this.#world.invalidate()
+        this.#changeBaselines.clear()
+        this.#lastTestRun = undefined
         return { message: result.compile.message, restored: result.restored, status: result.compile.status }
       },
     }
   }
 
-  async respond(
+  respond(
     responses: readonly { approvalId: string; approved: boolean }[],
+    onEvent?: (event: AgentChatEvent) => void,
+  ): Promise<Json> {
+    const generation = this.#generation
+    return this.#serialize(async () => await this.#respond(responses, generation, onEvent))
+  }
+
+  async #respond(
+    responses: readonly { approvalId: string; approved: boolean }[],
+    generation: number,
     onEvent?: (event: AgentChatEvent) => void,
   ): Promise<Json> {
     if (this.#chat === undefined) {
       return { message: 'Nothing is waiting for approval.', status: 'complete' }
     }
-    return await this.#record(await this.#chat.respond(responses, onEvent))
+    const turn = await this.#chat.respond(responses, event => {
+      if (generation === this.#generation) {
+        onEvent?.(event)
+      }
+    })
+    return await this.#record(turn, generation)
   }
 
-  async #record(turn: AgentChatTurn): Promise<Json> {
+  async #record(turn: AgentChatTurn, generation: number): Promise<Json> {
+    if (generation !== this.#generation) {
+      return {
+        message: 'This reply was discarded because the conversation changed while it was running.',
+        pendingApprovals: [],
+        status: 'failed',
+        steps: turn.steps,
+        text: '',
+        toolCalls: turn.toolCalls,
+        usage: turn.usage,
+      }
+    }
     const pendingApprovals = turn.pendingApprovals.map(approval => ({
       ...approval,
-      diff: this.#diffFor(approval.input),
+      diff: this.#diffFor(approval),
     }))
     const codeChanges = {
       granted: this.#codeChangesGranted,
       requests: this.#codeChangeRequests.slice(this.#requestsBeforeTurn),
     }
-    const verdict = this.#lastVerdict
+    const verdicts = this.#turnVerdicts.slice(this.#recordedVerdicts)
+    this.#recordedVerdicts = this.#turnVerdicts.length
+    const verdict = verdicts[verdicts.length - 1]
     this.#history.push({
       role: 'assistant',
       codeChanges,
@@ -307,6 +434,7 @@ class AgentChatConversation {
       toolCalls: turn.toolCalls,
       usage: turn.usage,
       ...(verdict === undefined ? {} : { verdict }),
+      ...(verdicts.length === 0 ? {} : { verdicts }),
     })
     await this.#log(turn)
     return {
@@ -319,6 +447,7 @@ class AgentChatConversation {
       toolCalls: turn.toolCalls,
       usage: turn.usage,
       ...(verdict === undefined ? {} : { verdict }),
+      ...(verdicts.length === 0 ? {} : { verdicts }),
     }
   }
 
@@ -330,7 +459,11 @@ class AgentChatConversation {
   /** runTests reads the app's own tests, and reports nothing rather than throwing when it cannot. */
   async #runTests(): Promise<TestRunSummary | undefined> {
     try {
-      return this.#tests === undefined ? undefined : await this.#tests.run()
+      const run = this.#tests === undefined ? undefined : await this.#tests.run()
+      if (run !== undefined) {
+        this.#lastTestRun = run
+      }
+      return run
     } catch {
       return undefined
     }
@@ -341,6 +474,11 @@ class AgentChatConversation {
    * denied here rather than becoming a card with an empty diff, which is how people learn to approve blindly.
    */
   #approvalPolicy(call: { toolName: string; input: unknown }): { denied: string } | undefined {
+    if (call.toolName === 'undoLastChange') {
+      return this.#session.agentUndoPreview() === undefined
+        ? { denied: 'Nothing applied by the agent is available to undo.' }
+        : undefined
+    }
     if (call.toolName !== 'applyChange') {
       return undefined
     }
@@ -352,8 +490,11 @@ class AgentChatConversation {
   }
 
   /** The diff an approval is really about, so a person approves a change rather than an argument list. */
-  #diffFor(input: unknown): string | undefined {
-    const id = (input as { changeId?: unknown } | undefined)?.changeId
+  #diffFor(approval: AgentChatApproval): string | undefined {
+    if (approval.toolName === 'undoLastChange') {
+      return this.#session.agentUndoPreview()?.diff
+    }
+    const id = (approval.input as { changeId?: unknown } | undefined)?.changeId
     return typeof id === 'string' ? this.#staged.get(id)?.edits.map(edit => edit.diff).join('\n\n') : undefined
   }
 
@@ -389,6 +530,7 @@ const conversations = new WeakMap<StudioProjectSession, AgentChatConversation>()
 function conversationFor(
   session: StudioProjectSession,
   secrets?: Readonly<Record<string, string>>,
+  provider?: AgentChatProvider,
 ): AgentChatConversation {
   const existing = conversations.get(session)
   if (existing !== undefined) {
@@ -398,7 +540,7 @@ function conversationFor(
   // without reaching the bundler, the preview runtime, or anything else Studio starts.
   const created = new AgentChatConversation(
     session,
-    new AgentChatProvider(secrets === undefined ? process.env : { ...process.env, ...secrets }),
+    provider ?? new AgentChatProvider(secrets === undefined ? process.env : { ...process.env, ...secrets }),
   )
   conversations.set(session, created)
   return created
@@ -408,10 +550,16 @@ function conversationFor(
 export function conversationForTesting(
   session: StudioProjectSession,
   provider: AgentChatProvider,
-): { handle: (command: string, body: Json, tests?: StudioTestRunner) => Promise<unknown> } {
+): {
+  handle: (command: string, body: Json, tests?: StudioTestRunner) => Promise<unknown>
+  send: (message: string, onEvent: (event: AgentChatEvent) => void) => Promise<unknown>
+} {
   const conversation = new AgentChatConversation(session, provider)
   conversations.set(session, conversation)
-  return { handle: async (command, body, tests) => await AgentChat.handle(session, command, body, tests) }
+  return {
+    handle: async (command, body, tests) => await AgentChat.handle(session, command, body, tests),
+    send: async (message, onEvent) => await conversation.send(message, onEvent),
+  }
 }
 
 /**
@@ -425,8 +573,9 @@ export function streamTurn(
   body: Json,
   tests?: StudioTestRunner,
   secrets?: Readonly<Record<string, string>>,
+  provider?: AgentChatProvider,
 ): ReadableStream<Uint8Array> {
-  const conversation = conversationFor(session, secrets)
+  const conversation = conversationFor(session, secrets, provider)
   conversation.useTestRunner(tests)
   const encoder = new TextEncoder()
   return new ReadableStream<Uint8Array>({
@@ -469,8 +618,9 @@ export const AgentChat = {
     body: Json,
     tests?: StudioTestRunner,
     secrets?: Readonly<Record<string, string>>,
+    provider?: AgentChatProvider,
   ): Promise<unknown> {
-    const conversation = conversationFor(session, secrets)
+    const conversation = conversationFor(session, secrets, provider)
     conversation.useTestRunner(tests)
     if (command === 'availability') {
       return conversation.provider.availability()
@@ -479,16 +629,16 @@ export const AgentChat = {
       return conversation.provider.enable(body['enabled'] === true)
     }
     if (command === 'reset') {
-      conversation.reset()
+      await conversation.reset()
       return { status: 'reset' }
     }
     if (command === 'mode') {
       // `ask` and `build` were separate modes before they merged; an old client may still name either.
-      conversation.setMode(body['mode'] === 'scenario' ? 'scenario' : 'chat')
+      await conversation.setMode(body['mode'] === 'scenario' ? 'scenario' : 'chat')
       return { mode: conversation.mode }
     }
     if (command === 'grant-code-changes') {
-      conversation.grantCodeChanges()
+      await conversation.grantCodeChanges()
       return conversation.codeChanges
     }
     if (command === 'respond') {
