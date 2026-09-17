@@ -81,11 +81,41 @@ Describe('green tree records', () => {
     }
   })
 
+  Test('a gate record is found at its own tree, whatever lane proved it', async () => {
+    const root = await mkTestDir('tao-green-tree-gates-')
+    try {
+      await GreenTree.record(
+        root,
+        'verify',
+        { at: '2026-09-05T10:00:00Z', logRoot: '/logs/verify', treeHash: 'abc' },
+        ['_typecheck', '_test'],
+      )
+
+      Expect([...(await GreenTree.findGates(root, 'abc', ['_typecheck', '_test', 'dead-exports'])).keys()].sort())
+        .toEqual(['_test', '_typecheck'])
+      // A gate proves the tree it ran against and no other.
+      Expect(await GreenTree.findGates(root, 'def', ['_typecheck'])).toEqual(new Map())
+
+      // A later run at another tree replaces the gate's record, exactly as it replaces a lane's.
+      await GreenTree.record(
+        root,
+        'verify',
+        { at: '2026-09-05T11:00:00Z', logRoot: '/logs/verify-2', treeHash: 'def' },
+        ['_typecheck'],
+      )
+      Expect([...(await GreenTree.findGates(root, 'abc', ['_typecheck', '_test'])).keys()]).toEqual(['_test'])
+      Expect((await GreenTree.findGates(root, 'def', ['_typecheck'])).get('_typecheck')?.logRoot)
+        .toBe('/logs/verify-2')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('a damaged store reads as empty instead of failing the lane', async () => {
     const root = await mkTestDir('tao-green-tree-damaged-')
     try {
       await FS.writeText(FS.resolvePath(GreenTree.STORE_PATH, root), '{"version": 99, "lanes": "no"}')
-      Expect(await GreenTree.load(root)).toEqual({ lanes: {}, version: 1 })
+      Expect(await GreenTree.load(root)).toEqual({ gates: {}, lanes: {}, version: 1 })
     } finally {
       await FS.remove(root)
     }
