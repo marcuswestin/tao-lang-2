@@ -55,6 +55,10 @@ description: >-
 - Write or update the message every time a branch becomes merge-ready, including when later commits
   change what the branch does. The command fails with `Merge message file does not exist` when the
   file is missing, so a branch handed over without it is not ready.
+- Completing the work means completing everything before that command: commits landed, worktree
+  clean, `verify --complete` and the reachable host lanes run, affected roadmap and ledger documents
+  refreshed, and the message written. Do this unprompted, and repeat it after every round of Ro's
+  corrections so the message never describes an earlier state of the branch.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command

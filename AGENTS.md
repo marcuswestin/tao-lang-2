@@ -66,6 +66,15 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
   merge-ready without it, and the human command Ro then runs is
   `just merge-with-main --execute --push --yes`.
+- Whenever the work looks complete, carry it all the way to that command without being asked: land
+  every change as commits on the feature branch, leave the worktree clean, run `verify --complete`
+  plus the host lanes the change reaches, refresh the roadmap or ledger documents the work changed,
+  and write the merge message. Ro's next action is then the merge command itself and nothing else.
+  Say plainly which evidence stands behind it and which gates did not run.
+- Every later round works the same way. When Ro comes back with corrections, implement them, re-run
+  the validation they invalidate, and update `.artifacts/merge/<branch>.msg` again so the branch
+  stays immediately mergeable; never leave a reviewed branch whose message describes an earlier
+  state.
 - Several worktrees share one machine. Lanes divide its CPUs between themselves automatically, so a
   lane is slower, not oversubscribed, while another agent works. A timeout under that load is
   reported as `machine-contention`, re-run once on its own, and named in the summary's `contention`
