@@ -364,4 +364,7 @@ Product and codebase backlog, unordered.
   `full-verify`'s Studio lanes parallelized on per-worker resources.
 - `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
 - `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
+- `Docs/Roadmap/September squash-merge remediation.md` — the September squash-merge audit's 183
+  tracked findings (implemented) and the follow-up branch's open items, including a second,
+  independent findings list that is cross-checked but not yet triaged.
 - `Docs/Roadmap/Archive/` — frozen records of completed work.
