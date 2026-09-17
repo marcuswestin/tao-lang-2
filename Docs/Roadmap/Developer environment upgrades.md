@@ -256,16 +256,22 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Studio browser smoke
 - **Impact:** The complete simulated-user journey cannot run in the managed host when Chrome aborts with
   `SIGABRT` before exposing DevTools; ordinary `verify` intentionally omits this proof.
-- **Evidence:** The smoke's two non-browser checks passed, but the browser journey never began.
+- **Evidence:** The smoke's non-browser checks pass, but every exact and reduced Chrome launch aborts
+  before DevTools dispatch. The macOS crash stack ends in
+  `TransformProcessType -> _RegisterApplication -> abort`, and LaunchServices cannot resolve the
+  otherwise valid signed Chrome application from this task namespace. Repository CDP tests remain green.
+  On 2026-09-17 the same branch's headless browser journeys launched Chrome normally from an
+  ordinary unsandboxed desktop shell, so the abort is specific to that managed task namespace.
 - **Workaround:** From a normal terminal run
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
-  `just full-verify`.
+  `just full-verify`; when selecting another supported browser explicitly, set
+  `TAO_STUDIO_CHROME_PATH` in that terminal.
 - **Proposed change:** After Studio branches land, evaluate headless Chromium and attach-to-existing-browser
   modes, then add a reliable CI or pre-merge host lane without slowing ordinary `verify`.
 - **Dependencies:** Semantic-agent, companion, and freehand Studio changes must land first.
 - **Acceptance:** The full browser journey runs repeatably in its supported host and is required for
   Studio-heavy landing evidence.
-- **Source:** 2026-09-03 freehand implementation summary.
+- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation acceptance.
 
 ### DEVENV-016 — Studio process ownership and status
 
@@ -632,7 +638,8 @@ an entry here may link one when the developer workflow is also affected.
   mutable Hutch project registry backed by copy-on-write clones of the installed immutable store,
   and clear only the current generated project's transient locks after proving its process tree
   stopped.
-- **Also observed:** from a managed shell the canary wrote `.artifacts/tests/studio-canary/canary.json`
+- **Also observed:** from a managed shell the canary wrote an invocation-scoped
+  `.artifacts/tests/studio-canary/invocations/<id>/canary.json`
   with `"status": "blocked"` within seconds, recorded its own pid in `survivingPids`, and was still
   alive 40 minutes later on a surviving `hutch-engine electrobun prepare` child, holding the whole
   `just full-verify` run open. The owned-process-group stop above should close this; re-verify it when
@@ -1132,7 +1139,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-061 — Generated-artifact cleanup is denied after files gain macOS provenance
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Area:** Generated artifacts
 - **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
   parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
@@ -1141,20 +1148,31 @@ an entry here may link one when the developer workflow is also affected.
   `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
   scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
   `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
-  attempt had already emptied its live output before the same cleanup denial surfaced.
+  attempt had already emptied its live output before the same cleanup denial surfaced. A focused
+  probe then established the narrower host rule: file unlink and replacement work inside the
+  checkout, while directory rename and removal fail; host-temporary directories remain removable.
+  The same boundary left an old `.studio-device-trust.lock` directory undeletable, while a
+  monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
+  2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
+  a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
+  provenance alone.
 - **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
   at the same source revision and verify that its generator reports `up to date`. Focused tests that
-  do not copy and recursively remove provenance-marked trees remain usable. A fresh temporary Git
-  checkout with the exact working diff applied omits the inherited provenance metadata and can run
-  the complete gate successfully.
-- **Proposed change:** Identify why copied repository inputs retain provenance that this host refuses
-  to remove, and make generated-tree replacement transactional so a cleanup denial preserves the
-  prior output. The supported verification host/profile must be able to delete its own scratch roots.
+  do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
+  and test roots in the host temporary directory; publish persistent generated output with
+  transactional file replacement instead of checkout-directory replacement.
+- **Proposed change:** The September remediation branch moves disposable runtime-test roots to host
+  temp and makes parser and IDE generated-file publication rollback-capable without renaming or
+  removing checkout directories. The Studio preview runtime is the exception and stays under
+  `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
+  root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
+  failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
+  task namespace prevents directory lifecycle operations.
 - **Dependencies:** None.
 - **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
   intact and reports one actionable failure.
-- **Source:** 2026-09-16 September remediation Wave 1.
+- **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
 
 ### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
 
@@ -1176,3 +1194,25 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Starting from deliberately stale generated Codex files, the documented setup command
   refreshes them and the exact-parity test passes in the default supported Codex workflow.
 - **Source:** 2026-09-16 September remediation Wave 1.
+
+### DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells
+
+- **Status:** Candidate
+- **Area:** Studio preview host
+- **Impact:** Studio can reach Expo successfully and then fail before browser dispatch with
+  `EMFILE: too many open files, watch`, preventing the browser and native acceptance lanes from
+  distinguishing product behavior from host watcher exhaustion.
+- **Evidence:** During September-remediation acceptance, the task shell omitted the linked
+  `.devenv/profile/bin` from `PATH`, so Metro could not find Watchman and fell back to Node watching.
+  The shell reported a high `ulimit -n`, but `launchctl limit maxfiles` retained a 256 soft limit.
+  The pinned `.devenv/profile/bin/watchman --version` succeeded as `2026.01.19.00`.
+- **Workaround:** Run Studio acceptance from a shell that has loaded the materialized devenv profile;
+  in a managed task shell, prepend this checkout's `.devenv/profile/bin` once before launching the
+  lane.
+- **Proposed change:** Make the Studio launch preflight resolve the pinned Watchman executable or fail
+  early with the exact profile remediation before Metro falls back to the launchd-limited watcher.
+- **Dependencies:** DEVENV-015 remains the later Chrome/LaunchServices boundary once Metro starts.
+- **Acceptance:** A managed-shell Studio launch either uses the pinned Watchman and reaches browser
+  dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node
+  watcher's `EMFILE` fallback.
+- **Source:** 2026-09-16 September remediation acceptance.
