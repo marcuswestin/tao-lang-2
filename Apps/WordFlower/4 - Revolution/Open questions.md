@@ -18,19 +18,22 @@ and are not questions.
 
 **Decided but unused:** `access`, `audience`, `transaction`, `publish`, `presence` (§3, §4).
 
-`Process.md` records this as an open scope question settled at step 4: whether the cluster "enters
-MVP through collaborative WordFlower workspaces, or waits for the app expansion". If it waits, the
-forcing app is Skillet and WordFlower never has it — so putting shared workspaces, invitations, and a
-published read-only document projection into this tier would answer the question by writing code,
-without Ro.
+This is already Ro's tracked decision **R5** in `Docs/MVP Roadmap/Ro MVP Roadmap.md`, whose standing
+recommendation is to defer the cluster to the app expansion with Skillet. It is repeated here only
+because it is the one open question that changes what this file contains: if the cluster enters MVP
+through collaborative WordFlower workspaces, the forcing feature lives in this tier and this tier has
+to grow it.
 
-This tier therefore contains no authority surface, and the TODO list at the head of the app file
-says why. Answering "WordFlower" means adding accounts, `data Accounts / Account with { … }`,
-memberships, a share code, and a `publish Document … by capability` projection here; answering "the
-app expansion" means the cluster is proven in `Apps/Tao Future/Skillet` and this tier stays as it is.
+The tier is written the way R5's recommendation implies — no authority surface at all — and the TODO
+list at the head of the app file says why. Taking the recommendation therefore changes nothing here.
+Answering the other way means adding accounts, `data Accounts / Account with { … }`, memberships, a
+share code, and a `publish Document … by capability` projection to this file.
 
-**Blocks:** `Coverage.md` rows for §3 and §4 — a coverage row cannot name a forcing feature until
-this is answered.
+Inventing collaborative workspaces to have something to point `access` at would have answered R5 by
+writing code, which is why the tier does not.
+
+**Blocks:** `Coverage.md` rows for §3 and §4 — a coverage row cannot name a forcing feature until R5
+is answered.
 
 ## Q2 — Is the visibility ladder two words or five?
 

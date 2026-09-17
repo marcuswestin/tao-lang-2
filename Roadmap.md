@@ -59,9 +59,9 @@ tests written in Tao, green in Current, for every construct introduced.
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
   - `Apps/WordFlower/4 - Revolution/Open questions.md` carries the eight questions the rewrite could
-    not answer from `Decisions.md` — chiefly whether WordFlower forces the authority cluster (which
-    step 4 must settle anyway), whether the visibility ladder is §1's two words or the implemented
-    five, and whether `DynamicSelectionNav` is a decided nav kind. Three internal contradictions in
+    not answer from `Decisions.md` — chiefly whether the visibility ladder is §1's two words or the
+    implemented five, and whether `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority
+    cluster, is `R5` in `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
     `Decisions.md` were amended in the same change: container parentheses, `TabNav` → `SelectionNav`,
     and the missing `overlay` presentation mode.
   - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
