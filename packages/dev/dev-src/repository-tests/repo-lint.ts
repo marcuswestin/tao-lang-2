@@ -221,6 +221,7 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
 const RAW_THROW_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts',
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
   'packages/studio/studio-src/StudioWelcome.ts',
 ]
@@ -256,13 +257,13 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
 const RAW_ERROR_ALLOWLIST = [
   // Emitted browser and Electrobun bodies, where no Tao module loads.
   'packages/dev/dev-src/studio/StudioCdp.ts:226',
-  'packages/dev/dev-src/studio/StudioCdp.ts:253',
-  'packages/dev/dev-src/studio/StudioCdp.ts:304',
-  'packages/dev/dev-src/studio/StudioCdp.ts:327',
-  'packages/dev/dev-src/studio/StudioCdp.ts:485',
-  'packages/dev/dev-src/studio/StudioCdp.ts:513',
-  'packages/dev/dev-src/studio/StudioCdp.ts:682',
-  'packages/dev/dev-src/studio/StudioCdp.ts:818',
+  'packages/dev/dev-src/studio/StudioCdp.ts:260',
+  'packages/dev/dev-src/studio/StudioCdp.ts:298',
+  'packages/dev/dev-src/studio/StudioCdp.ts:321',
+  'packages/dev/dev-src/studio/StudioCdp.ts:479',
+  'packages/dev/dev-src/studio/StudioCdp.ts:507',
+  'packages/dev/dev-src/studio/StudioCdp.ts:676',
+  'packages/dev/dev-src/studio/StudioCdp.ts:812',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
@@ -285,6 +286,16 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1261',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1303',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1329',
+  'packages/studio/studio-tests/studio-client.test.ts:626',
+  'packages/studio/studio-tests/studio-client.test.ts:2996',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:128',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:264',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:292',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:299',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:367',
   'packages/studio/studio-src/StudioWelcome.ts:83',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
@@ -313,11 +324,8 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/runtime/TR-tests/TR-studio-device-client.test.ts:489',
   'packages/runtime/TR-tests/TR-studio-device-client.test.ts:510',
   'packages/runtime/TR-tests/TR-studio-device-client.test.ts:511',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:317',
   'packages/shared/shared-tests/test-helpers.test.ts:45',
   'packages/stdlib/stdlib-tests/data-providers.test.ts:86',
-  'packages/studio/studio-tests/studio-client.test.ts:624',
-  'packages/studio/studio-tests/studio-client.test.ts:2903',
   'packages/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 

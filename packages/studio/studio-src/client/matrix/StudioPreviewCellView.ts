@@ -54,8 +54,9 @@ function cellButton(className: string, text: string, type: 'button' | 'submit' =
 
 /**
  * renderCellPreview builds one cell's header, controls, and viewport around its retained iframe, and
- * wires the remount, fixture, generation, and replay actions onto the connection. A remount renders
- * the cell again with the same frame, so the iframe keeps its identity while everything else is rebuilt.
+ * wires the remount, fixture, generation, and replay actions onto the connection. Later revisions
+ * replace the label in place and retain the mounted viewport: detaching even the same iframe while
+ * rebuilding its wrapper replaces its browsing context and turns Fast Refresh into a full reload.
  */
 export function renderCellPreview(
   frame: HTMLElement,
@@ -164,13 +165,16 @@ export function renderCellPreview(
     invalidatePreviewJourneyRecording(connection)
   }
 
-  const viewport = document.createElement('div')
+  const existingViewport = frame.querySelector<HTMLElement>(':scope > .studio-preview-cell-viewport')
+  const viewport = existingViewport ?? document.createElement('div')
   viewport.className = 'studio-preview-cell-viewport'
   viewport.style.height = `${cell.environment.viewport.height}px`
   viewport.style.width = `${cell.environment.viewport.width}px`
   connection.iframe.style.height = '100%'
   connection.iframe.style.width = '100%'
-  viewport.append(connection.iframe)
+  if (existingViewport === null) {
+    viewport.append(connection.iframe)
+  }
   observePreviewVisibility(frame, connection)
 
   const remount = async (
@@ -456,6 +460,14 @@ export function renderCellPreview(
       connection.activate?.()
     }
   }
-  frame.replaceChildren(label, viewport)
+  const previousLabel = frame.querySelector<HTMLElement>(':scope > .studio-preview-cell-label')
+  if (previousLabel === null) {
+    frame.prepend(label)
+  } else {
+    previousLabel.replaceWith(label)
+  }
+  if (viewport.parentElement !== frame) {
+    frame.append(viewport)
+  }
   connection.changed?.()
 }

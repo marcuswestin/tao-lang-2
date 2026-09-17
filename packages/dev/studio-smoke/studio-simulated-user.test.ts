@@ -187,7 +187,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         const rect = frame.getBoundingClientRect()
         return { height: rect.height, width: rect.width }
       })()`)
-      await browser.clickAt('.studio-preview-cell iframe', {
+      await browser.clickAtOffset('.studio-preview-cell iframe', {
         x: transformedFrame.width * 0.72,
         y: transformedFrame.height * 0.62,
       })
@@ -280,7 +280,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
 
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAt('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
       await browser.pressKey('End')
       await browser.pressKey('Backspace')
       await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
@@ -291,7 +291,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       await browser.click('[data-testid="studio-lens-refold"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAt('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
       await browser.pressKey('End')
       await browser.pressKey('ArrowLeft')
       await browser.pressKey('Delete')

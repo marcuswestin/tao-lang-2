@@ -2,7 +2,6 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { useValidationCodes } from '../validator-src/diagnostic-codes'
 import Validator from '../validator-src/validator'
-import { AppValidator } from '../validator-src/validators/app-validator'
 import { injectionValidationMessages } from '../validator-src/validators/injections-validator'
 import { useValidationMessages } from '../validator-src/validators/use-validator'
 import {
@@ -13,7 +12,6 @@ import {
   checksFiles,
   fence,
   rejectsFiles,
-  rejectsFilesFrom,
   stubView,
   type TaoFiles,
   tsFence,
@@ -374,11 +372,11 @@ Describe('validator: use and imports', () => {
   }
 
   Test(
-    'does not let inline tests import app declarations outside the entry file',
-    rejectsFiles(
+    'lets inline tests import visible app declarations outside the entry file',
+    acceptsFiles(
       {
         'Main.tao': importingApp(
-          'use OtherView from ./Other.tao',
+          'use OtherApp, OtherView from ./Other.tao',
           'render OtherView()',
           `test "inline smoke" {
              test "renders" {
@@ -388,11 +386,10 @@ Describe('validator: use and imports', () => {
            }`,
         ),
         'Other.tao': `
-          app OtherApp { view OtherView }
+          folder app OtherApp { view OtherView }
           ${visibleView('OtherView')}
         `,
       },
-      AppValidator.messages.appEntryFile('OtherApp'),
     ),
   )
 
@@ -401,7 +398,7 @@ Describe('validator: use and imports', () => {
   Test(
     'lets a test sidecar in a subfolder run an app declared in an ancestor directory',
     acceptsFilesFrom('ui/Main.test.tao', {
-      'Main.tao': stubApp(),
+      'Main.tao': stubApp().replace('app MyApp', 'workspace app MyApp'),
       'ui/Main.test.tao': `
         use MyApp from ../
         test "sidecar smoke" {
@@ -415,13 +412,13 @@ Describe('validator: use and imports', () => {
   )
 
   Test(
-    'does not let test sidecars relax app placement outside their directory',
-    rejectsFilesFrom(
+    'lets test sidecars import a visible app from a nested file',
+    acceptsFilesFrom(
       'Main.test.tao',
       {
         'Main.test.tao': `
           use MyApp from ./
-          use OtherView from ./nested/Other.tao
+          use OtherApp, OtherView from ./nested/Other.tao
           test "sidecar smoke" {
             test "renders" {
               run MyApp
@@ -431,11 +428,10 @@ Describe('validator: use and imports', () => {
         `,
         'Main.tao': stubApp(),
         'nested/Other.tao': `
-          app OtherApp { view OtherView }
+          workspace app OtherApp { view OtherView }
           ${visibleView('OtherView')}
         `,
       },
-      AppValidator.messages.appEntryFile('OtherApp'),
     ),
   )
 })

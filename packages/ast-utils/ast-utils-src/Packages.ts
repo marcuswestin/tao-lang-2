@@ -742,6 +742,11 @@ export namespace Packages {
   /** visibilityOf returns the optional visibility marker on a declaration. */
   export function visibilityOf(declaration: AST.Declaration): AST.DeclarationVisibility | undefined {
     const visibility = 'visibility' in declaration ? declaration.visibility : undefined
+    // Direct apps predate visibility markers and have always been importable by companion files in
+    // their folder. Preserve that source compatibility while letting an explicit `file app` opt out.
+    if (AST.isAppDeclaration(declaration) && visibility === undefined) {
+      return 'folder'
+    }
     return visibility === 'file' ? undefined : visibility
   }
 

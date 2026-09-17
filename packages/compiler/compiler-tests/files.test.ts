@@ -727,14 +727,14 @@ Describe('compiler: files and packages', () => {
     )
   })
 
-  Test('rejects entry files without an app declaration', async () => {
+  Test('rejects graphs without an app declaration', async () => {
     await Expect(TestCompiler.compileCode(`
       view MainView() {
         render inject ${tsFence}
           return null
         ${fence}
       }
-    `)).rejects.toThrow('entry file must declare at least one app')
+    `)).rejects.toThrow('no app declaration is reachable from the entry file')
   })
 
   Test('requires explicit multi-app selection and emits a named registry', async () => {
@@ -751,6 +751,98 @@ Describe('compiler: files and packages', () => {
     Expect(compiled.code).toContain('"First": TaoApp_First')
     Expect(compiled.code).toContain('"Second": TaoApp_Second')
     Expect(compiled.code).toContain('export default TaoApps["Second"]')
+  })
+
+  Test('selects and compiles an app declared in an imported file', async () => {
+    await withTaoFiles(
+      'tao-compiler-imported-app-',
+      {
+        'Project.tao': 'project { id "imported-app" name "Imported app" }',
+        'Main.tao': `
+          use NestedApp from ./nested/App.tao
+        `,
+        'nested/App.tao': `
+          workspace app NestedApp { view MainView }
+          view MainView() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'NestedApp' })
+        const selected = compiled.files.find(file => file.sourcePath === paths['nested/App.tao'])
+        const caller = compiled.files.find(file => file.sourcePath === paths['Main.tao'])
+
+        Expect(compiled.appNames).toEqual(['NestedApp'])
+        Expect(selected?.relativePath).toBe('App.tsx')
+        Expect(selected?.code).toContain('export default TaoApps["NestedApp"]')
+        Expect(caller?.relativePath).not.toBe('App.tsx')
+      },
+    )
+  })
+
+  Test('compiles a package app and a cross-module variant through imported runtime values', async () => {
+    await withTaoFiles(
+      'tao-compiler-package-app-',
+      {
+        'Project.tao': 'project { id "package-app" name "Package app" }',
+        'Main.tao': `
+          use PackageApp from @feature
+          app Preview = PackageApp with { Name "Preview" }
+        `,
+        'packages/@feature/App.tao': `
+          use StackNav from @tao/nav
+          public app PackageApp { Name "Package" Navigator StackNav { Initial Home } }
+          view Home() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'Preview' })
+        const entry = compiled.files.find(file => file.relativePath === 'App.tsx')
+
+        Expect(compiled.appNames).toEqual(['Preview', 'PackageApp'])
+        Expect(entry?.code).toContain('declaration: _Scope.PackageApp.declaration')
+        Expect(entry?.code).toContain('navigator: () => _Scope.PackageApp.definition.navigator()')
+        Expect(entry?.code).not.toContain('_Scope.StackNav')
+        Expect(entry?.code).not.toContain('_Scope.Home')
+      },
+    )
+  })
+
+  Test('keeps alternating-module app inheritance on each immediate runtime base', async () => {
+    await withTaoFiles(
+      'tao-compiler-alternating-app-inheritance-',
+      {
+        'Project.tao': 'project { id "alternating-app" name "Alternating app" }',
+        'Main.tao': `
+          use MiddleApp from ./Middle.tao
+          workspace app RootApp { view RootHome }
+          app FinalApp = MiddleApp
+          view RootHome() { render inject ${tsFence} return null ${fence} }
+        `,
+        'Middle.tao': `
+          use RootApp from ./Main.tao
+          use StackNav from @tao/nav
+          workspace app MiddleApp = RootApp with {
+            Navigator StackNav { Initial MiddleHome }
+          }
+          app SameModuleFinal = MiddleApp
+          view MiddleHome() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'FinalApp' })
+        const entry = compiled.files.find(file => file.relativePath === 'App.tsx')
+        const sameModule = await Workspace.compile(paths['Middle.tao'], { appName: 'SameModuleFinal' })
+        const sameModuleEntry = sameModule.files.find(file => file.relativePath === 'App.tsx')
+
+        Expect(entry?.code).toContain('declaration: _Scope.MiddleApp.declaration')
+        Expect(entry?.code).toContain('navigator: () => _Scope.MiddleApp.definition.navigator()')
+        Expect(entry?.code).not.toContain('_Scope.StackNav')
+        Expect(entry?.code).not.toContain('_Scope.MiddleHome')
+        Expect(sameModuleEntry?.code).toContain('declaration: _Scope.MiddleApp.declaration')
+        Expect(sameModuleEntry?.code).toContain('navigator: () => _Scope.MiddleApp.definition.navigator()')
+        Expect(sameModuleEntry?.code).not.toContain('_Scope.RootHome')
+      },
+    )
   })
 
   Test('strips test declarations from generated app code', async () => {

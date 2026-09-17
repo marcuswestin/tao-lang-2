@@ -12,7 +12,6 @@ import { renderCellPreview } from './StudioPreviewCellView'
 import {
   disconnectPreviews,
   expectPreviewRevision,
-  schedulePreviewRevisionFallback,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
   StudioRetainedPreview,
@@ -178,7 +177,6 @@ async function connectCellPreview(
     origin,
     previewInstanceId,
   }
-  schedulePreviewRevisionFallback(connection)
   return connection
 }
 
@@ -248,10 +246,6 @@ export async function refreshCellPreviews(
     }
     preview.cellIdentity = pendingIdentity
     preview.expectedRevision = manifest.compileRevision
-    if (preview.revisionTimeout !== undefined) {
-      clearTimeout(preview.revisionTimeout)
-      preview.revisionTimeout = undefined
-    }
     const refresh = async (): Promise<void> => {
       const runtime = await StudioRetainedPreview.register<StudioCellRuntimeResponse>(
         identities,

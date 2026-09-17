@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import TR from '../TaoRuntime-src/TR'
+import type { TaoAppDatasourceBinding } from '../TaoRuntime-src/TR-data'
 import { memoryDataProvider, memoryKeyValueStorage } from '../TaoRuntime-src/TR-data-provider'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import type { TaoNavigationArguments } from '../TaoRuntime-src/TR-navigation'
@@ -27,13 +28,18 @@ function identity(kind: string, name: string) {
 
 function runtimeApp(
   variant: string,
-  options: { exclusions?: readonly ('menus' | 'sheets' | 'toasts')[]; mode?: 'automatic' | 'fresh' } = {},
+  options: {
+    datasources?: () => readonly TaoAppDatasourceBinding[]
+    exclusions?: readonly ('menus' | 'sheets' | 'toasts')[]
+    mode?: 'automatic' | 'fresh'
+  } = {},
 ) {
   const home = TR.Navigation.View({ identity: identity('view', 'Home'), name: 'Home', render: () => null })
   const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
   const stack = TR.Navigation.Declaration('Stack', TR.NavKind.Stack(), identity('nav', 'Stack'))
   const app = TR.Navigation.App({
     auxiliaries: () => ({}),
+    ...(options.datasources ? { datasources: options.datasources } : {}),
     declaration: TR.Navigation.AppDeclaration('RestoreApp', identity('app', 'RestoreApp')),
     name: 'RestoreApp',
     navigator: () => TR.Navigation.Configure(stack, { Initial: home }),
@@ -233,6 +239,53 @@ Describe('navigation restoration', () => {
       const detachPreview = await preview.app.attachRestoration()
       Expect((preview.app.navigator as RuntimeStackNav).depth).toBe(1)
       detachPreview()
+    } finally {
+      restoreStorage()
+    }
+  })
+
+  Test('keys snapshots by every store an app mounts, and not at all when one cannot be represented', async () => {
+    const values = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      const store = TR.Data.Schema({ name: 'RestorationStores', schemaVersion: 1, entities: {} })
+      const feed = TR.Data.Declaration('Feed', memoryProvider(), identity('datasource', 'Feed'))
+      const personal = TR.Data.Declaration('Personal', memoryProvider(), identity('datasource', 'Personal'))
+      const bindings = (): readonly TaoAppDatasourceBinding[] => [
+        { source: TR.Data.Configure(feed, {}), storageName: 'Feed', store },
+        { source: TR.Data.Configure(personal, {}), storageName: 'Personal', store },
+      ]
+
+      const first = runtimeApp('stores', { datasources: bindings })
+      const detach = await first.app.attachRestoration()
+      first.app.present(first.app.navigator, first.detail, {})
+      await drainMicrotasks()
+      detach()
+
+      // A variant that inherits the same bindings restores the same position.
+      const inherited = runtimeApp('stores', { datasources: () => TR.Data.PatchBindings(bindings(), [[], []]) })
+      const detachInherited = await inherited.app.attachRestoration()
+      Expect((inherited.app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachInherited()
+
+      // Reconfiguring one member of the set starts afresh rather than restoring into other data.
+      const patched = runtimeApp('stores', {
+        datasources: () => TR.Data.PatchBindings(bindings(), [[], [{ StorageKey: TR.Value('elsewhere') }]]),
+      })
+      const detachPatched = await patched.app.attachRestoration()
+      Expect((patched.app.navigator as RuntimeStackNav).depth).toBe(1)
+      detachPatched()
+
+      const written = values.size
+      const unidentified = TR.Data.Declaration('Unidentified', memoryProvider())
+      const unkeyed = runtimeApp('stores', {
+        datasources: () => [...bindings(), { source: TR.Data.Configure(unidentified, {}), store }],
+      })
+      const detachUnkeyed = await unkeyed.app.attachRestoration()
+      unkeyed.app.present(unkeyed.app.navigator, unkeyed.detail, {})
+      await drainMicrotasks()
+      Expect(values.size).toBe(written)
+      detachUnkeyed()
     } finally {
       restoreStorage()
     }

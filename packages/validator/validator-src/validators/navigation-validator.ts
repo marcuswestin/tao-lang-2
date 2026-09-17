@@ -74,13 +74,13 @@ export const navigationValidationChecks = {
       ctx.error(dismiss, navigationValidationMessages.dismissContext)
     }
   },
-  [AST.SelectionActivateStatement.$type]: (activation, ctx, file) => {
+  [AST.SelectionActivateStatement.$type]: (activation, ctx) => {
     if (!AST.findOwningView(activation)) {
       ctx.error(activation, navigationValidationMessages.activationContext)
     }
     const app = activation.app?.ref
     if (app) {
-      for (const contract of selectionKeyContractsForAppFamily(app, file)) {
+      for (const contract of selectionKeyContractsForAppFamily(app, ctx.workspaceFiles)) {
         if (!contract.keys.has(activation.key)) {
           ctx.error(
             activation,
@@ -211,18 +211,19 @@ type SelectionKeyContract = {
 
 function selectionKeyContractsForAppFamily(
   app: AST.AppValueDeclaration,
-  file: AST.TaoFile,
+  files: readonly AST.TaoFile[],
 ): SelectionKeyContract[] {
   const root = ASTUtils.rootAppValue(app)
   if (!root) {
     return []
   }
-  return AST.appValueDeclarationsInFile(file).filter(candidate => ASTUtils.rootAppValue(candidate) === root).flatMap(
-    candidate => {
-      const keys = selectionKeysForApp(candidate)
-      return keys ? [{ app: candidate, keys }] : []
-    },
-  )
+  return files.flatMap(AST.appValueDeclarationsInFile).filter(candidate => ASTUtils.rootAppValue(candidate) === root)
+    .flatMap(
+      candidate => {
+        const keys = selectionKeysForApp(candidate)
+        return keys ? [{ app: candidate, keys }] : []
+      },
+    )
 }
 
 function selectionKeysForApp(app: AST.AppValueDeclaration): ReadonlySet<string> | undefined {

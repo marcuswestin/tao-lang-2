@@ -46,6 +46,35 @@ Describe('Tao dev app discovery and selection', () => {
     }
   })
 
+  Test('groups nested and package app declarations under ancestor project metadata', async () => {
+    const root = await mkTestDir('tao-dev-split-project-')
+    try {
+      await FS.writeText(
+        FS.resolvePath('Project.tao', root),
+        'project { id "split" name "Split project" }',
+      )
+      await FS.writeText(
+        FS.resolvePath('features/Reader.tao', root),
+        `workspace app Reader { view MainView } ${viewSource}`,
+      )
+      await FS.writeText(
+        FS.resolvePath('packages/@preview/App.tao', root),
+        `public app Preview { view MainView } ${viewSource}`,
+      )
+
+      const projects = await discoverTaoDevProjects(root)
+
+      Expect(projects).toHaveLength(1)
+      Expect(projects[0]?.name).toBe('Split project')
+      // Discovery canonicalizes the project root so a symlinked path cannot become a second app
+      // authority, and the host temporary directory is itself reached through one.
+      Expect(projects[0]?.root).toBe(await FS.realPath(root))
+      Expect(projects[0]?.apps.map(app => app.appName).toSorted()).toEqual(['Preview', 'Reader'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('labels choices 1-9 then letters and accepts lowercase without Enter', async () => {
     const projects = projectFixture(15)
     const input = terminalStream()

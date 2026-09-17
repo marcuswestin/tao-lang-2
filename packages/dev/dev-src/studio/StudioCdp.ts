@@ -227,7 +227,11 @@ export class StudioCdp {
       element.scrollIntoView({ block: 'center', inline: 'center' })
       return true
     })()`)
-    const point = await this.elementCenter(selector, 'clickable')
+    await this.clickAt(await this.elementCenter(selector, 'clickable'))
+  }
+
+  /** Clicks a viewport point with real mouse input, reaching whatever is drawn there, including inside a frame. */
+  async clickAt(point: Point): Promise<void> {
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 1,
@@ -244,9 +248,12 @@ export class StudioCdp {
     })
   }
 
-  async clickAt(selector: string, offset: Point): Promise<void> {
+  /** Clicks one point inside an element's box, for targets whose own center is not the live hit area. */
+  async clickAtOffset(selector: string, offset: Point): Promise<void> {
     requireFiniteNumber(offset.x, 'Studio browser horizontal click offset')
     requireFiniteNumber(offset.y, 'Studio browser vertical click offset')
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
     const point = await this.evaluate<Point>(`(() => {
       const selector = ${JSON.stringify(selector)}
       const element = document.querySelector(selector)
@@ -257,20 +264,7 @@ export class StudioCdp {
       const y = rect.top + Math.max(1, Math.min(rect.height - 1, ${offset.y}))
       return { x, y }
     })()`)
-    await this.client.send('Input.dispatchMouseEvent', {
-      button: 'left',
-      buttons: 1,
-      clickCount: 1,
-      type: 'mousePressed',
-      ...point,
-    })
-    await this.client.send('Input.dispatchMouseEvent', {
-      button: 'left',
-      buttons: 0,
-      clickCount: 1,
-      type: 'mouseReleased',
-      ...point,
-    })
+    await this.clickAt(point)
   }
 
   async wheel(

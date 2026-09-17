@@ -100,8 +100,8 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //   namespace. The delta always narrows or fills and never reopens a filled member. A value may fill
 //   or override declared data/configuration properties but may never introduce a member
 //   No `required` keyword is introduced: a supplied property without a default remains required
-// - Every app value is declared in the entry file, which keeps cross-module variant derivation
-//   unreachable. `run`, imports, and strict app identity accept any complete app value uniformly,
+// - App values use ordinary declaration placement and visibility, including across project and
+//   package modules. `run`, imports, and strict app identity accept any complete app value uniformly,
 //   whether a primitive head or an inferred `let` declared it; no AST-kind union leaks into semantics
 // - A render site composes named clause bundles and direct clauses in one list, and the last
 //   specification of a given clause wins: `[screen, claim 2, width max 720]` reads left to right.

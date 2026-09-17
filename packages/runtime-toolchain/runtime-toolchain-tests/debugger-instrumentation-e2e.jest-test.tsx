@@ -57,7 +57,9 @@ Describe('generated debugger instrumentation', () => {
           stderr: generation.stderr,
           stdout: generation.stdout,
         })
-        const generated = require(FS.resolvePath('_gen_tao-app/current/TaoApp.tsx', runtimePackageRoot)) as {
+        // Previews publish in place. The compiled app keeps the stable `TaoApp.tsx` path while
+        // `App.tsx` is reserved for the Studio host, and the retired `current/` directory is gone.
+        const generated = require(FS.resolvePath('_gen_tao-app/TaoApp.tsx', runtimePackageRoot)) as {
           default: ComponentType
         }
         const screen = render(createElement(generated.default))

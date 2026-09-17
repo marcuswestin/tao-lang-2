@@ -1,5 +1,5 @@
 import { RuntimeAssert } from './TR-assert'
-import type { TaoKeyValueStorage } from './TR-data'
+import { appProviderIdentity, type TaoKeyValueStorage } from './TR-data'
 import { entityHandle } from './TR-data-entity'
 import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
 import { restoreEntityReference, serializeEntityReference } from './TR-data-registry'
@@ -414,7 +414,7 @@ export class NavigationRestorationController {
       return undefined
     }
     const policy = this.policy()
-    const provider = policy.providerIdentity ? policy.providerIdentity() : 'none'
+    const provider = appProviderIdentity(this.app.definition.datasources?.() ?? [])
     if (provider === undefined) {
       return undefined
     }

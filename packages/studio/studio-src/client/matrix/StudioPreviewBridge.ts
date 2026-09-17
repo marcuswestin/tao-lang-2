@@ -15,7 +15,12 @@ import {
   type StudioSourceActionIdentity,
   type StudioWindowMessage,
 } from '../../StudioProtocol'
-import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
+import {
+  StudioApiClient,
+  StudioApiError,
+  type StudioCellRuntimeResponse,
+  type StudioHandshake,
+} from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
 import { revealCanvasNode } from './StudioCanvasViewport'
@@ -56,6 +61,18 @@ function received<Type extends StudioWindowMessage['type']>(
 ): StudioWindowMessageOf<Type> {
   Assert(message.type === type, 'Studio preview message dispatch handed a handler a different message type.')
   return message as StudioWindowMessageOf<Type>
+}
+
+/**
+ * A retained preview keeps its realm across compiles, so it can report layout for a revision the next
+ * compile already replaced. The server refuses that as a stale conflict, and the preview measures
+ * again under the revision that replaced it, so the refusal carries nothing to act on.
+ */
+function ignoreSupersededMeasurement(error: unknown): void {
+  if (error instanceof StudioApiError && error.status === 409) {
+    return
+  }
+  throw error
 }
 
 export function postInteractionMode(preview: StudioPreviewConnection, handshake: StudioHandshake): void {
@@ -219,7 +236,7 @@ export async function handlePreviewMessage(
     'preview-journey-replay-settled': type => receiveJourneyReplay(preview, received(message, type)),
     'preview-journey-step-recorded': type => receiveJourneyRecording(preview, received(message, type), actions),
     'preview-layout-measurements': async type => {
-      await StudioApiClient.previewLayoutMeasurements(received(message, type))
+      await StudioApiClient.previewLayoutMeasurements(received(message, type)).catch(ignoreSupersededMeasurement)
     },
     'preview-runtime-capture-failed': type => receiveRuntimeCapture(preview, received(message, type)),
     'preview-runtime-captured': type => receiveRuntimeCapture(preview, received(message, type)),
@@ -362,14 +379,6 @@ async function receivePreviewApplied(
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
-    if (
-      preview.expectedRevision !== undefined
-      && preview.appliedRevision >= preview.expectedRevision
-      && preview.revisionTimeout !== undefined
-    ) {
-      clearTimeout(preview.revisionTimeout)
-      preview.revisionTimeout = undefined
-    }
   }
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')

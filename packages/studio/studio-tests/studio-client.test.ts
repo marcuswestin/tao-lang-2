@@ -1,10 +1,11 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
-import { Errors } from '@shared'
+import { Errors, Time } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import { mountStudioCanvasFocus, StudioCanvasFocusLane } from '../studio-src/client/app/StudioCanvasFocus'
 import { studioInspectionRequest } from '../studio-src/client/app/StudioInspection'
+import { mountStudioPreviewReload, StudioPreviewNotice } from '../studio-src/client/app/StudioPreviewStatus'
 import {
   forwardPreviewCanvasGesture,
   studioPreviewMessageListener,
@@ -15,6 +16,7 @@ import {
   canvasRevealDelta,
   nextStop,
 } from '../studio-src/client/matrix/StudioCanvasViewport'
+import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
 import {
   StudioApiClient,
   StudioApiError,
@@ -797,6 +799,59 @@ Test('an app that never bundled says so, instead of leaving an empty preview une
     .toBe('This preview is empty: its app server did not answer.')
 })
 
+/**
+ * Reading the bundle rebuilds the preview's own Metro graph, and one that lands ahead of Metro's
+ * hot-update handler ends a retained preview's hot updates for good, so a preview that is running the
+ * compile it was handed is never probed.
+ */
+Test('asks the bundler about a preview only when it has not applied its compile', async () => {
+  const previousFetch = globalThis.fetch
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { pathname: '/sessions/probe-1' } },
+    writable: true,
+  })
+  const requests: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
+    return Response.json({ status: 'ok' })
+  }) as typeof fetch
+  try {
+    const preview = { appliedRevision: 2, expectedRevision: 2 } as StudioPreviewConnection
+    const notice = new StudioPreviewNotice({
+      compileState: () => ({
+        appliedRevision: 2,
+        compileRevision: 2,
+        diagnostics: [],
+        message: '',
+        status: 'compiled',
+      }),
+      preview: { querySelector: () => null } as unknown as HTMLElement,
+      previewUrl: 'http://127.0.0.1:1',
+      previews: [preview],
+      settleMs: 0,
+      signal: undefined,
+    })
+
+    notice.checkBundle()
+    await Time.sleep(20)
+    Expect(requests).toEqual([])
+
+    preview.expectedRevision = 3
+    notice.checkBundle()
+    await until(() => requests.length === 1, { description: 'the bundle probe for a lagging preview', intervalMs: 0 })
+    Expect(requests[0]).toStartWith('/sessions/probe-1/')
+  } finally {
+    globalThis.fetch = previousFetch
+    if (previousWindow === undefined) {
+      Reflect.deleteProperty(globalThis, 'window')
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
+  }
+})
+
 Test('Studio preview teardown releases observers and pending capture work', () => {
   let disconnected = 0
   let rejected = ''
@@ -897,6 +952,44 @@ Test('Studio advertises canvas gesture ownership explicitly per preview', () => 
     owned: false,
     type: 'set-canvas-gestures',
   }])
+})
+Test('Studio expects a new preview revision without automatically reloading its iframe', () => {
+  const iframe = { src: 'http://127.0.0.1:56102/' } as HTMLIFrameElement
+  const preview = { ...previewConnection('preview-revision', 'novel', {}), iframe }
+
+  expectPreviewRevision(preview, 2)
+
+  Expect(preview.expectedRevision).toBe(2)
+  Expect('revisionTimeout' in preview).toBe(false)
+  Expect(iframe.src).toBe('http://127.0.0.1:56102/')
+})
+
+Test('Studio reloads previews only through the explicit toolbar action', () => {
+  const iframe = new EventTarget() as HTMLIFrameElement
+  let source = 'http://127.0.0.1:56102/'
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => source,
+    set: value => {
+      source = value as string
+      reloads += 1
+    },
+  })
+  const preview = { ...previewConnection('preview-manual-reload', 'novel', {}), iframe }
+  const button = new EventTarget() as HTMLButtonElement
+  const status = { textContent: '' } as HTMLElement
+  let restored = 0
+  mountStudioPreviewReload(button, status, [preview], () => {
+    restored += 1
+  })
+
+  button.dispatchEvent(new Event('click'))
+
+  Expect(reloads).toBe(1)
+  Expect(iframe.src).toBe('http://127.0.0.1:56102/')
+  Expect(status.textContent).toBe('Reloading preview…')
+  iframe.dispatchEvent(new Event('load'))
+  Expect(restored).toBe(1)
 })
 
 Test('Studio Tao fixture capture rejects its pending action when the active preview reports failure', async () => {

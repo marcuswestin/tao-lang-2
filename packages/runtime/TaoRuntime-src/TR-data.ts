@@ -209,6 +209,31 @@ export type TaoConfiguredDatasource = Readonly<{
   evaluate(): TaoConfiguredDatasource
 }>
 
+/** TaoAppDatasourceBinding is one store an app mounts and the datasource filling it. */
+export type TaoAppDatasourceBinding = Readonly<{
+  source: TaoConfiguredDatasource
+  /** storageName is the bound declaration's name, present only for a store a `Data` slot declares. */
+  storageName?: string
+  store: RuntimeDataSchema
+}>
+
+/**
+ * appProviderIdentity keys an app's restoration by the providers its state was written against. An
+ * app with no store keys under `none`; one store keeps the identity it always had; several list every
+ * member, and a member that cannot be represented leaves the whole app unkeyed, because restoring
+ * against a provider that cannot be recognised again would restore handles into the wrong data.
+ */
+export function appProviderIdentity(bindings: readonly TaoAppDatasourceBinding[]): string | undefined {
+  if (bindings.length === 0) {
+    return 'none'
+  }
+  if (bindings.length === 1) {
+    return bindings[0]!.source.bindingIdentity()
+  }
+  const identities = bindings.map(binding => binding.source.bindingIdentity())
+  return identities.every(identity => identity !== undefined) ? JSON.stringify(identities) : undefined
+}
+
 export type TaoKeyValueStorage = {
   getItem(key: string): Promise<string | null>
   removeItem?(key: string): Promise<void>
@@ -334,6 +359,34 @@ export const DataControls = {
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
   UseConfigured: useConfiguredProviderBinding,
 
+  /**
+   * UseAppDatasources mounts every store an app definition binds. A definition's binding count is
+   * fixed when it is compiled, so the hooks called here keep their order across renders.
+   */
+  UseAppDatasources(definition: Readonly<{ datasources?(): readonly TaoAppDatasourceBinding[] }>): void {
+    for (const binding of definition.datasources?.() ?? []) {
+      useConfiguredProviderBinding(binding.store, binding.source, binding.storageName)
+    }
+  },
+
+  /**
+   * PatchBindings layers a variant's own patches onto the bindings it inherits from a base in another
+   * module: one list of patches per inherited binding, in the order the base binds them.
+   */
+  PatchBindings(
+    bindings: readonly TaoAppDatasourceBinding[],
+    patches: readonly (readonly Record<string, unknown>[])[],
+  ): readonly TaoAppDatasourceBinding[] {
+    RuntimeAssert(bindings.length === patches.length, 'an inherited datasource patch for every inherited binding', {
+      bindings: bindings.length,
+      patches: patches.length,
+    })
+    return bindings.map((binding, index) => ({
+      ...binding,
+      source: patches[index]!.reduce<TaoConfiguredDatasource>(DataControls.Patch, binding.source),
+    }))
+  },
+
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
     React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
     // A fill-capable provider is offered each live query's descriptor: on mount, and again
@@ -393,14 +446,6 @@ export const DataControls = {
     const metadata = metadataOf(handle)
     const policy = metadata.schema.definition.entities[metadata.entity]?.commandPolicy
     return { entity: metadata.entity, ...(policy === undefined ? {} : { policy }) }
-  },
-
-  /**
-   * CombinedIdentity keys restoration for an app that mounts several stores. Every member must be
-   * representable; one that is not leaves the app unkeyed, as a single unrepresentable store does.
-   */
-  CombinedIdentity(identities: readonly (string | undefined)[]): string | undefined {
-    return identities.every(identity => identity !== undefined) ? JSON.stringify(identities) : undefined
   },
 
   /**

@@ -131,6 +131,11 @@ async function readShipProject(
       })
     }
   }
+  const duplicates = apps.filter((app, index) => apps.findIndex(candidate => candidate.name === app.name) !== index)
+  if (duplicates.length > 0) {
+    const names = [...new Set(duplicates.map(app => app.name))]
+    Errors.throwUserInput(`Tao app names must be unique within a ship project: ${names.join(', ')}.`)
+  }
   const unique = new Map(apps.map(app => [app.name, app]))
   const uniqueApps = [...unique.values()].toSorted((left, right) => left.name.localeCompare(right.name))
   const defaultDefinition = unique.get(defaultApp ?? '')
@@ -157,7 +162,8 @@ function authoredAppName(source: string): string | undefined {
 }
 
 function directAppBaseName(source: string): string | undefined {
-  return /^\s*app\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s+with\b/u.exec(source)?.[1]
+  return /^\s*(?:(?:file|folder|package|workspace|public)\s+)?app\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s+with\b/u
+    .exec(source)?.[1]
 }
 
 /**

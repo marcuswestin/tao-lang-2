@@ -85,8 +85,7 @@ Describe('Tao Studio scenario runtime', () => {
       stderr: generation.stderr,
       stdout: generation.stdout,
     })
-    // `current` is the stable link to the newest published revision root, which holds the compiled graph.
-    const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
+    const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
     const manifest = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)).default as {
       fixtures: Array<TaoStudioFixturePlan & { id: string }>
       scenarios: Array<{
@@ -289,8 +288,7 @@ Describe('Tao Studio scenario runtime', () => {
         stderr: generation.stderr,
         stdout: generation.stdout,
       })
-      // `current` is the stable link to the newest published revision root, which holds the compiled graph.
-      const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
+      const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
       const manifestModule = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)) as {
         default: {
           fixtures: Array<TaoStudioFixturePlan & { id: string }>
@@ -405,7 +403,7 @@ Describe('Tao Studio scenario runtime', () => {
         stderr: generation.stderr,
         stdout: generation.stdout,
       })
-      const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
+      const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
       const manifest = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)).default as {
         fixtures: readonly unknown[]
         scenarios: readonly {

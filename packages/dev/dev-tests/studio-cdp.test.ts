@@ -131,7 +131,7 @@ Describe('Studio browser CDP harness', () => {
     transport.evaluateResults.push({ x: 12, y: 34 }, { x: 200, y: 300 }, true)
     const browser = StudioCdp.testing.create(transport)
 
-    await browser.clickAt('.cm-line', { x: 2, y: 10 })
+    await browser.clickAtOffset('.cm-line', { x: 2, y: 10 })
     await browser.wheel('.studio-preview-cell iframe', { x: 4, y: -180 }, { primary: true })
 
     Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
@@ -148,7 +148,7 @@ Describe('Studio browser CDP harness', () => {
         params: { deltaX: 4, deltaY: -180, modifiers: 4, type: 'mouseWheel', x: 200, y: 300 },
       },
     ])
-    await Expect(browser.clickAt('.cm-line', { x: Number.NaN, y: 0 })).rejects.toThrow(
+    await Expect(browser.clickAtOffset('.cm-line', { x: Number.NaN, y: 0 })).rejects.toThrow(
       'horizontal click offset must be finite',
     )
     await Expect(browser.wheel('.cm-scroller', { x: 0, y: Number.NaN })).rejects.toThrow(
