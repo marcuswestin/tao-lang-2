@@ -1,6 +1,6 @@
 import Runtime, { type GeneratePreviewOptions, type ShipManifest } from '@runtime-toolchain'
 import TR from '@runtime/TR'
-import { Assert, CLI, FS, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, Repo } from '@shared'
 import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
@@ -16,10 +16,13 @@ async function createRuntimePackageRoot(): Promise<string> {
 }
 
 async function createExecutableRuntimePackageRoot(name: string): Promise<string> {
-  const executableRoot = Repo.resolvePath(`packages/runtime-toolchain/.artifacts/${name}`)
-  await FS.mkdir(executableRoot)
-  const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', executableRoot))
+  const runtimePackageRoot = await mkTestDir(`tao-runtime-${name}-`)
+  // Register ownership before the next fallible acquisition step so AfterEach can always reclaim it.
   runtimeRoots.push(runtimePackageRoot)
+  await FS.symlink(
+    Repo.resolvePath('packages/runtime-toolchain/node_modules'),
+    FS.resolvePath('node_modules', runtimePackageRoot),
+  )
   return runtimePackageRoot
 }
 
@@ -61,13 +64,82 @@ function previewOptions(
 }
 
 AfterEach(async () => {
-  for (const root of runtimeRoots.splice(0)) {
-    await Runtime.resetStudioPreviewSession({ runtimePackageRoot: root })
-    await FS.remove(root)
-  }
+  await cleanupRuntimeRoots(runtimeRoots.splice(0))
 })
 
+type RuntimeRootCleanupOperations = {
+  remove: (root: string) => Promise<void> | void
+  reset: (root: string) => Promise<void> | void
+}
+
+async function cleanupRuntimeRoots(
+  roots: readonly string[],
+  operations: RuntimeRootCleanupOperations = {
+    remove: root => FS.remove(root),
+    reset: root => Runtime.resetStudioPreviewSession({ runtimePackageRoot: root }),
+  },
+): Promise<void> {
+  const failures: Array<{ error: unknown; label: string }> = []
+  for (const root of roots) {
+    try {
+      await operations.reset(root)
+    } catch (error) {
+      failures.push({ error, label: `reset preview session ${root}` })
+    }
+    try {
+      await operations.remove(root)
+    } catch (error) {
+      failures.push({ error, label: `remove runtime root ${root}` })
+    }
+  }
+  if (failures.length > 0) {
+    Errors.throwUnexpected(
+      `${failures.length} runtime test cleanup operations failed:\n${
+        failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
+      }`,
+      {
+        cause: failures.map(failure => ({
+          error: Errors.formatForLog(failure.error),
+          label: failure.label,
+        })),
+      },
+    )
+  }
+}
+
 Describe('Tao runtime app generation', () => {
+  Test('runtime cleanup reports every failure and continues to later operations', async () => {
+    const calls: string[] = []
+    let cleanupError: unknown
+    try {
+      await cleanupRuntimeRoots(['runtime-first', 'runtime-second'], {
+        remove: root => {
+          calls.push(`remove:${root}`)
+          if (root.endsWith('first')) {
+            Errors.throwHostEnvironment('remove failed')
+          }
+        },
+        reset: root => {
+          calls.push(`reset:${root}`)
+          if (root.endsWith('first')) {
+            Errors.throwHostEnvironment('reset failed')
+          }
+        },
+      })
+    } catch (error) {
+      cleanupError = error
+    }
+
+    Expect(calls).toEqual([
+      'reset:runtime-first',
+      'remove:runtime-first',
+      'reset:runtime-second',
+      'remove:runtime-second',
+    ])
+    Expect(Errors.messageOf(cleanupError)).toContain('reset preview session runtime-first: reset failed')
+    Expect(Errors.messageOf(cleanupError)).toContain('remove runtime root runtime-first: remove failed')
+  })
+
   Test('generates app paths from the supplied app path', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
     const appPath = FS.resolvePath('WordFlower.tao', wordFlowerDir)
@@ -559,10 +631,7 @@ Describe('Tao runtime app generation', () => {
   })
 
   Test('isolates inline injections from generated and Tao module bindings', async () => {
-    const executableRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/injection-boundary-tests')
-    await FS.mkdir(executableRoot)
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', executableRoot))
-    runtimeRoots.push(runtimePackageRoot)
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('injection-boundary-tests')
 
     await withTaoFiles(
       'tao-runtime-injection-boundary-valid-',
@@ -623,10 +692,7 @@ Describe('Tao runtime app generation', () => {
   })
 
   Test('generates, type-checks, and conforms a sidecar navigation implementation', async () => {
-    const executableRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/sidecar-tests')
-    await FS.mkdir(executableRoot)
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', executableRoot))
-    runtimeRoots.push(runtimePackageRoot)
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('sidecar-tests')
     await withTaoFiles(
       'tao-runtime-sidecar-',
       {

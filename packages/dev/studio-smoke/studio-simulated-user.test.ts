@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Time } from '@shared'
+import { Errors, FS, HCI, Platform, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -68,18 +68,23 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
 // validates the unattended Electrobun capability probe; it does not repeat the browser journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
-  await FS.mkdir(artifactParent)
-  // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
-  // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
-  const projectRoot = await mkTestDir('tao-studio-simulated-user-')
-  const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
+  let previewRuntimeRoot: string | undefined
   let previewSession: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
+  let projectRoot: string | undefined
   let studio: Awaited<ReturnType<typeof startStudioSessionServer>> | undefined
   let manager: StudioSessionManager | undefined
+  let primaryFailure: unknown
   try {
+    await FS.mkdir(artifactParent)
+    // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
+    // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
+    projectRoot = await mkTestDir('tao-studio-simulated-user-')
+    // Generated runtime state is disposable; durable screenshots and browser logs use artifactParent.
+    previewRuntimeRoot = await FS.mkTmpDir('tao-studio-simulated-runtime-')
+    const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, initialSource)
     // The real compile lane refuses a project without checked-in identity.
     await FS.writeText(
@@ -90,8 +95,6 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     // The scenario canvas and inspector only exist once a preview manifest is published, and only
     // the real compile lane publishes one. A stubbed compile leaves `previewManifest()` undefined,
     // so `scenarioRows()` returns nothing and no scenario UI can render.
-    const previewRuntimeRoot = FS.resolvePath('runtime', artifactParent)
-    await FS.remove(previewRuntimeRoot)
     previewSession = await openStudioPreviewSession({
       entryPath: sourcePath,
       previewRuntimeRoot,
@@ -726,16 +729,27 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactParent), consoleErrors)
       Expect(consoleErrors.map(entry => entry.text)).toEqual([])
     }
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    await browser?.close()
-    await native?.stop()
-    studio?.stop()
-    await manager?.closeAll()
-    await previewSession?.close()
-    preview?.stop()
-    await FS.remove(projectRoot)
+    await cleanupSmokeResources(primaryFailure, [
+      { label: 'close browser', run: () => browser?.close() },
+      { label: 'stop native Studio', run: () => native?.stop() },
+      { label: 'stop Studio server', run: () => studio?.stop() },
+      { label: 'close Studio sessions', run: () => manager?.closeAll() },
+      { label: 'close preview session', run: () => previewSession?.close() },
+      { label: 'stop preview server', run: () => preview?.stop() },
+      { label: 'remove project root', run: () => projectRoot === undefined ? undefined : FS.remove(projectRoot) },
+      {
+        label: 'remove preview runtime',
+        run: () => previewRuntimeRoot === undefined ? undefined : FS.remove(previewRuntimeRoot),
+      },
+    ])
   }
-  Expect(await FS.exists(projectRoot)).toBe(false)
+  if (projectRoot !== undefined) {
+    Expect(await FS.exists(projectRoot)).toBe(false)
+  }
 }, 180_000)
 
 function startPreviewServer(port: number): { stop(): void; url: string } {
@@ -1503,3 +1517,70 @@ function ordered(source: string, labels: readonly string[]): boolean {
   return offsets.every(offset => offset >= 0)
     && offsets.every((offset, index) => index === 0 || offsets[index - 1]! < offset)
 }
+
+async function cleanupSmokeResources(
+  primaryFailure: unknown,
+  cleanups: ReadonlyArray<{ label: string; run: () => unknown | Promise<unknown> }>,
+  reportCleanupFailure: (error: unknown) => void = error =>
+    HCI.logProcessError(
+      'studio-smoke-cleanup',
+      `Cleanup also failed after the primary journey failure: ${Errors.formatForLog(error)}`,
+    ),
+): Promise<void> {
+  const failures: Array<{ error: unknown; label: string }> = []
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup.run()
+    } catch (error) {
+      failures.push({ error, label: cleanup.label })
+    }
+  }
+  if (failures.length === 0) {
+    return
+  }
+  const message = `${failures.length} Studio smoke cleanup operations failed:\n${
+    failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
+  }`
+  const cause = failures.map(failure => ({
+    error: Errors.formatForLog(failure.error),
+    label: failure.label,
+  }))
+  if (primaryFailure === undefined) {
+    Errors.throwUnexpected(message, { cause })
+  }
+  reportCleanupFailure(new Errors.UnexpectedBehaviorError(message, { cause }))
+}
+
+Test('smoke cleanup attempts every disposer without replacing the primary failure', async () => {
+  const primaryFailure = new Errors.UnexpectedBehaviorError('primary journey failure')
+  const cleaned: string[] = []
+  const reported: unknown[] = []
+
+  await cleanupSmokeResources(primaryFailure, [
+    {
+      label: 'close browser',
+      run: () => {
+        cleaned.push('browser')
+        Errors.throwHostEnvironment('browser cleanup failed')
+      },
+    },
+    {
+      label: 'remove runtime',
+      run: () => {
+        cleaned.push('runtime')
+        Errors.throwHostEnvironment('runtime cleanup failed')
+      },
+    },
+    { label: 'remove export', run: () => cleaned.push('export') },
+  ], error => reported.push(error))
+
+  Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
+  Expect(reported).toHaveLength(1)
+  Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
+  Expect(Errors.messageOf(reported[0])).toContain('remove runtime: runtime cleanup failed')
+  Expect(primaryFailure.message).toBe('primary journey failure')
+
+  await Expect(cleanupSmokeResources(undefined, [
+    { label: 'standalone cleanup', run: () => Errors.throwHostEnvironment('standalone cleanup failed') },
+  ], error => reported.push(error))).rejects.toThrow('standalone cleanup failed')
+})

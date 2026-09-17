@@ -1,4 +1,4 @@
-import { FS, Repo } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { createHash } from 'node:crypto'
 import {
@@ -23,9 +23,10 @@ const renderer = {
 
 Describe('Studio visual review', () => {
   Test('captures each ready viewport and releases both browser and Studio launch', async () => {
-    const root = await mkTestDir(FS.resolvePath('.artifacts/studio-review-test-', Repo.getRoot()))
+    const root = await mkTestDir('tao-studio-review-test-')
     const projectRoot = FS.resolvePath('project', root)
     const artifactRoot = FS.resolvePath('output', root)
+    await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
     await FS.mkdir(projectRoot)
     const surface = {
       cells: [{

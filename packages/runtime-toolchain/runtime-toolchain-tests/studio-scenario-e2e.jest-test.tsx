@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
 import { Assert, CLI, Errors, FS, Repo } from '@shared'
-import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { AfterAll, AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
 import * as RN from 'react-native'
@@ -13,7 +13,42 @@ import type { TaoJourneyStep } from '../../runtime/TaoRuntime-src/TR-studio-jour
 const runtimeRoots: string[] = []
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
 
+async function createScenarioRuntimeRoot(prefix: string): Promise<string> {
+  const runtimePackageRoot = await mkTestDir(prefix)
+  // Register ownership before linking dependencies so AfterAll also covers a failed link.
+  runtimeRoots.push(runtimePackageRoot)
+  await FS.symlink(
+    Repo.resolvePath('packages/runtime-toolchain/node_modules'),
+    FS.resolvePath('node_modules', runtimePackageRoot),
+  )
+  return runtimePackageRoot
+}
+
 Describe('Tao Studio scenario runtime', () => {
+  Test('runtime-root cleanup reports every failure and continues to later roots', async () => {
+    const removed: string[] = []
+    let cleanupError: unknown
+    try {
+      await cleanupScenarioRuntimeRoots(
+        ['runtime-first', 'runtime-second', 'runtime-third'],
+        root => {
+          removed.push(root)
+          if (root !== 'runtime-third') {
+            Errors.throwHostEnvironment(`${root} removal failed`)
+          }
+        },
+      )
+    } catch (error) {
+      cleanupError = error
+    }
+
+    Expect(removed).toEqual(['runtime-first', 'runtime-second', 'runtime-third'])
+    Expect(Errors.messageOf(cleanupError)).toContain('remove runtime root runtime-first: runtime-first removal failed')
+    Expect(Errors.messageOf(cleanupError)).toContain(
+      'remove runtime root runtime-second: runtime-second removal failed',
+    )
+  })
+
   Test('shows a render failure inside the preview canvas', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     function BrokenPreview(): never {
@@ -32,10 +67,7 @@ Describe('Tao Studio scenario runtime', () => {
   })
 
   Test('mounts the real WordFlower focused-view scenario', async () => {
-    const artifactsRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/studio-scenario-e2e-tests')
-    await FS.mkdir(artifactsRoot)
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('wordflower-runtime-', artifactsRoot))
-    runtimeRoots.push(runtimePackageRoot)
+    const runtimePackageRoot = await createScenarioRuntimeRoot('tao-wordflower-runtime-')
     const generationScript = `
       import Runtime from ${
       JSON.stringify(Repo.resolvePath('packages/runtime-toolchain/runtime-toolchain-src/runtime.ts'))
@@ -185,10 +217,7 @@ Describe('Tao Studio scenario runtime', () => {
   })
 
   Test('mounts an imported focused view with its fixture entity', async () => {
-    const artifactsRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/studio-scenario-e2e-tests')
-    await FS.mkdir(artifactsRoot)
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', artifactsRoot))
-    runtimeRoots.push(runtimePackageRoot)
+    const runtimePackageRoot = await createScenarioRuntimeRoot('tao-studio-scenario-runtime-')
     await withTaoFiles('tao-studio-scenario-source-', {
       'Data.tao': `
         workspace data Workspaces / Workspace {
@@ -332,10 +361,7 @@ Describe('Tao Studio scenario runtime', () => {
   })
 
   Test('mounts a fixtureless journey view with an action stand-in and leaves it interactive', async () => {
-    const artifactsRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/studio-scenario-e2e-tests')
-    await FS.mkdir(artifactsRoot)
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('fixtureless-runtime-', artifactsRoot))
-    runtimeRoots.push(runtimePackageRoot)
+    const runtimePackageRoot = await createScenarioRuntimeRoot('tao-studio-fixtureless-runtime-')
     await withTaoFiles('tao-studio-fixtureless-scenario-', {
       'Main.tao': `
         use Button, Col, Text from @tao/ui
@@ -453,7 +479,32 @@ Describe('Tao Studio scenario runtime', () => {
 AfterEach(cleanup)
 
 AfterAll(async () => {
-  for (const root of runtimeRoots.splice(0)) {
-    await FS.remove(root)
-  }
+  await cleanupScenarioRuntimeRoots(runtimeRoots.splice(0))
 })
+
+async function cleanupScenarioRuntimeRoots(
+  roots: readonly string[],
+  remove: (root: string) => Promise<void> | void = root => FS.remove(root),
+): Promise<void> {
+  const failures: Array<{ error: unknown; label: string }> = []
+  for (const root of roots) {
+    try {
+      await remove(root)
+    } catch (error) {
+      failures.push({ error, label: `remove runtime root ${root}` })
+    }
+  }
+  if (failures.length > 0) {
+    Errors.throwUnexpected(
+      `${failures.length} Studio scenario cleanup operations failed:\n${
+        failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
+      }`,
+      {
+        cause: failures.map(failure => ({
+          error: Errors.formatForLog(failure.error),
+          label: failure.label,
+        })),
+      },
+    )
+  }
+}

@@ -1,11 +1,10 @@
 import Runtime, { RuntimeToolchainPaths, type ShipManifest } from '@runtime-toolchain'
-import { Assert, CLI, Errors, FS, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform } from '@shared'
 
 /** verifyReleaseBundle exports real release and preview bundles in an isolated host. */
 async function verifyReleaseBundle(): Promise<void> {
-  const scratchRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/ship-bundle-proof')
-  await FS.mkdir(scratchRoot)
-  const runRoot = await FS.mkTmpDir(FS.resolvePath('run-', scratchRoot))
+  const runRoot = await FS.mkTmpDir('tao-ship-bundle-proof-')
+  let primaryFailure: unknown
   try {
     const hostRoot = FS.resolvePath('host', runRoot)
     const sourceRoot = FS.resolvePath('source', runRoot)
@@ -52,8 +51,22 @@ async function verifyReleaseBundle(): Promise<void> {
     const previewRoot = FS.resolvePath('preview', runRoot)
     await expoExport(hostRoot, previewRoot)
     await assertPreviewControlFails(previewRoot)
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    await FS.remove(runRoot)
+    try {
+      await FS.remove(runRoot)
+    } catch (cleanupError) {
+      const message = `Failed to remove release-bundle proof root ${runRoot}.`
+      if (primaryFailure === undefined) {
+        Errors.throwHostEnvironment(message, { cause: cleanupError })
+      }
+      HCI.logProcessError(
+        'bundle-cleanup',
+        `${message} The primary proof failure is preserved. ${Errors.formatForLog(cleanupError)}`,
+      )
+    }
   }
 }
 

@@ -209,6 +209,9 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     await waitForSource(sourcePath, source => source === manualSource)
     await browser.click('.studio-rail-button[data-panel="agent"]')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'false'`)
+    // Expanding animates the panel's size, so a click aimed at the approval button's mid-transition
+    // center lands beside it.
+    await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAnimations().length === 0`)
     await browser.click('.studio-agent-card-actions button[data-variant="primary"]')
     await browser.waitFor(`document.querySelector('.chat-input')?.disabled === false
       && document.querySelector('.chat-log')?.textContent?.includes('Undo refused because the source changed.') === true`)
@@ -287,7 +290,7 @@ async function waitForApproval(browser: StudioCdp, heading: string): Promise<voi
 async function currentApprovalDiff(browser: StudioCdp): Promise<string> {
   return await browser.evaluate<string>(`(() => {
     const cards = [...document.querySelectorAll('.studio-agent-card')]
-    return [...(cards.at(-1)?.querySelectorAll('pre') ?? [])].map(element => element.textContent ?? '').join('\n')
+    return [...(cards.at(-1)?.querySelectorAll('pre') ?? [])].map(element => element.textContent ?? '').join('\\n')
   })()`)
 }
 
