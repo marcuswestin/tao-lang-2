@@ -201,8 +201,12 @@ export function formatForUser(error: unknown): string {
   return isTaoError(error) ? error.messageForUser : unexpectedErrorMessage
 }
 
-/** DEBUG_ERRORS_ENV names the opt-in that makes every user-facing error render its diagnostics. */
-const DEBUG_ERRORS_ENV = 'TAO_DEBUG_ERRORS'
+/**
+ * DEBUG_ERRORS_ENV names the opt-in that makes every user-facing error render its diagnostics. It
+ * is exported so the command boundaries that print the bare unexpected sentence can name the switch
+ * in the same breath, rather than leaving a reader with a sentence and nowhere to go.
+ */
+export const DEBUG_ERRORS_ENV = 'TAO_DEBUG_ERRORS'
 
 /**
  * This module is the leaf every other shared module throws through, so it depends on nothing —

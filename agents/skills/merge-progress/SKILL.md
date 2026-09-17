@@ -72,7 +72,7 @@ Follow `git-workflow`'s merge section as written. Then, without waiting to be as
 2. Carry the in-progress work onto it. Prefer re-applying it from the landed base to cherry-picking
    a commit whose context has moved.
 3. Continue the task. The follow-up branch is an ordinary feature branch from here: it ends at
-   `just merge-with-main --execute --push --yes` like any other.
+   `just merge-with-main` like any other, which needs no flag to do its job.
 
 Do not merge the follow-up branch under this skill again out of habit. A second mid-task cut is
 Ro's call, not a rhythm.

@@ -43,8 +43,14 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Guidance
 
-- `Docs/` holds the written material: `Spec/` the implemented contract, `Roadmap/` the plans, and
-  `Tutorials/` the learning material. `Docs/README.md` says what belongs in each.
+- `Docs/` holds the written material: `Spec/` the implemented contract, `Roadmap/` the plans,
+  `MVP Roadmap/` the remaining public-release work, and `Tutorials/` the learning material.
+  `Docs/README.md` says what belongs in each.
+- `Docs/MVP Roadmap/` owns what remains before the public MVP release: `Agent MVP Roadmap.md` the
+  work agents execute without a new decision, `Ro MVP Roadmap.md` the judgments that are Ro's. It is
+  authoritative for MVP scope and sequencing wherever `Roadmap.md`, `Docs/Roadmap/`, or any other
+  document says otherwise; those remain authoritative for their own workstreams' context and for
+  work outside the MVP release.
 - `Docs/Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
 - `Apps/WordFlower/README.md` owns the tranche mechanics. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice with behavior tests written in Tao. Current never leads; it follows Next.
 - `Apps/Tao Future/README.md` owns the post-MVP demo apps (Skillet, Hearth, Wayfare): tier-less specs whose files graduate from `.tao-revolution` to `.tao` as tranches land. Do not edit them outside consolidation or a decision amendment.
@@ -62,17 +68,16 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   host-only verification. Selection lanes are iteration aids, never merge evidence.
 - Before reporting a branch ready to merge, write or update its merge message at
   `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
-  merge-ready without it, and the landing command is
-  `just merge-with-main --execute --push --yes`.
+  merge-ready without it, and the landing command is `just merge-with-main`, which needs no flag to
+  do its job; its only flags remove verification work.
 - Whenever the work looks complete, carry it all the way without being asked: land every change as
   commits on the feature branch, leave the worktree clean, refresh the roadmap or ledger documents
   the work changed, then run `./agent finalize`, which integrates `main`, verifies only what is not
   already proved green, and drafts the merge message for you to edit. Then decide whether to land it.
-  Use `./agent board` to see what else this machine is doing first. An agent
-  lands on its own judgment when the gates can prove the change; it brings the branch to ready and
-  hands the landing to Ro when the change reaches what no gate can prove. The `verification-lanes`
-  skill owns that judgment. Either way, say plainly which evidence stands behind it and which gates
-  did not run.
+  Use `./agent board` to see what else this machine is doing first. An agent lands on its own
+  judgment when the gates can prove the change; it brings the branch to ready and hands the landing
+  to Ro when the change reaches what no gate can prove. The `verification-lanes` skill owns that
+  judgment. Either way, say plainly which evidence stands behind it and which gates did not run.
 - Refresh the roadmap, ledger, and spec documents the work changed **before** verifying, not after.
   A tracked edit made after a green lane changes the tree the lane proved, so the next lane runs
   everything again.

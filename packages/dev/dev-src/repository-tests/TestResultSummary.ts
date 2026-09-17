@@ -103,21 +103,48 @@ function printContentionNote(states: readonly SuiteState[], contention: Contenti
   }
 }
 
+/**
+ * printSuiteSummaries reports one line per suite, not per node. A suite's shards run as separate
+ * processes, so its duration is its longest shard — the wall time it actually occupied — and the
+ * work its shards did together is stated beside it, because that difference is what sharding bought.
+ */
 function printSuiteSummaries(states: readonly SuiteState[], stderr: boolean): void {
   const writeLine = stderr ? Shared.HCI.writeErrorLine : Shared.HCI.writeLine
   writeLine('\nTest suite summary:')
-  for (const state of [...states].sort((left, right) => right.elapsedMs - left.elapsedMs)) {
-    const summary = suiteTestSummary(state)
-    writeLine(
-      [
-        `- ${state.name}: ${state.status}`,
-        `tests ${formatCount(summary.total)}`,
-        `pass ${formatCount(summary.passed)}`,
-        `fail ${formatCount(summary.failed)}`,
-        `expect ${formatCount(summary.expectCalls)}`,
-        `duration ${OutputText.formatElapsed(state.elapsedMs)}`,
+  const bySuite = new Map<string, SuiteState[]>()
+  for (const state of states) {
+    bySuite.set(state.suite, [...bySuite.get(state.suite) ?? [], state])
+  }
+  const lines = [...bySuite].map(([suite, shards]) => {
+    const totals = shards.map(suiteTestSummary)
+    const sum = (read: (summary: SuiteTestSummary) => number | undefined) =>
+      totals.every(summary => read(summary) === undefined)
+        ? undefined
+        : totals.reduce((count, summary) => count + (read(summary) ?? 0), 0)
+    const wallMs = Math.max(0, ...shards.map(state => state.elapsedMs))
+    const workMs = shards.reduce((total, state) => total + state.elapsedMs, 0)
+    const status = shards.some(state => state.status === 'failed')
+      ? 'failed'
+      : shards.every(state => state.status === 'skipped')
+      ? 'skipped'
+      : shards.find(state => state.status !== 'passed')?.status ?? 'passed'
+    return {
+      line: [
+        `- ${suite}: ${status}`,
+        `tests ${formatCount(sum(summary => summary.total))}`,
+        `pass ${formatCount(sum(summary => summary.passed))}`,
+        `fail ${formatCount(sum(summary => summary.failed))}`,
+        `expect ${formatCount(sum(summary => summary.expectCalls))}`,
+        `duration ${OutputText.formatElapsed(wallMs)}`,
+        ...(shards.length > 1
+          ? [`${shards.length} shards over ${OutputText.formatElapsed(workMs)}`]
+          : []),
       ].join('; '),
-    )
+      wallMs,
+    }
+  })
+  for (const { line } of lines.toSorted((left, right) => right.wallMs - left.wallMs)) {
+    writeLine(line)
   }
 }
 
@@ -128,7 +155,7 @@ function printTotalSummary(states: readonly SuiteState[], elapsedMs: number, std
   writeLine(
     [
       'Total:',
-      `${states.length} suites`,
+      `${new Set(states.map(state => state.suite)).size} suites in ${states.length} processes`,
       `tests ${formatAggregateCount(summary.total, summary.missingTotal)}`,
       `pass ${formatAggregateCount(summary.passed, summary.missingPassed)}`,
       `fail ${formatAggregateCount(summary.failed, summary.missingFailed)}`,

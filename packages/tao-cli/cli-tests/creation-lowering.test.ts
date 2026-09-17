@@ -119,7 +119,10 @@ Describe('tao create lowering', () => {
     } finally {
       await FS.remove(root)
     }
-  }, 15_000)
+    // A hang guard, not a budget: this lowers a whole project and validates it, and the repository
+    // test lane now runs every suite's shards beside each other, so a healthy run of it can wait
+    // longer than the old bound before it gets the machine.
+  }, 60_000)
 })
 
 async function projectFilesUnder(directory: string): Promise<string[]> {
