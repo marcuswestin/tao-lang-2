@@ -1,4 +1,5 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { readDelegationIssues } from '../delegation/DelegationProfiles'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -768,6 +769,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
+  issues.push(...await readDelegationIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {

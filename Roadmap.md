@@ -37,6 +37,19 @@ neither blocks a tranche.
     dispositions, but it predates the tranche 4 documentation edits, so re-verify each finding
     against the current files before acting on it.
 
+## Subagent delegation
+
+How agents in this repository delegate, and at which model tier. The guidance and its tooling have
+landed; `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns the remaining slices
+and the calibration period that ends the ask-Ro clause.
+
+- [ ] Harness parity: the Codex `[agents]` block, and Cursor `.cursor/agents/` with its column in the
+      routing table.
+- [ ] Saved workflow scripts for the recurring fan-outs: tranche review and squash-merge audit.
+- [ ] Cross-vendor second opinion, opt-in per request and off by default.
+- [ ] Benchmark a few representative tasks with and without delegation, and tune the skill's
+      thresholds from the measurement rather than from research.
+
 ## The Tao Revolution program
 
 The language target is decided except for explicitly open or deferred questions recorded below and in

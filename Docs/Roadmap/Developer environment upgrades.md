@@ -1288,3 +1288,26 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Any harness gesture whose point lands outside its target fails immediately, naming
   the covering element, instead of being absorbed by the page.
 - **Source:** 2026-09-17 September remediation follow-up.
+
+### DEVENV-067 — `./agent fix` cannot format the skills it is told to format
+
+- **Status:** Candidate
+- **Area:** Sandbox policy
+- **Impact:** Claude Code's Bash sandbox denies writes under `agents/skills/`, which is also where
+  every project skill lives. Editing a skill and running the repository's own formatter therefore
+  fails on the file the change is about, and the failure names an OS error rather than a policy, so
+  it reads as a broken formatter. Every instruction-editing task pays it.
+- **Evidence:** After adding `agents/skills/delegation/SKILL.md`, `./agent fix` exited 1 with
+  `Error writing file '…/agents/skills/delegation/SKILL.md': Operation not permitted (os error 1)`
+  and `Had 1 error formatting.`; the same command outside the sandbox formatted the file and
+  reported `Formatted 1 file. 0 fixed, 124 unchanged`.
+- **Workaround:** Run `./agent fix` unsandboxed after editing a skill. The harness's own edit tools
+  write these paths normally; only Bash is denied, so the restriction bites exactly one command.
+- **Proposed change:** Decide which the policy means. If skills are protected against shell writes
+  on purpose, `fix` should say so — detect the denial on a known-protected path and print the
+  unsandboxed retry — rather than surfacing `os error 1`. If the protection is incidental, exempt
+  the repository's own formatter, whose writes are reviewable in the diff either way.
+- **Dependencies:** None.
+- **Acceptance:** Editing a project skill and running `./agent fix` either succeeds, or fails with a
+  message naming the sandbox and the command to rerun.
+- **Source:** 2026-09-17 subagent delegation branch.
