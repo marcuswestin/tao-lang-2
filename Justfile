@@ -158,7 +158,13 @@ test-flakes limit="20":
 test-slowest limit="20":
     ./dev test-slowest --limit "{{ limit }}"
 
-# Dry-run the human-only feature landing workflow; pass --execute explicitly to mutate refs
+# Bring a feature branch to the state where merge-with-main can run; safe and cheap to re-run
+[arg('check', long='check', value='true')]
+[arg('fresh', long='fresh', value='true')]
+finalize check='false' fresh='false':
+    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
+
+# Dry-run the feature landing workflow; pass --execute explicitly to mutate refs
 [arg('abort', long='abort')]
 [arg('execute', long='execute', value='true')]
 [arg('message_file', long='message-file')]
@@ -196,6 +202,10 @@ dead-exports:
 # Diagnose this checkout without changing it; pass --json for a structured report
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
+
+# Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
+board *ARGS:
+    ./dev board {{ ARGS }}
 
 # Report process, socket, simulator, and local-service capabilities without changing anything
 capabilities *ARGS:
