@@ -445,9 +445,11 @@ that.
 
 Each slice ends somewhere honest — a thing that works, not a refactor that compiles.
 
-**1. A binary that builds and runs.** Bump the pinned Bun to ≥ 1.4.2 and verify the existing suites
-against it (F3 — this is the precondition, and it is repository-wide). Add a build entry point that
-runs `_parser-gen` and then `bun build --compile` for the host platform. Done when `tao --help`,
+**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 — a `devenv.lock` nixpkgs
+update or an explicit `bun.package` override, since nothing pins a version string — and verify the
+existing suites against it (F3 — this is the precondition, it is repository-wide, and it moves every
+worktree on the machine at once). Add a build entry point that runs `_parser-gen` and then
+`bun build --compile` for the host platform. Done when `tao --help`,
 `tao fmt`, `tao check`, and `tao create --ai none --yes --skip-tests` run from the binary outside any
 checkout — which F1 shows is almost true already.
 
@@ -542,14 +544,12 @@ overlap with `A3` and `A8`.
 
 ## Notes for whoever implements this
 
-- `Docs/MVP Roadmap/` currently exists only on `feat/mvp-public-release-0d2656`. This plan was
-  written on its own branch and will land beside `Agent MVP Roadmap.md` and `Ro MVP Roadmap.md`.
 - A fresh worktree has no `packages/parser/parser-src/_gen_tao-parser`, and every Tao command fails
   with a bare `Something went wrong.` until `just _parser-gen` runs. The build entry point in slice 1
   must generate before it compiles, and the diagnostic is worth fixing under `A1`.
-- Bun 1.3.13's inability to produce a runnable compiled binary on macOS 27 (F3) is a
-  developer-environment issue as much as a product one. It is not recorded in
-  `Docs/Roadmap/Developer environment upgrades.md` because this task was scoped to change no file
-  but this one; it should become a `DEVENV` entry when the Bun bump is done.
+- Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets
+  `languages.javascript.bun.enable = true` and the version comes from `devenv.lock`'s nixpkgs input.
+  Slice 1's bump is therefore a nixpkgs update or an explicit `bun.package` override, and it moves
+  every worktree on the machine at once. The signing failure it fixes is `DEVENV-076`.
 - The prototypes behind every measurement here were run in `.artifacts/tmp/standalone-proto/` and
   the session scratchpad, and were removed afterwards.

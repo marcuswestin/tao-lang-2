@@ -33,6 +33,8 @@ language sees.
 Today `tao` is a zsh wrapper around `bun` inside this checkout's devenv profile, and every package
 is `private`. Nobody outside the repository can install Tao.
 
+- Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
+  evidence and a nine-slice sequence, and leaves eight questions to Ro.
 - Shape: `bun build --compile` binaries for macOS, Linux, and Windows on both architectures; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
