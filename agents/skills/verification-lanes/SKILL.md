@@ -85,17 +85,28 @@ description: >-
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command
   validates the complete final message and appends Git's generated appendix itself.
-- `merge-with-main`'s flags only remove work. `--skip-full-verify` omits `just full-verify` on the
-  feature branch, so the staged squash gets `just verify --complete` instead; `--skip-verify` omits
-  that staged-squash pass; `--skip-all` implies both, asks once with No as the default, and needs a
-  terminal, so there is no way to land unverified non-interactively. The staged-squash tree-equality
-  assertion runs under every combination including `--skip-all`, because the squash must be the tree
-  that was verified. `./dev merge-with-main --dry-run` reports the plan and changes nothing.
-  Preflight intentionally requires local `main` to equal `origin/main`. A remote feature branch that
-  is behind the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
-  the landing. Successful execution leaves the invoking feature worktree clean and detached at the
-  archived feature tip, deletes its local feature branch, and leaves worktree removal to archival of
-  the owning task.
+- `merge-with-main`'s flags only remove work. `--skip-full-verify` omits `just full-verify`, so the
+  staged squash gets `just verify --complete` instead; `--skip-verify` omits that staged-squash pass;
+  `--skip-all` implies both, asks once with No as the default, and needs a terminal, so there is no
+  way to land unverified non-interactively; `--skip-lease-wait` removes the wait for a busy landing
+  lease and fails fast instead. The staged-squash tree-equality assertion runs under every
+  combination including `--skip-all`, because the squash must be the tree that was verified.
+  `./dev merge-with-main --dry-run` reports the plan and changes nothing.
+- Landing is serialized machine-wide. The command takes a landing lease before preflight and holds it
+  through the push, so a second landing prints who holds it and waits its turn rather than racing
+  into the same state. It offers no takeover: ending someone else's landing mid-squash is not a
+  decision to make on their behalf.
+- It lands through a disposable integration worktree built at `origin/main`, never through a shared
+  `main` checkout, and verifies **that** tree — the one that actually ships. The worktree is removed
+  on success, on abort, and on every failure, so a red lane leaves nothing behind in
+  `git worktree list`. Preflight requires the local `main` ref to equal `origin/main`, and after a
+  successful push the command moves local `main` to the pushed commit itself — fast-forwarding the
+  worktree that has it checked out, or moving the ref when none does. If it cannot, it warns with the
+  exact command to run and the landing still stands.
+- A remote feature branch that is behind the worktree is pushed forward during execution; only one
+  holding commits the worktree lacks stops the landing. Successful execution leaves the invoking
+  feature worktree clean and detached at the archived feature tip, deletes its local feature branch,
+  and leaves worktree removal to archival of the owning task.
 - `--abort <snapshot>` restores only command-owned local state while the snapshot still matches.
   Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
   rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery

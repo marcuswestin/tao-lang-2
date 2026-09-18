@@ -41,6 +41,7 @@ type MergeCommandOptions = {
   dryRun?: boolean
   messageFile?: string
   skipAll?: boolean
+  skipLeaseWait?: boolean
   skipFullVerify?: boolean
   skipVerify?: boolean
 }
@@ -152,6 +153,7 @@ await runWithCommands(commands => {
       'Skip just full-verify on the feature branch; the staged squash then gets just verify --complete instead.',
     )
     .option('--skip-all', 'Skip every check after one confirmation that defaults to No. Needs a terminal.')
+    .option('--skip-lease-wait', 'Fail fast on a busy landing lease instead of waiting for it to free.')
     .option('--dry-run', 'Report the plan and change nothing.')
     .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
     .option('--abort <snapshot>', 'Restore command-owned local state from a pre-push snapshot.')
@@ -162,6 +164,7 @@ await runWithCommands(commands => {
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
           skipAll: options.skipAll === true,
+          skipLeaseWait: options.skipLeaseWait === true,
           skipFullVerify: options.skipFullVerify === true,
           skipVerify: options.skipVerify === true,
         })
