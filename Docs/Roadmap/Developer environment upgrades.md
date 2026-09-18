@@ -1498,27 +1498,39 @@ an entry here may link one when the developer workflow is also affected.
   `_test` node either passes on its isolated retry or fails for a reason the summary names.
 - **Source:** 2026-09-17 `feat/mvp-feedback-intake-doctor-134afd` complete verification.
 
-### DEVENV-073 — Gate-runner tests read the real machine from inside a verification lane
+### DEVENV-073 — The lane's own scheduling tests observe the machine the lane is running on
 
 - **Status:** Candidate
 - **Area:** Test reliability
-- **Impact:** `verify --complete` fails its own `dev` suite on a loaded machine, as a
-  `test-assertion` rather than as contention, so the failure does not retry and the merge gate
-  cannot go green until the machine is quiet. It reddens whichever branch happens to be verifying.
-- **Evidence:** On 2026-09-18, inside a lane at load 30.4 on 18 CPUs, `gate-runner.test.ts` failed
-  four cases; the same file passes 31 of 31 in a focused run. `surfaces warnings a gate printed
-  without failing on them` received the extra warning
-  `machine contention: no other Tao lane registered; load peaked at 30.4 on 18 CPUs`, and three
-  others read `ENOENT .../.artifacts/timings/durations.json`. The fixture already passes its own
-  `registryRoot`, which is what DEVENV-041 added, but `contentionWarnings` in `RunSummary.ts` is
-  built from a sampled load average, and a load average is machine-global — no registry root
-  isolates it.
-- **Workaround:** Re-run the file focused, or run the lane when the machine is quiet.
-- **Proposed change:** Let a nested `runGates` take its contention sample from an injected source,
-  as it already takes its registry root and its gate runner, so a unit test observes the machine it
-  was given rather than the one it happens to be running on.
-- **Dependencies:** None. `packages/dev/dev-src/repository-tests/` is outside this task's ownership
-  and was rewritten by the verification-graph work on `main`, so this is recorded rather than fixed.
-- **Acceptance:** The gate-runner suite passes inside a `verify --complete` lane on a machine that is
-  already busy, and a genuine contention warning still reaches a real lane's summary.
+- **Impact:** `verify --complete` cannot be relied on to go green on a busy machine, and it fails a
+  different one of its own scheduling tests each time. Most arrive as `test-assertion`, which is
+  exactly the classification that does not earn a contention retry, so the merge gate reddens on
+  whichever branch happens to be verifying. Retrying does not converge: four consecutive complete
+  runs on one unchanged tree failed four different tests.
+- **Evidence:** 2026-09-18, one tree, four `verify --complete` runs. `gate-runner.test.ts` failed
+  four cases at peak load 30.4 on 18 CPUs — `surfaces warnings a gate printed without failing on
+  them` received an unscripted `machine contention: no other Tao lane registered; load peaked at
+  30.4 on 18 CPUs`, and three more read `ENOENT .../.artifacts/timings/durations.json`, which is
+  `recordTimings: !contention.contended` in `GateRunner.ts` declining to write. Then
+  `test-runner.test.ts > an exact-file subset does not teach the full-suite timing estimate` timed
+  out at 60s twice including its isolated retry. Then `machine-lanes` `leaves both lanes' records
+  readable when two of them finish at once` and, in `packages/shared`, `CLI process policy > 'test'
+  policy stops a child's whole tree without detaching it`. Every one of them passes focused:
+  `gate-runner` 31 of 31, `test-runner` 21 of 21. Peak load across the four runs was 30.4, 36.2,
+  47.8 and 89.4 with up to 14 lanes registered.
+- **Workaround:** Run the file focused. Waiting for a quiet machine does not work — a 26-minute wait
+  for load under 6 still began a run that peaked at 36.2.
+- **Proposed change:** Two seams, both of which these fixtures already have siblings for. Let a
+  nested `runGates` take its contention sample from an injected source the way it already takes its
+  `registryRoot` and its `runGate`, so a unit test observes the machine it was given. And keep
+  nested process work out of `withCapturedOutput`, which serializes process-wide: a fixture that
+  spawns a child while holding that queue stalls every other capturing test in the shard, which is
+  what turns load into a 60-second timeout. `environment-fingerprint.test.ts` shows the shape —
+  gathering moved outside the capture took it from 60.5s to 395ms.
+- **Dependencies:** None. `packages/dev/dev-src/repository-tests/` and `packages/shared` are outside
+  this task's ownership and the verification-graph work on `main` rewrote both hours before this was
+  observed, so this is recorded rather than fixed.
+- **Acceptance:** Ten consecutive `verify --complete` runs on one unchanged tree are green while
+  other worktrees are verifying, and a genuine contention warning still reaches a real lane's
+  summary.
 - **Source:** 2026-09-18 `feat/mvp-feedback-intake-doctor-134afd` verification after merging `main`.
