@@ -11,6 +11,9 @@ import { CodexConfigGenerator } from './CodexConfigGenerator'
 const targetFeatures = {
   codexcli: ['subagents', 'hooks'],
   claudecode: ['subagents', 'permissions', 'hooks'],
+  // Cursor takes the profiles alone. Its permissions and worktree setup stay hand-maintained in
+  // `.cursor/`, because rulesync has no translator for the shape those files are written in.
+  cursor: ['subagents'],
 } satisfies Record<string, Feature[]>
 
 const targets = Object.keys(targetFeatures) as ToolTarget[]
@@ -19,6 +22,7 @@ const targets = Object.keys(targetFeatures) as ToolTarget[]
 const guardedOutputs: Record<string, string[]> = {
   codexcli: ['.codex/agents'],
   claudecode: ['.claude/agents', '.claude/settings.json'],
+  cursor: ['.cursor/agents'],
 }
 
 type GenerateAgentConfigOptions = {

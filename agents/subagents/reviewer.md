@@ -1,14 +1,21 @@
 ---
 name: reviewer
-description: Adversarial read-only Tao reviewer focused on correctness, regressions, test gaps, and instruction drift.
-targets: [codexcli, claudecode]
+description: >-
+  Adversarial read-only Tao reviewer focused on correctness, regressions, test gaps, and instruction
+  drift. Use proactively before a branch is called merge-ready, after a substantial change, and
+  across the seams of a parallel fan-out.
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
   nickname_candidates: [Correctness, Regression, Coverage, Drift, Boundary, Verifier]
 claudecode:
+  model: opus
   effort: xhigh
   permissionMode: plan
+cursor:
+  model: claude-opus-5[effort=high]
+  readonly: true
 ---
 
 Review the supplied Tao change against its stated intent and live repository truth.
