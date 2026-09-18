@@ -86,7 +86,54 @@ continues on `feat/september-remediation-continued`.
    first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
    `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
 
-### Second-audit backlog: triaged so far
+### Second-audit backlog: verified against current code
+
+The list below was written against an older `main` and is substantially stale: of the fourteen
+findings checked so far, thirteen are already fixed or do not describe the code, and one is a
+judgment for Ro rather than a defect. Check each remaining item before implementing anything.
+
+**Refuted — the code does not do what the finding describes**
+
+- `ship-model.ts` build numbers: `nextBuildNumber` takes the maximum build number already used and
+  increments it. There is no minute resolution and nothing to collide.
+- `ship-fingerprints.ts` schema compatibility: `canonicalEntitySchema` builds a sorted structure of
+  field names, traits, indexes, orders and visibility from the AST. No CST text is hashed, so a
+  formatting-only edit cannot change the fingerprint.
+- `data-stores.ts` store names: a binding is `_TaoDataCatalog_<group>`, one separator and one
+  variable segment, which cannot collide for two distinct group names.
+- `commands-validator.ts` shortcut validation: it rejects a missing key, a repeated modifier, an
+  unknown modifier, a platform key named instead of `primary`, and a shortcut the interaction
+  reducer owns, each with its own diagnostic.
+- `Text.ts` JSONC stripping: strings, escapes, line comments, block comments and trailing commas are
+  all handled, and an unterminated block comment is deliberately preserved so `JSON.parse` rejects
+  it rather than accepting the valid prefix. An unterminated string is emitted verbatim for the same
+  reason.
+- `StudioCanvasViewport.ts` listeners: every listener it installs, including the two on `document`,
+  is removed in `dispose()`, which is idempotent.
+- `TestSelection.ts` root dependencies: `bun.lock`, `package.json` and every `devenv.*` file are in
+  `EVERYTHING_PATHS`, so a change to one widens the run to the whole repository.
+- `StudioProtocol.ts` parameterised routes: every parameter is substituted through
+  `encodeURIComponent`, so a value containing `/` cannot cross a segment boundary.
+- `test-run-root.ts` cleanup: both name patterns are anchored and the deletion guard compares the
+  resolved generated root rather than matching directory names.
+- `StudioSketchCatalog.ts` revision: the rewind is deliberate and tested; see the entry below.
+
+**Needs Ro, not a fix**
+
+- `ship-executor.ts` export compliance: `ios` is emitted as `{}`, so nothing is declared at all and
+  App Store Connect asks at submission; the type also admits only `false`, so an app that does use
+  non-exempt encryption cannot state it. What Tao should declare on an author's behalf is a legal
+  question about their app, not a defect to patch. The finding's own claim — that `false` is always
+  declared — does not match the code.
+
+**Acknowledged, deliberately unchanged**
+
+- `DeadExports.ts` comments and strings: a reference inside a comment or string does keep an export
+  looking alive, but that is the safe direction — it hides dead code rather than proposing the
+  removal of live code. Stripping before the scan trades a false negative for a false positive in a
+  tool whose output is a deletion. Revisit only with a specific export it is proven to hide.
+
+### Second-audit backlog: earlier triage detail
 
 - **`StudioSketchCatalog.ts` catalog revision — refuted, and documented.** A rollback restores the
   snapshot's own revision, so the number can go backwards and later describe different contents.
@@ -119,14 +166,19 @@ continues on `feat/september-remediation-continued`.
    The journey no longer asserts the old behaviour either way.
 3. Everything below under **Known open items**, items 3 onward, is unchanged.
 
-## Known open items carried into the follow-up branch
+## Known open items
 
-1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed; see **Follow-up
-   branch** above.
-2. **Simulated-user journey remains quarantined**, now failing at the component drag rather than
-   the left-pane divider; see **Follow-up branch** above.
-3. **Not run this session:** `studio-smoke-native`, `studio-canary`, `ship-bundle-proof` (this one
-   _did_ pass under `full-verify-sandbox`), and a complete `just full-verify` chain.
+Items 1 to 3 are closed; they are kept so a reader of this document's history can see what the two
+follow-up branches were for.
+
+1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed on
+   `merged/september-remediation-followup`.
+2. ~~**Simulated-user journey remains quarantined.**~~ Lifted on
+   `merged/september-remediation-continued` after ten consecutive green runs; it is a member of
+   `FULL_VERIFY_GATES` again and `FULL_VERIFY_SKIPPED` is empty.
+3. ~~**Not run: `studio-smoke-native`, `studio-canary`, `ship-bundle-proof`, and a complete
+   `just full-verify` chain.**~~ All four have run and passed. `just full-verify` is green end to
+   end: 21 gates passed, 0 failed, 0 skipped.
 4. **External/host-only acceptance remains separate and unproved,** as it has since Wave 1:
    physical device, Apple Device Hub GUI, real CloudKit, installed-binary OTA, signed/notarized
    Studio, and App Store Connect/TestFlight.
