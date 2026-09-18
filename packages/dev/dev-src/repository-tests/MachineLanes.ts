@@ -256,18 +256,21 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
 }
 
 /**
- * fairAllocations redistributes unused ceilings, and is the whole admission rule: a lane's share is
- * the only thing its own reservations are measured against. Every registered lane keeps a floor of
- * one slot, so the machine holds at most `max(cpuCount, laneCount)` slots at once.
+ * fairAllocations redistributes unused ceilings. Every registered lane keeps a floor of one slot,
+ * and that floor is honoured at admission even when the machine-wide total is already spent, which
+ * bounds the machine at `cpuCount` plus at most one slot per lane running nothing.
  *
- * There used to be a second, machine-wide check — admit only while `cpuCount - Σslots` was positive
- * — and it cancelled that floor exactly when the floor mattered. Lanes that registered while the
- * machine was emptier keep their wider share until each of their running nodes ends, so on a busy
- * machine the sum reaches `cpuCount` and every newcomer is reduced to zero, waiting behind work
- * that will not shrink for minutes. Measured on an 18-CPU host: 18 of 18 slots reserved, CPU under
- * a third busy, nine lanes reporting `waiting` and none of them able to start. The pool that check
- * defended was also never the real resource, since a single slot may run a whole test file's worth
- * of parallel children; lanes that held 4-6 slots were measured driving the load average past 21.
+ * The floor used to be cancelled by the machine-wide check it shares admission with — admit only
+ * while `cpuCount - Σslots` is positive — exactly when the floor mattered. Lanes that registered
+ * while the machine was emptier keep their wider share until each of their running nodes ends, so
+ * on a busy machine the sum reaches `cpuCount` and every newcomer is reduced to zero, waiting
+ * behind work that will not shrink for minutes. Measured on an 18-CPU host: 18 of 18 slots
+ * reserved, CPU under a third busy, nine lanes reporting `waiting` and none of them able to start.
+ * The total is worth keeping above that floor, because a lane's share shrinks as lanes join while
+ * its reservations do not: without it, each new lane could stack a full share on reservations taken
+ * under wider ones. It is a fairness bound rather than a CPU one either way, since a single slot
+ * may run a whole test file's parallel children; lanes holding 4-6 slots were measured driving the
+ * load average past 21.
  */
 function fairAllocations(
   cpuCount: number,
@@ -317,18 +320,29 @@ function describeExclusiveHolder(exclusive: ExclusiveRecord, entries: readonly L
 }
 
 /**
- * describeShare explains an admission this lane's own share declined, and says how the machine is
- * currently divided, because the share is a function of how many lanes are registered.
+ * describeShare separates the three ways an admission is declined once the lane is registered and
+ * nobody holds the machine exclusively: this lane is at its share, the machine is full, or the node
+ * is wider than what is free. Each says how the machine is currently divided, because a share is a
+ * function of how many lanes are registered.
  */
-function describeShare(
-  options: { capacity: number; held: number; laneCount: number; requestedSlots: number },
-): string {
+function describeShare(options: {
+  available: number
+  capacity: number
+  cpuCount: number
+  globallyAvailable: number
+  held: number
+  laneCount: number
+  requestedSlots: number
+}): string {
   const division = `${options.laneCount} ${options.laneCount === 1 ? 'lane is' : 'lanes are'} registered`
-  if (options.held > 0) {
+  if (options.held >= options.capacity) {
     return `this lane holds ${options.held} of its ${options.capacity} slots; ${division}`
   }
-  return `this node wants ${options.requestedSlots} slots, more than this lane's share of `
-    + `${options.capacity}; ${division}`
+  if (options.globallyAvailable === 0) {
+    return `every one of the machine's ${options.cpuCount} slots is reserved; ${division}`
+  }
+  return `this node wants ${options.requestedSlots} slots, more than the ${options.available} free `
+    + `to this lane; ${division}`
 }
 
 function describeContention(report: ContentionReport): string {
@@ -412,11 +426,26 @@ function registeredLane(options: {
           }
           const allocations = fairAllocations(options.cpuCount, entries.map(entry => entry.record))
           capacity = allocations.get(options.id) ?? 0
-          const available = Math.max(0, capacity - own.record.slots)
+          const laneAvailable = Math.max(0, capacity - own.record.slots)
+          const globallyAvailable = Math.max(
+            0,
+            options.cpuCount - entries.reduce((sum, entry) => sum + entry.record.slots, 0),
+          )
+          // A lane running nothing is admitted whatever the machine-wide total says. That first slot
+          // is the floor every registration gets, and honouring it here is what keeps a machine
+          // whose slots are all spoken for from stalling every lane that joins it afterwards. Above
+          // that floor the total still governs, which bounds the machine at one extra slot per lane
+          // rather than letting shrinking shares stack on top of reservations taken under wider ones.
+          const available = own.record.slots === 0
+            ? Math.max(1, Math.min(globallyAvailable, laneAvailable))
+            : Math.min(globallyAvailable, laneAvailable)
           const slots = available >= requestedSlots ? requestedSlots : allowPartial ? available : 0
           if (slots <= 0) {
             waitReason = describeShare({
+              available,
               capacity,
+              cpuCount: options.cpuCount,
+              globallyAvailable,
               held: own.record.slots,
               laneCount: entries.length,
               requestedSlots,

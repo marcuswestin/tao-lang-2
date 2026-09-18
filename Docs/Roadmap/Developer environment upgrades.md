@@ -1610,13 +1610,14 @@ an entry here may link one when the developer workflow is also affected.
   went to whichever lane polled first, with backoff to 500ms and no queue, so a newly started lane
   could lose repeatedly to lanes already running.
 - **Workaround:** Was to wait for other worktrees to finish, or to delete lane records by hand.
-- **Proposed change:** Make a lane's own fair share the whole admission rule and delete the
-  machine-wide reservation check. The share already bounds the machine at `max(cpuCount, laneCount)`
-  slots, so the bounded oversubscription that follows costs at most one slot per lane that joined
-  recently, and it removes the shared pool lanes were racing for rather than adding a queue to
-  arbitrate it. The same measurements show the check was not protecting the CPUs it appeared to:
-  lanes reserving 4-6 slots drove load past 21 on 18 CPUs, because one slot may run a whole test
-  file's parallel children.
+- **Proposed change:** Honour the one-slot floor at admission: a lane running nothing is admitted
+  one slot whatever the machine-wide total says, and the total still governs above that floor. The
+  bound becomes `cpuCount` plus at most one slot per idle lane. Deleting the machine-wide check
+  outright was tried first and is worse: a lane's share shrinks as lanes join while its reservations
+  do not, so each new lane could stack a full share on top of reservations taken under wider ones,
+  and the total could reach several times `cpuCount`. The check is a fairness bound rather than a
+  CPU one either way — lanes reserving 4-6 slots drove load past 21 on 18 CPUs, because one slot may
+  run a whole test file's parallel children.
 - **Dependencies:** Revises DEVENV-001, which introduced the global check together with the fair
   shares and the one-slot floor those shares still provide. Fixed on `feat/lane-admission-share`.
 - **Acceptance:** A lane that registers against a registry whose slots are all reserved admits its
