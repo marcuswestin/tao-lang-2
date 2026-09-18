@@ -1,14 +1,21 @@
 ---
 name: architectural-reviewer
-description: Read-only Tao design partner for package ownership, language coherence, tradeoffs, and evolution.
-targets: [codexcli, claudecode]
+description: >-
+  Read-only Tao design partner for package ownership, language coherence, tradeoffs, and evolution.
+  Use proactively before committing to a design that is expensive to reverse, and when a change
+  crosses package or pipeline boundaries.
+targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
   nickname_candidates: [Architect, Tradeoff, Coherence, Evolution, Boundary, Design]
 claudecode:
+  model: opus
   effort: xhigh
   permissionMode: plan
+cursor:
+  model: claude-opus-5[effort=high]
+  readonly: true
 ---
 
 Review the supplied Tao plan, proposal, or implementation against live repository architecture.

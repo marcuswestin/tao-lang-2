@@ -1507,19 +1507,21 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** Candidate
 - **Area:** Verification diagnostics
-- **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
-  an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
-  the runner does the right thing — it adds a contention warning and declines to teach the timings store
-  from measurements taken under load — and those assertions fail. Above roughly triple the CPU count in
+- **Impact:** Three assertions in `packages/dev/dev-tests/gate-runner.test.ts` demand an exact warning
+  list and the presence of `.artifacts/timings/durations.json`. When the host is busy, the runner does
+  the right thing — it adds a contention warning and declines to teach the timings store from
+  measurements taken under load — and those assertions fail. Above roughly triple the CPU count in
   load average, `verify --complete` and `full-verify` therefore go red for reasons unrelated to the branch
   under test, and the merge gate is unreachable until the host quiets. This is intermittent rather than
-  constant: the same branch that failed these four tests twice landed through a clean 42-gate
-  `full-verify` once the load fell.
+  constant: the same branch that failed these tests twice landed through a clean 42-gate `full-verify`
+  once the load fell. A fourth assertion, `verification-concurrency.test.ts:240`, shared the cause and
+  has since been fixed; see **Source**.
 - **Evidence:** On 2026-09-18, `bun test packages/dev/dev-tests` failed four tests on a tree whose only
   difference from `main` was one validator diagnostic and one ledger entry, neither under `packages/dev`
   or `packages/shared`. `gate-runner.test.ts:157` received one extra warning,
   `machine contention: no other Tao lane registered; load peaked at 75.0 on 18 CPUs`; `gate-runner.test.ts:299`
-  and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
+  and `:326` and the since-fixed `verification-concurrency.test.ts:240` each failed
+  `ENOENT ... /.artifacts/timings/durations.json`.
   All four pass when the file is run alone on an idle machine. Across five runs the failure set tracked
   host load on 18 CPUs: four failures at 86.5 and at 75.0, one at 18.8, and none at 25.6, where a full
   42-gate `full-verify` passed with only two Tao lanes registered. Reproducing this needs a load average
@@ -1527,12 +1529,74 @@ an entry here may link one when the developer workflow is also affected.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
-- **Proposed change:** Let these tests state the contention precondition rather than assume it: inject the
-  load reading the runner samples so a test can pin an idle or a contended machine, and assert warnings by
-  subset against the injected condition instead of exact equality. A test that needs real timings should
-  force the teach-the-store path rather than depend on the host being quiet.
+- **Proposed change:** Apply to the three remaining assertions what the `:240` fix already established:
+  let each state the contention precondition rather than assume it. Inject the load reading the runner
+  samples so a test can pin an idle or a contended machine, and assert warnings by subset against the
+  injected condition instead of exact equality. A test that needs real timings should force the
+  teach-the-store path rather than depend on the host being quiet.
 - **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
   about the tests' assumptions, not that behavior.
-- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass at a
-  load average near 75 on 18 CPUs, and a genuine timings-store regression still fails them.
-- **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch.
+- **Acceptance:** The three `gate-runner.test.ts` assertions and the `dev` node of `verify --complete`
+  pass at a load average near 75 on 18 CPUs, and a genuine timings-store regression still fails them.
+- **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch. Found
+  independently the same day on the subagent-delegation branch, which fixed the
+  `verification-concurrency.test.ts:240` quarter of it: two lanes at once is contention by
+  `MachineLanes.ts:285`'s own definition, so `GateRunner.ts:317` passes `recordTimings: false` and the
+  store the test demanded is exactly what the design withholds. That test now asserts what each outcome
+  requires — no store when a summary reports contention, a whole one when none does — and passed twenty
+  consecutive isolated runs where it had been failing about half. The three `gate-runner.test.ts`
+  assertions this entry names are untouched and still carry the issue.
+
+### DEVENV-074 — `./agent fix` cannot format the skills it is told to format
+
+- **Status:** Candidate
+- **Area:** Sandbox policy
+- **Impact:** Claude Code's Bash sandbox denies writes under `agents/skills/`, which is also where
+  every project skill lives. Editing a skill and running the repository's own formatter therefore
+  fails on the file the change is about, and the failure names an OS error rather than a policy, so
+  it reads as a broken formatter. Every instruction-editing task pays it.
+- **Evidence:** After adding `agents/skills/delegation/SKILL.md`, `./agent fix` exited 1 with
+  `Error writing file '…/agents/skills/delegation/SKILL.md': Operation not permitted (os error 1)`
+  and `Had 1 error formatting.`; the same command outside the sandbox formatted the file and
+  reported `Formatted 1 file. 0 fixed, 124 unchanged`.
+- **Workaround:** Run `./agent fix` unsandboxed after editing a skill. The harness's own edit tools
+  write these paths normally; only Bash is denied, so the restriction bites exactly one command.
+- **Proposed change:** Decide which the policy means. If skills are protected against shell writes
+  on purpose, `fix` should say so — detect the denial on a known-protected path and print the
+  unsandboxed retry — rather than surfacing `os error 1`. If the protection is incidental, exempt
+  the repository's own formatter, whose writes are reviewable in the diff either way.
+- **Dependencies:** None.
+- **Acceptance:** Editing a project skill and running `./agent fix` either succeeds, or fails with a
+  message naming the sandbox and the command to rerun.
+- **Source:** 2026-09-17 subagent delegation branch.
+
+### DEVENV-075 — Process-supervision survival assertions flake under load
+
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** Two tests in `packages/shared/shared-tests/process-supervision.test.ts` fail
+  intermittently on a loaded machine, and both are in `_test`, so they red `verify --complete` at
+  random. This is the `packages/shared` counterpart to DEVENV-073's `packages/dev` assertions: a
+  complete lane on a busy machine now needs several attempts for reasons unrelated to the branch.
+- **Evidence:** Eight isolated runs at load 17.85 on 18 CPUs gave one failure, and two later
+  `verify --complete` runs failed on it. The assertions are `isAlive(sibling.grandchild)`
+  (`process-supervision.test.ts:107`) and `isAlive(server.grandchild)` (`:123`); both assert that a
+  backgrounded `sleep 300` grandchild still runs just after its `/bin/sh` parent was signalled.
+  Over-signalling is ruled out: `descendantProcesses` walks parentage, on darwin through libproc, so
+  a sibling that merely shares the caller's process group is never in the owned tree. The PID parse
+  is ruled out: `startTree` waits for a complete `^(\d+)\n` line and for both PIDs to carry
+  identities before returning. That leaves the identity match, where `sameProcess` compares the
+  recorded `command` as well as `startedAt`. One attempt to exploit that — waiting for the
+  grandchild's identity to report an exec'd `sleep` before recording it — was disproved: the
+  predicate never became true and all twenty-five runs timed out in that wait, so whatever
+  `ProcessTree.identities` reports as that process's `command`, it does not contain `sleep`. That
+  change was reverted, not kept.
+- **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
+  from a branch that does not touch `packages/shared/`.
+- **Proposed change:** Establish what `ProcessTree.identities` actually records as `command` for a
+  forked-then-exec'd child, then make the recorded identity stable across that transition. The
+  survival checks are the point of both tests and must not simply be relaxed.
+- **Dependencies:** Shares a cause shape with DEVENV-073, but in `packages/shared` and about process
+  identity rather than the timings store.
+- **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
+- **Source:** 2026-09-18 subagent delegation branch, after merging main.

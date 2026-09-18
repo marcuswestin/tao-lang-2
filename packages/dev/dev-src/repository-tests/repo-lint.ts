@@ -1,4 +1,5 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { readDelegationIssues } from '../delegation/DelegationProfiles'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -306,10 +307,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
   'packages/dev/dev-tests/agent-config-generation.test.ts:44',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:81',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:104',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:210',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
@@ -769,6 +770,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
+  issues.push(...await readDelegationIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
