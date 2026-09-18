@@ -1471,7 +1471,76 @@ an entry here may link one when the developer workflow is also affected.
   `grep -r`.
 - **Source:** 2026-09-17 branch-wide agent findings.
 
-### DEVENV-072 — `./agent fix` cannot format the skills it is told to format
+### DEVENV-072 — Shared devenv profile makes its coreutils vanish mid-command in every worktree
+
+- **Status:** Candidate
+- **Area:** Worktrees and shell environment
+- **Impact:** A tool shell resolves `dirname`, `basename`, and the other profile-provided coreutils
+  through `.devenv/profile`, which every linked worktree symlinks to the primary checkout's single
+  profile. While another worktree or the primary checkout re-resolves that profile, those binaries
+  stop resolving everywhere at once. In a shell pipeline the failure is per-invocation
+  `command not found` rather than a nonzero exit, so the surrounding loop keeps running and reports
+  a confidently wrong result instead of failing.
+- **Evidence:** On 2026-09-17, with `./agent verify --changed` running in this worktree, a
+  `while read` loop checking bridge paths emitted `(eval):2: command not found: dirname` once per
+  iteration and reported all 160 repository `from` bridges as missing. `sed` and `awk`, which
+  resolve from `/usr/bin`, were unaffected throughout. Re-running the identical pipeline after the
+  lane finished resolved `dirname` from
+  `.devenv/profile/bin/dirname` and reported 1 missing of 160. `ls -la .devenv/` shows
+  `profile -> /Users/ro/code/tao-lang-2/.devenv/profile`, so the profile is shared mutable state
+  rather than per-worktree.
+- **Workaround:** Do not build repository checks out of shell pipelines over profile coreutils while
+  a lane runs. Write the check as a `bun` script using `node:path` and `node:fs`, which depends only
+  on the already-resolved `bun` binary; that is how the bridge-path check was finally run.
+- **Proposed change:** Establish whether a linked worktree can hold its own profile symlink
+  generation, or whether profile re-resolution can publish atomically so the old generation stays
+  readable until the new one is complete. Failing both, have `./agent` expose the hazard: a
+  `command not found` for a profile-provided binary should be a named, actionable diagnostic rather
+  than an ordinary shell miss.
+- **Dependencies:** None.
+- **Acceptance:** A profile re-resolution in one worktree leaves every other worktree's tool shell
+  resolving profile coreutils continuously, or a shell that loses them says so with a diagnostic
+  naming the profile.
+- **Source:** 2026-09-17 bridged-sidecar file-reference validation.
+
+### DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite
+
+- **Status:** Candidate
+- **Area:** Verification diagnostics
+- **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
+  an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
+  the runner does the right thing — it adds a contention warning and declines to teach the timings store
+  from measurements taken under load — and those assertions fail. `verify --complete` therefore cannot go
+  green on a machine that several agents share, which is this repository's normal condition, so the merge
+  gate is unreachable for reasons unrelated to the branch under test.
+- **Evidence:** On 2026-09-18, `bun test packages/dev/dev-tests` failed four tests on a tree whose only
+  difference from `main` was one validator diagnostic and one ledger entry, neither under `packages/dev`
+  or `packages/shared`. `gate-runner.test.ts:157` received one extra warning,
+  `machine contention: no other Tao lane registered; load peaked at 75.0 on 18 CPUs`; `gate-runner.test.ts:299`
+  and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
+  All four pass when the file is run alone on an idle machine. Across four `verify --complete` runs the
+  failure set tracked host load, shrinking from four to one as the load average fell from 86.5 to 18.8.
+- **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
+  whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
+  re-reading the warning text for a contention line.
+- **Proposed change:** Let these tests state the contention precondition rather than assume it: inject the
+  load reading the runner samples so a test can pin an idle or a contended machine, and assert warnings by
+  subset against the injected condition instead of exact equality. A test that needs real timings should
+  force the teach-the-store path rather than depend on the host being quiet.
+- **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
+  about the tests' assumptions, not that behavior.
+- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass on a
+  host under sustained load from other worktrees, and a genuine timings-store regression still fails them.
+- **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch. Found
+  independently the same day on the subagent-delegation branch, which fixed the
+  `verification-concurrency.test.ts:240` quarter of it: two lanes at once is contention by
+  `MachineLanes.ts:285`'s own definition, so `GateRunner.ts:317` passes `recordTimings: false` and the
+  store the test demanded is exactly what the design withholds. That test now asserts what each outcome
+  requires — no store when a summary reports contention, a whole one when none does — and passed twenty
+  consecutive isolated runs where it had been failing about half. The three `gate-runner.test.ts`
+  assertions this entry names are untouched and still carry the issue.
+
+### DEVENV-074 — `./agent fix` cannot format the skills it is told to format
 
 - **Status:** Candidate
 - **Area:** Sandbox policy
@@ -1494,68 +1563,33 @@ an entry here may link one when the developer workflow is also affected.
   message naming the sandbox and the command to rerun.
 - **Source:** 2026-09-17 subagent delegation branch.
 
-### DEVENV-073 — The two-lane timings-record test asserted against its own premise
-
-- **Status:** Resolved
-- **Area:** Verification scheduling
-- **Impact:** `verification-concurrency.test.ts`'s `leaves both lanes' records readable when two of
-  them finish at once` failed roughly half of its runs, in isolation, on an unchanged tree. It sits
-  in `_test`, so it redded `verify --complete` at random and cost a full lane re-run each time.
-  Worse than the cost: it trains agents to re-run a red complete lane rather than read it, which is
-  the habit the contention reporting exists to prevent.
-- **Evidence:** Six consecutive isolated runs on one unchanged tree gave `6 pass 0 fail` three times
-  and then `5 pass 1 fail` three times, failing with
-  `ENOENT: no such file or directory, open '<temp root>/.artifacts/timings/durations.json'`. The
-  cause is the test's own premise: `MachineLanes.ts:285` defines a run as contended when
-  `peakLanes > 1`, `GateRunner.ts:317` passes `recordTimings: !contention.contended`, and this test
-  runs two lanes at once deliberately. A contended run is designed to record no durations rather
-  than teach the planner a number measured while something else held the CPUs, so the store the test
-  demanded is exactly what the design withholds. It passed only when the two very fast lanes
-  happened not to observe each other.
-- **Workaround:** None needed.
-- **Proposed change:** Done. The test now asserts what each outcome requires — no store when either
-  summary reports contention, a whole and well-formed one when neither does — which keeps its
-  original intent that the store is never a torn write, and documents the suppression rule instead
-  of contradicting it.
-- **Dependencies:** None.
-- **Acceptance:** Met: twenty consecutive isolated runs of the file passed on an unchanged tree.
-- **Source:** 2026-09-18 subagent delegation branch, after merging main.
-
-### DEVENV-074 — Process-supervision survival assertions flake under load
+### DEVENV-075 — Process-supervision survival assertions flake under load
 
 - **Status:** Candidate
 - **Area:** Test execution
 - **Impact:** Two tests in `packages/shared/shared-tests/process-supervision.test.ts` fail
   intermittently on a loaded machine, and both are in `_test`, so they red `verify --complete` at
-  random. Together with the contention timeouts, a complete lane on a busy machine now needs several
-  attempts for reasons that have nothing to do with the branch under test.
-- **Evidence:** Eight isolated runs at load 17.85 on 18 CPUs gave one failure. The two assertions
-  are `isAlive(sibling.grandchild)` (`process-supervision.test.ts:107`) and
-  `isAlive(server.grandchild)` (`:123`); both assert that a backgrounded `sleep 300` grandchild is
-  still running just after its `/bin/sh` parent has been signalled and reaped. Both failed in the
-  same lane run, and `:108` again in a later one. The mechanism is not established, but two
-  candidates are narrowed. Over-signalling is unlikely: `descendantProcesses` walks parentage, on
-  darwin through libproc, so a sibling that merely shares the caller's process group is not in the
-  owned tree and the teardown should never reach it. That leaves the harness side — `startTree`
-  learns the grandchild's PID by parsing `echo $!` from the shell's output, and `isAlive` matches a
-  recorded start identity, so either a PID read before its line is complete or an identity that does
-  not match under process churn would fail exactly this way while nothing is actually wrong. The
-  parse candidate is now ruled out: `startTree` already waits for a complete `^(\d+)\n` line and
-  then for both PIDs to carry identities before returning. That leaves the identity match, where
-  `sameProcess` compares the recorded `command` as well as `startedAt`. One attempt to exploit that
-  — waiting for the grandchild's identity to report an exec'd `sleep` before recording it — was
-  tried and disproved: the predicate never became true and all twenty-five runs timed out in that
-  wait, so whatever `ProcessTree.identities` reports as the `command` of a backgrounded `sleep 300`,
-  it does not contain `sleep`. That change was reverted, not kept. Establishing what the field
-  actually holds for a forked-then-exec'd child is the next step.
+  random. This is the `packages/shared` counterpart to DEVENV-073's `packages/dev` assertions: a
+  complete lane on a busy machine now needs several attempts for reasons unrelated to the branch.
+- **Evidence:** Eight isolated runs at load 17.85 on 18 CPUs gave one failure, and two later
+  `verify --complete` runs failed on it. The assertions are `isAlive(sibling.grandchild)`
+  (`process-supervision.test.ts:107`) and `isAlive(server.grandchild)` (`:123`); both assert that a
+  backgrounded `sleep 300` grandchild still runs just after its `/bin/sh` parent was signalled.
+  Over-signalling is ruled out: `descendantProcesses` walks parentage, on darwin through libproc, so
+  a sibling that merely shares the caller's process group is never in the owned tree. The PID parse
+  is ruled out: `startTree` waits for a complete `^(\d+)\n` line and for both PIDs to carry
+  identities before returning. That leaves the identity match, where `sameProcess` compares the
+  recorded `command` as well as `startedAt`. One attempt to exploit that — waiting for the
+  grandchild's identity to report an exec'd `sleep` before recording it — was disproved: the
+  predicate never became true and all twenty-five runs timed out in that wait, so whatever
+  `ProcessTree.identities` reports as that process's `command`, it does not contain `sleep`. That
+  change was reverted, not kept.
 - **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
   from a branch that does not touch `packages/shared/`.
-- **Proposed change:** Establish which of the two candidates it is before changing anything. The
-  survival checks are the point of both tests and must not simply be relaxed. If it is the PID
-  parse, have `startTree` wait for a complete line and confirm the grandchild is running before
-  returning; if it is the identity match, make the recorded identity unambiguous under churn. Rule
-  out over-signalling first all the same, because that one would be a real defect rather than a
-  flake, and on this machine it would mean a lane killing another agent's processes.
-- **Dependencies:** None.
+- **Proposed change:** Establish what `ProcessTree.identities` actually records as `command` for a
+  forked-then-exec'd child, then make the recorded identity stable across that transition. The
+  survival checks are the point of both tests and must not simply be relaxed.
+- **Dependencies:** Shares a cause shape with DEVENV-073, but in `packages/shared` and about process
+  identity rather than the timings store.
 - **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
