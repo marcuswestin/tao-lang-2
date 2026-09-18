@@ -1533,15 +1533,21 @@ an entry here may link one when the developer workflow is also affected.
   are `isAlive(sibling.grandchild)` (`process-supervision.test.ts:107`) and
   `isAlive(server.grandchild)` (`:123`); both assert that a backgrounded `sleep 300` grandchild is
   still running just after its `/bin/sh` parent has been signalled and reaped. Both failed in the
-  same lane run. The mechanism is not established — a grandchild orphaned by its parent's exit
-  should survive, so the question is whether the reported PID is the one being probed by the time
-  the assertion runs.
+  same lane run, and `:108` again in a later one. The mechanism is not established, but two
+  candidates are narrowed. Over-signalling is unlikely: `descendantProcesses` walks parentage, on
+  darwin through libproc, so a sibling that merely shares the caller's process group is not in the
+  owned tree and the teardown should never reach it. That leaves the harness side — `startTree`
+  learns the grandchild's PID by parsing `echo $!` from the shell's output, and `isAlive` matches a
+  recorded start identity, so either a PID read before its line is complete or an identity that does
+  not match under process churn would fail exactly this way while nothing is actually wrong.
 - **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
   from a branch that does not touch `packages/shared/`.
-- **Proposed change:** Establish the mechanism before changing the assertions. The survival checks
-  are the point of both tests, so they should not simply be relaxed: the fix is either to make the
-  grandchild's identity unambiguous to `isAlive` under PID churn, or to wait for a positive signal
-  that the grandchild is running rather than inferring it from `echo $!`.
+- **Proposed change:** Establish which of the two candidates it is before changing anything. The
+  survival checks are the point of both tests and must not simply be relaxed. If it is the PID
+  parse, have `startTree` wait for a complete line and confirm the grandchild is running before
+  returning; if it is the identity match, make the recorded identity unambiguous under churn. Rule
+  out over-signalling first all the same, because that one would be a real defect rather than a
+  flake, and on this machine it would mean a lane killing another agent's processes.
 - **Dependencies:** None.
 - **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
