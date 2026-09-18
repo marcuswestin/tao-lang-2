@@ -7,7 +7,12 @@ import {
 } from '../dev-src/repository-tests/Finalize'
 import { validateMergeMessage } from '../dev-src/repository-tests/MergeWithMain'
 
-type GreenTreeRecord = { at: string; logRoot: string; treeHash: string }
+type GreenTreeRecord = { at: string; logRoot: string; toolchain: string; treeHash: string }
+
+/** A fixed resolved-toolchain stand-in: fakes agree on this value everywhere a real run would read
+ * `.devenv/profile`, so a test opts into a *different* value only when it means to prove that a
+ * toolchain mismatch, not a tree change, is what should force a real run. */
+const FAKE_TOOLCHAIN = 'fake-toolchain-abc'
 
 type FakeRepository = {
   branch: string
@@ -98,7 +103,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (command === 'just' && args[0] === 'verify') {
       const treeHash = `tree-of-${headAfterMerge}`
       if ((repository.verifyExitCode ?? 0) === 0) {
-        greenTreeRecords.set('verify', { at: '2026-09-17T10:00:00.000Z', logRoot: '/logs/verify', treeHash })
+        greenTreeRecords.set('verify', {
+          at: '2026-09-17T10:00:00.000Z',
+          logRoot: '/logs/verify',
+          toolchain: FAKE_TOOLCHAIN,
+          treeHash,
+        })
       }
       return result(args, spec.cwd, '', repository.verifyExitCode ?? 0)
     }
@@ -107,16 +117,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const dependencies: FinalizeDependencies = {
     exists: async path => states.has(path) || files.has(path),
-    findGreenTree: async (_root, treeHash, acceptedLanes) => {
+    findGreenTree: async (_root, wanted, acceptedLanes) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
-        if (record !== undefined && record.treeHash === treeHash) {
+        if (record !== undefined && record.treeHash === wanted.treeHash && record.toolchain === wanted.toolchain) {
           return { ...record, lane }
         }
       }
       return undefined
     },
-    hashTree: async () => `tree-of-${headAfterMerge}`,
+    key: async () => ({ toolchain: FAKE_TOOLCHAIN, treeHash: `tree-of-${headAfterMerge}` }),
     now: () => new Date('2026-09-17T12:00:00.000Z'),
     readJson: async <ValueT>(path: string) => {
       if (!states.has(path)) {
@@ -204,6 +214,7 @@ Describe('finalize', () => {
     fake.greenTreeRecords.set('full-verify', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/full',
+      toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
     })
 
@@ -212,6 +223,25 @@ Describe('finalize', () => {
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
     Expect(outcome.lines.some(line => line.includes('full-verify'))).toBe(true)
   })
+
+  Test(
+    'runs just verify --complete when the tree matches a record but the resolved toolchain does not',
+    async () => {
+      const fake = fakeDependencies()
+      fake.greenTreeRecords.set('full-verify', {
+        at: '2026-09-17T09:00:00.000Z',
+        logRoot: '/logs/full',
+        toolchain: 'a-different-toolchain',
+        treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
+      })
+
+      const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+      Expect(fake.calls.some(call => call.command === 'just' && call.args.join(' ') === 'verify --complete'))
+        .toBe(true)
+      Expect(outcome.lines.some(line => line.includes('Verified; standing on verify'))).toBe(true)
+    },
+  )
 
   Test('runs verification when no record covers the tree, and stands on its own record afterwards', async () => {
     const fake = fakeDependencies()
@@ -283,13 +313,15 @@ Describe('finalize', () => {
       updatedAt: '2026-09-17T09:00:00.000Z',
       verifiedAt: '2026-09-17T09:00:00.000Z',
       verifiedLane: 'verify',
+      verifiedToolchain: FAKE_TOOLCHAIN,
       verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-      version: 1,
+      version: 2,
     }
     fake.states.set(statePath, state)
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
     })
 
@@ -313,8 +345,9 @@ Describe('finalize', () => {
         updatedAt: '2026-09-17T09:00:00.000Z',
         verifiedAt: '2026-09-17T09:00:00.000Z',
         verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
         verifiedTreeHash: 'some-old-tree',
-        version: 1,
+        version: 2,
       } satisfies FinalizeState,
     )
 
@@ -377,9 +410,10 @@ Describe('finalize', () => {
           updatedAt: '2026-09-17T09:00:00.000Z',
           verifiedAt: '2026-09-17T09:00:00.000Z',
           verifiedLane: 'verify',
+          verifiedToolchain: FAKE_TOOLCHAIN,
           // Claims to have proved the post-merge tree, but no GreenTree record backs that claim up.
           verifiedTreeHash: 'tree-of-mergedhead000000000000000000000000000000000',
-          version: 1,
+          version: 2,
         } satisfies FinalizeState,
       )
 
@@ -394,6 +428,7 @@ Describe('finalize', () => {
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
     })
 
@@ -428,13 +463,15 @@ Describe('finalize', () => {
         updatedAt: '2026-09-17T09:00:00.000Z',
         verifiedAt: '2026-09-17T09:00:00.000Z',
         verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
         verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-        version: 1,
+        version: 2,
       } satisfies FinalizeState,
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
     })
 
@@ -462,13 +499,15 @@ Describe('finalize', () => {
           updatedAt: '2026-09-17T09:00:00.000Z',
           verifiedAt: '2026-09-17T09:00:00.000Z',
           verifiedLane: 'verify',
+          verifiedToolchain: FAKE_TOOLCHAIN,
           verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-          version: 1,
+          version: 2,
         } satisfies FinalizeState,
       )
       fake.greenTreeRecords.set('verify', {
         at: '2026-09-17T09:00:00.000Z',
         logRoot: '/logs/verify',
+        toolchain: FAKE_TOOLCHAIN,
         treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
       })
 
@@ -497,13 +536,15 @@ Describe('finalize', () => {
         updatedAt: '2026-09-17T09:00:00.000Z',
         verifiedAt: '2026-09-17T09:00:00.000Z',
         verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
         verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-        version: 1,
+        version: 2,
       } satisfies FinalizeState,
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
     })
 
@@ -519,11 +560,12 @@ Describe('finalize', () => {
 
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     const state = fake.states.get(statePath) as FinalizeState
-    Expect(state.version).toBe(1)
+    Expect(state.version).toBe(2)
     Expect(state.headSha).toBe('mergedhead000000000000000000000000000000000')
     Expect(state.mainIntegratedSha).toBe('mainsha00000000000000000000000000000000000')
     Expect(state.messageHeadSha).toBe('mergedhead000000000000000000000000000000000')
     Expect(state.verifiedLane).toBe('verify')
+    Expect(state.verifiedToolchain).toBe(FAKE_TOOLCHAIN)
     Expect(typeof state.verifiedAt).toBe('string')
     Expect(state.updatedAt).toBe('2026-09-17T12:00:00.000Z')
   })
@@ -548,7 +590,7 @@ Describe('finalize', () => {
       const dependencies: FinalizeDependencies = {
         exists: FS.exists,
         findGreenTree: async () => undefined,
-        hashTree: async () => 'irrelevant-in-this-fixture',
+        key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
         run: async (command, spec) =>

@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { GreenTree } from '../repository-tests/GreenTree'
+import { GreenTree, type GreenTreeRecord } from '../repository-tests/GreenTree'
 import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
 
 /**
@@ -29,13 +29,24 @@ export type BoardDependencies = {
 /** BoardWorktreeStatus distinguishes a fully-read worktree from one this run could not inspect. */
 export type BoardWorktreeStatus = 'ok' | 'unreadable'
 
+/**
+ * BoardVerificationStatus compares a record against the worktree's current state honestly: a record
+ * is now keyed by the tree *and* the resolved toolchain, so a tree that still matches while the
+ * toolchain has since changed is not a match — it is its own distinct status, never folded into
+ * either "current" or "tree has changed".
+ */
+export type BoardVerificationStatus = 'current' | 'toolchain-changed' | 'tree-changed'
+
 /** BoardVerificationSummary names the most recently recorded verification lane for a worktree. */
 export type BoardVerificationSummary = {
   at: string
   lane: string
   logRoot: string
-  /** Whether that record's tree hash still matches the worktree's current content. */
-  treeMatchesCurrent?: boolean
+  /** The toolchain that record proved the tree under; see `GreenTree`. */
+  toolchain: string
+  /** How that record compares to the worktree's current tree and toolchain; undefined when this run
+   * could not compute the current tree hash or toolchain to compare against. */
+  status?: BoardVerificationStatus
 }
 
 /** BoardFinalizeSummary reports a `.artifacts/merge/<branch>.state.json` a concurrent `finalize`
@@ -133,10 +144,12 @@ function formatWorktreeRow(worktree: BoardWorktree): string {
   const verification = worktree.verification === undefined
     ? 'verification: none recorded'
     : `verification: ${worktree.verification.lane} at ${worktree.verification.at}`
-      + (worktree.verification.treeMatchesCurrent === undefined
+      + (worktree.verification.status === undefined
         ? ' (current tree unknown)'
-        : worktree.verification.treeMatchesCurrent
-        ? ' (matches current tree)'
+        : worktree.verification.status === 'current'
+        ? ' (matches current tree and toolchain)'
+        : worktree.verification.status === 'toolchain-changed'
+        ? ' (tree unchanged, but the toolchain has changed since)'
         : ' (tree has changed since)')
   return [
     header,
@@ -374,35 +387,49 @@ function summarizeFinalizeState(state: unknown): string {
   return 'recorded'
 }
 
-/** readVerificationSummary names the most recently recorded green-tree lane and whether it still
- * matches the worktree's current content. A store this run cannot read or hash is reported as "no
- * recorded lane" rather than failing the whole worktree row. */
+/** readVerificationSummary names the most recently recorded green-tree lane and how it compares to
+ * the worktree's current content. `GreenTree.load` already treats a missing or unreadable store, or
+ * any damaged record file within it, as the absence of that record, so this never fails the whole
+ * worktree row over it. */
 async function readVerificationSummary(
   path: string,
   run: typeof CLI.run,
 ): Promise<BoardVerificationSummary | undefined> {
-  const storePath = FS.resolvePath(GreenTree.STORE_PATH, path)
-  if (!await FS.isFile(storePath).catch(() => false)) {
-    return undefined
-  }
-  let store: { lanes?: Record<string, { at: string; logRoot: string; treeHash: string }> }
-  try {
-    store = await FS.readJson(storePath)
-  } catch {
-    return undefined
-  }
-  const lanes = store.lanes ?? {}
-  const mostRecent = Object.entries(lanes).toSorted(
+  const store = await GreenTree.load(path)
+  const mostRecent = Object.entries(store.lanes).toSorted(
     ([, left], [, right]) => Date.parse(right.at) - Date.parse(left.at),
   )[0]
   if (mostRecent === undefined) {
     return undefined
   }
   const [lane, record] = mostRecent
-  const treeMatchesCurrent = await GreenTree.hashTree(path, run)
-    .then(hash => hash === record.treeHash)
-    .catch(() => undefined)
-  return { at: record.at, lane, logRoot: record.logRoot, treeMatchesCurrent }
+  const status = await compareVerificationToCurrent(path, record, run)
+  return { at: record.at, lane, logRoot: record.logRoot, status, toolchain: record.toolchain }
+}
+
+/**
+ * compareVerificationToCurrent is the honest three-way read a record's identity now needs: a tree
+ * that still matches while the resolved toolchain has since changed is reported as
+ * `toolchain-changed`, never folded into `current` (nothing here proves the same tools would still
+ * reproduce that verdict) or into `tree-changed` (nothing in the tree itself moved). Either current
+ * value this run cannot compute leaves the status unknown rather than guessing.
+ */
+async function compareVerificationToCurrent(
+  path: string,
+  record: GreenTreeRecord,
+  run: typeof CLI.run,
+): Promise<BoardVerificationStatus | undefined> {
+  const [currentTreeHash, currentToolchain] = await Promise.all([
+    GreenTree.hashTree(path, run).catch(() => undefined),
+    GreenTree.toolchain(path, run).catch(() => undefined),
+  ])
+  if (currentTreeHash === undefined || currentToolchain === undefined) {
+    return undefined
+  }
+  if (currentTreeHash !== record.treeHash) {
+    return 'tree-changed'
+  }
+  return currentToolchain === record.toolchain ? 'current' : 'toolchain-changed'
 }
 
 /**

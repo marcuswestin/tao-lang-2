@@ -273,26 +273,67 @@ Describe('board', () => {
         },
       })
       // The tree the fake `run` describes is empty (every git read defaults to no entries), so its
-      // hash is exactly what GreenTree.hashTree computes for that same empty tree.
+      // hash and its `.devenv/profile`-less toolchain are exactly what a fresh read of that same
+      // empty tree computes.
       const currentTreeHash = await GreenTree.hashTree(worktreePath, run)
-      await FS.writeJson(FS.resolvePath(GreenTree.STORE_PATH, worktreePath), {
-        gates: {},
-        lanes: {
-          'verify-changed': { at: '2026-01-01T00:00:00.000Z', logRoot: 'old', treeHash: 'stale-hash' },
-          'verify': { at: '2026-06-01T00:00:00.000Z', logRoot: 'new', treeHash: currentTreeHash },
-        },
-        version: 1,
-      })
+      const currentToolchain = await GreenTree.toolchain(worktreePath, run)
+      await GreenTree.record(
+        worktreePath,
+        'verify-changed',
+        { at: '2026-01-01T00:00:00.000Z', logRoot: 'old', toolchain: currentToolchain, treeHash: 'stale-hash' },
+        [],
+      )
+      await GreenTree.record(
+        worktreePath,
+        'verify',
+        { at: '2026-06-01T00:00:00.000Z', logRoot: 'new', toolchain: currentToolchain, treeHash: currentTreeHash },
+        [],
+      )
 
       const report = await board({ ...quietMachine, registryRoot, run })
 
       Expect(report.worktrees[0]?.verification?.lane).toBe('verify')
-      Expect(report.worktrees[0]?.verification?.treeMatchesCurrent).toBe(true)
+      Expect(report.worktrees[0]?.verification?.status).toBe('current')
     } finally {
       await FS.remove(registryRoot)
       await FS.remove(worktreePath)
     }
   })
+
+  Test(
+    'reports a tree that still matches but a toolchain that has since changed, distinctly from a match',
+    async () => {
+      const registryRoot = await mkTestDir('tao-board-registry-')
+      const worktreePath = await mkTestDir('tao-board-worktree-')
+      try {
+        const run = fakeGitRun({
+          [routeKey('git', ['worktree', 'list', '--porcelain'], Repo.getRoot())]: {
+            stdout: porcelainListing([{ branch: 'feat/retooled', head: '4'.repeat(40), path: worktreePath }]),
+          },
+        })
+        const currentTreeHash = await GreenTree.hashTree(worktreePath, run)
+        await GreenTree.record(
+          worktreePath,
+          'verify',
+          {
+            at: '2026-06-01T00:00:00.000Z',
+            logRoot: 'new',
+            toolchain: 'a-toolchain-this-checkout-no-longer-has',
+            treeHash: currentTreeHash,
+          },
+          [],
+        )
+
+        const report = await board({ ...quietMachine, registryRoot, run })
+
+        Expect(report.worktrees[0]?.verification?.lane).toBe('verify')
+        Expect(report.worktrees[0]?.verification?.status).toBe('toolchain-changed')
+      } finally {
+        await FS.remove(registryRoot)
+        await FS.remove(worktreePath)
+      }
+    },
+  )
 
   Test('never writes to the worktree, the registry, or the merge artifacts it reads', async () => {
     const registryRoot = await mkTestDir('tao-board-registry-')

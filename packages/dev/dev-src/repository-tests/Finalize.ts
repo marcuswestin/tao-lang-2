@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
-import { GreenTree, type GreenTreeMatch } from './GreenTree'
+import { GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
 import { validateMergeMessage } from './MergeWithMain'
 
 /*
@@ -18,7 +18,9 @@ import { validateMergeMessage } from './MergeWithMain'
  * work — it can only ever cause a redraft, never a skipped integration or a skipped proof.
  */
 
-const STATE_VERSION = 1
+/** Bumped because `verifiedToolchain` is a new required field; an older-version file therefore
+ * always degrades to redrafting rather than being read as if the field were absent. */
+const STATE_VERSION = 2
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const VERIFY_LANE = 'verify'
@@ -79,10 +81,11 @@ export type FinalizeDependencies = {
   exists: (path: string) => Promise<boolean>
   findGreenTree: (
     repositoryRoot: string,
-    treeHash: string,
+    wanted: GreenTreeKey,
     acceptedLanes: readonly string[],
   ) => Promise<GreenTreeMatch | undefined>
-  hashTree: (repositoryRoot: string) => Promise<string>
+  /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
+  key: (repositoryRoot: string) => Promise<GreenTreeKey>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   run: FinalizeCommandRunner
@@ -94,7 +97,7 @@ export type FinalizeDependencies = {
 const defaultDependencies: FinalizeDependencies = {
   exists: FS.exists,
   findGreenTree: GreenTree.find,
-  hashTree: GreenTree.hashTree,
+  key: GreenTree.key,
   now: () => new Date(),
   readJson: FS.readJson,
   run: CLI.run,
@@ -115,6 +118,8 @@ export type FinalizeState = {
   updatedAt: string
   verifiedAt: string
   verifiedLane: string
+  /** Resolved `.devenv/profile` toolchain the recorded verification proved this tree under; see `GreenTree`. */
+  verifiedToolchain: string
   verifiedTreeHash: string
   version: typeof STATE_VERSION
 }
@@ -128,6 +133,7 @@ type MainIntegration = {
 type VerificationOutcome = {
   at: string
   lane: string
+  toolchain: string
   treeHash: string
 }
 
@@ -189,6 +195,7 @@ export const FinalizeCommand = {
         updatedAt: dependencies.now().toISOString(),
         verifiedAt: verification.at,
         verifiedLane: verification.lane,
+        verifiedToolchain: verification.toolchain,
         verifiedTreeHash: verification.treeHash,
         version: STATE_VERSION,
       }
@@ -324,7 +331,10 @@ async function localMainSha(dependencies: FinalizeDependencies, root: string): P
 
 /**
  * Verification never trusts recorded state as a verdict; it always asks `GreenTree` about the
- * current tree. Only when no accepted lane already covers this exact tree does finalize run one.
+ * current tree. Only when no accepted lane already covers this exact tree *and toolchain* does
+ * finalize run one — a record is now keyed by both, so a resolved `.devenv/profile` change alone
+ * (with the tree otherwise byte-identical) is enough to force a real run, exactly as a bare
+ * `just verify` would refuse to skip on it.
  */
 async function verifyTree(
   dependencies: FinalizeDependencies,
@@ -332,15 +342,15 @@ async function verifyTree(
   check: boolean,
   lines: string[],
 ): Promise<VerificationOutcome> {
-  const treeHash = await dependencies.hashTree(root)
-  const existing = await dependencies.findGreenTree(root, treeHash, VERIFY_ACCEPTED_LANES)
+  const wanted = await dependencies.key(root)
+  const existing = await dependencies.findGreenTree(root, wanted, VERIFY_ACCEPTED_LANES)
   if (existing !== undefined) {
     lines.push(`PASS  ${GreenTree.describe(VERIFY_LANE, existing)}`)
-    return { at: existing.at, lane: existing.lane, treeHash }
+    return { at: existing.at, lane: existing.lane, toolchain: wanted.toolchain, treeHash: wanted.treeHash }
   }
   if (check) {
     lines.push('PLAN  Run just verify --complete; no record already covers this tree.')
-    return { at: '', lane: '', treeHash }
+    return { at: '', lane: '', toolchain: wanted.toolchain, treeHash: wanted.treeHash }
   }
 
   lines.push('PASS  Running just verify --complete; no record already covers this tree.')
@@ -348,16 +358,17 @@ async function verifyTree(
   if (verify.exitCode !== 0 || verify.error !== undefined || verify.signal !== null) {
     throw new Errors.CommandExecutionError(verify)
   }
-  const verifiedTreeHash = await dependencies.hashTree(root)
-  const record = await dependencies.findGreenTree(root, verifiedTreeHash, VERIFY_ACCEPTED_LANES)
+  const verifiedKey = await dependencies.key(root)
+  const record = await dependencies.findGreenTree(root, verifiedKey, VERIFY_ACCEPTED_LANES)
   const outcome: GreenTreeMatch = record ?? {
     at: dependencies.now().toISOString(),
     lane: VERIFY_LANE,
     logRoot: '',
-    treeHash: verifiedTreeHash,
+    toolchain: verifiedKey.toolchain,
+    treeHash: verifiedKey.treeHash,
   }
   lines.push(`PASS  Verified; standing on ${outcome.lane} recorded at ${outcome.at}.`)
-  return { at: outcome.at, lane: outcome.lane, treeHash: verifiedTreeHash }
+  return { at: outcome.at, lane: outcome.lane, toolchain: verifiedKey.toolchain, treeHash: verifiedKey.treeHash }
 }
 
 /**
@@ -476,6 +487,7 @@ async function loadState(dependencies: FinalizeDependencies, statePath: string):
       || typeof value.updatedAt !== 'string'
       || typeof value.verifiedAt !== 'string'
       || typeof value.verifiedLane !== 'string'
+      || typeof value.verifiedToolchain !== 'string'
       || typeof value.verifiedTreeHash !== 'string'
     ) {
       return undefined
