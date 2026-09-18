@@ -1507,7 +1507,7 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** Candidate
 - **Area:** Verification diagnostics
-- **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
+- **Impact:** `packages/dev/dev-tests/gate-runner.test.ts`, `test-runner.test.ts`, and `verification-concurrency.test.ts` assert
   an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
   the runner does the right thing — it adds a contention warning and declines to teach the timings store
   from measurements taken under load — and those assertions fail. `verify --complete` therefore cannot go
@@ -1523,6 +1523,12 @@ an entry here may link one when the developer workflow is also affected.
   A later reproduction adds that the load need not come from another agent: all four failed twice inside
   `verify --complete` on a machine with no other lane registered, the warning naming the load this lane's
   own workers had just created, so a nested test inherits the load of the lane running it.
+  `packages/dev/dev-tests/test-runner.test.ts` belongs to the same class: at load 89.4 on 18 CPUs its
+  `an exact-file subset does not teach the full-suite timing estimate` took past its 60s timeout and
+  carried the whole `dev` node past 120s, where the file passes 21 of 21 in 1.2s alone. It failed its
+  isolated retry too, so the lane classified it `repository` — a retry is machine-exclusive within the
+  lane, not on a box holding fourteen of them, which is worth naming because that classification is what
+  a reader takes as proof the branch is at fault.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
