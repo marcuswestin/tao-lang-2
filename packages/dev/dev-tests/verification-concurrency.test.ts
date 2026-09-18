@@ -236,12 +236,19 @@ Describe('two lanes in one checkout', () => {
         )
         Expect(record.treeHash).toBe('shared-tree')
       }
-      // The durations store the next run plans from is still a readable store, not a torn write.
-      const timings = await FS.readJson<{ nodes: Record<string, { samples: number }> }>(
-        FS.resolvePath('.artifacts/timings/durations.json', root),
-      )
-      Expect(Object.keys(timings.nodes).toSorted()).toEqual(gates.toSorted())
-      Expect(Object.values(timings.nodes).every(node => node.samples >= 1)).toBe(true)
+      // Two lanes at once is contention by `MachineLanes`' own definition, and a contended run
+      // deliberately records no durations rather than teaching the planner a number it measured
+      // while something else had the CPUs. Whether these two fast lanes actually observe each other
+      // is a scheduling detail, so assert what each outcome requires instead of assuming one: no
+      // store when the contention was seen, and a whole one — never a torn write — when it was not.
+      const timingsPath = FS.resolvePath('.artifacts/timings/durations.json', root)
+      const contended = summaries.some(summary => summary.contention?.contended === true)
+      Expect(await FS.isFile(timingsPath)).toBe(!contended)
+      if (!contended) {
+        const timings = await FS.readJson<{ nodes: Record<string, { samples: number }> }>(timingsPath)
+        Expect(Object.keys(timings.nodes).toSorted()).toEqual(gates.toSorted())
+        Expect(Object.values(timings.nodes).every(node => node.samples >= 1)).toBe(true)
+      }
     } finally {
       await FS.remove(root)
       await Promise.all(registries.map(async registry => await FS.remove(registry)))
