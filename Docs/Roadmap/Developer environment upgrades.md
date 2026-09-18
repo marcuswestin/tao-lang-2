@@ -1470,3 +1470,28 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** The search guidance names the `-r` difference where it tells agents to prefer `rg` over
   `grep -r`.
 - **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-072 — New verification-scheduling tests read the live machine load
+
+- **Status:** Candidate
+- **Area:** Test reliability
+- **Impact:** `./agent verify --complete` fails its `dev` suite whenever another agent's lane is running,
+  which in this repository is the normal state rather than the exception. The failure is classified
+  `test-assertion` rather than `machine-contention`, so it reads as a genuine regression and costs a
+  full re-run to disprove. This is DEVENV-041's shape recurring in the scheduling tests added with the
+  verification-graph work, not a regression of that fix.
+- **Evidence:** On a 32.5-load, 18-CPU machine, `repository gate runner > surfaces warnings a gate
+  printed without failing on them` expected no warnings and received
+  `machine contention: no other Tao lane registered; load peaked at 32.5 on 18 CPUs`; three sibling
+  tests in `gate-runner.test.ts` and `verification-concurrency.test.ts` failed reading a
+  `.artifacts/timings/durations.json` their gate had not yet written. The same 37 tests passed in
+  1.4 seconds when run on their own.
+- **Workaround:** Re-run the `dev` suite on its own with
+  `bun test packages/dev/dev-tests/gate-runner.test.ts packages/dev/dev-tests/verification-concurrency.test.ts`.
+- **Proposed change:** Hold the ambient load and the machine registry behind an injected reading these
+  fixtures control, so a test that asserts on warnings or on timings-file contents never observes the
+  host. The tests that intentionally model contention keep supplying their own values.
+- **Dependencies:** None.
+- **Acceptance:** The `dev` suite passes inside `./agent verify --complete` while other lanes are
+  registered and the machine is loaded.
+- **Source:** 2026-09-17 `tao check` diagnostics branch verification.
