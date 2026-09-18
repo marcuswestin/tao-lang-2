@@ -51,6 +51,7 @@ Describe('validator: typed values', () => {
         Expect(Type.displayName(Type.ofValueDeclaration(basic))).toBe('Profile')
         Expect(Type.displayName(Type.ofExpression(maybeSubtitle.value))).toBe('Profile.Subtitle | none')
       },
+      { 'Join.ts': 'export function Join(values: string[], separator: string) { return values.join(separator) }' },
     )
   })
 

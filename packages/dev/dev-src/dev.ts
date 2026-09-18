@@ -1,6 +1,7 @@
 import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
+import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { runGates } from './repository-tests/GateRunner'
@@ -176,6 +177,14 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('delegation-report')
+    .description('Summarise which subagents this repository spawned, at which model, and for how long.')
+    .option('--json', 'Print the structured summary instead of a table.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await DelegationReportCommand.run({ json: options.json === true }))
     })
 
   commands

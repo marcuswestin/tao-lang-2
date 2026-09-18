@@ -1,4 +1,5 @@
 import { FS, HCI, Text } from '@shared'
+import { DELEGATION_SKILL_PATH, tierModels } from '../delegation/DelegationProfiles'
 import { type AgentProfiles, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
 
 /**
@@ -23,6 +24,18 @@ const UNRESTRICTED_PROFILE_BASE = ':danger-full-access'
  * on purpose: the generated file is committed, so it cannot carry a linked worktree's path.
  */
 const PRIMARY_GIT_DIRECTORY = '~/code/tao-lang-2/.git'
+
+/**
+ * What a Codex subagent gets when its caller names nothing. The model is read from the tier table in
+ * the `delegation` skill rather than written here, so the guidance an agent reads and the default a
+ * harness applies cannot disagree. Standard is the default tier because inheritance would otherwise
+ * hand mechanical work whatever the orchestrator happens to be running.
+ */
+const DEFAULT_SUBAGENT_TIER = 'standard'
+const DEFAULT_SUBAGENT_EFFORT = 'medium'
+
+/** The upper end of the concurrency the `delegation` skill calls the working range. */
+const MAX_CONCURRENT_SUBAGENTS = 5
 
 /** CanonicalPermissions is the subset of `.rulesync/permissions.jsonc` this renderer reads. */
 type CanonicalPermissions = {
@@ -54,8 +67,13 @@ type GenerateCodexConfigOptions = {
 async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise<void> {
   const permissions = parsePermissions(await FS.readText(FS.resolvePath(PERMISSIONS_SOURCE, options.root)))
   const profiles = await readProfiles(options.root)
+  const skillPath = FS.resolvePath(DELEGATION_SKILL_PATH, options.root)
+  const delegationSkill = await FS.isFile(skillPath) ? await FS.readText(skillPath) : ''
   const outputs = [
-    { content: renderCodexConfig(permissions, profiles), path: FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root) },
+    {
+      content: renderCodexConfig(permissions, profiles, delegationSkill),
+      path: FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root),
+    },
     { content: renderCodexRules(permissions), path: FS.resolvePath(CODEX_RULES_OUTPUT, options.root) },
   ]
   for (const output of outputs) {
@@ -77,7 +95,12 @@ function parsePermissions(source: string): CanonicalPermissions {
 }
 
 /** renderCodexConfig renders the whole `.codex/config.toml` from the canonical rules and profiles. */
-function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentProfiles): string {
+function renderCodexConfig(
+  permissions: CanonicalPermissions,
+  profiles: AgentProfiles,
+  /** Empty when the skill is unreadable, which drops the delegation defaults rather than guessing. */
+  delegationSkill = '',
+): string {
   const read = permissions.permission?.read ?? {}
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
@@ -96,6 +119,7 @@ function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentPro
     '[features]',
     'network_proxy = true',
     '',
+    ...agentsSection(delegationSkill),
     `[permissions.${REVIEW_PROFILE}]`,
     'extends = ":read-only"',
     'description = "Tao review: inspect the worktree and reference repository without editing them."',
@@ -119,6 +143,29 @@ function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentPro
     ...Object.entries(profiles).flatMap(([name, profile]) => renderOverlayProfile(name, profile)),
     '',
   ].join('\n')
+}
+
+/**
+ * agentsSection gives Codex the delegation defaults that `.codex/agents/*.toml` cannot carry,
+ * because those files describe one role each and say nothing about the role a caller did not name.
+ * Per-role `[agents.<name>]` tables are deliberately absent: Codex already discovers the generated
+ * role files, and declaring each role twice would let the two spellings drift.
+ */
+function agentsSection(delegationSkill: string): string[] {
+  const model = tierModels(delegationSkill, 'codex').get(DEFAULT_SUBAGENT_TIER)
+  if (model === undefined) {
+    return []
+  }
+  return [
+    `# Delegation defaults. The model is the ${DEFAULT_SUBAGENT_TIER} tier of the routing table in`,
+    `# ${DELEGATION_SKILL_PATH}, which is the one place this repository spells a model name.`,
+    '[agents]',
+    'enabled = true',
+    `default_subagent_model = ${quote(model)}`,
+    `default_subagent_reasoning_effort = ${quote(DEFAULT_SUBAGENT_EFFORT)}`,
+    `max_concurrent_threads_per_session = ${MAX_CONCURRENT_SUBAGENTS}`,
+    '',
+  ]
 }
 
 /** Each canonical overlay becomes a matching opt-in Codex profile without a name-specific branch. */

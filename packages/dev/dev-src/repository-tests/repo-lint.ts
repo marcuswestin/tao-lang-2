@@ -1,4 +1,5 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { readDelegationIssues } from '../delegation/DelegationProfiles'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -260,11 +261,12 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts:283',
   'packages/dev/dev-src/studio/StudioCdp.ts:293',
   'packages/dev/dev-src/studio/StudioCdp.ts:330',
-  'packages/dev/dev-src/studio/StudioCdp.ts:362',
-  'packages/dev/dev-src/studio/StudioCdp.ts:522',
-  'packages/dev/dev-src/studio/StudioCdp.ts:550',
-  'packages/dev/dev-src/studio/StudioCdp.ts:719',
-  'packages/dev/dev-src/studio/StudioCdp.ts:869',
+  'packages/dev/dev-src/studio/StudioCdp.ts:341',
+  'packages/dev/dev-src/studio/StudioCdp.ts:373',
+  'packages/dev/dev-src/studio/StudioCdp.ts:533',
+  'packages/dev/dev-src/studio/StudioCdp.ts:561',
+  'packages/dev/dev-src/studio/StudioCdp.ts:730',
+  'packages/dev/dev-src/studio/StudioCdp.ts:880',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
@@ -280,18 +282,18 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
   'packages/dev/studio-smoke/studio-real-app.test.ts:299',
   'packages/dev/studio-smoke/studio-real-app.test.ts:367',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:186',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:623',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:625',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:885',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:890',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:895',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:920',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1159',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1178',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1287',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1329',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1355',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:205',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:653',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:655',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:921',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:926',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:931',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:956',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1195',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1216',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1389',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1431',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1457',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
@@ -305,10 +307,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
   'packages/dev/dev-tests/agent-config-generation.test.ts:44',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:81',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:104',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:210',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
@@ -768,6 +770,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
+  issues.push(...await readDelegationIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {

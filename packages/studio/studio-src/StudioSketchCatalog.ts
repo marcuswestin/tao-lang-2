@@ -245,7 +245,16 @@ export class StudioSketchCatalog {
     return result
   }
 
-  /** Restores a snapshot only while the transaction revision it replaces is still current. */
+  /**
+   * Restores a snapshot only while the transaction revision it replaces is still current.
+   *
+   * The snapshot keeps its own revision, so rolling a transaction back returns the revision to what
+   * it was. That is deliberate: a transaction that ultimately did nothing must not conflict every
+   * other client holding the revision it started from. The consequence is that `revision` is an
+   * optimistic-concurrency token and not a monotonic version — the same number can later describe
+   * different contents — so a reader must never treat a higher revision as the signal that
+   * something changed, and must compare the contents it actually cares about.
+   */
   restore(snapshot: StudioSketchCatalogSnapshot, expectedCurrentRevision: number): Promise<void> {
     return this.#mutate(() => this.#withCatalogLock(() => this.#restore(snapshot, expectedCurrentRevision)))
   }
