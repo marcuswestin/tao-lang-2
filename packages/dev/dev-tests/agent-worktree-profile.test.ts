@@ -515,13 +515,12 @@ Describe('agent worktree profile bootstrap', () => {
     // The lanes are named for the public recipes that run the same files by hand; the graph runs
     // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-        + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
@@ -581,11 +580,11 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-      + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
-    Expect(fullVerify).toContain(quarantine)
+    // Nothing is deliberately omitted from the full lanes: the simulated-user journey is a gate
+    // again, and the sandbox lane names what it cannot run through `--skip-unsandboxed` instead.
+    Expect(fullVerify).not.toContain('--skipped')
     Expect(sandbox).toContain('--skip-unsandboxed')
-    Expect(sandbox).toContain(quarantine)
+    Expect(sandbox).not.toContain('--skipped')
   })
 })
 

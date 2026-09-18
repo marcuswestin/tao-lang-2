@@ -415,8 +415,15 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   const right = requiredElement(root, '.studio-pane-right')
   const preview = requiredElement(root, '.studio-preview')
   const bottom = requiredElement(root, '.studio-drawer')
-  /** What the layout looked like before Design mode borrowed the width, so leaving can give it back. */
-  const designLayout: { active: boolean; left?: number; preview?: number } = { active: false }
+  /**
+   * What the layout looked like before Design mode borrowed the width, so leaving can give it back.
+   * `previewSized` records that the person moved the canvas divider themselves while in Design mode;
+   * from then on their width stands instead of being re-derived from the host on every measurement.
+   */
+  const designLayout: { active: boolean; left?: number; preview?: number; previewSized: boolean } = {
+    active: false,
+    previewSized: false,
+  }
   const apply = (): void => {
     left.hidden = sizes.left === 0
     right.hidden = sizes.right === 0
@@ -424,7 +431,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     bottom.hidden = sizes.bottom === 0
     shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
-    if (designLayout.active) {
+    if (designLayout.active && !designLayout.previewSized) {
       sizes.preview = studioDesignPreviewSize(center.getBoundingClientRect().width, sizes.right)
     }
     center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
@@ -451,12 +458,19 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       )
     }
   }
+  /** resize records one pane size the person asked for, rather than one the layout derived. */
+  const resize = (pane: PaneName, value: number): void => {
+    if (pane === 'preview') {
+      designLayout.previewSized = true
+    }
+    sizes[pane] = value
+    apply()
+  }
   const setSize = (pane: PaneName, value: number): void => {
     if (value > 0) {
       lastExpanded[pane] = value
     }
-    sizes[pane] = value
-    apply()
+    resize(pane, value)
     save()
   }
   const toggle = (pane: PaneName): void => setSize(pane, sizes[pane] === 0 ? lastExpanded[pane] : 0)
@@ -506,8 +520,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
           ? start - moveEvent.clientX
           : moveEvent.clientX - start
         const minimum = StudioPaneMinimums[pane]
-        sizes[pane] = Math.max(minimum, initial + delta)
-        apply()
+        resize(pane, Math.max(minimum, initial + delta))
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)
@@ -534,6 +547,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       if (active) {
         designLayout.left = sizes.left
         designLayout.preview = sizes.preview
+        designLayout.previewSized = false
         sizes.left = 0
         // `apply` measures every time the host width or rail visibility changes.
       } else {

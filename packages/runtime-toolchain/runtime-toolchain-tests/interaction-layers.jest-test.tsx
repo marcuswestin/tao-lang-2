@@ -346,10 +346,12 @@ Describe('TR.Interaction generated layers', () => {
     TR.Data.Create(schema, 'InteractionLayerWorkspace', { Name: TR.Value('Archive') })
     const invoked: string[] = []
     const move = TR.Interaction.Command({
+      // Fills are evaluated the way the compiler emits them: once where the fill is read, and once
+      // more inside the runtime call that receives it.
       action: fills =>
         TR.Action(() => {
-          const workspace = fills['Workspace']?.evaluate().jsValue
-          invoked.push(`${TR.Data.Read(workspace, 'Name')}:${fills['Name']?.evaluate().jsValue}`)
+          const workspace = fills['Workspace']?.evaluate().evaluate().jsValue
+          invoked.push(`${TR.Data.Read(workspace, 'Name')}:${fills['Name']?.evaluate().evaluate().jsValue}`)
         }),
       members: { Key: () => TR.Value('m'), Title: () => TR.Value('Move document') },
       name: 'Move',

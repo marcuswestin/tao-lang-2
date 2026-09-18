@@ -6,6 +6,7 @@ const JUST_COMMANDS = [
   'bench',
   'capabilities',
   'check',
+  'delegation-report',
   'doctor',
   'fix',
   'fmt',

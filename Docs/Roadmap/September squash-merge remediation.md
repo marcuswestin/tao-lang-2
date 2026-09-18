@@ -8,7 +8,13 @@ medium / 85 low by its own narrative count) and refuted 21 more as already fixed
 
 `feat/september-verification-foundation` implemented the confirmed findings.
 
-## Status at merge (2026-09-17)
+## Status after the follow-up branch's first landing (2026-09-17)
+
+`feat/september-remediation-followup` landed the first two items of the handoff below. What that
+branch proved, and what it left open, is recorded under **Follow-up branch** further down. Work
+continues on `feat/september-remediation-continued`.
+
+## Status at the first merge (2026-09-17)
 
 - All 188 confirmed findings, deduplicated to 183 checklist rows, are implemented across packets
   1–23. Each row's implementation commit and covering tests are traced in this branch's own
@@ -30,18 +36,95 @@ medium / 85 low by its own narrative count) and refuted 21 more as already fixed
   `studio-smoke-native` and `studio-canary` remain unexercised since the last complete `full-verify`
   recorded in the ignored progress ledger.
 
+## Follow-up branch: what landed, and what is still open
+
+### Landed
+
+1. **Keyboard narrowing is settled and its gate is green.** Engaging a target clears the narrowing
+   that selected it, so narrowing never outlives its engagement; `Decisions.md`'s Escape ladder was
+   reworded to match the decided behaviour. `just keyboard-navigation-smoke` passes end to end.
+2. **Three defects the keyboard gate was hiding**, each found only because that gate got further
+   than it ever had, each fixed with covering tests:
+   - The interaction overlay sets `pointerEvents: 'box-none'` on its host, which the web runtime
+     renders as a plain `pointer-events: none` that descendants inherit. The pending-slot surface —
+     its store-search control and every chooser row — could not be clicked at all. The surface now
+     re-enables pointer input on itself.
+   - Interaction-supplied command fills evaluated to a bare `{ jsValue }`. Generated code evaluates
+     a fill where it reads it and hands the result to a runtime call that evaluates it again, so
+     every store-picked entity and every scalar slot failed inside the action with a contained
+     `TaoActionFailure`. `Evaluable` now states that evaluation is idempotent, which makes that
+     class of bug a type error, and the fabricated values that were not idempotent are fixed.
+   - `accessibilityState` is not read by the web runtime, which takes the matching `aria-*` props
+     instead, so selected, disabled, checked, busy and expanded state was dropped on every Tao
+     surface on web. One helper now spells both.
+3. **Two Studio defects found while chasing the simulated-user quarantine:**
+   - In Design mode the canvas width was re-derived on every measurement, including the one the
+     divider's own drag triggered, so the divider the layout comment calls "still free to change
+     that" could not be moved at all. A width the person sets now stands until Design mode is left.
+   - `mkTestDir` returned the uncanonical temp path. On macOS that is a symlink, so any test that
+     built a path from it and compared it with one the code under test had resolved could never
+     match. That is what broke the journey's render-inspection step.
+4. **Browser-harness guards**, which is how most of the above were found rather than as unrelated
+   timeouts much later: offset clicks and drags scroll `nearest` so a wide target keeps its leading
+   edge in view, and refuse a point that lands on something else, naming what covers it.
+   `StudioCdp` also gained `End`, `Home` and `Delete`, an offset for drags, and `world: 'page'` for
+   the few frame probes that must read or write a global the page itself defines — an isolated
+   world has its own `window`, so the page never saw what the harness wrote there.
+
+### Landed since (second branch, `feat/september-remediation-continued`)
+
+1. **The simulated-user journey is a gate again.** Ten consecutive runs are green,
+   `FULL_VERIFY_SKIPPED` is empty, and an empty skip list is now spelled by omission rather than by
+   passing `--skipped ""`. Four more journey defects and one product defect were fixed to get there:
+   a drag aimed at an element's own centre when that centre is off-screen; the floating agent panel
+   covering the inspector and half of every divider; a free sketch rectangle drawn in the middle of
+   the flow it was later asked to join, which Studio Snap rightly refuses; a sketch control pressed
+   while a compile replaces the board, where pressing again is not the remedy because each press
+   consumes one unit of work; and canvas focus entered before the owning cell reported its
+   rectangle, which left the cells at device size for good because nothing retried the reframe.
+2. **`just full-verify` is green end to end: 21 gates passed, 0 failed, 0 skipped.** That is the
+   first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
+   `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
+
+### Second-audit backlog: triaged so far
+
+- **`StudioSketchCatalog.ts` catalog revision — refuted, and documented.** A rollback restores the
+  snapshot's own revision, so the number can go backwards and later describe different contents.
+  That is deliberate and tested: a transaction that ultimately did nothing must not conflict every
+  client holding the revision it started from. The defect is on the reading side, and the journey
+  step that compared revisions now compares the state it actually asserts. `restore`'s docstring
+  says plainly that the revision is an optimistic-concurrency token, not a monotonic version.
+- **`test-run-root.ts` recursive cleanup regex — already fixed.** Both names are anchored
+  (`/^run-(\d+)-[0-9a-z]+$/`, `/^[a-z][a-z0-9-]*$/`), and `isRunRoot` compares the parent against
+  the resolved generated root rather than matching directory names, which its comment explains.
+- **`DeadExports.ts` comments and strings — acknowledged, deliberately not changed.** A reference
+  inside a comment or string does keep an export looking alive, but that is the safe direction: it
+  hides dead code rather than proposing the removal of live code. Stripping comments and strings
+  before the scan would trade a false negative for a false positive in a tool whose output is a
+  deletion. Revisit only with evidence of a specific export it is actually hiding.
+
+### Still open
+
+1. ~~**The simulated-user journey is still quarantined**~~, resolved above. It previously failed much later. Every step up to
+   the component drag passes. `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
+   fails waiting for `New text` after
+   `browser.drag('[data-tao-studio-component="Text"]', '.cm-content', { steps: 12 })`. Not yet
+   diagnosed; `drag` uses the HTML5 drag-interception path, which is a different mechanism from the
+   pointer drags repaired above. Ten consecutive green runs have not been attempted.
+2. **A lens behaviour worth confirming as intended.** With the outline lens on, `End` then
+   `ArrowLeft` on a folded declaration moves the caret to the region's start, which peeks it open by
+   design — so a following `Delete` edits source that was hidden a keystroke earlier. The
+   protection filter itself is correct (a deletion overlapping a folded span is cancelled); the
+   question is whether a navigation-driven peek should leave the very next forward delete armed.
+   The journey no longer asserts the old behaviour either way.
+3. Everything below under **Known open items**, items 3 onward, is unchanged.
+
 ## Known open items carried into the follow-up branch
 
-1. **Keyboard narrowing survives Enter-engage + Escape-disengage** (blocks
-   `keyboard-navigation-smoke`). After an input is engaged with Enter and left with Escape, the
-   narrowing text from before engagement is still applied, so typing `f` narrows as `inpf`.
-   `Docs/Roadmap/Tao Revolution/Decisions.md`'s Escape ladder puts "clears narrowing" first.
-   **Decided 2026-09-17:** engaging a target clears narrowing, so narrowing never outlives the
-   engagement it selected; the journey's expectation stands. The follow-up branch implements that
-   in the attention reducer and lifts the `keyboard-navigation-smoke` failure.
-2. **Simulated-user journey remains quarantined.** It still fails at the same left-pane-divider
-   drag step it fails at on `main`; ten consecutive green runs have not been attempted this
-   session.
+1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed; see **Follow-up
+   branch** above.
+2. **Simulated-user journey remains quarantined**, now failing at the component drag rather than
+   the left-pane divider; see **Follow-up branch** above.
 3. **Not run this session:** `studio-smoke-native`, `studio-canary`, `ship-bundle-proof` (this one
    _did_ pass under `full-verify-sandbox`), and a complete `just full-verify` chain.
 4. **External/host-only acceptance remains separate and unproved,** as it has since Wave 1:
@@ -148,13 +231,15 @@ this worktree is removed.
 
 ## Handoff
 
-The follow-up branch continues from post-merge `main` and should:
+`feat/september-remediation-continued` carries the rest from the `main` that holds the follow-up
+branch's landing, and should:
 
-1. Settle the keyboard-narrowing decision above, then land the fix and lift the
-   `keyboard-navigation-smoke` failure.
-2. Chase the simulated-user quarantine to ten consecutive green runs, or replace the failing step.
-3. Run `studio-smoke-native`, `studio-canary`, and a complete `just full-verify` chain to
-   completion.
-4. Triage the "cross-checked, partly unaddressed" list above: confirm each against current code,
+1. Chase the simulated-user quarantine to ten consecutive green runs, starting from the component
+   drag described above, then remove its `FULL_VERIFY_SKIPPED` entry.
+2. Run `studio-smoke-native`, `studio-canary`, and a complete `just full-verify` chain to
+   completion. The first two do not depend on item 1 and can run now.
+3. Triage the "cross-checked, partly unaddressed" list above: confirm each against current code,
    drop what is already fixed or was legitimately refuted, and carry the rest as new findings
-   through the same implement-with-tests process this branch used.
+   through the same implement-with-tests process the first branch used.
+4. Take the low-priority cleanups in item 5 of **Known open items**.
+5. Settle the lens question in **Still open** item 2 with Ro if it is a decision rather than a bug.

@@ -1,5 +1,7 @@
 import React from 'react'
+import { accessibilityStateProps } from './TR-accessibility'
 import { DataControls } from './TR-data'
+import { runtimeInteractionValue } from './TR-interaction-attention'
 import {
   commandCatalog,
   interactionAttention,
@@ -143,12 +145,12 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
         {
           accessibilityLabel: rowText(attention.mode, row),
           accessibilityRole: pending === undefined ? 'text' : 'button',
-          accessibilityState: row.enabled === false || row.selected === true
-            ? {
+          ...(row.enabled === false || row.selected === true
+            ? accessibilityStateProps({
               ...(row.enabled === false ? { disabled: true } : {}),
               ...(row.selected === true ? { selected: true } : {}),
-            }
-            : undefined,
+            })
+            : {}),
           accessible: true,
           key: row.identity,
           ...(onPress === undefined ? {} : { onPress }),
@@ -194,7 +196,13 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
           runtime.View,
           {
             accessible: false,
-            style: [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
+            // `box-none` on the host lets touches fall through to the app on native, but the web
+            // runtime renders it as a plain `pointer-events: none` that descendants inherit. The
+            // pending surface therefore re-enables pointer input on itself, so its search control
+            // and chooser rows stay clickable while the rest of the overlay stays transparent.
+            style: attention.mode === 'verb-pending'
+              ? [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview'), interactiveSurfaceStyle]
+              : [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
           },
           React.createElement(runtime.Text, {
             accessibilityLabel: heading,
@@ -265,7 +273,7 @@ function PendingScalarInput({ pending, runtime }: {
   const submit = () => {
     const scalar = pendingScalarValue(pending.type, value)
     if (scalar !== undefined) {
-      interactionAttention.providePendingValue({ evaluate: () => ({ jsValue: scalar }) })
+      interactionAttention.providePendingValue(runtimeInteractionValue(scalar))
     }
   }
   return React.createElement(runtime.TextInput, {
@@ -351,6 +359,7 @@ const interactionLayerHostStyle = {
   zIndex: 4,
 } as const
 const interactiveLayerHostStyle = { pointerEvents: 'box-none' } as const
+const interactiveSurfaceStyle = { pointerEvents: 'auto' } as const
 
 const surfaceStyle = {
   alignSelf: 'center',

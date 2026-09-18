@@ -7,8 +7,8 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
-FULL_VERIFY_SKIPPED := "studio-smoke-simulated-user=temporarily quarantined; run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
+FULL_VERIFY_SKIPPED := ""
 
 # Print available recipes
 help:
@@ -158,15 +158,14 @@ test-flakes limit="20":
 test-slowest limit="20":
     ./dev test-slowest --limit "{{ limit }}"
 
-# Dry-run the human-only feature landing workflow; pass --execute explicitly to mutate refs
+# Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
-[arg('execute', long='execute', value='true')]
 [arg('message_file', long='message-file')]
-[arg('push', long='push', value='true')]
+[arg('skip_all', long='skip-all', value='true')]
 [arg('skip_full_verify', long='skip-full-verify', value='true')]
-[arg('yes', long='yes', value='true')]
-merge-with-main execute='false' yes='false' push='false' skip_full_verify='false' message_file='' abort='':
-    ./dev merge-with-main {{ if execute == "true" { "--execute" } else { "" } }} {{ if yes == "true" { "--yes" } else { "" } }} {{ if push == "true" { "--push" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+[arg('skip_verify', long='skip-verify', value='true')]
+merge-with-main skip_verify='false' skip_full_verify='false' skip_all='false' message_file='' abort='':
+    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen
@@ -200,6 +199,10 @@ doctor *ARGS:
 # Report process, socket, simulator, and local-service capabilities without changing anything
 capabilities *ARGS:
     ./dev capabilities {{ ARGS }}
+
+# Summarise which subagents were spawned, at which model, and for how long
+delegation-report *ARGS:
+    ./dev delegation-report {{ ARGS }}
 
 # Benchmark cold and steady-state language-service performance
 bench iterations="10":
@@ -242,12 +245,12 @@ verify changed='false' complete='false' fresh='false':
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every slow UI lane
 [arg('fresh', long='fresh', value='true')]
 full-verify fresh='false': deps
-    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify {{ if FULL_VERIFY_SKIPPED == "" { "" } else { "--skipped \"" + FULL_VERIFY_SKIPPED + "\"" } }} --green-tree full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Run full-verification's sandbox-compatible gates without installing dependencies or claiming its five active UI lanes passed
 [arg('fresh', long='fresh', value='true')]
 full-verify-sandbox fresh='false':
-    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox {{ if FULL_VERIFY_SKIPPED == "" { "" } else { "--skipped \"" + FULL_VERIFY_SKIPPED + "\"" } }} --green-tree full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Private
 #########
@@ -302,12 +305,12 @@ _repo-lint:
 _typecheck:
     bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json
 
+# `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
+# all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the
+# suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
+# `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
     bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
-
-# The suites the branch diff reaches, as the `verify --changed` graph runs them
-_test-changed:
-    bun run packages/dev/dev-src/dev.ts test-changed
 
 # `verify` without a scope: name the choices and refuse, so the complete lane is a decision, not a default
 _verify-scope-menu:

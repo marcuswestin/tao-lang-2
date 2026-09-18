@@ -1,6 +1,7 @@
 import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
+import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { runGates } from './repository-tests/GateRunner'
@@ -36,11 +37,11 @@ type GatesCommandOptions = {
 
 type MergeCommandOptions = {
   abort?: string
-  execute?: boolean
+  dryRun?: boolean
   messageFile?: string
-  push?: boolean
+  skipAll?: boolean
   skipFullVerify?: boolean
-  yes?: boolean
+  skipVerify?: boolean
 }
 
 /** Help shared by every command that runs a work graph, so the modes are described once. */
@@ -143,22 +144,25 @@ await runWithCommands(commands => {
 
   commands
     .command('merge-with-main')
-    .description('Dry-run the human-only workflow that squash-merges a feature branch into main.')
-    .option('--execute', 'Perform the workflow; the first release defaults to a ref-preserving dry run.')
-    .option('--yes', 'Confirm the normal execution prompt non-interactively.')
-    .option('--push', 'Explicitly authorize pushing from a non-interactive invocation.')
-    .option('--skip-full-verify', 'Explicitly omit the otherwise mandatory unsandboxed full verification.')
+    .description('Squash-merge the current feature branch into main and push it; flags only remove work.')
+    .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
+    .option(
+      '--skip-full-verify',
+      'Skip just full-verify on the feature branch; the staged squash then gets just verify --complete instead.',
+    )
+    .option('--skip-all', 'Skip every check after one confirmation that defaults to No. Needs a terminal.')
+    .option('--dry-run', 'Report the plan and change nothing.')
     .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
     .option('--abort <snapshot>', 'Restore command-owned local state from a pre-push snapshot.')
     .action(async (options: MergeCommandOptions = {}) => {
       try {
         await MergeWithMainCommand.run({
           abortSnapshot: options.abort,
-          execute: options.execute === true,
+          dryRun: options.dryRun === true,
           messageFile: options.messageFile,
-          push: options.push === true,
+          skipAll: options.skipAll === true,
           skipFullVerify: options.skipFullVerify === true,
-          yes: options.yes === true,
+          skipVerify: options.skipVerify === true,
         })
         Platform.runtimeProcess.exit(0)
       } catch (error) {
@@ -173,6 +177,14 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('delegation-report')
+    .description('Summarise which subagents this repository spawned, at which model, and for how long.')
+    .option('--json', 'Print the structured summary instead of a table.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await DelegationReportCommand.run({ json: options.json === true }))
     })
 
   commands
@@ -495,11 +507,23 @@ function testRunOptions(options: TestCommandOptions) {
   }
 }
 
+/**
+ * runExitCommand runs one command and owns its exit code.
+ *
+ * An unexpected error reaches a Tao developer as the bare sentence "Something went wrong." — right
+ * for a product user, useless for whoever has to find the cause, and the failure mode is that the
+ * reader has no path at all: no name, no stack, and no log, because the command died before it
+ * created a run directory. Two agents lost time to exactly that in one afternoon. The remedy is one
+ * line naming the switch that turns the sentence back into a stack.
+ */
 async function runExitCommand(run: () => Promise<number>): Promise<void> {
   try {
     Platform.runtimeProcess.exit(await run())
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
+    if (!Errors.isTaoError(error)) {
+      HCI.writeErrorLine(`Re-run with ${Errors.DEBUG_ERRORS_ENV}=1 for the error's name, cause, and stack.`)
+    }
     Platform.runtimeProcess.exit(1)
   }
 }

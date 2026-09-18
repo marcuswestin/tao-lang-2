@@ -1,6 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
+import type { Evaluable } from '../TaoRuntime-src/TR-action-values'
 
 mock.module('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
@@ -72,14 +73,14 @@ Describe('TR.ForEach selectable rows', () => {
       render: () => null,
     })
 
-    screen.render({
-      Value: {
-        evaluate: () => {
-          evaluations += 1
-          return { jsValue: 'Draft' }
-        },
+    const value: Evaluable & { jsValue: unknown } = {
+      evaluate: () => {
+        evaluations += 1
+        return value
       },
-    })
+      jsValue: 'Draft',
+    }
+    screen.render({ Value: value })
 
     Expect(evaluations).toBe(0)
   })

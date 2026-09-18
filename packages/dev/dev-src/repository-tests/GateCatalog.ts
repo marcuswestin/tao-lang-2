@@ -2,56 +2,204 @@ import { Assert, Platform } from '@shared'
 import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from './WorkGraph'
 
 /**
- * What the scheduler needs to know about each gate: what must pass before it starts, how much of
- * the machine it occupies while it runs, which exclusive device it holds, whether it rewrites the
- * tree, and — when the gate is not simply the Justfile recipe of its own name — the process it runs.
+ * The one declarative place this repository's scheduling facts live: what each node writes, what it
+ * reads, how much of the machine it occupies, which exclusive device it holds, what bounds it runs
+ * under, whether its verdict may be recorded, and — when the node is not simply the Justfile recipe
+ * of its own name — the process it runs.
  *
- * Membership stays in the Justfile. This catalog says nothing about which lane a gate belongs to:
- * an entry may name a gate the lane left out, and the graph ignores an edge whose other end is not
+ * Membership stays in the Justfile. This catalog says nothing about which lane a gate belongs to: an
+ * entry may name a gate the lane left out, and the graph ignores an edge whose other end is not
  * present, so one entry serves `check`, `verify`, and `full-verify` alike. A recipe with no entry
- * runs as an ordinary single-slot node with no edges, so a new gate is runnable before anyone tunes
- * it.
+ * runs as an ordinary single-slot node that waits for every writer in the lane, which is the safe
+ * reading of a gate nobody has said anything about: a new gate is runnable, correctly ordered, and
+ * merely later than it needs to be until someone narrows what it reads.
+ *
+ * Ordering is derived, not hand-written twice. A node declares the file classes it `writes` and the
+ * ones it `reads`, and `node` turns that into edges: a reader waits for exactly the writers of the
+ * classes it reads, and for nothing else. That is the whole of the old `mutatesTree` barrier, which
+ * made every reader in a lane wait for every fixer in it — including the 5s `./tao fix`, which the
+ * TypeScript gates have no relationship with at all. Five class names, no globs, and a graph that
+ * still fits on a screen.
+ *
+ * Every recipe-backed node implicitly reads `just`, because it starts by parsing the Justfile, which
+ * `_fix-just-fmt` rewrites. That is why `_fix-just-fmt` is first in the prepare phase and depends on
+ * nothing: dprint owns TypeScript, JSON, and Markdown (`config/dprint.jsonc`) and never touches the
+ * Justfile, so there is nothing for it to wait for, and running it first costs 15ms and frees every
+ * other node from it.
  *
  * Costs are reservations measured against a whole machine, not guesses. A node whose width does not
- * fit holds the admission queue until it can run, so the widths here are chosen to fit side by side:
- * `_test` deliberately leaves room for `_typecheck` and `_tao-check` beside it.
+ * fit holds the admission queue until it can run.
  */
+
+/**
+ * SourceClass names one class of files, coarse enough that five names cover the repository. A class
+ * is written by at most one node, which is what makes the derived edges unambiguous.
+ */
+export type SourceClass =
+  /** `packages/runtime-toolchain/_gen_tao-app*`, filled by the WordFlower compile. */
+  | 'gen-app'
+  /** The generated Langium parser under `packages/parser/parser-src`. */
+  | 'gen-parser'
+  /** The Justfile itself, which every recipe-backed node parses on its way up. */
+  | 'just'
+  /** Every `.tao` source: the apps, the standard library, the Tao test journeys. */
+  | 'tao'
+  /** TypeScript, JSON, and Markdown sources — dprint's file classes. */
+  | 'ts'
 
 /** GateCommand is a gate's process without the working directory, which is always the repository. */
 type GateCommand = Pick<WorkCommand, 'args' | 'command'>
 
-/** GateMetadata is one gate's scheduling shape, in the vocabulary `WorkNode` already speaks. */
+/** GateMetadata is one node's scheduling shape, in the vocabulary `WorkNode` already speaks. */
 export type GateMetadata =
   & Pick<
     WorkNode,
-    'budgetEnvKeys' | 'cost' | 'mutatesTree' | 'needs' | 'priority' | 'resources' | 'timeoutMs' | 'workerPool'
+    | 'budgetEnvKeys'
+    | 'cost'
+    | 'idleTimeoutMs'
+    | 'needs'
+    | 'priority'
+    | 'resources'
+    | 'serial'
+    | 'timeoutMs'
+    | 'workerPool'
   >
   & {
-    /** True when the gate needs host capabilities the managed agent sandbox deliberately denies. */
+    /**
+     * True when the node's verdict depends on something no tree hash describes: Chrome,
+     * Electrobun, the iOS simulator, the macOS window server, a signing identity. Such a node is
+     * never recorded green, because a record would let a later run on the same bytes skip it on a
+     * host where it would fail. This is the only gap in the green-record design that can produce a
+     * false green, which is why it is a declared property of the node rather than a heuristic.
+     */
+    hostDependent?: boolean
+    /** File classes this node reads; it waits for their writers. `just` is implied for a recipe. */
+    reads?: readonly SourceClass[]
+    /** True when the node needs host capabilities the managed agent sandbox deliberately denies. */
     requiresUnsandboxed?: boolean
     /**
-     * The process the gate runs, or a builder over what the graph admitted; absent, the gate is
+     * The process the node runs, or a builder over what the graph admitted; absent, the node is
      * `just <name>`. A public recipe and a catalog command may share a name: the recipe is the
      * human spelling with its own defaults, the command is what the graph runs under that name.
      */
     run?: GateCommand | ((admission: WorkAdmission) => GateCommand)
+    /**
+     * File classes this node rewrites. A node that writes anything is a prepare node: it runs under
+     * the per-checkout prepare lock, before the readers of its classes, and is never recorded green
+     * because its output is derived state a tree hash does not describe.
+     */
+    writes?: readonly SourceClass[]
   }
 
-/** A gate nobody has tuned occupies one slot and waits for nothing. */
-const DEFAULT_METADATA: GateMetadata = { cost: 1 }
+/** A gate nobody has tuned occupies one slot, reads the whole tree, and waits for every writer. */
+const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-parser', 'tao', 'ts'] }
+
+/** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
+export type SuiteTuning = {
+  /** Extra runner arguments: Bun's `--concurrent`, a longer per-test timeout. */
+  args?: readonly string[]
+  /** Env keys a runner that would otherwise size itself to the machine reads its width from. */
+  budgetEnvKeys?: readonly string[]
+  /** Width one unsharded process of this suite reserves. */
+  cost?: number
+  /** Width one shard reserves, for a suite whose shard is not a single-core process. */
+  shardCost?: number
+  /**
+   * Milliseconds one process of this suite spends before it runs any test at all. It is what makes
+   * sharding cost something, so it caps the shard count: a shard must carry at least this much work
+   * of its own, or it is mostly overhead. Measure it — one shard of the smallest unit the suite has
+   * is the measurement — rather than guessing.
+   */
+  fixedMs?: number
+  priority?: number
+  /** File classes the suite reads; narrower than the default only where that is provable. */
+  reads?: readonly SourceClass[]
+  /** Overrides the derived answer to whether one process of this suite occupies one core. */
+  serial?: boolean
+  /** False for a suite that must stay one process, whatever the timings say. */
+  shardable?: boolean
+}
 
 /**
- * Slots `_test` leaves free for the gates that run beside it: `_typecheck` (3), `_tao-check` (2),
- * and one spare so a sub-second gate is not stuck behind them. The margin is what keeps all three
- * admitted at once — on 18 CPUs a `cpuCount - 4` reservation is 14, which no longer fits beside the
- * other two, and the admission queue would then hold `_test` for the 9.3s `_tao-check` measures.
+ * Every test suite reads the whole tree unless it provably does not. Waiting for a fixer that
+ * cannot affect you is wasted time, but reading a `.tao` file while `./tao fix` rewrites it is a
+ * torn read, so the default is the safe one and each narrowing is an assertion about that suite.
  */
-const SLOTS_BESIDE_TEST = 6
+const DEFAULT_SUITE_READS: readonly SourceClass[] = ['gen-app', 'gen-parser', 'tao', 'ts']
+/** Bun's own startup plus this repository's module graph, measured on a warm cache. */
+const BUN_SUITE_FIXED_MS = 600
+/** The published `./tao test` sizes itself to the machine unless a lane hands it a width. */
+const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
+
+/**
+ * SUITE_TUNING is the suite half of this table. Shard counts are not here: they are derived per
+ * checkout from the recorded per-file costs in the test ledger and the recorded suite duration in
+ * the timings store, because a hand-written count goes stale the first time a suite grows.
+ */
+const SUITE_TUNING = new Map<string, SuiteTuning>([
+  ['compiler', { args: ['--concurrent'] }],
+  // Developer tests deliberately run concurrently and many of them spawn child processes. During
+  // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
+  // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
+  // The developer tests are themselves parallel workloads: they run concurrently, and many of them
+  // start real child test runners, Studio canaries, and Expo lanes. Sharding the suite multiplies
+  // that, and its own tests are then the ones starved — a trivial child `bun test` ran past a
+  // fifteen-second bound with three shards of this suite in flight. Like Jest, it already saturates
+  // what it is given, so it takes one reservation and stays whole. Its per-test bound is a hang
+  // guard and is set for the worst case this machine actually sees: five worktree lanes at once
+  // starved a trivial child `bun test` past fifteen seconds, and a starved test is not a failing one.
+  ['dev', { args: ['--concurrent', '--timeout=60000'], cost: 2, shardable: false }],
+  ['ide-extension', { args: ['--concurrent'] }],
+  // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
+  // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
+  // empty output.
+  ['runtime-toolchain', { args: ['--timeout=60000'], cost: 2, shardCost: 2 }],
+  // Its tests lower and validate whole starter projects, which is seconds of real work per test.
+  // Bun's five-second default was calibrated when this suite was one process beside a handful of
+  // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
+  // work for longer than that and be killed for it. The bound is a hang guard, not a budget.
+  ['tao-cli', { args: ['--timeout=60000'] }],
+  ['validator', { args: ['--concurrent'] }],
+
+  // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
+  // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
+  // measure 19.7s, and the same files as three processes at one worker each measure 21.3s. It is
+  // handed a reservation and the matching `--maxWorkers`, and left whole.
+  ['runtime-jest', { cost: 3, priority: 4, shardable: false }],
+  // The Tao behavior tests are a `./tao test` process that loads the language services, validates
+  // and compiles the apps it was given across its own compiler worker pool, and runs one Jest pass.
+  // Unlike Jest's, that pool parallelizes the compile and not the run, so the suite does shard, and
+  // roots are what `./tao test` takes. Measured: the whole corpus in one process is 49.7s, and the
+  // same corpus as two concurrent halves is 27.8s — 44% less wall for 13% more CPU, which is the
+  // trade this scheduling exists to make. `fixedMs` is the measured language-service load
+  // (`./tao test Apps/HNReader`, one journey, is 6.0s) and it is what caps the count; shrinking it
+  // is what the workspace daemon would change, and it would raise the cap as well.
+  [
+    'tao-apps',
+    {
+      budgetEnvKeys: [BUDGET_KEY_TAO_TEST],
+      cost: 8,
+      fixedMs: 6_000,
+      priority: 5,
+      serial: false,
+      // One shard still spawns a compiler worker beside its own Jest pass.
+      shardCost: 2,
+    },
+  ],
+
+  // The four suites that reference no `.tao` source, no app, and no generated tree, and so wait
+  // for dprint alone. Verified by search; a suite that starts reading one belongs off this list.
+  ['code-editor', { reads: ['ts'] }],
+  ['generation', { reads: ['ts'] }],
+  ['stdlib', { reads: ['ts'] }],
+  ['update-server', { reads: ['ts'] }],
+])
+
 const TAO_CHECK_COST = 2
 const TYPECHECK_COST = 3
 /**
  * Studio smoke spends most of its wall time waiting on Metro, browser, simulator, or IPC
- * readiness. One accounting slot lets those host waits overlap the CPU-heavy package gates; the
+ * readiness. One accounting slot lets those host waits overlap the CPU-heavy package nodes; the
  * `gui` resource below, not an inflated CPU reservation, owns the real native-host exclusion.
  */
 const STUDIO_LANE_COST = 1
@@ -68,46 +216,23 @@ const SHIP_BUNDLE_PROOF_TIMEOUT_MS = 180_000
 const STUDIO_SMOKE_POOL = 'studio-smoke'
 
 /**
- * Start-order pins. Measured durations order nodes within a priority; these make the two stable
- * package critical-path gates start before auxiliary work once the tree-mutating preflight ends.
- * Starting the children is sufficient: their reservations protect their worker budgets, so a
- * fixed sleep before admitting the remaining work would only add idle time.
+ * Start-order pins. Measured durations order nodes within a priority, and a serial node already
+ * sorts ahead of its equal-priority neighbours. These two pins remain because they are claims
+ * measurement cannot make: the `gui` chain is a serial floor of its own that must begin at t=0 or
+ * it extends the run by its whole length, and the prepare chain must not be overtaken by readers
+ * that are merely cheap.
  */
-const TEST_PRIORITY = 4
-const TYPECHECK_PRIORITY = TEST_PRIORITY
-
-/**
- * testCost reserves most of the machine for `_test` while leaving `_typecheck` and `_tao-check`
- * room to run beside it. The reservation is also the nested runner's own worker budget, so it is
- * the one number that decides both how much of the lane `_test` occupies and how much parallelism
- * `./dev test` gets inside it.
- */
-function testCost(): number {
-  return Math.max(2, Platform.cpuCount() - SLOTS_BESIDE_TEST)
-}
-
-/** testGate is the shape the complete and changed-files test gates share. */
-function testGate(): GateMetadata {
-  return {
-    // `just _test` hides the nested runner behind a recipe name, so the graph cannot infer the
-    // budget key from the command it starts. Naming it here is what makes `cost` an enforced
-    // bound on `./dev test` rather than a reservation it ignores.
-    budgetEnvKeys: [WorkGraph.BUDGET_ENV_KEYS.devTest],
-    cost: testCost(),
-    // The tao-apps suite runs against the compiled WordFlower app, and a stale generated app is
-    // worse than a slow one.
-    needs: ['_compile-word-flower-app'],
-    priority: TEST_PRIORITY,
-  }
-}
+const PREPARE_PRIORITY = 8
+const GUI_PRIORITY = 6
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
   return {
     cost: STUDIO_LANE_COST,
-    // Every UI lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
-    // while `fix` is still rewriting it; the mutates-tree barrier handles the second half.
-    needs: ['_parser-gen'],
+    // Every UI lane dies on a missing `_gen_tao-parser`, and none of them may read a source file
+    // while a fixer is still rewriting it; the declared classes handle both.
+    hostDependent: true,
+    reads: ['gen-app', 'gen-parser', 'tao', 'ts'],
     requiresUnsandboxed: true,
     resources,
   }
@@ -145,41 +270,50 @@ function studioSmoke(
 
 function buildCatalog(): ReadonlyMap<string, GateMetadata> {
   return new Map<string, GateMetadata>([
-    // Generators, not ordinary gates: each deletes and rewrites a `_gen_*` directory that other
-    // nodes read. `packages/parser/tsconfig.json` compiles `parser-src/**`, which is where Langium
-    // writes, and `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, which is
-    // where the WordFlower compile writes — so `_typecheck` reads both. `mutatesTree` is what keeps
-    // a reader off a directory that is being replaced under it.
-    ['_parser-gen', { mutatesTree: true }],
-    ['_compile-word-flower-app', { mutatesTree: true, needs: ['_parser-gen'] }],
+    // The prepare phase, in the order its declared classes imply: the Justfile first because every
+    // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
+    // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
+    ['_fix-just-fmt', { priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
+    ['_fix-dprint', { priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
+    ['_parser-gen', { priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['gen-parser'] }],
+    // `./tao fix` reports "0 fixed, 123 unchanged" in 5s of single-threaded language-service work,
+    // and is the prepare phase's whole critical path. A workspace daemon is the lever on it; until
+    // then `serial` is what tells the scheduler to pack the rest of the run around it.
+    [
+      '_fix-tao',
+      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], serial: true, writes: ['tao'] },
+    ],
+    [
+      '_compile-word-flower-app',
+      {
+        priority: PREPARE_PRIORITY,
+        reads: ['gen-parser', 'tao', 'ts'],
+        serial: true,
+        writes: ['gen-app'],
+      },
+    ],
 
-    // The fix steps own provably disjoint file classes: dprint owns TS/JSON/MD and excludes
-    // `**/_gen_*/**` (`config/dprint.jsonc`), `./tao fix` owns `.tao`, `just --fmt` owns the
-    // Justfile. `_fix-just-fmt` still goes last, because it rewrites the file every sibling gate's
-    // own `just` process parses on the way up.
-    ['_fix-dprint', { mutatesTree: true }],
-    ['_fix-tao', { mutatesTree: true, needs: ['_parser-gen'] }],
-    ['_fix-just-fmt', { mutatesTree: true, needs: ['_fix-dprint', '_fix-tao'] }],
-
-    ['_ide-extension-build', { needs: ['_parser-gen'] }],
-    ['_tao-check', { cost: TAO_CHECK_COST, needs: ['_parser-gen'] }],
-    ['_typecheck', { cost: TYPECHECK_COST, priority: TYPECHECK_PRIORITY }],
-    ['_test', testGate()],
-    // The changed-files selection of the same runner, for `verify --changed`. It reserves the same
-    // width because a change in `shared` still selects every suite.
-    ['_test-changed', testGate()],
-
-    // Sub-second gates that read the tree and nothing else.
-    ['_dprint-check', {}],
-    ['_repo-lint', {}],
-    ['_runtime-pack-check', {}],
-    ['dead-exports', {}],
-    ['_doctor-json', {}],
+    // Readers. Each waits for the writers of the classes it names and for nothing else: the
+    // TypeScript gates never wait for `./tao fix`, and the Tao gates never wait for dprint.
+    ['_dprint-check', { reads: ['ts'] }],
+    ['_repo-lint', { reads: ['ts'] }],
+    ['_runtime-pack-check', { reads: ['ts'] }],
+    ['dead-exports', { reads: ['ts'] }],
+    ['_doctor-json', { reads: ['ts'] }],
+    ['_ide-extension-build', { reads: ['gen-parser', 'ts'] }],
+    ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
+    // `packages/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
+    // `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
+    // compile writes, so the typechecker reads both generated trees.
+    ['_typecheck', { cost: TYPECHECK_COST, reads: ['gen-app', 'gen-parser', 'ts'] }],
     [
       'ship-bundle-proof',
       {
         cost: SHIP_BUNDLE_PROOF_COST,
-        needs: ['_parser-gen'],
+        // The proof exports real iOS bundles through Expo and compares them; the result depends on
+        // the host toolchain, so it is never recorded green.
+        hostDependent: true,
+        reads: ['gen-app', 'gen-parser', 'tao', 'ts'],
         timeoutMs: SHIP_BUNDLE_PROOF_TIMEOUT_MS,
       },
     ],
@@ -208,33 +342,92 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       'studio-agent-browser',
       studioSmoke('studio-agent-browser', 'packages/dev/studio-smoke/studio-agent-browser.test.ts'),
     ],
+    // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
+    // their own. They start at t=0 for that reason, ahead of work that can be packed later.
     [
       'studio-smoke-native',
-      studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
-        native: true,
-        resources: ['gui'],
-      }),
+      {
+        ...studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
+          native: true,
+          resources: ['gui'],
+        }),
+        priority: GUI_PRIORITY,
+      },
     ],
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.
-    ['studio-canary', { ...studioLane(['gui']), timeoutMs: STUDIO_CANARY_TIMEOUT_MS }],
+    [
+      'studio-canary',
+      { ...studioLane(['gui']), priority: GUI_PRIORITY, timeoutMs: STUDIO_CANARY_TIMEOUT_MS },
+    ],
   ])
 }
 
 const CATALOG = buildCatalog()
 
-/** metadata returns one gate's scheduling shape, or the untuned default for an unknown recipe. */
+/** The class every recipe-backed node reads, because running it parses the Justfile. */
+const RECIPE_CLASS: SourceClass = 'just'
+
+/** metadata returns one node's scheduling shape, or the untuned default for an unknown recipe. */
 function metadata(name: string): GateMetadata {
   return CATALOG.get(name) ?? DEFAULT_METADATA
 }
 
+/** isPrepare reports whether a node rewrites anything, which is what puts it in the prepare phase. */
+function isPrepare(name: string): boolean {
+  return (metadata(name).writes ?? []).length > 0
+}
+
+/** isRecordable reports whether a node's verdict is fully described by the tree that produced it. */
+function isRecordable(name: string): boolean {
+  const gate = metadata(name)
+  return !isPrepare(name) && gate.hostDependent !== true
+}
+
+/** writerOf names the node that rewrites one class, when the catalog has one. */
+function writerOf(sourceClass: SourceClass): string | undefined {
+  for (const [name, gate] of CATALOG) {
+    if ((gate.writes ?? []).includes(sourceClass)) {
+      return name
+    }
+  }
+  return undefined
+}
+
+/**
+ * dependenciesOf resolves the edges one node runs under: what it declared, plus the writer of every
+ * class it reads. A recipe-backed node also reads the Justfile, because that is what starts it.
+ */
+function dependenciesOf(name: string, gate: GateMetadata = metadata(name)): readonly string[] {
+  const reads = new Set<SourceClass>(gate.reads ?? [])
+  if (gate.run === undefined) {
+    reads.add(RECIPE_CLASS)
+  }
+  const needs = new Set<string>(gate.needs ?? [])
+  for (const sourceClass of reads) {
+    const writer = writerOf(sourceClass)
+    if (writer !== undefined && writer !== name) {
+      needs.add(writer)
+    }
+  }
+  return [...needs]
+}
+
 /** node turns one gate name into the work-graph node that runs it. */
 function node(name: string, repositoryRoot: string): WorkNode {
-  const { requiresUnsandboxed: _requiresUnsandboxed, run, ...scheduling } = metadata(name)
+  const {
+    hostDependent: _hostDependent,
+    reads: _reads,
+    requiresUnsandboxed: _requiresUnsandboxed,
+    run,
+    writes: _writes,
+    ...scheduling
+  } = metadata(name)
   const inRepository = (command: GateCommand): WorkCommand => ({ ...command, cwd: repositoryRoot })
   return {
     ...scheduling,
+    needs: dependenciesOf(name),
     // Logs and dashboard tiles have always named a gate without its private-recipe underscore.
     label: name.replace(/^_/, ''),
     name,
@@ -246,14 +439,52 @@ function node(name: string, repositoryRoot: string): WorkNode {
   }
 }
 
-/** GateCatalog owns the scheduling metadata every gate runs under. */
+/**
+ * testDependencies is the edge set a generated test node runs under. Suites and shards are built by
+ * `TestNodes` from what this checkout actually contains, so they cannot be table rows; what they
+ * share is this one declared relationship to the prepare phase, stated here with everything else.
+ * A test node runs its runner directly rather than through a recipe, so it does not read the
+ * Justfile and `_fix-just-fmt` is not among its edges.
+ */
+function testDependencies(reads: readonly SourceClass[]): readonly string[] {
+  return dependenciesOf('', { reads, run: { args: [], command: '' } })
+}
+
+/** suiteTuning returns one suite's declared scheduling shape, or the defaults every suite gets. */
+function suiteTuning(suite: string): SuiteTuning {
+  return SUITE_TUNING.get(suite) ?? {}
+}
+
+/** suiteReads returns the file classes a suite reads: its declared narrowing, or the whole tree. */
+function suiteReads(suite: string): readonly SourceClass[] {
+  return suiteTuning(suite).reads ?? DEFAULT_SUITE_READS
+}
+
+/** machineWidth is the whole machine, which is what a single graph of small nodes now packs into. */
+function machineWidth(): number {
+  return Platform.cpuCount()
+}
+
+/** GateCatalog owns the scheduling metadata every node in every lane runs under. */
 export const GateCatalog = {
+  BUN_SUITE_FIXED_MS,
   DEFAULT_METADATA,
+  DEFAULT_SUITE_READS,
+  GUI_PRIORITY,
+  PREPARE_PRIORITY,
   STUDIO_LANE_COST,
   STUDIO_SMOKE_POOL,
   TAO_CHECK_COST,
+  TAO_TEST_BUDGET_KEY: WorkGraph.BUDGET_ENV_KEYS.taoTest,
   TYPECHECK_COST,
+  dependenciesOf,
+  isPrepare,
+  isRecordable,
+  machineWidth,
   metadata,
   node,
-  testCost,
+  suiteReads,
+  suiteTuning,
+  testDependencies,
+  writerOf,
 } as const

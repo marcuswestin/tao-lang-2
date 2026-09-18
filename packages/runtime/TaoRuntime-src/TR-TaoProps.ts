@@ -1,4 +1,5 @@
 import type React from 'react'
+import type { Evaluable } from './TR-action-values'
 import {
   DesignControls,
   type TaoDesign,
@@ -90,7 +91,7 @@ export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigatio
 
 /** TaoResponseOccurrence settles exactly one independently asked view. */
 export type TaoResponseOccurrence = {
-  respond(value?: { evaluate(): { jsValue: unknown } }): void
+  respond(value?: Evaluable): void
 }
 
 /** TaoVisualLayout is the public layout-only snapshot exposed to an injected visual implementation. */
