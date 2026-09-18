@@ -1593,3 +1593,32 @@ an entry here may link one when the developer workflow is also affected.
   identity rather than the timings store.
 - **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
+
+### DEVENV-076 — A busy machine could admit no lane at all
+
+- **Status:** Incoming
+- **Area:** Parallel verification
+- **Impact:** Every lane on the machine could sit at zero running nodes while the CPUs were mostly
+  idle. A lane that joined while the machine was fully reserved never started its first node, so an
+  agent watching `0/9 done, 0 running, 9 pending` had no way to tell a stalled run from a slow one,
+  and the natural response — start another verification — made the reservation total worse.
+- **Evidence:** On an 18-CPU host, `~/.cache/tao/machine-lanes` held eleven live lanes reserving
+  exactly 18 of 18 slots while CPU sat near a quarter busy; a run started under that condition
+  produced no output for 19 minutes against 89 seconds on its own. Admission gated on
+  `globallyAvailable = cpuCount - Σ slots`, which is zero in that state, so `tryAcquire` returned
+  nothing to anyone and the one-slot floor `fairAllocations` documents never applied. A freed slot
+  went to whichever lane polled first, with backoff to 500ms and no queue, so a newly started lane
+  could lose repeatedly to lanes already running.
+- **Workaround:** Was to wait for other worktrees to finish, or to delete lane records by hand.
+- **Proposed change:** Make a lane's own fair share the whole admission rule and delete the
+  machine-wide reservation check. The share already bounds the machine at `max(cpuCount, laneCount)`
+  slots, so the bounded oversubscription that follows costs at most one slot per lane that joined
+  recently, and it removes the shared pool lanes were racing for rather than adding a queue to
+  arbitrate it. The same measurements show the check was not protecting the CPUs it appeared to:
+  lanes reserving 4-6 slots drove load past 21 on 18 CPUs, because one slot may run a whole test
+  file's parallel children.
+- **Dependencies:** Revises DEVENV-001, which introduced the global check together with the fair
+  shares and the one-slot floor those shares still provide. Fixed on `feat/lane-admission-share`.
+- **Acceptance:** A lane that registers against a registry whose slots are all reserved admits its
+  first node immediately, and a declined admission says what it is waiting for.
+- **Source:** 2026-09-18 repository-deduplication branch.

@@ -17,9 +17,9 @@ that work:
 
 - A top-level lane registers itself under `~/.cache/tao/machine-lanes` before it schedules anything,
   and every node atomically reserves slots from that machine-wide budget before it starts.
-- Fair shares are recomputed whenever work is admitted. A lane already above a newly reduced share
-  finishes its running nodes but cannot admit more until it is back within that share; total
-  recorded reservations never exceed `cpuCount`.
+- Fair shares are recomputed whenever work is admitted, and a lane's own share is the whole
+  admission rule. A lane already above a newly reduced share finishes its running nodes but cannot
+  admit more until it is back within that share.
 - A lease is removed when the lane ends, and pruned by the next lane when its process is gone.
 - The one remaining nested runner is `./tao test`, the published product CLI, inside the `tao-apps`
   node. It is already within the width its parent reserved, so it neither registers nor divides
@@ -28,11 +28,16 @@ that work:
 - An explicit `--jobs` caps that lane but does not opt it out of machine coordination.
 
 So one worktree running `verify` on an 18-CPU machine can use 18 slots, two converge on 9 each, and
-four converge on 4 or 5 each. If lanes outnumber CPUs, every lane retains a one-slot admission turn
-while the global reservation check still prevents oversubscription. A blocked node reports that it
-is waiting and backs off its registry polling. CPU admission fails open only when its registry is
-unavailable; exclusive confirmation and named resources fail closed because they cannot truthfully
-claim isolation without shared storage.
+four converge on 4 or 5 each. If lanes outnumber CPUs, every lane keeps a floor of one slot, so the
+machine holds at most `max(cpuCount, laneCount)` reservations and a lane that joins a busy machine
+always starts something. The oversubscription that allows is bounded and brief — lanes above their
+share cannot admit more work — and it is the price of never stalling a machine whose slots are all
+spoken for by lanes that registered earlier. A slot is not a CPU in any case: one slot may run a
+whole test file's parallel children, so the reservation total tracks fairness between lanes rather
+than load. A blocked node reports what it is waiting for, names the lane holding an exclusive
+confirmation when that is the cause, and backs off its registry polling. CPU admission fails open
+only when its registry is unavailable; exclusive confirmation and named resources fail closed
+because they cannot truthfully claim isolation without shared storage.
 
 Inside one lane there is exactly one graph. Gates, test suites, and the shards of a long suite are all
 ordinary nodes of it; there is no second scheduler inside the test gate and no worker budget passed
