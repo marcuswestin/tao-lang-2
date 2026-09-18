@@ -408,19 +408,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         )
       }
 
-      await browser.click('.studio-canvas-focus')
-      await browser.waitFor(
-        `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
-      )
-      await browser.waitFor(
-        `(() => {
-        const viewport = document.querySelector('.studio-preview-cell-viewport')
-        return viewport instanceof HTMLElement
-          && viewport.getBoundingClientRect().width === 242
-          && viewport.getBoundingClientRect().height === 122
-      })()`,
-        { timeoutMs: 30_000 },
-      )
+      // Focus frames the group's cells at the measured size of the selected element's view. The
+      // measurement reaches the client with the preview's inspection, so leaving and re-entering is
+      // what a person does when the frame has not arrived yet.
+      await focusCanvasUntilFramed(browser)
       await browser.click('[data-tao-studio-canvas-back="true"]')
       await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
       await browser.waitFor(
@@ -576,8 +567,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
             ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const snappedCatalog = await waitForSketchCatalog(
+      const snappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > drawCatalog.revision
@@ -618,8 +611,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )
       const incrementalSnapBrowser = browser
       const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const incrementallySnappedCatalog = await waitForSketchCatalog(
+      const incrementallySnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > reloadedSnapCatalog.revision
@@ -635,8 +630,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const incrementalUndoCatalog = await waitForSketchCatalog(
+      const incrementalUndoCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementallySnappedCatalog.revision
@@ -658,8 +655,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
         option.selected = true
       })()`)
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const unsnappedCatalog = await waitForSketchCatalog(
+      const unsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementalUndoCatalog.revision
@@ -677,13 +676,15 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const fullyUnsnappedCatalog = await waitForSketchCatalog(
+      const fullyUnsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
-        catalog =>
-          catalog.revision > unsnappedCatalog.revision
-          && catalog.sketches[0]?.rects.length === 5
-          && catalog.sketches[0]?.snapped.length === 0,
+        // The catalog's revision does not advance on every write (see the revision race recorded in
+        // the remediation roadmap), so this waits on the state itself. Nothing but this press can
+        // produce it: the step above leaves three rectangles snapped.
+        catalog => catalog.sketches[0]?.rects.length === 5 && catalog.sketches[0]?.snapped.length === 0,
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
 
@@ -766,8 +767,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const undoneCatalog = await waitForSketchCatalog(
+      const undoneCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > overlapAppliedCatalog.revision
@@ -1290,6 +1293,68 @@ async function sketchBoardDiagnostics(
       },
     }
   })()`)
+}
+
+/**
+ * focusCanvasUntilFramed enters canvas focus and waits for the group's cells to take the focused
+ * view's measured size, re-entering if the measurement had not reached the client yet.
+ */
+async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
+  const framed = `(() => {
+    const viewport = document.querySelector('.studio-preview-cell-viewport')
+    return viewport instanceof HTMLElement
+      && viewport.getBoundingClientRect().width === 242
+      && viewport.getBoundingClientRect().height === 122
+  })()`
+  const deadline = Date.now() + 40_000
+  while (Date.now() < deadline) {
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(
+      `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
+    )
+    const attemptDeadline = Math.min(deadline, Date.now() + 10_000)
+    while (Date.now() < attemptDeadline) {
+      if (await browser.evaluate<boolean>(framed)) {
+        return
+      }
+      await Time.sleep(100)
+    }
+    // Leave, so the next iteration is a fresh entry rather than a second click that would leave.
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
+  }
+  Errors.throwHostEnvironment('Canvas focus never framed the selected view at its measured size.')
+}
+
+/**
+ * A sketch control clicked while a compile is replacing the board reaches an element on its way out
+ * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
+ * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
+ * and given a quiet moment instead, and pressed once when it is still the board that was marked.
+ */
+async function clickSketchWhenSettled(
+  browser: StudioCdp,
+  sketchId: string,
+  selector: string,
+  path: string,
+  predicate: (catalog: SmokeSketchCatalog) => boolean,
+  diagnose?: () => Promise<unknown>,
+): Promise<SmokeSketchCatalog> {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    const generation = await markSketchBoard(browser, sketchId)
+    await Time.sleep(300)
+    const settled = await browser.evaluate<boolean>(`(() => {
+      const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+      return board instanceof HTMLElement
+        && board.dataset.taoStudioSmokeGeneration === ${JSON.stringify(generation)}
+    })()`)
+    if (settled) {
+      await browser.click(selector)
+      return await waitForSketchCatalog(path, predicate, diagnose)
+    }
+  }
+  Errors.throwHostEnvironment(`The Studio sketch board never settled long enough to press ${selector}`)
 }
 
 async function waitForSketchCatalog(
