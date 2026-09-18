@@ -158,7 +158,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(headerWord?.$cstNode).toBeDefined()
     const headerDecls = services.language.references.References.findDeclarations(headerWord!.$cstNode!)
-    Expect(headerDecls).toEqual([headerMember])
+    Expect(headerDecls).toHaveLength(1)
+    Expect(headerDecls[0]).toBe(headerMember)
 
     // [headerTitle] at render site resolves to 'headerTitle' bundle in HNDesign
     const titleWord = AST.streamAllContents(file).find(
@@ -166,7 +167,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(titleWord?.$cstNode).toBeDefined()
     const titleDecls = services.language.references.References.findDeclarations(titleWord!.$cstNode!)
-    Expect(titleDecls).toEqual([titleMember])
+    Expect(titleDecls).toHaveLength(1)
+    Expect(titleDecls[0]).toBe(titleMember)
 
     // 'accent' in [pad 14, bg accent] inside the design bundle resolves to 'accent' token in HNDesign
     const accentWord = AST.streamAllContents(file).find(
@@ -174,7 +176,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(accentWord?.$cstNode).toBeDefined()
     const accentDecls = services.language.references.References.findDeclarations(accentWord!.$cstNode!)
-    Expect(accentDecls).toEqual([accentToken])
+    Expect(accentDecls).toHaveLength(1)
+    Expect(accentDecls[0]).toBe(accentToken)
 
     // References to 'header' bundle includes declaration and render site
     const headerRefs = services.language.references.References.findReferences(headerMember!, {
@@ -245,16 +248,21 @@ Describe('parser: minimal design declarations', () => {
     const references = services.language.references.References
 
     // The render site resolves to the design its own app mounts, never to the other project's `header`.
-    Expect(references.findDeclarations(words(shippedFile, 'header')[0]!.$cstNode!))
-      .toEqual([bundle(shippedDesign, 'header')])
+    const shippedHeaderDecls = references.findDeclarations(words(shippedFile, 'header')[0]!.$cstNode!)
+    Expect(shippedHeaderDecls).toHaveLength(1)
+    Expect(shippedHeaderDecls[0]).toBe(bundle(shippedDesign, 'header'))
 
     // `palette.60` inside each design names that design's own shade -- the most specific name that
     // resolves, not the `palette` entry it hangs off, and not the other project's shade of the same
-    // name. Identity is asserted directly: deep-comparing a linked AST node walks the whole document.
-    Expect(references.findDeclarations(words(shippedFile, 'palette')[0]!.$cstNode!))
-      .toEqual([familyMember(shippedDesign, 'palette', '60')])
-    Expect(references.findDeclarations(words(draftFile, 'palette')[0]!.$cstNode!))
-      .toEqual([familyMember(draftDesign, 'palette', '60')])
+    // name. Identity is asserted directly, never structurally: `@shared/test` refuses a deep-equality
+    // matcher on a Langium node because bun's formatter expands one exponentially through its
+    // `$container` links, which has taken a 128 GB machine out of application memory.
+    const shippedShadeDecls = references.findDeclarations(words(shippedFile, 'palette')[0]!.$cstNode!)
+    Expect(shippedShadeDecls).toHaveLength(1)
+    Expect(shippedShadeDecls[0]).toBe(familyMember(shippedDesign, 'palette', '60'))
+    const draftShadeDecls = references.findDeclarations(words(draftFile, 'palette')[0]!.$cstNode!)
+    Expect(draftShadeDecls).toHaveLength(1)
+    Expect(draftShadeDecls[0]).toBe(familyMember(draftDesign, 'palette', '60'))
 
     // Find-references is identity-based. The shipped `header` is used once, at its render site; the
     // draft's is declared and never used. Matching on spelling alone gave each the other's uses too.

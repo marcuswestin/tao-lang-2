@@ -1,6 +1,7 @@
 import React from 'react'
 import { DataControls, type TaoEntityCommandPolicy } from './TR-data'
 import { labelCorpus, primaryLabel } from './TR-interaction-labels'
+import type { Evaluable } from './TR-navigation-presentables'
 import type { Subscription } from './TR-navigation-state'
 import type { TaoRuntimeJson } from './TR-runtime-capture'
 import type { TaoProps } from './TR-TaoProps'
@@ -286,7 +287,7 @@ export type TaoOutlineLiveEntry = {
   measure?(): TaoInteractionBounds | undefined
   modal?: boolean
   primary?: boolean
-  runtimeValue?: { evaluate(): { jsValue: unknown } }
+  runtimeValue?: Evaluable
   scrollIntoView?(): void
 }
 

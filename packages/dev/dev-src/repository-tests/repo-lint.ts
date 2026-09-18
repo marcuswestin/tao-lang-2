@@ -1,4 +1,5 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { readDelegationIssues } from '../delegation/DelegationProfiles'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -256,14 +257,16 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  */
 const RAW_ERROR_ALLOWLIST = [
   // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts:226',
-  'packages/dev/dev-src/studio/StudioCdp.ts:260',
-  'packages/dev/dev-src/studio/StudioCdp.ts:298',
-  'packages/dev/dev-src/studio/StudioCdp.ts:321',
-  'packages/dev/dev-src/studio/StudioCdp.ts:479',
-  'packages/dev/dev-src/studio/StudioCdp.ts:507',
-  'packages/dev/dev-src/studio/StudioCdp.ts:676',
-  'packages/dev/dev-src/studio/StudioCdp.ts:812',
+  'packages/dev/dev-src/studio/StudioCdp.ts:232',
+  'packages/dev/dev-src/studio/StudioCdp.ts:283',
+  'packages/dev/dev-src/studio/StudioCdp.ts:293',
+  'packages/dev/dev-src/studio/StudioCdp.ts:330',
+  'packages/dev/dev-src/studio/StudioCdp.ts:341',
+  'packages/dev/dev-src/studio/StudioCdp.ts:373',
+  'packages/dev/dev-src/studio/StudioCdp.ts:533',
+  'packages/dev/dev-src/studio/StudioCdp.ts:561',
+  'packages/dev/dev-src/studio/StudioCdp.ts:730',
+  'packages/dev/dev-src/studio/StudioCdp.ts:880',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
@@ -274,29 +277,29 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioElectrobun.ts:742',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:763',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:766',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:186',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:597',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:599',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:859',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:864',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:869',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:894',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1133',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1152',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1261',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1303',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1329',
-  'packages/studio/studio-tests/studio-client.test.ts:626',
-  'packages/studio/studio-tests/studio-client.test.ts:2996',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
   'packages/dev/studio-smoke/studio-real-app.test.ts:128',
   'packages/dev/studio-smoke/studio-real-app.test.ts:264',
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
   'packages/dev/studio-smoke/studio-real-app.test.ts:299',
   'packages/dev/studio-smoke/studio-real-app.test.ts:367',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:205',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:653',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:655',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:921',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:926',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:931',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:956',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1195',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1216',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1389',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1431',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1457',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
   'packages/studio/studio-src/StudioWelcome.ts:83',
+  'packages/studio/studio-tests/studio-client.test.ts:626',
+  'packages/studio/studio-tests/studio-client.test.ts:2996',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
   'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
@@ -304,10 +307,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
   'packages/dev/dev-tests/agent-config-generation.test.ts:44',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:81',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:104',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:210',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
@@ -381,8 +384,8 @@ const NODE_IMPORT_ALLOWLIST = [
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/dev/dev-tests/repo-lint.test.ts:468',
   'packages/dev/dev-tests/repo-lint.test.ts:469',
-  'packages/dev/dev-tests/work-graph.test.ts:314',
-  'packages/dev/dev-tests/work-graph.test.ts:315',
+  'packages/dev/dev-tests/work-graph.test.ts:465',
+  'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
   'packages/tao-cli/cli-tests/compile-command.test.ts:3',
   'packages/tao-cli/cli-tests/create-command.test.ts:4',
@@ -767,6 +770,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
+  issues.push(...await readDelegationIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {

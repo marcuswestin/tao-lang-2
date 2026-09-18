@@ -24,6 +24,14 @@ web_search = "live"
 [features]
 network_proxy = true
 
+# Delegation defaults. The model is the standard tier of the routing table in
+# agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
+[agents]
+enabled = true
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "medium"
+max_concurrent_threads_per_session = 5
+
 [permissions.tao-review]
 extends = ":read-only"
 description = "Tao review: inspect the worktree and reference repository without editing them."

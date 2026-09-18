@@ -1,16 +1,24 @@
-import { Errors, FS, Platform, Time } from '@shared'
-import { dlopen, FFIType, type Pointer, ptr } from 'bun:ffi'
+import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
 import { OutputText } from '../cli/OutputText'
 
 /**
  * One scheduler for every parallel repository lane. A node says what must pass before it starts,
- * how much CPU width it occupies, which exclusive resources it holds, and whether it rewrites the
- * tree; the graph turns that into a start order, a slot budget, and a worker budget for nested
- * runners. It never writes to the terminal: a run emits events and the reporters decide what a
- * human or an agent sees.
+ * how much CPU width it occupies, and which exclusive resources it holds; the graph turns that into
+ * a start order and a slot budget. It never writes to the terminal: a run emits events and the
+ * reporters decide what a human or an agent sees.
  *
  * The admission policy is the one `TestRunner` proved on suites — priority first, then longest
  * remaining path, with a head-of-line hold so a wide node is not starved by cheap ones.
+ *
+ * The kernel knows nothing about this repository. It has no notion of a fixer, a generated
+ * directory, a test suite, or a shard: a caller that needs one node to precede another says so with
+ * an edge. There used to be one exception — a `mutatesTree` bit whose nodes every other node in the
+ * run waited for — and it made the whole lane serial behind the slowest fixer. `GateCatalog` now
+ * derives those edges from what each node writes and reads, so the ordering is declared where the
+ * repository facts live and the scheduler is left with edges alone.
+ *
+ * A run also records why each node waited and when it was admitted, which is what makes the schedule
+ * reviewable: `WorkSchedule` turns those into a makespan, a serial floor, and idle slot-seconds.
  */
 
 /** WorkStatus declares the lifecycle state of one node. `skipped` is never reported as `passed`. */
@@ -18,6 +26,9 @@ export type WorkStatus = 'failed' | 'passed' | 'pending' | 'running' | 'skipped'
 
 /** WorkFailureKind is the machine-readable reason a node did not pass. */
 export type WorkFailureKind = 'dependency' | 'interrupted' | 'nonzero-exit' | 'process-error' | 'timeout'
+
+/** WorkTimeoutKind distinguishes a node that ran too long from one that went quiet. */
+type WorkTimeoutKind = 'idle' | 'wall-clock'
 
 /** WorkFailure keeps retry and reporting policy out of human-readable output matching. */
 export type WorkFailure = {
@@ -69,10 +80,15 @@ export type WorkNode = {
   budgetEnvKeys?: readonly string[]
   /** Worker slots reserved while running (CPU width). Default 1. */
   cost?: number
+  /**
+   * Milliseconds of silence after which a still-running node is killed and marked failed. A runaway
+   * that allocates without printing — bun's assertion formatter on a multiply-reachable value is the
+   * worked example — produces no output at all, so the wall-clock bound below is the only other
+   * thing that would ever notice it, and it is necessarily much larger.
+   */
+  idleTimeoutMs?: number
   /** Display and log-file name; defaults to `name`. */
   label?: string
-  /** True for nodes that rewrite the source tree; every non-mutating node in the run waits for them. */
-  mutatesTree?: boolean
   /** Names of nodes that must pass before this node starts. Unknown names are ignored. */
   needs?: readonly string[]
   /** Hand-pinned start-order override. Default 0; measured durations refine within a priority. */
@@ -80,10 +96,26 @@ export type WorkNode = {
   /** Named exclusive resources (e.g. `gui`); nodes sharing one never run concurrently. */
   resources?: readonly string[]
   /**
+   * True for a node that cannot use more than one core however long it runs: a single-threaded tool,
+   * or one unsharded test process. Its width is one slot, and it sorts ahead of its equal-priority
+   * neighbours, because a run can be no shorter than its longest serial node and everything else can
+   * be packed around one.
+   */
+  serial?: boolean
+  /**
    * Milliseconds after which a still-running node is killed and marked failed, so one hung
    * process cannot hold the whole lane open. Unset means unbounded.
    */
   timeoutMs?: number
+}
+
+/** WorkWait records one reason a node was not started yet, and how long that reason held. */
+export type WorkWait = {
+  /** What held the node: an unpassed edge, a held resource, local width, or the machine broker. */
+  kind: 'capacity' | 'dependency' | 'machine' | 'resource'
+  /** The dependency or resource name, when the kind names one. */
+  detail?: string
+  ms: number
 }
 
 /** WorkState tracks one node's output, status, and timing across a run. */
@@ -103,8 +135,12 @@ export type WorkState = {
   reason?: string
   /** True once a node that failed under machine contention has been run again on its own. */
   retried?: boolean
+  /** The width the machine broker granted this node, once it was admitted. */
+  slots?: number
   startedAt?: number
   status: WorkStatus
+  /** Why this node was not started earlier, longest reason first; empty for one that never waited. */
+  waits?: readonly WorkWait[]
 }
 
 /** WorkEvent is what a run reports as it progresses; reporters consume nothing else. */
@@ -166,9 +202,13 @@ export type WorkRunOptions = {
   watchInterrupt?: (interrupt: () => void) => () => void
 }
 
-/** WorkRunResult reports how a whole run ended. */
+/** WorkRunResult reports how a whole run ended, including what the schedule had to work with. */
 export type WorkRunResult = {
+  /** Local worker width this run was allowed, which is the divisor for idle slot-seconds. */
+  capacity: number
+  finishedAt: number
   interrupted: boolean
+  startedAt: number
   states: readonly WorkState[]
 }
 
@@ -176,15 +216,6 @@ type RunningNode = {
   cancel: () => void
   promise: Promise<void>
 }
-
-type TrackedProcess = {
-  command: string
-  pid: number
-  /** Kernel process start time, including microseconds on Darwin, protects against PID reuse. */
-  startedAt: string
-}
-
-type ProcessTableEntry = TrackedProcess & { ppid: number }
 
 const OUTPUT_LINE_LIMIT = 6
 /**
@@ -194,11 +225,14 @@ const OUTPUT_LINE_LIMIT = 6
 const COLD_START_MS_PER_SLOT = 1_000
 const INTERRUPTED_REASON = 'interrupted'
 const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
-/** How long a cancelled process gets to honor SIGTERM before it is killed outright. */
-const FORCE_KILL_GRACE_MS = 250
-/** Env keys the nested runners read their own worker budget from. */
+/**
+ * Env key the one remaining nested runner reads its own worker budget from. `./tao test` is the
+ * published product CLI and sizes itself to the machine unless told otherwise, so a node that runs
+ * it has to hand down the width the graph reserved. There used to be a second key for a nested
+ * `./dev test`, which existed only because the test gate started a second scheduler inside itself;
+ * suites and shards are ordinary nodes now, so nothing nests and nothing divides the machine twice.
+ */
 const BUDGET_ENV_KEYS = {
-  devTest: 'TAO_DEV_TEST_JOBS',
   taoTest: 'TAO_TEST_JOBS',
 } as const
 
@@ -229,9 +263,13 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   const ranks = criticalPathRanks(states, options.expectedMs)
   const pending = [...states].sort(startOrder(states, ranks))
   const running = new Map<WorkState, RunningNode>()
+  /** What each pending node was blocked on when the last admission scan looked. */
+  const heldBy = new Map<WorkState, Pick<WorkWait, 'detail' | 'kind'>>()
   const heldResources = new Set<string>()
   const workersAdmitted = new Map<string, number>()
   const runOne = options.runNode ?? runProcess
+  const startedAt = Date.now()
+  let lastScanAt = startedAt
   let availableSlots = capacity
   let interrupted = false
 
@@ -252,6 +290,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   emit({ kind: 'planned', states })
   try {
     while (pending.length > 0 || running.size > 0) {
+      accountWaits()
       const admission = await admit()
       if (running.size === 0) {
         if (admission.machineBlocked) {
@@ -292,7 +331,46 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     stopWatchingInterrupt()
   }
   emit({ kind: 'done', interrupted, states })
-  return { interrupted, states }
+  return { capacity, finishedAt: Date.now(), interrupted, startedAt, states }
+
+  /**
+   * accountWaits charges the time since the last admission scan to whatever was holding each
+   * still-pending node *at the start* of that slice, then records what is holding it now for the
+   * next one. Charging what is holding it now would misattribute every node's last slice: a scan
+   * only happens when something completes, so by the time the scan looks, the dependency the node
+   * was waiting for has already passed and the wait would be filed under capacity instead. A node
+   * with exactly one dependency would then never report waiting on it.
+   */
+  function accountWaits(): void {
+    const now = Date.now()
+    const sliceMs = now - lastScanAt
+    lastScanAt = now
+    for (const state of pending) {
+      if (state.status !== 'pending') {
+        continue
+      }
+      const held = heldBy.get(state)
+      if (held !== undefined && sliceMs > 0) {
+        addWait(state, held, sliceMs)
+      }
+      heldBy.set(state, blockingReason(state))
+    }
+  }
+
+  /** blockingReason names the first thing standing between a pending node and its start. */
+  function blockingReason(state: WorkState): Pick<WorkWait, 'detail' | 'kind'> {
+    const dependency = (state.node.needs ?? [])
+      .map(need => states.find(candidate => candidate.name === need))
+      .find(candidate => candidate !== undefined && candidate.status !== 'passed')
+    if (dependency !== undefined) {
+      return { detail: dependency.name, kind: 'dependency' }
+    }
+    const resource = (state.node.resources ?? []).find(candidate => heldResources.has(candidate))
+    if (resource !== undefined) {
+      return { detail: resource, kind: 'resource' }
+    }
+    return state.reason === MACHINE_CAPACITY_REASON ? { kind: 'machine' } : { kind: 'capacity' }
+  }
 
   async function admit(): Promise<{ machineBlocked: boolean; settled: number; started: number }> {
     let started = 0
@@ -347,7 +425,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
 
   function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
     let cancel = () => {}
-    let timedOut = false
+    let expiry: WorkTimeoutKind | undefined
     const admission: WorkAdmission = { slots, workerIndex: nextWorkerIndex(state.node.workerPool) }
     const run = typeof state.node.run === 'function' ? state.node.run(admission) : state.node.run
     const context: WorkRunContext = {
@@ -359,35 +437,60 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       },
       onOutput: output => {
         appendOutput(state, output)
+        restartIdleTimer()
         emit({ kind: 'output', output, state })
       },
     }
+    state.slots = slots
     state.status = 'running'
     state.reason = undefined
     state.startedAt = Date.now()
     emit({ kind: 'start', state })
-    const timeout = state.node.timeoutMs === undefined ? undefined : setTimeout(() => {
-      timedOut = true
-      cancel()
-    }, state.node.timeoutMs)
+    const expire = (kind: WorkTimeoutKind) => {
+      if (expiry === undefined) {
+        expiry = kind
+        cancel()
+      }
+    }
+    const timeout = state.node.timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => expire('wall-clock'), state.node.timeoutMs)
+    let idleTimeout: ReturnType<typeof setTimeout> | undefined
+    // The idle bound is armed from the start, not from the first byte: a node that never prints
+    // anything is exactly the case it exists for.
+    function restartIdleTimer(): void {
+      if (state.node.idleTimeoutMs === undefined) {
+        return
+      }
+      if (idleTimeout !== undefined) {
+        clearTimeout(idleTimeout)
+      }
+      idleTimeout = setTimeout(() => expire('idle'), state.node.idleTimeoutMs)
+    }
+    restartIdleTimer()
 
     const promise = executeNode(state, context, runOne).finally(async () => {
       if (timeout !== undefined) {
         clearTimeout(timeout)
       }
+      if (idleTimeout !== undefined) {
+        clearTimeout(idleTimeout)
+      }
       availableSlots += slots
       for (const resource of state.node.resources ?? []) {
         heldResources.delete(resource)
       }
-      if (timedOut) {
+      if (expiry !== undefined) {
         state.status = 'failed'
-        state.reason = `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
+        state.reason = expiry === 'idle'
+          ? `timed out after ${formatTimeout(state.node.idleTimeoutMs ?? 0)} with no output`
+          : `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
         state.failure = { kind: 'timeout', message: state.reason }
         if (!state.fullOutput.includes(state.reason)) {
           appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${state.reason}\n`)
         }
       }
-      if (interrupted && !timedOut && state.status === 'failed') {
+      if (interrupted && expiry === undefined && state.status === 'failed') {
         state.status = 'failed'
         state.reason = INTERRUPTED_REASON
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
@@ -443,7 +546,23 @@ async function executeNode(
   }
 }
 
-/** runProcess is the default runner: one child process with its output piped back to the graph. */
+/**
+ * runProcess is the default runner: one child process in its own process group, with its output
+ * piped back to the graph.
+ *
+ * A node runs detached deliberately, unlike an ordinary `CLI.start` child. The graph owns when a
+ * node stops — a timeout, an idle bound, an interrupt — and a lane that was itself interrupted must
+ * be able to stop a node that is ignoring SIGTERM without the terminal's own signal racing it.
+ * Everything a node started is stopped with it: `ProcessTree` snapshots the owned tree before
+ * cancellation can orphan any of it, signals each PID only while its OS start identity still
+ * matches so a reused PID can never be hit, and escalates to SIGKILL after a grace period, because
+ * a node cancelled for hanging may ignore SIGTERM — the Studio canary's surviving launch process
+ * did — and would then hold the lane open through the very mechanism meant to unblock it.
+ *
+ * It stops what it started and nothing else. A sibling agent's `bun test`, Metro, simulator, or
+ * Studio session shares this machine and this checkout, and is never signalled by name, port, or
+ * working directory.
+ */
 async function runProcess(_state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
   const child = Platform.spawn(context.run.command, {
     args: [...context.run.args],
@@ -460,21 +579,19 @@ async function runProcess(_state: WorkState, context: WorkRunContext): Promise<W
   try {
     context.onCancel(() => {
       cancelled = true
-      trackedDescendants = child.pid === undefined ? [] : descendantProcesses(child.pid)
-      signalTrackedProcesses(trackedDescendants, 'SIGTERM')
-      signalProcessGroup(child.pid, 'SIGTERM')
-      // A node cancelled for hanging may ignore SIGTERM — the canary's surviving launch process
-      // did — and would then hold the lane open through the very mechanism meant to unblock it.
+      trackedDescendants = child.pid === undefined ? [] : ProcessTree.descendants(child.pid)
+      ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
+      ProcessTree.signalGroup(child.pid, 'SIGTERM')
       forceKill = setTimeout(() => {
-        signalTrackedProcesses(trackedDescendants, 'SIGKILL')
-        signalProcessGroup(child.pid, 'SIGKILL')
-      }, FORCE_KILL_GRACE_MS)
+        ProcessTree.signalTracked(trackedDescendants, 'SIGKILL')
+        ProcessTree.signalGroup(child.pid, 'SIGKILL')
+      }, ProcessTree.FORCE_KILL_GRACE_MS)
     })
     const outcome = await waitForProcess(child)
     if (cancelled) {
       await Promise.all([
-        waitForProcessGroupExit(child.pid),
-        waitForTrackedProcessesExit(trackedDescendants),
+        ProcessTree.waitForGroupExit(child.pid),
+        ProcessTree.waitForTrackedExit(trackedDescendants),
       ])
     }
     return outcome
@@ -486,185 +603,6 @@ async function runProcess(_state: WorkState, context: WorkRunContext): Promise<W
     child.stdout?.destroy()
     child.stderr?.destroy()
     child.removeAllListeners()
-  }
-}
-
-/**
- * descendantProcesses snapshots the whole owned tree before cancellation can orphan an escaped
- * process group. Each PID carries its OS start identity so a later signal cannot hit a reused PID.
- */
-function descendantProcesses(rootPid: number): TrackedProcess[] {
-  if (process.platform === 'darwin') {
-    return darwinDescendantProcesses(rootPid)
-  }
-  const byParent = new Map<number, TrackedProcess[]>()
-  for (const process of processTable()) {
-    const children = byParent.get(process.ppid) ?? []
-    children.push(process)
-    byParent.set(process.ppid, children)
-  }
-  const descendants: Array<TrackedProcess & { depth: number }> = []
-  const visit = (pid: number, depth: number) => {
-    for (const child of byParent.get(pid) ?? []) {
-      descendants.push({ ...child, depth })
-      visit(child.pid, depth + 1)
-    }
-  }
-  visit(rootPid, 1)
-  return descendants.toSorted((left, right) => right.depth - left.depth).map(({ depth: _depth, ...process }) => process)
-}
-
-/** Darwin's libproc gives child PIDs and microsecond process-start identity inside the sandbox. */
-function darwinDescendantProcesses(rootPid: number): TrackedProcess[] {
-  const library = dlopen('/usr/lib/libproc.dylib', {
-    proc_listchildpids: {
-      args: [FFIType.i32, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-    proc_pidinfo: {
-      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-  })
-  try {
-    const descendants: Array<TrackedProcess & { depth: number }> = []
-    const visited = new Set<number>([rootPid])
-    const visit = (pid: number, depth: number) => {
-      const children = new Int32Array(4_096)
-      const count = library.symbols.proc_listchildpids(pid, ptr(children), children.byteLength)
-      for (const childPid of children.subarray(0, Math.min(Math.max(0, count), children.length))) {
-        if (!Number.isSafeInteger(childPid) || childPid <= 1 || visited.has(childPid)) {
-          continue
-        }
-        visited.add(childPid)
-        const child = darwinProcessIdentity(childPid, library.symbols.proc_pidinfo)
-        if (child === undefined) {
-          continue
-        }
-        descendants.push({ ...child, depth })
-        visit(childPid, depth + 1)
-      }
-    }
-    visit(rootPid, 1)
-    return descendants.toSorted((left, right) => right.depth - left.depth)
-      .map(({ depth: _depth, ...process }) => process)
-  } finally {
-    library.close()
-  }
-}
-
-function darwinProcessIdentity(
-  pid: number,
-  inspect: (pid: number, flavor: number, arg: number, buffer: Pointer, size: number) => number,
-): TrackedProcess | undefined {
-  const bytes = new Uint8Array(136)
-  if (inspect(pid, 3, 0, ptr(bytes), bytes.byteLength) < bytes.byteLength) {
-    return undefined
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (view.getUint32(12, true) !== pid) {
-    return undefined
-  }
-  return {
-    command: darwinProcessName(bytes),
-    pid,
-    startedAt: `${view.getBigUint64(120, true)}:${view.getBigUint64(128, true)}`,
-  }
-}
-
-function darwinProcessName(bytes: Uint8Array): string {
-  const decode = (offset: number, length: number) =>
-    new TextDecoder().decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '')
-  return decode(64, 32) || decode(48, 16)
-}
-
-/** processTable uses the repository-approved fixed process listing, not caller-shaped ps arguments. */
-function processTable(): ProcessTableEntry[] {
-  const result = Platform.spawnSync('ps', {
-    args: ['-axo', 'pid=,ppid=,lstart=,command='],
-  })
-  if (result.status !== 0) {
-    return []
-  }
-  const processes: ProcessTableEntry[] = []
-  for (const line of String(result.stdout).split('\n')) {
-    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\d+\s+\d+:\d+:\d+\s+\d+)\s+(.+)$/)
-    if (match === null) {
-      continue
-    }
-    const pid = Number(match[1])
-    const ppid = Number(match[2])
-    if (Number.isSafeInteger(pid) && pid > 1 && Number.isSafeInteger(ppid) && ppid >= 0) {
-      processes.push({ command: match[4]!, pid, ppid, startedAt: match[3]! })
-    }
-  }
-  return processes
-}
-
-/** signalTrackedProcesses signals only PIDs whose start identities still match the owned snapshot. */
-type ProcessSignalSeams = {
-  identities: (pids: readonly number[]) => Map<number, TrackedProcess>
-  signal: (pids: readonly number[], signal: Platform.ProcessSignal) => void
-}
-
-function signalTrackedProcesses(
-  processes: readonly TrackedProcess[],
-  signal: Platform.ProcessSignal,
-  seams: ProcessSignalSeams = systemProcessSignalSeams,
-): void {
-  if (processes.length === 0) {
-    return
-  }
-  const current = seams.identities(processes.map(process => process.pid))
-  const pids = processes
-    .filter(process => sameProcess(current.get(process.pid), process))
-    .map(process => process.pid)
-  if (pids.length > 0) {
-    seams.signal(pids, signal)
-  }
-}
-
-const systemProcessSignalSeams: ProcessSignalSeams = {
-  identities: currentProcessIdentities,
-  signal: (pids, signal) => {
-    Platform.spawnSync('/bin/kill', {
-      args: [`-${signal.replace(/^SIG/, '')}`, '--', ...pids.map(String)],
-      stdio: 'ignore',
-    })
-  },
-}
-
-function sameProcess(current: TrackedProcess | undefined, expected: TrackedProcess): boolean {
-  return current?.startedAt === expected.startedAt && current.command === expected.command
-}
-
-function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
-  if (process.platform !== 'darwin') {
-    return new Map(processTable().map(process => [process.pid, process]))
-  }
-  const library = dlopen('/usr/lib/libproc.dylib', {
-    proc_pidinfo: {
-      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-  })
-  try {
-    return new Map(pids.flatMap(pid => {
-      const process = darwinProcessIdentity(pid, library.symbols.proc_pidinfo)
-      return process === undefined ? [] : [[pid, process] as const]
-    }))
-  } finally {
-    library.close()
-  }
-}
-
-async function waitForTrackedProcessesExit(processes: readonly TrackedProcess[]): Promise<void> {
-  const expected = new Map(processes.map(process => [process.pid, process.startedAt]))
-  while (
-    [...currentProcessIdentities([...expected.keys()]).values()]
-      .some(process => sameProcess(process, processes.find(expected => expected.pid === process.pid)!))
-  ) {
-    await Time.sleep(25)
   }
 }
 
@@ -687,32 +625,6 @@ async function waitForProcess(child: ReturnType<typeof Platform.spawn>): Promise
       finish({ error: processError, exitCode })
     })
   })
-}
-
-/** signalProcessGroup stops the detached command and every descendant that inherited its pipes. */
-function signalProcessGroup(pid: number | undefined, signal: Platform.ProcessSignal): boolean {
-  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) {
-    return false
-  }
-  const result = Platform.spawnSync('/bin/kill', {
-    args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`],
-    stdio: 'ignore',
-  })
-  return result.status === 0
-}
-
-/** waitForProcessGroupExit keeps cancellation pending until no descendant remains signalable. */
-async function waitForProcessGroupExit(pid: number | undefined): Promise<void> {
-  if (pid === undefined) {
-    return
-  }
-  while (processGroupIsAlive(pid)) {
-    await Time.sleep(25)
-  }
-}
-
-function processGroupIsAlive(pid: number): boolean {
-  return Platform.spawnSync('/bin/kill', { args: ['-0', '--', `-${pid}`], stdio: 'ignore' }).status === 0
 }
 
 function finishWithoutRunning(
@@ -742,18 +654,10 @@ function failedDependencyName(state: WorkState, states: readonly WorkState[]): s
 }
 
 function isReady(state: WorkState, states: readonly WorkState[]): boolean {
-  if (state.node.mutatesTree !== true && states.some(other => other.node.mutatesTree === true && !isFinished(other))) {
-    // A node that rewrites the tree must complete before anything reads the tree in the same run.
-    return false
-  }
   return (state.node.needs ?? []).every(need => {
     const dependency = states.find(candidate => candidate.name === need)
     return dependency === undefined || dependency.status === 'passed'
   })
-}
-
-function isFinished(state: WorkState): boolean {
-  return state.status === 'failed' || state.status === 'passed' || state.status === 'skipped'
 }
 
 function resourcesAvailable(state: WorkState, heldResources: ReadonlySet<string>): boolean {
@@ -767,8 +671,13 @@ function startOrder(
   const declarationOrder = new Map(states.map((state, index) => [state.name, index]))
   const rankOf = (state: WorkState) => ranks.get(state.name) ?? 0
   const orderOf = (state: WorkState) => declarationOrder.get(state.name) ?? 0
+  // A serial node is a floor on the whole run: it cannot be made shorter by any amount of machine,
+  // and everything else can be packed around it. Starting it before its equal-priority neighbours
+  // is therefore free, and starting it late costs the run its own length.
+  const serialFirst = (state: WorkState) => state.node.serial === true ? 1 : 0
   return (left, right) =>
     nodePriority(right.node) - nodePriority(left.node)
+    || serialFirst(right) - serialFirst(left)
     || rankOf(right) - rankOf(left)
     || orderOf(left) - orderOf(right)
 }
@@ -828,25 +737,12 @@ function nestedRunnerBudgetKeys(command: WorkCommand): readonly string[] {
   const isBunRun = FS.basename(command.command) === 'bun' && command.args[0] === 'run'
   const runner = FS.basename(isBunRun ? command.args[1] ?? '' : command.command).replace(/\.ts$/, '')
   const subcommand = isBunRun ? command.args[2] : command.args[0]
-  if (subcommand !== 'test') {
-    return []
-  }
-  if (runner === 'tao') {
-    return [BUDGET_ENV_KEYS.taoTest]
-  }
-  return runner === 'dev' ? [BUDGET_ENV_KEYS.devTest] : []
+  return subcommand === 'test' && runner === 'tao' ? [BUDGET_ENV_KEYS.taoTest] : []
 }
 
-/** resolveCapacity resolves the worker width of a run: `--jobs`, then the env budget, then CPUs. */
+/** resolveCapacity resolves the worker width of a run: `--jobs`, then the whole machine. */
 function resolveCapacity(requestedJobs: number | undefined): number {
-  if (requestedJobs !== undefined) {
-    return requestedJobs
-  }
-  const envJobs = Number(Platform.runtimeProcess.env[BUDGET_ENV_KEYS.devTest] ?? '')
-  if (Number.isInteger(envJobs) && envJobs > 0) {
-    return envJobs
-  }
-  return Platform.cpuCount()
+  return requestedJobs ?? Platform.cpuCount()
 }
 
 function watchProcessInterrupt(interrupt: () => void): () => void {
@@ -854,11 +750,24 @@ function watchProcessInterrupt(interrupt: () => void): () => void {
 }
 
 function nodeCost(node: WorkNode | undefined): number {
-  return Math.max(1, node?.cost ?? 1)
+  // A serial node occupies one core by definition, so its width is one whatever else it declares.
+  return node?.serial === true ? 1 : Math.max(1, node?.cost ?? 1)
 }
 
 function nodePriority(node: WorkNode): number {
   return node.priority ?? 0
+}
+
+/** addWait folds one slice of waiting into the node's per-reason totals, longest reason first. */
+function addWait(state: WorkState, reason: Pick<WorkWait, 'detail' | 'kind'>, sliceMs: number): void {
+  const waits = [...state.waits ?? []]
+  const existing = waits.find(wait => wait.kind === reason.kind && wait.detail === reason.detail)
+  if (existing === undefined) {
+    waits.push({ ...reason, ms: sliceMs })
+  } else {
+    existing.ms += sliceMs
+  }
+  state.waits = waits.toSorted((left, right) => right.ms - left.ms)
 }
 
 function appendOutput(state: WorkState, output: string): void {
@@ -891,5 +800,4 @@ export const WorkGraph = {
   exitCodeFor,
   nodeLabel,
   run,
-  signalTrackedProcesses,
 } as const

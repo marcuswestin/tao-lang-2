@@ -8,6 +8,10 @@ language target and the program that reaches it â€” first MVP, then Revolution â
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
+The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
+agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
+judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
+
 ## Ro STACK
 
 - [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
@@ -17,6 +21,11 @@ app feature and Tao test proves each capability).
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in
     `Docs/Roadmap/Developer environment upgrades.md`.
+- [ ] Decide how parallel agents share one machine.
+  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
+    wall time and starved suites past their hang guards. What to share, what to serialize, what is
+    duplicated per worktree for no reason, and where a single orchestrator does and does not help
+    live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
 ## Documentation cleanup
 
@@ -36,6 +45,21 @@ neither blocks a tranche.
     an authoritative map of what every document is for. An audit produced concrete per-file
     dispositions, but it predates the tranche 4 documentation edits, so re-verify each finding
     against the current files before acting on it.
+
+## Subagent delegation
+
+How agents in this repository delegate, and at which model tier. The guidance, the profiles, the
+three harnesses' defaults, and the fan-out and second-opinion procedures have landed;
+`Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns what is left and the
+calibration period that ends the ask-Ro clause.
+
+- [ ] Decide whether the two fan-outs get saved `Workflow` scripts. The plan states the case against
+      shipping them unasked: one harness only, unprovable without a supervised run, and a fan-out at
+      September's scale is the machine-contention problem rather than a use of it.
+- [ ] Benchmark a few representative tasks with and without delegation, once load-aware admission
+      lands and the machine is quiet enough for the measurement to mean anything.
+- [ ] End calibration when the delegation log says the routing table is right, then delete the
+      ask-Ro clause and the three logging hooks.
 
 ## The Tao Revolution program
 

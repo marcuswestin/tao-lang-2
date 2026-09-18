@@ -143,6 +143,25 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       })()`,
         { timeoutMs: 30_000 },
       )
+      // The agent panel opens as a floating window over the workbench, covering the inspector and
+      // the lower half of every divider. Minimize it once, as anyone about to work in the editor
+      // would, so the rest of the journey reaches the workbench rather than the panel. It stays
+      // minimized across the reloads below, which is why this is done once.
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
+          instanceof HTMLButtonElement`,
+        { timeoutMs: 30_000 },
+      )
+      if (
+        await browser.evaluate<boolean>(
+          `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') !== 'true'`,
+        )
+      ) {
+        await browser.click('.studio-agent-collapse')
+      }
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
+      )
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
@@ -222,29 +241,40 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
         ),
       ).toBe(designPreviewWide)
+      // Both dividers are dragged in the workbench layout, which is the only one that mounts them:
+      // the Run preset hands the whole window to the preview. A divider runs the full height of the
+      // body and the floating agent panel covers its lower half, so each is grabbed near its top,
+      // where it is exposed and where a person reaching for it would take hold.
+      const dividerGrip = { x: 2, y: 24 }
+      const initialLeft = await dividerSize(browser, 'left')
+      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 }, { offset: dividerGrip })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
+          initialLeft + 48
+        }`,
+      )
+      // Design mode derives the canvas width from whatever the rest of the workbench leaves, so
+      // widening the file tree just narrowed it. Read it again instead of predicting it.
+      const initialPreview = await dividerSize(browser, 'preview')
+      // The preview is the right-hand pane, so moving its left divider left increases its width.
+      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 }, { offset: dividerGrip })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
+          initialPreview + 40
+        }`,
+      )
+      await browser.captureScreenshot('studio-resized-workbench')
+
       await browser.click('[data-preset="run"]')
       await browser.waitFor(
         `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'run'`,
       )
-
-      const initialPaneSizes = await browser.evaluate<{ left: number; preview: number }>(`(() => ({
-        left: Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')),
-        preview: Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')),
-      }))()`)
-      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 })
+      // Run leaves nothing but the preview, so the rest of the journey — editing, the lens, the
+      // canvas — needs the workbench back.
+      await browser.click('[data-preset="design"]')
       await browser.waitFor(
-        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
-          initialPaneSizes.left + 48
-        }`,
+        `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'design'`,
       )
-      // The preview is the right-hand pane, so moving its left divider left increases its width.
-      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 })
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
-          initialPaneSizes.preview + 40
-        }`,
-      )
-      await browser.captureScreenshot('studio-resized-workbench')
 
       await browser.pressShortcut('k')
       await browser.waitFor(
@@ -278,29 +308,37 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
         .toContain('Text("First typed")')
 
+      // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
+      // reveal the one region involved and leave every other fold alone, and neither changes the
+      // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
+      // lands on its edge opens it rather than sitting in text the person cannot see.
+      const revealedHead = 'app Smoke { view MainView }'
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      const outlineFolds = await foldedRegions(browser)
+      Expect(outlineFolds).toBeGreaterThan(1)
+      await browser.click('.cm-line:has(.cm-lens-glyph)')
       await browser.pressKey('End')
       await browser.pressKey('Backspace')
-      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("Second")')
+        .toContain(revealedHead)
       await browser.pressShortcut('s')
       await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       await browser.click('[data-testid="studio-lens-refold"]')
-      await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
-      await browser.clickAtOffset('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds}`)
+      await browser.click('.cm-line:has(.cm-lens-glyph)')
       await browser.pressKey('End')
       await browser.pressKey('ArrowLeft')
-      await browser.pressKey('Delete')
-      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      await browser.waitFor(`document.querySelectorAll('.cm-lens-glyph').length === ${outlineFolds - 1}`)
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
-        .toContain('Text("Second")')
-      await browser.pressShortcut('s')
+        .toContain(revealedHead)
       await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
+      // Back to the whole file: the steps after this one read and edit source the outline hides.
+      await browser.click('[data-testid="studio-lens-preset-all"]')
+      await browser.waitFor("document.querySelector('.cm-lens-glyph') === null")
 
       const selectedText = 'Text("First typed")'
       const currentFile = await session.readFile('Smoke.tao')
@@ -315,14 +353,21 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       if (selectedInspection.owner === undefined) {
         Errors.throwUnexpected('The smoke selection must have an owning view render.')
       }
+      // The preview republishes after the save above. Install the identity only once it has settled,
+      // or the reload that follows drops the global the measurement reads.
+      await waitForPreviewSourceIdentity(browser, preview.url)
+      // The preview's own handler reads this global, so it has to be written in the page's world
+      // rather than the isolated one every other probe uses.
       await browser.evaluateInFrame(
         preview.url,
         `window.taoSmokeOwnerRenderId = ${JSON.stringify(selectedInspection.owner.renderId)}`,
+        { world: 'page' },
       )
       await clickPreviewAndWaitForState(browser, preview.url, '#measure-owner', 'measurement sent')
       const measuredIdentity = await browser.evaluateInFrame<Record<string, unknown>>(
         preview.url,
         `window.taoSmokeMeasuredIdentity`,
+        { world: 'page' },
       )
       const measured = await Time.pollUntil(async () => {
         const inspection = await session.inspectRender({
@@ -363,19 +408,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         )
       }
 
-      await browser.click('.studio-canvas-focus')
-      await browser.waitFor(
-        `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
-      )
-      await browser.waitFor(
-        `(() => {
-        const viewport = document.querySelector('.studio-preview-cell-viewport')
-        return viewport instanceof HTMLElement
-          && viewport.getBoundingClientRect().width === 242
-          && viewport.getBoundingClientRect().height === 122
-      })()`,
-        { timeoutMs: 30_000 },
-      )
+      // Focus frames the group's cells at the measured size of the selected element's view. The
+      // measurement reaches the client with the preview's inspection, so leaving and re-entering is
+      // what a person does when the frame has not arrived yet.
+      await focusCanvasUntilFramed(browser)
       await browser.click('[data-tao-studio-canvas-back="true"]')
       await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
       await browser.waitFor(
@@ -443,8 +479,21 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       const drawingBrowser = browser
       const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
       const firstDraw = { x: 64, y: 24 }
-      await expectPointerReachesBoard(drawingBrowser, createdSketchId, boardGenerationBeforeDraw, firstDraw)
-      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, { steps: 8 })
+      // Draw the free rectangle against the board's right edge. An incremental Snap can only fold a
+      // new rectangle into an existing flow from one end of it, so a rectangle drawn in the middle
+      // of the board would leave the two groups interleaved and Snap would rightly refuse.
+      const firstDrawOrigin = { x: 288, y: 40 }
+      await expectPointerReachesBoard(
+        drawingBrowser,
+        createdSketchId,
+        boardGenerationBeforeDraw,
+        firstDraw,
+        firstDrawOrigin,
+      )
+      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
+        offset: firstDrawOrigin,
+        steps: 8,
+      })
       const persistedCatalog = await waitForSketchRect(
         sketchCatalogPath,
         createdCatalog.revision,
@@ -482,11 +531,12 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(reloadedRect).toEqual({ height: 24, width: 64 })
 
       // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
+      // Left of the free rectangle, so the projection's children run existing-then-new in one step.
       const playlistRects = [
         { height: 52, width: 52, x: 12, y: 8 },
         { height: 20, width: 100, x: 76, y: 8 },
         { height: 20, width: 100, x: 76, y: 40 },
-        { height: 20, width: 36, x: 300, y: 28 },
+        { height: 20, width: 36, x: 188, y: 28 },
       ] as const
       let drawCatalog = persistedCatalog
       const playlistRectIds: string[] = []
@@ -517,8 +567,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
             ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const snappedCatalog = await waitForSketchCatalog(
+      const snappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > drawCatalog.revision
@@ -559,8 +611,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )
       const incrementalSnapBrowser = browser
       const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const incrementallySnappedCatalog = await waitForSketchCatalog(
+      const incrementallySnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > reloadedSnapCatalog.revision
@@ -576,8 +630,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const incrementalUndoCatalog = await waitForSketchCatalog(
+      const incrementalUndoCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementallySnappedCatalog.revision
@@ -599,8 +655,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
         option.selected = true
       })()`)
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const unsnappedCatalog = await waitForSketchCatalog(
+      const unsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementalUndoCatalog.revision
@@ -618,13 +676,15 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const fullyUnsnappedCatalog = await waitForSketchCatalog(
+      const fullyUnsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
-        catalog =>
-          catalog.revision > unsnappedCatalog.revision
-          && catalog.sketches[0]?.rects.length === 5
-          && catalog.sketches[0]?.snapped.length === 0,
+        // The catalog's revision does not advance on every write (see the revision race recorded in
+        // the remediation roadmap), so this waits on the state itself. Nothing but this press can
+        // produce it: the step above leaves three rectangles snapped.
+        catalog => catalog.sketches[0]?.rects.length === 5 && catalog.sketches[0]?.snapped.length === 0,
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
 
@@ -707,8 +767,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const undoneCatalog = await waitForSketchCatalog(
+      const undoneCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > overlapAppliedCatalog.revision
@@ -1141,11 +1203,13 @@ async function markSketchBoard(browser: StudioCdp, sketchId: string): Promise<st
  * The action boundary for a real pointer gesture: the board's centre must be inside the viewport
  * and hit-test to the board itself, otherwise Chrome would deliver the drag to whatever covers it.
  */
+/** `origin` is where in the board the gesture starts, when it is not the board's centre. */
 async function expectPointerReachesBoard(
   browser: StudioCdp,
   sketchId: string,
   generation: string,
   delta: Readonly<{ x: number; y: number }>,
+  origin?: Readonly<{ x: number; y: number }>,
 ): Promise<void> {
   await browser.evaluate(`(() => {
     const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
@@ -1157,7 +1221,9 @@ async function expectPointerReachesBoard(
   const bounds = diagnostics.bounds
   const start = bounds === undefined
     ? undefined
-    : { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : origin === undefined
+    ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : { x: bounds.left + origin.x, y: bounds.top + origin.y }
   const inView = (point: Readonly<{ x: number; y: number }>): boolean =>
     point.x >= 0 && point.y >= 0 && point.x < diagnostics.viewport.width && point.y < diagnostics.viewport.height
   const reachable = start !== undefined
@@ -1227,6 +1293,68 @@ async function sketchBoardDiagnostics(
       },
     }
   })()`)
+}
+
+/**
+ * focusCanvasUntilFramed enters canvas focus and waits for the group's cells to take the focused
+ * view's measured size, re-entering if the measurement had not reached the client yet.
+ */
+async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
+  const framed = `(() => {
+    const viewport = document.querySelector('.studio-preview-cell-viewport')
+    return viewport instanceof HTMLElement
+      && viewport.getBoundingClientRect().width === 242
+      && viewport.getBoundingClientRect().height === 122
+  })()`
+  const deadline = Date.now() + 40_000
+  while (Date.now() < deadline) {
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(
+      `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
+    )
+    const attemptDeadline = Math.min(deadline, Date.now() + 10_000)
+    while (Date.now() < attemptDeadline) {
+      if (await browser.evaluate<boolean>(framed)) {
+        return
+      }
+      await Time.sleep(100)
+    }
+    // Leave, so the next iteration is a fresh entry rather than a second click that would leave.
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
+  }
+  Errors.throwHostEnvironment('Canvas focus never framed the selected view at its measured size.')
+}
+
+/**
+ * A sketch control clicked while a compile is replacing the board reaches an element on its way out
+ * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
+ * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
+ * and given a quiet moment instead, and pressed once when it is still the board that was marked.
+ */
+async function clickSketchWhenSettled(
+  browser: StudioCdp,
+  sketchId: string,
+  selector: string,
+  path: string,
+  predicate: (catalog: SmokeSketchCatalog) => boolean,
+  diagnose?: () => Promise<unknown>,
+): Promise<SmokeSketchCatalog> {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    const generation = await markSketchBoard(browser, sketchId)
+    await Time.sleep(300)
+    const settled = await browser.evaluate<boolean>(`(() => {
+      const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+      return board instanceof HTMLElement
+        && board.dataset.taoStudioSmokeGeneration === ${JSON.stringify(generation)}
+    })()`)
+    if (settled) {
+      await browser.click(selector)
+      return await waitForSketchCatalog(path, predicate, diagnose)
+    }
+  }
+  Errors.throwHostEnvironment(`The Studio sketch board never settled long enough to press ${selector}`)
 }
 
 async function waitForSketchCatalog(
@@ -1455,6 +1583,18 @@ async function clickPreviewUntilSource(
     `Timed out applying the Studio preview interaction; last status=${JSON.stringify(lastStatus)}; `
       + `last source:\n${lastSource}`,
   )
+}
+
+/** dividerSize reads one pane divider's reported size, which is the pane width the shell applied. */
+async function dividerSize(browser: StudioCdp, pane: string): Promise<number> {
+  return await browser.evaluate<number>(
+    `Number(document.querySelector('[data-divider="${pane}"]')?.getAttribute('aria-valuenow'))`,
+  )
+}
+
+/** foldedRegions counts the syntax regions the lens currently collapses behind a glyph. */
+async function foldedRegions(browser: StudioCdp): Promise<number> {
+  return await browser.evaluate<number>("document.querySelectorAll('.cm-lens-glyph').length")
 }
 
 async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: string): Promise<void> {

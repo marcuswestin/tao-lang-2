@@ -64,6 +64,12 @@ export function mountStudioCanvasFocus(
       button.hidden = false
       button.textContent = 'Back to app'
       button.dataset['state'] = 'focused'
+      // Focus can be entered before the owning cell has reported its rectangle, and the first
+      // reframe then has no size to apply. Every later inspection retries it, so a focused view is
+      // never left at the device size once a measurement exists.
+      if (framedViewports.size === 0 && deps.ownerFrame(focused) !== undefined) {
+        lane.enqueue(async () => await frameCells({ id: focused, name: focused }))
+      }
       return
     }
     delete button.dataset['state']
@@ -83,7 +89,8 @@ export function mountStudioCanvasFocus(
   async function frameCells(candidate: Readonly<{ id: string; name: string }>): Promise<void> {
     const rect = deps.ownerFrame(candidate.id)
     const row = group(candidate.id)
-    if (rect === undefined || row === undefined || rect.width < 1 || rect.height < 1) {
+    // Already framed: a retry queued while the first attempt was still in flight has nothing to do.
+    if (framedViewports.size > 0 || rect === undefined || row === undefined || rect.width < 1 || rect.height < 1) {
       return
     }
     const viewport = { height: Math.ceil(rect.height), width: Math.ceil(rect.width) }
