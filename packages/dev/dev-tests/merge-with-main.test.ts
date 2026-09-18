@@ -287,9 +287,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return JSON.parse(files.get(path)!) as ValueT
     },
-    readText: async path => path === squashMessagePath
-      ? 'Squashed commit of the following:\n\ncommit abc\n\n    Add example\n'
-      : files.get(path)!,
+    readText: async path =>
+      path === squashMessagePath
+        ? 'Squashed commit of the following:\n\ncommit abc\n\n    Add example\n'
+        : files.get(path)!,
     remove: async path => {
       files.delete(path)
       snapshots.delete(path)
@@ -496,7 +497,19 @@ Describe('merge-with-main', () => {
     let released = false
     fake.dependencies.acquireLease = async options => {
       acquisitions.push(options.name)
-      return { owner: { command: options.command, id: 'x', name: options.name, pid: 1, repositoryRoot: options.repositoryRoot, startedAt: '2026-09-03T14:00:00.000Z' }, release: async () => { released = true } }
+      return {
+        owner: {
+          command: options.command,
+          id: 'x',
+          name: options.name,
+          pid: 1,
+          repositoryRoot: options.repositoryRoot,
+          startedAt: '2026-09-03T14:00:00.000Z',
+        },
+        release: async () => {
+          released = true
+        },
+      }
     }
 
     await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
@@ -521,7 +534,17 @@ Describe('merge-with-main', () => {
       if (attempts === 1) {
         throw new MachineResourceBusyError(owner)
       }
-      return { owner: { command: options.command, id: 'mine', name: options.name, pid: 1, repositoryRoot: options.repositoryRoot, startedAt: '2026-09-03T14:15:00.000Z' }, release: async () => {} }
+      return {
+        owner: {
+          command: options.command,
+          id: 'mine',
+          name: options.name,
+          pid: 1,
+          repositoryRoot: options.repositoryRoot,
+          startedAt: '2026-09-03T14:15:00.000Z',
+        },
+        release: async () => {},
+      }
     }
 
     const outcome = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
@@ -568,7 +591,8 @@ Describe('merge-with-main', () => {
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(outcome.mode).toBe('executed')
     Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
-    Expect(operations.some(operation => operation.startsWith('git merge --ff-only ') && operation.includes('commit0'))).toBe(true)
+    Expect(operations.some(operation => operation.startsWith('git merge --ff-only ') && operation.includes('commit0')))
+      .toBe(true)
     Expect(fake.calls.find(call => call.args[0] === 'merge' && call.args[1] === '--ff-only')?.cwd).toBe('/repo-main')
     Expect(fake.repository.mainHead).toBe('commit00000000000000000000000000000000000')
     Expect(fake.lines.some(line => line.startsWith('WARN') && line.includes('main'))).toBe(false)
@@ -595,9 +619,11 @@ Describe('merge-with-main', () => {
     }, dirty.dependencies)
     Expect(dirtyOutcome.mode).toBe('executed')
     Expect(dirty.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--ff-only')).toBe(false)
-    Expect(dirty.lines.some(line =>
-      line.startsWith('WARN') && line.includes('not clean') && line.includes('git -C /repo-main merge --ff-only')
-    )).toBe(true)
+    Expect(
+      dirty.lines.some(line =>
+        line.startsWith('WARN') && line.includes('not clean') && line.includes('git -C /repo-main merge --ff-only')
+      ),
+    ).toBe(true)
     Expect(dirty.repository.mainHead).toBe('main000000000000000000000000000000000000')
 
     const refused = fakeDependencies({ failMainFastForward: true, mainWorktreePath: '/repo-main' })
@@ -848,28 +874,31 @@ Describe('merge-with-main', () => {
     }
   })
 
-  Test('integrates a main update discovered after verification and restarts by rebuilding the integration tree', async () => {
-    const originalMain = 'main000000000000000000000000000000000000'
-    const movedMain = 'movedmain000000000000000000000000000000000'
-    const fake = fakeDependencies({
-      ancestorExitCodes: [0, 0, 1],
-      mainHead: originalMain,
-      remoteMainHead: originalMain,
-      remoteMainSequence: [originalMain, movedMain, movedMain],
-    })
+  Test(
+    'integrates a main update discovered after verification and restarts by rebuilding the integration tree',
+    async () => {
+      const originalMain = 'main000000000000000000000000000000000000'
+      const movedMain = 'movedmain000000000000000000000000000000000'
+      const fake = fakeDependencies({
+        ancestorExitCodes: [0, 0, 1],
+        mainHead: originalMain,
+        remoteMainHead: originalMain,
+        remoteMainSequence: [originalMain, movedMain, movedMain],
+      })
 
-    await MergeWithMainCommand.run({
-      repositoryRoot: fake.repository.featureRoot,
-    }, fake.dependencies)
+      await MergeWithMainCommand.run({
+        repositoryRoot: fake.repository.featureRoot,
+      }, fake.dependencies)
 
-    const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    Expect(operations.filter(operation => operation === 'just full-verify')).toHaveLength(2)
-    Expect(operations.filter(operation => operation.startsWith('git worktree add --detach'))).toHaveLength(2)
-    Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
-      operations.indexOf('just full-verify'),
-    )
-    Expect(fake.lines.some(line => line.includes('restarting verification (pass 2/3)'))).toBe(true)
-  })
+      const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+      Expect(operations.filter(operation => operation === 'just full-verify')).toHaveLength(2)
+      Expect(operations.filter(operation => operation.startsWith('git worktree add --detach'))).toHaveLength(2)
+      Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
+        operations.indexOf('just full-verify'),
+      )
+      Expect(fake.lines.some(line => line.includes('restarting verification (pass 2/3)'))).toBe(true)
+    },
+  )
 
   Test('stops after three verification restarts when remote main never stabilizes', async () => {
     const originalMain = 'main000000000000000000000000000000000000'

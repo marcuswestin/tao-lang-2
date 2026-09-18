@@ -272,7 +272,9 @@ export async function inspectMergePreflight(
   }
   if (mainHead !== remoteMainHead) {
     Errors.throwUserInput(
-      `Local main (${shortSha(mainHead)}) is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
+      `Local main (${shortSha(mainHead)}) is not at ${REMOTE}/main (${
+        shortSha(remoteMainHead)
+      }); refresh it before merging.`,
     )
   }
   // A remote feature branch left behind by earlier commits is the ordinary case, not an obstacle:
@@ -422,7 +424,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? ['PLAN  Ask once, defaulting to No, whether to merge with nothing verified at all.']
       : []),
     'PLAN  Create a disposable integration worktree from origin/main and squash the feature branch onto it.',
-    "PLAN  Prove the staged squash tree equals the feature tree.",
+    'PLAN  Prove the staged squash tree equals the feature tree.',
     fullVerifySkip === undefined
       ? 'PLAN  Run just full-verify on the integration worktree, once.'
       : stagedVerifySkip === undefined
@@ -430,12 +432,12 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
         + 'integration worktree instead.'
       : `PLAN  Skip all verification of the integration worktree because ${stagedVerifySkip} was passed.`,
     'PLAN  Fetch and, if origin/main moved during verification, rebuild and re-verify the integration worktree '
-      + '(up to 3 attempts).',
+    + '(up to 3 attempts).',
     "PLAN  Commit the staged squash with Git's generated squash appendix.",
     'PLAN  Push the integration worktree onto main, archive the remote feature branch, detach its clean worktree, '
-      + 'delete its local branch, and prune.',
+    + 'delete its local branch, and prune.',
     'PLAN  Move local main to the pushed commit if some worktree has it checked out and is clean, or if none '
-      + 'does; warn without failing otherwise.',
+    + 'does; warn without failing otherwise.',
     'PLAN  Remove the disposable integration worktree on every exit path, success or failure.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Land it with: ${command}`,
@@ -728,7 +730,7 @@ async function buildAndVerifyIntegrationTree(
   } else {
     writeLines(dependencies, [
       `WARN  Skipped all verification of integration tree ${shortSha(stagedTree)} because ${stagedVerifySkip} `
-        + 'was passed; nothing has verified these bytes.',
+      + 'was passed; nothing has verified these bytes.',
     ])
     await advanceSnapshot(snapshot, 'integration-verified', dependencies)
   }
