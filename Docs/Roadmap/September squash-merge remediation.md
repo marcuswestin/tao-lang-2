@@ -86,52 +86,32 @@ continues on `feat/september-remediation-continued`.
    first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
    `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
 
-### Second-audit backlog: verified against current code
+### Second-audit backlog: what was checked and closed
 
-The list below was written against an older `main` and is substantially stale: of the fourteen
-findings checked so far, thirteen are already fixed or do not describe the code, and one is a
-judgment for Ro rather than a defect. Check each remaining item before implementing anything.
+The list below was written against an older `main`. Fourteen of its findings have been checked
+against current code and are closed; they have been removed from the list itself so what remains is
+live work only. Closed, with what was checked:
 
-**Refuted — the code does not do what the finding describes**
-
-- `ship-model.ts` build numbers: `nextBuildNumber` takes the maximum build number already used and
-  increments it. There is no minute resolution and nothing to collide.
-- `ship-fingerprints.ts` schema compatibility: `canonicalEntitySchema` builds a sorted structure of
-  field names, traits, indexes, orders and visibility from the AST. No CST text is hashed, so a
-  formatting-only edit cannot change the fingerprint.
-- `data-stores.ts` store names: a binding is `_TaoDataCatalog_<group>`, one separator and one
-  variable segment, which cannot collide for two distinct group names.
-- `commands-validator.ts` shortcut validation: it rejects a missing key, a repeated modifier, an
-  unknown modifier, a platform key named instead of `primary`, and a shortcut the interaction
-  reducer owns, each with its own diagnostic.
-- `Text.ts` JSONC stripping: strings, escapes, line comments, block comments and trailing commas are
-  all handled, and an unterminated block comment is deliberately preserved so `JSON.parse` rejects
-  it rather than accepting the valid prefix. An unterminated string is emitted verbatim for the same
-  reason.
-- `StudioCanvasViewport.ts` listeners: every listener it installs, including the two on `document`,
-  is removed in `dispose()`, which is idempotent.
-- `TestSelection.ts` root dependencies: `bun.lock`, `package.json` and every `devenv.*` file are in
-  `EVERYTHING_PATHS`, so a change to one widens the run to the whole repository.
-- `StudioProtocol.ts` parameterised routes: every parameter is substituted through
-  `encodeURIComponent`, so a value containing `/` cannot cross a segment boundary.
-- `test-run-root.ts` cleanup: both name patterns are anchored and the deletion guard compares the
-  resolved generated root rather than matching directory names.
-- `StudioSketchCatalog.ts` revision: the rewind is deliberate and tested; see the entry below.
-
-**Needs Ro, not a fix**
-
-- `ship-executor.ts` export compliance: `ios` is emitted as `{}`, so nothing is declared at all and
-  App Store Connect asks at submission; the type also admits only `false`, so an app that does use
-  non-exempt encryption cannot state it. What Tao should declare on an author's behalf is a legal
-  question about their app, not a defect to patch. The finding's own claim — that `false` is always
-  declared — does not match the code.
-
-**Acknowledged, deliberately unchanged**
-
-- `DeadExports.ts` comments and strings: a reference inside a comment or string does keep an export
-  looking alive, but that is the safe direction — it hides dead code rather than proposing the
-  removal of live code. Stripping before the scan trades a false negative for a false positive in a
-  tool whose output is a deletion. Revisit only with a specific export it is proven to hide.
+- `ship-model.ts` build numbers, `ship-fingerprints.ts` schema hashing, `data-stores.ts` store
+  names, `commands-validator.ts` shortcut validation, `Text.ts` JSONC stripping,
+  `StudioCanvasViewport.ts` listener disposal, `TestSelection.ts` root dependencies,
+  `StudioProtocol.ts` route parameters, and `test-run-root.ts` cleanup all describe code that does
+  not exist: each is already correct, most of them explicitly so with a comment saying why.
+- `StudioSketchCatalog.ts` revision: the rewind on rollback is deliberate and tested. A transaction
+  that did nothing must not conflict every client holding the revision it started from, so the
+  revision is an optimistic-concurrency token rather than a monotonic version. `restore` says so,
+  and the reader that misused it was fixed.
+- `ship-executor.ts` export compliance: **decided, no change.** Tao emits `ios: {}` and declares no
+  answer, so App Store Connect asks the author at submission. That is right: an export-compliance
+  declaration is a legal statement about someone else's app, and Tao must not make it on their
+  behalf. The type admitting only `false` is a latent limitation, not a defect; widen it when an
+  authoring surface exists to set it, not before. The finding's claim that `false` is always
+  declared does not match the code.
+- `DeadExports.ts` comments and strings: **fixed, in the stricter direction.** Comment bodies and
+  single- and double-quoted string bodies are masked before the reference scan, so a member named
+  only in prose no longer keeps itself out of the report. Template literals are left intact because
+  `${Alias.member}` is a real reference. The scan now reports 35 unused exports; removing any of
+  them stays a reviewed change, as the gate says.
 
 ### Second-audit backlog: earlier triage detail
 
@@ -193,19 +173,15 @@ follow-up branches were for.
 A separate, earlier P0–P3 audit of the same 44 merges (different reporter, same commit hashes)
 overlaps heavily with the 188-finding list above, but is not identical to it. Cross-checking its
 items against the 183-row checklist and current `main` found a subset with **no matching tracked
-row and no evident fix**. This list is unverified against live code — each item needs a quick
-repro check before being trusted or dismissed — and is recorded here only so it is not lost when
-this worktree is removed.
+row and no evident fix**. Fourteen of those have since been checked and closed, and are recorded
+under **what was checked and closed** above rather than here; twelve of the fourteen turned out to
+describe code that does not exist, so read what remains as unverified rather than as known bugs.
+Check each one against live code before implementing anything.
 
 **Shipping**
 
-- `ship-executor.ts` — `usesNonExemptEncryption` is always declared `false`, regardless of
-  native/package dependencies.
 - `ship-command.ts` — concurrent `tao ship` runs derive repeated writes from a startup snapshot and
   can overwrite each other's lock checkpoints.
-- `ship-model.ts` — build numbers are minute-resolution and collide within one minute.
-- `ship-fingerprints.ts` — schema-compatibility hashing uses raw CST slices, so formatting-only
-  entity edits appear incompatible.
 - `app-store-connect-client.ts` — App Store review submission always creates a new submission
   rather than discovering and resuming a draft.
 
@@ -229,9 +205,7 @@ this worktree is removed.
   registry.
 - `TR-interaction-attention.ts` — palette Arrow/Enter navigation goes through outline navigation
   instead of palette selection.
-- `commands-validator.ts` — shortcut validation accepts reducer-owned or malformed keys.
 - `ActionsCompiler.ts` — debugger step identities collide across declarations and branches.
-- `data-stores.ts` — datasource store-name composition collides on underscores.
 
 **CloudKit** (beyond the six findings already fixed for this area)
 
@@ -245,16 +219,8 @@ this worktree is removed.
 **Editor, tooling, and packaging**
 
 - `CodeEditorLens.ts` — fold-peek controls are mouse-only (no keyboard/button semantics).
-- `StudioCanvasViewport.ts` — canvas listeners installed on the host/document are never disposed.
-- `test-run-root.ts` — recursive run-root cleanup matches names by a non-anchored, one-character
-  suffix regex before deleting.
-- `DeadExports.ts` — dead-export analysis treats block comments and strings as live bindings.
 - `Packages.ts` — external/multi-root documents inherit the first workspace's package namespace,
   and symlinks can bypass package/project boundaries.
-- `StudioSketchCatalog.ts` — catalog revision read/check/rename races across processes (a
-  different bug than the tracked ViewN-counter collision in the same file).
-- `TestSelection.ts` — a root `package.json`/`bun.lock`/`devenv.*` change is not treated as
-  repository-wide.
 - `repo-lint.ts` — the raw-Error rule's `packages/runtime` gap is tracked and fixed, but the
   broader claim (Apps, CJS/JS, whole-file allowlist leakage) may still apply.
 - `tao-references.ts` — design-color resolution can select a file-private sibling declaration,
@@ -265,14 +231,11 @@ this worktree is removed.
 
 **Docs and fixtures**
 
-- `StudioProtocol.ts` — parameterized Studio routes can cross segment boundaries.
 - `Docs/Spec/Tao Studio.md` — still contradicts the implemented binding/wrap actions.
 - `StudioPreviewBridge.ts` — preview-capture errors lose their taxonomy category across the
   protocol.
 - `StudioEditorSurface.tsx` — a rejected syntax-analysis promise is cached permanently until the
   text changes.
-- `packages/shared/shared-src/core/Text.ts` — JSONC stripping can turn malformed input into valid
-  JSON.
 - `Docs/Roadmap/Freehand UI sketching/Plan - Canvas-first design mode.md` — still labels landed
   work "proposal / no code changed" in places.
 - `Apps/HNReader/.tao-project/studio/sketches.jsonc` — commits checkout-specific absolute render
