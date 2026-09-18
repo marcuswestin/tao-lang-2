@@ -1539,7 +1539,15 @@ an entry here may link one when the developer workflow is also affected.
   owned tree and the teardown should never reach it. That leaves the harness side — `startTree`
   learns the grandchild's PID by parsing `echo $!` from the shell's output, and `isAlive` matches a
   recorded start identity, so either a PID read before its line is complete or an identity that does
-  not match under process churn would fail exactly this way while nothing is actually wrong.
+  not match under process churn would fail exactly this way while nothing is actually wrong. The
+  parse candidate is now ruled out: `startTree` already waits for a complete `^(\d+)\n` line and
+  then for both PIDs to carry identities before returning. That leaves the identity match, where
+  `sameProcess` compares the recorded `command` as well as `startedAt`. One attempt to exploit that
+  — waiting for the grandchild's identity to report an exec'd `sleep` before recording it — was
+  tried and disproved: the predicate never became true and all twenty-five runs timed out in that
+  wait, so whatever `ProcessTree.identities` reports as the `command` of a backgrounded `sleep 300`,
+  it does not contain `sleep`. That change was reverted, not kept. Establishing what the field
+  actually holds for a forked-then-exec'd child is the next step.
 - **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
   from a branch that does not touch `packages/shared/`.
 - **Proposed change:** Establish which of the two candidates it is before changing anything. The
