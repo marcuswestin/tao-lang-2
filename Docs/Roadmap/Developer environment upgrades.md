@@ -1510,16 +1510,20 @@ an entry here may link one when the developer workflow is also affected.
 - **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
   an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
   the runner does the right thing — it adds a contention warning and declines to teach the timings store
-  from measurements taken under load — and those assertions fail. `verify --complete` therefore cannot go
-  green on a machine that several agents share, which is this repository's normal condition, so the merge
-  gate is unreachable for reasons unrelated to the branch under test.
+  from measurements taken under load — and those assertions fail. Above roughly triple the CPU count in
+  load average, `verify --complete` and `full-verify` therefore go red for reasons unrelated to the branch
+  under test, and the merge gate is unreachable until the host quiets. This is intermittent rather than
+  constant: the same branch that failed these four tests twice landed through a clean 42-gate
+  `full-verify` once the load fell.
 - **Evidence:** On 2026-09-18, `bun test packages/dev/dev-tests` failed four tests on a tree whose only
   difference from `main` was one validator diagnostic and one ledger entry, neither under `packages/dev`
   or `packages/shared`. `gate-runner.test.ts:157` received one extra warning,
   `machine contention: no other Tao lane registered; load peaked at 75.0 on 18 CPUs`; `gate-runner.test.ts:299`
   and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
-  All four pass when the file is run alone on an idle machine. Across four `verify --complete` runs the
-  failure set tracked host load, shrinking from four to one as the load average fell from 86.5 to 18.8.
+  All four pass when the file is run alone on an idle machine. Across five runs the failure set tracked
+  host load on 18 CPUs: four failures at 86.5 and at 75.0, one at 18.8, and none at 25.6, where a full
+  42-gate `full-verify` passed with only two Tao lanes registered. Reproducing this needs a load average
+  near 75, not merely a busy machine.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
@@ -1529,6 +1533,6 @@ an entry here may link one when the developer workflow is also affected.
   force the teach-the-store path rather than depend on the host being quiet.
 - **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
   about the tests' assumptions, not that behavior.
-- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass on a
-  host under sustained load from other worktrees, and a genuine timings-store regression still fails them.
+- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass at a
+  load average near 75 on 18 CPUs, and a genuine timings-store regression still fails them.
 - **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch.
