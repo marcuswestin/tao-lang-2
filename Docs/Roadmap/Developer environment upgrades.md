@@ -1520,3 +1520,28 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** Met: twenty consecutive isolated runs of the file passed on an unchanged tree.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
+
+### DEVENV-074 — Process-supervision survival assertions flake under load
+
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** Two tests in `packages/shared/shared-tests/process-supervision.test.ts` fail
+  intermittently on a loaded machine, and both are in `_test`, so they red `verify --complete` at
+  random. Together with the contention timeouts, a complete lane on a busy machine now needs several
+  attempts for reasons that have nothing to do with the branch under test.
+- **Evidence:** Eight isolated runs at load 17.85 on 18 CPUs gave one failure. The two assertions
+  are `isAlive(sibling.grandchild)` (`process-supervision.test.ts:107`) and
+  `isAlive(server.grandchild)` (`:123`); both assert that a backgrounded `sleep 300` grandchild is
+  still running just after its `/bin/sh` parent has been signalled and reaped. Both failed in the
+  same lane run. The mechanism is not established — a grandchild orphaned by its parent's exit
+  should survive, so the question is whether the reported PID is the one being probed by the time
+  the assertion runs.
+- **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
+  from a branch that does not touch `packages/shared/`.
+- **Proposed change:** Establish the mechanism before changing the assertions. The survival checks
+  are the point of both tests, so they should not simply be relaxed: the fix is either to make the
+  grandchild's identity unambiguous to `isAlive` under PID churn, or to wait for a positive signal
+  that the grandchild is running rather than inferring it from `echo $!`.
+- **Dependencies:** None.
+- **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
+- **Source:** 2026-09-18 subagent delegation branch, after merging main.
