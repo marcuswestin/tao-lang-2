@@ -43,7 +43,8 @@ is `private`. Nobody outside the repository can install Tao.
   version pin so a project selects the Tao it was written against.
 - Context: `packages/tao-cli`, `packages/runtime-toolchain` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
-- Waits on: nothing to start; code signing certificates and the tap repository come from Ro (`R2`).
+- Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
+  code signing certificates from `R8`, which owns where signing happens.
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 

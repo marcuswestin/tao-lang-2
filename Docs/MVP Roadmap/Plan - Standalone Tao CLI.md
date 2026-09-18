@@ -5,14 +5,16 @@ no code; it records what the toolchain actually reads at runtime, what was measu
 assumed, the recommended shape, what is still uncertain, the slice sequence, and the questions that
 are Ro's.
 
-Everything under **Findings** was verified on this machine on 2026-09-17 (macOS 27.0, arm64, Bun
-1.3.13 pinned) in a scratch directory under `.artifacts/`. Commands and numbers are reproduced
-verbatim so a later reader can tell measurement from opinion.
+Everything under **Findings** was verified on this machine on 2026-09-17 — macOS 27.0 (26A428),
+arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun is 1.3.13; F3
+explains why every other measurement was taken with an official Bun 1.4.2 instead. Commands and
+numbers are reproduced verbatim so a later reader can tell measurement from opinion.
 
 ## The problem, stated precisely
 
-- `tao` is a zsh wrapper whose one working line is `exec bun packages/tao-cli/cli-src/tao-cli.ts "$@"`, so it
-  needs this checkout, its devenv profile, and zsh.
+- `tao` is a zsh wrapper that execs `bun` on `packages/tao-cli/cli-src/tao-cli.ts`. It locates
+  itself with the zsh-only `${0:A:h}` expansion, so it needs this checkout, its devenv profile, and
+  zsh.
 - All twenty packages under `packages/` carry `"private": true`.
 - `tao dev` compiles into `packages/runtime-toolchain/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
@@ -141,23 +143,29 @@ are TypeScript values, not templates on disk.
 
 **Unpack — a child process has to resolve these.**
 
-- stdlib `@tao/**/*.tao`, 228 KB in 41 files. The Tao package resolver walks the root with
-  `FS.isDirectory` and `Repo.directoriesUnder`; there is no directory in `/$bunfs` to walk.
-- stdlib `@tao/**/*.ts` sidecars, in the same tree. **Metro** resolves them inside the user's
-  project.
+- stdlib `.tao` sources: 24 files, about 34 KB, under `packages/stdlib/@tao`. The Tao package
+  resolver walks that root with `FS.isDirectory` and `Repo.directoriesUnder`; there is no directory
+  in `/$bunfs` to walk.
+- stdlib sidecars in the same tree: 16 `.ts` and one `.tsx`
+  (`@tao/code-editor/CodeEditor.tsx` — a `**/*.ts` glob silently drops it). **Metro** resolves them
+  inside the user's project. The whole `@tao` tree is 228 KB.
 - `@tao/runtime` (`packages/runtime/TaoRuntime-src`, 1.3 MB). **Metro** resolves it, and so does the
   project's `tsconfig.json` through the `node_modules/@tao/runtime` link.
-- The Expo host files — `package.json`, `app.config.js`, `app-config.cjs`, `metro.config.cjs`,
-  `app.json`, `index.ts`, `plugins/`, `assets/`; 3.3 MB without `node_modules`. The **Expo CLI**,
-  **Metro**, and **Jest** all read them.
+- The Expo host files, about 2.1 MB without `node_modules`. `expo start` needs `package.json`,
+  `app.config.js`, `app-config.cjs`, `metro.config.cjs`, `app.json`, `index.ts`, `plugins/`, and
+  `assets/` (1.9 MB, nearly all of it the two app icons). `tao test` additionally needs
+  `jest.tao-test.config.cjs` and the `jest.shared.config.cjs` it requires, `jest.config.cjs`,
+  `tsconfig.json`, `runtime-toolchain-src/testing/` including the device-module setup file, and the
+  `runtime-toolchain-tests/tao-test-command.jest.tsx` entry its `testMatch` names (a further
+  168 KB). Omitting the second group is the quiet way to make slice 5 unreachable.
 
 **Never embed.** The Expo host `node_modules`, 355 MB of resolved closure, read by the Expo CLI,
 Metro, and Jest. See F6.
 
-Text embedding was verified directly (`import x from '…/Prelude.tao' with { type: 'text' }` returned
-2894 bytes from inside a compiled binary), but it buys little: the Tao-owned resources total about
-**5 MB**, so one unconditional unpack per version is simpler than two mechanisms and is what the
-package resolver and every child process need anyway.
+Text embedding was verified directly — `import x from '…/Prelude.tao' with { type: 'text' }` returned
+the file's contents from inside a compiled binary — but it buys little: the Tao-owned resources above
+total about **3.6 MB**, so one unconditional unpack per version is simpler than two mechanisms and is
+what the package resolver and every child process need anyway.
 
 `packages/tao-cli/modules/@tao/` already exists for this, holds only `.gitkeep`, and
 `TaoAppModules.packageRuntime()` is already written to fill it. `DEVENV-058` records that no recipe
@@ -217,9 +225,11 @@ uses itself; with a Node on `PATH` it may honour the `#!/usr/bin/env node` sheba
 user's machine.
 
 **Jest does not run under bun.** `tao test` currently resolves Node explicitly
-(`TAO_TEST_NODE_PATH` → `.devenv/profile/bin/node` → `node` on `PATH`) and runs
-`node_modules/jest/bin/jest.js` with `jest.tao-test.config.cjs`. Pointing that at the compiled
-binary:
+(`TAO_TEST_NODE_PATH` → `.devenv/profile/bin/node` → `node` on `PATH`) and runs Jest with
+`jest.tao-test.config.cjs`. Its Jest lookup is `<runtimeRoot>/node_modules/jest/bin/jest.js` falling
+back to `../../node_modules/jest/bin/jest.js` — the hoisted workspace root, which under
+`~/.tao/versions/<v>/host` escapes the version directory and has to go. Pointing the runner at the
+compiled binary:
 
 ```
 $ BUN_BE_BUN=1 TAO_TEST_NODE_PATH=<tao-binary> ./tao test Apps/Starters/Notebook
@@ -256,6 +266,10 @@ directory, with the workspace dependencies removed:
 | Cold `bun install` from the registry (no cache)                             | **8.1 s**, 499 packages |
 | Warm `bun install`                                                          | 1.9–3.1 s               |
 
+Three installs of that one `package.json` reported 507, 499, and 498 packages. Treat the closure as
+**roughly 500 packages**; the sizes above were measured on the 507-package install, and I did not
+chase where the other two differ.
+
 Largest entries: `hermes-compiler` 48 MB, `@expo` 35 MB, `expo-modules-core` 34 MB, `react-native`
 31 MB, `@react-native` 29 MB, `react-devtools-core` 17 MB, `@babel` 15 MB, `fb-dotslash` 9.1 MB,
 `lightningcss-darwin-arm64` 8.2 MB.
@@ -285,7 +299,8 @@ Genuinely macOS-only, and correctly guarded already:
 
 - `sips` in `creation-brief.ts`. `paletteFromImage` returns `undefined` when
   `process.platform !== 'darwin'`, so an image in the description contributes no palette elsewhere
-  rather than failing. Replacing it is a small pure-TypeScript job — the BMP decoder
+  rather than failing. On macOS it is stricter: a non-zero `sips` exit or a missing bitmap throws
+  `HostEnvironmentError`. Replacing it is a small pure-TypeScript job — the BMP decoder
   (`paletteFromBmp`) is already ours and platform-free; only the decode-to-BMP step is `sips`.
 - The Apple Foundation Models lane. `creation-lanes.ts` offers it only when
   `platform === 'darwin' && arch === 'arm64'` **and** `Repo.tryGetRoot()` finds
@@ -294,7 +309,8 @@ Genuinely macOS-only, and correctly guarded already:
   `Docs/Roadmap/Tao create.md` already names the follow-up: _"`tao create` outside a repository
   checkout: the Apple lane compiles its Swift helper from source, so a shipped CLI needs a
   prebuilt, signed helper."_ That helper is a signed, notarized Mach-O shipped in the macOS
-  resource payload; it needs R2's certificate and so is late in the sequence, not a blocker.
+  resource payload; it needs the Developer ID certificate, and so is late in the sequence, not a
+  blocker.
 - Everything `xcrun`: `simctl` (Simulator boot and deep links), `devicectl` (physical devices),
   `stapler` (release validation), and `tao ship` end to end.
 
@@ -306,7 +322,6 @@ Not macOS-only, but broken on Windows or outside a checkout:
 - `Ports` shells out to `lsof` for port diagnostics and kill advice: macOS and Linux only.
 - `TaoAppModules.ensureProject` creates `node_modules/@tao/runtime` with `FS.replaceSymlink`. On
   Windows a symlink needs Developer Mode or elevation; a directory junction or a copy is portable.
-  `DEVENV-057` separately records that a directory symlink there breaks `GreenTree.hashTree`.
 - `EXPO_START_ENV` sets `BROWSER: 'Google Chrome'` with `OPEN_MATCH_HOST_ONLY`, which is macOS
   `open -a` semantics.
 - `Repo.getRoot()` shells out to `git rev-parse --show-toplevel` and throws
@@ -314,10 +329,14 @@ Not macOS-only, but broken on Windows or outside a checkout:
   (`.artifacts/cache/expo`), the Expo log path, the runtime-toolchain root, the dev-data root, and
   the Expo Go APK cache.
 - The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/dev/dev-src/dev.ts`,
-  and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository package paths. This is
-  the repository's own loop, reused by `tao dev`. Separating the shipped loop from the repository
-  loop is the largest single piece of work in this item, and it is not an OS problem.
-- `tao review` launches Chrome over CDP, so it needs a browser on the host.
+  and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository-root paths beside the
+  project root it already watches. This is the repository's own loop, reused by `tao dev`.
+  Separating the shipped loop from the repository loop is the largest single piece of work in this
+  item, and it is not an OS problem.
+- `tao review` launches Chrome over CDP, so it needs a browser on the host. It is not optional
+  today: `tao-cli.ts` reaches it through `await import('tao-dev/studio-review')`, which pulls
+  Studio, the CDP client, and the rest of the `packages/dev` graph into the binary already measured
+  at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
 - Android needs a JDK, the SDK, and an emulator image — `A8`'s requirement graph.
 
 Honest platform claim for `R4`: **`create`, `check`, `fmt`, `fix`, `compile`, `test`, and the web
@@ -365,11 +384,11 @@ Introduce a single `TaoResources` seam and route every dir-relative anchor throu
 order:
 
 1. `TAO_RESOURCES` / `TAO_HOME` environment override (keeps the existing `TAO_STDLIB_ROOT`,
-   `TAO_TEST_RUNTIME_ROOT`, `TAO_TEST_NODE_PATH` contract working);
+   `TAO_TEST_RUNTIME_ROOT`, `TAO_TEST_NODE_PATH`, and `TAO_TEST_JEST_PATH` contract working);
 2. `<dirname(process.execPath)>/../resources` — the installed layout;
 3. the in-repo sibling layout — so `./tao` and every test keep working unchanged.
 
-Call sites to convert: `TaoAppModules.CLI_PACKAGE_ROOT`, `Stdlib.rootPath`,
+Call sites to convert: the module-level `CLI_PACKAGE_ROOT` in `app-modules.ts`, `Stdlib.rootPath`,
 `RuntimeToolchainPaths.packageRoot`, and `StudioHighlight`'s `Repo.resolvePath` of the TextMate
 grammar. `process.execPath` is correct inside a compiled binary (F1), which is what makes this work.
 
@@ -456,8 +475,10 @@ checkout — which F1 shows is almost true already.
 **2. One resource root.** The `TaoResources` seam, the three anchors plus the grammar path, the
 embedded resource payload, and the unpack-with-verification. Fills
 `packages/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
-`DEVENV-058`. Done when `tao create` completes and `tao compile` produces a generated app from the
-binary, outside a checkout.
+`DEVENV-058` — and it must copy rather than link, because `DEVENV-057` records that a directory
+symlink at exactly that path makes `GreenTree.hashTree` exit 128 before any gate runs. Done when
+`tao create` completes and `tao compile` produces a generated app from the binary, outside a
+checkout.
 
 **3. A Tao home and a versioned host.** The `~/.tao` layout, the embedded host lockfile,
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
@@ -466,7 +487,9 @@ shared host install.
 
 **4. A shipped dev loop.** Cut `@expo-dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through
-`process.execPath`; move Expo home, logs, and caches under `~/.tao` and the project. Done when
+`process.execPath`; re-anchor the four repository-relative values `expo-config.ts` and
+`expo-server.ts` hand Expo — `__UNSAFE_EXPO_HOME_DIRECTORY`, `EXPO_LOG_PATH`,
+`RUNTIME_TOOLCHAIN_PATH`, and the dev-data root — on `~/.tao` and the project. Done when
 `tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
@@ -487,7 +510,7 @@ per-platform optional dependencies.
 resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
 
 **9. The macOS payload and the remaining gaps.** The prebuilt, signed Apple Foundation Models helper
-(needs R2's certificate), the `tao review` browser requirement, and an honest statement of whatever
+(needs the Developer ID certificate), the `tao review` browser requirement, and an honest statement of whatever
 is still absent.
 
 Slices 1–4 are the release-blocking path: they are what `A2`'s _done_ line asks for. Slices 5–9 can
@@ -504,7 +527,7 @@ overlap with `A3` and `A8`.
    hashes the runtime. Settle by installing the same lockfile twice on different machines and
    comparing the fingerprint.
 3. **Does Windows Authenticode signing survive Bun's appended payload?** Untested — no Windows host
-   and no certificate here. Settle on a Windows runner once R2 produces a certificate. If it does
+   and no certificate here. Settle on a Windows runner once a certificate exists. If it does
    not, the fallback is an MSI or a `.zip` with an unsigned binary and a documented SmartScreen
    warning, which is a materially worse first impression.
 4. **Does `expo start` need `typescript` resolvable from the project root?** `DEVENV-064` records
@@ -540,7 +563,9 @@ overlap with `A3` and `A8`.
 7. **Who hosts the release artifacts, the checksums, and the version index?** `R11` already asks a
    version of this for the update service; the same answer probably serves both.
 8. **Does the first release include `tao review`?** It needs a local Chrome, which is a real host
-   requirement to put in front of a stranger.
+   requirement to put in front of a stranger. Note that leaving it out is not free: it is imported
+   from `tao-cli.ts` today and pulls the whole `packages/dev` graph into the binary, so excluding it
+   is a bundling change with its own slice.
 
 ## Notes for whoever implements this
 

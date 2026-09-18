@@ -1601,7 +1601,8 @@ an entry here may link one when the developer workflow is also affected.
 - **Impact:** `bun build --compile` is the mechanism behind the standalone `tao` executable
   (`Docs/MVP Roadmap/Plan - Standalone Tao CLI.md`). With the Bun the shared devenv profile supplies,
   every compiled binary is invalid-signed and killed by the kernel on this host, so the whole
-  approach looks impossible rather than merely unpinned.
+  approach looks impossible rather than merely unpinned. It is slice 1 of that plan and blocks the
+  rest of it.
 - **Evidence:** 2026-09-17 on macOS 27.0 (26A428), arm64. `bun build --compile` of a one-line
   `console.log` with the profile's Bun 1.3.13 produced a 63,060,304-byte binary whose ad-hoc
   signature covers 15275 x 4096 = 62,566,400 bytes; running it exits 137 (SIGKILL) and
@@ -1619,7 +1620,7 @@ an entry here may link one when the developer workflow is also affected.
   `devenv.lock`'s nixpkgs input — so this is a lock update or an explicit `bun.package` override, and
   it moves every worktree sharing the profile at once. Verify the full gates against it rather than
   bumping in a feature branch alone.
-- **Dependencies:** None. It is slice 1 of the standalone-CLI plan and blocks the rest of it.
+- **Dependencies:** None.
 - **Acceptance:** `bun build --compile` from the profile's Bun produces a binary that `codesign -v`
   calls valid and that runs on macOS 27, and `verify --complete` passes on the bumped profile.
 - **Source:** 2026-09-17 standalone Tao CLI planning task.
