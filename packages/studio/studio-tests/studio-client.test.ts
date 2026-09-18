@@ -3274,6 +3274,63 @@ Test('Studio Focus serializes a late enter before leave restoration', async () =
   Expect(order).toEqual(['enter:start', 'enter:end', 'leave'])
 })
 
+Test('Studio Focus frames a view it entered before the owning cell reported a rectangle', async () => {
+  const owner = { id: '/project/Late.tao#Card', name: 'Card' }
+  const frame = {} as HTMLElement
+  const row = {
+    contains: (candidate: unknown) => candidate === frame,
+    dataset: { taoStudioGroupViewId: owner.id },
+  } as unknown as HTMLElement
+  const preview = { querySelectorAll: () => [row] } as unknown as HTMLElement
+  let click: (() => void) | undefined
+  const button = {
+    addEventListener: (_type: string, listener: () => void) => {
+      click = listener
+    },
+    dataset: {} as Record<string, string>,
+    hidden: true,
+    removeEventListener() {},
+    textContent: '',
+  } as unknown as HTMLButtonElement
+  let focused: string | undefined
+  const matrix = {
+    focusedView: () => focused,
+    focusView: (_parent: HTMLElement, viewId: string | undefined) => {
+      focused = viewId
+    },
+  }
+  const connection = { ...previewConnection('only-preview', 'only', {}), frame }
+  const viewports: Array<{ height: number; width: number }> = []
+  connection.reconfigureEnvironment = async environment => {
+    viewports.push(environment.viewport)
+  }
+  // No measurement yet: entering focus can frame nothing.
+  let measured: { height: number; width: number; x: number; y: number } | undefined
+  const focus = mountStudioCanvasFocus({
+    button,
+    matrix,
+    onError: error => {
+      throw error
+    },
+    ownerFrame: viewId => viewId === owner.id ? measured : undefined,
+    preview,
+    previews: () => [connection],
+    selectedOwner: () => owner,
+    status: { dataset: {}, textContent: '' } as unknown as HTMLElement,
+  })
+
+  click?.()
+  await until(() => focused === owner.id)
+  Expect(viewports).toEqual([])
+
+  // The cell reports its rectangle afterwards, and the next inspection applies it.
+  measured = { height: 120.2, width: 240.1, x: 0, y: 0 }
+  focus.update()
+  await until(() => viewports.length === 1)
+
+  Expect(viewports).toEqual([{ height: 121, width: 241 }])
+})
+
 Test('Studio Focus restores only successful reframes after Back, in serialized request order', async () => {
   const owner = { id: '/project/A"B.tao#Card', name: 'Card' }
   const firstFrame = {} as HTMLElement
