@@ -188,26 +188,21 @@ function xcodeFingerprint(versionOutput: string | undefined): { xcode?: { build?
 
 /** readFingerprintFacts asks the host about itself without changing anything on it. */
 export async function readFingerprintFacts(repositoryRoot = Repo.getRoot()): Promise<FingerprintFacts> {
-  const [kernelName, kernelVersion, architecture, macOs, xcodeVersionOutput, toolVersions, git, lockDigests] =
-    await Promise.all([
-      commandOutput('uname', ['-s']),
-      commandOutput('uname', ['-r']),
-      commandOutput('uname', ['-m']),
-      readMacOsRelease(),
-      commandOutput('xcodebuild', ['-version']),
-      Promise.all(TOOL_PROBES.map(async probe => ({
-        name: probe.name,
-        versionLine: await commandOutput(probe.command, probe.args),
-      }))),
-      readGitFacts(repositoryRoot),
-      readLockDigests(repositoryRoot),
-    ])
+  const [uname, macOs, xcodeVersionOutput, toolVersions, git, lockDigests] = await Promise.all([
+    readUname(),
+    readMacOsRelease(),
+    commandOutput('xcodebuild', ['-version']),
+    Promise.all(TOOL_PROBES.map(async probe => ({
+      name: probe.name,
+      versionLine: await commandOutput(probe.command, probe.args),
+    }))),
+    readGitFacts(repositoryRoot),
+    readLockDigests(repositoryRoot),
+  ])
   return {
-    architecture,
+    ...uname,
     devenvProfilePath: await readDevenvProfilePath(repositoryRoot),
     ...git,
-    kernelName,
-    kernelVersion,
     lockDigests,
     ...macOs,
     toolVersions,
@@ -215,12 +210,26 @@ export async function readFingerprintFacts(repositoryRoot = Repo.getRoot()): Pro
   }
 }
 
+/**
+ * Every probe below asks one process for everything it knows rather than one process per field.
+ * A fingerprint is a dozen tiny reads, and on a machine where several worktrees are verifying at
+ * once the spawn is most of what each one costs.
+ */
+async function readUname(): Promise<{ architecture?: string; kernelName?: string; kernelVersion?: string }> {
+  const [kernelName, kernelVersion, architecture] = (await commandOutput('uname', ['-srm']) ?? '').split(/\s+/)
+  return { architecture, kernelName, kernelVersion }
+}
+
 /** environmentFingerprintOf gathers and shapes in one step, for callers that only want the block. */
 export async function environmentFingerprintOf(repositoryRoot = Repo.getRoot()): Promise<EnvironmentFingerprint> {
   return environmentFingerprint(await readFingerprintFacts(repositoryRoot))
 }
 
-async function commandOutput(command: string, args: readonly string[], cwd?: string): Promise<string | undefined> {
+async function commandOutput(
+  command: string,
+  args: readonly string[] = [],
+  cwd?: string,
+): Promise<string | undefined> {
   const result = await CLI.run(command, { args: [...args], ...(cwd === undefined ? {} : { cwd }) })
   if (result.error !== undefined || result.exitCode !== 0) {
     return undefined
@@ -230,12 +239,17 @@ async function commandOutput(command: string, args: readonly string[], cwd?: str
 }
 
 async function readMacOsRelease(): Promise<{ osBuild?: string; osName?: string; osVersion?: string }> {
-  const [osName, osVersion, osBuild] = await Promise.all([
-    commandOutput('sw_vers', ['-productName']),
-    commandOutput('sw_vers', ['-productVersion']),
-    commandOutput('sw_vers', ['-buildVersion']),
-  ])
-  return { osBuild, osName, osVersion }
+  const labelled = new Map(
+    (await commandOutput('sw_vers') ?? '')
+      .split('\n')
+      .map(line => line.split(/:\s+/, 2))
+      .map(([label, value]) => [label?.trim() ?? '', value?.trim()]),
+  )
+  return {
+    osBuild: labelled.get('BuildVersion'),
+    osName: labelled.get('ProductName'),
+    osVersion: labelled.get('ProductVersion'),
+  }
 }
 
 async function readGitFacts(
@@ -255,12 +269,15 @@ async function readGitFacts(
  * a hash this repository would have to implement and keep honest itself.
  */
 async function readLockDigests(repositoryRoot: string): Promise<{ digest?: string; name: string }[]> {
-  return await Promise.all(LOCKFILES.map(async name => ({
-    digest: await FS.isFile(FS.resolvePath(name, repositoryRoot))
-      ? await commandOutput('git', ['hash-object', '--', name], repositoryRoot)
-      : undefined,
-    name,
-  })))
+  const present = await Promise.all(
+    LOCKFILES.map(async name => await FS.isFile(FS.resolvePath(name, repositoryRoot)) ? name : undefined),
+  )
+  const hashed = present.filter((name): name is typeof LOCKFILES[number] => name !== undefined)
+  // One `hash-object` for every lockfile at once; it answers in the order it was asked.
+  const digests = hashed.length === 0
+    ? []
+    : (await commandOutput('git', ['hash-object', '--', ...hashed], repositoryRoot) ?? '').split('\n')
+  return LOCKFILES.map(name => ({ digest: digests[hashed.indexOf(name)]?.trim(), name }))
 }
 
 /**

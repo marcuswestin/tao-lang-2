@@ -58,6 +58,17 @@ function pastedStrings(value: unknown): string[] {
   return []
 }
 
+/**
+ * The real host, read once for the whole file. Every probe is a process, and a machine running
+ * several verification lanes charges for each one, so the two tests that need the true answer share
+ * a single reading of it.
+ */
+let host: Promise<EnvironmentFingerprint> | undefined
+function thisHost(): Promise<EnvironmentFingerprint> {
+  host ??= environmentFingerprintOf()
+  return host
+}
+
 /** Splits a pasteable value into the words a machine or account name would appear as. */
 function words(value: string): string[] {
   return value.split(/[._+-]/).filter(word => word.length > 0)
@@ -157,7 +168,7 @@ Describe('environment fingerprint', () => {
   })
 
   Test('carries nothing off this machine that names the person or the machine', async () => {
-    const fingerprint = await environmentFingerprintOf()
+    const fingerprint = await thisHost()
     const values = pastedStrings(fingerprint)
     const hostname = (await CLI.run('hostname')).stdout.trim()
     // The fingerprint's own component names are fixed literals, so an account that happens to be
@@ -182,7 +193,10 @@ Describe('environment fingerprint', () => {
   })
 
   Test('prints the fingerprint alone, and succeeds, when it is asked for as an attachment', async () => {
-    const printed = await withCapturedOutput(async () => await RepositoryDoctorCommand.run({ fingerprint: true }))
+    // Gathered before the capture, never inside it: output capture is serialized process-wide, and
+    // holding that queue through a dozen process spawns stalls every other capturing test too.
+    const host = await thisHost()
+    const printed = await withCapturedOutput(() => RepositoryDoctorCommand.writeFingerprint(host))
 
     // Somebody running this is collecting an attachment for a report, not asking for a verdict.
     Expect(printed.result).toBe(0)

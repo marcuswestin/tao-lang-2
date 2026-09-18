@@ -1,5 +1,9 @@
 import { HCI, Switch } from '@shared'
-import { environmentFingerprintOf, formatFingerprint } from './EnvironmentFingerprint'
+import {
+  type EnvironmentFingerprint,
+  environmentFingerprintOf,
+  formatFingerprint,
+} from './EnvironmentFingerprint'
 import {
   type CheckStatus,
   type DoctorReport,
@@ -56,17 +60,22 @@ function writeReport(report: DoctorReport, options: RunDoctorOptions): void {
 /**
  * The fingerprint alone, and always exit 0. Somebody runs this to collect an attachment for a
  * report, not to be told a verdict: a nonzero exit would read as "this command failed" at exactly
- * the moment we are asking them to trust us with something. It also skips the rest of the doctor,
- * which probes ports and writes into `.artifacts` to test that it can.
+ * the moment we are asking them to trust us with something.
+ *
+ * Printing is separate from gathering so a caller can do the slow half — a dozen processes asked
+ * about themselves — before it takes anything this narrow, which is what keeps the test of this
+ * function off the process-wide output-capture queue.
  */
-async function writeFingerprint(): Promise<number> {
-  HCI.writeLine(JSON.stringify(await environmentFingerprintOf(), null, 2))
+function writeFingerprint(fingerprint: EnvironmentFingerprint): number {
+  HCI.writeLine(JSON.stringify(fingerprint, null, 2))
   return 0
 }
 
 async function runRepositoryDoctor(options: RunDoctorOptions = {}): Promise<number> {
   if (options.fingerprint === true) {
-    return await writeFingerprint()
+    // Also skips the rest of the doctor, which probes ports and writes into `.artifacts` to test
+    // that it can; a fingerprint needs none of that.
+    return writeFingerprint(await environmentFingerprintOf())
   }
   const report = doctorReport(await readDoctorFacts())
   writeReport(report, options)
@@ -77,5 +86,6 @@ async function runRepositoryDoctor(options: RunDoctorOptions = {}): Promise<numb
 export const RepositoryDoctorCommand = {
   exitCodeFor,
   run: runRepositoryDoctor,
+  writeFingerprint,
   writeReport,
 }
