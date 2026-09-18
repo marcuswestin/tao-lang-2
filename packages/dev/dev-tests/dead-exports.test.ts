@@ -34,6 +34,24 @@ Describe('tao foreign binding forms', () => {
       .toEqual(['FetchRecipe'])
     Expect(names('action FetchRecipe(Link text) returns { Title, Steps } from ./FetchRecipe.ts'))
       .toEqual(['FetchRecipe'])
+    // Every type expression a return position accepts, so a name is never mistaken for the export.
+    Expect(names('action Recent(Since time) returns list of Recipe from ./Recent.ts')).toEqual(['Recent'])
+    Expect(names('action Find(Query text) returns Recipe? from ./Find.ts')).toEqual(['Find'])
+    Expect(names('action Save(Draft item) runs single from ./Save.ts')).toEqual(['Save'])
+  })
+
+  Test('does not fold a data field that happens to be named after a tail keyword', () => {
+    // A `fails` field is a field, not a continuation. Folding it would blank its line and graft it
+    // onto the field above, so a `fails` line only continues a declaration when a sentence follows.
+    const source = 'data Attempts / Attempt {\n'
+      + '   Name text\n'
+      + '   fails number (default 0)\n'
+      + '}\n'
+      + '\n'
+      + 'action Retry(Attempt) from ./Retry.ts\n'
+    Expect(names(source)).toEqual(['Retry'])
+    Expect(taoForeignBindings(source).unreadable).toEqual([])
+    Expect(taoForeignBindings(source).bindings.map(binding => binding.line)).toEqual([6])
   })
 
   Test('reads a foreign action whose tails are laid out one per line', () => {

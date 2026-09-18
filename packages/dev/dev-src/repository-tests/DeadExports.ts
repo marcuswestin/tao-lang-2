@@ -60,7 +60,7 @@ const TAO_FROM_BINDING = new RegExp(String.raw`\bfrom\s+(${TAO_RELATIVE_PATH})`,
  * `from <path>` on its own line. Anything else keeps `from` mid-line, so nothing folds by accident.
  */
 const TAO_DECLARATION_TAIL_LINE = new RegExp(
-  String.raw`^\s+(?:fails\s+[A-Za-z_]\w*\s|from\s+${TAO_RELATIVE_PATH}\s*$)`,
+  String.raw`^\s+(?:fails\s+[A-Za-z_]\w*\s+"|from\s+${TAO_RELATIVE_PATH}\s*$)`,
 )
 
 /** `action Name(…) = inject "<path>"`: the Revolution binding, which names a default export. */
@@ -69,13 +69,15 @@ const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_P
 /**
  * Clauses the grammar allows between a foreign declaration's head and its `from`. Stripping them
  * leaves the head ending in its parameter list, so one backward scan reads the export name out of
- * every binding form: `runs latest`, `returns <type>`, and `fails <case> "<sentence>"`
- * (actions.langium), `responds` and `accepts [content] [slots …]` (views.langium).
+ * every binding form: `runs latest`, `runs single`, `returns <type>`, and
+ * `fails <case> "<sentence>"` (actions.langium), `responds` and `accepts [content] [slots …]`
+ * (views.langium). The return type is any type expression a declaration may write: a name, an
+ * optional name, `list of <name>`, or an inline record (Decisions §2).
  */
 const TAO_BINDING_TAILS = [
-  /\s+runs\s+latest$/,
+  /\s+runs\s+(?:latest|single)$/,
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
-  /\s+returns\s+(?:[A-Za-z_][\w.]*|\{[^{}]*\})$/,
+  /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
 ]
