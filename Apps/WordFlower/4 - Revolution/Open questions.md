@@ -122,18 +122,18 @@ These are used in the tier because they are implemented today and the tier would
 them, but `Decisions.md` — the record of the decided language — never mentions them. Each is either a
 decision that was never written down or an implementation detail that should not be in a spec tier.
 
-| Construct                                          | Used by                                   | Where it is specified today        |
-| -------------------------------------------------- | ----------------------------------------- | ---------------------------------- |
-| `async { … }`                                      | `AddDocument`, `AddParagraph`             | `1 - Current` tranche header       |
-| `guard <subject> <case> -> …` inside an **action** | — (retired here, see below)               | `Docs/Spec/Tao Actions.md`         |
-| `snapshot <row>`, `T.Snapshot`                     | `DocumentSnapshot`                        | `3 - MVP`                          |
-| `Panes()`                                          | `WorkspaceDetails`                        | `Docs/Spec/Tao Layout and UI.md`   |
-| `Occurrence`                                       | `FileTree` (see Q3)                       | `3 - MVP`                          |
-| `hide <Command>` on a view                         | `DraftDocumentRow`, `FinishedDocumentRow` | §8 (decided — listed for contrast) |
-| `remote none`, `requires <ref>`                    | `project`                                 | `Docs/Spec/Tao Packages.md`        |
-| `press text "…"`, `press key "…"`, `narrow`, `expect navigation title`, `expect target` | the journeys | `Docs/Spec/Tao Testing.md` |
+| Construct                                                                               | Used by                                   | Where it is specified today        |
+| --------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------- |
+| `async { … }`                                                                           | `AddDocument`, `AddParagraph`             | `1 - Current` tranche header       |
+| `guard <subject> <case> -> …` inside an **action**                                      | — (retired here, see below)               | `Docs/Spec/Tao Actions.md`         |
+| `snapshot <row>`, `T.Snapshot`                                                          | `DocumentSnapshot`                        | `3 - MVP`                          |
+| `Panes()`                                                                               | `WorkspaceDetails`                        | `Docs/Spec/Tao Layout and UI.md`   |
+| `Occurrence`                                                                            | `FileTree` (see Q3)                       | `3 - MVP`                          |
+| `hide <Command>` on a view                                                              | `DraftDocumentRow`, `FinishedDocumentRow` | §8 (decided — listed for contrast) |
+| `remote none`, `requires <ref>`                                                         | `project`                                 | `Docs/Spec/Tao Packages.md`        |
+| `press text "…"`, `press key "…"`, `narrow`, `expect navigation title`, `expect target` | the journeys                              | `Docs/Spec/Tao Testing.md`         |
 
-§16 decides `press "New recipe"` and a *physical* `Slash` for hints; the tier writes `press text "…"`
+§16 decides `press "New recipe"` and a _physical_ `Slash` for hints; the tier writes `press text "…"`
 and `press key "?"` because that is the implemented vocabulary and the journeys are meant to be
 readable beside `1 - Current`'s. Most of the attention vocabulary — `narrow`, `expect target`,
 `expect focus region`, `expect verbs` — has no recorded spelling at all, which is a gap in §16 rather
