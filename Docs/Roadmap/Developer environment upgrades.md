@@ -1497,3 +1497,33 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A deliberately unbalanced `.tao-revolution` file fails the lint lane with its file
   and line, and the 40 current Tao Future sources plus the WordFlower tiers pass.
 - **Source:** 2026-09-17 Tao Future dialect consolidation (Process step 3).
+
+### DEVENV-073 — The new verification-graph tests fail when a lane runs them
+
+- **Status:** Candidate
+- **Area:** Test reliability
+- **Impact:** `verify --complete` is red on `main` itself. Four tests of the new graph scheduler and
+  green-record store pass as their own node and fail when a verification lane schedules them, so
+  every branch that merges current `main` inherits a red complete lane and cannot land through
+  `just merge-with-main` without skipping the verification the command exists to run.
+- **Evidence:** On 2026-09-17, `main` at `5811df6e`: `gate-runner.test.ts` fails "surfaces warnings
+  a gate printed without failing on them" because the nested runner adds a warning the test's exact
+  expected list does not carry — `machine contention: no other Tao lane registered; load peaked at
+  32.5 on 18 CPUs`, so the fixture isolates the lane registry but still samples the host's real
+  load — and three tests fail reading `.artifacts/timings/durations.json` in their temp checkout
+  with `ENOENT`, which is what `RunTimings.record` leaves behind when it early-returns on an empty
+  duration map. `just test-file` on both files passes 31 of 31 and 6 of 6. Reproduced twice inside
+  `verify --complete`, once at load 39.8 and once on an idle machine with no other lane registered,
+  so it is not contention. The failing fixtures stub `runGate`, so no gate's real work is involved.
+- **Workaround:** Run the two files with `just test-file` to see them green; there is none for the
+  complete lane.
+- **Proposed change:** Give the nested `runGates` fixtures a load sampler they control, the way
+  DEVENV-041 gave them their own registry root — a fixture that cannot see the host's load cannot
+  inherit a warning from it. Separately, decide whether a lane whose gates were all skipped by a
+  green record should record no durations at all, and make the test assert whichever answer is
+  intended rather than assuming a store exists.
+- **Dependencies:** Owned by whoever lands the verification-graph work (`Schedule verification as
+  one graph of small, bounded nodes`, `614669c8`); this is its own area, not the reporting branch's.
+- **Acceptance:** `verify --complete` is green on `main` with no other lane registered, and the two
+  files stay green as their own node.
+- **Source:** 2026-09-17 Tao Future dialect consolidation, blocked at its merge gate.
