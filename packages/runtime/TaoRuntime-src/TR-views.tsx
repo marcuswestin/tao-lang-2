@@ -1,6 +1,6 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
-import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { accessibilityStateProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { RuntimeAssert } from './TR-assert'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
@@ -190,7 +190,7 @@ export const Views = {
       nativePropOverrides: {
         accessibilityLabel: props.label ?? 'Loading',
         accessibilityRole: 'progressbar',
-        accessibilityState: { busy: visible },
+        ...accessibilityStateProps({ busy: visible }),
         animating: visible,
         hidesWhenStopped: true,
         size: props.size,
@@ -263,7 +263,7 @@ function renderTaoCheckbox(
       ...wrapperProps,
       accessibilityLabel: props.label,
       accessibilityRole: 'checkbox',
-      accessibilityState: { checked: props.value, disabled },
+      ...accessibilityStateProps({ checked: props.value, disabled }),
       disabled,
       ...(host ? { ref: host } : {}),
       ...semanticPressableProps(
@@ -529,7 +529,7 @@ function renderTaoTextInput(
     : InteractionControls.Activate(occurrence, props.onSubmit)
   const inputNativeProps = {
     accessibilityLabel: props.label,
-    accessibilityState: { disabled: props.disabled === true },
+    ...accessibilityStateProps({ disabled: props.disabled === true }),
     editable: !props.disabled,
     onBlur: () => InteractionControls.Disengage(occurrence),
     onChangeText: props.disabled || !props.onChange
@@ -683,7 +683,7 @@ function accessiblePressableProps(
     accessible: nativeProps['accessible'] ?? true,
     accessibilityLabel: nativeProps['accessibilityLabel'] ?? title,
     accessibilityRole: nativeProps['accessibilityRole'] ?? 'button',
-    accessibilityState: { ...state, disabled: nativeProps['disabled'] === true },
+    ...accessibilityStateProps({ ...state, disabled: nativeProps['disabled'] === true }),
   }
 }
 

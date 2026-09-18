@@ -10,6 +10,7 @@
 
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
+import { accessibilityStateProps } from './TR-accessibility'
 import { requireSafeAreaContext } from './TR-app-shell'
 import { errorMessage, errorStack, onUnownedFailure } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
@@ -1426,7 +1427,7 @@ function DeviceBadge(
         {
           accessibilityLabel: action.label,
           accessibilityRole: 'button',
-          accessibilityState: { disabled: action.disabled === true, selected: action.active === true },
+          ...accessibilityStateProps({ disabled: action.disabled === true, selected: action.active === true }),
           disabled: action.disabled === true,
           key: action.id,
           onPress: action.onPress,

@@ -1,0 +1,271 @@
+import { AfterEach, Describe, Expect, Test, until, withCapturedOutput } from '@shared/test'
+import { CLI, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
+
+/**
+ * These tests start real process trees, so each one registers what it started for cleanup: a leaked
+ * `sleep` would outlive the suite and a leaked tree would outlive the lane. A sleeping shell is the
+ * deliberate stand-in for a runaway child — reproducing the formatter runaway that motivated this
+ * supervision would put the machine back in the state it exists to prevent.
+ */
+const abandoned: number[] = []
+
+AfterEach(() => {
+  for (const pid of abandoned.splice(0)) {
+    Platform.spawnSync('/bin/kill', { args: ['-KILL', '--', String(pid)], stdio: 'ignore' })
+  }
+})
+
+/** A shell that reports the PID of a grandchild it backgrounds, then waits for it. */
+const REPORT_GRANDCHILD = 'sleep 300 & echo $!; wait'
+
+type StartedTree = {
+  child: TrackedProcess
+  command: CLI.StartedCommand
+  grandchild: TrackedProcess
+  output: () => string
+}
+
+/** startTree starts a shell with a backgrounded grandchild and resolves once both PIDs are known. */
+async function startTree(spec: CLI.CommandSpec = {}): Promise<StartedTree> {
+  let text = ''
+  const command = CLI.start('/bin/sh', {
+    args: ['-c', REPORT_GRANDCHILD],
+    onOutput: (_stream, chunk) => {
+      text += chunk.toString('utf8')
+    },
+    stdio: 'pipe',
+    ...spec,
+  })
+  const childPid = command.pid ?? 0
+  Expect(childPid).toBeGreaterThan(1)
+  abandoned.push(childPid)
+  const grandchildPid = await until(() => {
+    const match = /^(\d+)\n/u.exec(text)
+    return match?.[1] === undefined ? undefined : Number(match[1])
+  }, { description: 'the backgrounded grandchild to report its PID', timeoutMs: 4_000 })
+  abandoned.push(grandchildPid)
+  const identities = await until(
+    () => {
+      const found = ProcessTree.identities([childPid, grandchildPid])
+      return found.size === 2 ? found : undefined
+    },
+    { description: `processes ${childPid} and ${grandchildPid} to carry start identities` },
+  )
+  const child = identities.get(childPid)
+  const grandchild = identities.get(grandchildPid)
+  Expect(child?.pid).toBe(childPid)
+  Expect(grandchild?.pid).toBe(grandchildPid)
+
+  return { child: child!, command, grandchild: grandchild!, output: () => text }
+}
+
+/** isAlive reports whether the exact process that was tracked still runs, not merely that its PID exists. */
+function isAlive(tracked: TrackedProcess): boolean {
+  return ProcessTree.sameProcess(ProcessTree.identities([tracked.pid]).get(tracked.pid), tracked)
+}
+
+async function waitForGone(tracked: TrackedProcess, description: string): Promise<void> {
+  await until(() => !isAlive(tracked), { description, timeoutMs: 5_000 })
+}
+
+Describe('CLI process policy', () => {
+  Test('no policy detaches a child; only the caller decides its process group', async () => {
+    const ownGroup = ProcessTree.processGroupOf(Platform.runtimeProcess.pid)
+    const toolChild = await startTree()
+    const testChild = await startTree({ processPolicy: 'test' })
+    const detachedChild = await startTree({ detached: true })
+
+    Expect(ownGroup).toBeGreaterThan(0)
+    // A child that stays in the caller's process group is one the terminal's Ctrl-C still reaches.
+    Expect(ProcessTree.processGroupOf(toolChild.child.pid)).toBe(ownGroup)
+    Expect(ProcessTree.processGroupOf(testChild.child.pid)).toBe(ownGroup)
+    // Only the caller's own `detached` makes a child lead a group of its own.
+    Expect(ProcessTree.processGroupOf(detachedChild.child.pid)).toBe(detachedChild.child.pid)
+
+    for (const started of [toolChild, testChild, detachedChild]) {
+      started.command.kill('SIGKILL')
+      await waitForGone(started.grandchild, 'the process-group probe to be cleaned up')
+    }
+  })
+
+  Test(`'test' policy stops a child's whole tree without detaching it`, async () => {
+    const sibling = await startTree()
+    const supervised = await startTree({ processPolicy: 'test' })
+
+    // The teardown must not depend on a group leader: this child shares the caller's group, and
+    // what reaches the grandchild is the tracked-descendant signalling, not the group signal.
+    Expect(ProcessTree.processGroupOf(supervised.child.pid))
+      .toBe(ProcessTree.processGroupOf(Platform.runtimeProcess.pid))
+    Expect(supervised.command.kill()).toBe(true)
+
+    await waitForGone(supervised.grandchild, 'the supervised grandchild to be gone')
+    await waitForGone(supervised.child, 'the supervised child to be gone')
+    // The grandchild inherited the child's pipes, so a close only arrives once it too has exited:
+    // this await is what would hang if the teardown had reached the child alone.
+    await supervised.command.waitForClose()
+    Expect(supervised.command.exitCode ?? supervised.command.signalCode).not.toBe(null)
+    // A lane may stop only what it started: the sibling tree was never handed to that command.
+    Expect(isAlive(sibling.grandchild)).toBe(true)
+    Expect(isAlive(sibling.child)).toBe(true)
+    Expect(sibling.command.exitCode).toBe(null)
+
+    sibling.command.kill('SIGKILL')
+    await waitForGone(sibling.grandchild, 'the sibling tree to be cleaned up')
+  })
+
+  Test(`'server' policy signals the direct child only, so its grandchild survives`, async () => {
+    const server = await startTree({ processPolicy: 'server' })
+
+    Expect(server.command.kill('SIGTERM')).toBe(true)
+
+    await waitForGone(server.child, 'the server child itself to exit')
+    // Metro, Studio and the simulator idle legitimately; the opt-out has to be real, not advisory.
+    Expect(isAlive(server.grandchild)).toBe(true)
+  })
+
+  Test('a wall-clock bound stops the tree and names the bound it hit', async () => {
+    const bounded = await startTree({ processPolicy: 'test', timeoutMs: 600 })
+
+    const close = await bounded.command.waitForClose()
+
+    Expect(close.signal).toBe('SIGTERM')
+    Expect(bounded.output()).toContain('timed out after 600ms')
+    await waitForGone(bounded.grandchild, 'the timed-out grandchild to be gone')
+  })
+
+  Test('an idle-output bound stops a child that printed and then went quiet', async () => {
+    const bounded = await startTree({ idleOutputMs: 500, processPolicy: 'test' })
+
+    const close = await bounded.command.waitForClose()
+
+    Expect(close.signal).toBe('SIGTERM')
+    Expect(bounded.output()).toContain('timed out with no output for 500ms')
+    await waitForGone(bounded.grandchild, 'the idle grandchild to be gone')
+  })
+
+  Test('output restarts the idle bound, so a child that keeps printing runs to completion', async () => {
+    const result = await CLI.run('/bin/sh', {
+      args: ['-c', 'for tick in 1 2 3 4 5 6; do echo tick; sleep 0.15; done'],
+      idleOutputMs: 500,
+      processPolicy: 'test',
+      stdio: 'pipe',
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.signal).toBe(null)
+    Expect(result.stdout.trim().split('\n')).toHaveLength(6)
+    Expect(result.stderr).toBe('')
+  })
+
+  Test('run surfaces the bound it hit through its CommandResult', async () => {
+    const result = await CLI.run('/bin/sh', {
+      args: ['-c', 'sleep 30'],
+      processPolicy: 'test',
+      stdio: 'pipe',
+      timeoutMs: 400,
+    })
+
+    Expect(result.signal).toBe('SIGTERM')
+    Expect(result.stderr).toContain('timed out after 400ms')
+  })
+
+  Test('a bound reaches the terminal when the child has no wrapper output sink', async () => {
+    // With inherited stdio the child writes straight to the terminal, so the reason line has no
+    // captured buffer, no `onOutput` and no prefixed log to land in. It must not vanish.
+    const captured = await withCapturedOutput(async () => {
+      const command = CLI.start('/bin/sh', {
+        args: ['-c', 'sleep 30'],
+        processPolicy: 'test',
+        stdio: 'inherit',
+        timeoutMs: 300,
+      })
+      return await command.waitForClose()
+    })
+
+    Expect(captured.result.signal).toBe('SIGTERM')
+    Expect(captured.stderr).toContain('timed out after 300ms')
+    Expect(captured.stdout).toBe('')
+  })
+
+  Test('a bound declared on a policy that cannot enforce it is refused', () => {
+    Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], processPolicy: 'server', timeoutMs: 100 }))
+      .toThrow(/timeoutMs only on a 'test' process policy/u)
+    Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], idleOutputMs: 100 }))
+      .toThrow(/idleOutputMs only on a 'test' process policy/u)
+    Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], processPolicy: 'test', timeoutMs: 0 }))
+      .toThrow(/a positive timeoutMs/u)
+  })
+})
+
+Describe('ProcessTree', () => {
+  Test('descendants reports a grandchild with its start identity, deepest first', async () => {
+    const started = await startTree({ processPolicy: 'server' })
+
+    const direct = ProcessTree.descendants(started.child.pid)
+    const own = ProcessTree.descendants(Platform.runtimeProcess.pid)
+    const grandchildIndex = own.findIndex(entry => entry.pid === started.grandchild.pid)
+    const childIndex = own.findIndex(entry => entry.pid === started.child.pid)
+
+    Expect(direct.map(entry => entry.pid)).toEqual([started.grandchild.pid])
+    Expect(direct[0]?.startedAt).toBe(started.grandchild.startedAt)
+    Expect(grandchildIndex).toBeGreaterThanOrEqual(0)
+    Expect(childIndex).toBeGreaterThanOrEqual(0)
+    // Deepest first: a parent must not get the chance to replace a child already stopped.
+    Expect(grandchildIndex).toBeLessThan(childIndex)
+
+    started.command.kill('SIGKILL')
+    await waitForGone(started.child, 'the inspected child to exit')
+  })
+
+  Test('signalTracked skips a PID whose start identity no longer matches', () => {
+    const tracked: TrackedProcess[] = [
+      { command: 'kept', pid: 4_001, startedAt: '100:0' },
+      { command: 'reused', pid: 4_002, startedAt: '200:0' },
+    ]
+    const signalled: number[][] = []
+
+    ProcessTree.signalTracked(tracked, 'SIGTERM', {
+      identities: () =>
+        new Map([
+          [4_001, { command: 'kept', pid: 4_001, startedAt: '100:0' }],
+          // The kernel handed 4002 to somebody else's work between the snapshot and the signal.
+          [4_002, { command: 'reused', pid: 4_002, startedAt: '999:0' }],
+        ]),
+      signal: pids => signalled.push([...pids]),
+    })
+
+    Expect(signalled).toEqual([[4_001]])
+  })
+
+  Test('signalTracked signals nothing when no tracked identity is still present', () => {
+    const signalled: number[][] = []
+
+    ProcessTree.signalTracked([{ command: 'gone', pid: 4_003, startedAt: '100:0' }], 'SIGKILL', {
+      identities: () => new Map(),
+      signal: pids => signalled.push([...pids]),
+    })
+
+    Expect(signalled).toEqual([])
+  })
+
+  Test('stopTree escalates past an ignored SIGTERM and resolves only once the tree has gone', async () => {
+    // A tree that ignores SIGTERM is the case that made the grace period necessary: the Studio
+    // canary's launch process survived cancellation and held the lane open through it.
+    const started = await startTree({
+      args: ['-c', `trap '' TERM; ${REPORT_GRANDCHILD}`],
+      detached: true,
+      processPolicy: 'server',
+    })
+
+    Expect(ProcessTree.isGroupAlive(started.child.pid)).toBe(true)
+    const startedAtMs = Time.nowMs()
+    await ProcessTree.stopTree(started.command.pid, { graceMs: 150 })
+    const elapsedMs = Time.nowMs() - startedAtMs
+
+    // stopTree does not resolve on a signal delivered; it resolves on the tree having exited.
+    Expect(elapsedMs).toBeGreaterThanOrEqual(120)
+    Expect(isAlive(started.grandchild)).toBe(false)
+    Expect(isAlive(started.child)).toBe(false)
+    Expect(ProcessTree.isGroupAlive(started.child.pid)).toBe(false)
+  })
+})

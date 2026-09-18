@@ -1,4 +1,5 @@
-import { FS, Repo } from '@shared'
+import { FS, Platform, Repo, Time } from '@shared'
+import { MachineLanes, type MachineResourceLease } from './MachineLanes'
 
 /**
  * How long each node actually takes, so ordering is derived from evidence instead of hand-tuned
@@ -40,6 +41,9 @@ export type RecordRunOptions = RunTimingsOptions & {
 
 const DURATIONS_PATH = '.artifacts/timings/durations.json'
 const HISTORY_PATH = '.artifacts/timings/history.jsonl'
+const LOCK_PATH = '.artifacts/timings/transaction-lock'
+/** Long enough for a sibling lane's merge, short enough never to hold a finished run open. */
+const LOCK_WAIT_MS = 2_000
 /**
  * Weight of the newest sample. High enough that a suite which just grew is reflected within a
  * couple of runs, low enough that one contended run does not rewrite the estimate.
@@ -66,26 +70,76 @@ function expectedMs(store: TimingsStore, name: string): number | undefined {
   return timing === undefined || !Number.isFinite(timing.emaMs) ? undefined : timing.emaMs
 }
 
-/** record folds one run's durations into the store and appends the run to the history log. */
+/**
+ * record folds one run's durations into the store and appends the run to the history log.
+ *
+ * Two lanes in one checkout are a read-modify-write race two ways over. A truncating write lets a
+ * concurrent reader see half a file, which `load` then reads as a cold checkout and which mis-orders
+ * the next run; and an interleaved read-modify-write loses one lane's samples entirely. The two need
+ * different answers, and conflating them was a mistake worth naming:
+ *
+ * - The **file** is always published by atomic rename, with no condition attached. A reader may see
+ *   the old store or the new one, never a partial one.
+ * - The **merge** is serialized by a per-checkout lease, on a short wait. If the lease cannot be had
+ *   in that time the write still happens, unserialized: the worst case is then the lost update this
+ *   store has always been able to suffer, which costs one estimate, where skipping the write costs
+ *   every estimate from then on. A lane that stops recording stops learning, and a suite that stops
+ *   being measured stops being re-sharded.
+ */
 async function record(options: RecordRunOptions): Promise<void> {
   if (options.durations.size === 0) {
     return
   }
-  const store = await load(options)
-  const lastRunAt = new Date().toISOString()
-  for (const [name, durationMs] of options.durations) {
-    const previous = store.nodes[name]
-    store.nodes[name] = {
-      emaMs: previous === undefined || !Number.isFinite(previous.emaMs)
-        ? Math.round(durationMs)
-        : Math.round(EMA_WEIGHT * durationMs + (1 - EMA_WEIGHT) * previous.emaMs),
-      lastMs: Math.round(durationMs),
-      lastRunAt,
-      samples: (previous?.samples ?? 0) + 1,
+  const lease = await acquireLease(options)
+  try {
+    const store = await load(options)
+    const lastRunAt = new Date().toISOString()
+    for (const [name, durationMs] of options.durations) {
+      const previous = store.nodes[name]
+      store.nodes[name] = {
+        emaMs: previous === undefined || !Number.isFinite(previous.emaMs)
+          ? Math.round(durationMs)
+          : Math.round(EMA_WEIGHT * durationMs + (1 - EMA_WEIGHT) * previous.emaMs),
+        lastMs: Math.round(durationMs),
+        lastRunAt,
+        samples: (previous?.samples ?? 0) + 1,
+      }
     }
+    await writeStore(store, options)
+    await appendHistory(options)
+  } finally {
+    await lease?.release()
   }
-  await FS.writeJson(durationsPath(options), store)
-  await appendHistory(options)
+}
+
+/**
+ * acquireLease serializes the store's read-modify-write between the lanes of one checkout, on a
+ * deliberately short wait. Returning nothing means "write anyway, unserialized": the caller still
+ * publishes atomically, so the cost of not waiting longer is at most a lost update.
+ */
+async function acquireLease(options: RunTimingsOptions): Promise<MachineResourceLease | undefined> {
+  const registryRoot = FS.resolvePath(LOCK_PATH, options.repositoryRoot ?? Repo.getRoot())
+  try {
+    return await Time.pollUntil(
+      () => MachineLanes.tryAcquireResource({ name: 'run-timings', registryRoot }),
+      { intervalMs: 25, timeoutMs: LOCK_WAIT_MS },
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/** writeStore publishes the store by atomic rename, so no reader ever sees a partial file. */
+async function writeStore(store: TimingsStore, options: RunTimingsOptions): Promise<void> {
+  const path = durationsPath(options)
+  const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
+  await FS.writeJson(temporaryPath, store)
+  try {
+    await FS.move(temporaryPath, path)
+  } catch (error) {
+    await FS.remove(temporaryPath).catch(() => {})
+    throw error
+  }
 }
 
 async function appendHistory(options: RecordRunOptions): Promise<void> {
