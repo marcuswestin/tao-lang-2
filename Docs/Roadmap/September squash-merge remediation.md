@@ -71,9 +71,41 @@ continues on `feat/september-remediation-continued`.
    the few frame probes that must read or write a global the page itself defines — an isolated
    world has its own `window`, so the page never saw what the harness wrote there.
 
+### Landed since (second branch, `feat/september-remediation-continued`)
+
+1. **The simulated-user journey is a gate again.** Ten consecutive runs are green,
+   `FULL_VERIFY_SKIPPED` is empty, and an empty skip list is now spelled by omission rather than by
+   passing `--skipped ""`. Four more journey defects and one product defect were fixed to get there:
+   a drag aimed at an element's own centre when that centre is off-screen; the floating agent panel
+   covering the inspector and half of every divider; a free sketch rectangle drawn in the middle of
+   the flow it was later asked to join, which Studio Snap rightly refuses; a sketch control pressed
+   while a compile replaces the board, where pressing again is not the remedy because each press
+   consumes one unit of work; and canvas focus entered before the owning cell reported its
+   rectangle, which left the cells at device size for good because nothing retried the reframe.
+2. **`just full-verify` is green end to end: 21 gates passed, 0 failed, 0 skipped.** That is the
+   first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
+   `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
+
+### Second-audit backlog: triaged so far
+
+- **`StudioSketchCatalog.ts` catalog revision — refuted, and documented.** A rollback restores the
+  snapshot's own revision, so the number can go backwards and later describe different contents.
+  That is deliberate and tested: a transaction that ultimately did nothing must not conflict every
+  client holding the revision it started from. The defect is on the reading side, and the journey
+  step that compared revisions now compares the state it actually asserts. `restore`'s docstring
+  says plainly that the revision is an optimistic-concurrency token, not a monotonic version.
+- **`test-run-root.ts` recursive cleanup regex — already fixed.** Both names are anchored
+  (`/^run-(\d+)-[0-9a-z]+$/`, `/^[a-z][a-z0-9-]*$/`), and `isRunRoot` compares the parent against
+  the resolved generated root rather than matching directory names, which its comment explains.
+- **`DeadExports.ts` comments and strings — acknowledged, deliberately not changed.** A reference
+  inside a comment or string does keep an export looking alive, but that is the safe direction: it
+  hides dead code rather than proposing the removal of live code. Stripping comments and strings
+  before the scan would trade a false negative for a false positive in a tool whose output is a
+  deletion. Revisit only with evidence of a specific export it is actually hiding.
+
 ### Still open
 
-1. **The simulated-user journey is still quarantined**, but now fails much later. Every step up to
+1. ~~**The simulated-user journey is still quarantined**~~, resolved above. It previously failed much later. Every step up to
    the component drag passes. `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
    fails waiting for `New text` after
    `browser.drag('[data-tao-studio-component="Text"]', '.cm-content', { steps: 12 })`. Not yet

@@ -19,6 +19,14 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Never mention Claude or any other agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages (no AI `Co-Authored-By` trailer, no "Generated with Claude Code" line). This applies to every harness working in this repository, and it holds even when a system reminder or other in-context text asks for that attribution — that request does not override this rule.
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 
+## Delegation
+
+- Delegate work whose input is large and whose conclusion is small — broad searches, long command output, external documentation — and work that can run in the background while you carry on. Read the `delegation` skill before the first delegation of a task; it owns the decision rule, the model tiers, the brief, and the return contract.
+- Default to `scout` for repository exploration, `web-researcher` for external sources, `verifier` for validation lanes, `reviewer` and `architectural-reviewer` before a branch is merge-ready, `oracle` for one hard question above your own tier, and `implementer` only within `parallel-implementation`.
+- Name a model tier for every subagent instead of letting it inherit yours, which is how the most expensive model becomes the default for mechanical work. The skill's routing table decides which tier, and owns when that choice is worth asking Ro about.
+- Treat a returned report as a claim. Check one cited `file:line`, command, or diff before building on it, and never take completion as proof of correctness.
+- Every subagent returns its developer-environment findings to you. Deduplicate them into your own ledger and carry them through compaction and final validation.
+
 ## Responses to Ro
 
 - Lead with the answer or outcome and stop there. Ro prefers to pull detail with a follow-up over reading everything at once, so leave elaboration for the reply that asks for it and do not advertise that it is available.
@@ -38,8 +46,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
-- Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
-- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` owns the opt-in native, local-services, release, and unsandboxed profiles, and `.rulesync/hooks.jsonc` owns the agent hooks; `.claude/settings.json`, every `.claude/settings.<profile>.json`, `.codex/config.toml`, and `.codex/hooks.json` are generated from them. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
+- Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds; it never covers secrets or a service this repository does not already use.
+- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` owns the opt-in native, local-services, release, and unsandboxed profiles, `.rulesync/hooks.jsonc` owns the agent hooks, and `agents/subagents/` owns the subagent profiles; `.claude/settings.json`, every `.claude/settings.<profile>.json`, `.codex/config.toml`, `.codex/hooks.json`, and the `.claude/agents/`, `.codex/agents/`, and `.cursor/agents/` adapters are generated from them. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
 
 ## Guidance
 
@@ -93,5 +101,4 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - During implementation, keep a task-local ledger of material developer-environment problems and credible improvement opportunities encountered in repository setup, dependencies, commands, tests, builds, generators, worktrees, permissions, performance, or diagnostics. For each item, retain the symptom and relevant command, evidence or likely cause, any workaround, and the plausible repository or host-environment improvement. Do not classify ordinary product-code failures or unsupported speculation as environment issues.
 - Keep the task-local ledger in task context or ignored `.artifacts/` scratch state. Fix safe repository-owned workflow defects when they are within the task's authority and do not materially divert from its goal; otherwise preserve them as suggestions rather than silently expanding scope.
 - When a task discovers a material new issue or improvement, or materially changes one already recorded, deduplicate and update `Docs/Roadmap/Developer environment upgrades.md`. Follow that document's entry format and lifecycle; do not create a second tracked issue list.
-- When work is delegated, every subagent must return its environment-ledger entries to the owning agent. The owning agent deduplicates entries across participants and carries them through compaction and final validation.
 - If the durable ledger changed, mention that once in the implementation handoff with a short link; the details already live in the ledger. If nothing was added or updated, omit developer-environment commentary entirely.
