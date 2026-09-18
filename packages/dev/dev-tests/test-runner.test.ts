@@ -1,4 +1,4 @@
-import { FS, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import type { SelectedSuite, TestProcess } from '../dev-src/repository-tests/TestNodes'
@@ -260,6 +260,13 @@ Describe('test runner suite registry', () => {
   Test('an exact-file subset does not teach the full-suite timing estimate', async () => {
     const root = await mkTestDir('tao-test-runner-subset-timing-')
     const file = 'packages/example/example-tests/example.test.ts'
+    // This starts a real top-level lane, which would otherwise register in the machine-wide
+    // registry and wait on whatever the other worktrees on this host are doing — including a peer's
+    // exclusive confirmation, which blocks every admission for as long as it is held. The registry
+    // root is derived from `XDG_CACHE_HOME`, so pointing that at this test's own directory gives
+    // the lane a machine to itself and makes the run depend on nothing outside the test.
+    const cacheHome = Platform.runtimeProcess.env['XDG_CACHE_HOME']
+    Platform.runtimeProcess.env['XDG_CACHE_HOME'] = FS.resolvePath('cache', root)
     try {
       await FS.writeText(
         FS.resolvePath(file, root),
@@ -276,6 +283,11 @@ Describe('test runner suite registry', () => {
       Expect(captured.result).toBe(0)
       Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
     } finally {
+      if (cacheHome === undefined) {
+        delete Platform.runtimeProcess.env['XDG_CACHE_HOME']
+      } else {
+        Platform.runtimeProcess.env['XDG_CACHE_HOME'] = cacheHome
+      }
       await FS.remove(root)
     }
   })
