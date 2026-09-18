@@ -169,10 +169,9 @@ finalize check='false' fresh='false':
 [arg('message_file', long='message-file')]
 [arg('skip_all', long='skip-all', value='true')]
 [arg('skip_full_verify', long='skip-full-verify', value='true')]
-[arg('skip_lease_wait', long='skip-lease-wait', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
-merge-with-main skip_verify='false' skip_full_verify='false' skip_all='false' skip_lease_wait='false' message_file='' abort='':
-    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if skip_lease_wait == "true" { "--skip-lease-wait" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+merge-with-main skip_verify='false' skip_full_verify='false' skip_all='false' message_file='' abort='':
+    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen

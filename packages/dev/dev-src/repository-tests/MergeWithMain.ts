@@ -48,12 +48,6 @@ export type MergeWithMainOptions = {
   skipAll?: boolean
   /** Skip the otherwise mandatory unsandboxed full verification of the integration tree. */
   skipFullVerify?: boolean
-  /**
-   * Fail immediately with the current holder's identity instead of waiting for the machine-wide
-   * landing lease to free. The plain invocation removes no work by waiting; this flag removes the
-   * wait itself.
-   */
-  skipLeaseWait?: boolean
   /** Skip the staged-squash `just verify --complete` pass. */
   skipVerify?: boolean
 }
@@ -76,9 +70,9 @@ export type MergePhase =
 /**
  * MergeSnapshot records the exact local state the command owns and may safely restore. Landing no
  * longer mutates a shared `main` worktree at all: the squash is staged and verified in a disposable
- * integration worktree that is removed on every exit path, so the only durable state this command
- * owns is the invoking feature worktree plus this snapshot itself, which is the recovery record for
- * a process that died before its own cleanup ran.
+ * integration worktree, so the only durable state this command owns is the invoking feature worktree
+ * plus this snapshot itself. That worktree is removed when the landing succeeds and deliberately
+ * kept when it fails, because it holds the only copy of what went wrong.
  */
 export type MergeSnapshot = {
   branch: string
@@ -342,7 +336,6 @@ export const MergeWithMainCommand = {
         options.dryRun === true
         || options.skipAll === true
         || options.skipFullVerify === true
-        || options.skipLeaseWait === true
         || options.skipVerify === true
         || options.messageFile !== undefined
       ) {
@@ -359,7 +352,7 @@ export const MergeWithMainCommand = {
     }
 
     await authorizeExecution(options, dependencies, preflight)
-    const lease = await acquireLandingLease(options, dependencies, preflight)
+    const lease = await acquireLandingLease(dependencies, preflight)
     try {
       const snapshot = await createSnapshot(preflight, dependencies)
       writeLines(dependencies, [
@@ -372,13 +365,15 @@ export const MergeWithMainCommand = {
         await stabilizeAndVerify(snapshot, options, dependencies)
         await commitSquash(snapshot, preflight.message, dependencies)
         await pushArchiveAndPreserve(snapshot, dependencies)
-      } finally {
-        // The integration worktree never carries anything this command still needs once its own
-        // create-stage-verify sequence has run, whether that sequence succeeded, was aborted, or
-        // threw: disposing it here, on every exit path, is what keeps a red lane or a staging
-        // conflict from stranding a worktree on disk.
-        await disposeIntegrationWorktree(snapshot, dependencies)
+      } catch (error) {
+        // A landing that failed leaves its integration worktree where it is. Removing it would
+        // destroy the staged squash, the conflict, or the red tree that explains the failure, and
+        // the snapshot alone cannot reproduce them. Say where it is instead: a stray worktree is
+        // cheap to remove once its evidence has been read, and `git worktree list` shows it.
+        warnAboutStrandedIntegrationWorktree(snapshot, dependencies)
+        throw error
       }
+      await disposeIntegrationWorktree(snapshot, dependencies)
 
       const completed = [
         `PASS  Merged '${preflight.branch}' into main and archived it as merged/${preflight.branch.slice(5)}.`,
@@ -415,7 +410,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     `PASS  Merge message: ${preflight.messageFile}`,
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
-    'PLAN  Wait for (or, with --skip-lease-wait, fail fast on) the machine-wide landing lease.',
+    'PLAN  Wait for the machine-wide landing lease, so this landing does not race another.',
     'PLAN  Write a safety snapshot before creating the disposable integration worktree.',
     ...(preflight.remoteFeatureBehind
       ? [`PLAN  Keep the behind ${REMOTE}/${preflight.branch} unchanged until the verified archive replaces it.`]
@@ -456,9 +451,6 @@ function executionCommand(options: MergeWithMainOptions): string {
   }
   if (options.skipVerify === true) {
     parts.push('--skip-verify')
-  }
-  if (options.skipLeaseWait === true) {
-    parts.push('--skip-lease-wait')
   }
   if (options.messageFile !== undefined) {
     parts.push('--message-file', shellQuote(options.messageFile))
@@ -506,7 +498,6 @@ function skipAllPrompt(branch: string): string {
  * here through push and released whichever way the landing ends.
  */
 async function acquireLandingLease(
-  options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
   preflight: MergePreflight,
 ): Promise<MachineResourceLease> {
@@ -529,11 +520,6 @@ async function acquireLandingLease(
       `WARN  Landing lease held by '${owner.command}' in ${owner.repositoryRoot} (PID ${owner.pid}), `
         + `held for ${describeHeldFor(owner.startedAt, dependencies.now())}.`,
     )
-    if (options.skipLeaseWait === true) {
-      Errors.throwUserInput(
-        `Refusing to wait for the landing lease because --skip-lease-wait was passed. ${error.message}`,
-      )
-    }
     dependencies.writeLine('WARN  Waiting for the landing lease to free...')
     return await request(LEASE_WAIT_TIMEOUT_MS)
   }
@@ -652,7 +638,8 @@ async function stabilizeAndVerify(
       return
     }
     if (pass === MAX_STABILIZATION_PASSES) {
-      await disposeIntegrationWorktree(snapshot, dependencies)
+      // Keep this pass's integration worktree: it is the evidence of what was verified against the
+      // main tip that kept moving, and the caller's handler names where it is.
       await markFailed(snapshot, dependencies)
       Errors.throwHostEnvironment(
         `${REMOTE}/main moved during ${MAX_STABILIZATION_PASSES} consecutive verification passes; `
@@ -948,6 +935,25 @@ async function refreshLocalMain(snapshot: MergeSnapshot, dependencies: MergeWith
         + `Run: git -C ${mainWorktree.path} merge --ff-only ${pushedHead}`,
     )
   }
+}
+
+/**
+ * A failed landing keeps its integration worktree, because that worktree holds the only copy of what
+ * went wrong. Name it so the evidence can be read and the worktree removed once it has been.
+ */
+function warnAboutStrandedIntegrationWorktree(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): void {
+  const integrationRoot = snapshot.integrationRoot
+  if (integrationRoot === undefined) {
+    return
+  }
+  writeLines(dependencies, [
+    `WARN  The integration worktree is left at ${integrationRoot} so its state can be inspected; it holds `
+    + 'the staged squash this landing failed on.',
+    `WARN  Remove it when you are done: git worktree remove --force ${integrationRoot}`,
+  ])
 }
 
 /** Remove the disposable integration worktree, tolerating it having already been removed or never created. */

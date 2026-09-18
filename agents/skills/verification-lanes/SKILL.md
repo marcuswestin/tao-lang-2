@@ -88,9 +88,8 @@ description: >-
 - `merge-with-main`'s flags only remove work. `--skip-full-verify` omits `just full-verify`, so the
   staged squash gets `just verify --complete` instead; `--skip-verify` omits that staged-squash pass;
   `--skip-all` implies both, asks once with No as the default, and needs a terminal, so there is no
-  way to land unverified non-interactively; `--skip-lease-wait` removes the wait for a busy landing
-  lease and fails fast instead. The staged-squash tree-equality assertion runs under every
-  combination including `--skip-all`, because the squash must be the tree that was verified.
+  way to land unverified non-interactively. The staged-squash tree-equality assertion runs under
+  every combination including `--skip-all`, because the squash must be the tree that was verified.
   `./dev merge-with-main --dry-run` reports the plan and changes nothing.
 - Landing is serialized machine-wide. The command takes a landing lease before preflight and holds it
   through the push, so a second landing prints who holds it and waits its turn rather than racing
@@ -98,8 +97,10 @@ description: >-
   decision to make on their behalf.
 - It lands through a disposable integration worktree built at `origin/main`, never through a shared
   `main` checkout, and verifies **that** tree — the one that actually ships. The worktree is removed
-  on success, on abort, and on every failure, so a red lane leaves nothing behind in
-  `git worktree list`. Preflight requires the local `main` ref to equal `origin/main`, and after a
+  when the landing succeeds and on abort; a **failed** landing keeps it and prints where it is,
+  because it holds the staged squash, the conflict, or the red tree that explains the failure, and
+  the snapshot alone cannot reproduce them. Remove it once you have read it. Preflight requires the
+  local `main` ref to equal `origin/main`, and after a
   successful push the command moves local `main` to the pushed commit itself — fast-forwarding the
   worktree that has it checked out, or moving the ref when none does. If it cannot, it warns with the
   exact command to run and the landing still stands.

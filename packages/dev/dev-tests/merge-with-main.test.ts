@@ -556,31 +556,6 @@ Describe('merge-with-main', () => {
     Expect(fake.lines.some(line => line.includes('Waiting for the landing lease to free'))).toBe(true)
   })
 
-  Test('--skip-lease-wait fails fast on a busy lease instead of waiting', async () => {
-    const fake = fakeDependencies()
-    const owner: MachineResourceOwner = {
-      command: 'merge-with-main feat/other',
-      id: 'other',
-      name: 'merge-with-main-landing',
-      pid: 999,
-      repositoryRoot: '/repo-other',
-      startedAt: '2026-09-03T14:10:00.000Z',
-    }
-    let attempts = 0
-    fake.dependencies.acquireLease = async () => {
-      attempts += 1
-      throw new MachineResourceBusyError(owner)
-    }
-
-    await Expect(MergeWithMainCommand.run({
-      repositoryRoot: fake.repository.featureRoot,
-      skipLeaseWait: true,
-    }, fake.dependencies)).rejects.toThrow('--skip-lease-wait was passed')
-
-    Expect(attempts).toBe(1)
-    Expect(fake.snapshots.size).toBe(0)
-  })
-
   Test('a successful landing fast-forwards local main when a worktree has it checked out', async () => {
     const fake = fakeDependencies({ mainWorktreePath: '/repo-main' })
 
@@ -648,7 +623,7 @@ Describe('merge-with-main', () => {
     )).toBe(true)
   })
 
-  Test('disposes the integration worktree after a staging conflict', async () => {
+  Test('leaves the integration worktree after a staging conflict and says where it is', async () => {
     const fake = fakeDependencies({ failSquash: true })
 
     await Expect(MergeWithMainCommand.run({
@@ -656,14 +631,16 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    Expect(operations.some(operation => operation.startsWith('git worktree remove --force'))).toBe(true)
-    Expect(fake.integrationRoot).toBeUndefined()
+    Expect(operations.some(operation => operation.startsWith('git worktree remove --force'))).toBe(false)
+    Expect(fake.integrationRoot).toBeDefined()
+    Expect(fake.lines.some(line => line.includes('integration worktree is left at'))).toBe(true)
+    Expect(fake.lines.some(line => line.includes('git worktree remove --force'))).toBe(true)
     const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
     Expect(snapshot.phase).toBe('failed')
-    Expect(snapshot.integrationRoot).toBeUndefined()
+    Expect(snapshot.integrationRoot).toBeDefined()
   })
 
-  Test('disposes the integration worktree after a red verification lane', async () => {
+  Test('leaves the integration worktree after a red verification lane and says where it is', async () => {
     const fake = fakeDependencies({ failVerify: true })
 
     await Expect(MergeWithMainCommand.run({
@@ -671,8 +648,9 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    Expect(operations.some(operation => operation.startsWith('git worktree remove --force'))).toBe(true)
-    Expect(fake.integrationRoot).toBeUndefined()
+    Expect(operations.some(operation => operation.startsWith('git worktree remove --force'))).toBe(false)
+    Expect(fake.integrationRoot).toBeDefined()
+    Expect(fake.lines.some(line => line.includes('integration worktree is left at'))).toBe(true)
     const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
     Expect(snapshot.phase).toBe('failed')
   })
@@ -869,7 +847,9 @@ Describe('merge-with-main', () => {
       Expect(fake.calls.some(call => call.command === 'just' && call.args[0] === 'verify')).toBe(false)
       Expect(fake.calls.some(call => call.args[0] === 'commit')).toBe(false)
       Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
-      Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(true)
+      // A failed landing keeps its integration worktree and names it instead of removing it.
+      Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'remove')).toBe(false)
+      Expect(fake.lines.some(line => line.includes('integration worktree is left at'))).toBe(true)
       Expect(([...fake.snapshots.values()][0] as MergeSnapshot).phase).toBe('squashed')
     }
   })
@@ -915,7 +895,9 @@ Describe('merge-with-main', () => {
 
     Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'full-verify')).toHaveLength(3)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(true)
-    Expect(fake.integrationRoot).toBeUndefined()
+    // A failed landing keeps its integration worktree; the command says where it is instead.
+    Expect(fake.integrationRoot).toBeDefined()
+    Expect(fake.lines.some(line => line.includes('integration worktree is left at'))).toBe(true)
     Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
   })
 
@@ -936,7 +918,8 @@ Describe('merge-with-main', () => {
 
     const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
     Expect(snapshot.phase).toBe('failed')
-    Expect(fake.integrationRoot).toBeUndefined()
+    Expect(fake.integrationRoot).toBeDefined()
+    Expect(fake.lines.some(line => line.includes('integration worktree is left at'))).toBe(true)
   })
 
   Test('refuses an appendix with automated attribution before creating a commit', async () => {
@@ -1035,7 +1018,6 @@ Describe('merge-with-main', () => {
         { messageFile: '/elsewhere.msg' },
         { skipAll: true },
         { skipFullVerify: true },
-        { skipLeaseWait: true },
         { skipVerify: true },
       ]
     ) {
