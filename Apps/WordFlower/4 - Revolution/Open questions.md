@@ -10,7 +10,7 @@ or already inherited, and the file says so at the use site.
 
 Three internal contradictions were resolved in `Decisions.md` itself, in this same change, because
 the document disagreed with itself rather than with the implementation; they are listed at the end
-and are not questions.
+and are not questions. A fourth looked like one and was not — it is Q9.
 
 ---
 
@@ -130,6 +130,14 @@ decision that was never written down or an implementation detail that should not
 | `Panes()`                                          | `WorkspaceDetails`                        | `Docs/Spec/Tao Layout and UI.md`   |
 | `Occurrence`                                       | `FileTree` (see Q3)                       | `3 - MVP`                          |
 | `hide <Command>` on a view                         | `DraftDocumentRow`, `FinishedDocumentRow` | §8 (decided — listed for contrast) |
+| `remote none`, `requires <ref>`                    | `project`                                 | `Docs/Spec/Tao Packages.md`        |
+| `press text "…"`, `press key "…"`, `narrow`, `expect navigation title`, `expect target` | the journeys | `Docs/Spec/Tao Testing.md` |
+
+§16 decides `press "New recipe"` and a *physical* `Slash` for hints; the tier writes `press text "…"`
+and `press key "?"` because that is the implemented vocabulary and the journeys are meant to be
+readable beside `1 - Current`'s. Most of the attention vocabulary — `narrow`, `expect target`,
+`expect focus region`, `expect verbs` — has no recorded spelling at all, which is a gap in §16 rather
+than a choice this tier made.
 
 One of these went the other way. `1 - Current` uses `guard WorkspaceName empty -> { … }` as an
 action's early exit, but §8 is explicit that `guard` is **views only** and tests a data object's
@@ -149,6 +157,40 @@ That is a real migration Current owes, and it is the one place where following t
 how an existing WordFlower action reads rather than only how it is spelled. If §8 is wrong and
 availability guards belong in actions too, this is the moment to say so.
 
+## Q9 — Are empty argument lists on containers omitted?
+
+§9 says yes — "`Col [page]`, not `Col()`" — and calls it the one place the mirroring rule yields.
+§10's shell example, `Docs/Spec/Tao Layout and UI.md`, and `1 - Current` all say no, and this tier
+writes `Col()` throughout because that is what §10's example and every sibling reference write.
+
+This rewrite first amended §9 to match them, and that was wrong: the document's own preamble says a
+decision is made on its merits and may supersede a shipped spelling, so "the implementation does it
+the other way" is not evidence against a decision — it is the thing a decision is allowed to
+overrule. The amendment was reverted, and the question is put here instead.
+
+It is not cosmetic. Whichever way it goes, `3 - MVP` inherits it, and the loser is a migration across
+every render tree in the repository.
+
+## Q10 — Two inherited navigation spellings with no decision behind them
+
+- **A split pane's `Title`** (`WorkspaceSplit`, three panes). §10's `SplitNav` contract is `Content`,
+  `Width`, `CollapseOrder`, and `Compact`, and its host-read-set says `SplitNav` reads neither host
+  slot and that panes "retain their own configuration". A journey asserts the pane titles render.
+- **`Badge`** on a `SelectionNav` item. §9 defers `Icon`, `Badge`, detents, and appearance "for
+  forcing features", and §10's host read-set enumerates a selection item as `Label` and `Icon`.
+
+Both came from `3 - MVP` rather than from this rewrite, and both are now marked at the use site.
+
+## Q11 — How does a foreign action's declared failure reach the calling site?
+
+§15 gives a foreign action `fails <Case> "<sentence>"` and says a provider failure "selects a
+declared case". §5 gives the calling site `queued`, `saved`, `rejected`, and `error`, and defines
+`rejected` as a `refuse when` or `validate` failure and `error` as a thrown exception. Neither says
+which arm a declared `fails` case arrives in, or whether the arm binds the case or the sentence.
+
+`ExportPanel` guesses: it treats `Offline` and `Rejected` as `rejected` and renders the bound
+sentence. The export journey rests on that guess.
+
 ## Q8 — Does the Revolution tier stay one file?
 
 §1 decides a file decomposition every app shares — `App`, `Data`, `Access`, `Rules`, `Chrome`,
@@ -167,15 +209,15 @@ that README owns, not a dialect change.
 Three places where the document contradicted itself. Each is amended rather than raised, because
 there was no second party to ask: the decision already existed twice, in two spellings.
 
-1. **§9 "Empty argument lists on _containers_ are omitted."** §10's own shell example — the amended
-   KEY-D7 one — writes `Col() [fill]` and `Navigator() [fill]`, `Docs/Spec/Tao Layout and UI.md`
-   states that render arguments are always parenthesized, and `1 - Current` writes `Col()`
-   throughout. The one-line exception to the mirroring rule never survived contact with the
-   implementation; §9 now says so.
-2. **§10 "Four container kinds … `TabNav`."** The same section's host-read-set bullet, amended by
+1. **§10 "Four container kinds … `TabNav`."** The same section's host-read-set bullet, amended by
    KEY-D11, names `SelectionNav`, which is what is implemented, specified, and used everywhere. §10
-   now names `SelectionNav` and records `TabNav` as the retired name.
-3. **Presentation modes omit `overlay`.** §9 and §10 list sheet, window, root, menu, and toast, but
+   now names `SelectionNav` and records `TabNav` as the retired name. The rename is the whole
+   amendment; nothing about the kind's behaviour is added.
+2. **Presentation modes omit `overlay`.** §9 and §10 list sheet, window, root, menu, and toast, but
    §10's own Back rules talk about "that presentation's own overlays", the grammar has
    `as overlay | sheet | toast`, and every WordFlower tier uses it. `overlay` is now in the list,
-   with the sentence that distinguishes it from a sheet.
+   with one sentence distinguishing it from a sheet and a pointer to the spec page that owns its
+   lane, stacking, and Back precedence — recording those rather than deciding them.
+3. **`Name is Type` in two parameter lists.** §2 and Migration 3 both retire it, and the tier never
+   writes it, but `transaction LeaveKitchen(Membership is Membership)` and
+   `function FirstOwner(Household is Household)` still did. Same class as the two above.

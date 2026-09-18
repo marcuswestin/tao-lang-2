@@ -91,10 +91,31 @@ Describe('tao foreign binding forms', () => {
   })
 
   Test('never completes a line that carries head text of its own from its neighbour', () => {
-    const scan = taoForeignBindings('action Publish(Value text)\n   retries 3 from ./Api.ts')
+    const scan = taoForeignBindings('action Publish(Value text)\n   retries Twice from ./Api.ts')
 
-    Expect(scan.bindings).toEqual([])
-    Expect(scan.unreadable).toEqual([2])
+    Expect(scan.bindings.map(binding => binding.name)).toEqual(['Twice'])
+  })
+
+  Test('refuses a wrapped head that does not reduce to a parameter list', () => {
+    // Each of these walks back past a clause it could not strip, so without the parameter-list
+    // requirement the last identifier on that line becomes the export name: the phrase a `fails`
+    // sentence names, the word after an unrecognized `runs`, or an unrelated neighbouring binding.
+    const cases = [
+      'action Publish(Value text)\n   fails Offline InviteUsed\n   from ./Api.ts',
+      'action Publish(Value text)\n   runs single\n   from ./Api.ts',
+      'let Other = Thing\n   from ./Api.ts',
+    ]
+
+    for (const source of cases) {
+      const scan = taoForeignBindings(source)
+
+      Expect(scan.bindings).toEqual([])
+      Expect(scan.unreadable.length).toBe(1)
+    }
+  })
+
+  Test('still reads a same-line binding that has no parameter list', () => {
+    Expect(names('nav Workspace from ./Workspace.ts')).toEqual(['Workspace'])
   })
 })
 

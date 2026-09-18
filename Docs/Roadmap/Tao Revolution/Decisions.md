@@ -426,7 +426,7 @@ data Recipes / Recipe {
    validate Servings >= 1 "A recipe serves at least one"   // validate: the write is rejected outright
 }
 
-transaction LeaveKitchen(Membership is Membership) for Me {
+transaction LeaveKitchen(Membership) for Me {
    refuse when Membership.Role is Owner and Membership is last owner
       "Make someone else an owner first."             // refuse: a domain check inside a transaction
    delete Membership
@@ -1173,7 +1173,7 @@ Three constructs, one per context, so no word is asked to mean two things:
 ```swift
 file view RecipeScreen(Recipe) {
    guard Recipe { loading -> Spinner(), missing -> EmptyState(Title: "This is gone") }
-   render Col() [screen] { Text(Recipe.Title) [title] }   // reached only once Recipe is available
+   render Col [screen] { Text(Recipe.Title) [title] }   // reached only once Recipe is available
 }
 ```
 
@@ -1192,7 +1192,7 @@ action Delete() runs single {
   `if` is the one-sided test that gets it there:
 
 ```swift
-function FirstOwner(Household is Household) returns Account {
+function FirstOwner(Household) returns Account {
    if Household.Memberships is empty { return none }
    return Household.Memberships[0].Person
 }
@@ -1215,8 +1215,8 @@ function FirstOwner(Household is Household) returns Account {
 ```swift
 view RecipeScreen(Recipe) { … }                        // a link presents it (§10) — nothing marks that here
 file view RecipeCard(Recipe) { … }                     // a reusable leaf
-view Section(Title text) { render Col() [card] { Text(Title) [sectionTitle]; @@content } }
-view Centered() { render Col() [screen, content center center] { @@content } }
+view Section(Title text) { render Col [card] { Text(Title) [sectionTitle]; @@content } }
+view Centered() { render Col [screen, content center center] { @@content } }
 file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a typed value
 ```
 
@@ -1304,20 +1304,17 @@ navigator can describe itself when it is itself presented, without exposing its 
 - **Parameter types are inferred from the type name** — `view RecipeScreen(Recipe)` — not restated.
   A stated type is juxtaposed and its traits trail, exactly as in a field: `view Status(Message
   text, Tone default Neutral)`, `view CookScreen(Recipe, Meal?)` (§2).
-- **Every argument list is parenthesized, containers included**: `Col() [page]`. This reverses an
-  earlier exception — "empty argument lists on containers are omitted" — which never survived contact
-  with the implementation. The exception bought a little quiet in the render tree and cost a rule:
-  §10's own shell example writes `Col() [fill]` and `Navigator() [fill]`, `Docs/Spec/Tao Layout and
-  UI.md` states that render arguments are always parenthesized, and `1 - Current` has written `Col()`
-  since the surfaces tranche. The mirroring rule now has no exception anywhere, which is worth more
-  than two saved characters per line. _(Amended while rewriting `Apps/WordFlower/4 - Revolution`,
-  Process step 2.)_
+- **Empty argument lists on _containers_ are omitted**: `Col [page]`, not `Col()`. The render tree is
+  the primary shape of the code and the parentheses carry nothing there, so this is the one place the
+  mirroring rule yields. _(§10's shell example, the implementation, and
+  `Apps/WordFlower/4 - Revolution` all write `Col()` instead; that disagreement is an open question
+  in `Apps/WordFlower/4 - Revolution/Open questions.md`, not a decision an agent may take.)_
 - **`render` introduces the visual tree**, and the visible hierarchy is the primary shape of the code:
 
 ```swift
-render Col() [screen] {
+render Col [screen] {
    Text(Recipe.Title) [title]
-   Row() [gap sm] { Text(Recipe.Course); Text(Recipe.Servings) }
+   Row [gap sm] { Text(Recipe.Course); Text(Recipe.Servings) }
 }
 ```
 
@@ -1327,14 +1324,14 @@ render Col() [screen] {
 
 ```swift
 // A condition postfixed to an entry. Several may sit in one list, independently.
-render Foo2() [ink green when Person.Happy, ink red when Person.Sad]
+render Foo2 [ink green when Person.Happy, ink red when Person.Sad]
 
 // A case map supplying one clause's value.
-render Foo() [ink when Timer.EndsAt > Now { yes -> fine, no -> good }]
+render Foo [ink when Timer.EndsAt > Now { yes -> fine, no -> good }]
 
 // A case map supplying whole clause lists, beside an ordinary postfix condition.
-render Row() [card, when Tone { Neutral -> [background sunken], Good -> [ink good] },
-              ink accent when Tone is Warning]
+render Row [card, when Tone { Neutral -> [background sunken], Good -> [ink good] },
+            ink accent when Tone is Warning]
 ```
 
 - The three are told apart by what is present, not by lookahead: an entry that _starts_ with `when`
@@ -1349,7 +1346,7 @@ render Row() [card, when Tone { Neutral -> [background sunken], Good -> [ink goo
 - **Layout primitives express intent**, never device coordinates or flexbox mechanics:
 
 ```swift
-Row() [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chevron.right") }
+Row [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chevron.right") }
 ```
 
 - **`Grid` is a layout container in the `Col` / `Row` / `Scroll` family — it wraps a `loop`, never
@@ -1358,7 +1355,7 @@ Row() [gap md, content spread center] { Text(Recipe.Title) [claim 1]; Icon("chev
   header, after it the footer; emptiness stays at the site (§5):
 
 ```swift
-Grid() [cell min 220, gap md] {
+Grid [cell min 220, gap md] {
    Text("This week's picks") [sectionTitle]              // header — scrolls with the grid
    loop Recipes / Recipe {
       RecipeCard(Recipe) [span 2 when Recipe is Featured]
@@ -1366,7 +1363,7 @@ Grid() [cell min 220, gap md] {
    }
 }
 
-Grid() [columns 7, gap sm] {                              // a generated collection: a calendar
+Grid [columns 7, gap sm] {                                // a generated collection: a calendar
    loop WeekOf(WeekStart) / Day { DayCell(Day); on select -> { set Selected = Day } }
 }
 ```
@@ -1389,7 +1386,7 @@ Grid() [columns 7, gap sm] {                              // a generated collect
 state StepNumber = 1
 Pages(Page: StepNumber) {
    loop Recipe.Steps / Step {
-      Col() [gap md, content center center] {
+      Col [gap md, content center center] {
          Text("Step { Step.Position } of { Recipe.Steps.Count }") [caption]
          Text(Step.Text) [pageTitle, center]
 }  }  }
@@ -1428,7 +1425,7 @@ file view TimerBar(Timer) {
    state Tick = Interval(1.s)                    // starts on mount, stops when the view unmounts
    let Left = Timer.EndsAt - Tick.Value          // Tick.Value: the time as of the latest tick
 
-   render Row() [card, content spread center] {
+   render Row [card, content spread center] {
       Text(Timer.Step.Text, Lines: 1) [label, claim 1]
       Text(when Left > 0 Left.Clock / not "Done") [pageTitle, ink good when Left <= 0]
    }
@@ -1497,8 +1494,9 @@ Map(Places) alternative { loop Places / Place { PlaceRow(Place) } }
 - **Four container kinds**: a back-stack, a replaceable detail pane, an adaptive selection container,
   and a multi-pane split — `StackNav`, `SlotNav`, `SelectionNav`, `SplitNav`. The selection container
   was first written `TabNav`, which named one of its surfaces rather than what it is: the same
-  declaration is a tab bar, a sidebar, a drawer, or a toggle bar depending on `Display` and width, so
-  the kind is named for the selection it owns. `TabNav` is retired without an alias, and the
+  declaration is tabs when narrow and a sidebar when wide, as the bullet below already said, so the
+  kind is named for the selection it owns rather than for one of its shapes. `TabNav` is retired
+  without an alias, and the
   host-read-set bullet below — which already said `SelectionNav` — is the spelling the rest of this
   document and the implementation use. _(Amended while rewriting
   `Apps/WordFlower/4 - Revolution`, Process step 2.)_
@@ -1579,12 +1577,13 @@ reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe f
 - **Presentation modes with automatic fallbacks** — overlay, sheet, window, root, menu, toast. A
   window is a window on a laptop and a full-screen sheet elsewhere, and carries a semantic key so
   reopening the same subject focuses one window. **An overlay is Tao's own layer and a sheet is the
-  platform's**: every nav owns an absolute overlay lane above its content, so an overlay stacks there
-  — covered entries stay mounted but hidden, and `dismiss` or Back consumes the top one before the
-  nav's ordinary content history — while a sheet is the card the OS slides up and lets a person drag
-  down. Both are dismissible modals; only the sheet hands presentation to the host. This mode was
-  implemented and specified from the start and was missing from this list rather than from the
-  language. _(Recorded while rewriting `Apps/WordFlower/4 - Revolution`, Process step 2.)_
+  platform's**: an overlay stacks in the nav's own lane above its content, while a sheet is the card
+  the OS slides up and lets a person drag down. Both are dismissible modals; only the sheet hands
+  presentation to the host. This mode was implemented and specified from the start and was missing
+  from this list rather than from the language; `Docs/Spec/Tao Presentation and Navigation.md`
+  § _Presenting overlays and toasts_ owns its lane, stacking, and Back precedence, and this entry
+  records that rather than deciding it. _(Recorded while rewriting
+  `Apps/WordFlower/4 - Revolution`, Process step 2.)_
 
 ```swift
 present JoinKitchen(Code) as sheet

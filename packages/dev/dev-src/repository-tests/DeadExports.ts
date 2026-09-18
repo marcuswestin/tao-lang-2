@@ -78,8 +78,11 @@ const TAO_BINDING_TAILS = [
   /\s+returns\s+[A-Za-z_]\w*$/,
 ]
 
-/** How many earlier lines a wrapped foreign declaration head may span before `from`. */
-const TAO_WRAPPED_HEAD_LIMIT = 12
+/**
+ * How many earlier lines a wrapped foreign declaration head may span before `from`. Only a line that
+ * strips to nothing continues the search, so the practical span is the declaration's clause count.
+ */
+const TAO_WRAPPED_HEAD_LIMIT = 4
 
 /** `import * as <Alias> from '<relative path>'`, the first half of a namespace facade. */
 const NAMESPACE_IMPORT = /import\s+\*\s+as\s+(\w+)\s+from\s+'(\.{1,2}\/[^']*)'/g
@@ -235,7 +238,7 @@ function wrappedExportName(codeLines: string[], index: number, head: string): st
       return undefined
     }
     joined = `${line} ${joined}`
-    const name = boundExportName(joined)
+    const name = boundExportName(joined, 'parameter list required')
     if (name !== undefined) {
       return name
     }
@@ -320,8 +323,17 @@ function maskTaoStrings(line: string): string {
  * boundExportName reads the export name out of the text left of a `from`. After the declaration
  * tails are stripped the name is the identifier before the path, skipping one balanced parameter
  * or argument list — the same shape whether the binding is a declaration or a bridged expression.
+ *
+ * `'parameter list required'` refuses a head that does not end in one. A same-line read accepts
+ * either shape, because `nav Export from ./X.ts` legitimately has no list. A wrapped read must not:
+ * it walks backwards past lines it could not strip, so without the requirement an unstripped clause
+ * or an unrelated neighbouring line donates its last identifier — `fails Offline InviteUsed` binds
+ * the phrase, `runs single` binds `single`, and `let Other = Thing` binds `Thing`. Every declaration
+ * form whose head can wrap has clauses between its parameter list and its `from`, so requiring the
+ * list costs nothing and keeps a misread binding an `unreadable` one, which is the case the report
+ * calls serious.
  */
-function boundExportName(head: string): string | undefined {
+function boundExportName(head: string, shape?: 'parameter list required'): string | undefined {
   let text = head.trimEnd()
   for (let stripped = true; stripped;) {
     stripped = false
@@ -333,9 +345,10 @@ function boundExportName(head: string): string | undefined {
       }
     }
   }
-  if (text.endsWith(')')) {
-    text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
+  if (!text.endsWith(')')) {
+    return shape === 'parameter list required' ? undefined : /([A-Za-z_]\w*)$/.exec(text)?.[1]
   }
+  text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
   return /([A-Za-z_]\w*)$/.exec(text)?.[1]
 }
 

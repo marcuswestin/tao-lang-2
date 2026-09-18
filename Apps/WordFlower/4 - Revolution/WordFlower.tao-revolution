@@ -262,7 +262,7 @@ nav WordFlowerNavigator = SelectionNav {
    @workspace {
       Label "Workspace"
       Icon "folder"
-      Badge "3"
+      Badge "3" // §9 defers `Badge` behind a forcing feature (`Open questions.md` Q10)
       Content WorkspaceNav
    }
    @settings {
@@ -290,7 +290,7 @@ function WorkspaceSplit(Workspace) returns nav {
       @files {
          // A view with bound arguments is a presentable value; it renders only when the nav mounts it.
          Content SlotNav { Initial FileTree(Workspace) }
-         Title "Files"
+         Title "Files" // a pane `Title` is in no decision (`Open questions.md` Q10)
          Width 280
          CollapseOrder 2
       }
@@ -461,7 +461,7 @@ data Workspaces / Workspace {
    CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
    ChangedAt time (default now, touch on change)
    Pinned yes / no
-   Documents (relation Documents, owned)
+   Documents (owned)
 
    validate Name is not empty "A workspace needs a name"
 
@@ -471,13 +471,17 @@ data Workspaces / Workspace {
 
 data Documents / Document {
    Title text (required "Name this document", search, title)
+   // `required` states completeness and never blocks a write; the invariant that rejects one is a
+   // `validate`, and it is what invalidates a draft that tries to save without a title.
    Body text (default "", search)
    Final yes / Draft no
    Public yes / Private no (default Public)
    CreatedAt time (default now)
    ChangedAt time (default now, touch on change)
-   Workspace (relation Workspace)
+   Workspace
    Paragraphs (owned, ordered)
+
+   validate Title is not empty "A document needs a title"
 
    index CreatedAt
    order by CreatedAt
@@ -606,7 +610,7 @@ function DocumentLabel(Title text) returns text {
 
 // A function stops by returning, and `if` is the one-sided test that gets it there — it never takes
 // an `else`.
-function GoalFraction(Count number) {
+function GoalFraction(Count number) returns number {
    if Count == 0 {
       return 0
    }
@@ -685,7 +689,9 @@ view TagSummary(Tags PromptTags) {
 scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
-   query Workspaces { }
+   query Workspaces {
+      order by Pinned descending // what the Pin command is for; the entity's CreatedAt breaks ties
+   }
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. `check` is the action's early exit — `guard` is the view-side construct and tests a
    // data object's availability, never a boolean.
@@ -1004,10 +1010,13 @@ view DocumentEditor(Document) {
    // `runs single` refuses a second in-flight call, and `SaveDocument.Running` is the live
    // in-flight reading the button below renders as a busy state.
    action SaveDocument() runs single {
-      check Edit.Incomplete is no
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
+      // An unhandled `save` rejection invalidates the draft, so the sentence shows beside the field
+      // rather than anywhere else — the one write outcome with a defined home. `check` then stops
+      // the action, so a refused save neither counts nor announces itself.
       save Edit
+      check Edit.Invalid is no
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking.
       present SavedToast(Revert: -> {
@@ -1255,8 +1264,8 @@ scene Settings() {
          Card(Title: "Writing session") {
             WordBadge(SessionGoal)
             Text("Build { BuildStamp }") [body]
+            #resetSignedOut
             @actions FormButton("Reset to signed out") {
-               #resetSignedOut
                // From a view declaration, `replace` is the only root operation an app host accepts.
                on press -> { replace SignedOutNav in WordFlower }
             }

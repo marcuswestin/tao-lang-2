@@ -73,12 +73,14 @@ tests written in Tao, green in Current, for every construct introduced.
 - [x] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
-  - `Apps/WordFlower/4 - Revolution/Open questions.md` carries the eight questions the rewrite could
-    not answer from `Decisions.md` — chiefly whether the visibility ladder is §1's two words or the
-    implemented five, and whether `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority
-    cluster, is `R5` in `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
-    `Decisions.md` were amended in the same change: container parentheses, `TabNav` → `SelectionNav`,
-    and the missing `overlay` presentation mode.
+  - `Apps/WordFlower/4 - Revolution/Open questions.md` carries the eleven questions the rewrite could
+    not answer from `Decisions.md` — chiefly whether empty argument lists on containers are omitted
+    (§9 says yes, §10's own example and the implementation say no, and `3 - MVP` inherits whichever
+    wins), whether the visibility ladder is §1's two words or the implemented five, and whether
+    `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority cluster, is `R5` in
+    `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
+    `Decisions.md` were amended in the same change: `TabNav` → `SelectionNav`, the missing `overlay`
+    presentation mode, and two parameter lists still written `Name is Type`.
   - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
 - [ ] Consolidate the `Apps/Tao Future/` apps to the decided dialect (Process step 3)
   - The three demos are design D's dialect today; align them to `Decisions.md` and complete

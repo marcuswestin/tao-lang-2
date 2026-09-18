@@ -1,6 +1,8 @@
 use SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
-use DocumentGone, ExportDocument, StarterWorkspace, WordFlowerDrawer, WordFlowerPreview, Workspaces from ./
+
+// A folder is one module, so nothing here imports the app file beside it: `use … from @pkg` is for
+// genuinely external packages and other folders (§1).
 
 // Directional journeys for the full target, written in the decided testing dialect
 // (`Docs/Roadmap/Tao Revolution/Decisions.md` §16).
@@ -70,9 +72,9 @@ test "WordFlower full target" on phone with StarterWorkspace {
       expect text "Saves this session: 0"
       enter "" into #documentTitle
       press #save
-      // The draft carries `Documents.Title (required "…")`, so an empty title leaves it incomplete
-      // and the sentence shows beside the field rather than anywhere else.
-      expect text "Name this document"
+      // `save` is refused by the entity's own `validate`, which invalidates the draft, so the
+      // sentence shows beside the field. `required` would not have blocked the write.
+      expect text "A document needs a title"
       expect text "Saves this session: 0"
       enter "Opening night" into #documentTitle
       enter "The first line. Then another." into #documentBody
@@ -354,27 +356,27 @@ nav FoundationNavigator = SlotNav { Initial FoundationStack }
 
 app WordFlowerFoundationTest {
    Name "WordFlower Navigation Foundation Test"
-   Navigator FoundationNavigator
+   view FoundationNavigator
 }
 
 app WordFlowerDeclarationHead {
    Name "WordFlower Declaration Head"
-   Navigator FoundationStack
+   view FoundationStack
 }
 
 app WordFlowerDeclarationHeadWith = app with {
    Name "WordFlower Declaration Head With"
-   Navigator FoundationStackWith
+   view FoundationStackWith
 }
 
 let WordFlowerDeclarationLet = app {
    Name "WordFlower Declaration Let"
-   Navigator FoundationStackLet
+   view FoundationStackLet
 }
 
 let WordFlowerDeclarationLetWith = app with {
    Name "WordFlower Declaration Let With"
-   Navigator FoundationStackLetWith
+   view FoundationStackLetWith
 }
 
 scene FoundationHome() {
