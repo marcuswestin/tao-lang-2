@@ -1493,3 +1493,32 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Editing a project skill and running `./agent fix` either succeeds, or fails with a
   message naming the sandbox and the command to rerun.
 - **Source:** 2026-09-17 subagent delegation branch.
+
+### DEVENV-073 — The two-lane timings-record test fails about half the time
+
+- **Status:** Candidate
+- **Area:** Verification scheduling
+- **Impact:** `verification-concurrency.test.ts`'s `leaves both lanes' records readable when two of
+  them finish at once` fails roughly half of its runs, in isolation, on an unchanged tree. It is in
+  `_test`, so it reds `verify --complete` at random and costs a full lane re-run each time. Worse
+  than the cost: it trains agents to re-run a red complete lane rather than read it, which is the
+  habit the contention reporting exists to prevent.
+- **Evidence:** Six consecutive isolated runs of
+  `bun test packages/dev/dev-tests/verification-concurrency.test.ts` on one unchanged tree gave
+  `6 pass 0 fail` three times and then `5 pass 1 fail` three times. The failure is
+  `ENOENT: no such file or directory, open '<temp root>/.artifacts/timings/durations.json'` at
+  `verification-concurrency.test.ts:240`, where the test asserts both concurrent lanes left a
+  readable durations store. The mechanism is not established: `RunTimings.acquireLease` documents a
+  lost lease as "write anyway, unserialized", so a contended lease alone should still leave the file
+  behind, and the missing-file case needs its own explanation before a fix is chosen.
+- **Workaround:** Re-run the file. A branch that changes nothing under
+  `packages/dev/dev-src/repository-tests/` outside `repo-lint.ts` is not the cause; check
+  `git diff main...HEAD -- packages/dev/dev-src/repository-tests/ packages/shared/` before treating
+  it as a regression.
+- **Proposed change:** Find out whether the durations store is never written or written elsewhere
+  when two lanes finish together — `record()` returns early on an empty duration set, which would
+  produce exactly this — and make the test assert the behavior that is actually intended. If a lane
+  may legitimately record nothing, the test should say so rather than requiring the file.
+- **Dependencies:** None.
+- **Acceptance:** Twenty consecutive isolated runs of the file pass on an unchanged tree.
+- **Source:** 2026-09-18 subagent delegation branch, after merging main.
