@@ -1520,6 +1520,11 @@ an entry here may link one when the developer workflow is also affected.
   and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
   All four pass when the file is run alone on an idle machine. Across four `verify --complete` runs the
   failure set tracked host load, shrinking from four to one as the load average fell from 86.5 to 18.8.
+  The same three reappeared later that day at `load peaked at 31.8`, and the load they turn on is not
+  something lane admission can govern: sampled every ten seconds while they failed, the machine's total
+  reserved slots stayed at 1 across five registered lanes while the load average ran 86 down to 20. The
+  contention these tests trip over is the load ratio alone — the warning they received says `no other
+  Tao lane registered` — so no admission rule makes them green.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
@@ -1617,7 +1622,9 @@ an entry here may link one when the developer workflow is also affected.
   do not, so each new lane could stack a full share on top of reservations taken under wider ones,
   and the total could reach several times `cpuCount`. The check is a fairness bound rather than a
   CPU one either way — lanes reserving 4-6 slots drove load past 21 on 18 CPUs, because one slot may
-  run a whole test file's parallel children.
+  run a whole test file's parallel children. Measured further apart the two barely relate at all: with
+  five lanes registered and exactly one slot reserved machine-wide, the load average ran from 86 down
+  to 20 over fifty seconds. Nothing admission does to the slot total governs that number.
 - **Dependencies:** Revises DEVENV-001, which introduced the global check together with the fair
   shares and the one-slot floor those shares still provide. Fixed on `feat/lane-admission-share`.
 - **Acceptance:** A lane that registers against a registry whose slots are all reserved admits its
