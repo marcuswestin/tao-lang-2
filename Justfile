@@ -7,8 +7,8 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
-FULL_VERIFY_SKIPPED := "studio-smoke-simulated-user=quarantined; every step now passes up to the component drag onto the editor; run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
+FULL_VERIFY_SKIPPED := ""
 
 # Print available recipes
 help:
@@ -241,12 +241,12 @@ verify changed='false' complete='false' fresh='false':
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every slow UI lane
 [arg('fresh', long='fresh', value='true')]
 full-verify fresh='false': deps
-    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify {{ if FULL_VERIFY_SKIPPED == "" { "" } else { "--skipped \"" + FULL_VERIFY_SKIPPED + "\"" } }} --green-tree full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Run full-verification's sandbox-compatible gates without installing dependencies or claiming its five active UI lanes passed
 [arg('fresh', long='fresh', value='true')]
 full-verify-sandbox fresh='false':
-    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox {{ if FULL_VERIFY_SKIPPED == "" { "" } else { "--skipped \"" + FULL_VERIFY_SKIPPED + "\"" } }} --green-tree full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Private
 #########

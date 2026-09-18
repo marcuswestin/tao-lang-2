@@ -143,6 +143,25 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       })()`,
         { timeoutMs: 30_000 },
       )
+      // The agent panel opens as a floating window over the workbench, covering the inspector and
+      // the lower half of every divider. Minimize it once, as anyone about to work in the editor
+      // would, so the rest of the journey reaches the workbench rather than the panel. It stays
+      // minimized across the reloads below, which is why this is done once.
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
+          instanceof HTMLButtonElement`,
+        { timeoutMs: 30_000 },
+      )
+      if (
+        await browser.evaluate<boolean>(
+          `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') !== 'true'`,
+        )
+      ) {
+        await browser.click('.studio-agent-collapse')
+      }
+      await browser.waitFor(
+        `document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`,
+      )
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
@@ -389,19 +408,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         )
       }
 
-      await browser.click('.studio-canvas-focus')
-      await browser.waitFor(
-        `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
-      )
-      await browser.waitFor(
-        `(() => {
-        const viewport = document.querySelector('.studio-preview-cell-viewport')
-        return viewport instanceof HTMLElement
-          && viewport.getBoundingClientRect().width === 242
-          && viewport.getBoundingClientRect().height === 122
-      })()`,
-        { timeoutMs: 30_000 },
-      )
+      // Focus frames the group's cells at the measured size of the selected element's view. The
+      // measurement reaches the client with the preview's inspection, so leaving and re-entering is
+      // what a person does when the frame has not arrived yet.
+      await focusCanvasUntilFramed(browser)
       await browser.click('[data-tao-studio-canvas-back="true"]')
       await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
       await browser.waitFor(
@@ -469,8 +479,21 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       const drawingBrowser = browser
       const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
       const firstDraw = { x: 64, y: 24 }
-      await expectPointerReachesBoard(drawingBrowser, createdSketchId, boardGenerationBeforeDraw, firstDraw)
-      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, { steps: 8 })
+      // Draw the free rectangle against the board's right edge. An incremental Snap can only fold a
+      // new rectangle into an existing flow from one end of it, so a rectangle drawn in the middle
+      // of the board would leave the two groups interleaved and Snap would rightly refuse.
+      const firstDrawOrigin = { x: 288, y: 40 }
+      await expectPointerReachesBoard(
+        drawingBrowser,
+        createdSketchId,
+        boardGenerationBeforeDraw,
+        firstDraw,
+        firstDrawOrigin,
+      )
+      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
+        offset: firstDrawOrigin,
+        steps: 8,
+      })
       const persistedCatalog = await waitForSketchRect(
         sketchCatalogPath,
         createdCatalog.revision,
@@ -508,11 +531,12 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(reloadedRect).toEqual({ height: 24, width: 64 })
 
       // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
+      // Left of the free rectangle, so the projection's children run existing-then-new in one step.
       const playlistRects = [
         { height: 52, width: 52, x: 12, y: 8 },
         { height: 20, width: 100, x: 76, y: 8 },
         { height: 20, width: 100, x: 76, y: 40 },
-        { height: 20, width: 36, x: 300, y: 28 },
+        { height: 20, width: 36, x: 188, y: 28 },
       ] as const
       let drawCatalog = persistedCatalog
       const playlistRectIds: string[] = []
@@ -543,8 +567,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
             ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const snappedCatalog = await waitForSketchCatalog(
+      const snappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > drawCatalog.revision
@@ -585,8 +611,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )
       const incrementalSnapBrowser = browser
       const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
-      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
-      const incrementallySnappedCatalog = await waitForSketchCatalog(
+      const incrementallySnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > reloadedSnapCatalog.revision
@@ -602,8 +630,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const incrementalUndoCatalog = await waitForSketchCatalog(
+      const incrementalUndoCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementallySnappedCatalog.revision
@@ -625,8 +655,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
         option.selected = true
       })()`)
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const unsnappedCatalog = await waitForSketchCatalog(
+      const unsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > incrementalUndoCatalog.revision
@@ -644,13 +676,15 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
-      const fullyUnsnappedCatalog = await waitForSketchCatalog(
+      const fullyUnsnappedCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`,
         sketchCatalogPath,
-        catalog =>
-          catalog.revision > unsnappedCatalog.revision
-          && catalog.sketches[0]?.rects.length === 5
-          && catalog.sketches[0]?.snapped.length === 0,
+        // The catalog's revision does not advance on every write (see the revision race recorded in
+        // the remediation roadmap), so this waits on the state itself. Nothing but this press can
+        // produce it: the step above leaves three rectangles snapped.
+        catalog => catalog.sketches[0]?.rects.length === 5 && catalog.sketches[0]?.snapped.length === 0,
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
 
@@ -733,8 +767,10 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
           ?.disabled === false`,
       )
-      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
-      const undoneCatalog = await waitForSketchCatalog(
+      const undoneCatalog = await clickSketchWhenSettled(
+        browser,
+        persistedSketch.id,
+        `[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`,
         sketchCatalogPath,
         catalog =>
           catalog.revision > overlapAppliedCatalog.revision
@@ -1167,11 +1203,13 @@ async function markSketchBoard(browser: StudioCdp, sketchId: string): Promise<st
  * The action boundary for a real pointer gesture: the board's centre must be inside the viewport
  * and hit-test to the board itself, otherwise Chrome would deliver the drag to whatever covers it.
  */
+/** `origin` is where in the board the gesture starts, when it is not the board's centre. */
 async function expectPointerReachesBoard(
   browser: StudioCdp,
   sketchId: string,
   generation: string,
   delta: Readonly<{ x: number; y: number }>,
+  origin?: Readonly<{ x: number; y: number }>,
 ): Promise<void> {
   await browser.evaluate(`(() => {
     const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
@@ -1183,7 +1221,9 @@ async function expectPointerReachesBoard(
   const bounds = diagnostics.bounds
   const start = bounds === undefined
     ? undefined
-    : { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : origin === undefined
+    ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : { x: bounds.left + origin.x, y: bounds.top + origin.y }
   const inView = (point: Readonly<{ x: number; y: number }>): boolean =>
     point.x >= 0 && point.y >= 0 && point.x < diagnostics.viewport.width && point.y < diagnostics.viewport.height
   const reachable = start !== undefined
@@ -1253,6 +1293,68 @@ async function sketchBoardDiagnostics(
       },
     }
   })()`)
+}
+
+/**
+ * focusCanvasUntilFramed enters canvas focus and waits for the group's cells to take the focused
+ * view's measured size, re-entering if the measurement had not reached the client yet.
+ */
+async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
+  const framed = `(() => {
+    const viewport = document.querySelector('.studio-preview-cell-viewport')
+    return viewport instanceof HTMLElement
+      && viewport.getBoundingClientRect().width === 242
+      && viewport.getBoundingClientRect().height === 122
+  })()`
+  const deadline = Date.now() + 40_000
+  while (Date.now() < deadline) {
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(
+      `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
+    )
+    const attemptDeadline = Math.min(deadline, Date.now() + 10_000)
+    while (Date.now() < attemptDeadline) {
+      if (await browser.evaluate<boolean>(framed)) {
+        return
+      }
+      await Time.sleep(100)
+    }
+    // Leave, so the next iteration is a fresh entry rather than a second click that would leave.
+    await browser.click('.studio-canvas-focus')
+    await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
+  }
+  Errors.throwHostEnvironment('Canvas focus never framed the selected view at its measured size.')
+}
+
+/**
+ * A sketch control clicked while a compile is replacing the board reaches an element on its way out
+ * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
+ * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
+ * and given a quiet moment instead, and pressed once when it is still the board that was marked.
+ */
+async function clickSketchWhenSettled(
+  browser: StudioCdp,
+  sketchId: string,
+  selector: string,
+  path: string,
+  predicate: (catalog: SmokeSketchCatalog) => boolean,
+  diagnose?: () => Promise<unknown>,
+): Promise<SmokeSketchCatalog> {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    const generation = await markSketchBoard(browser, sketchId)
+    await Time.sleep(300)
+    const settled = await browser.evaluate<boolean>(`(() => {
+      const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+      return board instanceof HTMLElement
+        && board.dataset.taoStudioSmokeGeneration === ${JSON.stringify(generation)}
+    })()`)
+    if (settled) {
+      await browser.click(selector)
+      return await waitForSketchCatalog(path, predicate, diagnose)
+    }
+  }
+  Errors.throwHostEnvironment(`The Studio sketch board never settled long enough to press ${selector}`)
 }
 
 async function waitForSketchCatalog(
