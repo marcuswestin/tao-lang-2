@@ -7,6 +7,7 @@ const JUST_COMMANDS = [
   'board',
   'capabilities',
   'check',
+  'delegation-report',
   'doctor',
   'finalize',
   'fix',

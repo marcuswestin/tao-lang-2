@@ -210,6 +210,10 @@ board *ARGS:
 capabilities *ARGS:
     ./dev capabilities {{ ARGS }}
 
+# Summarise which subagents were spawned, at which model, and for how long
+delegation-report *ARGS:
+    ./dev delegation-report {{ ARGS }}
+
 # Benchmark cold and steady-state language-service performance
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
