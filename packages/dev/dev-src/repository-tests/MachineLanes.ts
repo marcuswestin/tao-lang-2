@@ -83,6 +83,12 @@ export type AcquireOptions = {
   lane: string
   /** Injected by tests. */
   cpuCount?: number
+  /**
+   * Injected by tests. A run's contention verdict turns on this reading, so a test that means an
+   * idle or a busy machine has to be able to say so; sampling the real host makes the assertion
+   * depend on what every other worktree happens to be doing.
+   */
+  loadAverage?: () => number
   /** Injected by tests. */
   lockTimeoutMs?: number
   registryRoot?: string
@@ -206,8 +212,9 @@ async function inspectLanes(root = registryRoot(), options: { prune?: boolean } 
 async function acquire(options: AcquireOptions): Promise<MachineLane> {
   const root = options.registryRoot ?? registryRoot()
   const cpuCount = Math.max(1, options.cpuCount ?? Platform.cpuCount())
+  const loadAverage = options.loadAverage ?? (() => Platform.loadAverage())
   if (options.reservedJobs !== undefined) {
-    return observingUnregisteredLane(options.reservedJobs, root, cpuCount)
+    return observingUnregisteredLane(options.reservedJobs, root, cpuCount, loadAverage)
   }
 
   const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
@@ -248,6 +255,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     id,
     initialCapacity,
     initialLaneCount,
+    loadAverage,
     lockTimeoutMs: options.lockTimeoutMs,
     path,
     record,
@@ -355,20 +363,21 @@ function registeredLane(options: {
   id: string
   initialCapacity: number
   initialLaneCount: number
+  loadAverage: () => number
   lockTimeoutMs?: number
   path: string
   record: LaneRecord & { id: string; maxSlots: number }
   root: string
 }): MachineLane {
   let peakLanes = options.initialLaneCount
-  let peakLoadAverage = Platform.loadAverage()
+  let peakLoadAverage = options.loadAverage()
   let released = false
   let capacity = Math.max(1, options.initialCapacity)
   let admissionPollMs = ADMISSION_POLL_MS
   let waitReason: string | undefined
 
   const timer = setInterval(() => {
-    peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
+    peakLoadAverage = Math.max(peakLoadAverage, options.loadAverage())
     void activeLanes(options.root).then(lanes => {
       peakLanes = Math.max(peakLanes, lanes.length)
       return lanes
@@ -681,13 +690,18 @@ function unregisteredLane(capacity: number): MachineLane {
   }
 }
 
-async function observingUnregisteredLane(capacity: number, root: string, cpuCount: number): Promise<MachineLane> {
+async function observingUnregisteredLane(
+  capacity: number,
+  root: string,
+  cpuCount: number,
+  loadAverage: () => number,
+): Promise<MachineLane> {
   const width = Math.max(1, capacity)
   let peakLanes = 1
-  let peakLoadAverage = Platform.loadAverage()
+  let peakLoadAverage = loadAverage()
   let released = false
   const sample = async () => {
-    peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
+    peakLoadAverage = Math.max(peakLoadAverage, loadAverage())
     const lanes = await activeLanes(root)
     peakLanes = Math.max(peakLanes, lanes.length)
   }

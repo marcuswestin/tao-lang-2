@@ -1505,7 +1505,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite
 
-- **Status:** Candidate
+- **Status:** Incoming
 - **Area:** Verification diagnostics
 - **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
   an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
@@ -1543,7 +1543,11 @@ an entry here may link one when the developer workflow is also affected.
   store the test demanded is exactly what the design withholds. That test now asserts what each outcome
   requires — no store when a summary reports contention, a whole one when none does — and passed twenty
   consecutive isolated runs where it had been failing about half. The three `gate-runner.test.ts`
-  assertions this entry names are untouched and still carry the issue.
+  assertions were fixed the same way on `feat/lane-admission-share`: `RunGatesOptions` gained an
+  injected `machineLoadAverage` beside the `machineCpuCount` it already had, the suite's shared helper
+  and the two timings-store tests pin an idle machine, and a new test pins a contended one and asserts
+  the other half — the contention warning appears and no durations file is written. The whole file
+  passed at load 44.15 on 18 CPUs, which is the condition that had been failing it.
 
 ### DEVENV-074 — `./agent fix` cannot format the skills it is told to format
 
@@ -1647,6 +1651,18 @@ an entry here may link one when the developer workflow is also affected.
   visible at `0/1` slots throughout. The same test passed in 24.7s minutes earlier, in a window with
   no lease, and hung identically at 45s on pre-change code while a lease was held, so this is the
   lease and not the admission rule DEVENV-076 changed.
+- **Evidence, second round:** the same evening, four `verify --changed` attempts on one branch were
+  frozen by it, one of them mid-run between two gates. Sampled at six-second intervals, the lease
+  passed between three different worktrees' lanes in a train of short holds, so a waiting lane that
+  loses the gap waits again; the machine sat at load 11.4 on 18 CPUs with four lanes registered, one
+  slot reserved, and nothing able to start. That is the reported symptom exactly — CPU far from
+  pegged and tests not starting — reached without any slot being scarce.
+- **Evidence that the isolation is nominal:** the lease drains peers to zero slots, but slots do not
+  bound CPU demand (see DEVENV-076). Sampled during one such confirmation, with one slot reserved
+  machine-wide, the load average was 86 on 18 CPUs. A confirmation that believes it has the machine
+  to itself can be measuring a host under five times its CPU count, and the one-minute load average
+  it judges by is still mostly the drained peers' work. So the lease charges every other lane for an
+  isolation its own verdict does not actually get.
 - **Workaround:** Re-run the file when no other worktree is confirming. A waiting node now names the
   holding lane, so the cause is visible in the run rather than only in the registry.
 - **Proposed change:** Decide what an exclusive confirmation may cost its peers. A holder that keeps
