@@ -78,14 +78,41 @@ Describe('repository gate runner', () => {
   })
 
   Test('names the first actionable failure in declaration order', async () => {
-    const { summary } = await run(['_repo-lint', '_typecheck', '_test'], {
-      _test: { exitCode: 1, output: 'test failed' },
+    const { summary } = await run(['_repo-lint', '_typecheck', 'dead-exports'], {
+      'dead-exports': { exitCode: 1, output: 'unreferenced export' },
       _typecheck: { exitCode: 2, output: 'error TS2345: bad argument' },
     })
 
     Expect(summary.firstFailure?.name).toBe('_typecheck')
     Expect(summary.firstFailure?.output).toContain('error TS2345')
     Expect(formatGateSummary(summary)).toContain('First failure — _typecheck')
+  })
+
+  Test('expands the test marker into suite nodes instead of running it as a recipe', async () => {
+    // `_test` in a lane's list is not a recipe: `just _test` is never run, and the marker is
+    // replaced by one node per suite, each reporting under the suite it belongs to.
+    const { started, summary } = await run(['_repo-lint', '_test'], {
+      _test: { exitCode: 1, output: 'a recipe that must never run' },
+    })
+
+    Expect(started).toContain('_repo-lint')
+    Expect(started).not.toContain('_test')
+    Expect(summary.gates.map(gate => gate.name)).not.toContain('_test')
+    Expect(summary.gates.map(gate => gate.name)).toContain('_repo-lint')
+    Expect(summary.gates.some(gate => gate.suite === 'tao-apps')).toBe(true)
+    Expect(started).toContain('tao-apps')
+  })
+
+  Test('fails a suite node that exited zero without writing the results it promised', async () => {
+    // A suite process that leaves no structured report proved nothing, whatever it exited. The
+    // summary has to say so itself: reading the reports after rolling the run up would publish
+    // `passed` and then record the failure, and the lane would disagree with its own ledger.
+    const { summary } = await run(['_test'], {})
+    const performanceChecks = summary.gates.find(gate => gate.name === 'performance-checks')
+
+    Expect(summary.status).toBe('failed')
+    Expect(performanceChecks?.status).toBe('failed')
+    Expect(performanceChecks?.reason).toContain('test result report unavailable')
   })
 
   Test('reports a skipped gate as skipped, with why, and never as passed', async () => {
@@ -489,6 +516,11 @@ Describe('gate runner green trees', () => {
       Expect(second.summary.status).toBe('passed')
       Expect(second.summary.greenTree?.lane).toBe('verify')
       Expect(second.summary.greenTree?.logRoot).toBe(first.summary.logRoot)
+      // A tree hash does not describe the tools that read it, so the record carries both halves of
+      // its key and the summary publishes both. This checkout pins no profile.
+      Expect(second.summary.greenTree?.treeHash).toBe('tree-1')
+      Expect(second.summary.greenTree?.toolchain).toBe(GreenTree.NO_TOOLCHAIN)
+      Expect((await GreenTree.load(root)).lanes['verify']?.toolchain).toBe(GreenTree.NO_TOOLCHAIN)
       Expect(second.summary.gates.map(gate => gate.status)).toEqual(['skipped', 'skipped'])
       Expect(second.summary.gates[0]?.reason).toContain('tree unchanged since the green verify run')
 
