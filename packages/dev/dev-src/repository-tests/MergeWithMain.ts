@@ -433,7 +433,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     + 'delete its local branch, and prune.',
     'PLAN  Move local main to the pushed commit if some worktree has it checked out and is clean, or if none '
     + 'does; warn without failing otherwise.',
-    'PLAN  Remove the disposable integration worktree on every exit path, success or failure.',
+    'PLAN  Remove the disposable integration worktree once the landing succeeds; keep it and say where it is if the landing fails.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Land it with: ${command}`,
   ]
