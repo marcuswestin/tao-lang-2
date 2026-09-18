@@ -1497,3 +1497,28 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** The focused file passes while several other worktrees run gates, and a contended
   `_test` node either passes on its isolated retry or fails for a reason the summary names.
 - **Source:** 2026-09-17 `feat/mvp-feedback-intake-doctor-134afd` complete verification.
+
+### DEVENV-073 — Gate-runner tests read the real machine from inside a verification lane
+
+- **Status:** Candidate
+- **Area:** Test reliability
+- **Impact:** `verify --complete` fails its own `dev` suite on a loaded machine, as a
+  `test-assertion` rather than as contention, so the failure does not retry and the merge gate
+  cannot go green until the machine is quiet. It reddens whichever branch happens to be verifying.
+- **Evidence:** On 2026-09-18, inside a lane at load 30.4 on 18 CPUs, `gate-runner.test.ts` failed
+  four cases; the same file passes 31 of 31 in a focused run. `surfaces warnings a gate printed
+  without failing on them` received the extra warning
+  `machine contention: no other Tao lane registered; load peaked at 30.4 on 18 CPUs`, and three
+  others read `ENOENT .../.artifacts/timings/durations.json`. The fixture already passes its own
+  `registryRoot`, which is what DEVENV-041 added, but `contentionWarnings` in `RunSummary.ts` is
+  built from a sampled load average, and a load average is machine-global — no registry root
+  isolates it.
+- **Workaround:** Re-run the file focused, or run the lane when the machine is quiet.
+- **Proposed change:** Let a nested `runGates` take its contention sample from an injected source,
+  as it already takes its registry root and its gate runner, so a unit test observes the machine it
+  was given rather than the one it happens to be running on.
+- **Dependencies:** None. `packages/dev/dev-src/repository-tests/` is outside this task's ownership
+  and was rewritten by the verification-graph work on `main`, so this is recorded rather than fixed.
+- **Acceptance:** The gate-runner suite passes inside a `verify --complete` lane on a machine that is
+  already busy, and a genuine contention warning still reaches a real lane's summary.
+- **Source:** 2026-09-18 `feat/mvp-feedback-intake-doctor-134afd` verification after merging `main`.
