@@ -6,7 +6,7 @@ waits on. This report decides nothing — `R2` chooses between publishing as-is,
 repository, and splitting by subtree, and every recommendation below is written to hold under any of
 those three.
 
-Entries are `P1`–`P24`, grouped by the five areas `A10` names. Each states what it is, what
+Entries are `P1`–`P25`, grouped by the five areas `A10` names. Each states what it is, what
 publishing it reveals, and a recommendation. Severity is **High** (publish only after acting),
 **Medium** (act, or accept deliberately), **Low** (note and move on).
 
@@ -19,7 +19,7 @@ shape and location are recorded.
   age-encrypted to a Secure Enclave recipient, and a scan of all 15,141 blobs in all 1,448 commits of
   history found no credential material. This was the single largest unknown going in, and it is clean.
 - **The real exposure is editorial, not cryptographic.** The agent instruction set, `Roadmap.md`, and
-  `Docs/Roadmap/` are candid internal working material — roughly 247,000 words of it — written on the
+  `Docs/Roadmap/` are candid internal working material — roughly 255,000 words of it — written on the
   assumption that only Ro and agents would read it. It is unflattering in places and sets
   expectations the product does not yet meet.
 - **Three concrete items should be fixed before any publication**, whichever shape `R2` picks: real
@@ -32,15 +32,15 @@ shape and location are recorded.
 
 ## A. Agent instruction set, subagent profiles, skills, and `.rulesync`
 
-The whole agent surface is tracked and would publish: `AGENTS.md` (91 lines), `packages/AGENTS.md`,
-`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 14 skills under `agents/skills/`, 2 subagent
+The whole agent surface is tracked and would publish: `AGENTS.md` (104 lines), `packages/AGENTS.md`,
+`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 18 skills under `agents/skills/`, 7 subagent
 profiles under `agents/subagents/`, the 4 `.rulesync/` sources, and their generated adapters
 (`.claude/settings*.json`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/tao.rules`,
 `.cursor/*`, `.config/wt.toml`).
 
 ### P1 — The instruction set names Ro and encodes the working relationship — Medium
 
-`AGENTS.md` refers to Ro 15 times, and skills add 17 more references. It states that "Ro is the
+`AGENTS.md` refers to Ro 17 times, and skills add 32 more references. It states that "Ro is the
 project lead and language designer", that Ro decides language semantics, roadmap priority, and
 product behavior, and that pushing and merging always stop for Ro. A whole `Responses to Ro` section
 prescribes how an agent should talk to Ro: lead with the answer, at most three levels of nesting,
@@ -97,14 +97,14 @@ learns exactly which commands execute without review.
 
 ### P4 — The skills document known weaknesses in the codebase — Low
 
-The 14 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
+The 18 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
 catch "vacuous or self-fulfilling assertions" and "README claims a journey does not prove".
 `removing-code` exists because dead surfaces accumulate. `old-repo-porting` warns against the
 previous repository's "stale conventions and copied implementation cruft". `error-handling`,
 `langium-scoping`, `runtime-codegen`, and `studio-hybrid-client` each encode a seam that was gotten
 wrong before.
 
-A skill is a scar. Fourteen of them published together read as a list of the project's recurring
+A skill is a scar. Eighteen of them published together read as a list of the project's recurring
 failure modes.
 
 - **Recommendation:** publish. This is the least of the exposures and arguably an asset — it is
@@ -120,28 +120,53 @@ A single vendor-specific agent definition sits inside an otherwise harness-neutr
 
 ### P6 — The session-start hook runs outside the sandbox, and says so — Low
 
-`.rulesync/hooks.jsonc` documents in a comment that "Hooks run as ordinary processes outside the Bash
-sandbox", and wires `sessionStart` to execute
-`packages/dev/dev-src/cli/agent-session-start.zsh` from the Git root.
+`.rulesync/hooks.jsonc` (64 lines) documents in a comment that "Hooks run as ordinary processes
+outside the Bash sandbox", and wires `sessionStart` to execute
+`packages/dev/dev-src/cli/agent-session-start.zsh` from the Git root. Three further hooks —
+`preToolUse`, `subagentStart`, `subagentStop` — run
+`packages/dev/dev-src/cli/agent-delegation-log.zsh`.
 
 Published, this is a documented code-execution path that runs unsandboxed whenever anyone opens this
-repository in Claude Code, Codex, Cursor, or Worktrunk. A contributor who lands a change to that
+repository in Claude Code, Codex, Cursor, or Worktrunk. A contributor who lands a change to either
 script executes code on the next maintainer's machine, outside the sandbox, before any agent command
 runs.
 
-- **Recommendation:** treat `packages/dev/dev-src/cli/agent-session-start.zsh`, `./agent`, and
-  `.rulesync/hooks.jsonc` as a protected path once the repository is public — the same review bar as
-  the permission sources in `P3`. This is a real supply-chain seam, not merely an exposure, and it is
-  worth naming in the contributing guidance `A3` produces.
+- **Recommendation:** treat `packages/dev/dev-src/cli/agent-session-start.zsh`,
+  `packages/dev/dev-src/cli/agent-delegation-log.zsh`, `./agent`, and `.rulesync/hooks.jsonc` as
+  protected paths once the repository is public — the same review bar as the permission sources in
+  `P3`. This is a real supply-chain seam, not merely an exposure, and it is worth naming in the
+  contributing guidance `A3` produces.
+
+### P25 — The delegation instrumentation is published; its log is not — Low
+
+The subagent-delegation work adds a surface worth stating explicitly, because it looks like telemetry
+at a glance and is not.
+
+- Seven profiles under `agents/subagents/` name concrete models and effort levels —
+  `claude-opus-5[effort=high]`, `claude-sonnet-5`, `model_reasoning_effort: xhigh`. Published, these
+  disclose which vendor and tier each kind of work is routed to, and they sit oddly beside `P2`'s
+  rule against naming the agent identity in work products. The rule governs work products; config
+  that has to name a model is a different thing, but a reader will notice the tension.
+- The three hooks in `P6` write to `.artifacts/delegation/events`. `.artifacts` is gitignored
+  (`.gitignore:16`), so **no delegation log is committed** and none would publish. Verified rather
+  than assumed, because a per-session record of what work was handed to which model is exactly the
+  kind of file that should not leave the machine.
+- `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` states the hooks are for a
+  calibration period and names the criteria for removing them, so the instrumentation is
+  self-limiting and says so.
+
+- **Recommendation:** publish the profiles and the skill; keep the log path gitignored. If `R2` picks
+  a curated public repository, check before each sync that `.artifacts/` is excluded at the sync
+  boundary too, not only by `.gitignore` — that is the one way these events could escape.
 
 ## B. `Roadmap.md` and `Docs/Roadmap/` as Ro's private working material
 
-`Roadmap.md` is 370 lines. `Docs/Roadmap/` is 101 tracked files and roughly 247,000 words, 68 of
+`Roadmap.md` is 394 lines. `Docs/Roadmap/` is 103 tracked files and roughly 255,000 words, 70 of
 them active and 33 archived.
 
 ### P7 — `Roadmap.md`'s `Ro STACK` section — High
 
-Lines 11–19 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
+Lines 15–29 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
 deep links, "Enable Codex to interact with studio on its own", work through the environment ledger.
 `R2` names this section specifically.
 
@@ -154,7 +179,7 @@ someone's notes-to-self, because it is.
 
 ### P8 — `Roadmap.md`'s `Ro's stack` section — High
 
-Lines 239–333 are the product and codebase backlog, "unordered", and they are frank in a way that
+Lines 263–358 are the product and codebase backlog, "unordered", and they are frank in a way that
 will be quoted. Specifics that publish as written: "Roughly two dozen raw `Error`s handed to a
 promise rejection", "66 already-typed `throw new Errors.*` guards across ten studio files", "Remove
 magical strings", "Review all tests: remove unnecessary surfaces and overlaps", 462 call sites
@@ -194,7 +219,7 @@ you are asking to install your toolchain.
   findings (`AGENTS.md` mandates it), so keep it tracked privately rather than deleting it. Revisit
   after `A8`'s managed toolchain lands, when the list is shorter and the story is "we fixed these".
 
-### P11 — Twenty-one active roadmap programs for unshipped capability — Medium
+### P11 — Twenty-two active roadmap programs for unshipped capability — Medium
 
 `Docs/Roadmap/` holds active plans for Accessible Tao apps, a design system, navigation and routing,
 React Native and Expo bridging, a CloudKit provider, component kits, enforcement and diagnostics,
@@ -473,8 +498,9 @@ What was not examined, and why:
   lockfiles, where a credential is implausible but not impossible.
 - **Semantic sensitivity was judged, not measured.** Sections B and C rest on reading; another reader
   may draw the line elsewhere on `P11`, `P12`, and `P13` in particular.
-- **`Docs/MVP Roadmap/Agent MVP Roadmap.md` and `Ro MVP Roadmap.md` do not exist on this branch.**
-  They were read from commit `e72efab2` on `feat/mvp-public-release-0d2656`, where they were created.
-  This report is written to merge alongside them.
+- **`Docs/MVP Roadmap/Agent MVP Roadmap.md` and `Ro MVP Roadmap.md`** were first read from commit
+  `e72efab2` before they reached `main`; they now sit beside this report.
 
-Scan date: 2026-09-17. Repository state: `feat/publication-audit-report-d93f40`, based on `3e1ae411`.
+Scan date: 2026-09-17; refreshed 2026-09-18 after merging `main` at `90df2153`, which added the
+subagent-delegation surface (`P25`) and moved the counts in section A and section B.
+Repository state: `feat/publication-audit-report-d93f40`.
