@@ -64,6 +64,33 @@ The usual format applies. Two things are specific to this cut:
 - One bullet states what is deliberately not in this commit and where it continues, naming the
   follow-up branch. That bullet is what stops a later reader from concluding the task was abandoned.
 
+## Syncing `main` before the cut lands
+
+`merge-with-main`'s preflight requires local `main` to equal `origin/main`, and on a machine running
+several agents `main` moves while the cut is being prepared. Sync it deliberately rather than
+discovering the mismatch when the landing is refused:
+
+Fetching before and pushing after is part of landing, for every agent. A local `main` left ahead of
+the remote is what blocks the next agent, and the block is invisible until their landing is refused.
+
+1. `git fetch origin main` immediately before landing, not once at the start. Another branch can land
+   between the verification run and the merge command.
+2. **Local `main` behind `origin/main`:** fast-forward it in whichever worktree has `main` checked
+   out (`git merge --ff-only origin/main`), never in a worktree that has it borrowed.
+3. **Local `main` ahead of `origin/main`:** someone landed and left it unpushed. Landing pushes those
+   commits with yours, and that is the intended outcome — an unpushed `main` is the defect, not the
+   push. Say in the handover whose commits went up alongside yours.
+4. **Both moved:** merge the refreshed `main` into the feature branch, re-run the verification the
+   merge invalidated, and refresh the merge message before landing. A green lane from before the
+   merge proves a tree that no longer exists.
+5. After the landing, confirm `main` and `origin/main` agree again before branching from it, so the
+   follow-up branch starts from what the remote actually holds, and no one inherits an unpushed
+   `main` from you.
+
+A merge that brought in other people's work is also the moment to re-read what it changed in
+`AGENTS.md` and under `agents/skills/`: a landing command or a verification rule can change under
+you, and the cut is being made precisely because other work is landing alongside yours.
+
 ## Merging and continuing
 
 Follow `git-workflow`'s merge section as written. Then, without waiting to be asked:
