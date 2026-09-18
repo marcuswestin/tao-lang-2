@@ -120,7 +120,7 @@ view QuickCapture(Home) {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { dismiss } }
          #captureAdd
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // -- The one question -----------------------------------------------------------------------------------------

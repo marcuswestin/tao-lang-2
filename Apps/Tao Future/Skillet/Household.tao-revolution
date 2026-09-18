@@ -37,7 +37,7 @@ file view SignInPanel() {
    render Col [card, gap sm] {
       #email
       TextInput(Value: bind Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit -> { do SendLink() } }
-      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press -> { do SendLink() } }
+      Button("Email me a sign-in link", Disabled: Email is empty) [primary, busy when SendLink.Running] { on press -> { do SendLink() } }
 }  }
 
 file view StartKitchenPanel() {
@@ -55,7 +55,7 @@ file view StartKitchenPanel() {
       TextInput(Value: bind New.Name, Label: "Kitchen name", Focus: initial) { on submit -> { do Create() } }
       Problems(New)
       #createKitchen
-      Button("Create kitchen", Disabled: New.Incomplete, Busy: Create running) [primary] { on press -> { do Create() } }
+      Button("Create kitchen", Disabled: New.Incomplete) [primary, busy when Create.Running] { on press -> { do Create() } }
 }  }
 
 // Opened by JoinLink, which carries a one-use secret rather than a kitchen id. The invitation projection
@@ -81,7 +81,7 @@ view JoinKitchen(Code secret) {
       if Invited.Anyone { Text("Anyone with this link may join once, until it is used.") [caption] }
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       #join
-      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press -> { do Join() } }
+      Button("Join { Invited.Name }") [primary, busy when Join.Running] { on press -> { do Join() } }
       Button("Not now") [quiet] { on press -> { dismiss } }
 }  }
 
@@ -195,5 +195,5 @@ file view InviteSheet(Household) responds Invite {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #sendInvite
-         Button("Create invite link", Busy: Send running) [primary] { on press -> { do Send() } }
+         Button("Create invite link") [primary, busy when Send.Running] { on press -> { do Send() } }
 }  }  }

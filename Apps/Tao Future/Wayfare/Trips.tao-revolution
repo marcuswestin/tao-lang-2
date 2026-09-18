@@ -75,7 +75,7 @@ file view NewTripSheet() responds Trip {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #createTrip
-         Button("Create trip", Disabled: New.Incomplete, Busy: Create running) [primary] { on press -> { do Create() } }
+         Button("Create trip", Disabled: New.Incomplete) [primary, busy when Create.Running] { on press -> { do Create() } }
 }  }  }
 
 view NoTripOpen() {
@@ -211,7 +211,7 @@ file view NewDaySheet(Trip) responds Day {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #addDay
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // -- Travelers ----------------------------------------------------------------------------------------------
@@ -272,7 +272,7 @@ file view InviteSheet(Trip) responds Member {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #sendInvite
-         Button("Create invitation", Busy: Send running) [primary] { on press -> { do Send() } }
+         Button("Create invitation") [primary, busy when Send.Running] { on press -> { do Send() } }
 }  }  }
 
 view JoinTrip(Code secret) {
@@ -293,7 +293,7 @@ view JoinTrip(Code secret) {
       Text("{ Invited.Begins.Long } – { Invited.Ends.Long }") [caption]
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       #join
-      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press -> { do Join() } }
+      Button("Join { Invited.Name }") [primary, busy when Join.Running] { on press -> { do Join() } }
       Button("Not now") [quiet] { on press -> { dismiss } }
 }  }
 
@@ -312,7 +312,7 @@ file view ShareTripSheet(Trip) {
             Row [content right center, gap sm] {
                Button("Cancel") [quiet] { on press -> { dismiss } }
                #createLink
-               Button("Create link", Busy: Start running) [primary] { on press -> { do Start() } }
+               Button("Create link") [primary, busy when Start.Running] { on press -> { do Start() } }
          }  }
          Shared -> {
             Status("Anyone with the link can see this itinerary", Tone: Good)
@@ -320,7 +320,7 @@ file view ShareTripSheet(Trip) {
             Row [content right center, gap sm] {
                Button("Close") [quiet] { on press -> { dismiss } }
                #revokeLink
-               Button("Stop sharing", Busy: Revoke running) [destructive] { on press -> { do Revoke() } }
+               Button("Stop sharing") [destructive, busy when Revoke.Running] { on press -> { do Revoke() } }
                Button("Share link") [primary] { on press -> { share SharedTripLink(publish Trip as SharedTrip) } }
 }  }  }  }  }
 

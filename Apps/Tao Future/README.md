@@ -42,9 +42,11 @@ name differs from their entity carry `(relation X)`, `search` is a field trait, 
 binding each with a `Reason`, and neither an app language picker nor a provider quiet-hours window
 survives.
 
-**Spellings this pass had to choose without a decision.** Each is recorded in the step-3 handoff for
-Ro: the reorder affordance and drop target as container members (`Col(Reorderable: …)`,
-`Col(Accepts: …)`, `on drop`), `where` on a `loop`, `first N of`, composite `unique A, B`,
+**Spellings this pass had to choose without a decision.** Each is recorded as `R13` in
+`Docs/MVP Roadmap/Ro MVP Roadmap.md`: the reorder affordance and drop target as container members
+(`Col(Reorderable: …)`, `Col(Accepts: …)`, `on drop`), `invalidate <Draft> with <Problem>` where §5
+decides a bare `save` populates `Draft.Problems` on its own,
+`where` on a `loop`, `first N of`, composite `unique A, B`,
 `order by relevance`, `device.timeZone`, `Connection` and `Sync` as environment values, `X.Cases`,
 `to X otherwise Y` and a `never` schedule case, `runs single per Row`, and the world controls a
 journey uses (`clock`, `advance`, `collaborator`, `capture shared link`, `expect notification`,

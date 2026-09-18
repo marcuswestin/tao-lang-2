@@ -7,7 +7,10 @@ available evidence that proves it.
 Every row's Forcing feature cell is now filled, with one exception spelling: a cell reading
 **`none — for Ro`** means the capability is decided but _no feature in any of the four apps forces
 it_. Those are red flags to resolve at MVP derivation (step 4) — cut the capability, or let Ro name
-the feature that earns it — and they are deliberately not given a contrived one.
+the feature that earns it — and they are deliberately not given a contrived one. Occurrence queries
+are the sharpest of the five: `Decisions.md` §17 decides Hearth's repeating list items as the
+forcing feature, and Hearth does not have them, so either the app grows the feature or the decision
+loses its justification.
 
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
@@ -33,7 +36,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | One atomic commit across rows (§5)                            | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat | Post-MVP | —                         |
 | Bulk write verbs (`update each`, `delete each`) (§5)          | Skillet · clear what was bought; Hearth · clear a finished list         | Post-MVP | —                         |
 | Guard default, effect outcomes (§5)                           | WordFlower · document availability                                      | MVP      | partially in Current      |
-| Outcome vocabulary incl. `queued` (§5)                        | Wayfare · saving a stop with no network; Hearth · offline capture       | Post-MVP | —                         |
+| Outcome vocabulary incl. `queued` (§5)                        | Wayfare · saving a stop with no network       | Post-MVP | —                         |
 | Queries, search, grouping (§6)                                | WordFlower · library search and lists                                   | MVP      | partially in Current      |
 | Entity-declared search consumed by a query (§6)               | Skillet · find anything; Hearth · find across every list                | Post-MVP | —                         |
 | Grouped queries retaining their source rows (§6)              | Skillet · a folded shopping line one tick buys; Hearth · the same fold  | Post-MVP | —                         |
@@ -103,7 +106,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | World controls: clock, network, relaunch, collaborators (§16) | Skillet · a timer that outlives the window; Wayfare · a live conflict   | MVP      | partially in Current      |
 | Scenarios, pseudolocale, review gallery (§16)                 | WordFlower · scenario set                                               | TBD      | partially in Current      |
 | Sketch placeholders and flexible space (§16)                  | WordFlower · the Placeholder journey                                    | MVP      | in Current                |
-| Occurrence queries (§17)                                      | Hearth · routines in Today/Week                                         | Post-MVP | —                         |
+| Occurrence queries (§17)                                      | **none — for Ro** (§17 decides Hearth's routines; Hearth has none) | Post-MVP | —                         |
 | Nearness, distance, places (§17)                              | Hearth · Around                                                         | Post-MVP | —                         |
 
 Rows marked _partially in Current_ have behavior tests for part of the capability; _pending_ means

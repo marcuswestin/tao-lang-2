@@ -59,10 +59,10 @@ file view ImportSheet() {
       Text("Paste a link to a recipe on the web.") [body, muted]
       #importLink
       TextInput(Value: bind Link, Label: "Link", Placeholder: "https://…", Keyboard: url, Focus: initial) { on submit -> { do Import() } }
-      if Import running { Status("Reading the page…", Announce: yes) }
+      if Import.Running { Status("Reading the page…", Announce: yes) }
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { dismiss } }
          #import
-         Button("Import", Disabled: Link is empty, Busy: Import running) [primary] { on press -> { do Import() } }
+         Button("Import", Disabled: Link is empty) [primary, busy when Import.Running] { on press -> { do Import() } }
 }  }  }

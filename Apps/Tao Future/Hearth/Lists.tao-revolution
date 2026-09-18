@@ -67,7 +67,7 @@ file view NewListSheet(Home) responds HearthList {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #addList
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // -- One list -----------------------------------------------------------------------------------------------
@@ -183,7 +183,7 @@ scene HearthListScreen(HearthList) {
                #newItem
                TextInput(Value: bind NewTitle, Label: "What needs doing?", Placeholder: "Add something") [claim 1] { on submit -> { do AddItem() } }
                #addItem
-               Button("Add", Icon: "plus", Disabled: NewTitle is empty, Busy: AddItem running) [primary] { on press -> { do AddItem() } }
+               Button("Add", Icon: "plus", Disabled: NewTitle is empty) [primary, busy when AddItem.Running] { on press -> { do AddItem() } }
          }  }
 
          when HearthList.Kind {
@@ -339,7 +339,7 @@ file view ShareListSheet(HearthList) {
             Row [content right center, gap sm] {
                Button("Cancel") [quiet] { on press -> { dismiss } }
                #createLink
-               Button("Create read-only link", Busy: Start running) [primary] { on press -> { do Start() } }
+               Button("Create read-only link") [primary, busy when Start.Running] { on press -> { do Start() } }
          }  }
          Shared -> {
             Status("Anyone with the link can see this list", Tone: Good)
@@ -347,7 +347,7 @@ file view ShareListSheet(HearthList) {
             Row [content right center, gap sm] {
                Button("Close") [quiet] { on press -> { dismiss } }
                #revokeLink
-               Button("Stop sharing", Busy: Revoke running) [destructive] { on press -> { do Revoke() } }
+               Button("Stop sharing") [destructive, busy when Revoke.Running] { on press -> { do Revoke() } }
                Button("Share link") [primary] { on press -> { share SharedListLink(publish HearthList as SharedList) } }
 }  }  }  }  }
 

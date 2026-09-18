@@ -64,5 +64,5 @@ file view NewDocumentSheet(Trip) responds Document {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #addDocument
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }

@@ -87,7 +87,7 @@ file view NewStopSheet(Day) responds Stop {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #addStop
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // -- One stop ---------------------------------------------------------------------------------------------------
@@ -207,7 +207,7 @@ file view ResolveStopConflict(Mine draft of Stop) {
          #discardMine
          Button("Discard mine") [secondary] { on press -> { discard Mine; dismiss } } // the draft re-reads the row
          #keepMine
-         Button("Keep mine", Busy: Resolve running) [primary] { on press -> { do Resolve() } }
+         Button("Keep mine") [primary, busy when Resolve.Running] { on press -> { do Resolve() } }
 }  }  }
 
 // -- Today ------------------------------------------------------------------------------------------------------

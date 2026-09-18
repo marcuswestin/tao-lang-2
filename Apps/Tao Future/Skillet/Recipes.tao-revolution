@@ -195,7 +195,7 @@ file view NewRecipeSheet(Household) responds Recipe {
       Row [content right center, gap sm] {
          Button("Cancel") [secondary] { on press -> { respond } }
          #addRecipe
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press -> { do Add() } }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // Editing: the row exists and its fields stand on their own, so every input writes through. There is no
@@ -275,7 +275,7 @@ file view ShareRecipe(Recipe) {
             Row [content right center, gap sm] {
                Button("Cancel") [quiet] { on press -> { dismiss } }
                #createLink
-               Button("Create link", Busy: Start running) [primary] { on press -> { do Start() } }
+               Button("Create link") [primary, busy when Start.Running] { on press -> { do Start() } }
          }  }
          Shared -> {
             Status("Anyone with the link can see this recipe", Tone: Good)
@@ -284,7 +284,7 @@ file view ShareRecipe(Recipe) {
             Row [content right center, gap sm] {
                Button("Close") [quiet] { on press -> { dismiss } }
                #revokeLink
-               Button("Stop sharing", Busy: Revoke running) [destructive] { on press -> { do Revoke() } }
+               Button("Stop sharing") [destructive, busy when Revoke.Running] { on press -> { do Revoke() } }
                Button("Share link") [primary] { on press -> { share SharedRecipeLink(publish Recipe as SharedRecipe) } }
 }  }  }  }  }
 

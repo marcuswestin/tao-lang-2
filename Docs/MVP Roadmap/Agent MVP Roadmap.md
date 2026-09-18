@@ -184,7 +184,7 @@ as sibling references. Transcription against a settled decision record, with Ro 
 
 Landed. Skillet, Hearth, and Wayfare read as `Decisions.md` decides, and `Coverage.md` names a
 forcing feature for every capability — four of them `none — for Ro`, which are red flags for step 4
-rather than contrived features. What remains is not agent work: the nine spellings the port had to
+rather than contrived features. What remains is not agent work: the ten spellings the port had to
 choose where `Decisions.md` is silent are listed in `Apps/Tao Future/README.md`, and two places
 where `Decisions.md` disagrees with itself (`TabNav` versus `SelectionNav`, two visibility modifiers
 versus five) wait on Ro.

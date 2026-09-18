@@ -88,7 +88,7 @@ file view StartTimerFor(Step) {
    }
    render Col {
       #startTimer
-      Button("Start { Step.Timer } timer", Icon: "timer", Busy: Start running) { on press -> { do Start() } }
+      Button("Start { Step.Timer } timer", Icon: "timer") [busy when Start.Running] { on press -> { do Start() } }
 }  }
 
 // A running timer, counting down. `Interval` is an ordinary library value, not timer grammar: it starts

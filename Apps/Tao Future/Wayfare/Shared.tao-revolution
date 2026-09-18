@@ -85,7 +85,7 @@ view SignInPanel() {
    render Col [card, gap sm] {
       #email
       TextInput(Value: bind Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit -> { do SendLink() } }
-      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press -> { do SendLink() } }
+      Button("Email me a sign-in link", Disabled: Email is empty) [primary, busy when SendLink.Running] { on press -> { do SendLink() } }
 }  }
 
 // -- The one question -----------------------------------------------------------------------------------------
