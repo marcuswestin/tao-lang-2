@@ -1593,3 +1593,31 @@ an entry here may link one when the developer workflow is also affected.
   identity rather than the timings store.
 - **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
+
+### DEVENV-076 — A dirty shared `main` checkout blocks every agent's landing, with no signal
+
+- **Status:** Candidate
+- **Area:** Worktrees and shell environment
+- **Impact:** `merge-with-main`'s preflight requires the single `main` worktree to be clean, but that
+  checkout is also where agents and Ro edit `main` directly. Any uncommitted file there refuses every
+  other agent's landing, however green their branch is. The refusal names the worktree but not the
+  owner, and nothing tells the blocked agent whether to wait a minute or an hour, so the only options
+  are to poll or to interrupt Ro. An agent that does not know the rule may also be tempted to clean a
+  checkout whose changes are someone else's.
+- **Evidence:** On 2026-09-18 one branch was refused twice within a few hours by two unrelated sets of
+  changes it did not make: first five staged files from the MVP-roadmap split, then four modified
+  `Docs/Tutorials/` files plus an untracked `packages/tao-cli/cli-tests/tutorials.test.ts`. Both times
+  the branch was clean, verified, and had its merge message written; both times the only available
+  action was to wait and retry.
+- **Workaround:** Poll `git -C <mainRoot> status --porcelain` until it is empty and retry immediately;
+  never stage, stash, or revert anything in that checkout.
+- **Proposed change:** Name the blocker in the refusal — how many entries, whether staged or unstaged,
+  and the newest modification time — so the blocked agent can judge whether to wait. Longer term,
+  landing should not need the shared checkout's working tree to be clean at all: the squash could be
+  built in a scratch worktree created from `origin/main`, which removes the coupling between one
+  agent's editing and every other agent's ability to land.
+- **Dependencies:** Related to `Docs/Roadmap/Parallel agents on one machine.md`, which covers sharing
+  the machine's CPUs but not sharing the `main` checkout.
+- **Acceptance:** An agent with a green branch can land while another agent has uncommitted work in the
+  `main` checkout, or is told precisely what to wait for.
+- **Source:** 2026-09-18 `tao check` diagnostics branch landing.
