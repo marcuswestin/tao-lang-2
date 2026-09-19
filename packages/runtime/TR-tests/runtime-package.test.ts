@@ -30,7 +30,7 @@ function providerPackageFixture(): TR.DataProvider {
 }
 
 Describe('tao-runtime package boundary', () => {
-  Test('packages only the generated-code runtime surface', async () => {
+  Test('packages the generated-code runtime and host-neutral core surfaces', async () => {
     const manifest = await FS.readJson<RuntimeManifest>(FS.resolvePath('package.json', runtimePackageRoot))
 
     Expect(manifest.private).toBe(true)
@@ -39,6 +39,7 @@ Describe('tao-runtime package boundary', () => {
     Expect(manifest.exports).toEqual({
       '.': './TaoRuntime-src/TR.ts',
       './TR': './TaoRuntime-src/TR.ts',
+      './core': './TaoRuntime-src/core/Effects.ts',
     })
     const packagedDependencies = {
       ...manifest.dependencies,

@@ -10,7 +10,8 @@
   ],
   "exports": {
     ".": "./TaoRuntime-src/TR.ts",
-    "./TR": "./TaoRuntime-src/TR.ts"
+    "./TR": "./TaoRuntime-src/TR.ts",
+    "./core": "./TaoRuntime-src/core/Effects.ts"
   },
   "peerDependencies": {
     "@expo/vector-icons": "^15.0.0",

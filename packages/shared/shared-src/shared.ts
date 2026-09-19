@@ -1,5 +1,5 @@
 import * as CLI from './CLI'
-import { Assert, Diagnostic, Diagnostics, Errors, Http, Json, Switch, Text, Time } from './core/shared-core'
+import { Assert, Diagnostic, Diagnostics, Effects, Errors, Http, Json, Switch, Text, Time } from './core/shared-core'
 import * as FS from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
@@ -22,6 +22,7 @@ export {
   CLI,
   Diagnostic,
   Diagnostics,
+  Effects,
   Errors,
   FS,
   HCI,
