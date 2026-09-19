@@ -177,7 +177,7 @@ A dedicated attempt on 2026-09-19 did not obtain any of the three, and the reaso
 because it is not the one the section above predicts. Waiting for the lane registry to reach zero is
 not sufficient and the attempt was designed around the wrong signal: the registry hit zero while the
 machine ran at load 22.2 on unregistered work, and over the window the count moved between thirteen
-lanes and none. Held against a gate of no lanes *and* a low load average, no window of the two or
+lanes and none. Held against a gate of no lanes _and_ a low load average, no window of the two or
 three minutes a pair of runs needs ever opened.
 
 What the attempt did establish, none of which needs redoing:
@@ -188,7 +188,7 @@ What the attempt did establish, none of which needs redoing:
 - **`runtime-jest` cannot be benchmarked outside a lane on an unprepared tree.** Run directly, it
   fails 20 of 30 suites with `Something went wrong while compiling Tao tests`, because the generated
   parser the suite compiles against is Git-ignored and a freshly switched worktree has not built it.
-  Run the lane, or `just verify`, before timing the suite by hand. `DEVENV-081` owns the diagnostic.
+  Run the lane, or `just verify`, before timing the suite by hand. `DEVENV-090` owns the diagnostic.
 - **An interleaved paired design does not rescue a contended measurement here.** Alternating
   `--maxWorkers=3` and `6` round by round, so the same drifting load falls on both arms, still gave
   the 3-worker arm a spread of 22.3s to 51.7s at load 34 to 47. The within-suite effect being looked
