@@ -154,7 +154,7 @@ Describe('tao check per-workspace stamp', () => {
     )
   })
 
-  Test('replays a stamped workspace\'s warnings word for word', async () => {
+  Test("replays a stamped workspace's warnings word for word", async () => {
     await withTaoFixture({
       ...TWO_WORKSPACES,
       'AppOne/Main.tao': 'use Placeholder from @tao/ui\n\nview MainView() {\n   render Placeholder("Main")\n}\n',
