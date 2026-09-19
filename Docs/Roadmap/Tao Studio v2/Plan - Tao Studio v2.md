@@ -103,7 +103,7 @@ validity as unverified when Apple's tools are absent rather than as passed.
 
 ## Simulated-user lane: editor ownership and the preview origin boundary
 
-`studio-simulated-user.test.ts` had never been run by any recipe before `full-verify` was repaired, so its
+`studio-simulated-user.test.ts` had never been run by any recipe before `verify-full` was repaired, so its
 browser assertions were unverified from the day they were written. Working through them surfaced two
 findings that outlive the test.
 
@@ -116,7 +116,7 @@ Source identity is also synchronized on tab activation, immediately when a previ
 reloads, saves, and selection changes. The load-time send assumes a synchronously installed preview
 listener; the later activation/save/selection paths republish for receivers that mount after load.
 
-The full simulated-browser journey remains explicitly quarantined from the `full-verify` graph. Focused
+The full simulated-browser journey remains explicitly quarantined from the `verify-full` graph. Focused
 browser runs have exercised typed editor save, isolated palette-drop undo, preview insertion and undo,
 preview-origin move and undo, responsive layout, and console checks, but that evidence is not final
 acceptance. It rejoins automatic verification only after the Draw/Snap/drag-one-in path completes ten

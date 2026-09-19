@@ -54,10 +54,18 @@ async function processFile(
   }
 }
 
-/** workspaceRootForPath returns the package-aware workspace root for an in-place command root. */
-async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
+/**
+ * workspaceRootForPath returns the package-aware workspace root for an in-place command root. Pass
+ * the `sweep` a caller resolving many paths at once opened, so they share one memo and one parser
+ * instead of each rediscovering the ancestors they have in common.
+ */
+async function workspaceRootForPath(
+  path: string,
+  options: InPlace.PathOptions = {},
+  sweep?: Packages.ProjectRootSweep,
+): Promise<string> {
   const root = FS.resolvePath(path, options.cwd)
-  const projectRoot = await Packages.containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
+  const projectRoot = await Packages.containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root, sweep)
   if (projectRoot !== undefined) {
     return projectRoot
   }

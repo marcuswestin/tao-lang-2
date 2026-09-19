@@ -66,6 +66,11 @@ export type MachineLane = {
   report: () => ContentionReport
   release: () => Promise<void>
   tryAcquire: (requestedSlots: number, allowPartial: boolean) => Promise<MachineSlotReservation | undefined>
+  /**
+   * Why the last admission attempt was declined, in words a waiting run can show. A lane that sits
+   * at zero running nodes is otherwise indistinguishable from a lane that is merely slow.
+   */
+  readonly waitReason: string | undefined
   waitForAvailability: () => Promise<void>
 }
 
@@ -78,6 +83,12 @@ export type AcquireOptions = {
   lane: string
   /** Injected by tests. */
   cpuCount?: number
+  /**
+   * Injected by tests. A run's contention verdict turns on this reading, so a test that means an
+   * idle or a busy machine has to be able to say so; sampling the real host makes the assertion
+   * depend on what every other worktree happens to be doing.
+   */
+  loadAverage?: () => number
   /** Injected by tests. */
   lockTimeoutMs?: number
   registryRoot?: string
@@ -201,8 +212,9 @@ async function inspectLanes(root = registryRoot(), options: { prune?: boolean } 
 async function acquire(options: AcquireOptions): Promise<MachineLane> {
   const root = options.registryRoot ?? registryRoot()
   const cpuCount = Math.max(1, options.cpuCount ?? Platform.cpuCount())
+  const loadAverage = options.loadAverage ?? (() => Platform.loadAverage())
   if (options.reservedJobs !== undefined) {
-    return observingUnregisteredLane(options.reservedJobs, root, cpuCount)
+    return observingUnregisteredLane(options.reservedJobs, root, cpuCount, loadAverage)
   }
 
   const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
@@ -243,6 +255,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     id,
     initialCapacity,
     initialLaneCount,
+    loadAverage,
     lockTimeoutMs: options.lockTimeoutMs,
     path,
     record,
@@ -251,9 +264,21 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
 }
 
 /**
- * fairAllocations redistributes unused ceilings. Every registered lane retains a logical admission
- * floor, even when there are more lanes than CPUs; the separate global-availability check still
- * guarantees that actual reservations never oversubscribe the machine.
+ * fairAllocations redistributes unused ceilings. Every registered lane keeps a floor of one slot,
+ * and that floor is honoured at admission even when the machine-wide total is already spent, which
+ * bounds the machine at `cpuCount` plus at most one slot per lane running nothing.
+ *
+ * The floor used to be cancelled by the machine-wide check it shares admission with — admit only
+ * while `cpuCount - Σslots` is positive — exactly when the floor mattered. Lanes that registered
+ * while the machine was emptier keep their wider share until each of their running nodes ends, so
+ * on a busy machine the sum reaches `cpuCount` and every newcomer is reduced to zero, waiting
+ * behind work that will not shrink for minutes. Measured on an 18-CPU host: 18 of 18 slots
+ * reserved, CPU under a third busy, nine lanes reporting `waiting` and none of them able to start.
+ * The total is worth keeping above that floor, because a lane's share shrinks as lanes join while
+ * its reservations do not: without it, each new lane could stack a full share on reservations taken
+ * under wider ones. It is a fairness bound rather than a CPU one either way, since a single slot
+ * may run a whole test file's parallel children; lanes holding 4-6 slots were measured driving the
+ * load average past 21.
  */
 function fairAllocations(
   cpuCount: number,
@@ -289,6 +314,45 @@ function contentionReport(options: { cpuCount: number; peakLanes: number; peakLo
   }
 }
 
+/**
+ * describeExclusiveHolder names the worktree whose confirmation run owns the machine. A lane whose
+ * every node reports a bare `waiting` looks broken; naming the holder makes the wait a fact about
+ * another run rather than a mystery about this one.
+ */
+function describeExclusiveHolder(exclusive: ExclusiveRecord, entries: readonly LaneEntry[]): string {
+  const holder = entries.find(entry => entry.record.id === exclusive.laneId)
+  const where = holder === undefined
+    ? `PID ${exclusive.pid}`
+    : `${holder.record.lane} in ${FS.basename(holder.record.repositoryRoot)}`
+  return `another lane is confirming exclusively (${where})`
+}
+
+/**
+ * describeShare separates the three ways an admission is declined once the lane is registered and
+ * nobody holds the machine exclusively: this lane is at its share, the machine is full, or the node
+ * is wider than what is free. Each says how the machine is currently divided, because a share is a
+ * function of how many lanes are registered.
+ */
+function describeShare(options: {
+  available: number
+  capacity: number
+  cpuCount: number
+  globallyAvailable: number
+  held: number
+  laneCount: number
+  requestedSlots: number
+}): string {
+  const division = `${options.laneCount} ${options.laneCount === 1 ? 'lane is' : 'lanes are'} registered`
+  if (options.held >= options.capacity) {
+    return `this lane holds ${options.held} of its ${options.capacity} slots; ${division}`
+  }
+  if (options.globallyAvailable === 0) {
+    return `every one of the machine's ${options.cpuCount} slots is reserved; ${division}`
+  }
+  return `this node wants ${options.requestedSlots} slots, more than the ${options.available} free `
+    + `to this lane; ${division}`
+}
+
 function describeContention(report: ContentionReport): string {
   const lanes = report.peakLanes > 1 ? `${report.peakLanes} Tao lanes ran at once` : 'no other Tao lane registered'
   return `${lanes}; load peaked at ${report.peakLoadAverage.toFixed(1)} on ${report.cpuCount} CPUs`
@@ -299,19 +363,21 @@ function registeredLane(options: {
   id: string
   initialCapacity: number
   initialLaneCount: number
+  loadAverage: () => number
   lockTimeoutMs?: number
   path: string
   record: LaneRecord & { id: string; maxSlots: number }
   root: string
 }): MachineLane {
   let peakLanes = options.initialLaneCount
-  let peakLoadAverage = Platform.loadAverage()
+  let peakLoadAverage = options.loadAverage()
   let released = false
   let capacity = Math.max(1, options.initialCapacity)
   let admissionPollMs = ADMISSION_POLL_MS
+  let waitReason: string | undefined
 
   const timer = setInterval(() => {
-    peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
+    peakLoadAverage = Math.max(peakLoadAverage, options.loadAverage())
     void activeLanes(options.root).then(lanes => {
       peakLanes = Math.max(peakLanes, lanes.length)
       return lanes
@@ -328,6 +394,9 @@ function registeredLane(options: {
     acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) =>
       acquireExclusive(options.root, options.id, timeoutMs, options.lockTimeoutMs),
     report: () => contentionReport({ cpuCount: options.cpuCount, peakLanes, peakLoadAverage }),
+    get waitReason() {
+      return waitReason
+    },
     release: async () => {
       if (released) {
         return
@@ -356,24 +425,43 @@ function registeredLane(options: {
           peakLanes = Math.max(peakLanes, entries.length)
           const own = entries.find(entry => entry.record.id === options.id)
           if (own === undefined) {
+            waitReason = 'this lane is no longer registered on the machine'
             return undefined
           }
           const exclusive = await liveExclusive(options.root)
           if (exclusive !== undefined && exclusive.laneId !== options.id) {
+            waitReason = describeExclusiveHolder(exclusive, entries)
             return undefined
           }
           const allocations = fairAllocations(options.cpuCount, entries.map(entry => entry.record))
           capacity = allocations.get(options.id) ?? 0
+          const laneAvailable = Math.max(0, capacity - own.record.slots)
           const globallyAvailable = Math.max(
             0,
             options.cpuCount - entries.reduce((sum, entry) => sum + entry.record.slots, 0),
           )
-          const laneAvailable = Math.max(0, capacity - own.record.slots)
-          const available = Math.min(globallyAvailable, laneAvailable)
+          // A lane running nothing is admitted whatever the machine-wide total says. That first slot
+          // is the floor every registration gets, and honouring it here is what keeps a machine
+          // whose slots are all spoken for from stalling every lane that joins it afterwards. Above
+          // that floor the total still governs, which bounds the machine at one extra slot per lane
+          // rather than letting shrinking shares stack on top of reservations taken under wider ones.
+          const available = own.record.slots === 0
+            ? Math.max(1, Math.min(globallyAvailable, laneAvailable))
+            : Math.min(globallyAvailable, laneAvailable)
           const slots = available >= requestedSlots ? requestedSlots : allowPartial ? available : 0
           if (slots <= 0) {
+            waitReason = describeShare({
+              available,
+              capacity,
+              cpuCount: options.cpuCount,
+              globallyAvailable,
+              held: own.record.slots,
+              laneCount: entries.length,
+              requestedSlots,
+            })
             return undefined
           }
+          waitReason = undefined
           own.record.slots += slots
           own.record.updatedAt = new Date().toISOString()
           await atomicWriteJson(own.path, own.record)
@@ -596,17 +684,24 @@ function unregisteredLane(capacity: number): MachineLane {
     report: () => contentionReport({ cpuCount: Platform.cpuCount(), peakLanes: 1, peakLoadAverage: 0 }),
     release: async () => {},
     tryAcquire: async requestedSlots => uncoordinatedReservation(requestedSlots),
+    // Nothing declines an admission here, so there is never a wait to explain.
+    waitReason: undefined,
     waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
   }
 }
 
-async function observingUnregisteredLane(capacity: number, root: string, cpuCount: number): Promise<MachineLane> {
+async function observingUnregisteredLane(
+  capacity: number,
+  root: string,
+  cpuCount: number,
+  loadAverage: () => number,
+): Promise<MachineLane> {
   const width = Math.max(1, capacity)
   let peakLanes = 1
-  let peakLoadAverage = Platform.loadAverage()
+  let peakLoadAverage = loadAverage()
   let released = false
   const sample = async () => {
-    peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
+    peakLoadAverage = Math.max(peakLoadAverage, loadAverage())
     const lanes = await activeLanes(root)
     peakLanes = Math.max(peakLanes, lanes.length)
   }
@@ -626,6 +721,7 @@ async function observingUnregisteredLane(capacity: number, root: string, cpuCoun
       }
     },
     tryAcquire: async requestedSlots => uncoordinatedReservation(requestedSlots),
+    waitReason: undefined,
     waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
   }
 }
@@ -983,4 +1079,5 @@ export const MachineLanes = {
   ownerIsLive,
   registryRoot,
   tryAcquireResource,
+  withRegistryLock,
 } as const

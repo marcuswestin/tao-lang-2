@@ -1,5 +1,15 @@
 import { Switch as CoreSwitch } from '@shared/core'
-import { AfterEach, Describe, Expect, fakeTerminal, mkTestDir, settle, Test, withCapturedOutput } from '@shared/test'
+import {
+  AfterEach,
+  Describe,
+  Expect,
+  fakeTerminal,
+  mkTestDir,
+  runCleanups,
+  settle,
+  Test,
+  withCapturedOutput,
+} from '@shared/test'
 import { PassThrough } from 'node:stream'
 import {
   Assert,
@@ -12,6 +22,7 @@ import {
   Platform,
   Repo,
   Switch,
+  TaoStdlib,
   Text,
   Time,
 } from '../shared-src/shared'
@@ -204,6 +215,32 @@ Describe('FS', () => {
     Expect(await FS.exists(FS.resolvePath('removed.txt', targetDir))).toBe(false)
     Expect(await FS.exists(FS.resolvePath('empty-after-sync/file.txt', targetDir))).toBe(false)
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
+  })
+
+  Test('sweeps staging files a killed synchronization orphaned beside the destination', async () => {
+    const root = await tmpDir()
+    const sourceDir = FS.resolvePath('source', root)
+    const targetDir = FS.resolvePath('target', root)
+    const uuid = '0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c'
+    // Staging and rollback files are named for the destination and sit beside it, so a killed run
+    // leaves them where whatever packages the parent directory next will pick them up.
+    const orphanedStaging = FS.resolvePath(`target.${uuid}.0.tmp`, root)
+    const orphanedRollback = FS.resolvePath(`target.${uuid}.3.restore`, root)
+    const unrelated = FS.resolvePath('target-notes.tmp', root)
+
+    await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
+    await FS.mkdir(targetDir)
+    await FS.writeText(orphanedStaging, 'orphaned staging')
+    await FS.writeText(orphanedRollback, 'orphaned rollback')
+    await FS.writeText(unrelated, 'not ours')
+
+    await FS.synchronizeDirectoryFiles(sourceDir, targetDir, { boundaryPath: root })
+
+    Expect(await FS.exists(orphanedStaging)).toBe(false)
+    Expect(await FS.exists(orphanedRollback)).toBe(false)
+    // Only this synchronization's own naming is swept; a neighbour that merely ends in .tmp stays.
+    Expect(await FS.readText(unrelated)).toBe('not ours')
+    Expect(await FS.readText(FS.resolvePath('value.txt', targetDir))).toBe('current')
   })
 
   Test('refuses source and destination symbolic links while synchronizing files', async () => {
@@ -1113,6 +1150,163 @@ Describe('Text', () => {
     Expect(() => JSON.parse(Text.stripJsonc('{ "ready": true } /* unfinished'))).toThrow()
   })
 })
+
+/**
+ * The declared stdlib is the one compile input that need not live inside the repository, so every
+ * memoizing scheme in the toolchain reaches it through this identity. What it must do is notice a
+ * change to a tree nothing else hashes; what it must not do is answer the same for two different
+ * stdlibs.
+ */
+/**
+ * A journey's disposers must all run, and a cleanup failure must never become the failure the test
+ * reports when the journey itself already failed. Both smoke journeys had their own copy of this
+ * before it moved here.
+ */
+Describe('Test cleanup', () => {
+  Test('runs every disposer and reports beside a primary failure rather than replacing it', async () => {
+    const primaryFailure = new Errors.UnexpectedBehaviorError('primary journey failure')
+    const cleaned: string[] = []
+    const reported: unknown[] = []
+
+    await runCleanups(primaryFailure, [
+      {
+        label: 'close browser',
+        run: () => {
+          cleaned.push('browser')
+          Errors.throwHostEnvironment('browser cleanup failed')
+        },
+      },
+      {
+        label: 'remove runtime',
+        run: () => {
+          cleaned.push('runtime')
+          Errors.throwHostEnvironment('runtime cleanup failed')
+        },
+      },
+      { label: 'remove export', run: () => cleaned.push('export') },
+    ], { channel: 'test-cleanup', reportCleanupFailure: error => reported.push(error), subject: 'journey' })
+
+    // A disposer that throws must not stop the ones after it.
+    Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
+    Expect(reported).toHaveLength(1)
+    Expect(Errors.messageOf(reported[0])).toContain('2 journey cleanup operations failed')
+    Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
+    Expect(Errors.messageOf(reported[0])).toContain('remove runtime: runtime cleanup failed')
+    Expect(primaryFailure.message).toBe('primary journey failure')
+  })
+
+  Test('throws a cleanup failure when there is no primary failure to preserve', async () => {
+    const reported: unknown[] = []
+
+    await Expect(runCleanups(undefined, [
+      { label: 'standalone cleanup', run: () => Errors.throwHostEnvironment('standalone cleanup failed') },
+    ], { channel: 'test-cleanup', reportCleanupFailure: error => reported.push(error), subject: 'journey' }))
+      .rejects.toThrow('standalone cleanup failed')
+    Expect(reported).toEqual([])
+  })
+
+  Test('stays silent when every disposer succeeds', async () => {
+    const reported: unknown[] = []
+
+    await runCleanups(undefined, [{ label: 'quiet cleanup', run: () => undefined }], {
+      channel: 'test-cleanup',
+      reportCleanupFailure: error => reported.push(error),
+      subject: 'journey',
+    })
+
+    Expect(reported).toEqual([])
+  })
+})
+
+Describe('TaoStdlib', () => {
+  Test('identifies the built-in stdlib without naming a tree', async () => {
+    await withDeclaredStdlibRoot(undefined, async () => {
+      Expect(TaoStdlib.declaredRoot()).toBeUndefined()
+      Expect(await TaoStdlib.declaredRootIdentity()).toBe(await TaoStdlib.declaredRootIdentity())
+    })
+  })
+
+  Test('changes when a file inside the declared tree changes', async () => {
+    const payload = await tmpDir()
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edit\n')
+
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  // A scheme that only asked whether the declared root sits inside an already-hashed tree answers
+  // the same for both of these. They are different stdlibs, so the identity must differ.
+  Test('changes when the variable names a different tree with the same content', async () => {
+    const payload = await tmpDir()
+    const twin = await tmpDir()
+    for (const root of [payload, twin]) {
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', root), 'public view Text(Value text) { }\n')
+    }
+
+    const one = await withDeclaredStdlibRoot(payload, () => TaoStdlib.declaredRootIdentity())
+    const other = await withDeclaredStdlibRoot(twin, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(other).not.toBe(one)
+  })
+
+  // Declaring a tree that is not there is not the same as declaring nothing: the first is a broken
+  // configuration whose repair must invalidate the key, the second is the built-in stdlib.
+  Test('separates an absent declared tree from an unset variable', async () => {
+    const missing = FS.resolvePath('not-created', await tmpDir())
+    const declared = await withDeclaredStdlibRoot(missing, () => TaoStdlib.declaredRootIdentity())
+    const unset = await withDeclaredStdlibRoot(undefined, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(declared).not.toBe(unset)
+  })
+
+  // A relative value cannot be honoured, because the two halves of this variable's job disagree on
+  // what to resolve it against: this module resolves it against the root the caller's other
+  // components are relative to, and `Stdlib.rootPath` hands the raw value to whatever reads it,
+  // which resolves against the process's current directory. It identified one tree and compiled
+  // against another, silently — no setter in this repository has ever passed one.
+  Test('refuses a relative declared root rather than resolving it two different ways', async () => {
+    const base = await tmpDir()
+    await FS.writeText(FS.resolvePath('payload/@tao/ui/Views.tao', base), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot('payload', async () => {
+      await Expect(TaoStdlib.declaredRootIdentity(base)).rejects.toThrow('must be an absolute path')
+      Expect(() => TaoStdlib.declaredRoot()).toThrow('must be an absolute path')
+    })
+  })
+
+  // The absolute value it does accept still identifies the tree it names rather than the string.
+  Test('identifies the tree an absolute declared root names', async () => {
+    const base = await tmpDir()
+    const payload = FS.resolvePath('payload', base)
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const named = await TaoStdlib.declaredRootIdentity(base)
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edited\n')
+
+      Expect(await TaoStdlib.declaredRootIdentity(base)).not.toBe(named)
+    })
+  })
+})
+
+async function withDeclaredStdlibRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
+  const previous = Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+  if (value === undefined) {
+    delete Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+  } else {
+    Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV] = value
+  }
+  try {
+    return await run()
+  } finally {
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+    } else {
+      Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV] = previous
+    }
+  }
+}
 
 async function tmpDir() {
   const dir = await mkTestDir('tao-shared-test-')
