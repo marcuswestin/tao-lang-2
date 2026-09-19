@@ -135,17 +135,17 @@ tests written in Tao, green in Current, for every construct introduced.
     now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
     -- the preview runtime, the session, and one revision both halves agree on -- is in
     `Docs/Roadmap/Tao Studio v2/Exploration - Studio server hot reload.md`.
-- [ ] Make `just full-verify` pass its simulated-user lane
+- [ ] Make `just verify-full` pass its simulated-user lane
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
     transaction defects found through this journey have landed with focused coverage. That does not
     promote the lane to final evidence: the complete simulated-user journey still needs ten
-    consecutive reliable normal-terminal runs before it rejoins `full-verify`.
+    consecutive reliable normal-terminal runs before it rejoins `verify-full`.
   - Do not widen `previewOriginPath` to make the lane pass. The stub preview builds its identity by
     fetching `/api/protocol` and `/api/file`, which that six-endpoint allowlist deliberately keeps
     away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
     `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
     stub onto that contract instead.
-  - The lane remains quarantined from the `full-verify` graph with its stated reliability reason;
+  - The lane remains quarantined from the `verify-full` graph with its stated reliability reason;
     `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it directly for
     acceptance evidence, and re-adding it to the graph is one catalog edit after the ten-run gate.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
@@ -384,8 +384,8 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
 - `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
   dependency-aware, duration-informed scheduler for every test and verification lane, the live dashboard
-  for humans on `check`/`verify`/`full-verify`, the file-backed quiet output contract for agents, and
-  `full-verify`'s Studio lanes parallelized on per-worker resources.
+  for humans on `check`/`verify`/`verify-full`, the file-backed quiet output contract for agents, and
+  `verify-full`'s Studio lanes parallelized on per-worker resources.
 - `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
 - `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
 - `Docs/Roadmap/September squash-merge remediation.md` — the September squash-merge audit's 183

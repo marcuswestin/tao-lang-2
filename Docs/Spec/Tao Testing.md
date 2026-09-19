@@ -46,8 +46,15 @@ particular, a scenario entry's focused
 subject. See `Tao Studio.md` for the implemented source and manifest contract.
 
 `tao test [path]` discovers inline and sidecar tests, compiles them to structured test-plan IR, and
-runs the plans through the repository's runtime Jest harness. Richer filtering, watch, JSON,
-artifacts, retries, and alternate device adapters remain future work.
+runs the plans through the repository's runtime Jest harness. Each test check is one case in that
+harness, named `<file> <suite> > <test>`, so `tao test --name <pattern>` runs only the checks whose
+name matches that case-insensitive regular expression anywhere; a pattern that matches no check is
+an error rather than an empty passing run, unless `--pass-with-no-tests` says an empty selection is
+an expected answer — which is what a scheduler handing one pattern to every suite it knows about
+needs, and which a person typing a pattern does not. A file-level test is a suite, and a suite
+declares its checks as the tests nested inside it: written as a leaf journey it would compile to a
+suite of no checks and run nothing, so the validator rejects that shape. Watch, JSON, artifacts,
+retries, and alternate device adapters remain future work.
 
 ## Tags and selectors
 

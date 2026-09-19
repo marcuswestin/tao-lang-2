@@ -12,7 +12,7 @@ shape of the problem.
 One reading, taken while a single `verify --complete` was running:
 
 - **Twelve registered verification lanes at once** — ten other worktrees running `verify`,
-  `verify-changed`, or `full-verify` — on 18 CPUs, with load peaking at **34.3**.
+  `verify-changed`, or `verify-full` — on 18 CPUs, with load peaking at **34.3**.
 - The same `verify --complete`, unchanged, measured **89s** earlier in the afternoon and **207s**
   under that load. Its serial floor went from 84s to 132s. Nothing about the tree changed.
 - Two of its suites then failed their per-test hang guards. Both passed in **0.6s** when run alone.
@@ -54,7 +54,7 @@ one the broker starves.
 
 Interactive work is distinguishable from batch work without guessing, because the entry points
 already differ: `test-file`, `test`, and `test-changed` are iteration lanes, while `verify`,
-`full-verify`, and `check` are batch lanes. Giving the iteration lanes a small reserved share, or
+`verify-full`, and `check` are batch lanes. Giving the iteration lanes a small reserved share, or
 simply admission priority, costs a batch lane seconds and saves an agent minutes on every edit. The
 same argument applies to `./tao check` and a single Studio smoke.
 
@@ -74,7 +74,7 @@ a queue. Serializing verification across worktrees would idle the machine whenev
 | ----------------------- | -------------------------------------------------------------------------- |
 | One simulator or device | Two agents installing to one UDID corrupt each other's install             |
 | The Android emulator    | One AVD, one instance                                                      |
-| The window server       | `full-verify` already declares it needs the GUI to itself                  |
+| The window server       | `verify-full` already declares it needs the GUI to itself                  |
 | Local InstantDB         | One Docker stack machine-wide by design; stopping it stops it for everyone |
 | A native Studio session | Already leased, and the worked example the rest should follow              |
 
@@ -151,7 +151,7 @@ worktrees are idle, and neither is blocked on code:
 - A single-lane `verify --complete` before-and-after pair. The components are measured (see the
   numbers above and in `packages/dev/README.md`) and the schedule report gives the packing loss —
   0.0% at three lanes, 8.2% at five — but there is no single-lane wall time for the lane as a whole.
-- A `just full-verify` before-and-after pair, unsandboxed. The lane is reachable from an agent
+- A `just verify-full` before-and-after pair, unsandboxed. The lane is reachable from an agent
   session: a browser smoke passes from one in 5.5s, so DEVENV-015's Chrome registration failure is
   specific to another harness's process context.
 

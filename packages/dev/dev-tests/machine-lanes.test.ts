@@ -41,8 +41,8 @@ Describe('machine lanes', () => {
     Expect([...MachineLanes.fairAllocations(18, records(1)).values()]).toEqual([18])
     Expect([...MachineLanes.fairAllocations(18, records(2)).values()]).toEqual([9, 9])
     Expect([...MachineLanes.fairAllocations(18, records(4)).values()]).toEqual([5, 5, 4, 4])
-    // Logical shares may exceed the CPU count only in this edge case. Actual reservations remain
-    // bounded by the broker's machine-wide available-slot check.
+    // More lanes than CPUs is the case the one-slot floor exists for: every lane may still run
+    // something, and the machine is oversubscribed by the number of lanes above its CPU count.
     Expect([...MachineLanes.fairAllocations(2, records(8)).values()]).toEqual(Array(8).fill(1))
   })
 
@@ -233,6 +233,87 @@ Describe('machine lanes', () => {
     Expect(second.ceiling).toBe(6)
     Expect(expandedWork?.slots).toBe(6)
     await expandedWork?.release()
+    await second.release()
+  })
+
+  Test('admits a lane that joins a machine whose slots are all reserved', async () => {
+    // The stall this prevents: lanes that registered while the machine was emptier hold every slot
+    // until their running nodes end, and a lane that joins after them must not wait on that.
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({ cpuCount: 2, lane: 'first', registryRoot, repositoryRoot: '/first' })
+    const firstWork = await first.tryAcquire(2, false)
+    Expect(firstWork?.slots).toBe(2)
+
+    const second = await MachineLanes.acquire({ cpuCount: 2, lane: 'second', registryRoot, repositoryRoot: '/second' })
+    const secondWork = await second.tryAcquire(1, false)
+
+    Expect(secondWork?.slots).toBe(1)
+    Expect(second.waitReason).toBeUndefined()
+    const records = await MachineLanes.activeLanes(registryRoot)
+    // Three slots on a two-CPU machine: the joining lane's floor, and nothing beyond it.
+    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(3)
+
+    // The floor is one slot per lane, not a way around the machine total: a lane that is already
+    // running something waits like any other.
+    Expect(await second.tryAcquire(1, true)).toBeUndefined()
+    Expect(second.waitReason).toBe('this lane holds 1 of its 1 slots; 2 lanes are registered')
+
+    await firstWork?.release()
+    await secondWork?.release()
+    await first.release()
+    await second.release()
+  })
+
+  Test('does not let a joining lane stack a whole share on top of a full machine', async () => {
+    // A lane that registered while the machine was emptier keeps the wider share it reserved under.
+    // The lane that joins gets its floor so it can start, and then waits with everyone else: the
+    // machine holds one extra slot, not a second full share on top of the first.
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const early = await MachineLanes.acquire({ cpuCount: 4, lane: 'early', registryRoot, repositoryRoot: '/early' })
+    const earlyWork = await early.tryAcquire(4, false)
+    Expect(earlyWork?.slots).toBe(4)
+
+    const late = await MachineLanes.acquire({ cpuCount: 4, lane: 'late', registryRoot, repositoryRoot: '/late' })
+    Expect(late.capacity).toBe(2)
+    const floor = await late.tryAcquire(2, true)
+
+    Expect(floor?.slots).toBe(1)
+    Expect(await late.tryAcquire(1, true)).toBeUndefined()
+    Expect(late.waitReason).toBe("every one of the machine's 4 slots is reserved; 2 lanes are registered")
+    const total = (await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)
+    Expect(total).toBe(5)
+
+    await floor?.release()
+    await earlyWork?.release()
+    await early.release()
+    await late.release()
+  })
+
+  Test('says what a declined admission is waiting for', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({ cpuCount: 4, lane: 'first', registryRoot, repositoryRoot: '/first' })
+    const second = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'second',
+      registryRoot,
+      repositoryRoot: '/second-worktree',
+    })
+
+    const held = await first.tryAcquire(2, false)
+    Expect(held?.slots).toBe(2)
+    Expect(await first.tryAcquire(1, false)).toBeUndefined()
+    Expect(first.waitReason).toBe('this lane holds 2 of its 2 slots; 2 lanes are registered')
+    Expect(await second.tryAcquire(3, false)).toBeUndefined()
+    Expect(second.waitReason).toBe('this node wants 3 slots, more than the 2 free to this lane; 2 lanes are registered')
+
+    // An exclusive holder outranks both, and is named so the waiting lane points somewhere.
+    await held?.release()
+    const exclusive = await second.acquireExclusive(1_000)
+    Expect(await first.tryAcquire(1, false)).toBeUndefined()
+    Expect(first.waitReason).toBe('another lane is confirming exclusively (second in second-worktree)')
+
+    await exclusive?.release()
+    await first.release()
     await second.release()
   })
 

@@ -56,8 +56,8 @@ export type AgentChatSessionOptions = {
 }
 
 const DEFAULT_MAX_STEPS = 12
-export const AGENT_TURN_INPUT_TOKEN_LIMIT = 64_000
-export const AGENT_TURN_OUTPUT_TOKEN_LIMIT = 8_000
+const AGENT_TURN_INPUT_TOKEN_LIMIT = 64_000
+const AGENT_TURN_OUTPUT_TOKEN_LIMIT = 8_000
 
 type TokenUsage = { inputTokens: number; outputTokens: number }
 

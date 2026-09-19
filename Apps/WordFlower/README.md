@@ -44,7 +44,7 @@ Work the tranche one slice at a time; a slice is one decision group from Next's 
 
 1. **Implement the vertical.** Grammar → scoping → validator → formatter → compiler → runtime, with package tests at each layer. The validator is authoritative for AST correctness; downstream layers assume validated input.
 2. **Migrate Current.** Rewrite the corresponding files in `1 - Current/` to the new form, matching Next's spelling exactly, and extend the journeys to prove the new behavior. Migrate any Test Apps and specs the slice touches in the same change.
-3. **Verify and commit.** Focused tests and `./agent verify --changed` while working, `./agent verify --complete` before committing; every commit leaves Current green.
+3. **Verify and commit.** Focused tests and `./agent verify-changed` while working, `./agent verify --complete` before committing; every commit leaves Current green.
 4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the mapped directories have the same file set and byte-identical content after status normalization.
 5. **Reconcile the later versions.** As the final step of the tranche, fold every decision Next settled — including changes discovered during implementation — into `3 - MVP` and `4 - Revolution` in one pass.
 

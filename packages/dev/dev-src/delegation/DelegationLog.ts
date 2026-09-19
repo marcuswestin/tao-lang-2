@@ -6,7 +6,7 @@ export const DELEGATION_EVENTS_PATH = '.artifacts/delegation/events'
 /** What a caller left to the harness instead of naming, reported rather than guessed at. */
 export const UNNAMED_MODEL = 'inherited'
 
-export type ProfileSummary = {
+type ProfileSummary = {
   profile: string
   spawns: number
   /** Models the caller named for this profile, most used first; `inherited` is counted separately. */

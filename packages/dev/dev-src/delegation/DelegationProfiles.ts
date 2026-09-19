@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 
 export const SUBAGENTS_DIRECTORY = 'agents/subagents'
-export const SKILLS_DIRECTORY = 'agents/skills'
+const SKILLS_DIRECTORY = 'agents/skills'
 export const DELEGATION_SKILL_PATH = 'agents/skills/delegation/SKILL.md'
 
 /** The phrases that make a description route work to a profile instead of describing one. */

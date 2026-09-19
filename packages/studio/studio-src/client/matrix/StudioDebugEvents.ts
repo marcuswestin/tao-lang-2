@@ -16,9 +16,9 @@ export type StudioDebugJournalRow = Readonly<{
   startedAt: number
 }>
 
-export type StudioDebugBinding = Readonly<{ name: string; value: string }>
+type StudioDebugBinding = Readonly<{ name: string; value: string }>
 
-export type StudioDebugPendingWrite = Readonly<{
+type StudioDebugPendingWrite = Readonly<{
   committed: string
   kind: string
   pending: string
