@@ -11,20 +11,19 @@ type StopKind is one of Visit, Meal, Stay, Travel
 type DocumentKind is one of Ticket, Booking, Identity, Insurance, Other
 
 data Accounts / Account with {
-   Seats Members // the Member rows that name this account: a reverse relation may take its own name, typed by the collection
+   Seats (relation Members) // the Member rows that name this account: the trait carries the target
 
-   preference CurrentTrip Trip (optional)
+   preference CurrentTrip Trip?
    preference KeepTripsOffline yes / no (default yes)
-   preference Language text (default device.language)
 }
 
 data Trips / Trip {
-   Name text (required "Name this trip")
-   Summary text (default "")
+   Name text (required "Name this trip", search, title)
+   Summary text (default "", search)
    Begins date
    Ends date
    HomeZone timezone (default device.timeZone)
-   Cover image (optional)
+   Cover image?
    Shared yes / Private no
    ShareCode secret (default new secret) // rotating this kills every link already handed out
    Days (owned)
@@ -33,8 +32,7 @@ data Trips / Trip {
    ChangedAt time (default now, touch on change)
 
    index Begins
-   search Name, Summary
-   order by Begins desc
+   order by Begins descending
 
    validate Ends >= Begins "A trip cannot end before it starts"
    validate at least one Members where Role is Owner and is Joined "A trip needs an owner"
@@ -43,7 +41,7 @@ data Trips / Trip {
 data Days / Day {
    Trip
    Date date
-   Title text (default "")
+   Title text (default "", title)
    Stops (owned, ordered) // the store keeps the order; `Position` is derived from it and never stored by hand
 
    order by Date
@@ -54,17 +52,16 @@ data Days / Day {
 
 data Stops / Stop {
    Day
-   Title text (required "Name this stop")
+   Title text (required "Name this stop", search, title)
    Kind StopKind (default Visit)
-   Place Place (optional)
-   Starts timeofday (optional) // a wall-clock time; `time` would be an instant
-   Duration duration (default 1 hour)
-   Notes text (default "")
-   Reservation text (optional) // a confirmation number, a booking reference
+   Place?
+   Starts timeofday? // a wall-clock time; `time` would be an instant
+   Duration duration (default 1.h)
+   Notes text (default "", search)
+   Reservation text? // a confirmation number, a booking reference
    Visited yes / Planned no
    Attachments (owned)
 
-   search Title, Notes
    validate Duration > 0 "A stop takes longer than nothing"
 }
 
@@ -72,7 +69,7 @@ data Attachments / Attachment {
    Stop
    File file
    Caption text (default "")
-   AddedBy Account
+   AddedBy (relation Accounts)
    AddedAt time (default now)
 
    order by AddedAt
@@ -83,16 +80,15 @@ data Attachments / Attachment {
 // a joined seat cannot be claimed again.
 data Members / Member {
    Trip
-   Person Account (optional)
+   Person? (relation Accounts)
    Email text (required "Who is this seat for?")
-   Name text (optional)
+   Name text?
    Role (default Viewer)
    Joined yes / Invited no
-   InviteCode secret (default new secret)
+   InviteCode secret (default new secret, unique)
    InvitedAt time (default now)
 
    unique Trip, Email // "already on the trip" is a store fact, not a UI guess
-   unique InviteCode
 }
 
 // Travel documents. A document may be private to one traveler — a passport scan — and then only that
@@ -100,10 +96,10 @@ data Members / Member {
 data Documents / Document {
    Trip
    Kind DocumentKind (default Other)
-   Title text (required "Name this document")
+   Title text (required "Name this document", title)
    File file (required "Choose a file")
-   PrivateTo Account (optional)
-   AddedBy Account
+   PrivateTo? (relation Accounts)
+   AddedBy (relation Accounts)
    AddedAt time (default now)
 
    order by AddedAt

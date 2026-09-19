@@ -56,6 +56,8 @@ and web work everywhere.
   invest first in making Linux a first-class development platform.
 - **Recommended:** the middle option. It is true today and it does not turn away the Linux
   developers who would otherwise try the web lane.
+- Concrete form: `Plan - Standalone Tao CLI.md` question 3 asks which of the five buildable targets
+  are release targets, and F7 there records exactly what is macOS-only today.
 
 ## Decide next — these unblock program and device work
 
@@ -134,6 +136,9 @@ app's membership model assumes.
 - Blocks: `A16`, and any demo of sync or over-the-air updates.
 - Decide for the release: who runs the update service and at what scale, and whether the public demo
   uses a hosted Instant application you own.
+- A fourth service joins them once `A2` lands: `Plan - Standalone Tao CLI.md` question 7 asks who
+  hosts the release binaries, their checksums, and the version index. One answer probably serves
+  both.
 
 ### R12 — What the public story includes
 
@@ -142,5 +147,55 @@ extension. Studio is the most impressive and the least finished.
 
 - Blocks: `A3`'s scope and `A5`'s example set.
 - **Recommended:** CLI and IDE extension as the product, Studio shown as a video or screenshots and
-  offered to anyone who asks. It avoids promising a surface whose reliability gate (`A15`) is still
-  open.
+  offered to anyone who asks. Studio's own reliability gate closed with `A15`, so this is now a
+  question of how finished Studio feels to a stranger rather than of whether it is proved.
+- Also part of the story's edge: `Plan - Standalone Tao CLI.md` question 8 asks whether `tao review`
+  ships in the first release, since it needs a local Chrome.
+
+### R13 — The standalone CLI's remaining questions
+
+`Plan - Standalone Tao CLI.md` measured what a shipped `tao` binary takes and left eight questions
+that are yours. Four are already covered above — 3 under `R4`, 6 under `R1` and `R2`, 7 under `R11`,
+8 under `R12` — and these four have no other home:
+
+- **Question 1:** does `tao test` ship with a managed Node (about 50 MB per version), or does the
+  test harness change so nothing needs Node? The plan recommends a managed Node first and a harness
+  change as the durable answer.
+- **Question 2:** is the Expo host installed from a pinned lockfile on first run, shipped as a
+  per-platform archive, or both? The lockfile needs registry access; the archive needs hosting.
+- **Question 4:** is the per-project version pin exact, and may `tao` download a missing version
+  without asking? rustup downloads silently; 90 MB unannounced may not be what you want.
+- **Question 5:** which distribution channels the first release carries — an install script alone,
+  or script plus Homebrew plus npm. Each is a surface that has to keep working.
+
+### R14 — The spellings the Tao Future consolidation had to choose
+
+Process step 3 (`A12`) aligned Skillet, Hearth, and Wayfare to `Decisions.md` and found nine
+constructs the apps genuinely need that no decision covers, plus one place where `Decisions.md`
+still disagrees with itself. Each is listed in `Apps/Tao Future/README.md`; the port chose a spelling so
+the apps would read as one dialect, and none of those choices is a decision.
+
+The ten: the reorder affordance and the drop target as container members (`Col(Reorderable: …)`,
+`Col(Accepts: …)` with `on drop`) now that `List` is retired and §18 fixes only `Reorderable: yes`;
+`where` on a `loop`; `first N of`; a composite `unique A, B`; `order by relevance`;
+`device.timeZone` and the `Connection` and `Sync` environment values, none of which §13's
+environment table carries; `X.Cases`; `to X otherwise Y` and a `never` schedule case in an
+automation; `runs single per Row`; and the world controls a journey uses beyond §16's named set
+(`clock`, `advance`, `collaborator`, `capture shared link`, `expect notification`, `expect window`,
+`move … onto …`); and `invalidate <Draft> with <Problem>`, which the apps use at six sites where §5
+decides the opposite shape — a bare `save` whose unhandled rejection populates `Draft.Invalid` and
+`Draft.Problems` with no `when` at the site.
+
+One self-contradiction remains: §1 says two visibility modifiers "and no others" while §8's command
+example and `visibility.langium` carry five (`file`, `folder`, `package`, `workspace`, `public`).
+The apps follow §1 and use only `file` and `public`. The other one this pass reported —
+`TabNav` against `SelectionNav` — was settled while `Apps/WordFlower/4 - Revolution` was rewritten:
+§10 now retires `TabNav` without an alias, which is the spelling these apps had already chosen.
+
+- Blocks: nothing in the first hour, and no tranche until one of these constructs is the one being
+  implemented. It blocks the graduation promise: a file graduates by rename alone, so a spelling
+  decided differently later is an edit at graduation time, which is the thing the rule forbids.
+- **Recommended:** settle the remaining contradiction now, since it is a one-word correction to
+  `Decisions.md` and the implementation already chose. Take the nine as a decision round when the
+  first tranche reaches one of them, rather than deciding ten spellings with no code pressing on
+  them.

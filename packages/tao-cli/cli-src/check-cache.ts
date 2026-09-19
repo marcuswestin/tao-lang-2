@@ -55,7 +55,7 @@ import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
 const STAMP_PATH = '.artifacts/tao-check-stamp.json'
 
 /** The stamp layout and the composition above. An older or unreadable stamp is no stamp. */
-const STAMP_VERSION = 1
+const STAMP_VERSION = 2
 
 /**
  * The opt-outs. `TAO_CHECK_NO_CACHE` is this command's own, spelled the way `TAO_TEST_NO_CACHE` is
@@ -80,11 +80,17 @@ const GENERATED_PARSER_ROOT = 'packages/parser/parser-src/_gen_tao-parser'
  * CheckCacheDiagnostic is one recorded warning, reduced to what survives a replay. The path is
  * relative to the workspace root and the position is stored raw, because the sentence `tao check`
  * prints is built against the current working directory and a run from elsewhere must print its own.
+ * The whole span is recorded, not just where it starts, because the printed diagnostic underlines it
+ * and a replay that kept only the start would underline one character where a check underlined ten.
  */
 export type CheckCacheDiagnostic = {
   character?: number
+  code?: string
+  endCharacter?: number
+  endLine?: number
   line?: number
   message: string
+  nodeType?: string
   path: string
 }
 
@@ -388,7 +394,11 @@ function parseStampEntry(entry: unknown): CheckStampEntry | undefined {
     }
     diagnostics.push({
       ...(typeof diagnostic.character === 'number' ? { character: diagnostic.character } : {}),
+      ...(typeof diagnostic.code === 'string' ? { code: diagnostic.code } : {}),
+      ...(typeof diagnostic.endCharacter === 'number' ? { endCharacter: diagnostic.endCharacter } : {}),
+      ...(typeof diagnostic.endLine === 'number' ? { endLine: diagnostic.endLine } : {}),
       ...(typeof diagnostic.line === 'number' ? { line: diagnostic.line } : {}),
+      ...(typeof diagnostic.nodeType === 'string' ? { nodeType: diagnostic.nodeType } : {}),
       message: diagnostic.message,
       path: diagnostic.path,
     })

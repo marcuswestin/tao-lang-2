@@ -1,26 +1,28 @@
-// Journeys, as a person would take them. Every check starts from a fresh store, clock, and network.
+// Journeys, as a person would take them. Every test starts from a fresh store, clock, and network.
 //
-// A fixture is named and its rows are handles, so a later check or a scenario can point at exactly the
-// row it means. Steps press by role and name — `press button "New recipe"` — which is both a better test
-// and an accessibility assertion; a `#tag` exists only where visible text cannot identify something.
+// A fixture builds a named, reusable data graph plus identity state, and its rows are handles a later
+// test or scenario points at. Steps select by visible text or `#tag` and nothing else — there are no
+// role words in test syntax, because role and name guarantees are enforced where they are declared, by
+// the design's `rules { }` across every scenario. Store checks are ordinary queries over plain values,
+// so there is no assertion sub-language to learn.
 
 fixture HomeKitchen {
    account Ro { Name: "Ro", Email: "ro@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
    signed in as Ro
 
-   let Home = Household { Name: "Home", TimeZone: "America/New_York" }
-   let RoMember = Membership { Household: Home, Person: Ro, Owner }
-   let SamMember = Membership { Household: Home, Person: Sam, Cook }
+   Home = create Household { Name: "Home", TimeZone: "America/New_York" } through StartKitchen(Ro)
+   RoMember = exactly one Home.Memberships where Person is Ro
+   SamMember = create Membership { Household: Home, Person: Sam, Role: Cook } for Ro
 
-   let Shakshuka = Recipe { Household: Home, Title: "Shakshuka", Course: Dinner, Servings: 2 }
-   let Eggs = Ingredient { Recipe: Shakshuka, Name: "Eggs", Amount: 4, Unit: "piece", Aisle: Dairy }
-   let Tomatoes = Ingredient { Recipe: Shakshuka, Name: "Tomatoes", Amount: 400, Unit: "g", Aisle: Produce }
-   let Soften = Step { Recipe: Shakshuka, Text: "Soften the onion and pepper." }
-   let Simmer = Step { Recipe: Shakshuka, Text: "Simmer the tomatoes.", Timer: 20 minutes }
-   let Crack = Step { Recipe: Shakshuka, Text: "Crack in the eggs and cover." }
-   let Pancakes = Recipe { Household: Home, Title: "Pancakes", Course: Breakfast, Servings: 4 }
-   let TomorrowsShakshuka = Meal { Household: Home, Recipe: Shakshuka, Day: today + 1 day, Course: Dinner, Servings: 4 }
+   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Course: Dinner, Servings: 2 } for Ro
+   Eggs = create Ingredient { Recipe: Shakshuka, Name: "Eggs", Amount: 4, Unit: "piece", Aisle: Dairy } for Ro
+   Tomatoes = create Ingredient { Recipe: Shakshuka, Name: "Tomatoes", Amount: 400, Unit: "g", Aisle: Produce } for Ro
+   Soften = create Step { Recipe: Shakshuka, Text: "Soften the onion and pepper." } for Ro
+   Simmer = create Step { Recipe: Shakshuka, Text: "Simmer the tomatoes.", Timer: 20.minutes } for Ro
+   Crack = create Step { Recipe: Shakshuka, Text: "Crack in the eggs and cover." } for Ro
+   Pancakes = create Recipe { Household: Home, Title: "Pancakes", Course: Breakfast, Servings: 4 } for Ro
+   TomorrowsShakshuka = create Meal { Household: Home, Recipe: Shakshuka, Day: today + 1.day, Course: Dinner, Servings: 4 } for Ro
 }
 
 fixture NewCook {
@@ -28,126 +30,141 @@ fixture NewCook {
    signed in as Wren
 }
 
+// The kitchen with a week already on the list, for the folded shopping scenarios.
+fixture WeekShopped {
+   fixture HomeKitchen
+   Listed = do AddMealToList(TomorrowsShakshuka) for Ro
+}
+
+// The kitchen with a timer already counting down, for the cooking scenarios.
+fixture TimerRunning {
+   fixture HomeKitchen
+   Counting = create Timer { Household: Home, Step: Simmer, StartedBy: Ro, EndsAt: now + 12.minutes, Running } for Ro
+}
+
 test "Skillet" {
-   check "starting a kitchen and cooking the first thing" on phone with NewCook {
+   test "starting a kitchen and cooking the first thing" on phone with NewCook {
       run Skillet
-      expect heading "Start your kitchen"
+      expect text "Start your kitchen"
       enter "Foxglove" into #kitchenName
       press #createKitchen
       // The root followed the account: no screen replaced anything.
-      expect heading "Week of"
+      expect text "Week of"
 
-      press tab "Recipes"
-      press button "New recipe"
+      press "Recipes"
+      press "New recipe"
       enter "Toast" into #newTitle
       press #addRecipe
-      expect heading "Toast"
+      expect text "Toast"
    }
 
-   check "starting a kitchen is one write or none" on phone with NewCook {
-      datasource fails StartKitchen after 1 write "cloud rejected the membership"
+   test "starting a kitchen is one write or none" on phone with NewCook {
+      // The injection is addressed at the provider and names the write that fails, so reordering the
+      // transaction's body cannot make it pass silently.
+      datasource fails after create Membership "cloud rejected the membership"
       run Skillet
       enter "Foxglove" into #kitchenName
       press #createKitchen
       expect text "cloud rejected the membership"
-      expect heading "Start your kitchen"
-      expect stored no Household where Name is "Foxglove"
+      expect text "Start your kitchen"
+      expect (Households where Name is "Foxglove").Count is 0
    }
 
-   check "the whole week becomes one list, folded and scaled" on laptop with HomeKitchen {
+   test "the whole week becomes one list, folded and scaled" on laptop with HomeKitchen {
       clock 2027-08-16 10:00 America/New_York // a Monday; the fixture materializes at `run`, under this clock
       run Skillet
-      press tab "Plan"
-      press button "Add a meal" // the toolbar command; the day cards say "Plan Monday" etc.
-      select #pickRecipe { press row "Shakshuka" }
+      press "Plan"
+      press "Add a meal" // the toolbar command; the day cards say "Plan Monday" etc.
+      select #pickRecipe { press "Shakshuka" }
       enter 4 into #mealServings
       press #addMeal
 
-      press button "Shop the week"
-      expect status "Added the week to your list"
+      press "Shop the week"
+      expect text "Added the week to your list"
       // Pressing it again must not double the list — the transaction is idempotent per meal.
-      press button "Shop the week"
-      press tab "Shop"
+      press "Shop the week"
+      press "Shop"
       // Two servings became four, twice — tonight's meal and tomorrow's from the fixture — and the
       // contributions of each ingredient fold into one line.
-      expect row "Eggs" { text "16 piece" }
-      expect row "Tomatoes" { text "1600 g" }
-      select #lines { expect exactly 2 rows }
+      select #lines[1] { expect text "Eggs"; expect text "16 piece" }
+      select #lines[2] { expect text "Tomatoes"; expect text "1600 g" }
+      // Four source rows behind the two folded lines, and nothing else needed buying.
+      expect (Groceries where is Needed).Count is 4
 
       // Ticking a folded line buys every row inside it.
       select #lines[1] { press #tick }
-      expect section "Bought" { row "Eggs" }
-      expect stored no Grocery where Name is "Eggs" and is Needed
+      expect text "Bought"
+      expect (Groceries where Name is "Eggs" and is Needed).Count is 0
    }
 
-   check "an imperial cook reads the same list in ounces" on phone with HomeKitchen {
+   test "an imperial cook reads the same list in ounces" on phone with HomeKitchen {
       prepare { update Me { Units: Imperial } }
       run Skillet at RecipeLink(Shakshuka)
       expect text "14 oz" // 400 g, in the reader's measurement system
       expect missing text "400 g"
    }
 
-   check "cooking runs one step at a time, and its timer outlives the window" on tablet with HomeKitchen {
+   test "cooking runs one step at a time, and its timer outlives the window" on tablet with HomeKitchen {
       clock 2027-08-15 18:00 America/New_York
       run Skillet at RecipeLink(Shakshuka)
-      press button "Cook"
+      press "Cook"
       expect text "Step 1 of 3"
 
-      press button "Next"
-      expect heading "Simmer the tomatoes."
+      press "Next"
+      expect text "Simmer the tomatoes."
       press #startTimer
       expect text "20:00"
 
       // Close the window. The timer is a row, so it keeps running and its alert still belongs to the
       // automation that owns it.
-      press button "Close"
-      advance 20 minutes
+      press "Close"
+      advance 20.minutes
       expect notification "Timer done — Simmer the tomatoes."
 
       open notification
-      expect heading "Cooking Shakshuka"
+      expect text "Cooking Shakshuka"
    }
 
-   check "two cooks in one kitchen see each other" on laptop with HomeKitchen {
+   test "two cooks in one kitchen see each other" on laptop with HomeKitchen {
       run Skillet at RecipeLink(Shakshuka)
       collaborator Sam { open RecipeLink(Shakshuka) }
-      expect status "Sam is looking at this too"
+      expect text "Sam is looking at this too"
    }
 
-   check "a remote edit arrives without stealing what you are typing" on laptop with HomeKitchen {
+   test "a remote edit arrives without stealing what you are typing" on laptop with HomeKitchen {
       run Skillet at RecipeLink(Shakshuka)
-      press button "Edit"
+      press "Edit"
       enter "Shakshuka for four" into #title
       // Independent fields, so field-wise last-write-wins is the right answer and no dialogue is owed.
       // Sam's servings change lands; Ro's title keeps what Ro typed.
       collaborator Sam { update Shakshuka { Servings: 6 } }
-      expect field "Serves" value 6
-      expect field "What are you making?" value "Shakshuka for four"
+      expect Shakshuka.Servings is 6
+      select #title { expect text "Shakshuka for four" }
    }
 
-   check "work done offline reconciles on its own" on phone with HomeKitchen {
+   test "work done offline reconciles on its own" on phone with HomeKitchen {
       run Skillet
       network offline
-      expect status "Offline — your changes are safe on this device"
-      press tab "Shop"
+      expect text "Offline — your changes are safe on this device"
+      press "Shop"
       enter "Oat milk" into #newItem
       submit #newItem
-      expect row "Oat milk"
+      expect text "Oat milk"
 
       relaunch Skillet
-      expect row "Oat milk"
+      expect text "Oat milk"
       network online
-      wait for sync current within 5 seconds
-      expect stored exactly one Grocery where Name is "Oat milk"
+      wait for sync current within 5.seconds
+      expect (Groceries where Name is "Oat milk").Count is 1
    }
 
-   check "an invitation is one use, and only for the person invited" on phone with HomeKitchen {
+   test "an invitation is one use, and only for the person invited" on phone with HomeKitchen {
       run Skillet
-      press tab "Kitchen"
-      press button "Invite someone"
+      press "Kitchen"
+      press "Invite someone"
       enter "wren@example.com" into #inviteEmail
       press #sendInvite
-      expect status "Invite link ready — it works once, for seven days"
+      expect text "Invite link ready — it works once, for seven days"
       capture shared link as Invitation
 
       // Someone else holding the link cannot take it.
@@ -159,7 +176,7 @@ test "Skillet" {
       account "Wren" email "wren@example.com"
       open Invitation
       press #join
-      expect heading "Week of"
+      expect text "Week of"
 
       // And it does not work twice.
       account "Mallory"
@@ -168,38 +185,44 @@ test "Skillet" {
       expect text "This invitation has already been used."
    }
 
-   check "the last owner cannot walk away from the kitchen" on phone with HomeKitchen {
-      prepare { delete SamMember }
+   test "the last owner cannot walk away from the kitchen" on phone with HomeKitchen {
+      delete SamMember
       run Skillet
-      press tab "Kitchen"
+      press "Kitchen"
       press #leave
       press #confirm
       // The store refuses the write; the sentence is the entity's own `validate` copy.
       expect text "A kitchen needs an owner. Make someone else an owner first."
-      expect heading "Who cooks here"
+      expect text "Who cooks here"
    }
 
-   check "a guest may read the plan and not rewrite it" on tablet with HomeKitchen {
-      prepare { update SamMember { Role: Guest } }
+   test "a guest may read the plan and not rewrite it" on tablet with HomeKitchen {
+      update SamMember { Role: Guest }
       signed in as Sam
       run Skillet at RecipeLink(Shakshuka)
-      expect missing button "Edit"
-      expect missing button "Delete recipe"
-      press tab "Shop"
+      expect missing text "Edit"
+      expect missing text "Delete recipe"
+      // A hidden button is not proof of security, so the test writes as Sam and watches the store refuse.
+      as Sam update Shakshuka { Title: "Not yours" }
+      expect refused
+      expect Shakshuka.Title is "Shakshuka"
+      press "Shop"
       // A guest may still say "we're out of milk".
-      expect field "Add an item"
+      enter "Oat milk" into #newItem
+      submit #newItem
+      expect (Groceries where Name is "Oat milk").Count is 1
    }
 
-   check "sharing publishes exactly what the projection lists" on laptop with HomeKitchen {
-      prepare { update Shakshuka { Notes: "Halve the salt.", Source: "https://example.com/shakshuka" } }
+   test "sharing publishes exactly what the projection lists" on laptop with HomeKitchen {
+      update Shakshuka { Notes: "Halve the salt.", Source: "https://example.com/shakshuka" }
       run Skillet at RecipeLink(Shakshuka)
-      press button "Share recipe"
-      expect dialogue "Share recipe" {
-         text "Shakshuka"
-         text "Eggs"
-         missing text "Halve the salt."
-         missing text "https://example.com/shakshuka"
-      }
+      press "Share recipe"
+      // The preview is generated from the projection, so what an author sees cannot drift from what
+      // crosses the boundary.
+      expect text "Shakshuka"
+      expect text "Eggs"
+      expect missing text "Halve the salt."
+      expect missing text "https://example.com/shakshuka"
       press #createLink
       capture shared link as Public
 
@@ -211,30 +234,34 @@ test "Skillet" {
 
       signed out
       open Public
-      expect { heading "Shakshuka"; text "Shared from Skillet" }
-      expect missing button "Edit"
+      expect text "Shakshuka"
+      expect text "Shared from Skillet"
+      expect missing text "Edit"
 
       // Revoking rotates the code, so the link already sent is dead for good.
       signed in as Ro
       run Skillet at RecipeLink(Shakshuka)
-      press button "Manage link"
+      press "Manage link"
       press #revokeLink
       signed out
       open Public
-      expect heading "This is gone"
+      expect text "This is gone"
    }
 
-   check "importing a page is one write, and says so when it cannot read it" on phone with HomeKitchen {
+   test "importing a page is one write, and says so when it cannot read it" on phone with HomeKitchen {
       run Skillet
-      press tab "Recipes"
-      press button "Import from a link"
-      action FetchRecipe rejects "No recipe was found on that page."
+      press "Recipes"
+      press "Import from a link"
+      // A failure stub picks a declared case, so renaming the case breaks this at compile time rather
+      // than passing silently; a stub by message would match copy the words file translates.
+      action FetchRecipe fails NotARecipe
       enter "https://example.com/nothing" into #importLink
       press #import
-      expect status "No recipe was found on that page." // the sidecar's sentence, through `failed`
-      expect stored no Recipe where Title is ""
+      expect text "No recipe was found on that page." // the declared case's own sentence
+      expect (Recipes where Title is "").Count is 0
 
-      action FetchRecipe returns RecipeDraft {
+      // A success stub supplies the value, so it needs no type name.
+      action FetchRecipe returns {
          Title: "Pancakes with berries"
          Servings: 4
          Ingredients: ["Flour", "Milk", "Berries"]
@@ -242,81 +269,74 @@ test "Skillet" {
          Source: "https://example.com/pancakes"
       }
       press #import
-      expect { heading "Pancakes with berries"; text "Whisk" }
+      expect text "Pancakes with berries"
+      expect text "Whisk"
    }
 
-   check "losing access mid-session is an honest state, not a blank" on laptop with HomeKitchen {
+   test "losing access mid-session is an honest state, not a blank" on laptop with HomeKitchen {
       signed in as Sam
       run Skillet at RecipeLink(Shakshuka)
       collaborator Ro { delete SamMember }
       // Nothing in Recipes.tao-revolution writes this screen: `guard default` supplies it.
-      expect heading "You don't have access to this"
+      expect text "You don't have access to this"
    }
 
-   check "the same graph is a stack on a phone and two panes on a laptop" with HomeKitchen {
-      on phone {
+   // Tests nest: the inner sentences read as continuations, and the parent's fixture applies to each.
+   test "the same graph adapts to the room it is in" with HomeKitchen {
+      test "it walks as a stack on a phone" on phone {
          run Skillet
-         press tab "Recipes"
-         press row "Shakshuka"
-         expect navigation { selection as tabs; split RecipeWorkspace collapsed }
-         go back
-         expect heading "Recipes"
+         press "Recipes"
+         press "Shakshuka"
+         // The library is behind the recipe, not beside it.
+         expect missing text "Pick a recipe"
+         back
+         expect text "Recipes"
       }
-      on laptop {
+      test "it shows the library beside the recipe on a laptop" on laptop {
          run Skillet
-         press tab "Recipes"
-         expect navigation { selection as sidebar; split RecipeWorkspace expanded }
-         expect heading "Pick a recipe"
-         press row "Shakshuka"
-         expect { heading "Shakshuka"; button "New recipe" }
-   }  }
+         press "Recipes"
+         expect text "Pick a recipe"
+         press "Shakshuka"
+         // Both panes at once: the recipe opened without the library leaving.
+         expect text "Shakshuka"
+         expect text "Pancakes"
+      }
+   }
 
-   check "a shortcut works from any tab, and a key does not fire while typing" on laptop with HomeKitchen {
+   test "a shortcut works from any tab, and a key does not fire while typing" on laptop with HomeKitchen {
       run Skillet
-      press tab "Shop"
+      press "Shop"
       // The command is mounted on the navigator, so it is not the recipe screen's private key.
-      press key "primary+n"
-      expect dialogue "New recipe"
+      press key primary + "n"
+      expect text "New recipe"
       enter "Nachos" into #newTitle
-      press key "primary+n" // inside a text field: the field keeps its own keys
-      expect field "What are you making?" value "Nachos"
+      press key primary + "n" // inside a text field: the field keeps its own keys
+      select #newTitle { expect text "Nachos" }
       press #addRecipe
-      expect heading "Nachos"
+      expect text "Nachos"
    }
 
-   check "Spanish changes the words and nothing else" on phone with HomeKitchen {
-      prepare { update Me { Language: "es" } }
-      run Skillet
-      expect tab "Compra"
-      press tab "Recetas"
-      expect heading "Recetas"
-      press row "Shakshuka"
-      expect heading "Ingredientes"
-      // The navigation is the same graph, whatever it is called.
-      expect navigation identity SkilletNavigator@recipes
-   }
-
-   check "the plan reads its own week, not the device's" on phone with HomeKitchen {
-      prepare { update Home { TimeZone: "Asia/Tokyo" } }
+   test "the plan reads its own week, not the device's" on phone with HomeKitchen {
+      update Home { TimeZone: "Asia/Tokyo" }
       clock 2027-08-14 23:00 America/New_York // Saturday in New York, already Sunday the 15th in Tokyo
       run Skillet
-      expect heading "Week of Aug 15" // the kitchen's week (en-US weeks start on Sunday); the device's would say Aug 8
+      expect text "Week of Aug 15" // the kitchen's week (en-US weeks start on Sunday); the device's would say Aug 8
    }
 
-   check "deleting an account stops at a sole owner, and otherwise leaves the kitchen intact" on phone with HomeKitchen {
+   test "deleting an account stops at a sole owner, and otherwise leaves the kitchen intact" on phone with HomeKitchen {
       run Skillet
-      press tab "Kitchen"
-      press button "Delete my account"
+      press "Kitchen"
+      press "Delete my account"
       press #confirm
       expect text "A kitchen needs an owner. Make someone else an owner first."
 
       // Make Sam an owner first (Ro is still an owner and may), then step down.
       update SamMember { Role: Owner }
       update RoMember { Role: Cook }
-      press button "Delete my account"
+      press "Delete my account"
       press #confirm
-      expect heading "Skillet" // signed out, back at Welcome
-      expect stored exactly one Household where Name is "Home"
-      expect stored no Membership where Person is Ro
+      expect text "Skillet" // signed out, back at Welcome
+      expect (Households where Name is "Home").Count is 1
+      expect (Memberships where Person is Ro).Count is 0
    }
 }

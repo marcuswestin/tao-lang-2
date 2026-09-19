@@ -1,20 +1,25 @@
-// The TypeScript side of `action FetchRecipe … = inject "./FetchRecipe.ts"` in Import.tao-revolution.
-// Tao declares the contract and emits `FetchRecipeAction` from it; this file implements it, and the
-// compiler checks the join both ways. Rejecting is a returned value, never a thrown exception: Tao sees
-// `reject(…)` as the `rejected -> Reason` outcome and a thrown error as `error -> Message`.
+// The TypeScript side of `action FetchRecipe(Link text) returns RecipeDraft … from ./FetchRecipe.ts`
+// in Import.tao-revolution. Tao declares the contract and emits `FetchRecipeAction` from it; this file
+// implements it, and the compiler checks the join both ways.
+//
+// There are no default exports: `<expression> from <path>` resolves the expression's free names against
+// this module, so the export's name is the one the Tao declaration uses. Failing selects one of the
+// cases that declaration names — `NotARecipe` or `Unreachable` — rather than returning a free string,
+// which is what makes renaming a case break a test at compile time instead of passing silently. A
+// thrown error stays `error`.
 //
 // (A real Skillet would name the Tao file `Import.tao`; the `-revolution` suffix only keeps this folder
 // out of Tao's discovery.)
 import type { FetchRecipeAction } from './Import.tao-revolution'
 
-const FetchRecipe: FetchRecipeAction = async ({ Link }, { reject, signal }) => {
+export const FetchRecipe: FetchRecipeAction = async ({ Link }, { fail, signal }) => {
   const response = await fetch(Link, { signal }).catch(() => null)
   if (!response?.ok) {
-    return reject('The page could not be reached.')
+    return fail('Unreachable')
   }
   const recipe = readJsonLdRecipe(await response.text())
   if (!recipe) {
-    return reject('No recipe was found on that page.')
+    return fail('NotARecipe')
   }
   return {
     Title: recipe.name,
@@ -24,8 +29,6 @@ const FetchRecipe: FetchRecipeAction = async ({ Link }, { reject, signal }) => {
     Source: Link,
   }
 }
-
-export default FetchRecipe
 
 // Most recipe sites publish schema.org/Recipe as JSON-LD; that is all this reads.
 function readJsonLdRecipe(html: string) {

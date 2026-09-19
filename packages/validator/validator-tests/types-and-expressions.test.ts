@@ -279,7 +279,7 @@ Describe('validator: types and expressions', () => {
     [
       'unresolved constructors',
       typeApp('let Bad = Missing "Ada"'),
-      "Could not resolve reference to ConstructorDeclaration named 'Missing'.",
+      "No type named 'Missing' is in scope.",
       [
         typeValidationMessages.typeFixIncompatible('Missing'),
         typeValidationMessages.constructorShape('Missing', 'text'),
@@ -288,13 +288,13 @@ Describe('validator: types and expressions', () => {
     [
       'member access on unresolved values',
       app('render Text(Missing.First)', stubView('Text', 'Value text')),
-      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      "No value named 'Missing' is in scope.",
       [typeValidationMessages.memberNotItem('First')],
     ],
     [
       'unresolved invocation arguments',
       app('render Text(Missing)', stubView('Text', 'Value text')),
-      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      "No value named 'Missing' is in scope.",
       [
         invocationValidationMessages.unmatchedArgument('Text'),
         invocationValidationMessages.missingArgument('Text', 'Value'),
@@ -303,7 +303,7 @@ Describe('validator: types and expressions', () => {
     [
       'unresolved item fields',
       typeApp('type Name is text type Person is { Name } let BadPerson = Person { Missing }'),
-      "Could not resolve reference to ListedDeclaration named 'Missing'.",
+      "No data entity or value named 'Missing' is in scope.",
       [typeValidationMessages.unmatchedProperty, typeValidationMessages.missingProperty('Name')],
     ],
   ]
@@ -430,7 +430,7 @@ Describe('validator: types and expressions', () => {
   )
 
   Test('keeps cross-view values out of scope with a located linker diagnostic', async () => {
-    const message = "Could not resolve reference to ValueDeclaration named 'Secret'."
+    const message = "No value named 'Secret' is in scope."
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Target }
       ${stubView('Text', 'Value text')}
@@ -453,7 +453,7 @@ Describe('validator: types and expressions', () => {
       view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
     `,
-      "Could not resolve reference to StateDeclaration named 'Ready'.",
+      "No state named 'Ready' is in scope.",
     ),
   )
 

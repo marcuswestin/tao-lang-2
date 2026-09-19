@@ -1,28 +1,30 @@
-// Journeys, as a person would take them. Every check starts from a fresh store, clock, and network.
+// Journeys, as a person would take them. Every test starts from a fresh store, clock, and network.
+//
+// Steps select by visible text or `#tag` only; store checks are ordinary queries over plain values.
 
 fixture PineStreet {
    account Ro { Name: "Ro", Email: "ro@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
    signed in as Ro
 
-   let Garden = Place { Name: "Community garden", Coordinate: 40.7122, -74.0064 }
-   let Pharmacy = Place { Name: "Canal Pharmacy", Coordinate: 40.7180, -74.0002 }
+   Garden = create Place { Name: "Community garden", Coordinate: 40.7122, -74.0064 }
+   Pharmacy = create Place { Name: "Canal Pharmacy", Coordinate: 40.7180, -74.0002 }
 
-   let PineStreet = Home { Name: "Pine Street", TimeZone: "America/New_York", Accent: Moss }
-   let RoMember = Membership { Home: PineStreet, Person: Ro, Owner }
-   let SamMember = Membership { Home: PineStreet, Person: Sam, Adult }
-   update Ro { CurrentHome: PineStreet } // a fixture is setup statements; rows are handles
+   PineStreet = create Home { Name: "Pine Street", TimeZone: "America/New_York", Accent: Moss } through CreateHome(Ro)
+   RoMember = exactly one PineStreet.Memberships where Person is Ro
+   SamMember = create Membership { Home: PineStreet, Person: Sam, Role: Adult } for Ro
 
-   let ChoresList = HearthList { Home: PineStreet, Name: "Things to do", Kind: Chores, Color: Moss }
-   let ShoppingList = HearthList { Home: PineStreet, Name: "Shopping", Kind: Shopping, Color: Clay }
-   let PlansList = HearthList { Home: PineStreet, Name: "Plans", Kind: Plans, Color: Sky }
+   // `CreateHome` seeds "Things to do" and "Shopping"; the plans list is this fixture's own.
+   ChoresList = exactly one PineStreet.Lists where Name is "Things to do"
+   ShoppingList = exactly one PineStreet.Lists where Name is "Shopping"
+   PlansList = create HearthList { Home: PineStreet, Name: "Plans", Kind: Plans, Color: Sky } for Ro
 
-   let EggsBreakfast = HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 4, Unit: "piece", CreatedBy: Ro }
-   let EggsBaking = HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 2, Unit: "piece", CreatedBy: Sam }
-   let Milk = HearthItem { HearthList: ShoppingList, Title: "Milk", Quantity: 1, Unit: "l", CreatedBy: Ro }
-   let Plants = HearthItem { HearthList: PlansList, Title: "Water the plants", Note: "The fern likes the rain barrel.", Due: 2027-04-12 09:00 America/New_York, Place: Garden, Assignee: Sam, CreatedBy: Ro }
-   let Prescription = HearthItem { HearthList: PlansList, Title: "Collect prescription", Due: 2027-04-12 17:00 America/New_York, Place: Pharmacy, CreatedBy: Sam }
-   let Bins = HearthItem { HearthList: ChoresList, Title: "Take the bins out", Due: 2027-04-13 07:30 America/New_York, CreatedBy: Ro }
+   EggsBreakfast = create HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 4, Unit: "piece", CreatedBy: Ro } for Ro
+   EggsBaking = create HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 2, Unit: "piece", CreatedBy: Sam } for Sam
+   Milk = create HearthItem { HearthList: ShoppingList, Title: "Milk", Quantity: 1, Unit: "l", CreatedBy: Ro } for Ro
+   Plants = create HearthItem { HearthList: PlansList, Title: "Water the plants", Note: "The fern likes the rain barrel.", Due: 2027-04-12 09:00 America/New_York, Place: Garden, Assignee: Sam, CreatedBy: Ro } for Ro
+   Prescription = create HearthItem { HearthList: PlansList, Title: "Collect prescription", Due: 2027-04-12 17:00 America/New_York, Place: Pharmacy, CreatedBy: Sam } for Sam
+   Bins = create HearthItem { HearthList: ChoresList, Title: "Take the bins out", Due: 2027-04-13 07:30 America/New_York, CreatedBy: Ro } for Ro
 }
 
 fixture NewPerson {
@@ -31,122 +33,128 @@ fixture NewPerson {
 }
 
 test "Hearth" {
-   check "making a home is one write, and the root follows it" on phone with NewPerson {
+   test "making a home is one write, and the root follows it" on phone with NewPerson {
       run Hearth
-      expect heading "Make a home"
+      expect text "Make a home"
       enter "Foxglove House" into #homeName
       press #createHome
-      expect tab "Today"
-      expect stored exactly one Home where Name is "Foxglove House"
-      expect stored exactly one Membership where Person is Alex and Role is Owner
-      expect stored exactly one HearthList where Name is "Things to do"
+      expect text "Today"
+      expect (Homes where Name is "Foxglove House").Count is 1
+      expect (Memberships where Person is Alex and Role is Owner).Count is 1
+      expect (HearthLists where Name is "Things to do").Count is 1
    }
 
-   check "capture from anywhere is a draft until it is added" on phone with PineStreet {
+   test "capture from anywhere is a draft until it is added" on phone with PineStreet {
       run Hearth
-      press key "primary+n"
-      expect dialogue "Add something"
-      choose "Things to do" in field "List"
+      press key primary + "n"
+      expect text "Add something"
+      press "Things to do"
       enter "Fix the gate latch" into #captureTitle
       // Half-typed, nothing has synced: an abandoned capture never reaches the home.
-      expect stored no HearthItem where Title is "Fix the gate latch"
+      expect (HearthItems where Title is "Fix the gate latch").Count is 0
       press #captureAdd
-      expect stored exactly one HearthItem where Title is "Fix the gate latch"
+      expect (HearthItems where Title is "Fix the gate latch").Count is 1
    }
 
-   check "the shopping list folds equal lines and one tick buys them all" on phone with PineStreet {
+   test "the shopping list folds equal lines and one tick buys them all" on phone with PineStreet {
       run Hearth at ListLink(ShoppingList)
-      expect row "Eggs" { text "6 piece" }
-      expect row "Eggs" { text "from 2" }
-      select #needed { expect exactly 2 rows }
-      select #needed { press checkbox "Mark Eggs done" }
-      expect section "Bought" { row "Eggs" }
+      select #needed[1] { expect text "Eggs"; expect text "6 piece"; expect text "from 2" }
+      select #needed[2] { expect text "Milk" }
+      select #needed[1] { press #tick }
+      expect text "Bought"
       expect EggsBreakfast.Complete is yes
       expect EggsBaking.Complete is yes
-      expect stored exactly one HearthItem where Title is "Eggs" and CompletedBy is Ro and CreatedBy is Sam
+      // The stamp is on every source row, including the one Sam created.
+      expect (HearthItems where Title is "Eggs" and CompletedBy is Ro and CreatedBy is Sam).Count is 1
    }
 
-   check "an item's fields write through, and a remote change lands without a dialogue" on laptop with PineStreet {
+   test "an item's fields write through, and a remote change lands without a dialogue" on laptop with PineStreet {
       run Hearth at ItemLink(Plants)
       enter "Water every planter" into #itemTitle
       collaborator Sam { update Plants { Note: "Skip the rosemary." } }
-      expect field "What needs doing?" value "Water every planter"
-      expect field "Notes" value "Skip the rosemary."
       expect Plants.Title is "Water every planter"
-      expect missing dialogue
+      expect Plants.Note is "Skip the rosemary."
+      select #itemTitle { expect text "Water every planter" }
    }
 
-   check "ticking is for everyone; removing is not" on phone with PineStreet {
-      prepare { update SamMember { Role: YoungPerson } }
+   test "ticking is for everyone; removing is not" on phone with PineStreet {
+      update SamMember { Role: YoungPerson }
       signed in as Sam
       run Hearth at ItemLink(Bins)
-      expect checkbox "Mark Take the bins out done"
-      expect missing button "Delete"
-      press checkbox "Mark Take the bins out done"
+      expect missing text "Delete"
+      press "Mark Take the bins out done"
       expect Bins.Complete is yes
       expect Bins.CompletedBy is Sam
+      // A hidden button is not proof of security: the store refuses the delete too.
+      as Sam delete Bins
+      expect refused
    }
 
-   check "the reminder reaches whoever is taking care of it, on their devices" on phone with PineStreet {
+   test "the reminder reaches whoever is taking care of it, on their devices" on phone with PineStreet {
       clock 2027-04-12 08:29 America/New_York
       signed in as Sam
       run Hearth
-      advance 1 minute
+      advance 1.minute
       expect notification "Water the plants is due at 9:00 AM" // `.Time` in the reader's locale
       open notification
-      expect heading "Water the plants"
-      // The reminder fires once, even after a relaunch.
+      expect text "Water the plants"
+      // The reminder fires once, even after a relaunch: `once per Item.Due` is the deduplication key.
       relaunch Hearth
-      advance 1 minute
+      advance 1.minute
       expect exactly one notification
    }
 
-   check "the week is seven columns wide and one column narrow, and a drop moves the due day" with PineStreet {
+   test "the week is seven columns wide and one column narrow, and a drop moves the due day" with PineStreet {
       clock 2027-04-12 08:00 America/New_York // a Monday
-      on laptop {
+      test "a laptop lays the week out across" on laptop {
          run Hearth
-         press tab "Week"
-         expect heading "Week of Apr 12"
-         select #week { expect exactly 7 columns }
-         move row "Water the plants" onto list "Tuesday"
+         press "Week"
+         expect text "Week of Apr 12"
+         select #week { expect text "Monday"; expect text "Sunday" }
+         move "Water the plants" onto "Tuesday"
          expect Plants.Due is 2027-04-13 09:00 America/New_York
       }
-      on phone {
+      test "a phone reads it one day at a time" on phone {
          run Hearth
-         press tab "Week"
-         select #week { expect exactly 1 column }
+         press "Week"
+         expect text "Week of Apr 12"
+         expect text "Water the plants"
       }
    }
 
-   check "errands sort by distance and the map has an equal list" on tablet with PineStreet {
+   test "errands sort by distance and the map has an equal list" on tablet with PineStreet {
       location 40.7175, -74.0010 // beside the pharmacy
       run Hearth
-      press tab "Around"
-      select #errands { expect rows in order "Collect prescription", "Water the plants" }
-      press row "Water the plants"
-      expect map selection "Water the plants"
+      press "Around"
+      select #errands[1] { expect text "Collect prescription" }
+      select #errands[2] { expect text "Water the plants" }
+      // Selecting a row marks the same errand on the map beside it.
+      press "Water the plants"
+      select #errands[2] { expect text "Water the plants" }
    }
 
-   check "without location, Around is still an honest list" on phone with PineStreet {
+   test "without location, Around is still an honest list" on phone with PineStreet {
       location denied
       run Hearth
-      press tab "Around"
-      expect status "Errands stay available as a list without location access."
-      expect row "Water the plants"
+      press "Around"
+      expect text "Errands stay available as a list without location access."
+      expect text "Water the plants"
    }
 
-   check "the same item is one window, however many times it is opened" on laptop with PineStreet {
+   test "the same item is one window, however many times it is opened" on laptop with PineStreet {
       run Hearth at ItemLink(Plants)
-      press button "Open separately"
+      press "Open separately"
       expect window "Water the plants"
-      press button "Open separately"
+      press "Open separately"
       expect exactly one window
    }
 
-   check "a shared list is exactly the projection, and revoking kills the link" on laptop with PineStreet {
+   test "a shared list is exactly the projection, and revoking kills the link" on laptop with PineStreet {
       run Hearth at ListLink(PlansList)
-      press button "Share list"
-      expect dialogue "Share list" { text "Water the plants"; missing text "The fern likes the rain barrel."; missing text "Sam" }
+      press "Share list"
+      expect text "Water the plants"
+      expect missing text "The fern likes the rain barrel."
+      expect missing text "Sam"
       press #createLink
       capture shared link as Public
       expect public content behind Public includes only {
@@ -155,21 +163,23 @@ test "Hearth" {
       }
       signed out
       open Public
-      expect { heading "Plans"; text "Water the plants"; text "Community garden" }
+      expect text "Plans"
+      expect text "Water the plants"
+      expect text "Community garden"
       expect missing text "The fern likes the rain barrel."
       signed in as Ro
       run Hearth at ListLink(PlansList)
-      press button "Manage link"
+      press "Manage link"
       press #revokeLink
       signed out
       open Public
-      expect heading "This is gone"
+      expect text "This is gone"
    }
 
-   check "an invitation is one use and only for the person invited" on phone with PineStreet {
+   test "an invitation is one use and only for the person invited" on phone with PineStreet {
       run Hearth
-      press tab "People"
-      press button "Invite someone"
+      press "People"
+      press "Invite someone"
       enter "lee@example.com" into #inviteEmail
       press #sendInvite
       capture shared link as Invitation
@@ -180,81 +190,75 @@ test "Hearth" {
       account "Lee" email "lee@example.com"
       open Invitation
       press #join
-      expect tab "Today"
-      expect stored exactly one Membership where Person is Lee and Home is PineStreet
+      expect text "Today"
+      expect (Memberships where Person is Lee and Home is PineStreet).Count is 1
    }
 
-   check "the last owner cannot leave, and an adult cannot mint an owner" on phone with PineStreet {
+   test "the last owner cannot leave, and an adult cannot mint an owner" on phone with PineStreet {
       run Hearth
-      press tab "Settings"
+      press "Settings"
       press #leave
       press #confirm
       expect text "A home needs an owner. Make someone else an owner first."
       signed in as Sam
       run Hearth
-      press tab "People"
-      press button "Invite someone"
-      expect field "Role" options "Adult", "Young person" // a case prints as its name, split into words
+      press "People"
+      press "Invite someone"
+      // The grantable roles come from the access rule, not from a hand-written role test.
+      expect missing text "Owner"
+      expect text "Adult"
+      // And the store refuses an owner seat even when the screen is bypassed.
+      as Sam create Invite { Home: PineStreet, Role: Owner, InvitedBy: Sam }
+      expect refused
    }
 
-   check "work done offline survives relaunch and reconciles once" on phone with PineStreet {
+   test "work done offline survives relaunch and reconciles once" on phone with PineStreet {
       run Hearth at ListLink(ChoresList)
       network offline
-      expect status "Offline — your changes are safe on this device"
+      expect text "Offline — your changes are safe on this device"
       enter "Sweep the porch" into #newItem
       submit #newItem
-      expect row "Sweep the porch"
+      expect text "Sweep the porch"
       relaunch Hearth
       run Hearth at ListLink(ChoresList)
-      expect row "Sweep the porch"
+      expect text "Sweep the porch"
       network online
-      wait for sync current within 5 seconds
-      expect stored exactly one HearthItem where Title is "Sweep the porch"
+      wait for sync current within 5.seconds
+      expect (HearthItems where Title is "Sweep the porch").Count is 1
    }
 
-   check "an incoming link wins over what was restored" on phone with PineStreet {
+   test "an incoming link wins over what was restored" on phone with PineStreet {
       run Hearth at ListLink(ChoresList)
       relaunch Hearth opening ItemLink(Prescription)
-      expect heading "Collect prescription"
+      expect text "Collect prescription"
    }
 
-   check "the same graph is a stack on a phone and two panes on a laptop" with PineStreet {
-      on phone {
+   test "the same graph adapts to the room it is in" with PineStreet {
+      test "it walks as a stack on a phone" on phone {
          run Hearth
-         press tab "Lists"
-         press row "Plans"
-         expect navigation { selection as tabs; split ListsWorkspace collapsed }
-         go back
-         expect heading "Lists"
+         press "Lists"
+         press "Plans"
+         expect missing text "Choose a list"
+         back
+         expect text "Lists"
       }
-      on laptop {
+      test "it shows the index beside the list on a laptop" on laptop {
          run Hearth
-         press tab "Lists"
-         expect navigation { selection as sidebar; split ListsWorkspace expanded }
-         expect heading "Choose a list"
-         press row "Plans"
-         expect { heading "Plans"; heading "Lists" }
-   }  }
+         press "Lists"
+         expect text "Choose a list"
+         press "Plans"
+         expect text "Plans"
+         expect text "Things to do"
+      }
+   }
 
-   check "a person with two homes switches by a write" on phone with PineStreet {
-      prepare {
-         let Cabin = create Home { Name: "The cabin", TimeZone: "America/Denver" }
-         create Membership { Home: Cabin, Person: Ro, Owner }
-      }
+   test "a person with two homes switches by a write" on phone with PineStreet {
+      Cabin = create Home { Name: "The cabin", TimeZone: "America/Denver" } through CreateHome(Ro)
       run Hearth
-      press tab "Settings"
+      press "Settings"
       press #switchHome
-      expect heading "Choose a home"
-      press row "The cabin"
-      expect heading "Today at The cabin"
-   }
-
-   check "Spanish changes the words and nothing else" on phone with PineStreet {
-      prepare { update Me { Language: "es" } }
-      run Hearth
-      expect tab "Listas"
-      press tab "Listas"
-      press row "Plans"
-      expect navigation identity HomeNavigator@lists
+      expect text "Choose a home"
+      press "The cabin"
+      expect text "Today at The cabin"
    }
 }

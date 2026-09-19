@@ -18,7 +18,8 @@
 type Course is one of Breakfast, Lunch, Dinner, Snack
 type Unit is one of "g", "kg", "ml", "l", "cup", "tbsp", "tsp", "piece"
 type Role is one of Owner, Cook, Guest
-type Aisle is one of Produce, Bakery, Dairy, Pantry, Frozen, Household // which part of the shop something comes from
+// `Homeware`, not `Household`: `Household` is the entity and would collide in every bare-name position.
+type Aisle is one of Produce, Bakery, Dairy, Pantry, Frozen, Homeware // which part of the shop something comes from
 
 // The Prelude's account has a Name, an Email, and a Photo. Skillet adds what it needs to know.
 data Accounts / Account with {
@@ -26,10 +27,10 @@ data Accounts / Account with {
    Timers // the timers this account started; the household owns them
 
    // Preferences are durable and personal: they follow the account, not the household. A `(device)`
-   // preference stays on the device it was set on.
+   // preference stays on the device it was set on. Language, text size, and light/dark are the OS's,
+   // read as `Locale`, `TextScale`, and `Scheme` — never duplicated here.
    preference Units is one of Metric, Imperial (default Metric)
    preference KeepOffline yes / no (default yes)
-   preference Language text (default device.language)
    preference Appearance is one of System, Light, Dark (default System, device)
 }
 
@@ -51,37 +52,35 @@ data Households / Household {
 
 data Memberships / Membership {
    Household
-   Person Account
+   Person (relation Accounts) // named Person, pointing at the Accounts entity
    Role (default Cook)
    JoinedAt time (default now)
 
    unique Household, Person
 }
 
-// An invitation is a row with a secret, not a link to a household id. It works once, expires, and may
-// be bound to the person it was meant for.
+// An invitation is a row with a secret, not a link to a household id. It works once, expires, and may be
+// bound to the person it was meant for.
 data Invites / Invite {
    Household
-   Code secret (default new secret)
+   Code secret (default new secret, unique)
    Role (default Cook)
-   Email text (optional) // when set, only this address may accept
+   Email text? // when set, only this address may accept
    Used yes / Unused no
-   InvitedBy Account
-   ExpiresAt time (default now + 7 days)
-
-   unique Code
+   InvitedBy (relation Accounts)
+   ExpiresAt time (default now + 7.days)
 }
 
 data Recipes / Recipe {
    Household
-   Title text (required "Name this recipe")
-   Photo image (optional)
+   Title text (required "Name this recipe", search, title)
+   Photo image?
    Course (default Dinner)
    Servings number (default 4)
-   Duration duration (optional)
+   Duration duration?
    Favorite yes / no
-   Notes text (default "")
-   Source text (optional)
+   Notes text (default "", search)
+   Source text?
    Shared yes / Private no
    ShareCode secret (default new secret) // rotating this kills every link already handed out
    Ingredients (owned, ordered)
@@ -90,7 +89,6 @@ data Recipes / Recipe {
    ChangedAt time (default now, touch on change)
 
    index Title
-   search Title, Notes
    order by Title
 
    validate Servings >= 1 "A recipe serves at least one"
@@ -99,9 +97,9 @@ data Recipes / Recipe {
 
 data Ingredients / Ingredient {
    Recipe
-   Name text (required "Name this ingredient")
-   Amount number (optional)
-   Unit (optional)
+   Name text (required "Name this ingredient", search, title)
+   Amount number?
+   Unit?
    Aisle (default Pantry)
 
    // An amount and its unit are one fact. `together` makes the store apply them as a single write, so a
@@ -113,8 +111,8 @@ data Ingredients / Ingredient {
 
 data Steps / Step {
    Recipe
-   Text text (required "Say what to do")
-   Timer duration (optional)
+   Text text (required "Say what to do", title)
+   Timer duration?
 
    validate Timer is none or Timer > 0 "A timer has to be longer than nothing"
 }
@@ -126,7 +124,7 @@ data Meals / Meal {
    Course (default Dinner)
    Servings number (default 4)
    Cooked yes / Planned no
-   Remind duration (optional) // "thaw it 12 hours before" — see Rules.tao-revolution
+   Remind duration? // "thaw it 12 hours before" — see Rules.tao-revolution
    Groceries // the lines this meal put on the list; a Grocery's `Meal` is the reverse
 
    index Day
@@ -138,13 +136,13 @@ data Meals / Meal {
 
 data Groceries / Grocery {
    Household
-   Name text (required "Name the item")
-   Amount number (optional)
-   Unit (optional)
+   Name text (required "Name the item", title)
+   Amount number?
+   Unit?
    Aisle (default Pantry)
-   Store Place (optional) // where to buy it, so the list can send you there
+   Store Place? // where to buy it, so the list can send you there
    Bought yes / Needed no
-   Meal (optional) // set when the line came from the plan; if that meal goes, this becomes none
+   Meal? // set when the line came from the plan; if that meal goes, this becomes none
    CreatedAt time (default now)
 
    together Amount, Unit
@@ -154,9 +152,9 @@ data Groceries / Grocery {
 // What the kitchen already has. `ShopTheWeek` reads it, so the list is what you actually need.
 data Pantry / PantryItem {
    Household
-   Name text (required "Name the item")
+   Name text (required "Name the item", title)
    Aisle (default Pantry)
-   PlentyUntil date (optional)
+   PlentyUntil date?
 
    unique Household, Name
 }
@@ -166,7 +164,7 @@ data Pantry / PantryItem {
 data Timers / Timer {
    Household
    Step
-   StartedBy Account
+   StartedBy (relation Accounts) // `StartedBy`, not `Cook`: `Cook` is a `Role` case
    EndsAt time
    Running yes / Stopped no
 
@@ -178,4 +176,4 @@ data Timers / Timer {
 
 // `Place` comes with the Prelude: a name, a coordinate, an address. A grocery line points at one, the
 // shopping list groups by it, and `Map` draws them. Nothing here stores a coordinate by hand.
-let NearbyStores = places near Here within 5 km where Kind is "grocery" // a Prelude search over the platform's places
+let NearbyStores = places near Here within 5.km where Kind is "grocery" // a Prelude search over the platform's places

@@ -1,176 +1,133 @@
-// Skillet's design. Tokens name values, meaning names roles, screens speak in meaning ([card], [title],
-// [primary]), and the runtime turns meaning into platform styles. One design for every device: what
-// changes with the size of the room is said once, here.
+// Skillet's design. One declaration, organized as typed value blocks plus styles, screens, and rules.
+// The block name types its members, so the checker needs no annotations and there is no generic tokens
+// block. Screens speak in names ([card], [title], [primary]); raw visual values are confined to here.
+//
+// There is no meaning layer and no dark block: a semantic role is a derived entry whose value is
+// conditional on the environment, so the old tokens → meaning → dark stack is one block with derivation.
 
 design SkilletDesign {
-   personality warm
-   density comfortable
+   colors {
+      cream #FBF7EF
+      paper #FFFFFF
+      linen #EDE6DA
+      charcoal #2B2622
+      smoke #6F6861
+      ember #D9622B { 20 #F4D7C8, 60 #B34E1F } // a family: ember, ember.20, ember.60
+      sage #5E8C61
+      brick #B4432F
+      night #17140F
+      soot #24201B
+      ash #3B352E
 
-   // The size classes every `when wide` clause and every `container` test uses. Declared once.
-   sizes { narrow below 600; medium from 600 below 900; wide from 900 }
+      // Derived, conditional entries: each resolves at render, constant per frame.
+      canvas    when Scheme is Dark night / not cream
+      surface   when Scheme is Dark soot / not paper
+      sunken    when Scheme is Dark ash / not linen
+      inverse   when Scheme is Dark cream / not charcoal
+      ink       when Scheme is Dark cream / not charcoal
+      muted     when Scheme is Dark linen / not smoke
+      subtle    when Scheme is Dark ash / not linen
+      accent    ember
+      good      sage
+      danger    brick
+      onAccent  paper // stays light in both schemes: it sits on ember either way
 
-   tokens {
-      color {
-         cream #FBF7EF
-         paper #FFFFFF
-         linen #EDE6DA
-         charcoal #2B2622
-         smoke #6F6861
-         ember #D9622B
-         sage #5E8C61
-         brick #B4432F
-         night #17140F
-         soot #24201B
-         ash #3B352E
+      // A parameterized entry is the case-keyed palette, by the same mechanism as `phrase`. Used as
+      // `[background aisle(Ingredient.Aisle)]`, so the mapping is stated once, not re-branched in
+      // product code.
+      aisle(Aisle) when Aisle {
+         Produce -> sage
+         Bakery -> ember
+         Dairy -> cream
+         Pantry -> linen
+         Frozen -> smoke
+         Homeware -> charcoal
       }
-      space { xxs 2; xs 4; sm 8; md 12; lg 16; xl 24; xxl 40; screen 20 }
-      radius { sm 8; md 12; lg 20; pill 999 }
-      shadow {
-         sm [offset 1, blur 3, opacity 10%]
-         md [offset 6, blur 20, opacity 14%]
-      }
-      // A named type scale: a bundle names a step rather than restating three numbers.
-      type {
-         display [size 34, weight bold, line 40]
-         title [size 24, weight semibold, line 30]
-         heading [size 17, weight semibold, line 22]
-         body [size 16, line 23]
-         label [size 15, weight medium, line 20]
-         caption [size 13, line 18]
-      }
-      motion { quick 120 ms; calm 220 ms; page 320 ms }
    }
 
-   // A clause head is a token category, so `[background surface]` reads `background.surface` and
-   // `[pad lg]` reads `space.lg`.
-   meaning {
-      background.canvas cream
-      background.surface paper
-      background.sunken linen
-      background.inverse charcoal
-      background.primary ember
-      background.danger brick
-      ink.text charcoal
-      ink.muted smoke
-      ink.accent ember
-      ink.good sage
-      ink.danger brick
-      ink.inverse cream
-      ink.onPrimary paper // stays light in both schemes: it sits on ember either way
-      border.subtle linen
-      border.accent ember
+   sizes {
+      xxs 2.px, xs 4.px, sm 8.px, md 12.px, lg 16.px, xl 24.px, xxl 40.px
+      screen 20.px, touch 48.px
+      pill 999.px
+      readable 1.rem // grows with the person's text setting
    }
 
-   dark {
-      background.canvas night
-      background.surface soot
-      background.sunken ash
-      background.inverse cream
-      ink.text cream
-      ink.muted linen
-      ink.inverse charcoal
-      border.subtle ash
+   shadows {
+      sm [offset 1.px, blur 3.px, opacity 10%]
+      md [offset 6.px, blur 20.px, opacity 14%]
    }
 
-   // A palette keyed by a case type. `[background Aisle.Produce]` and `[background Ingredient.Aisle]`
-   // both resolve here, so the mapping is stated once instead of being re-branched in product code.
-   palette Aisle {
-      Produce sage
-      Bakery ember
-      Dairy cream
-      Pantry linen
-      Frozen smoke
-      Household charcoal
+   // The text entries are the clause names a site uses: `Text(Recipe.Title) [title]`.
+   text {
+      pageTitle [size 34.px, weight bold, line 40.px]
+      title [size 24.px, weight semibold, line 30.px]
+      sectionTitle [size 17.px, weight semibold, line 22.px]
+      body [size 16.px, line 1.4]
+      label [size 15.px, weight medium, line 20.px]
+      caption [size 13.px, line 18.px, ink muted]
    }
 
-   // Type bundles name a scale step.
-   pageTitle [type display, ink text]
-   title [type title, ink text]
-   sectionTitle [type heading, ink text]
-   body [type body, ink text]
-   label [type label, ink text]
-   caption [type caption, ink muted]
-   muted [ink muted]
-   danger [ink danger]
-   strike [decoration strike]
-   center [align center]
+   // The size classes every `when wide` clause uses. No pixel count or device name appears in a screen.
+   screens { narrow below 600.px, medium below 900.px, wide }
 
-   // Surfaces.
-   screen [fill, background canvas, content top center]
-   page [fill, width max 1120, pad screen, gap lg, pad xxl when wide]
-   surface [background surface, border subtle, radius md]
-   card [surface, pad md, gap sm, shadow sm, pad lg when wide]
-   selected [background sunken, border accent]
-   chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption]
-   toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow md]
+   styles {
+      // Element defaults are Capitalized: every Text in the app starts from `Text`, and `App` is the
+      // root's. Interaction states are ordinary postfix conditions, not a sub-grammar.
+      App [background canvas]
+      Text [ink ink]
+      Col [gap sm]
+      Row [gap sm]
+      Button [label, tap min touch, content center center, gap sm, radius pill,
+              pad horizontal md vertical sm, background surface, ink ink, border subtle,
+              overlay own ink 8% when hovered, brightness -5% when pressed, scale 0.985 when pressed]
+      TextInput [background surface, border subtle, radius sm, pad md, body, tap min touch,
+                 border accent when focused, ring accent when focused]
+      Checkbox [size 24.px, radius sm, border subtle, tap min touch, ring accent when focused]
+      // Generated interaction affordances are ordinary element defaults; an app may restyle them without
+      // declaring or owning the runtime layers they render on.
+      Hint [background inverse, ink inverse, radius sm, pad horizontal sm vertical xxs, caption]
+      Overview [background surface, border subtle, radius md, pad md, gap xs, shadow md]
 
-   // A parameterized bundle: the argument indexes a palette, so one line covers every case.
-   aisleMark(Of) [size 10, radius pill, background Aisle.Of]
+      // Lowercase bundles a site opts into.
+      muted [ink muted]
+      danger [ink danger]
+      strike [decoration strike]
+      center [align center]
 
-   style Button {
-      base [type label, tap min 48, content center center, gap sm, radius pill, pad horizontal md vertical sm]
-      variant intent {
-         primary [background primary, ink onPrimary]
-         secondary [background surface, ink text, border subtle]
-         quiet [background none, ink text]
-         destructive [background danger, ink onPrimary]
-      }
-      // Derived from whichever variant's ink is in play, so one line covers all four.
-      state hover [overlay own ink 8%]
-      state pressed [brightness -5%, scale 0.985]
-      state disabled [opacity 45%]
-      state busy [opacity 60%]
-      default { intent secondary }
-   }
-   style TextInput {
-      base [background surface, border subtle, radius sm, pad md, type body, tap min 48]
-      state focus [border accent, ring accent]
-      state rejected [border danger]
-   }
-   style Checkbox {
-      base [size 24, radius sm, border subtle, tap min 48]
-      state checked [background primary, ink onPrimary]
-      state focus [ring accent]
-   }
+      primary [background accent, ink onAccent]
+      secondary [background surface, ink ink, border subtle]
+      quiet [background none, ink ink]
+      destructive [background danger, ink onAccent]
 
-   // Patterns are design data with named slots, so `tao design check` can reason about them.
-   patterns {
-      pattern EmptyState {
-         layout [content center center, gap md, pad xl, width max 520]
-         slots {
-            icon [size 34, ink muted]
-            title [type title, align center]
-            body [type body, ink muted, align center]
-            action [primary]
-      }  }
-      pattern Line {
-         layout [content left center, gap sm, pad vertical sm, tap min 48]
-         slots {
-            leading [hug]
-            content [claim 1, compress]
-            trailing [hug, ink muted]
-      }  }
+      screen [fill, background canvas, content top center]
+      page [fill, width max 1120.px, pad screen, gap lg, pad xxl when wide]
+      surface [background surface, border subtle, radius md]
+      card [surface, pad md, gap sm, shadow sm, pad lg when wide, pad md when TextScale > 1.6]
+      selected [background sunken, border accent]
+      chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption,
+            pad horizontal md vertical xs when TextScale > 1.6]
+      toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow md]
+
+      // A row: a leading mark, the content, a trailing edge. The retired `patterns { }` block's `Line`
+      // is ordinary bundles over ordinary containers.
+      line [content left center, gap sm, pad vertical sm, tap min touch]
+      lead [hug]
+      main [claim 1, compress]
+      trail [hug, ink muted]
    }
 
+   // Each rule runs where it is actually decidable: contrast, naming, heading order, and declared tap
+   // minimums are build diagnostics, layout-dependent rules are measured over the scenario gallery, and
+   // perceptual rules are review criteria the gallery surfaces. There is no `design check` declaration.
    rules {
-      contrast minimum wcag.aa
-      tapTarget minimum 44
-      rawColor allowed never
-      headingOrder required
-      accessibleName required on interactive
-      textScale upTo 200%
-      status communicates with icon and text
-      map requires ordered alternative
+      rule contrast at least wcag.aa
+      rule tap targets at least 44.px
+      rule every interactive element is named
+      rule heading order is sequential
+      rule raw visual values stay inside the design
+      rule text survives 200% scale without clipping
+      rule no horizontal overflow except maps
+      rule meaning survives without color or motion
+      rule status is carried by an icon as well as a color
    }
-
-   // Adapt to the person's settings and input before guessing from a device name.
-   environment pointer touch { tapTarget minimum 48 }
-   environment pointer precise { density compact; hover visible }
-   environment motion reduced { motion none; meaning preserved }
-   environment contrast high { border stronger; ink.muted ink.text }
-   environment textScale above 160% { card [pad md, gap sm]; chip [pad horizontal md vertical xs] }
-
-   platform ios { material glass }
-   platform android { dynamicColor yes; elevation tonal }
-   platform web { hover yes; focusRing visible }
 }

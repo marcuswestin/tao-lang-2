@@ -71,7 +71,7 @@ words "es" {
    // -- Cases print as copy, so they translate like any literal
    Breakfast "Desayuno"; Lunch "Comida"; Dinner "Cena"; Snack "Tentempié"
    Owner "Propietario"; Cook "Cocinero"; Guest "Invitado"
-   Produce "Frutas y verduras"; Bakery "Panadería"; Dairy "Lácteos"; Pantry "Despensa"; Frozen "Congelados"; Aisle.Household "Hogar" // qualified: `Household` is also the entity
+   Produce "Frutas y verduras"; Bakery "Panadería"; Dairy "Lácteos"; Pantry "Despensa"; Frozen "Congelados"; Homeware "Hogar"
 
    // -- Common
    "Add"                                                "Añadir"

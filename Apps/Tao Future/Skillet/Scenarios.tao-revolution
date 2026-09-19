@@ -1,104 +1,100 @@
 // The states this app is reviewed, screenshotted, and audited in.
 //
-// A scenario entry is a named, buildable app state: a fixture, a place to open, a device, and the human
-// settings that matter. It reuses the same fixtures the journeys use, so a screenshot and a check cannot
-// drift apart. `just scenarios` renders them; `just design-check` holds them to the design's rules.
+// `scenarios [Subject] "group" { … }` has an optional subject and a required group name; every nested
+// `scenario "entry" { … }` has a required entry name. Group clauses are inherited defaults and an entry
+// clause of the same kind replaces the group's wholesale, so after inheritance every entry has exactly
+// one device and one subject. `prepare` is the scenario-local data delta: ordered updates to fixture
+// handles, applied after the fixture and before the subject mounts — it is not a second fixture.
+//
+// Every rule in SkilletDesign's `rules { }` runs over these, so a screenshot and the design's acceptance
+// criteria cannot drift apart. There is no `design check` declaration: `tao review` renders the gallery
+// and flags what it can measure there.
 
 scenarios "Library" {
+   fixture HomeKitchen
+   run Skillet at RecipeLink(Shakshuka)
+
    scenario "empty" {
       fixture NewCook
       run Skillet
-      prepare { do StartKitchen("Foxglove") }
-      at @recipes
       device phone
       appearance light
    }
    scenario "full" {
-      fixture HomeKitchen
-      run Skillet
-      at @recipes
       device laptop 1440 x 900
-      pointer precise
-      keyboard present
    }
 }
 
 scenarios "Recipe" {
+   fixture HomeKitchen
+   run Skillet at RecipeLink(Shakshuka)
+   device phone
+
    scenario "longTitleLargeText" {
-      fixture HomeKitchen
       prepare { update Shakshuka { Title: "Shakshuka with roasted red pepper and a soft egg" } }
-      run Skillet at RecipeLink(Shakshuka)
-      device phone
       textScale 200%
    }
    scenario "spanish" {
-      fixture HomeKitchen
-      prepare { update Me { Language: "es" } }
-      run Skillet at RecipeLink(Shakshuka)
-      device phone
+      locale "es"
+   }
+   // Pseudolanguages are review modes, never shipped languages: Double-Length and mirrored layout are
+   // reviewed in one pass, and neither is an entry in `project { languages }`.
+   scenario "pseudolocale" {
+      locale pseudolocale
+      direction rightToLeft
    }
 }
 
 scenarios "Shop" {
+   fixture WeekShopped
+   run Skillet
+   device phone
+
    scenario "foldedOffline" {
-      fixture HomeKitchen
-      prepare { do AddMealToList(TomorrowsShakshuka) }
-      run Skillet
-      at @shop
-      device phone
       network offline
+      press "Shop"
    }
    scenario "withStores" {
-      fixture HomeKitchen
-      prepare { do AddMealToList(TomorrowsShakshuka) }
-      run Skillet
-      at @shop
       device tablet landscape
-      location granted
+      press "Shop"
    }
 }
 
 scenarios "Cook" {
-   scenario "running" {
-      fixture HomeKitchen
-      prepare { create Timer { Household: Home, Step: Simmer, StartedBy: Ro, EndsAt: now + 12 minutes, Running } }
-      run Skillet at CookLink(Shakshuka)
-      device tablet landscape
-      appearance dark
-   }
+   fixture TimerRunning
+   run Skillet at CookLink(Shakshuka)
+   device tablet landscape
+   appearance dark
+
+   scenario "running" { }
    scenario "reducedMotionHighContrast" {
-      fixture HomeKitchen
-      run Skillet at CookLink(Shakshuka)
-      device tablet landscape
-      appearance dark
       contrast high
       motion reduced
    }
 }
 
 scenarios "Kitchen" {
+   fixture HomeKitchen
+   run Skillet
+   device phone
+
    scenario "guest" {
-      fixture HomeKitchen
       prepare { update SamMember { Role: Guest } }
-      signed in as Sam
-      run Skillet
-      at @kitchen
-      device phone
+      press "Kitchen"
    }
 }
 
-scenarios "Recovery" {
-   scenario "deletedRecipe" {
-      fixture HomeKitchen
-      run Skillet at RecipeLink(Shakshuka)
-      prepare { delete Shakshuka }
-      device phone
-   }
-}
+// A focused view render rather than an app run: one parameterized view mounted with fixture handles.
+scenarios RecipeCard "row" {
+   fixture HomeKitchen
+   device phone
 
-// Every rule in SkilletDesign's `rules { }` is checked in every scenario; these are the check-only requirements.
-design check SkilletDesign across all scenarios {
-   require no clipped text at 200%
-   require no horizontal scroll except maps
-   require meaning survives without colour or motion
+   scenario "favorite" {
+      prepare { update Shakshuka { Favorite } }
+      render RecipeCard(Recipe: Shakshuka)
+   }
+   scenario "shared" {
+      prepare { update Shakshuka { Shared } }
+      render RecipeCard(Recipe: Shakshuka)
+   }
 }
