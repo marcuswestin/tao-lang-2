@@ -41,13 +41,21 @@ export default Object.assign(Switch, {
   typeMaybe: SwitchTypeMaybe,
 })
 
+/**
+ * ownHandler reads a handler only from the table's own keys. A discriminant can arrive off a wire,
+ * and `constructor`, `toString`, or `__proto__` must not resolve to an inherited `Object` member.
+ */
+function ownHandler<HandlersT extends object>(handlers: HandlersT, key: PropertyKey): unknown {
+  return Object.hasOwn(handlers, key) ? handlers[key as keyof HandlersT] : undefined
+}
+
 /** Switch dispatches exhaustively on a literal value. */
 function Switch<ValueT extends SwitchValueKey, ResultT>(
   input: ValueT,
   handlers: ValueHandlers<ValueT, ResultT>,
 ): ResultT {
   const key = input === undefined ? 'undefined' : input
-  const handler = handlers[key as keyof ValueHandlers<ValueT, ResultT>]
+  const handler = ownHandler(handlers, key)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled switch value: ${String(input)}`)
@@ -61,7 +69,7 @@ function SwitchType<ItemT extends TypeItem, ResultT>(
   handlers: TypeHandlers<ItemT, ResultT>,
 ): ResultT {
   const key = item.$type as ItemT['$type']
-  const handler = handlers[key]
+  const handler = ownHandler(handlers, key)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item type: ${String(key)}`)
@@ -75,7 +83,7 @@ function SwitchKind<ItemT extends KindItem, ResultT>(
   handlers: KindHandlers<ItemT, ResultT>,
 ): ResultT {
   const key = item.kind as ItemT['kind']
-  const handler = handlers[key]
+  const handler = ownHandler(handlers, key)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item kind: ${String(key)}`)
@@ -89,7 +97,7 @@ function SwitchTypeMaybe<ItemT extends TypeItem | undefined, ResultT>(
   handlers: TypeMaybeHandlers<ItemT, ResultT>,
 ): ResultT {
   const key = item === undefined ? 'undefined' : item.$type
-  const handler = handlers[key as keyof TypeMaybeHandlers<ItemT, ResultT>]
+  const handler = ownHandler(handlers, key)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item type: ${String(key)}`)
@@ -103,7 +111,7 @@ function SwitchKindMaybe<ItemT extends KindItem | undefined, ResultT>(
   handlers: KindMaybeHandlers<ItemT, ResultT>,
 ): ResultT {
   const key = item === undefined ? 'undefined' : item.kind
-  const handler = handlers[key as keyof KindMaybeHandlers<ItemT, ResultT>]
+  const handler = ownHandler(handlers, key)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item kind: ${String(key)}`)
@@ -119,7 +127,7 @@ function SwitchProperty<ItemT extends object, PropertyT extends keyof ItemT, Res
 ): ResultT {
   const propertyValue = item[propertyName]
   const key = propertyValue === undefined ? 'undefined' : propertyValue
-  const handler = handlers[key as keyof PropertyHandlers<ItemT, PropertyT, ResultT>]
+  const handler = ownHandler(handlers, key as PropertyKey)
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled property value: ${String(propertyValue)}`)

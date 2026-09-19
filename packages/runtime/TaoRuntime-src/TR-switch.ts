@@ -60,7 +60,8 @@ export function runtimeSwitchHandler<ValueT extends RuntimeSwitchKey, HandlerT>(
   input: ValueT,
   handlers: Readonly<Record<ValueT, HandlerT>>,
 ): HandlerT {
-  const handler = handlers[input]
+  // Own keys only: a wire value such as `constructor` must not resolve to an inherited member.
+  const handler = Object.hasOwn(handlers, input) ? handlers[input] : undefined
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled runtime switch value: ${String(input)}`)
   }

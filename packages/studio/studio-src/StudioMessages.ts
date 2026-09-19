@@ -22,7 +22,10 @@ export const StudioMessages = {
     message: MessageT,
     handlers: StudioMessageHandlers<MessageT, ResultT>,
   ): ResultT {
-    const handler = handlers[message.type as MessageT['type']] as ((message: MessageT) => ResultT) | undefined
+    // Own keys only: `type` arrives off a socket, and `constructor` must not resolve to `Object`.
+    const handler = Object.hasOwn(handlers, message.type)
+      ? handlers[message.type as MessageT['type']] as (message: MessageT) => ResultT
+      : undefined
     if (handler === undefined) {
       Errors.throwUnexpected(`Studio received an unknown message: ${JSON.stringify(message)}`)
     }

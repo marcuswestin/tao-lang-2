@@ -880,10 +880,15 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   ) {
     return undefined
   }
-  const parse = windowMessageParsers[value['type'] as StudioWindowMessage['type']] as
-    | ((candidate: StudioJsonObject) => StudioWindowMessage | undefined)
-    | undefined
-  return parse?.(value)
+  const type = value['type']
+  // Own keys only: the type comes from another window, and `constructor` must not resolve to `Object`.
+  if (typeof type !== 'string' || !Object.hasOwn(windowMessageParsers, type)) {
+    return undefined
+  }
+  const parse = windowMessageParsers[type as StudioWindowMessage['type']] as (
+    candidate: StudioJsonObject,
+  ) => StudioWindowMessage | undefined
+  return parse(value)
 }
 
 function parseJourneyRecordingControl(value: StudioJsonObject): StudioJourneyRecordingControlMessage | undefined {
