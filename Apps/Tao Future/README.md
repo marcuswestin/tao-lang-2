@@ -42,7 +42,7 @@ name differs from their entity carry `(relation X)`, `search` is a field trait, 
 binding each with a `Reason`, and neither an app language picker nor a provider quiet-hours window
 survives.
 
-**Spellings this pass had to choose without a decision.** Each is recorded as `R13` in
+**Spellings this pass had to choose without a decision.** Each is recorded as `R14` in
 `Docs/MVP Roadmap/Ro MVP Roadmap.md`: the reorder affordance and drop target as container members
 (`Col(Reorderable: …)`, `Col(Accepts: …)`, `on drop`), `invalidate <Draft> with <Problem>` where §5
 decides a bare `save` populates `Draft.Problems` on its own,
