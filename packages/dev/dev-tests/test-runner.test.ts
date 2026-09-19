@@ -1,5 +1,6 @@
 import { FS, Platform, Repo, TaoTestProtocol } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { FlakeTolerance } from '../dev-src/repository-tests/FlakeTolerance'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { type SelectedSuite, TestNodes, type TestProcess } from '../dev-src/repository-tests/TestNodes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
@@ -344,6 +345,22 @@ Describe('test runner suite registry', () => {
     }], states)).toBe(false)
     // An unfiltered run has no pattern to have matched nothing, whatever scope chose its suites.
     Expect(TestRunner.noTestsMatched('', [], states)).toBe(false)
+  })
+
+  // A process that crashed or timed out named no test, so nothing about it can have earned
+  // tolerance — and `FlakeTolerance` refuses to demote a failure by that exact name. The runner
+  // writes the name and that module reads it; the two agreeing is the whole of the rule, and they
+  // live in modules that never read each other's source.
+  Test('names a whole-process failure what the tolerance rule refuses to demote', async () => {
+    const crashed = suiteState('shared')
+    crashed.status = 'failed'
+    crashed.selectedTestFiles = ['packages/shared/shared-tests/shared.test.ts']
+
+    const observations = await TestRunner.observationsFor([crashed], Repo.getRoot())
+
+    Expect(observations).toHaveLength(1)
+    Expect(observations[0]?.name).toBe(FlakeTolerance.PROCESS_STAND_IN_NAME)
+    Expect(observations[0]?.outcome).toBe('failed')
   })
 
   // The Tao behavior suite writes no per-test report, so the runner fabricates one observation for

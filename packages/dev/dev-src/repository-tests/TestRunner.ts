@@ -595,7 +595,7 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
       state.testObservations = (state.selectedTestFiles ?? []).map(file => ({
         durationMs: state.elapsedMs,
         file,
-        name: 'suite process',
+        name: FlakeTolerance.PROCESS_STAND_IN_NAME,
         outcome: 'failed',
         suite: state.suite,
       }))

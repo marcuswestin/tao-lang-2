@@ -143,10 +143,39 @@ Describe('tao create command', () => {
       Expect(result.directory).toBe(FS.resolvePath('our-trips', root))
       Expect(result.plan.entities.map(entity => entity.plural)).toEqual(['Trips'])
       Expect(stopped).toEqual(['stopped'])
-      Expect(Object.keys(lowerCreationPlan(result.plan))).toContain('Trips/Trips.tao')
+      // Lowering is proved against what reached disk in the interactive-create test below, not
+      // against this call's own return value.
+      Expect(result.created).toBe(false)
       Expect(captured()).toContain('Shaping the project with Fake lane.')
       Expect(captured()).toContain('Shaped by Fake lane.')
       Expect(captured()).toContain('Trips / Trip: Title (text, title), Days (number), Booked (yes/no); 2 sample rows')
+    })
+  })
+
+  // Every other interactive test declines at the confirmation, which left the path a person
+  // actually takes — say yes, and get a project — covered only by the non-interactive `--yes` run.
+  Test('writes the shaped project when the confirmation is accepted', async () => {
+    await withRoot(async (root, output, captured) => {
+      const provider = new ScriptedGenerationProvider([{ kind: 'answer', value: wholePlan }, {
+        kind: 'answer',
+        value: sampleRows,
+      }])
+      const result = await runCreate('Plan trips with friends', {
+        cwd: root,
+        interactive: true,
+        lanes: [fakeLane(provider)],
+        output,
+        // Use the lane, then accept the id it suggested, then create.
+        prompts: scriptedPrompts({ confirm: [true, true], text: ['plan-trips-with'] }, []),
+        runTests: false,
+      })
+
+      Expect(result.created).toBe(true)
+      // The entity the lane shaped is what reached disk, lowered into its own directory — which is
+      // the claim the plan's own lowering used to be asked to make about itself.
+      Expect(await relativeTaoFiles(result.directory)).toContain('Trips/Trips.tao')
+      Expect(await FS.readText(FS.resolvePath('Trips/Trips.tao', result.directory))).toContain('Trip')
+      Expect(captured()).toContain('tao dev plan-trips-with')
     })
   })
 

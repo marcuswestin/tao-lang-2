@@ -29,6 +29,12 @@ import { TestLedger, type TestObservation, type ToleratedFlake } from './TestLed
  * results: one stands for a whole process, the other for the whole Tao behavior corpus. Neither is
  * a test, so neither is demotable however often it has flipped.
  */
+/**
+ * The name a whole-process failure is recorded under. It is exported because the runner writes it
+ * and this module refuses to demote it, and the two agreeing is the whole of the rule: a process
+ * that crashed or timed out named no test, so nothing about it can have earned tolerance. Spelling
+ * it twice would let a rename quietly make every whole-process failure demotable.
+ */
 const PROCESS_STAND_IN_NAME = 'suite process'
 const TAO_APPS_FILE = 'Apps'
 
@@ -99,4 +105,4 @@ function isProcessStandIn(observation: TestObservation): boolean {
 }
 
 /** FlakeTolerance owns which of a finished run's failures the recorded flake history accounts for. */
-export const FlakeTolerance = { apply, empty } as const
+export const FlakeTolerance = { apply, empty, PROCESS_STAND_IN_NAME } as const

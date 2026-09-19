@@ -183,8 +183,8 @@ Describe('proven flakes stop failing a lane', () => {
       evidence: 'evidence',
       file: FILE,
       fileIdentity: 'identity',
-      id: `${SUITE}::${FILE}::suite process`,
-      name: 'suite process',
+      id: `${SUITE}::${FILE}::${FlakeTolerance.PROCESS_STAND_IN_NAME}`,
+      name: FlakeTolerance.PROCESS_STAND_IN_NAME,
       observed: 4,
       reversals: 3,
       suite: SUITE,
@@ -192,7 +192,7 @@ Describe('proven flakes stop failing a lane', () => {
 
     Expect(
       FlakeTolerance.apply(
-        [node({ testObservations: [observation('failed', 'suite process')] })],
+        [node({ testObservations: [observation('failed', FlakeTolerance.PROCESS_STAND_IN_NAME)] })],
         [standIn],
       ).demoted,
     ).toEqual([])

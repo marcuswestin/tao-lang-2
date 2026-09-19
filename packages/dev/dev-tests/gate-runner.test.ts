@@ -290,10 +290,13 @@ Describe('repository gate runner', () => {
       const firstLog = FS.resolvePath('logs/first.log', root)
       // Waiting for the file to exist and then reading it is a race the lane loses under load: the
       // path appears when the write opens, not when it lands, so the read returns an empty file and
-      // the assertion blames the lane for the test's own timing. Wait for the content instead.
-      await until(async () => await FS.isFile(firstLog) && await FS.readText(firstLog) === 'first output\n', {
+      // the assertion blames the lane for the test's own timing. Wait for the write to land, then
+      // assert what landed — waiting for the exact bytes instead would report a lane that published
+      // the wrong output as a timeout, which says nothing about what went wrong.
+      await until(async () => await FS.isFile(firstLog) && (await FS.readText(firstLog)).length > 0, {
         description: 'the completed gate log to be published',
       })
+      Expect(await FS.readText(firstLog)).toBe('first output\n')
       Expect(await FS.isFile(FS.resolvePath('logs/summary.json', root))).toBe(false)
 
       held.resolve()
