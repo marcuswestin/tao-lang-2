@@ -127,6 +127,25 @@ Describe('proven flakes stop failing a lane', () => {
     })
   })
 
+  Test("a run recorded after the edit does not inherit the old bytes' reversals", async () => {
+    await withRepository(async root => {
+      await writeTestFile(root)
+      await replay(root, 'pfpf')
+
+      // The edit, and then a run against the edited file. Without it the newest event still carries
+      // the old identity and the withdrawal above is decided by that alone; with it, the newest
+      // event carries the *new* identity, which is what the file hashes to — so the only thing that
+      // can still withhold tolerance is refusing to count reversals earned before the edit.
+      await writeTestFile(root, 'Test("supervision", () => { rewritten() })\n')
+      await replay(root, 'f')
+
+      const flake = (await TestLedger.flakes(root))[0]
+      Expect(flake?.reversals ?? 0).toBe(0)
+      Expect(flake?.observed ?? 1).toBe(1)
+      Expect(await TestLedger.tolerated(root)).toEqual([])
+    })
+  })
+
   Test('the window is the history that survives compaction, so old flips age out', async () => {
     await withRepository(async root => {
       await writeTestFile(root)

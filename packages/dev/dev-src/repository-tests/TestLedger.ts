@@ -92,10 +92,13 @@ export type ToleratedFlake = Flake & {
  * `FLAKE_MAX_CONSECUTIVE_FAILURES` trailing failures in the window plus the failure being judged
  * now is three consecutive failures, and no flake history however long survives that.
  *
- * Every count is at one file identity. `reversals` is only incremented between adjacent events that
- * agree on `fileIdentity`, and `tolerated` additionally requires that identity to be what the file
- * hashes to now — so editing a flaky test drops its reputation with it, and the next run judges the
- * new file on its own outcomes.
+ * Every count is at one file identity, and it is the current one. The window is first cut back to
+ * the trailing events that share the latest `fileIdentity`, and `tolerated` additionally requires
+ * that identity to be what the file hashes to now — so editing a flaky test drops its reputation
+ * with it, and the next run judges the new file on its own outcomes. Counting reversals across the
+ * whole window and only comparing adjacent pairs is not the same thing: reversals earned before an
+ * edit would then be reported beside the edited file's identity, and a test that now fails every
+ * time would keep the tolerance the old bytes earned.
  *
  * The three numbers live with the other durable-state constants below.
  */
@@ -254,14 +257,14 @@ async function flakes(repositoryRoot = Repo.getRoot(), limit = 20): Promise<Flak
 }
 
 /** flakeOf measures one test's window: how often it contradicted itself, and how it ends. */
-function flakeOf(id: string, window: readonly TestHistoryEvent[]): Flake {
+function flakeOf(id: string, recorded: readonly TestHistoryEvent[]): Flake {
+  const window = atLatestIdentity(recorded)
   let reversals = 0
   for (let index = 1; index < window.length; index += 1) {
     const previous = window[index - 1]!
     const current = window[index]!
     if (
-      previous.fileIdentity === current.fileIdentity
-      && previous.outcome !== 'skipped'
+      previous.outcome !== 'skipped'
       && current.outcome !== 'skipped'
       && previous.outcome !== current.outcome
     ) {
@@ -283,6 +286,28 @@ function flakeOf(id: string, window: readonly TestHistoryEvent[]): Flake {
     reversals,
     suite: latest.suite,
   }
+}
+
+/**
+ * atLatestIdentity cuts the window back to the events recorded against the bytes the file holds
+ * now, which is the only stretch of history that says anything about the test as it is written
+ * today. Comparing each adjacent pair's identity is not enough on its own: a window that flipped
+ * twice at the old bytes and then failed once at the new ones still counts two reversals, while
+ * `latest` reports the new identity — so `tolerated`, which checks that identity against the file,
+ * hands a test that now fails every time the tolerance it earned before it was edited. Everything
+ * downstream — the reversal count, the trailing failures, and `observed` — is measured on the cut
+ * window, so all three describe the same bytes.
+ */
+function atLatestIdentity(window: readonly TestHistoryEvent[]): readonly TestHistoryEvent[] {
+  const latest = window.at(-1)
+  if (latest === undefined) {
+    return window
+  }
+  let start = window.length - 1
+  while (start > 0 && window[start - 1]!.fileIdentity === latest.fileIdentity) {
+    start -= 1
+  }
+  return window.slice(start)
 }
 
 /**
