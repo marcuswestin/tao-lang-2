@@ -119,3 +119,4 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Candidate
 - [DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox](<Developer environment upgrades/DEVENV-101-fix-dprint-cannot-format-a-skill-file-inside-the-sandbox.md>) — Candidate
 - [DEVENV-102 — No gate parses `.tao-revolution` spec sources](<Developer environment upgrades/DEVENV-102-no-gate-parses-tao-revolution-spec-sources.md>) — Candidate
+- [DEVENV-103 — `$TMPDIR` resolves to two different paths between tool calls](<Developer environment upgrades/DEVENV-103-tmpdir-resolves-to-two-different-paths-between-tool-calls.md>) — Candidate
