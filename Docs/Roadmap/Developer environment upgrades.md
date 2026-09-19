@@ -118,3 +118,4 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-098 — A fixture holding the output-capture queue through a spawn stalls its whole shard](<Developer environment upgrades/DEVENV-098-a-fixture-holding-the-output-capture-queue-through-a-spawn.md>) — Candidate
 - [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Candidate
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Candidate
+- [DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox](<Developer environment upgrades/DEVENV-101-fix-dprint-cannot-format-a-skill-file-inside-the-sandbox.md>) — Candidate
