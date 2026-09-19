@@ -1,5 +1,15 @@
 import { Switch as CoreSwitch } from '@shared/core'
-import { AfterEach, Describe, Expect, fakeTerminal, mkTestDir, settle, Test, withCapturedOutput } from '@shared/test'
+import {
+  AfterEach,
+  Describe,
+  Expect,
+  fakeTerminal,
+  mkTestDir,
+  runCleanups,
+  settle,
+  Test,
+  withCapturedOutput,
+} from '@shared/test'
 import { PassThrough } from 'node:stream'
 import {
   Assert,
@@ -180,6 +190,32 @@ Describe('FS', () => {
     Expect(await FS.exists(FS.resolvePath('removed.txt', targetDir))).toBe(false)
     Expect(await FS.exists(FS.resolvePath('empty-after-sync/file.txt', targetDir))).toBe(false)
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
+  })
+
+  Test('sweeps staging files a killed synchronization orphaned beside the destination', async () => {
+    const root = await tmpDir()
+    const sourceDir = FS.resolvePath('source', root)
+    const targetDir = FS.resolvePath('target', root)
+    const uuid = '0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c'
+    // Staging and rollback files are named for the destination and sit beside it, so a killed run
+    // leaves them where whatever packages the parent directory next will pick them up.
+    const orphanedStaging = FS.resolvePath(`target.${uuid}.0.tmp`, root)
+    const orphanedRollback = FS.resolvePath(`target.${uuid}.3.restore`, root)
+    const unrelated = FS.resolvePath('target-notes.tmp', root)
+
+    await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
+    await FS.mkdir(targetDir)
+    await FS.writeText(orphanedStaging, 'orphaned staging')
+    await FS.writeText(orphanedRollback, 'orphaned rollback')
+    await FS.writeText(unrelated, 'not ours')
+
+    await FS.synchronizeDirectoryFiles(sourceDir, targetDir, { boundaryPath: root })
+
+    Expect(await FS.exists(orphanedStaging)).toBe(false)
+    Expect(await FS.exists(orphanedRollback)).toBe(false)
+    // Only this synchronization's own naming is swept; a neighbour that merely ends in .tmp stays.
+    Expect(await FS.readText(unrelated)).toBe('not ours')
+    Expect(await FS.readText(FS.resolvePath('value.txt', targetDir))).toBe('current')
   })
 
   Test('refuses source and destination symbolic links while synchronizing files', async () => {
@@ -1096,6 +1132,67 @@ Describe('Text', () => {
  * change to a tree nothing else hashes; what it must not do is answer the same for two different
  * stdlibs.
  */
+/**
+ * A journey's disposers must all run, and a cleanup failure must never become the failure the test
+ * reports when the journey itself already failed. Both smoke journeys had their own copy of this
+ * before it moved here.
+ */
+Describe('Test cleanup', () => {
+  Test('runs every disposer and reports beside a primary failure rather than replacing it', async () => {
+    const primaryFailure = new Errors.UnexpectedBehaviorError('primary journey failure')
+    const cleaned: string[] = []
+    const reported: unknown[] = []
+
+    await runCleanups(primaryFailure, [
+      {
+        label: 'close browser',
+        run: () => {
+          cleaned.push('browser')
+          Errors.throwHostEnvironment('browser cleanup failed')
+        },
+      },
+      {
+        label: 'remove runtime',
+        run: () => {
+          cleaned.push('runtime')
+          Errors.throwHostEnvironment('runtime cleanup failed')
+        },
+      },
+      { label: 'remove export', run: () => cleaned.push('export') },
+    ], { channel: 'test-cleanup', reportCleanupFailure: error => reported.push(error), subject: 'journey' })
+
+    // A disposer that throws must not stop the ones after it.
+    Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
+    Expect(reported).toHaveLength(1)
+    Expect(Errors.messageOf(reported[0])).toContain('2 journey cleanup operations failed')
+    Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
+    Expect(Errors.messageOf(reported[0])).toContain('remove runtime: runtime cleanup failed')
+    Expect(primaryFailure.message).toBe('primary journey failure')
+  })
+
+  Test('throws a cleanup failure when there is no primary failure to preserve', async () => {
+    const reported: unknown[] = []
+
+    await Expect(runCleanups(undefined, [
+      { label: 'standalone cleanup', run: () => Errors.throwHostEnvironment('standalone cleanup failed') },
+    ], { channel: 'test-cleanup', reportCleanupFailure: error => reported.push(error), subject: 'journey' }))
+      .rejects.toThrow('standalone cleanup failed')
+    Expect(reported).toEqual([])
+  })
+
+  Test('stays silent when every disposer succeeds', async () => {
+    const reported: unknown[] = []
+
+    await runCleanups(undefined, [{ label: 'quiet cleanup', run: () => undefined }], {
+      channel: 'test-cleanup',
+      reportCleanupFailure: error => reported.push(error),
+      subject: 'journey',
+    })
+
+    Expect(reported).toEqual([])
+  })
+})
+
 Describe('TaoStdlib', () => {
   Test('identifies the built-in stdlib without naming a tree', async () => {
     await withDeclaredStdlibRoot(undefined, async () => {

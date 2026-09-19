@@ -1,5 +1,5 @@
-import { Errors, FS, HCI, Platform, Time } from '@shared'
-import { Expect, mkTestDir, Test } from '@shared/test'
+import { Errors, FS, Platform, Time } from '@shared'
+import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
@@ -804,7 +804,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     primaryFailure = error
     throw error
   } finally {
-    await cleanupSmokeResources(primaryFailure, [
+    await runCleanups(primaryFailure, [
       { label: 'close browser', run: () => browser?.close() },
       { label: 'stop native Studio', run: () => native?.stop() },
       { label: 'stop Studio server', run: () => studio?.stop() },
@@ -816,7 +816,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         label: 'remove preview runtime',
         run: () => previewRuntimeRoot === undefined ? undefined : FS.remove(previewRuntimeRoot),
       },
-    ])
+    ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
   }
   if (projectRoot !== undefined) {
     Expect(await FS.exists(projectRoot)).toBe(false)
@@ -1676,70 +1676,3 @@ function ordered(source: string, labels: readonly string[]): boolean {
   return offsets.every(offset => offset >= 0)
     && offsets.every((offset, index) => index === 0 || offsets[index - 1]! < offset)
 }
-
-async function cleanupSmokeResources(
-  primaryFailure: unknown,
-  cleanups: ReadonlyArray<{ label: string; run: () => unknown | Promise<unknown> }>,
-  reportCleanupFailure: (error: unknown) => void = error =>
-    HCI.logProcessError(
-      'studio-smoke-cleanup',
-      `Cleanup also failed after the primary journey failure: ${Errors.formatForLog(error)}`,
-    ),
-): Promise<void> {
-  const failures: Array<{ error: unknown; label: string }> = []
-  for (const cleanup of cleanups) {
-    try {
-      await cleanup.run()
-    } catch (error) {
-      failures.push({ error, label: cleanup.label })
-    }
-  }
-  if (failures.length === 0) {
-    return
-  }
-  const message = `${failures.length} Studio smoke cleanup operations failed:\n${
-    failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
-  }`
-  const cause = failures.map(failure => ({
-    error: Errors.formatForLog(failure.error),
-    label: failure.label,
-  }))
-  if (primaryFailure === undefined) {
-    Errors.throwUnexpected(message, { cause })
-  }
-  reportCleanupFailure(new Errors.UnexpectedBehaviorError(message, { cause }))
-}
-
-Test('smoke cleanup attempts every disposer without replacing the primary failure', async () => {
-  const primaryFailure = new Errors.UnexpectedBehaviorError('primary journey failure')
-  const cleaned: string[] = []
-  const reported: unknown[] = []
-
-  await cleanupSmokeResources(primaryFailure, [
-    {
-      label: 'close browser',
-      run: () => {
-        cleaned.push('browser')
-        Errors.throwHostEnvironment('browser cleanup failed')
-      },
-    },
-    {
-      label: 'remove runtime',
-      run: () => {
-        cleaned.push('runtime')
-        Errors.throwHostEnvironment('runtime cleanup failed')
-      },
-    },
-    { label: 'remove export', run: () => cleaned.push('export') },
-  ], error => reported.push(error))
-
-  Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
-  Expect(reported).toHaveLength(1)
-  Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
-  Expect(Errors.messageOf(reported[0])).toContain('remove runtime: runtime cleanup failed')
-  Expect(primaryFailure.message).toBe('primary journey failure')
-
-  await Expect(cleanupSmokeResources(undefined, [
-    { label: 'standalone cleanup', run: () => Errors.throwHostEnvironment('standalone cleanup failed') },
-  ], error => reported.push(error))).rejects.toThrow('standalone cleanup failed')
-})

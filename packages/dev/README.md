@@ -322,8 +322,9 @@ merged into the branch, the squash can only be the feature tree, so the bytes `v
 are the bytes that land.
 
 **A person works the same way, through the `Mine` recipes.** `just my-branch [name]` switches the
-checkout to `dev/<name>` — defaulting to `$TAO_DEV_BRANCH`, then the Git identity — creating it from
-`main` the first time and carrying uncommitted work across. `just my-sync` fast-forwards the local
+checkout to `dev/<name>` — defaulting to `$TAO_DEV_BRANCH`, then `tao.devBranch` in Git config
+(`git config --local tao.devBranch dev/<name>` says it once per machine), then the Git identity —
+creating it from `main` the first time and carrying uncommitted work across. `just my-sync` fast-forwards the local
 `main` ref to `origin/main`, moves every mirror that follows it, and merges `main` into the branch,
 naming the conflicted files if there are any. `just my-resolve` hands exactly those conflicts to an
 agent, which resolves them, runs `./agent verify`, and commits the merge. `just my-land` finalizes
