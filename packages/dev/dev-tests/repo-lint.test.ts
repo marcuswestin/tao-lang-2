@@ -13,6 +13,7 @@ import {
   repoLintIssues,
   wordFlowerDirectoryIssues,
 } from '../dev-src/repository-tests/repo-lint'
+import type { LedgerSide } from '../dev-src/repository-tests/repo-lint'
 
 const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'
@@ -317,22 +318,26 @@ _bench-check:
 
   Test('reports developer-environment entries the index does not link, and links with no entry', () => {
     const index = '# Developer environment upgrades\n\n'
-      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Resolved\n'
+      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Candidate\n'
       + '- [DEVENV-903 — Vanished](<Developer environment upgrades/DEVENV-903-vanished.md>) — Candidate\n'
     Expect(developerEnvironmentLedgerIssues(
-      ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md'],
-      index,
+      openSide(index, ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md']),
+      emptySide,
     )).toEqual([
       'Developer environment upgrades.md needs an index line linking `DEVENV-902-unlisted.md`.',
       'Developer environment upgrades.md links `DEVENV-903-vanished.md`, which does not exist.',
     ])
   })
 
-  Test('reports two developer-environment entries that claim the same ID', () => {
+  Test('reports two developer-environment entries that claim the same ID, in either half', () => {
     const index = '- [DEVENV-904 — One](<Developer environment upgrades/DEVENV-904-one.md>) — Candidate\n'
-      + '- [DEVENV-904 — Two](<Developer environment upgrades/DEVENV-904-two.md>) — Candidate\n'
-    Expect(developerEnvironmentLedgerIssues(['DEVENV-904-one.md', 'DEVENV-904-two.md'], index)).toEqual([
-      'Developer environment upgrades: DEVENV-904 is claimed by DEVENV-904-one.md, DEVENV-904-two.md;'
+    const archiveIndex = '- [DEVENV-904 — Two](<Developer environment upgrades/Archive/DEVENV-904-two.md>) — Resolved\n'
+    Expect(developerEnvironmentLedgerIssues(
+      openSide(index, ['DEVENV-904-one.md']),
+      archivedSide(archiveIndex, ['DEVENV-904-two.md']),
+    )).toEqual([
+      'Developer environment upgrades: DEVENV-904 is claimed by Developer environment upgrades/DEVENV-904-one.md,'
+      + ' Developer environment upgrades/Archive/DEVENV-904-two.md;'
       + ' rename the later-merged file and its index line.',
     ])
   })
@@ -342,20 +347,46 @@ _bench-check:
     // from either direction on its own: the file exists, and it is listed.
     const index = '- [DEVENV-905 — Once](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
       + '- [DEVENV-905 — Again](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
-    Expect(developerEnvironmentLedgerIssues(['DEVENV-905-twice.md'], index)).toEqual([
+    Expect(developerEnvironmentLedgerIssues(openSide(index, ['DEVENV-905-twice.md']), emptySide)).toEqual([
       'Developer environment upgrades.md links `DEVENV-905-twice.md` 2 times; keep one index line.',
     ])
   })
 
-  Test('accepts a developer-environment directory whose entries and index agree', () => {
-    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Resolved\n'
-      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Candidate\n'
-    Expect(developerEnvironmentLedgerIssues(['DEVENV-901-one.md', 'DEVENV-902-two.md', '.DS_Store'], index))
-      .toEqual([])
+  Test('accepts a developer-environment backlog whose entries, statuses, and both indexes agree', () => {
+    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Candidate\n'
+      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Incoming\n'
+    const archiveIndex =
+      '- [DEVENV-900 — Done](<Developer environment upgrades/Archive/DEVENV-900-done.md>) — Resolved\n'
+    Expect(developerEnvironmentLedgerIssues(
+      {
+        entries: [
+          { name: 'DEVENV-901-one.md', status: 'Candidate' },
+          { name: 'DEVENV-902-two.md', status: 'Incoming' },
+          { name: '.DS_Store', status: '' },
+        ],
+        index,
+      },
+      archivedSide(archiveIndex, ['DEVENV-900-done.md']),
+    )).toEqual([])
+  })
+
+  Test('reports an addressed entry left in the open backlog, and an open one left in the archive', () => {
+    const index = '- [DEVENV-901 — Done](<Developer environment upgrades/DEVENV-901-done.md>) — Resolved\n'
+    const archiveIndex =
+      '- [DEVENV-902 — Open](<Developer environment upgrades/Archive/DEVENV-902-open.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      { entries: [{ name: 'DEVENV-901-done.md', status: 'Resolved' }], index },
+      { entries: [{ name: 'DEVENV-902-open.md', status: 'Candidate' }], index: archiveIndex },
+    )).toEqual([
+      'Developer environment upgrades/DEVENV-901-done.md is `Resolved`; move it and its index line to the archive'
+      + ' in the change that addressed it.',
+      'Developer environment upgrades/Archive/DEVENV-902-open.md is `Candidate`; an entry that is not addressed'
+      + ' belongs in the open backlog.',
+    ])
   })
 
   Test('reports a developer-environment file that is not named for an ID', () => {
-    Expect(developerEnvironmentLedgerIssues(['notes.md'], '')).toEqual([
+    Expect(developerEnvironmentLedgerIssues(openSide('', ['notes.md']), emptySide)).toEqual([
       'Developer environment upgrades/notes.md must be named DEVENV-NNN-<slug>.md.',
     ])
   })
@@ -733,4 +764,15 @@ type TestFile = {
 
 function file(path: string, source: string, bytes?: Uint8Array): TestFile {
   return { bytes, path, source }
+}
+
+const emptySide: LedgerSide = { entries: [], index: '' }
+
+/** The status each helper gives its entries is the one that belongs in that half, so only the case under test differs. */
+function openSide(index: string, names: readonly string[]): LedgerSide {
+  return { entries: names.map(name => ({ name, status: 'Candidate' })), index }
+}
+
+function archivedSide(index: string, names: readonly string[]): LedgerSide {
+  return { entries: names.map(name => ({ name, status: 'Resolved' })), index }
 }
