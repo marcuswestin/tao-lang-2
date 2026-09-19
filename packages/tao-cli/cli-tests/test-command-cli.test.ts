@@ -1,5 +1,5 @@
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
-import { FS, Platform, Text } from '@shared'
+import { FS, Platform, TaoTestProtocol, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
@@ -647,7 +647,11 @@ Describe('tao test CLI', () => {
 
           Expect(result.exitCode).toBe(0)
           Expect(output).toContain('No Tao test journey matches --name "never written". Searched 1 journey under')
-          Expect(output).toContain('passing with no tests.')
+          // The repository test runner reads this marker to tell this pass from a pass that ran
+          // something: the Tao suite writes no per-test report, so the line is the only evidence.
+          // Asserting the literal here would let the two ends drift apart silently.
+          Expect(output).toContain(`${TaoTestProtocol.NO_JOURNEYS_MATCHED}.`)
+          Expect(TaoTestProtocol.ranNoJourneys(output)).toBe(true)
           // Passing is not running: the remedy for a mistyped pattern is not offered, and the
           // runner is still never started.
           Expect(output).not.toContain('run tao test without --name to run them all.')

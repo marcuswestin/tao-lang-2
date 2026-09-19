@@ -1,7 +1,7 @@
 import { AST, Langium, Parser } from '@parser'
 import { RuntimeToolchainPaths } from '@runtime-toolchain'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, TaoTestProtocol } from '@shared'
 import { TaoAppModules } from './app-modules'
 import { findTaoFiles } from './tao-files'
 import { type FingerprintRequest, TestCache } from './test-cache'
@@ -182,8 +182,11 @@ async function reportSelectedJourneys(
       journeys.length === 1 ? 'journey' : 'journeys'
     } under ${displayRoots}`
     if (options.passWithNoTests === true) {
+      // The marker a scheduler reads to tell this pass from a pass that ran something. `tao test`
+      // writes no per-test report, so this line is the only evidence either way.
       HCI.writeLine(
-        `No Tao test journey matches --name ${JSON.stringify(pattern)}. ${searched}; passing with no tests.`,
+        `No Tao test journey matches --name ${JSON.stringify(pattern)}. ${searched}; `
+          + `${TaoTestProtocol.NO_JOURNEYS_MATCHED}.`,
       )
       return false
     }

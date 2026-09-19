@@ -1,4 +1,4 @@
-import { FS, Platform, Repo } from '@shared'
+import { FS, Platform, Repo, TaoTestProtocol } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { type SelectedSuite, TestNodes, type TestProcess } from '../dev-src/repository-tests/TestNodes'
@@ -344,6 +344,42 @@ Describe('test runner suite registry', () => {
     }], states)).toBe(false)
     // An unfiltered run has no pattern to have matched nothing, whatever scope chose its suites.
     Expect(TestRunner.noTestsMatched('', [], states)).toBe(false)
+  })
+
+  // The Tao behavior suite writes no per-test report, so the runner fabricates one observation for
+  // it. That stand-in is the only thing the guard above sees from this suite, and `tao test` is
+  // handed `--pass-with-no-tests` so that an empty `--name` selection exits zero — so a stand-in
+  // recorded `passed` on the exit code alone would disable the guard for every filtered run, which
+  // is every run the guard exists for.
+  Test('the Tao behavior suite reports skipped when it says it matched no journey', async () => {
+    const matchedNothing = suiteState('tao-apps')
+    matchedNothing.status = 'passed'
+    matchedNothing.selectedTestFiles = ['Apps']
+    matchedNothing.fullOutput = 'No Tao test journey matches --name "a name nothing has". '
+      + `Searched 41 journeys under Apps; ${TaoTestProtocol.NO_JOURNEYS_MATCHED}.\n`
+
+    const ranSomething = suiteState('tao-apps')
+    ranSomething.status = 'passed'
+    ranSomething.selectedTestFiles = ['Apps']
+    ranSomething.fullOutput = 'Selected 2 of 41 Tao journeys\ntest suites ok\n'
+
+    Expect((await TestRunner.observationsFor([matchedNothing], Repo.getRoot()))[0]?.outcome).toBe('skipped')
+    Expect((await TestRunner.observationsFor([ranSomething], Repo.getRoot()))[0]?.outcome).toBe('passed')
+
+    // And the guard, which is what the outcome is for: a whole run in which nothing matched. The
+    // Bun suite reported for itself and found nothing, the Tao suite says it matched no journey,
+    // and the union of the two is what the guard reads.
+    const bun = suiteState('dev')
+    bun.status = 'passed'
+    bun.testObservations = []
+    const observations = await TestRunner.observationsFor([matchedNothing], Repo.getRoot())
+
+    Expect(TestRunner.noTestsMatched('a name nothing has', observations, [bun, matchedNothing])).toBe(true)
+    Expect(
+      TestRunner.noTestsMatched('a name nothing has', [
+        ...await TestRunner.observationsFor([ranSomething], Repo.getRoot()),
+      ], [bun, ranSomething]),
+    ).toBe(false)
   })
 
   Test('a filter that matched somewhere passes, however many suites it matched nothing in', () => {

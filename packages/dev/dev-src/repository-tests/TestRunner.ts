@@ -576,7 +576,7 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
         // A partial app run is recorded under its own name, so it can never stand in for the
         // complete inventory the retry ledger keys on.
         name: taoAppsObservationName(state.selectedTestFiles ?? []),
-        outcome: state.status === 'passed' ? 'passed' : state.status === 'failed' ? 'failed' : 'skipped',
+        outcome: taoAppsOutcome(state),
         suite: state.suite,
       }]
       : state.testReport === undefined
@@ -652,6 +652,27 @@ function printSelection(
       }`,
     )
   }
+}
+
+/**
+ * taoAppsOutcome reads the one suite that reports nothing per test. The stand-in observation it
+ * gets is the whole of what the union-of-observations guard below sees from the Tao behavior
+ * suite, so recording it `passed` on a zero exit alone told that guard a test had run whenever the
+ * suite was scheduled — and `tao test` is handed `--pass-with-no-tests` precisely so that it exits
+ * zero on an empty `--name` selection. The guard could then never fire, and a typo in
+ * `just test "<name>"` ran nothing anywhere and reported green.
+ *
+ * A run that says it matched no journey is `skipped`, which is what every other suite's reporter
+ * says about the same situation.
+ */
+function taoAppsOutcome(state: SuiteState): TestObservation['outcome'] {
+  if (state.status === 'failed') {
+    return 'failed'
+  }
+  if (state.status !== 'passed' || Shared.TaoTestProtocol.ranNoJourneys(state.fullOutput)) {
+    return 'skipped'
+  }
+  return 'passed'
 }
 
 function taoAppsObservationName(roots: readonly string[]): string {
