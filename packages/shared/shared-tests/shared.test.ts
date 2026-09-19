@@ -1140,16 +1140,30 @@ Describe('TaoStdlib', () => {
     Expect(declared).not.toBe(unset)
   })
 
-  // A relative value is resolved against the base the caller's other components are relative to,
-  // not against whatever directory the process happens to be sitting in.
-  Test('resolves a relative declared root against the base directory it is given', async () => {
+  // A relative value cannot be honoured, because the two halves of this variable's job disagree on
+  // what to resolve it against: this module resolves it against the root the caller's other
+  // components are relative to, and `Stdlib.rootPath` hands the raw value to whatever reads it,
+  // which resolves against the process's current directory. It identified one tree and compiled
+  // against another, silently — no setter in this repository has ever passed one.
+  Test('refuses a relative declared root rather than resolving it two different ways', async () => {
     const base = await tmpDir()
     await FS.writeText(FS.resolvePath('payload/@tao/ui/Views.tao', base), 'public view Text(Value text) { }\n')
     await withDeclaredStdlibRoot('payload', async () => {
-      const relative = await TaoStdlib.declaredRootIdentity(base)
-      const elsewhere = await TaoStdlib.declaredRootIdentity(await tmpDir())
+      await Expect(TaoStdlib.declaredRootIdentity(base)).rejects.toThrow('must be an absolute path')
+      Expect(() => TaoStdlib.declaredRoot()).toThrow('must be an absolute path')
+    })
+  })
 
-      Expect(relative).not.toBe(elsewhere)
+  // The absolute value it does accept still identifies the tree it names rather than the string.
+  Test('identifies the tree an absolute declared root names', async () => {
+    const base = await tmpDir()
+    const payload = FS.resolvePath('payload', base)
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const named = await TaoStdlib.declaredRootIdentity(base)
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edited\n')
+
+      Expect(await TaoStdlib.declaredRootIdentity(base)).not.toBe(named)
     })
   })
 })
