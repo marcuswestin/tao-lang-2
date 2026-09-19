@@ -18,8 +18,22 @@
   `stabilizeAndVerify` restarts the whole lane when `origin/main` moves and gives up after three
   passes. This entry carried an earlier `DEVENV-078` number that another branch reused while it
   existed only as a body in the index.
+- **Evidence, the refusals themselves:** landing `feat/september-cleanups` the same day was refused
+  six times over roughly ninety minutes on a branch that was green throughout, and each refusal
+  named a different precondition: a peer's staged squash in a main worktree (which the archived
+  DEVENV-092 has since removed), `verify-full needs this machine to itself` naming five running
+  lanes, and `Local main is not at origin/main (21905bc44c86); refresh it before merging.` That last
+  one is worth separating from the convoy: it is not another branch landing ahead, it is the window
+  between a peer committing its squash and pushing it, during which every other agent's preflight
+  fails for a reason that will resolve itself in seconds. No waiter can tell it apart from an
+  abandoned local `main` except by watching whether the ref moves. Each refusal is computed from
+  state a waiter could subscribe to — the lane registry already records who holds the machine — so
+  every one of them could be a wait instead.
 - **Workaround:** Land one branch at a time, and tell the others to wait rather than start the
-  merge-and-verify cycle they will have to repeat.
+  merge-and-verify cycle they will have to repeat. An agent that must land now can wrap the command
+  in a loop that watches those conditions and fires the moment they clear, but every agent writing
+  its own loop is the argument for the lease below: one that polls slowly loses the window, and one
+  that polls quickly loads the machine it is waiting for.
 - **Proposed change:** Two halves, in either order. The earlier round proposed the same lease, and
   additionally: verify the integration tree — `main` plus the branch — once inside it, treating the
   branch-side lane as iteration evidence rather than the gate. Make re-verification proportional to what
@@ -27,7 +41,9 @@
   package does not invalidate this branch's evidence. And serialize the landings themselves: a
   machine-wide landing lease with a queue, so branches take turns in a visible order instead of
   racing, and consider an integrator mode that lands several ready branches in one process and
-  verifies once at the end.
+  verifies once at the end. Whatever shape the lease takes, give the landing an opt-in wait rather
+  than only a refusal — `merge-with-main --wait`, blocking on the conditions the preflight already
+  computes and naming who holds each one — so no agent writes that loop itself.
 - **Dependencies:** DEVENV-086 records the same over-broad-key pathology for the compiled-app
   fingerprint. The landing lease already exists in `~/.cache/tao/machine-lanes` but only guards the
   push.
