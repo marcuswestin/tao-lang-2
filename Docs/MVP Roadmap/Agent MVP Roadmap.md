@@ -33,6 +33,15 @@ language sees.
 - Done: validation errors and parse errors reach the CLI with file, line, column, and a readable
   message; the exit code reflects failure; tests cover both kinds; the roadmap line that says
   `tao check` only reports canonicalization is corrected.
+- Landed on `feat/tao-check-error-reporting-400fde`. Every lexer, parser, linker, and validator
+  diagnostic now reaches `tao check` with its file, line, column, severity, message, and the
+  offending source line underlined; the exit code fails on any error; long `../` path prefixes are
+  gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
+  Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
+  entry graph, which is fixed.
+- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
+  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
+  of type …") is passed through unchanged.
 
 ### A2 — A standalone cross-platform `tao` executable
 
