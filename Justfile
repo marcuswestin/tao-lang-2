@@ -225,6 +225,28 @@ report-test-stats limit="20":
 finalize check='false' fresh='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
 
+# Switch this checkout to your own dev/* branch, creating it from main the first time
+[group('Mine')]
+my-branch name='':
+    ./dev my-branch {{ quote(name) }}
+
+# Fast-forward main, move the mirrors that follow it, and merge it into your branch
+[group('Mine')]
+my-sync:
+    ./dev sync-main
+
+# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+[group('Mine')]
+my-resolve *ARGS:
+    if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
+    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+
+# Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
+[group('Mine')]
+my-land *ARGS:
+    ./dev finalize
+    ./dev merge-with-main {{ ARGS }}
+
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
 [arg('message_file', long='message-file')]

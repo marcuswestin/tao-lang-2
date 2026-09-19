@@ -78,11 +78,16 @@ Require a clean, validated feature branch with its merge message written or refr
 before the merge commit; afterwards the command's own tree-equality proof, not a second lane, is what
 says the squash is the verified tree. Archive completed roadmap task folders before it, never after.
 
-No worktree needs to be on `main` first. The command stages its squash in one, and makes a temporary
-one under `.artifacts/merge/main-worktree` when the repository has none — which is the ordinary state
-when the primary checkout is itself on the feature branch. It removes that worktree when the landing
-completes and keeps it when the landing fails, because the staged squash inside it is what `--abort`
-restores from.
+A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does; the `Mine` recipes in the
+`Justfile` (`my-branch`, `my-sync`, `my-resolve`, `my-land`) are that workflow. Leave those branches
+and the primary checkout alone unless Ro asks: a branch lives in one worktree at a time.
+
+No worktree may be on `main`, and the command refuses to land while one is. `main` is a ref the
+landing moves with `git update-ref`, and the commit it moves to is built with `git commit-tree`
+without a working tree, so nothing is ever staged in a checkout other agents share. A checkout that
+exists to show what `main` holds is detached at its tip (`git worktree add --detach <path> main`) and
+the landing moves it forward itself; treat it as read-only, and give it a branch of its own before
+working in it.
 
 Refresh `main`, merge current `main` back into the feature branch, validate and push again, then
 squash onto freshly refreshed `main`. Push `main` before renaming the remote feature branch to
