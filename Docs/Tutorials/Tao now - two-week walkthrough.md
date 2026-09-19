@@ -7,6 +7,13 @@ running Tao app during the walkthrough pass; later contract corrections are not 
 as live evidence. **Not verified here** means the implementation and tests exist, but this host lacked
 the required service, credential, device, or browser capability.
 
+This is a dated record, not a living contract: what it says was **verified** was verified on those
+dates and has not been re-run since. What it cannot be allowed to do is name things that no longer
+exist, so `packages/tao-cli/cli-tests/tutorials.test.ts` checks every repository path, `just` recipe,
+`--app` name, and `tao` subcommand it mentions against the repository on every run. A rename that
+leaves this walkthrough behind fails that test. For behavior that is current by construction, read
+`Your First Tao App.md`, whose every step the same suite compiles and runs.
+
 ## What landed
 
 - **A usable Studio workbench:** project/app sessions, Design/Code/Run/Draw layouts, semantic source
