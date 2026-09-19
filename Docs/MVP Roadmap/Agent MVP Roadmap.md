@@ -218,8 +218,13 @@ as sibling references. Transcription against a settled decision record, with Ro 
 
 ### A12 — Process step 3: consolidate the Tao Future apps
 
-Skillet, Hearth, and Wayfare aligned to `Decisions.md`, with `Coverage.md` rows written during the
-port, as `Apps/Tao Future/README.md` prescribes.
+Landed. Skillet, Hearth, and Wayfare read as `Decisions.md` decides, and `Coverage.md` names a
+forcing feature for every capability — four of them `none — for Ro`, which are red flags for step 4
+rather than contrived features. What remains is not agent work: the ten spellings the port had to
+choose where `Decisions.md` is silent are listed in `Apps/Tao Future/README.md`, and the one place
+where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on Ro
+as `R14`. Step 2's rewrite settled the other one this pass reported, retiring `TabNav` for
+`SelectionNav`.
 
 - Context: `Apps/Tao Future/README.md`, `Docs/Roadmap/Tao Revolution/Coverage.md`.
 

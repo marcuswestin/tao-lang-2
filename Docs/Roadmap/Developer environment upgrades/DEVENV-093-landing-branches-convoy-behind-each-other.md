@@ -29,6 +29,13 @@
   abandoned local `main` except by watching whether the ref moves. Each refusal is computed from
   state a waiter could subscribe to — the lane registry already records who holds the machine — so
   every one of them could be a wait instead.
+  The lease has since landed without the queue half, and the starvation that predicts is now
+  observed: on 2026-09-19 one `finalize` in `align-tao-apps-dialect-243197` waited through three
+  successive holders — `publication-audit-report-d93f40`, then `wizardly-shamir-d3f33d`, then
+  `wordflower-revolution-rewrite-deaf54` — without ever acquiring it, because a released lock is
+  taken by whoever asks next rather than by whoever has waited longest. Its own warning says
+  `Nothing will take it away on a timer`, which is true and is not the problem: the problem is that
+  waiting confers no position. A waiter cannot tell a long queue from being skipped.
 - **Workaround:** Land one branch at a time, and tell the others to wait rather than start the
   merge-and-verify cycle they will have to repeat. An agent that must land now can wrap the command
   in a loop that watches those conditions and fires the moment they clear, but every agent writing

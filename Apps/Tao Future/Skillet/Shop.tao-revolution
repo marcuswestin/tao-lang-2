@@ -6,32 +6,40 @@ scene ShoppingList() {
    Toolbar { ClearTheBought }
    state NewItem = ""
 
-   // `group by` folds rows that agree on the named fields into one line, and `sum` totals a field. A
-   // folded line stands for the rows it folds: reading Name or Unit reads what they share, reading
-   // Amount reads the total, and ticking it ticks every row inside. `Line.Sources` is there when a
-   // screen wants the rows themselves.
+   // `group by` folds rows that agree on the named fields into one line, and a named aggregate totals a
+   // field. A folded line stands for the rows it folds: reading Name or Unit reads what they share,
+   // reading Amount reads the total, and ticking it ticks every row inside. A grouped row keeps its
+   // contributing rows under their collection name, so `Line.Groceries` is there when a screen wants
+   // the rows themselves.
    query Lines from MyKitchen.Groceries {
       where is Needed
       group by Name, Unit, Aisle, Store
-      sum Amount
+      Amount = sum(Amount)
       order by Aisle, Name
+   }
+   // The aisles that have something in them, so the walk through the shop is in order. A second
+   // grouped query is how a screen groups a presentation: `loop` iterates and never groups.
+   query Aisles from MyKitchen.Groceries {
+      where is Needed
+      group by Aisle
+      order by Aisle
    }
    query Bought from MyKitchen.Groceries {
       where is Bought
       group by Name, Unit, Aisle, Store
-      sum Amount
+      Amount = sum(Amount)
       order by Name
    }
    action AddItem() runs single {
-      stop if NewItem is empty
-      create Grocery in MyKitchen.Groceries { Name: NewItem }
+      check NewItem is not empty
+      create Grocery { Household: MyKitchen, Name: NewItem }
       set NewItem = ""
    }
 
    action DeleteBoughtItems() runs single {
       // Visibility is store-derived from whether any Bought Grocery may be deleted; Enabled below
       // separately keeps the visible command inert when there are no bought rows.
-      delete MyKitchen.Groceries where is Bought
+      delete each Grocery where Household is MyKitchen and is Bought
    }
    command ClearTheBought() {
       Title "Clear bought"
@@ -42,36 +50,37 @@ scene ShoppingList() {
 
    render ScrollView [screen] {
       Col [page, width max 900] {
-         OfflineNotice
+         OfflineNotice()
          #newItem
-         TextInput(Value: NewItem, Label: "Add an item", Placeholder: "Olive oil") { on submit AddItem }
+         TextInput(Value: bind NewItem, Label: "Add an item", Placeholder: "Olive oil") { on submit -> { do AddItem() } }
 
          guard Lines
          if Lines is empty {
             EmptyState(Icon: "basket", Title: "Nothing to buy", Body: "Plan a meal and add it to the list, or type an item above.")
          }
 
-         // The list and the map side by side on a wide screen, one column on a phone. The map is over the
-         // same rows as the list, which is the ordered alternative the design's rules require.
+         // The list and the map side by side on a wide screen, one column on a phone. A map must name a
+         // non-map alternative over the same rows, so location graphics are never the only way to shop.
          Panes [gap lg] {
             #lines
             Col [claim 2, gap lg] {
-               // Grouped by aisle so the walk through the shop is in order.
-               loop Lines by Aisle as Group {
-                  Section(Group.Key) {
-                     @actions Col [aisleMark(Group.Key), size 14, decorative]
-                     List(Group.Rows as Line) { GroceryRow(Line) }
+               loop Aisles / AisleLines {
+                  Section(AisleLines.Aisle) {
+                     @actions Col [size 14, radius pill, background aisle(AisleLines.Aisle), decorative]
+                     loop Lines / Line where Line.Aisle is AisleLines.Aisle { GroceryRow(Line) }
                }  }
 
                if Bought is not empty {
                   Section("Bought") {
-                     List(Bought as Line) { GroceryRow(Line) }
+                     loop Bought / Line { GroceryRow(Line) }
             }  }  }
 
-            if Lines has any where Store is not none {
+            if Lines[Store is not none] is not empty {
                Map(Lines, Place: Line.Store, Label: "Where to buy these") [height min 320, radius lg] {
                   pin label Line.Store.Name
                   me
+               } alternative {
+                  loop Lines / Line { GroceryRow(Line) }
 }  }  }  }  }  }
 
 // One line of the list — a folded row, which stands for its sources: it exposes the fields the fold
@@ -79,18 +88,18 @@ scene ShoppingList() {
 // source row. `Bought` is bound to the row, so ticking writes through.
 file view GroceryRow(Grocery) {
    action HaveIt() runs single {
-      when KeepInPantry(Grocery) {
-         done -> present Notice("{ Grocery.Name } is in the pantry") as toast (Key: "pantry")
+      when do KeepInPantry(Grocery) {
+         saved -> present Notice("{ Grocery.Name } is in the pantry") as toast (Key: "pantry")
    }  }
-   render Row [pattern Line] {
+   render Row [line] {
       #tick
-      Checkbox(Value: Grocery.Bought, Label: Grocery.Name) [@leading]
-      Col [@content, gap xxs] {
+      Checkbox(Value: bind Grocery.Bought, Label: Grocery.Name) [lead]
+      Col [main, gap xxs] {
          Text(Grocery.Name) [body, strike when Grocery is Bought]
          // Bound to the row, so on a folded line this sets the shop for every row it stands for.
          if NearbyStores is not empty {
-            Choice(Value: Grocery.Store, Options: NearbyStores, Placeholder: "Any shop", Label: "Where to buy { Grocery.Name }") [caption]
+            Choice(Value: bind Grocery.Store, Options: NearbyStores, Placeholder: "Any shop", Label: "Where to buy { Grocery.Name }") [caption]
       }  }
-      Measure(Grocery.Amount, Grocery.Unit) [@trailing]
-      Button(Icon: "cabinet", Label: "Already have { Grocery.Name }") [quiet, @trailing] { on press HaveIt }
+      Measure(Grocery.Amount, Grocery.Unit) [trail]
+      Button(Icon: "cabinet", Label: "Already have { Grocery.Name }") [quiet, trail] { on press -> { do HaveIt() } }
 }  }
