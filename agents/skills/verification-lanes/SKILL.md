@@ -109,7 +109,14 @@ description: >-
   terminal, so there is no way to land unverified non-interactively. The staged-squash tree-equality
   assertion runs under every combination including `--skip-all`, because the squash must be the tree
   that was verified. `./dev merge-with-main --dry-run` reports the plan and changes nothing.
-  Preflight intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
+  Preflight intentionally requires local `main` to equal `origin/main`. It does not require a worktree
+  on `main`: a checkout on main is somewhere to stage the squash, not a precondition, so execution
+  creates one under `.artifacts/merge/main-worktree` and removes it when the landing completes, while
+  a dry run only names where it would go. More than one main worktree is still refused. A failed
+  landing keeps the created worktree, because its staged squash is what `--abort` restores from, and
+  the next run then finds it as an ordinary main worktree. `--skip-verify-full` is refused when the
+  worktree has to be created, because that flag moves verification into it and a fresh worktree has no
+  installed dependencies. A remote feature branch that is behind
   the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
   the landing. Successful execution leaves the invoking feature worktree clean and detached at the
   archived feature tip, deletes its local feature branch, and leaves worktree removal to archival of

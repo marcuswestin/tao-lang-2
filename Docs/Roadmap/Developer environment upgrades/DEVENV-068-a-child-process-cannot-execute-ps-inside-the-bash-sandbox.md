@@ -18,6 +18,13 @@
   rather than through repository code.
 - **Proposed change:** Either allow `/bin/ps` for child processes in `.rulesync/permissions.jsonc`'s
   sandbox policy, or document `processTable` as a non-Darwin-only path so no lane depends on it here.
+- **Since recorded (2026-09-19):** the second half is done and the cost of not doing it was measured.
+  `StudioDeviceTrustStore` judged a lock owner's liveness by shelling out to `ps -o lstart= -p <pid>`;
+  the denial sent it down a fallback that kept working and silently dropped the start-time comparison
+  protecting against a reused PID. It reads `ProcessTree` now, and `environment-recovery` states that
+  repository code reads process facts that way rather than through `ps`. The per-PID `ps` shape is
+  allowed for direct diagnostic use, which does not address this entry: the denial here is on the
+  exec of `ps` by a child process, not on the shape of the command.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
   the adjacent host process-visibility constraints.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its

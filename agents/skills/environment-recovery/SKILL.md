@@ -62,9 +62,15 @@ output is not enough, or when you need the reasoning behind it.
 
 ## Processes and ports
 
-- Inspect all processes with the fixed read-only shape `ps -axo pid=,ppid=,lstart=,command=`, and
-  one listening port with `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Selected-PID queries and every
-  signal stay under review, because a wildcard command rule cannot validate a PID argument.
+- Inspect all processes with the fixed read-only shape `ps -axo pid=,ppid=,lstart=,command=`, one
+  process's start time with `ps -o lstart= -p <pid>`, and one listening port with
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Every signal stays under review, because a wildcard
+  command rule cannot validate a PID argument. Any other `ps` shape is denied by the sandbox rather
+  than reviewed, so it fails with `operation not permitted`; add it to `.rulesync/permissions.jsonc`
+  if it is genuinely needed.
+- Repository code reads process facts through `ProcessTree`, never through `ps`. On macOS it uses
+  libproc with no subprocess, so a sandbox denial cannot silently degrade it — which is exactly what
+  happened to a liveness check that shelled out instead and lost its PID-reuse protection.
 - After review, confirm the PID belongs to the intended task. Send `kill -TERM <pid>` first and
   use `kill -KILL <pid>` only when the process survives graceful shutdown.
 - Studio has its own lifecycle commands — `./dev studio-ps`, `./dev studio-stop`,

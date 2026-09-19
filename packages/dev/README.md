@@ -174,7 +174,10 @@ those either takes a lock or tolerates a concurrent writer, and which one it is 
 
 That last row is a rule, not a mechanism. A lane's teardown signals the process groups it created,
 identified by the OS process-start time so a reused PID cannot be hit, and it never looks for work to
-kill by command name, port, or working directory. A sibling agent's `bun test`, Metro, simulator, or
+kill by command name, port, or working directory. The start time is the whole identity, deliberately:
+it is set at `fork` and never moves, while the kernel process name changes at `exec`, so comparing
+the name as well made a process captured between the two fail to match itself — and a descendant that
+exec'd since the snapshot was then skipped when its tree was signalled. A sibling agent's `bun test`, Metro, simulator, or
 Studio session must survive any teardown, and a `server` process policy opts a long-lived child out
 of the test-shaped bounds entirely, because servers idle legitimately.
 
