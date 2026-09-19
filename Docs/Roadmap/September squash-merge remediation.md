@@ -174,13 +174,13 @@ gate in this repository can close it.
      helper would have been a worse fit than the duplication, so they stay.
    - **`ParserGenerate.ts` re-implementing file-transaction helpers.** It does not. Its
      transactional moves and backups already delegate to `FS.ts`; what it duplicated was the
-     *hashing* — `generatedFileIdentity` was a verbatim copy of `FS.filesIdentity`, and
+     _hashing_ — `generatedFileIdentity` was a verbatim copy of `FS.filesIdentity`, and
      `hashContent` of `FS.contentIdentity`. Those now call `FS`, and the one genuinely local need
      that remains — the digest of one file's bytes, which `FS.contentIdentity` cannot serve because
      it identifies ordered strings — says so at its definition.
    - **Crash-orphaned `.tmp`/`.restore` files in the VSIX.** Real, and fixed at the source rather
      than at the package step. `FS.synchronizeDirectoryFiles` stages and rolls back through files
-     named for the destination and sitting *beside* it, so neither the destination's walk nor its
+     named for the destination and sitting _beside_ it, so neither the destination's walk nor its
      content identity can see them and a killed run leaves them in the parent directory for good.
      The synchronization now sweeps its own orphans while it holds the destination's mutation lock,
      which fixes every reader of that directory, not only the VSIX. Note for anyone revisiting

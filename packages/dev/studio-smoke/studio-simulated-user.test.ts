@@ -1657,4 +1657,3 @@ function ordered(source: string, labels: readonly string[]): boolean {
   return offsets.every(offset => offset >= 0)
     && offsets.every((offset, index) => index === 0 || offsets[index - 1]! < offset)
 }
-
