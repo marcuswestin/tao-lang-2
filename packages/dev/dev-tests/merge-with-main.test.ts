@@ -397,6 +397,35 @@ Describe('merge-with-main', () => {
     Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'add')).toBe(false)
   })
 
+  Test('refuses the same flag when a failed landing left that worktree behind', async () => {
+    // A failed landing keeps its temporary worktree, so the next run finds an ordinary main
+    // worktree and stops creating one. Nothing about it changed: it still has no installed
+    // dependencies. Keying the refusal on whether one must be *created* let the second attempt
+    // through, and the remedy the first attempt printed is what produced that state.
+    const fake = fakeDependencies({ mainRoot: '/repo-feature/.artifacts/merge/main-worktree' })
+
+    await Expect(
+      MergeWithMainCommand.run(
+        { repositoryRoot: fake.repository.featureRoot, skipVerifyFull: true },
+        fake.dependencies,
+      ),
+    ).rejects.toThrow('no installed dependencies either')
+  })
+
+  Test('removes the worktree a failed landing left behind once a landing completes', async () => {
+    const fake = fakeDependencies({ mainRoot: '/repo-feature/.artifacts/merge/main-worktree' })
+
+    const outcome = await MergeWithMainCommand.run(
+      { repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(fake.calls.at(-1)?.args.slice(0, 2)).toEqual(['worktree', 'remove'])
+    // And the snapshot stays outside it, because this landing is the one that removes it.
+    Expect(outcome.snapshotPath?.startsWith(fake.repository.featureRoot)).toBe(true)
+  })
+
   Test('--dry-run performs only read-only git operations and ends with the exact landing command', async () => {
     const fake = fakeDependencies()
     const result = await MergeWithMainCommand.run(

@@ -98,6 +98,13 @@ export type MergePreflight = {
   branchHead: string
   /** Whether `mainRoot` names a worktree execution must create, rather than one that already exists. */
   createsMainWorktree: boolean
+  /**
+   * Whether `mainRoot` is this command's own scratch worktree rather than a checkout the developer
+   * keeps. It is not the same question as `createsMainWorktree`: a failed landing leaves its
+   * temporary worktree in place, and the next run then finds it as an ordinary main worktree with
+   * no installed dependencies — which is exactly what the `--skip-verify-full` refusal is about.
+   */
+  mainWorktreeIsTemporary: boolean
   featureRoot: string
   mainHead: string
   mainRoot: string
@@ -268,7 +275,9 @@ export async function inspectMergePreflight(
   // is none, execution makes one and removes it again; preflight only names where it would go, so a
   // dry run still changes nothing.
   const createsMainWorktree = mainWorktrees.length === 0
-  const mainRoot = mainWorktrees[0]?.path ?? FS.resolvePath(TEMPORARY_MAIN_WORKTREE, featureRoot)
+  const temporaryMainRoot = FS.resolvePath(TEMPORARY_MAIN_WORKTREE, featureRoot)
+  const mainRoot = mainWorktrees[0]?.path ?? temporaryMainRoot
+  const mainWorktreeIsTemporary = mainRoot === temporaryMainRoot
   if (!createsMainWorktree) {
     assertClean('main', mainRoot, await status(dependencies, mainRoot))
   }
@@ -290,12 +299,18 @@ export async function inspectMergePreflight(
   // so that lane could not run there — and silently skipping it would be the one thing this command
   // must never do.
   if (
-    createsMainWorktree && fullVerifySkippedBy(options) !== undefined && stagedVerifySkippedBy(options) === undefined
+    mainWorktreeIsTemporary && fullVerifySkippedBy(options) !== undefined
+    && stagedVerifySkippedBy(options) === undefined
   ) {
     Errors.throwUserInput(
       `${fullVerifySkippedBy(options)} moves verification onto the staged squash, which runs in a worktree on `
-        + 'main. There is none, and one created here would have no installed dependencies. Either drop that flag, '
-        + `or create a main worktree yourself: git worktree add <path> ${MAIN_BRANCH}.`,
+        + `main. ${
+          createsMainWorktree
+            ? 'There is none, and one created here would have no installed dependencies.'
+            : `The only one is this command's own scratch worktree at ${mainRoot}, left by a landing that failed, `
+              + 'and it has no installed dependencies either.'
+        } Either drop that flag, or create a main worktree yourself: `
+        + `git worktree add <path> ${MAIN_BRANCH}.`,
     )
   }
 
@@ -355,6 +370,7 @@ export async function inspectMergePreflight(
     featureRoot,
     mainHead,
     mainRoot,
+    mainWorktreeIsTemporary,
     message,
     messageFile,
     remoteFeatureHead,
@@ -443,6 +459,11 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     ...(preflight.createsMainWorktree
       ? [
         `PLAN  Create a temporary worktree on main at ${preflight.mainRoot}, and remove it when the landing completes.`,
+      ]
+      : preflight.mainWorktreeIsTemporary
+      ? [
+        `PLAN  Reuse this command's own worktree at ${preflight.mainRoot}, left by a landing that failed, `
+        + 'and remove it when this landing completes.',
       ]
       : []),
     'PLAN  Write a safety snapshot before moving any ref.',
@@ -584,7 +605,7 @@ async function createSnapshot(
   const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${Platform.randomUUID().slice(0, 8)}`
   // A snapshot is what `--abort` restores from, so it cannot live inside a checkout this command
   // removes on its way out. The invoking worktree is preserved through success and failure alike.
-  const snapshotRoot = preflight.createsMainWorktree ? preflight.featureRoot : preflight.mainRoot
+  const snapshotRoot = preflight.mainWorktreeIsTemporary ? preflight.featureRoot : preflight.mainRoot
   const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, snapshotRoot)
   const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
@@ -609,7 +630,7 @@ async function createSnapshot(
     mainIndexTree,
     mainRoot: preflight.mainRoot,
     mainTree,
-    mainWorktreeIsTemporary: preflight.createsMainWorktree,
+    mainWorktreeIsTemporary: preflight.mainWorktreeIsTemporary,
     messageFile: preflight.messageFile,
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
