@@ -249,9 +249,23 @@ function sameProcess(current: TrackedProcess | undefined, expected: TrackedProce
   return current !== undefined && current.startedAt === expected.startedAt
 }
 
+/**
+ * currentProcessIdentities answers for exactly the PIDs it was asked about; a PID that is gone is
+ * absent from the result. Outside Darwin the only reading available is `ps`, whose `lstart` has
+ * one-second granularity — enough to catch a PID the kernel handed on minutes later, not enough to
+ * catch one reused inside the same second. Darwin's libproc start time is microsecond-precise and
+ * needs no subprocess, which is why it is the primary path and the one every lane on this host
+ * takes.
+ */
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
   if (process.platform !== 'darwin') {
-    return new Map(processTable().map(process => [process.pid, process]))
+    // Filtered to the asked-about PIDs: the table is every process on the host, and handing the
+    // whole of it back made callers that pair each entry with its expected identity look up
+    // processes they never asked about and find nothing.
+    const wanted = new Set(pids)
+    return new Map(
+      processTable().filter(entry => wanted.has(entry.pid)).map(entry => [entry.pid, entry]),
+    )
   }
   const { dlopen, FFIType } = ffi()
   const library = dlopen('/usr/lib/libproc.dylib', {
@@ -271,11 +285,14 @@ function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedP
 }
 
 async function waitForTrackedProcessesExit(processes: readonly TrackedProcess[]): Promise<void> {
-  const expected = new Map(processes.map(process => [process.pid, process.startedAt]))
-  while (
-    [...currentProcessIdentities([...expected.keys()]).values()]
-      .some(process => sameProcess(process, processes.find(expected => expected.pid === process.pid)!))
-  ) {
+  // Asked of the expected processes rather than of whatever the reading returned, so an entry with
+  // no expectation behind it cannot be paired with one that is not there.
+  const pids = processes.map(process => process.pid)
+  for (;;) {
+    const current = currentProcessIdentities(pids)
+    if (!processes.some(expected => sameProcess(current.get(expected.pid), expected))) {
+      return
+    }
     await sleep(EXIT_POLL_MS)
   }
 }
