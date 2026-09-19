@@ -4,10 +4,13 @@ import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { TaoAppModules } from './app-modules'
 import { findTaoFiles } from './tao-files'
+import { type FingerprintRequest, TestCache } from './test-cache'
 import { TestOutput, type TestOutputMode } from './test-output'
 
 /** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
 type CompiledTaoTests = {
+  /** True when this run took a previous passing run's output instead of compiling its own. */
+  reused?: boolean
   manifestPath?: string
   runRoot?: string
   runtimeRoot?: string
@@ -16,7 +19,17 @@ type CompiledTaoTests = {
 
 /** TestCommandOptions configures one `tao test` run. */
 export type TestCommandOptions = {
+  /** Run only the journeys whose full name matches this pattern, instead of every journey found. */
+  name?: string
   output?: TestOutputMode
+  /**
+   * Report a `--name` pattern that selects no journey as a finished run of nothing rather than as a
+   * user error. A person who typed the pattern wants the error; a scheduler that hands the same
+   * pattern to every suite it knows about wants the suites the pattern cannot describe to sit out
+   * quietly instead of turning the whole filtered run red. Bun and Jest both offer this, and the
+   * spelling here is Bun's, because Bun is the neighbouring runner in this repository.
+   */
+  passWithNoTests?: boolean
 }
 
 /** CompletedTestRun records one finished test runner process and everything it wrote. */
@@ -59,12 +72,18 @@ export async function runTestCommand(
       await TaoAppModules.ensureForPath(testPath)
     }
     HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
-    const compiled = await validateAndCompileTaoTests(testPaths)
+    const runtimeRoot = testRuntimeRoot()
+    const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
+    const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
+      ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
+    if (!await reportSelectedJourneys(compiled, options, displayRoots)) {
+      return
+    }
     HCI.logProcessInfo('test', 'Running Tao tests')
-    const run = await runCompiledTaoTests(compiled, mode)
+    const run = await runCompiledTaoTests(compiled, mode, options.name)
     const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
     // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
-    // the generated code, and which a passing run discards below.
+    // the generated code, and which a passing run either publishes for reuse or discards below.
     const logPath = await writeTestOutputLog(compiled, run.output)
     TestOutput.reportFinishedRun({ failed, logPath, mode, output: run.output })
     if (failed) {
@@ -73,9 +92,7 @@ export async function runTestCommand(
       }
       Platform.runtimeProcess.exit(1)
     }
-    if (compiled.runRoot !== undefined) {
-      await RuntimeTesting.TestRunRoot.discard(compiled.runRoot, { runtimePackageRoot: compiled.runtimeRoot })
-    }
+    await keepOrDiscardRunRoot(compiled, fingerprint)
     HCI.logProcessInfo('test', 'Tao tests finished')
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
@@ -83,14 +100,143 @@ export async function runTestCommand(
   }
 }
 
+/**
+ * reusableRunFingerprint identifies output this run may take from a previous one, or undefined when
+ * it must compile for itself. An unset fingerprint is the whole of the opt-out: nothing is looked
+ * up, and nothing this run produces is published.
+ */
+async function reusableRunFingerprint(request: FingerprintRequest): Promise<string | undefined> {
+  return TestCache.disabled() ? undefined : await TestCache.fingerprint(request)
+}
+
+/**
+ * reusedTaoTests returns a previous passing run's compiled output for this exact run, skipping both
+ * the validate and the compile phase. The phases are skipped together on purpose: the same sources,
+ * read by the same validator, produced no errors last time and cannot produce one now.
+ */
+async function reusedTaoTests(
+  fingerprint: string | undefined,
+  runtimeRoot: string,
+  testPaths: readonly string[],
+): Promise<CompiledTaoTests | undefined> {
+  if (fingerprint === undefined) {
+    return undefined
+  }
+  const cached = await RuntimeTesting.TestRunRoot.lookup(TestCache.CATEGORY, fingerprint, {
+    runtimePackageRoot: runtimeRoot,
+  })
+  if (cached === undefined) {
+    return undefined
+  }
+  HCI.logProcessInfo('test', 'Reusing compiled apps (nothing they are built from has changed)')
+  return { manifestPath: cached.manifestPath, reused: true, runRoot: cached.runRoot, runtimeRoot, testPaths }
+}
+
+/**
+ * keepOrDiscardRunRoot settles what a passing run leaves behind. Output a later identical run can
+ * take is kept under its fingerprint; everything else is discarded exactly as before. A failing run
+ * never reaches here, so a failure is never published and its root stays for debugging.
+ */
+async function keepOrDiscardRunRoot(compiled: CompiledTaoTests, fingerprint: string | undefined): Promise<void> {
+  if (compiled.runRoot === undefined) {
+    return
+  }
+  if (compiled.reused === true) {
+    return
+  }
+  const options = { runtimePackageRoot: compiled.runtimeRoot }
+  const published = fingerprint !== undefined
+    && await RuntimeTesting.TestRunRoot.publish(TestCache.CATEGORY, fingerprint, compiled.runRoot, options)
+  if (!published) {
+    await RuntimeTesting.TestRunRoot.discard(compiled.runRoot, options)
+  }
+}
+
+/**
+ * reportSelectedJourneys settles what a `--name` pattern selected, before the runner starts, and
+ * answers whether there is a run left to make.
+ *
+ * A pattern that matches nothing is reported as the user error it is rather than run: the runner
+ * would otherwise filter every case out, print a run with no tests in it, and exit zero — a green
+ * that proves nothing. `--pass-with-no-tests` is how a caller says that an empty selection is an
+ * expected answer rather than a mistake, which is what a scheduler handing one pattern to every
+ * suite it knows about needs: a Tao journey will never be named like a Bun test, so without it one
+ * filtered run turns the whole scheduled sweep red. Either way nothing ran, so the compiled output
+ * this run made is discarded rather than kept.
+ */
+async function reportSelectedJourneys(
+  compiled: CompiledTaoTests,
+  options: TestCommandOptions,
+  displayRoots: string,
+): Promise<boolean> {
+  const pattern = options.name
+  if (pattern === undefined) {
+    return true
+  }
+  const journeys = await compiledJourneyNames(compiled)
+  const matcher = journeyMatcher(pattern)
+  const matched = journeys.filter(journey => matcher.test(journey))
+  if (matched.length === 0) {
+    await keepOrDiscardRunRoot(compiled, undefined)
+    const searched = `Searched ${journeys.length} ${
+      journeys.length === 1 ? 'journey' : 'journeys'
+    } under ${displayRoots}`
+    if (options.passWithNoTests === true) {
+      HCI.writeLine(
+        `No Tao test journey matches --name ${JSON.stringify(pattern)}. ${searched}; passing with no tests.`,
+      )
+      return false
+    }
+    Errors.throwUserInput(
+      `No Tao test journey matches --name ${
+        JSON.stringify(pattern)
+      }. ${searched}; run tao test without --name to run them all.`,
+    )
+  }
+  HCI.logProcessInfo(
+    'test',
+    `Selected ${matched.length} of ${journeys.length} Tao ${journeys.length === 1 ? 'journey' : 'journeys'}`,
+  )
+  return true
+}
+
+/**
+ * journeyMatcher reads a `--name` pattern exactly as the test runner reads `--testNamePattern`: an
+ * unanchored, case-insensitive regular expression. The two must agree, because this command decides
+ * whether anything was selected and the runner decides what actually runs.
+ */
+function journeyMatcher(pattern: string): RegExp {
+  try {
+    return new RegExp(pattern, 'i')
+  } catch (error) {
+    return Errors.throwUserInput(
+      `--name ${JSON.stringify(pattern)} is not a valid regular expression: ${Errors.messageOf(error)}`,
+    )
+  }
+}
+
+/** compiledJourneyNames lists every journey in one compiled run under the name the runner gives it. */
+async function compiledJourneyNames(compiled: CompiledTaoTests): Promise<string[]> {
+  if (compiled.manifestPath === undefined) {
+    return []
+  }
+  const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(compiled.manifestPath)
+  return manifest.files.flatMap(file =>
+    file.suites.flatMap(suite => suite.checks.map(check => RuntimeTesting.TestCaseName.full(file, suite, check)))
+  )
+}
+
 type CompilerWorkerSession = ReturnType<typeof RuntimeTesting.TestCompiler.Worker.createSession>
 
 // Validation and compilation run across a pool of compiler worker processes: each directory group
 // stays on one worker so its files share that worker's workspace, and one worker's requests run
 // serially in its process while distinct workers run in parallel.
-async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise<CompiledTaoTests> {
+async function validateAndCompileTaoTests(
+  testPaths: readonly string[],
+  runtimeRoot: string,
+): Promise<CompiledTaoTests> {
   if (Platform.runtimeProcess.env['TAO_TEST_IN_PROCESS'] === 'true') {
-    return await validateAndCompileTaoTestsInProcess(testPaths)
+    return await validateAndCompileTaoTestsInProcess(testPaths, runtimeRoot)
   }
   const groups = [...groupPathsByDirectory(testPaths).values()]
   const workers = createTestWorkers(groups.length)
@@ -111,14 +257,13 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
     }
 
     HCI.logProcessInfo('test', 'Compiling apps')
-    const runtimeRoot = testRuntimeRoot()
-    const runRoot = await RuntimeTesting.TestRunRoot.create('tao-test-command', { runtimePackageRoot: runtimeRoot })
+    const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
     const filesByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
       async (worker, testPath) => await worker.compileTestPlan(testPath, { runRoot, skipValidation: true }),
     )
-    const manifestPath = FS.resolvePath('manifest.json', runRoot)
+    const manifestPath = FS.resolvePath(RuntimeTesting.TestRunRoot.MANIFEST_FILE_NAME, runRoot)
     await FS.writeJson(manifestPath, {
       files: testPaths.map(testPath => filesByPath.get(testPath)!),
     })
@@ -128,7 +273,10 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
   }
 }
 
-async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[]): Promise<CompiledTaoTests> {
+async function validateAndCompileTaoTestsInProcess(
+  testPaths: readonly string[],
+  runtimeRoot: string,
+): Promise<CompiledTaoTests> {
   HCI.logProcessInfo('test', 'Validating Tao test files (packaged runner)')
   const validationErrors = (await Promise.all(
     testPaths.map(testPath => RuntimeTesting.TestCompiler.validateTestFile(testPath)),
@@ -138,8 +286,7 @@ async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[])
     Platform.runtimeProcess.exit(1)
   }
   HCI.logProcessInfo('test', 'Compiling apps')
-  const runtimeRoot = testRuntimeRoot()
-  const runRoot = await RuntimeTesting.TestRunRoot.create('tao-test-command', { runtimePackageRoot: runtimeRoot })
+  const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
   const context: RuntimeTesting.TestCompiler.Context = { appModulePaths: new Map(), runRoot }
   const files = []
   for (const testPath of testPaths) {
@@ -150,7 +297,7 @@ async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[])
       }),
     )
   }
-  const manifestPath = FS.resolvePath('manifest.json', runRoot)
+  const manifestPath = FS.resolvePath(RuntimeTesting.TestRunRoot.MANIFEST_FILE_NAME, runRoot)
   await FS.writeJson(manifestPath, { files })
   return { manifestPath, runRoot, runtimeRoot, testPaths }
 }
@@ -184,14 +331,21 @@ function maxTestWorkers(): number {
  * leaves this command resolving the value itself.
  *
  * - `TAO_TEST_JOBS`: worker budget for one run, set by an outer scheduler that reserved that width
- *   for `tao test`. It bounds both the compiler worker pool and the test runner child's own
- *   `--maxWorkers`, so the reservation bounds the whole command rather than one half of it.
+ *   for `tao test`. It bounds the compiler worker pool, the test runner child's own `--maxWorkers`,
+ *   and the number of Jest entrypoints the run is split into, so the reservation bounds the whole
+ *   command rather than one part of it. Splitting further than the budget buys no parallelism and
+ *   costs one module registry per extra entrypoint, so the budget is the ceiling on the split too.
  * - `TAO_TEST_IN_PROCESS`: `true` validates and compiles in this process instead of worker
  *   processes, for the packaged runner that ships without a worker entrypoint.
+ * - `TAO_TEST_NO_CACHE`: `true` validates and compiles from source however unchanged the inputs
+ *   are, and publishes nothing for a later run. `test-cache.ts` owns the name and the identity it
+ *   switches off; a lane running `--no-cache` sets it, because a memoized compile is not fresh work.
  * - `TAO_TEST_JEST_PATH`: the test runner entrypoint to execute instead of the resolved one.
  * - `TAO_TEST_NODE_PATH`: the Node executable that runs it instead of the pinned repository Node.
  * - `TAO_TEST_RUNTIME_ROOT`: the runtime-toolchain package root one run compiles into.
  * - `TAO_TEST_RUNTIME_MANIFEST`: set by this command for its child; `RuntimeTesting` owns the name.
+ * - `TAO_TEST_RUNTIME_ENTRYPOINTS`: set by this command for its child, naming the generated Jest
+ *   entrypoints its run is split into; `TestHarnessFiles` owns the name.
  */
 function taoTestJobs(): number | undefined {
   const envJobs = Number(Platform.runtimeProcess.env['TAO_TEST_JOBS'] ?? '')
@@ -202,25 +356,35 @@ function taoTestJobs(): number | undefined {
  * runCompiledTaoTests runs the Jest harness for one already-compiled Tao test manifest, forwarding
  * its output as it arrives and returning the whole of it in the order the runner produced it.
  */
-async function runCompiledTaoTests(compiled: CompiledTaoTests, mode: TestOutputMode): Promise<CompletedTestRun> {
-  if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined) {
+async function runCompiledTaoTests(
+  compiled: CompiledTaoTests,
+  mode: TestOutputMode,
+  namePattern: string | undefined,
+): Promise<CompletedTestRun> {
+  if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined || compiled.runRoot === undefined) {
     return { output: '' }
   }
   const writer = TestOutput.createWriter(mode)
   const chunks: Buffer[] = []
-  const jobs = taoTestJobs()
+  const entrypoints = await writeJourneyEntrypoints(compiled.manifestPath, compiled.runRoot, namePattern)
   const result = await CLI.run(await testNodePath(), {
     args: [
       await testJestPath(compiled.runtimeRoot),
       '--config',
       'jest.tao-test.config.cjs',
       '--no-watchman',
-      // An outer scheduler reserves a fixed width for this whole command, so the Jest child is held
-      // to the same budget as the compiler worker pool rather than sizing itself to the machine.
-      ...(jobs === undefined ? [] : [`--maxWorkers=${jobs}`]),
+      // The run was split into exactly the entrypoints its worker budget affords, so the pool is
+      // sized to the split rather than to the machine: every worker gets one entrypoint, and no
+      // worker waits behind another for a second one.
+      `--maxWorkers=${Math.max(1, entrypoints.shardCount)}`,
+      // One Jest case per Tao journey is what makes this select a journey rather than a whole file.
+      ...(namePattern === undefined ? [] : ['--testNamePattern', namePattern]),
     ],
     cwd: compiled.runtimeRoot,
-    env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
+    env: {
+      [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
+      [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
+    },
     onOutput: (_stream, chunk) => {
       chunks.push(chunk)
       writer?.write(chunk)
@@ -229,6 +393,47 @@ async function runCompiledTaoTests(compiled: CompiledTaoTests, mode: TestOutputM
   })
   writer?.flush()
   return { output: Buffer.concat(chunks).toString('utf8'), result }
+}
+
+/**
+ * writeJourneyEntrypoints generates the Jest entrypoints this run is started through.
+ *
+ * They are generated per run rather than per compile because how many there are is the run's worker
+ * budget, and a reused run root was compiled under whatever budget its own run happened to have.
+ * The manifest is read back for the same reason: on the reused path it is the only description of
+ * the run this process holds.
+ */
+async function writeJourneyEntrypoints(
+  manifestPath: string,
+  runRoot: string,
+  namePattern: string | undefined,
+): Promise<RuntimeTesting.TestHarnessFiles.Generated> {
+  const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(manifestPath)
+  return await RuntimeTesting.TestHarnessFiles.write(runRoot, selectableFiles(manifest, namePattern), maxTestWorkers())
+}
+
+/**
+ * selectableFiles drops the Tao test files a `--name` pattern can select nothing from. The runner
+ * filters by case name and reaches the same journeys either way, but it pays for a module registry
+ * per entrypoint it opens, so an entrypoint holding nothing the pattern selects is a worker that
+ * loads React Native to run no journey. Selecting one journey out of a corpus is the inner loop this
+ * protects; the count the command itself reports is still taken from the whole manifest.
+ */
+function selectableFiles(
+  manifest: RuntimeTesting.TestCompiler.Manifest,
+  namePattern: string | undefined,
+): RuntimeTesting.TestCompiler.Manifest {
+  if (namePattern === undefined) {
+    return manifest
+  }
+  const matcher = journeyMatcher(namePattern)
+  return {
+    files: manifest.files.filter(file =>
+      file.suites.some(suite =>
+        suite.checks.some(check => matcher.test(RuntimeTesting.TestCaseName.full(file, suite, check)))
+      )
+    ),
+  }
 }
 
 /** writeTestOutputLog keeps one run's whole test output beside the code that run generated. */

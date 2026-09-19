@@ -1,3 +1,4 @@
+import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import { FS, Platform, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
@@ -103,7 +104,10 @@ const reportFixture = {
 /** listRunRoots lists the generated `tao test` run roots left under one runtime package root. */
 async function listRunRoots(runtimeRoot: string): Promise<string[]> {
   const categoryRoot = FS.resolvePath('_gen_tao-app-test/tao-test-command', runtimeRoot)
-  return await FS.isDirectory(categoryRoot) ? await FS.listDir(categoryRoot) : []
+  // The category also holds the reuse index, which is not generated code and never a run root.
+  return await FS.isDirectory(categoryRoot)
+    ? (await FS.listDir(categoryRoot)).filter(name => name.startsWith('run-'))
+    : []
 }
 
 /** writeStaleRunRoot writes a run root whose id claims a run finished long before this one. */
@@ -118,6 +122,70 @@ const lifecycleFixture = {
   'App.tao': taoApp('Lifecycle'),
   'App.test.tao': taoTest('Lifecycle'),
 } as const
+
+const reuseFixture = {
+  'Project.tao': 'project { id "compiled-output-reuse-test" name "Compiled output reuse test" }',
+  'App.tao': taoApp('Reused'),
+  'App.test.tao': taoTest('Reused'),
+} as const
+
+/** COMPILED and REUSED are the phase lines that say which of the two paths one run took. */
+const COMPILED = 'Compiling apps'
+const REUSED = 'Reusing compiled apps'
+
+/**
+ * taoTestJourneys writes a Tao test file of `count` journeys, which is what decides whether a run
+ * has enough work to be worth dividing between Jest entrypoints at all.
+ */
+function taoTestJourneys(name: string, count: number): string {
+  return [
+    `use ${name} from ./`,
+    `test "${name}" {`,
+    ...Array.from({ length: count }, (_unused, index) => [
+      `  test "runs ${index + 1}" {`,
+      `    run ${name}`,
+      `    expect text "${name}"`,
+      '  }',
+    ]).flat(),
+    '}',
+    '',
+  ].join('\n')
+}
+
+/**
+ * splittableFixture is two Tao test files carrying between them exactly the journeys two Jest
+ * entrypoints need to be worth their two module registries.
+ */
+const splittableFixture = {
+  'Project.tao': 'project { id "entrypoint-split-test" name "Entrypoint split test" }',
+  'One/App.tao': taoApp('SplitOne'),
+  'One/App.test.tao': taoTestJourneys('SplitOne', RuntimeTesting.TestHarnessFiles.JOURNEYS_PER_SHARD),
+  'Two/App.tao': taoApp('SplitTwo'),
+  'Two/App.test.tao': taoTestJourneys('SplitTwo', RuntimeTesting.TestHarnessFiles.JOURNEYS_PER_SHARD),
+} as const
+
+/** listEntrypoints lists the Jest entrypoints of the plan a run `width` workers wide generated. */
+async function listEntrypoints(runtimeRoot: string, width: number): Promise<string[]> {
+  const found: string[] = []
+  for (const runRoot of await listRunRoots(runtimeRoot)) {
+    const plans = FS.resolvePath(
+      `_gen_tao-app-test/tao-test-command/${runRoot}/${RuntimeTesting.TestHarnessFiles.DIRECTORY_NAME}`,
+      runtimeRoot,
+    )
+    for (const plan of await FS.isDirectory(plans) ? await FS.listDir(plans) : []) {
+      if (plan.startsWith(`${width}-`)) {
+        found.push(...await FS.listDir(FS.resolvePath(plan, plans)))
+      }
+    }
+  }
+  return found.toSorted()
+}
+
+/** listCachedFingerprints lists the reuse index entries left under one runtime package root. */
+async function listCachedFingerprints(runtimeRoot: string): Promise<string[]> {
+  const cacheRoot = FS.resolvePath('_gen_tao-app-test/tao-test-command/.cache', runtimeRoot)
+  return await FS.isDirectory(cacheRoot) ? await FS.listDir(cacheRoot) : []
+}
 
 Describe('tao test CLI', () => {
   Test('reports no discovered tests without failing', async () => {
@@ -161,7 +229,7 @@ Describe('tao test CLI', () => {
       const output = `${result.stdout}${result.stderr}`
 
       Expect(result.exitCode).not.toBe(0)
-      Expect(output).toContain("Test 'Empty' must start exactly one app with run.")
+      Expect(output).toContain("Test 'Empty' declares no checks, so it would run nothing.")
       Expect(output).toContain('Empty.test.tao')
       Expect(output).toContain('Validating Tao test files')
       Expect(output).not.toContain('Compiling apps')
@@ -197,7 +265,9 @@ Describe('tao test CLI', () => {
     })
   })
 
-  Test('discards its generated run root and prunes stale roots after a passing suite', async () => {
+  // A run that publishes nothing has nothing to keep, which is the lifecycle every passing run had
+  // before compiled output became reusable and the one the opt-out restores.
+  Test('discards its generated run root and prunes stale roots when reuse is switched off', async () => {
     await withTaoFixture({ ...lifecycleFixture, 'jest-stub.mjs': '' }, async rootDir => {
       const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
       const staleOlder = await writeStaleRunRoot(runtimeRoot, 9)
@@ -205,11 +275,112 @@ Describe('tao test CLI', () => {
 
       await withJestStub(rootDir, async () => {
         await withRuntimeRoot(runtimeRoot, async () => {
-          const result = await runTaoCliForTest(['test', rootDir])
+          await withEnv('TAO_TEST_NO_CACHE', 'true', async () => {
+            const result = await runTaoCliForTest(['test', rootDir])
 
-          Expect(result.exitCode).toBe(0)
-          Expect(await listRunRoots(runtimeRoot)).toEqual([staleNewest])
-          Expect(await listRunRoots(runtimeRoot)).not.toContain(staleOlder)
+            Expect(result.exitCode).toBe(0)
+            Expect(await listRunRoots(runtimeRoot)).toEqual([staleNewest])
+            Expect(await listRunRoots(runtimeRoot)).not.toContain(staleOlder)
+          })
+        })
+      })
+    })
+  })
+
+  // Most of a `tao test` run is validating and compiling apps that have not changed since the last
+  // run compiled them. The second run below must do neither and still run the same tests.
+  Test("reuses a passing run's compiled apps when nothing they are built from has changed", async () => {
+    await withTaoFixture({ ...reuseFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      const staleOlder = await writeStaleRunRoot(runtimeRoot, 9)
+      const staleNewest = await writeStaleRunRoot(runtimeRoot, 3)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const cold = await runTaoCliForTest(['test', rootDir])
+          const warm = await runTaoCliForTest(['test', rootDir])
+
+          Expect(cold.exitCode).toBe(0)
+          Expect(outputText(cold)).toContain(COMPILED)
+          Expect(outputText(cold)).not.toContain(REUSED)
+          Expect(warm.exitCode).toBe(0)
+          Expect(outputText(warm)).toContain(REUSED)
+          Expect(outputText(warm)).not.toContain(COMPILED)
+          Expect(outputText(warm)).not.toContain('Validating Tao test files')
+          Expect(outputText(warm)).toContain('Tao tests finished')
+          // The published root is kept rather than discarded, and pruning still reaches the rest.
+          const runRoots = await listRunRoots(runtimeRoot)
+          Expect(runRoots).toContain(staleNewest)
+          Expect(runRoots).not.toContain(staleOlder)
+          Expect(runRoots).toHaveLength(2)
+        })
+      })
+    })
+  })
+
+  Test('compiles again after a Tao source under test changes', async () => {
+    await withTaoFixture({ ...reuseFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          await runTaoCliForTest(['test', rootDir])
+          Expect(outputText(await runTaoCliForTest(['test', rootDir]))).toContain(REUSED)
+
+          await FS.writeText(FS.resolvePath('App.tao', rootDir), taoApp('Reused').replace('Reused")', 'Edited")'))
+          const afterEdit = await runTaoCliForTest(['test', rootDir])
+
+          Expect(afterEdit.exitCode).toBe(0)
+          Expect(outputText(afterEdit)).toContain(COMPILED)
+          Expect(outputText(afterEdit)).not.toContain(REUSED)
+          Expect(await listCachedFingerprints(runtimeRoot)).toHaveLength(2)
+        })
+      })
+    })
+  })
+
+  // A false green is worse than a slow suite, so only a run that both compiled and passed may be
+  // handed to a later run.
+  Test('publishes nothing a failing run compiled', async () => {
+    await withTaoFixture({ ...reuseFixture, 'jest-stub.mjs': 'process.exit(1)\n' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const failed = await runTaoCliForTest(['test', rootDir])
+          const again = await runTaoCliForTest(['test', rootDir])
+
+          Expect(failed.exitCode).toBe(1)
+          Expect(await listCachedFingerprints(runtimeRoot)).toEqual([])
+          Expect(again.exitCode).toBe(1)
+          Expect(outputText(again)).toContain(COMPILED)
+          Expect(outputText(again)).not.toContain(REUSED)
+        })
+      })
+    })
+  })
+
+  Test('compiles from source and publishes nothing when reuse is switched off', async () => {
+    await withTaoFixture({ ...reuseFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          await withEnv('TAO_TEST_NO_CACHE', 'true', async () => {
+            const first = await runTaoCliForTest(['test', rootDir])
+            const second = await runTaoCliForTest(['test', rootDir])
+
+            Expect(first.exitCode).toBe(0)
+            Expect(second.exitCode).toBe(0)
+            Expect(outputText(second)).toContain(COMPILED)
+            Expect(outputText(second)).not.toContain(REUSED)
+            Expect(await listCachedFingerprints(runtimeRoot)).toEqual([])
+            Expect(await listRunRoots(runtimeRoot)).toEqual([])
+          })
+
+          // The opt-out is per run, not a state it leaves behind: the next run caches again.
+          Expect(outputText(await runTaoCliForTest(['test', rootDir]))).toContain(COMPILED)
+          Expect(outputText(await runTaoCliForTest(['test', rootDir]))).toContain(REUSED)
         })
       })
     })
@@ -348,23 +519,178 @@ Describe('tao test CLI', () => {
     })
   })
 
-  Test('bounds the test runner workers with the run job budget', async () => {
-    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+  // Jest distributes test files rather than cases, so a run only uses the width it was granted if it
+  // is split into that many entrypoints. The pool and the split are therefore one number.
+  Test('bounds the test runner workers and the entrypoint split with the run job budget', async () => {
+    await withTaoFixture({ ...splittableFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
       await withJestStub(rootDir, async () => {
         await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
-          await withEnv('TAO_TEST_JOBS', '2', async () => {
+          await withEnv('TAO_TEST_JOBS', '1', async () => {
             const budgeted = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
 
             Expect(budgeted.exitCode).toBe(0)
-            Expect(outputText(budgeted)).toContain('--maxWorkers=2')
+            Expect(outputText(budgeted)).toContain('--maxWorkers=1')
+            Expect(await listEntrypoints(FS.resolvePath('runtime-root', rootDir), 1)).toEqual([
+              'shard-1-of-1.jest.tsx',
+            ])
           })
           await withEnv('TAO_TEST_JOBS', undefined, async () => {
             const unbudgeted = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
 
             Expect(unbudgeted.exitCode).toBe(0)
-            Expect(outputText(unbudgeted)).toContain('runner args: ')
-            Expect(outputText(unbudgeted)).not.toContain('--maxWorkers')
+            Expect(outputText(unbudgeted)).toContain('--maxWorkers=2')
+            Expect(await listEntrypoints(FS.resolvePath('runtime-root', rootDir), 2)).toEqual([
+              'shard-1-of-2.jest.tsx',
+              'shard-2-of-2.jest.tsx',
+            ])
           })
+        })
+      })
+    })
+  })
+
+  // A run with little to divide is better off undivided: every entrypoint stands up its own React
+  // Native module registry, and one app's own suite is the common shape.
+  Test('leaves a small run on one entrypoint however wide the budget', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          await withEnv('TAO_TEST_JOBS', '8', async () => {
+            const result = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+
+            Expect(result.exitCode).toBe(0)
+            Expect(outputText(result)).toContain('--maxWorkers=1')
+            Expect(await listEntrypoints(FS.resolvePath('runtime-root', rootDir), 1)).toEqual([
+              'shard-1-of-1.jest.tsx',
+            ])
+          })
+        })
+      })
+    })
+  })
+
+  // One Jest case per Tao journey is what makes a name pattern able to select a journey at all, so
+  // the pattern goes to the runner unaltered and the runner does the selecting.
+  Test('forwards a name pattern to the test runner', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest(['test', rootDir, '--name', 'runs', '--output', 'lines'])
+
+          Expect(result.exitCode).toBe(0)
+          Expect(outputText(result)).toContain('--testNamePattern runs')
+          Expect(outputText(result)).toContain('Selected 1 of 1 Tao journey')
+        })
+      })
+    })
+  })
+
+  // The runner reaches the same journeys either way, but it stands up a module registry for every
+  // entrypoint it opens, so an entrypoint the pattern can select nothing from is a worker that loads
+  // React Native to run nothing. Selecting one journey is the inner loop this protects.
+  Test('keeps a name pattern out of the entrypoints it can select nothing from', async () => {
+    await withTaoFixture({ ...splittableFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest([
+            'test',
+            rootDir,
+            '--name',
+            'SplitOne > runs 1$',
+            '--output',
+            'lines',
+          ])
+
+          Expect(result.exitCode).toBe(0)
+          // The command still reports the selection against every journey the run discovered.
+          Expect(outputText(result)).toContain(
+            `Selected 1 of ${RuntimeTesting.TestHarnessFiles.JOURNEYS_PER_SHARD * 2} Tao journeys`,
+          )
+          Expect(outputText(result)).toContain('--maxWorkers=1')
+          Expect(await listEntrypoints(FS.resolvePath('runtime-root', rootDir), 1)).toEqual([
+            'shard-1-of-1.jest.tsx',
+          ])
+        })
+      })
+    })
+  })
+
+  // The runner would filter every case out, report a run with no tests in it, and exit zero. A
+  // pattern that selects nothing is a mistake in the pattern, so it is reported as one.
+  Test('fails with a clear message when a name pattern matches no journey', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest(['test', rootDir, '--name', 'never written'])
+          const output = outputText(result)
+
+          Expect(result.exitCode).toBe(1)
+          Expect(output).toContain('No Tao test journey matches --name "never written". Searched 1 journey under')
+          Expect(output).toContain('run tao test without --name to run them all.')
+          // Nothing ran, so the runner was never started and nothing it would have printed appears.
+          Expect(output).not.toContain('runner args: ')
+          Expect(output).not.toContain('Tests:')
+        })
+      })
+    })
+  })
+
+  // A scheduler hands one pattern to every suite it knows about, and a Tao journey will never be
+  // named like a Bun test, so the suites the pattern cannot describe have to be able to sit out
+  // without turning the filtered run red. The empty selection is still reported, not hidden.
+  Test('passes on a name pattern that matches no journey when asked to', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest(['test', rootDir, '--name', 'never written', '--pass-with-no-tests'])
+          const output = outputText(result)
+
+          Expect(result.exitCode).toBe(0)
+          Expect(output).toContain('No Tao test journey matches --name "never written". Searched 1 journey under')
+          Expect(output).toContain('passing with no tests.')
+          // Passing is not running: the remedy for a mistyped pattern is not offered, and the
+          // runner is still never started.
+          Expect(output).not.toContain('run tao test without --name to run them all.')
+          Expect(output).not.toContain('runner args: ')
+          Expect(output).not.toContain('Tests:')
+        })
+      })
+    })
+  })
+
+  // The flag settles the empty selection and nothing else; a pattern that does select journeys runs
+  // them, so a scheduler that always passes it cannot silently stop testing what it does reach.
+  Test('still runs the journeys a name pattern selects while passing with no tests', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest([
+            'test',
+            rootDir,
+            '--name',
+            'runs',
+            '--pass-with-no-tests',
+            '--output',
+            'lines',
+          ])
+
+          Expect(result.exitCode).toBe(0)
+          Expect(outputText(result)).toContain('--testNamePattern runs')
+          Expect(outputText(result)).toContain('Selected 1 of 1 Tao journey')
+        })
+      })
+    })
+  })
+
+  Test('rejects a name pattern that is not a regular expression', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest(['test', rootDir, '--name', 'runs('])
+
+          Expect(result.exitCode).toBe(1)
+          Expect(outputText(result)).toContain('--name "runs(" is not a valid regular expression')
+          Expect(outputText(result)).not.toContain('runner args: ')
         })
       })
     })

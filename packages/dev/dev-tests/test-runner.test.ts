@@ -1,7 +1,7 @@
 import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
-import type { SelectedSuite, TestProcess } from '../dev-src/repository-tests/TestNodes'
+import { type SelectedSuite, TestNodes, type TestProcess } from '../dev-src/repository-tests/TestNodes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
 import { type SuiteState, TestRunner, type TestRunRequest } from '../dev-src/repository-tests/TestRunner'
 import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
@@ -55,14 +55,55 @@ function suiteState(name: string): SuiteState {
 }
 
 Describe('test runner suite registry', () => {
-  Test('a name pattern filters every Bun suite and leaves out the suite that cannot filter by name', async () => {
-    const { byName, skipped } = await discover({ pattern: 'one package only' })
+  Test('a name pattern filters every suite, including the Tao behavior suite', async () => {
+    const { byName } = await discover({ pattern: 'one package only' })
 
     Expect(argsOf(byName, 'dev')).toContain('--pass-with-no-tests')
     Expect(argsOf(byName, 'dev')).toContain('--test-name-pattern=one package only')
-    Expect(byName.has('tao-apps')).toBe(false)
-    // The summary's note comes from the registry entry, so the runner has no second flag to keep true.
-    Expect(skipped).toEqual([{ name: 'tao-apps', reason: 'a test-name pattern cannot select Tao behavior tests' }])
+    // A name that selects plenty in other suites normally selects nothing here, so the Tao suite is
+    // told to pass on no match. Without that it would fail the whole run, which is why it used to
+    // sit filtered runs out — and a run that skips it silently loses its Tao behavior coverage.
+    Expect(argsOf(byName, 'tao-apps')).toContain('--name')
+    Expect(argsOf(byName, 'tao-apps')).toContain('one package only')
+    Expect(argsOf(byName, 'tao-apps')).toContain('--pass-with-no-tests')
+  })
+
+  Test('a name pattern narrows the scope that chose the suites instead of replacing it', async () => {
+    const { byName } = await discover({
+      files: new Map([['tao-apps', ['Apps/WordFlower']]]),
+      kind: 'changed',
+      pattern: 'one package only',
+      suites: new Set(['dev', 'tao-apps']),
+    })
+
+    // `just test "<name>"` means the suites the diff reaches, filtered to that name. The scope still
+    // decides which suites run — a pattern can only ever narrow the tests inside them.
+    Expect([...byName.keys()].sort()).toEqual(['dev', 'tao-apps'])
+    Expect(argsOf(byName, 'dev')).toContain('--test-name-pattern=one package only')
+    Expect(argsOf(byName, 'dev')).toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'tao-apps')).toContain('--pass-with-no-tests')
+  })
+
+  Test('leaves the Tao behavior suite unfiltered when the run carries no pattern', async () => {
+    const { byName } = await discover({
+      files: new Map([['tao-apps', ['Apps/WordFlower']]]),
+      kind: 'changed',
+      suites: new Set(['tao-apps']),
+    })
+
+    // `--pass-with-no-tests` is how a filtered run says a miss is expected. An unfiltered run has no
+    // such excuse: a scope that selected this suite and then found nothing to run is a real failure.
+    Expect(argsOf(byName, 'tao-apps')).not.toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'tao-apps')).not.toContain('--name')
+  })
+
+  Test('only an unfiltered complete run counts as having observed every test', () => {
+    // The retry ledger and the timings store both stand on this: a filtered run schedules every
+    // suite but skips most of the tests inside them, so it can neither call a test green nor say
+    // what a suite costs.
+    Expect(TestRunner.completeRun({ kind: 'full', pattern: '' })).toBe(true)
+    Expect(TestRunner.completeRun({ kind: 'full', pattern: 'one package only' })).toBe(false)
+    Expect(TestRunner.completeRun({ kind: 'changed', pattern: '' })).toBe(false)
   })
 
   Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
@@ -75,6 +116,34 @@ Describe('test runner suite registry', () => {
     Expect(argsOf(byName, 'dev').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
   })
 
+  Test('keeps the node idle bound clear of the longest a single test may be silent', () => {
+    // A gate lane reports to a file, so a healthy suite prints nothing between tests and a test
+    // spending its whole deadline is indistinguishable from a stalled one. Raising the per-test
+    // deadline past half the idle floor would start killing suites that were only slow, and the
+    // two constants live in modules that cannot import each other — so they are held together here.
+    Expect(TestNodes.IDLE_TIMEOUT_FLOOR_MS).toBeGreaterThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS * 2)
+  })
+
+  Test('weighs Tao app shards by the source they compile, not by how many journeys they hold', async () => {
+    const { byName } = await discover()
+    const costs = byName.get('tao-apps')?.unitCostMs
+
+    Expect(costs).toBeDefined()
+    const wordFlower = costs?.get('Apps/WordFlower/1 - Current') ?? 0
+    const navigation = costs?.get('Apps/Test Apps/Navigation') ?? 0
+    Expect(wordFlower).toBeGreaterThan(0)
+    Expect(navigation).toBeGreaterThan(0)
+    // Counting journeys read WordFlower's six `.test.tao` files as lighter than Navigation's seven,
+    // so the balancer packed 2,462 lines beside four more apps into the shard that then measured
+    // 51.3s while seven small apps finished together in 14.2s. Compiling the source is where that
+    // time goes, so the heavier app has to weigh more than the one with more journeys.
+    Expect(wordFlower).toBeGreaterThan(navigation)
+    // An app's own sources are compiled with it, so a unit's weight includes what sits beneath it.
+    Expect(wordFlower).toBeGreaterThan(
+      (await FS.readText(Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao'))).length,
+    )
+  })
+
   Test('gives a suite that declares no bound one work-denominated timeout', async () => {
     const { byName } = await discover()
 
@@ -84,19 +153,19 @@ Describe('test runner suite registry', () => {
     // three other lanes. Every Bun suite therefore carries an explicit bound.
     const bounds = argsOf(byName, 'studio').filter(argument => argument.startsWith('--timeout='))
     Expect(bounds).toHaveLength(1)
-    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(5_000)
+    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(7_500)
   })
 
   Test('spends the per-test budget on work, and stretches the deadline only while the machine is loaded', () => {
     const { starvationAdjustedTimeoutMs } = TestRunner
 
-    // A machine this run has to itself keeps Bun's own five seconds, so a test that genuinely
-    // regresses is still caught. This is the case a flat sixty-second bound gives up.
-    Expect(starvationAdjustedTimeoutMs(2, 18)).toBe(5_000)
-    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(5_000)
+    // A machine this run has to itself keeps the fixed budget, so a test that genuinely regresses
+    // is still caught. This is the case a flat sixty-second bound gives up.
+    Expect(starvationAdjustedTimeoutMs(2, 18)).toBe(7_500)
+    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(7_500)
     // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
     // than in isolation. The deadline has to clear that multiple, and does.
-    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBeGreaterThan(5_000 * 3.7)
+    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBeGreaterThan(7_500 * 3.7)
     // Past the ceiling the deadline stops distinguishing a starved test from a hung one.
     Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(60_000)
   })
@@ -206,10 +275,9 @@ Describe('test runner suite registry', () => {
   })
 
   Test('the complete run tests every app and the inventory names every suite it would run', async () => {
-    const { byName, selected, skipped } = await discover()
+    const { byName, selected } = await discover()
     const inventory = await TestRunner.suiteInventory()
 
-    Expect(skipped).toEqual([])
     Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps'])
     Expect(inventory.packageSuites).toContain('dev')
     Expect(inventory.packageSuites).toContain('shared')
@@ -259,8 +327,8 @@ Describe('test runner suite registry', () => {
       state.testObservations = []
     }
 
-    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(true)
-    Expect(TestRunner.noTestsMatched('name', [{
+    Expect(TestRunner.noTestsMatched('a name nothing has', [], states)).toBe(true)
+    Expect(TestRunner.noTestsMatched('a name nothing has', [{
       file: 'packages/dev/dev-tests/example.test.ts',
       name: 'not selected',
       outcome: 'skipped',
@@ -268,13 +336,43 @@ Describe('test runner suite registry', () => {
     }], states)).toBe(true)
     states[0]!.testReport = { format: 'bun-junit', path: '/missing.xml', suite: 'dev' }
     states[0]!.testObservations = undefined
-    Expect(TestRunner.noTestsMatched('name', [{
+    Expect(TestRunner.noTestsMatched('a name nothing has', [{
       file: 'packages/runtime-toolchain/runtime-toolchain-tests/example.jest-test.ts',
       name: 'not selected',
       outcome: 'skipped',
       suite: 'runtime-jest',
     }], states)).toBe(false)
-    Expect(TestRunner.noTestsMatched('changed', [], states)).toBe(false)
+    // An unfiltered run has no pattern to have matched nothing, whatever scope chose its suites.
+    Expect(TestRunner.noTestsMatched('', [], states)).toBe(false)
+  })
+
+  Test('a filter that matched somewhere passes, however many suites it matched nothing in', () => {
+    // The question is asked of the whole run, not of each suite. A Bun test name never matches a
+    // Jest test or a Tao journey, so a suite finding nothing is the ordinary case: failing on it
+    // would make `just test "<a real bun test>"` red for every other suite doing the right thing.
+    const states = [suiteState('dev'), suiteState('runtime-jest')]
+    for (const state of states) {
+      state.status = 'passed'
+      state.testObservations = []
+    }
+    const matchedInOneSuite = [
+      {
+        file: 'packages/dev/dev-tests/example.test.ts',
+        name: 'the one match',
+        outcome: 'passed' as const,
+        suite: 'dev',
+      },
+      {
+        file: 'packages/runtime-toolchain/runtime-toolchain-tests/example.jest-test.ts',
+        name: 'not selected',
+        outcome: 'skipped' as const,
+        suite: 'runtime-jest',
+      },
+    ]
+
+    Expect(TestRunner.noTestsMatched('the one match', matchedInOneSuite, states)).toBe(false)
+    // And the same suites with nothing matched anywhere is the typo the rule exists to catch.
+    Expect(TestRunner.noTestsMatched('the one match', [matchedInOneSuite[1]!], states)).toBe(true)
   })
 
   Test('routes exact Bun and runtime Jest files to their owning suites', async () => {
@@ -376,20 +474,6 @@ Describe('test lane reporting on a shared machine', () => {
 
     Expect(output).toContain('failed again on an isolated retry')
     Expect(output).not.toContain('Confirm it alone')
-  })
-
-  Test('names every suite the registry left out, with the registry reason', async () => {
-    const state = suiteState('dev')
-    state.status = 'passed'
-    const captured = await withCapturedOutput(() => {
-      TestResultSummary.printResultSummary([state], 1_000, {
-        skippedSuites: [{ name: 'tao-apps', reason: 'a test-name pattern cannot select Tao behavior tests' }],
-      })
-    })
-
-    Expect(captured.stdout).toContain(
-      'Note: the tao-apps suite was skipped; a test-name pattern cannot select Tao behavior tests.',
-    )
   })
 
   Test('says nothing at all about a machine this run had to itself', async () => {
