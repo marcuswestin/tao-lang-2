@@ -863,10 +863,33 @@ function bunSuite(
     // suite's hang guard.
     ...(tuningArgs.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))
       ? []
-      : [`--timeout=${starvationAdjustedTimeoutMs(Shared.Platform.loadAverage(), Shared.Platform.cpuCount())}`]),
+      : [`--timeout=${deadlineFor(tuningArgs)}`]),
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
   return { args, command: 'bun', cwd: repositoryRoot, files, testReport }
+}
+
+/**
+ * deadlineFor chooses which question this suite's `--timeout` is answering.
+ *
+ * Under `--concurrent` Bun starts every test in the file at once and reports each one's duration as
+ * the time from that shared start to its own completion — so a test's number is the process's work
+ * up to that point, not the test's. One file of 30 validator tests measured a 1.8s minimum and a
+ * 4.9s median for tests that take about 50ms each on their own, and the slowest reached 7.5s. A
+ * per-test budget cannot bound that: it is applied per test to a quantity that describes the
+ * process, so the last test to finish trips it first and the suite fails for being large rather
+ * than for being slow. Stretching that budget by load does not help either, because the number it
+ * is stretching was never about one test.
+ *
+ * So a concurrent suite gets the hang guard instead, which is the only per-test question still
+ * worth asking there, and is what the one concurrent suite that had run long enough to hit this
+ * already declared for itself by hand. The work budget keeps its regression-catching job in every
+ * suite whose tests run one at a time, which is where a test's duration really is its own.
+ */
+function deadlineFor(tuningArgs: readonly string[]): number {
+  return tuningArgs.includes('--concurrent')
+    ? MAX_TEST_DEADLINE_MS
+    : starvationAdjustedTimeoutMs(Shared.Platform.loadAverage(), Shared.Platform.cpuCount())
 }
 
 /**

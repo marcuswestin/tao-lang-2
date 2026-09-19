@@ -117,6 +117,28 @@ Describe('test runner suite registry', () => {
     Expect(argsOf(byName, 'dev').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
   })
 
+  // Under `--concurrent` Bun starts every test in the file at once and reports each one's duration
+  // as the time from that shared start, so the number a per-test budget would bound describes the
+  // process rather than the test: one validator file measured a 1.8s minimum and a 4.9s median for
+  // tests that take about 50ms alone, and the slowest reached 7.5s and was killed. Stretching the
+  // budget by load cannot fix a number that was never about one test, so a concurrent suite gets
+  // the hang guard and the budget keeps its job where a duration really is one test's own.
+  Test('bounds a concurrent suite by the hang guard and a serial one by the work budget', async () => {
+    const { byName } = await discover()
+    const timeoutOf = (suite: string) =>
+      Number(
+        argsOf(byName, suite).find(argument => argument.startsWith('--timeout='))?.slice('--timeout='.length),
+      )
+
+    Expect(argsOf(byName, 'validator')).toContain('--concurrent')
+    Expect(timeoutOf('validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(timeoutOf('dev')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    // A suite whose tests run one at a time keeps the budget, which is what catches a regression.
+    Expect(argsOf(byName, 'shared')).not.toContain('--concurrent')
+    Expect(timeoutOf('shared')).toBeLessThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(timeoutOf('shared')).toBeGreaterThan(0)
+  })
+
   Test('keeps the node idle bound clear of the longest a single test may be silent', () => {
     // A gate lane reports to a file, so a healthy suite prints nothing between tests and a test
     // spending its whole deadline is indistinguishable from a stalled one. Raising the per-test

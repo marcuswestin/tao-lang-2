@@ -158,9 +158,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // that, and its own tests are then the ones starved — a trivial child `bun test` ran past a
   // fifteen-second bound with three shards of this suite in flight. Like Jest, it already saturates
   // what it is given, so it takes one reservation and stays whole. Its per-test bound is a hang
-  // guard and is set for the worst case this machine actually sees: five worktree lanes at once
-  // starved a trivial child `bun test` past fifteen seconds, and a starved test is not a failing one.
-  ['dev', { args: ['--concurrent', '--timeout=60000'], cost: 2, shardable: false }],
+  // guard, which it no longer has to spell out: `--concurrent` reports each test's duration as the
+  // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
+  // written `--timeout=60000` that used to sit here said only what the flag already implies.
+  ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ide-extension', { args: ['--concurrent'] }],
   // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
   // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
