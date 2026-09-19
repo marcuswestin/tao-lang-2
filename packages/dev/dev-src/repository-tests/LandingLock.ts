@@ -42,6 +42,11 @@ import { MachineLanes } from './MachineLanes'
  *
  * The record lives beside the lane registry, under the same root, and every read-modify-write runs
  * inside the registry's own mutex, so concurrent claimants converge on one winner.
+ *
+ * Unlike `MachineLanes.acquire`, which degrades to running unbrokered when the registry cannot be
+ * read, this fails closed: a registry it cannot reach is a lock it cannot check, and proceeding
+ * would be guessing that nobody is landing. A broad lane is worth failing rather than guessing at;
+ * every narrow command stays runnable regardless, so a registry outage never blocks iteration.
  */
 
 /** LandingLockRecord is the whole state of the lock: who holds it, from when, and doing what. */
@@ -60,12 +65,24 @@ export type LandingLockRecord = {
   /** The process that took it. Informational only: the lock is designed to outlive it. */
   pid: number
   /**
-   * One token per command-scoped hold still running in the holding worktree. Re-entrancy is
+   * One entry per command-scoped hold still running in the holding worktree. Re-entrancy is
    * counted rather than assumed, because two broad lanes routinely run in one checkout: if the
    * first to finish deleted the record, the second would still be verifying while another worktree
-   * took the lock. The record survives until every token is returned and no durable claim remains.
+   * took the lock. The record survives until every hold is returned and no durable claim remains.
+   *
+   * Each carries the pid that took it, and that is sound where it would not be for the durable
+   * claim: a scoped hold lasts exactly as long as one command, so its process being gone proves
+   * the hold is over. Without this a Ctrl-C'd `verify` would strand its hold and wedge the machine
+   * behind a lock nothing is using. The durable claim keeps no pid, because it is designed to
+   * outlive the process that took it and liveness would prove nothing about it.
    */
-  scopedHolds: readonly string[]
+  scopedHolds: readonly LandingLockScopedHold[]
+}
+
+/** LandingLockScopedHold is one running command's claim on the lock, and the process running it. */
+export type LandingLockScopedHold = {
+  pid: number
+  token: string
 }
 
 /** LandingLockHold is what an acquisition returns: the record, and what this call must give back. */
@@ -121,8 +138,12 @@ const WAIT_WARN_INTERVAL_MS = 5 * 60 * 1_000
  * A bound on one call's patience, not on the lock. It exists so a blocked command eventually hands
  * the problem back to a person with a sentence they can act on, rather than hanging silently until
  * someone notices. Reaching it never releases or weakens the lock.
+ *
+ * It matches the landing's own wait deliberately. A shorter one would throw away an hour of waiting
+ * over a holder that is legitimately slow — this repository has a recorded verification run of
+ * 1798.2s under load — and leave the caller no better off than when it started.
  */
-const DEFAULT_WAIT_TIMEOUT_MS = 60 * 60 * 1_000
+const DEFAULT_WAIT_TIMEOUT_MS = 6 * 60 * 60 * 1_000
 
 export class LandingLockBusyError extends Errors.HostEnvironmentError {
   readonly holder: LandingLockRecord
@@ -147,6 +168,24 @@ export class LandingLockUnreadableError extends Errors.HostEnvironmentError {
   }
 }
 
+/**
+ * A record with no durable claim and no surviving scoped hold is the residue of commands that were
+ * interrupted. It holds nothing, so it must not hold up the machine.
+ */
+function isAbandoned(record: LandingLockRecord): boolean {
+  return !record.durable && record.scopedHolds.length === 0
+}
+
+/**
+ * Compare holders by their resolved path. `Repo.getRoot()` returns the spelling the caller's cwd
+ * had, so a symlinked or differently-cased path to one worktree yields two strings, and the
+ * worktree would then queue behind its own lock and be told to force-release itself. The lane
+ * registry already canonicalizes for exactly this reason.
+ */
+async function canonicalHolder(path: string): Promise<string> {
+  return await FS.realPath(path).catch(() => path)
+}
+
 function lockPath(registryRoot: string): string {
   return FS.resolvePath(LOCK_FILE, registryRoot)
 }
@@ -169,7 +208,14 @@ async function readLockState(registryRoot: string): Promise<LandingLockState> {
     return { kind: 'unreadable', reason: error instanceof Error ? error.message : 'unparsable' }
   }
   const record = asLandingLockRecord(parsed)
-  return record === undefined ? { kind: 'unreadable', reason: 'unrecognized shape' } : { kind: 'held', record }
+  if (record === undefined) {
+    return { kind: 'unreadable', reason: 'unrecognized shape' }
+  }
+  // Decided here and nowhere else, so that acquiring, releasing, and everything that merely reports
+  // the lock agree on what "held" means. A record whose durable claim is gone and whose scoped
+  // holds all died with their processes is residue, and `board` must not call it held while the
+  // next `verify` would walk straight past it.
+  return isAbandoned(record) ? { kind: 'free' } : { kind: 'held', record }
 }
 
 function asLandingLockRecord(value: unknown): LandingLockRecord | undefined {
@@ -189,8 +235,25 @@ function asLandingLockRecord(value: unknown): LandingLockRecord | undefined {
     holder: record.holder,
     label: record.label,
     pid: record.pid,
-    scopedHolds: Array.isArray(record.scopedHolds) ? record.scopedHolds.filter(h => typeof h === 'string') : [],
+    scopedHolds: liveScopedHolds(record.scopedHolds),
   }
+}
+
+/**
+ * Keep the scoped holds whose process is still running. This is the one reclamation this module
+ * performs, and it is evidence rather than a guess: a scoped hold cannot outlive its command.
+ */
+function liveScopedHolds(value: unknown): readonly LandingLockScopedHold[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value
+    .filter((entry): entry is LandingLockScopedHold =>
+      typeof entry === 'object' && entry !== null
+      && typeof (entry as LandingLockScopedHold).token === 'string'
+      && typeof (entry as LandingLockScopedHold).pid === 'number'
+    )
+    .filter(entry => Platform.processIsAlive(entry.pid))
 }
 
 async function writeLock(registryRoot: string, record: LandingLockRecord): Promise<void> {
@@ -256,16 +319,20 @@ async function claim(
   registryRoot: string,
   options: AcquireLandingLockOptions,
 ): Promise<{ holder: LandingLockRecord; hold?: undefined } | { holder?: undefined; hold: LandingLockHold }> {
+  const repositoryRoot = await canonicalHolder(options.repositoryRoot)
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
     const state = await readLockState(registryRoot)
     if (state.kind === 'unreadable') {
       throw new LandingLockUnreadableError(state.reason)
     }
     const durable = options.durable === true
-    const token = durable ? undefined : Platform.randomUUID()
+    const scoped: LandingLockScopedHold | undefined = durable
+      ? undefined
+      : { pid: Platform.runtimeProcess.pid, token: Platform.randomUUID() }
+    const token = scoped?.token
     if (state.kind === 'held') {
       const existing = state.record
-      if (existing.holder !== options.repositoryRoot) {
+      if (existing.holder !== repositoryRoot) {
         return { holder: existing }
       }
       // Same worktree: join the hold rather than queue behind ourselves, and record the join so
@@ -273,7 +340,7 @@ async function claim(
       const record: LandingLockRecord = {
         ...existing,
         durable: existing.durable || durable,
-        scopedHolds: token === undefined ? existing.scopedHolds : [...existing.scopedHolds, token],
+        scopedHolds: scoped === undefined ? existing.scopedHolds : [...existing.scopedHolds, scoped],
       }
       await writeLock(registryRoot, record)
       return { hold: { acquired: false, record, ...(token === undefined ? {} : { token }) } }
@@ -281,10 +348,10 @@ async function claim(
     const record: LandingLockRecord = {
       acquiredAt: new Date().toISOString(),
       durable,
-      holder: options.repositoryRoot,
+      holder: repositoryRoot,
       label: options.label,
       pid: Platform.runtimeProcess.pid,
-      scopedHolds: token === undefined ? [] : [token],
+      scopedHolds: scoped === undefined ? [] : [scoped],
     }
     await writeLock(registryRoot, record)
     return { hold: { acquired: true, record, ...(token === undefined ? {} : { token }) } }
@@ -303,6 +370,7 @@ async function claim(
  */
 async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutcome> {
   const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
+  const repositoryRoot = await canonicalHolder(options.repositoryRoot)
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
     const state = await readLockState(registryRoot)
     if (state.kind === 'free') {
@@ -312,7 +380,7 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
       throw new LandingLockUnreadableError(state.reason)
     }
     const existing = state.record
-    if (existing.holder !== options.repositoryRoot) {
+    if (existing.holder !== repositoryRoot) {
       Errors.throwUserInput(
         `The landing lock is held by ${describe(existing)}, not by this worktree, so this cannot `
           + 'release it. Release it from that worktree, or use `./dev land-unlock --force` if you have '
@@ -324,7 +392,7 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
       durable: options.token === undefined ? false : existing.durable,
       scopedHolds: options.token === undefined
         ? existing.scopedHolds
-        : existing.scopedHolds.filter(held => held !== options.token),
+        : existing.scopedHolds.filter(held => held.token !== options.token),
     }
     if (remaining.durable || remaining.scopedHolds.length > 0) {
       await writeLock(registryRoot, remaining)

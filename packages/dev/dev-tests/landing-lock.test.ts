@@ -69,7 +69,7 @@ Describe('landing lock', () => {
       await acquire(root, ONE)
       const error = await LandingLock.release({ registryRoot: root, repositoryRoot: TWO })
         .then(() => undefined, (caught: unknown) => caught)
-      Expect(error).toBeDefined()
+      Expect((error as Error).message).toContain('not by this worktree')
       Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
     },
   )
@@ -83,19 +83,50 @@ Describe('landing lock', () => {
     Expect(await LandingLock.inspect(root)).toBeUndefined()
   })
 
-  Test(
-    'a dead holder process does not release the lock, because the lock outlives the process that took it',
-    async () => {
-      const root = await mkTestDir('landing-lock-dead-pid')
-      await acquire(root, ONE)
-      // PID 0 is never a live acquirer. The lock must still be held: an agent claims it in one
-      // process and lands in another, so liveness of the acquiring process proves nothing.
-      const path = FS.resolvePath('.landing-lock.json', root)
-      await FS.writeJson(path, { ...(await FS.readJson<object>(path)), pid: 0 })
-      const error = await acquire(root, TWO).then(() => undefined, (caught: unknown) => caught)
-      Expect(error).toBeInstanceOf(LandingLockBusyError)
-    },
-  )
+  Test('a durable claim survives its acquiring process, because it is meant to outlive it', async () => {
+    const root = await mkTestDir('landing-lock-durable-pid')
+    await LandingLock.acquire({ durable: true, label: 'land-lock', registryRoot: root, repositoryRoot: ONE })
+    // PID 0 is never live. A durable claim keeps no process promise, so this must change nothing:
+    // the agent claims it in one process and lands in another.
+    const path = FS.resolvePath('.landing-lock.json', root)
+    await FS.writeJson(path, { ...(await FS.readJson<object>(path)), pid: 0 })
+    const error = await acquire(root, TWO).then(() => undefined, (caught: unknown) => caught)
+    Expect(error).toBeInstanceOf(LandingLockBusyError)
+  })
+
+  Test('an interrupted lane does not wedge the machine, because a scoped hold cannot outlive its process', async () => {
+    const root = await mkTestDir('landing-lock-interrupted')
+    const hold = await acquire(root, ONE)
+    // Ctrl-C on a long `verify`: the token is never returned. Unlike the durable claim, a scoped
+    // hold lasts exactly one command, so a dead process is proof the hold is over.
+    const path = FS.resolvePath('.landing-lock.json', root)
+    await FS.writeJson(path, {
+      ...(await FS.readJson<object>(path)),
+      scopedHolds: [{ pid: 0, token: hold.token }],
+    })
+    Expect((await acquire(root, TWO)).acquired).toBe(true)
+  })
+
+  Test('a locked lane takes the lock while it runs and gives it back when it ends', async () => {
+    const root = await mkTestDir('landing-lock-locked-lane')
+    let heldDuring: string | undefined
+    await LandingLock.holdingForLane({ lane: 'verify', registryRoot: root, repositoryRoot: ONE }, async () => {
+      heldDuring = (await LandingLock.inspect(root))?.holder
+    })
+    Expect(heldDuring).toBe(ONE)
+    Expect(await LandingLock.inspect(root)).toBeUndefined()
+  })
+
+  Test('compares holders by resolved path, so a symlinked worktree does not queue behind itself', async () => {
+    const root = await mkTestDir('landing-lock-symlink')
+    const real = await mkTestDir('landing-lock-symlink-real')
+    const link = FS.resolvePath('link', root)
+    await FS.symlink(real, link)
+    await LandingLock.acquire({ durable: true, label: 'one', registryRoot: root, repositoryRoot: real })
+    // Reached by its symlinked spelling, the same worktree must be re-entrant rather than blocked.
+    const again = await LandingLock.acquire({ label: 'verify', registryRoot: root, repositoryRoot: link })
+    Expect(again.acquired).toBe(false)
+  })
 
   Test('refuses a second worktree when the record is unreadable, rather than treating it as free', async () => {
     const root = await mkTestDir('landing-lock-corrupt')

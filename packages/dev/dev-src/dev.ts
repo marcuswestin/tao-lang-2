@@ -73,7 +73,9 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (pattern = '', options: TestCommandOptions = {}) => {
-      // Every suite in the repository, which is the breadth the landing lock exists to serialize.
+      // `test-all` schedules every suite in the repository, which is the breadth the landing lock
+      // exists to serialize. A name pattern filters which tests run inside those suites rather than
+      // narrowing the set of suites scheduled, so it is locked too; `test-file` is the narrow one.
       await runExitCommand(async () =>
         await holdingLandingLock('test-all', async () => await TestRunner.runTests(pattern, testRunOptions(options)))
       )
@@ -162,10 +164,27 @@ await runWithCommands(commands => {
     .action(async (options: { force?: boolean } = {}) => {
       await runExitCommand(async () => {
         if (options.force === true) {
+          // Breaking somebody else's lock is the one destructive act this command can perform, and
+          // the safety argument for never expiring a lock only holds if breaking one is deliberate.
+          const state = await LandingLock.inspectState()
+          if (state.kind === 'held' && HCI.isInteractive()) {
+            const confirmed = await HCI.askConfirm({
+              defaultValue: false,
+              message:
+                `The landing lock is held by ${
+                  LandingLock.describe(state.record)
+                }. Breaking it while that landing is still running lets two agents move main at once. `
+                + 'Has it really stopped?',
+            })
+            if (!confirmed) {
+              HCI.writeLine('PASS  Left the landing lock alone.')
+              return 0
+            }
+          }
           const previous = await LandingLock.forceRelease()
           HCI.writeLine(
             previous === undefined
-              ? 'PASS  The landing lock was already free; nothing to release.'
+              ? 'PASS  The landing lock was already free or unreadable; it is clear now.'
               : `PASS  Force-released the landing lock held by ${LandingLock.describe(previous)}.`,
           )
           return 0
@@ -667,15 +686,6 @@ function testRunOptions(options: TestCommandOptions) {
 }
 
 /**
- * runExitCommand runs one command and owns its exit code.
- *
- * An unexpected error reaches a Tao developer as the bare sentence "Something went wrong." — right
- * for a product user, useless for whoever has to find the cause, and the failure mode is that the
- * reader has no path at all: no name, no stack, and no log, because the command died before it
- * created a run directory. Two agents lost time to exactly that in one afternoon. The remedy is one
- * line naming the switch that turns the sentence back into a stack.
- */
-/**
  * Run a lane under the landing lock when its breadth requires one. The wait is here rather than in
  * the caller so no agent ever writes a sleep-poll loop around a lane, and the periodic warning is
  * what escalates a lock that is stuck: nothing in this path ever takes one away.
@@ -694,6 +704,15 @@ async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Prom
   }, work)
 }
 
+/**
+ * runExitCommand runs one command and owns its exit code.
+ *
+ * An unexpected error reaches a Tao developer as the bare sentence "Something went wrong." — right
+ * for a product user, useless for whoever has to find the cause, and the failure mode is that the
+ * reader has no path at all: no name, no stack, and no log, because the command died before it
+ * created a run directory. Two agents lost time to exactly that in one afternoon. The remedy is one
+ * line naming the switch that turns the sentence back into a stack.
+ */
 async function runExitCommand(run: () => Promise<number>): Promise<void> {
   try {
     Platform.runtimeProcess.exit(await run())

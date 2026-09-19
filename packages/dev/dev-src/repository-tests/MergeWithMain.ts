@@ -531,11 +531,20 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
     },
     // Returns exactly this hold. A durable claim the agent made with `land-lock` has no token and
     // is therefore left standing, which is what lets one agent verify, land, and then unlock.
+    // Called from a `finally`, so it must not throw: a release that fails after the squash already
+    // moved `main` would replace the landing's own outcome with a lock error, or mask the error the
+    // caller actually needs. It warns instead, naming the lock that is still on disk.
     release: async () => {
       await LandingLock.release({
         repositoryRoot,
         ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
         ...(hold.token === undefined ? {} : { token: hold.token }),
+      }).catch((error: unknown) => {
+        HCI.writeLine(
+          `WARN  Could not release the landing lock: ${
+            error instanceof Error ? error.message : String(error)
+          } Clear it with \`./dev land-unlock --force\` before the next landing.`,
+        )
       })
     },
   }

@@ -95,15 +95,22 @@ reversed on 2026-09-19, and this section is kept rather than deleted because the
 instructive.**
 
 The argument for sharing was that serializing verification idles the machine whenever less than
-`cpuCount` of work exists. What it missed is that the measurements in this same document refute it:
-the identical unchanged run took 92.5s at three lanes, 207.3s at five, and 1798.2s at fifteen. Fair
-sharing does not make fifteen verifications cost one; it makes each of them cost twenty times its
-solo price, and they all finish later than they would have one after another. Sharing was never
-dividing the machine — it was thrashing it.
+`cpuCount` of work exists. Two things weigh against it, and only one of them is about time.
 
-The second miss is that a verification is not just CPU: it is _evidence about a tree_, and a
-neighbouring landing invalidates it. Two agents verifying at once are not merely slow, they are
-frequently proving trees that one of them is about to make stale.
+The measurements in this same document show the sharing curve collapsing at the top end: the
+identical unchanged run took 92.5s at three lanes, 207.3s at five, and 1798.2s at fifteen. **State
+that carefully — it is a 3-to-15 ratio, not a comparison against a solo baseline**, because as this
+document records further down there is no single-lane wall time for the lane as a whole. On the
+packing-loss figures here, 0.0% at three lanes and 8.2% at five, sharing plausibly still wins at
+two to five agents. An earlier draft of this section claimed each lane cost "twenty times its solo
+price" and that serializing wins "from three agents upward"; neither is supported by these numbers,
+and the solo baseline that would settle it is one of the measurements still outstanding below.
+
+The second reason does not depend on timing at all: a verification is not just CPU, it is
+_evidence about a tree_, and a neighbouring landing invalidates it. Two agents verifying at once
+are not merely slower — they are often proving trees one of them is about to make stale, and the
+one that lands second pays for an entire second run. No wall-time measurement of the lanes
+themselves can see that cost.
 
 So the broad lanes — `verify`, `verify-full`, `verify-full-sandbox`, `test-all` — now take the
 machine-wide **landing lock** (`LandingLock.ts`), which is the same lock the landing itself takes,
@@ -112,9 +119,11 @@ unserialized, because an agent must always be able to check the change it just m
 a named test, `test-retry`, `check`, `fix`, `fmt`. The diff-scoped lanes in between —
 `verify-changed`, `test-changed` — remain on ordinary slot admission.
 
-The cost of the reversal is real and worth stating: with exactly two active agents, one now waits
-where before both ran at half width. That is the trade, and the numbers above say it is the right
-one from three agents upward.
+The cost of the reversal is real and worth stating: with two to five active agents, one now waits
+where before several ran at reduced width, and on the packing figures alone that is probably a loss
+in wall time. It is taken deliberately, for the invalidation reason rather than the throughput one,
+and because a lock is what makes landing safe at all. Establishing the solo baseline would let this
+section make the quantitative claim it currently cannot.
 
 ## What is duplicated fifteen times and need not be
 
