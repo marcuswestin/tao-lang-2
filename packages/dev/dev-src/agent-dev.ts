@@ -4,10 +4,12 @@ import { runWithCommands } from './cli/run-with-commands'
 
 const JUST_COMMANDS = [
   'bench',
+  'board',
   'capabilities',
   'check',
   'delegation-report',
   'doctor',
+  'finalize',
   'fix',
   'fmt',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
