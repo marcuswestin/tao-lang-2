@@ -996,6 +996,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
   const previewWindow = {}
   const preview = previewConnection('preview-capture', 'default', previewWindow)
   let rejected = ''
+  let rejectedName = ''
   preview.capture = {
     fixtureName: 'CapturedState',
     identity: {
@@ -1007,6 +1008,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
     },
     reject(error) {
       rejected = error.message
+      rejectedName = error.constructor.name
     },
     requestId: 'capture-1',
     resolve() {},
@@ -1017,6 +1019,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
       data: {
         channel: studioProtocolChannel,
         error: 'Provider capture failed safely.',
+        errorName: 'UserInputError',
         identity: {
           appName: 'Garden',
           previewInstanceId: preview.previewInstanceId,
@@ -1036,6 +1039,9 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
   )
 
   Expect(rejected).toBe('Provider capture failed safely.')
+  // The category survives the protocol: a capture that failed on the author's input must not reach
+  // the client as a host-environment fault.
+  Expect(rejectedName).toBe('UserInputError')
   Expect(preview.capture).toBeUndefined()
 })
 

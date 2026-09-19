@@ -725,6 +725,7 @@ type StudioPreviewFixtureCapturedMessage = {
 type StudioPreviewFixtureCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
+  errorName: StudioRuntimeCaptureErrorName
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
@@ -1631,6 +1632,9 @@ function parsePreviewFixtureCaptureFailed(
   return {
     channel: studioProtocolChannel,
     error: value['error'],
+    // A preview running older code sends no category. Defaulting keeps its failure readable instead
+    // of rejecting the whole message, and matches how such a failure was reported before.
+    errorName: runtimeCaptureErrorName(value['errorName']) ? value['errorName'] : 'HostEnvironmentError',
     identity,
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],

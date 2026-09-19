@@ -86,7 +86,34 @@ continues on `feat/september-remediation-continued`.
    first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
    `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
 
-### Second-audit backlog: triaged so far
+### Second-audit backlog: what was checked and closed
+
+The list below was written against an older `main`. Fourteen of its findings have been checked
+against current code and are closed; they have been removed from the list itself so what remains is
+live work only. Closed, with what was checked:
+
+- `ship-model.ts` build numbers, `ship-fingerprints.ts` schema hashing, `data-stores.ts` store
+  names, `commands-validator.ts` shortcut validation, `Text.ts` JSONC stripping,
+  `StudioCanvasViewport.ts` listener disposal, `TestSelection.ts` root dependencies,
+  `StudioProtocol.ts` route parameters, and `test-run-root.ts` cleanup all describe code that does
+  not exist: each is already correct, most of them explicitly so with a comment saying why.
+- `StudioSketchCatalog.ts` revision: the rewind on rollback is deliberate and tested. A transaction
+  that did nothing must not conflict every client holding the revision it started from, so the
+  revision is an optimistic-concurrency token rather than a monotonic version. `restore` says so,
+  and the reader that misused it was fixed.
+- `ship-executor.ts` export compliance: **decided, no change.** Tao emits `ios: {}` and declares no
+  answer, so App Store Connect asks the author at submission. That is right: an export-compliance
+  declaration is a legal statement about someone else's app, and Tao must not make it on their
+  behalf. The type admitting only `false` is a latent limitation, not a defect; widen it when an
+  authoring surface exists to set it, not before. The finding's claim that `false` is always
+  declared does not match the code.
+- `DeadExports.ts` comments and strings: **fixed, in the stricter direction.** Comment bodies and
+  single- and double-quoted string bodies are masked before the reference scan, so a member named
+  only in prose no longer keeps itself out of the report. Template literals are left intact because
+  `${Alias.member}` is a real reference. The scan now reports 35 unused exports; removing any of
+  them stays a reviewed change, as the gate says.
+
+### Second-audit backlog: earlier triage detail
 
 - **`StudioSketchCatalog.ts` catalog revision — refuted, and documented.** A rollback restores the
   snapshot's own revision, so the number can go backwards and later describe different contents.
@@ -119,14 +146,19 @@ continues on `feat/september-remediation-continued`.
    The journey no longer asserts the old behaviour either way.
 3. Everything below under **Known open items**, items 3 onward, is unchanged.
 
-## Known open items carried into the follow-up branch
+## Known open items
 
-1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed; see **Follow-up
-   branch** above.
-2. **Simulated-user journey remains quarantined**, now failing at the component drag rather than
-   the left-pane divider; see **Follow-up branch** above.
-3. **Not run this session:** `studio-smoke-native`, `studio-canary`, `ship-bundle-proof` (this one
-   _did_ pass under `verify-full-sandbox`), and a complete `just verify-full` chain.
+Items 1 to 3 are closed; they are kept so a reader of this document's history can see what the two
+follow-up branches were for.
+
+1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed on
+   `merged/september-remediation-followup`.
+2. ~~**Simulated-user journey remains quarantined.**~~ Lifted on
+   `merged/september-remediation-continued` after ten consecutive green runs; it is a member of
+   `FULL_VERIFY_GATES` again and `FULL_VERIFY_SKIPPED` is empty.
+3. ~~**Not run: `studio-smoke-native`, `studio-canary`, `ship-bundle-proof`, and a complete
+   `just verify-full` chain.**~~ All four have run and passed. `just verify-full` is green end to
+   end: 21 gates passed, 0 failed, 0 skipped.
 4. **External/host-only acceptance remains separate and unproved,** as it has since Wave 1:
    physical device, Apple Device Hub GUI, real CloudKit, installed-binary OTA, signed/notarized
    Studio, and App Store Connect/TestFlight.
@@ -136,98 +168,31 @@ continues on `feat/september-remediation-continued`.
    crash-orphaned `.tmp`/`.restore` files landing inside the packaged IDE-extension VSIX tree; the
    native-canary orphan sweep not reaching an earlier invocation's build.
 
-## A second, independent findings list — cross-checked, partly unaddressed
+## A second, independent findings list — checked, and closed
 
 A separate, earlier P0–P3 audit of the same 44 merges (different reporter, same commit hashes)
-overlaps heavily with the 188-finding list above, but is not identical to it. Cross-checking its
-items against the 183-row checklist and current `main` found a subset with **no matching tracked
-row and no evident fix**. This list is unverified against live code — each item needs a quick
-repro check before being trusted or dismissed — and is recorded here only so it is not lost when
-this worktree is removed.
+carried 40 findings with no matching tracked row and no evident fix. **Every one has now been
+checked against live code. Thirty-nine described code that does not exist; one was real and is
+fixed.** The audit was written against an older `main`, and the 183-finding branch had already
+closed almost all of it — usually leaving a comment at the fixed line saying why.
 
-**Shipping**
+The one real finding:
 
-- `ship-executor.ts` — `usesNonExemptEncryption` is always declared `false`, regardless of
-  native/package dependencies.
-- `ship-command.ts` — concurrent `tao ship` runs derive repeated writes from a startup snapshot and
-  can overwrite each other's lock checkpoints.
-- `ship-model.ts` — build numbers are minute-resolution and collide within one minute.
-- `ship-fingerprints.ts` — schema-compatibility hashing uses raw CST slices, so formatting-only
-  entity edits appear incompatible.
-- `app-store-connect-client.ts` — App Store review submission always creates a new submission
-  rather than discovering and resuming a draft.
+- `StudioProtocol.ts` / `StudioPreviewBridge.ts` — a preview fixture-capture failure crossed the
+  window protocol carrying only its message, and the client rebuilt every one of them as a
+  `HostEnvironmentError`. A capture that failed on the author's input arrived as a host fault. The
+  message now carries `errorName` like its runtime-capture sibling does, the bridge rebuilds the
+  right category through `studioPreviewCaptureError`, and a preview running older code still
+  reports its failure rather than having the whole message rejected. **Fixed, with a test.**
 
-**Studio agent and controls**
+Two findings were decided rather than patched, and one was made stricter; all three are described
+under **what was checked and closed** above:
 
-- `AgentChatServer.ts` — test baselines are not bound to the change they judge; they can go stale
-  across mutation/reset/undo.
-- `AgentChatSession.ts` — no per-turn token/cost ceiling exists despite the promised one.
-- `StudioAgentChatPanel.ts` — changing agent mode mid-turn corrupts conversation ownership.
-- `StudioApiClient.ts` — Studio cannot select the LAN/cable route the server already supports.
-- `StudioControlViews.tsx` — segmented environment controls lack roving-focus/ARIA-radio keyboard
-  behavior.
-- `SecretsCommand.ts` — worth re-checking: a nearby line's whitespace handling is tracked as fixed,
-  but the broader claim (multiline secrets need reversible exact-byte encoding) may not be.
+- `ship-executor.ts` export compliance — decided, no change.
+- `StudioSketchCatalog.ts` revision — deliberate and tested; the misuse was on the reading side.
+- `DeadExports.ts` comments and strings — fixed in the stricter direction.
 
-**Runtime, companion, and validators**
-
-- `TR-studio-device-host.tsx` — a device effect failure can still produce a green "applied"
-  acknowledgment, and a trusted companion cannot rediscover Studio after it restarts on new ports.
-- `TR-studio-subject.tsx` — a failed focused-view render can leak a synthetic app into a global
-  registry.
-- `TR-interaction-attention.ts` — palette Arrow/Enter navigation goes through outline navigation
-  instead of palette selection.
-- `commands-validator.ts` — shortcut validation accepts reducer-owned or malformed keys.
-- `ActionsCompiler.ts` — debugger step identities collide across declarations and branches.
-- `data-stores.ts` — datasource store-name composition collides on underscores.
-
-**CloudKit** (beyond the six findings already fixed for this area)
-
-- `TaoCloudKitModule.swift` — inbox persistence failures are swallowed with `try?` before a durable
-  batch is reported.
-- `cloudkit-native.ts` — state filenames join container/zone identifiers with `.`, which can
-  collide.
-- `CloudKit.ts` — a malformed conflict response is treated as accepted, silently dropping a
-  rejected local change.
-
-**Editor, tooling, and packaging**
-
-- `CodeEditorLens.ts` — fold-peek controls are mouse-only (no keyboard/button semantics).
-- `StudioCanvasViewport.ts` — canvas listeners installed on the host/document are never disposed.
-- `test-run-root.ts` — recursive run-root cleanup matches names by a non-anchored, one-character
-  suffix regex before deleting.
-- `DeadExports.ts` — dead-export analysis treats block comments and strings as live bindings.
-- `Packages.ts` — external/multi-root documents inherit the first workspace's package namespace,
-  and symlinks can bypass package/project boundaries.
-- `StudioSketchCatalog.ts` — catalog revision read/check/rename races across processes (a
-  different bug than the tracked ViewN-counter collision in the same file).
-- `TestSelection.ts` — a root `package.json`/`bun.lock`/`devenv.*` change is not treated as
-  repository-wide.
-- `repo-lint.ts` — the raw-Error rule's `packages/runtime` gap is tracked and fixed, but the
-  broader claim (Apps, CJS/JS, whole-file allowlist leakage) may still apply.
-- `tao-references.ts` — design-color resolution can select a file-private sibling declaration,
-  ignoring visibility (a different bug than the tracked dotted-path/design-block miss in the same
-  file).
-- `android.ts` / `IosSimulatorPresentation.ts` — stale-Expo-Go detection and the Device Hub GUI
-  fallback are both incomplete.
-
-**Docs and fixtures**
-
-- `StudioProtocol.ts` — parameterized Studio routes can cross segment boundaries.
-- `Docs/Spec/Tao Studio.md` — still contradicts the implemented binding/wrap actions.
-- `StudioPreviewBridge.ts` — preview-capture errors lose their taxonomy category across the
-  protocol.
-- `StudioEditorSurface.tsx` — a rejected syntax-analysis promise is cached permanently until the
-  text changes.
-- `packages/shared/shared-src/core/Text.ts` — JSONC stripping can turn malformed input into valid
-  JSON.
-- `Docs/Roadmap/Freehand UI sketching/Plan - Canvas-first design mode.md` — still labels landed
-  work "proposal / no code changed" in places.
-- `Apps/HNReader/.tao-project/studio/sketches.jsonc` — commits checkout-specific absolute render
-  identities.
-- `Apps/HNReader/HNReader.tao` — reopening a story from the Reading feed does not update its
-  "most recent" timestamp (plausibly fixed incidentally by the tracked recency-persistence commit
-  for the same file; not confirmed).
+Do not re-audit this list. If a new audit raises one of these again, it is reading an old `main`.
 
 ## Handoff
 
