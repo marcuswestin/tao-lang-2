@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { isSandboxDenial } from '../doctor/AgentCapabilities'
 
 const SNAPSHOT_VERSION = 1
 const MAX_STABILIZATION_PASSES = 3
@@ -1213,6 +1214,16 @@ async function remoteHeads(
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
   })
+  if (isSandboxDenial(result)) {
+    Errors.throwHostEnvironment(
+      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
+        + 'Retry the merge-with-main command from an unsandboxed shell.',
+      {
+        cause: new Errors.CommandExecutionError(result),
+        details: { command: result.command, stderr: result.stderr },
+      },
+    )
+  }
   assertCommandSucceeded(result)
   const refs = new Map<string, string>()
   for (const line of result.stdout.trim().split('\n').filter(Boolean)) {

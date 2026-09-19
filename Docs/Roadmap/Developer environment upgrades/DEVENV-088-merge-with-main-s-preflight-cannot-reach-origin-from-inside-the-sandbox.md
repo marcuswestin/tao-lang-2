@@ -1,6 +1,6 @@
 # DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Area:** Sandbox
 - **Impact:** `./dev merge-with-main --dry-run` — the command an agent is supposed to run to check that
   a branch is landable — fails inside a sandboxed shell on its own remote query, so a branch cannot be
@@ -26,6 +26,9 @@
   because the plain command is already the landing command and pushing still stops for Ro, or have
   the preflight report a failed remote query as an environment failure that names the sandbox and the
   unsandboxed retry, rather than as a bare command failure.
+- **Change made:** `merge-with-main` now reuses the capability classifier's sandbox-denial judgment
+  for its remote query and reports a host-environment failure naming both the sandbox and the
+  unsandboxed retry. The broader `./dev merge-with-main *` sandbox exclusion remains open for Ro.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-068 owns the
   general case of a child process denied an operation the shell may perform; DEVENV-087 owns the
   argument-order gap in the same rule.
