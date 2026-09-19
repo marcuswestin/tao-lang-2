@@ -586,6 +586,6 @@ overlap with `A3` and `A8`.
 - Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets
   `languages.javascript.bun.enable = true` and the version comes from `devenv.lock`'s nixpkgs input.
   Slice 1's bump is therefore a nixpkgs update or an explicit `bun.package` override, and it moves
-  every worktree on the machine at once. The signing failure it fixes is `DEVENV-090`.
+  every worktree on the machine at once. The signing failure it fixes is `DEVENV-092`.
 - The prototypes behind every measurement here were run in `.artifacts/tmp/standalone-proto/` and
   the session scratchpad, and were removed afterwards.
