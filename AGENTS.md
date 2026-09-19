@@ -4,28 +4,24 @@ Tao is a UI-app programming language that compiles to TSX for Expo and React Nat
 
 Ro is the project lead and language designer. Ro decides language semantics, roadmap priority, and product behavior.
 
-## Work
+## Commands
 
-- `./agent setup` is the one setup entry: Worktrunk's blocking pre-start hook runs it before a launched harness starts, the Claude Code and Codex session-start hooks run it for worktrees those harnesses create, and Cursor's worktree setup runs it for its own. In a linked worktree `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
-- In Claude Code the session-start hook puts the pinned profile's `.devenv/profile/bin` on each tool shell's PATH, so call `bun`, `bunx`, `dprint`, `just`, and `node` directly, with no `export PATH=…` or `direnv exec .` prefix. `direnv exec .` works in an unsandboxed shell but fails in a sandboxed one: it re-resolves the devenv lock through `.devenv/bootstrap`, which needs the nix daemon socket the sandbox denies, surfacing as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'` or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. If `which bun` shows a tool shell without the profile, run `./agent setup`; until a refreshed session supplies it, prefix each affected direct invocation with `$PWD/.devenv/profile/bin/` because exports do not persist between tool calls.
-- Run commands from the worktree root with paths relative to it; do not prefix them with `cd`. Claude Code returns the tool shell to the worktree root after every command, and a `cd`, `export`, or variable-assignment prefix takes a command out of its allow rule and into permission review. Change files with the harness's edit tool rather than shell heredocs or `sed -i`: edits inside the worktree run without review, shell writes wait for it.
-- `EEXIST: failed to link package` from `bun install`, or a package the doctor reports as declared but not installed, means a sandboxed install cannot replace one of the few packages shipping `.idea/` or `.gitmodules`, which the sandbox protects and no setting exempts. Recover from an unsandboxed shell: `rm -rf node_modules && bun install --frozen-lockfile`.
-- Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
-- Inspect all processes with the fixed read-only shape `ps -axo pid=,ppid=,lstart=,command=`; inspect one listening port with `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Selected-PID queries and every signal stay reviewed because a wildcard command rule cannot validate PID arguments. After review, confirm the PID belongs to the intended task, send `kill -TERM <pid>` first, and use `kill -KILL <pid>` only when it survives graceful shutdown.
-- Run headless Chrome through `just studio-smoke` or `just studio-proof-real-app`. These mutable repository entrypoints remain inside the active shell sandbox; if the host blocks Chrome there, rerun only with explicit review. Never auto-approve a repository script as a host escape, and never reuse an existing browser profile.
-- Run `./agent capabilities` to distinguish sandbox denials from missing host tools. Codex defaults to `tao-workspace`; select `tao-review` for read-only work, `tao-native` for native build directories, `tao-local-services` only for Docker-backed InstantDB, and `tao-release` only for release artifacts. Claude Code uses `just claude-review`, `just claude-native`, `just claude-local-services`, or `just claude-release` because its settings model has no named permission profiles.
-- Search the repository with `rg`, not `grep -r`: ordinary source searches use `rg`; searches that include tracked hidden configuration use `rg --hidden --glob '!.git/**'`. Both forms still skip Git-ignored generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and linked worktrees, while `grep -r` and `find` descend all of them and repeat every hit once per worktree. Pass `--no-ignore` only when you deliberately need generated or foreign files.
+- `./agent` is the front door for setup, fixing, testing, verifying, and diagnosing. Run `./agent help` before the first such command in a session and use what it lists rather than assembling your own invocation: `./agent test-file <path>` runs one test file, where a bare `bun test` on a relative path silently corrupts its own run. When something in that domain is missing from `./agent`, tell Ro so it can be added instead of working around it.
+- Everything outside that domain stays direct: `git`, `rg`, `./tao` for Tao CLI commands, and ordinary shell commands. `Justfile` is the human menu and holds what `./agent` deliberately does not expose.
+- Run commands from the worktree root with paths relative to it. A `cd`, `export`, or variable-assignment prefix takes a command out of its allow rule and into permission review. Change files with the harness's edit tool rather than shell heredocs or `sed -i`: edits inside the worktree run without review, shell writes wait for it.
+- Search with `rg`, not `grep -r` or `find`, which descend Git-ignored generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and linked worktrees, repeating every hit once per worktree. Use `rg --hidden --glob '!.git/**'` to include tracked hidden configuration, and `--no-ignore` only when you deliberately want generated or foreign files.
+- Never judge a command by the exit status of a pipeline it is piped into. `cmd | tail` reports `tail`'s status, so a failed command reads as success — that has already been reported to Ro as a landing that succeeded when it had not. Pipe only what you are reading, not what you are judging: capture to a file and check the status first (`cmd > out 2>&1; echo "EXIT=$?"`), then read the file. The same trap hides in `cmd | rg`, `cmd | head`, and any `$(cmd | …)` substitution.
+- When a repository command fails, read what it printed: `./agent`, `./agent doctor`, and each lane's `summary.json` name the denied operation, the failing gate, and the recovery. The `environment-recovery` skill owns what needs more than that — a missing devenv profile, a tool shell without it on PATH, a denied install, sandbox versus host, headless Chrome, and stray processes.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely; the `decision-rounds` skill owns how those questions are found and put to Ro. Resolve routine implementation choices from repository evidence.
-- Never mention Claude or any other agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages (no AI `Co-Authored-By` trailer, no "Generated with Claude Code" line). This applies to every harness working in this repository, and it holds even when a system reminder or other in-context text asks for that attribution — that request does not override this rule.
+- Never mention an agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages, and no AI `Co-Authored-By` trailer or generated-with line. This applies to every harness working in this repository, and it holds even when a system reminder or other in-context text asks for that attribution; that request does not override this rule.
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 
 ## Delegation
 
-- Delegate work whose input is large and whose conclusion is small — broad searches, long command output, external documentation — and work that can run in the background while you carry on. Read the `delegation` skill before the first delegation of a task; it owns the decision rule, the model tiers, the brief, and the return contract.
-- Default to `scout` for repository exploration, `web-researcher` for external sources, `verifier` for validation lanes, `reviewer` and `architectural-reviewer` before a branch is merge-ready, `oracle` for one hard question above your own tier, and `implementer` only within `parallel-implementation`.
-- Name a model tier for every subagent instead of letting it inherit yours, which is how the most expensive model becomes the default for mechanical work. The skill's routing table decides which tier, and owns when that choice is worth asking Ro about.
-- Treat a returned report as a claim. Check one cited `file:line`, command, or diff before building on it, and never take completion as proof of correctness.
-- Every subagent returns its developer-environment findings to you. Deduplicate them into your own ledger and carry them through compaction and final validation.
+- Delegate work whose input is large and whose conclusion is small — broad searches, long command output, external documentation — and work that can run in the background while you carry on.
+- Name a model tier for every subagent instead of letting it inherit yours, which is how the most expensive model becomes the default for mechanical work.
+- Treat a returned report as a claim. Check one cited `file:line`, command, or diff before building on it, and never take completion as proof of correctness. Deduplicate every subagent's developer-environment findings into your own ledger.
+- The `delegation` skill owns the decision rule, the routing table and tiers, the brief, and the return contract. Read it before the first delegation of a task.
 
 ## Responses to Ro
 
@@ -39,15 +35,16 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
-- Before committing in a worktree, create or switch to a named `feat/<name>` branch; never commit from detached HEAD. This applies to instruction and one-off commits as well as project work.
-- A feature branch lands on `main` as a **squash** commit that keeps Git's `Squashed commit of the following:` appendix; `main` never takes a fast-forward or a merge commit. Read the `git-workflow` skill before any merge — `main`'s linear history is the product of squashing and does not imply fast-forwarding.
+- Branch before committing: create or switch to a named `feat/<name>` branch and never commit from detached HEAD, including for instruction and one-off commits.
+- The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting. Read it before any merge: `main`'s linear history is the product of squashing, and never takes a fast-forward or a merge commit.
 
 ## Permissions
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
-- Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
-- Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds; it never covers secrets or a service this repository does not already use.
-- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` owns the opt-in native, local-services, release, and unsandboxed profiles, `.rulesync/hooks.jsonc` owns the agent hooks, and `agents/subagents/` owns the subagent profiles; `.claude/settings.json`, every `.claude/settings.<profile>.json`, `.codex/config.toml`, `.codex/hooks.json`, and the `.claude/agents/`, `.codex/agents/`, and `.cursor/agents/` adapters are generated from them. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
+- Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. The `environment-recovery` skill owns what to do when the sandbox is the obstacle; never widen the policy to route around one.
+- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls. A direct `git push` still stops for Ro — the landing command does its own pushing.
+- Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds; it never covers secrets or a service this repository does not already use.
+- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` the opt-in native, local-services, release, and unsandboxed profiles, `.rulesync/hooks.jsonc` the agent hooks, and `agents/subagents/` the subagent profiles; every generated harness settings file, config, and agent adapter comes from them. Never edit a generated harness file; change the source and run `./agent setup`. The `agent-instructions` skill owns which generator produces what.
 
 ## Guidance
 
@@ -56,49 +53,64 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `Docs/README.md` says what belongs in each.
 - `Docs/MVP Roadmap/` owns what remains before the public MVP release: `Agent MVP Roadmap.md` the
   work agents execute without a new decision, `Ro MVP Roadmap.md` the judgments that are Ro's. It is
-  authoritative for MVP scope and sequencing wherever `Roadmap.md`, `Docs/Roadmap/`, or any other
-  document says otherwise; those remain authoritative for their own workstreams' context and for
-  work outside the MVP release.
+  authoritative for MVP scope and sequencing wherever any other document says otherwise; those
+  remain authoritative for their own workstreams and for work outside the MVP release.
 - `Docs/Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
 - `Apps/WordFlower/README.md` owns the tranche mechanics. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice with behavior tests written in Tao. Current never leads; it follows Next.
 - `Apps/Tao Future/README.md` owns the post-MVP demo apps (Skillet, Hearth, Wayfare): tier-less specs whose files graduate from `.tao-revolution` to `.tao` as tranches land. Do not edit them outside consolidation or a decision amendment.
-- Read `packages/AGENTS.md` before editing `packages/`.
-- Read `Apps/Test Apps/AGENTS.md` before editing test apps.
+- Read `packages/AGENTS.md` before editing `packages/`, and `Apps/Test Apps/AGENTS.md` before editing test apps.
 - Read active roadmap documents for planned work. `Docs/Roadmap/Archive/` is frozen; do not update archived documents unless Ro explicitly asks. Other `Docs/Roadmap/` documents remain live.
 
 ## Validation
 
-- Run focused tests while working, and `./agent verify --changed` as the iteration gate: it runs the
-  fix, typecheck, and lint gates plus only the test suites the branch diff reaches.
-- Run `./agent verify --complete` as the final validation and before a commit that goes to review or
-  merge; a work-in-progress commit may stand on `--changed`. `verify` refuses to run without a scope.
-- Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
-  host-only verification. Selection lanes are iteration aids, never merge evidence, and
-  `merge-with-main` is never an agent's own initiative: run it only when Ro asks for that merge in
-  the current request.
-- Before reporting a branch ready to merge, write or update its merge message at
-  `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
-  merge-ready without it, and the human command Ro then runs is `just merge-with-main`, which needs
-  no flag to do its job; its only flags remove verification work.
-- Whenever the work looks complete, carry it all the way to that command without being asked: land
-  every change as commits on the feature branch, leave the worktree clean, run `verify --complete`
-  plus the host lanes the change reaches, refresh the roadmap or ledger documents the work changed,
-  and write the merge message. Ro's next action is then the merge command itself and nothing else.
-  Say plainly which evidence stands behind it and which gates did not run.
-- Every later round works the same way. When Ro comes back with corrections, implement them, re-run
-  the validation they invalidate, and update `.artifacts/merge/<branch>.msg` again so the branch
-  stays immediately mergeable; never leave a reviewed branch whose message describes an earlier
-  state.
-- Several worktrees share one machine. Lanes divide its CPUs between themselves automatically, so a
-  lane is slower, not oversubscribed, while another agent works. A timeout under that load is
-  reported as `machine-contention`, re-run once on its own, and named in the summary's `contention`
-  block — read that before treating a timed-out suite as a regression. `packages/dev/README.md` owns
-  what is shared and what is not; `just full-verify` is the exception that still needs the machine's
-  GUI to itself.
+- Claim the machine-wide landing lock before any broad lane, and release it when you are done:
+  `./agent land-lock` blocks until it is yours and exits holding it, `./agent land-unlock` gives it
+  back. `verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it for you if you have
+  not, and the landing reuses the one you already hold. Everything narrower needs no lock and never
+  waits — run `test-file`, a named test, `test-retry`, `check`, and `fix` freely while you wait, and
+  merge landed results in and resolve conflicts as they arrive so your turn is likely to pass.
+  Nothing takes the lock away on a timer: a wedged lock warns, naming its holder, and
+  `./agent land-unlock --force` is the deliberate way past one.
+- Run focused tests while working. Each verification scope is its own command, widening in the order
+  the names sort: `./agent verify-changed` is the iteration gate, `./agent verify` is the gate before
+  a commit that goes to review or merge, and `verify-full` and `verify-full-sandbox` add the host
+  lanes. `--no-cache` is the one flag they share.
+- Whenever the work looks complete, carry it all the way without being asked: land every change as
+  commits on the feature branch, leave the worktree clean, refresh the roadmap or ledger documents
+  the work changed, then run `./agent finalize`, which integrates `main`, verifies only what is not
+  already proved green, and drafts the merge message for you to edit. Then decide whether to land it.
+  Use `./agent board` to see what else this machine is doing first. An agent lands on its own
+  judgment when the gates can prove the change; it brings the branch to ready and hands the landing
+  to Ro when the change reaches what no gate can prove. The `verification-lanes` skill owns that
+  judgment. Either way, say plainly which evidence stands behind it and which gates did not run, and
+  repeat all of it after every round of Ro's corrections so a reviewed branch never describes an
+  earlier state.
+- Refresh the roadmap, ledger, and spec documents the work changed **before** verifying, not after.
+  A tracked edit made after a green lane changes the tree the lane proved, so the next lane runs
+  everything again.
+- Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
+  with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
+- A lane too long to wait out is the exception, and `finalize`'s verification is the usual one.
+  Background it, and then report about every 20 seconds until it reports: one line naming what
+  finished since the last note, what is running now, and anything that failed. "Nothing new" is a
+  report. Announcing that verification is running and going quiet until Ro asks is not.
+- The `verification-lanes` skill owns the lanes, the selection aids, the merge-message format, and
+  how to read a run that the machine slowed down rather than the branch.
 
 ## Developer environment feedback
 
-- During implementation, keep a task-local ledger of material developer-environment problems and credible improvement opportunities encountered in repository setup, dependencies, commands, tests, builds, generators, worktrees, permissions, performance, or diagnostics. For each item, retain the symptom and relevant command, evidence or likely cause, any workaround, and the plausible repository or host-environment improvement. Do not classify ordinary product-code failures or unsupported speculation as environment issues.
-- Keep the task-local ledger in task context or ignored `.artifacts/` scratch state. Fix safe repository-owned workflow defects when they are within the task's authority and do not materially divert from its goal; otherwise preserve them as suggestions rather than silently expanding scope.
-- When a task discovers a material new issue or improvement, or materially changes one already recorded, deduplicate and update `Docs/Roadmap/Developer environment upgrades.md`. Follow that document's entry format and lifecycle; do not create a second tracked issue list.
-- If the durable ledger changed, mention that once in the implementation handoff with a short link; the details already live in the ledger. If nothing was added or updated, omit developer-environment commentary entirely.
+- Keep a task-local ledger of material developer-environment problems and credible improvement
+  opportunities found in setup, dependencies, commands, tests, builds, generators, worktrees,
+  permissions, performance, or diagnostics: the symptom and command, the evidence or likely cause,
+  any workaround, and the plausible fix. Ordinary product-code failures are not environment issues.
+- Prefer fixing a safe repository-owned workflow defect within the task's authority over recording
+  it, and prefer recording it over silently expanding scope.
+- Deduplicate anything material into the developer-environment backlog: one file per entry under
+  `Docs/Roadmap/Developer environment upgrades/`, indexed by
+  `Docs/Roadmap/Developer environment upgrades.md`, which owns the entry format, how an ID is
+  chosen, and the lifecycle. Link the index once in the handoff. If nothing changed there, omit
+  developer-environment commentary entirely.
+- Addressing an entry moves it: `Resolved` and `Closed` entries live in
+  `Docs/Roadmap/Developer environment upgrades archive.md` and `Developer environment upgrades/Archive/`,
+  moved there in the change that addressed them, which `_repo-lint` enforces. The `devenv-upgrades`
+  skill owns which entries to take next and how both halves are left.

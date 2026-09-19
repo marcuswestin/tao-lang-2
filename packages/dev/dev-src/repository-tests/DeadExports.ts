@@ -27,10 +27,24 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * (`StudioPackagedService.ts`, `StudioPackagedService.ts`, `TaoStudioBrowser.tsx`). Their own exports
  * are the surface they exist to publish, so knip does not report them.
  *
- * Findings do not fail this check. Removing an export is a reviewed change, so the run is a report
- * and exits 0 with a list. What does fail it is the check going stale: a `.tao` binding form this
- * scanner cannot read, or one naming a file or symbol that is not there. Either means the filter is
- * now hiding real findings, and that must never pass silently.
+ * Findings fail this check. An export nothing imports is dead weight, and a report nobody has to
+ * act on is how it accumulates; the remedy is almost always to drop the `export` keyword from a
+ * symbol whose own module is its only user, which the typechecker proves right or wrong at once.
+ *
+ * What may survive is an export something outside the TypeScript import graph really reaches: a
+ * consumer of `@tao/runtime`, of the published `tao` CLI, or of `@tao/*`, or a module loaded as
+ * text rather than imported. Each of those is recorded in the declaring package, in a file named
+ * for the one reason its exports are there — `packages/tao-cli/cli-src/subprocess-test-api.ts` is
+ * the only such record today — which `config/knip.json` declares an entry point by path so the
+ * record does not itself read as dead. That is knip's own documented answer — re-export from an
+ * entry file — rather than the per-symbol `@public` JSDoc tag knip also offers and its own guide
+ * discourages. One file per reason, not one per package: a second reason earns a second named file,
+ * so no record decays into a list of exports nobody can account for. A record is a claim that
+ * something uses the symbol, and is deleted when that stops being true.
+ *
+ * The other failure is the check going stale: a `.tao` binding form this scanner cannot read, or
+ * one naming a file or symbol that is not there. Either means the filter is now hiding real
+ * findings, and that must never pass silently.
  */
 
 /** Where the repository's TypeScript lives, matching the workspaces `config/knip.json` declares. */
@@ -418,23 +432,99 @@ function facadeNamesIn(source: string): Set<string> {
 }
 
 /**
+ * maskTypeScriptProse blanks comment bodies and single- and double-quoted string bodies, keeping
+ * every other character and every offset where it was. Template literals are deliberately untouched:
+ * their `${…}` holes hold real code, and blanking them would turn a live reference into a dead one.
+ */
+export function maskTypeScriptProse(source: string): string {
+  let output = ''
+  let index = 0
+  let quote: string | undefined
+  let blockComment = false
+  while (index < source.length) {
+    const character = source[index]!
+    const next = source[index + 1]
+    if (blockComment) {
+      if (character === '*' && next === '/') {
+        output += '  '
+        index += 2
+        blockComment = false
+        continue
+      }
+      output += character === '\n' ? character : ' '
+      index += 1
+      continue
+    }
+    if (quote !== undefined) {
+      if (character === '\\') {
+        output += '  '
+        index += 2
+        continue
+      }
+      if (character === quote) {
+        output += character
+        quote = undefined
+        index += 1
+        continue
+      }
+      // An unterminated quote ends at the line break, exactly as the language says it does.
+      if (character === '\n') {
+        output += character
+        quote = undefined
+        index += 1
+        continue
+      }
+      output += ' '
+      index += 1
+      continue
+    }
+    if (character === '/' && next === '/') {
+      const lineEnd = source.indexOf('\n', index)
+      const end = lineEnd === -1 ? source.length : lineEnd
+      output += ' '.repeat(end - index)
+      index = end
+      continue
+    }
+    if (character === '/' && next === '*') {
+      output += '  '
+      index += 2
+      blockComment = true
+      continue
+    }
+    if (character === "'" || character === '"') {
+      quote = character
+      output += character
+      index += 1
+      continue
+    }
+    output += character
+    index += 1
+  }
+  return output
+}
+
+/**
  * facadeReachedMembers returns the `<file>#<member>` keys a facade module publishes and some other
  * module really reaches. A file counts only when it holds the facade name — imported, re-exported,
  * or reached through a bound namespace. Without that, an unrelated local `FS` — a parameter, a
  * const, a class — silently kept every `FS.*` member alive, which is a missed finding rather than a
  * visible one.
  *
- * Inside a file that does hold the name, reading the reference textually stays deliberately
- * generous. Two approximations are left in on purpose, because this decides only whether to keep a
- * symbol out of the report: over-matching costs a missed finding, while under-matching would call
- * live code dead. A mention in a comment or a string still counts, and so does a reference in a
- * scope where the imported name is shadowed by a local one.
+ * Inside a file that does hold the name, the reference is read textually out of code alone:
+ * comments and quoted strings are masked first, so a member named only in prose or in a message no
+ * longer keeps itself out of the report. Template literals are left intact, because `${Alias.member}`
+ * is a real reference and masking it would call live code dead.
+ *
+ * One approximation is left in on purpose: a reference in a scope where the imported name is
+ * shadowed by a local one still counts. Over-matching there costs a missed finding, which is the
+ * direction to err in when the alternative is proposing the removal of live code.
  */
 export function facadeReachedMembers(
   files: readonly SourceFile[],
   aliases: ReadonlyMap<string, ReadonlySet<string>>,
 ): Set<string> {
   const heldNames = new Map(files.map(file => [file.path, facadeNamesIn(file.source)]))
+  const code = new Map(files.map(file => [file.path, maskTypeScriptProse(file.source)]))
   const reached = new Set<string>()
   for (const [path, moduleAliases] of aliases) {
     for (const alias of moduleAliases) {
@@ -443,7 +533,7 @@ export function facadeReachedMembers(
         if (file.path === path || !heldNames.get(file.path)?.has(alias)) {
           continue
         }
-        for (const match of file.source.matchAll(reference)) {
+        for (const match of (code.get(file.path) ?? file.source).matchAll(reference)) {
           reached.add(`${path}#${match[1]!}`)
         }
       }
@@ -509,7 +599,7 @@ export type DeadExportsOptions = {
   repositoryRoot?: string
 }
 
-/** runDeadExports reports every unused export the repository's own bindings do not explain. */
+/** runDeadExports fails on every unused export the repository's own bindings do not explain. */
 export async function runDeadExports(options: DeadExportsOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const readKnipReport = options.readKnipReport ?? runKnip
@@ -526,7 +616,7 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
   )
 
   for (const entry of review.reported) {
-    HCI.writeLine(`dead exports: ${entry.file}:${entry.line} ${entry.name} is exported but never imported.`)
+    HCI.writeErrorLine(`dead exports: ${entry.file}:${entry.line} ${entry.name} is exported but never imported.`)
   }
   HCI.writeLine(
     `dead exports: ${review.reported.length} unused, `
@@ -534,7 +624,14 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
       + `${review.facadeReached} reached through a namespace facade, `
       + `${review.typeImported} republished by an import-type query.`,
   )
-  HCI.writeLine('dead exports: reported only; removing or de-exporting a symbol is a reviewed change.')
+  if (review.reported.length > 0) {
+    HCI.writeErrorLine(
+      'Remove each symbol, or drop its `export` where its own module is the only user. An export '
+        + 'something outside the TypeScript import graph really reaches is re-exported instead from '
+        + 'a file in the declaring package named for which consumer reaches it, added to that '
+        + "package's entry points in config/knip.json.",
+    )
+  }
 
   for (const issue of review.staleness) {
     HCI.writeErrorLine(`dead exports: ${issue}`)
@@ -544,9 +641,8 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
       'The .tao binding scanner in packages/dev/dev-src/repository-tests/DeadExports.ts no longer '
         + 'reads these bindings, so it is hiding real findings. Teach it the form, or fix the binding.',
     )
-    return 1
   }
-  return 0
+  return review.reported.length > 0 || review.staleness.length > 0 ? 1 : 0
 }
 
 /**

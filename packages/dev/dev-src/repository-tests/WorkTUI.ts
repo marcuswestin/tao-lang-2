@@ -247,14 +247,19 @@ function visibleLines(state: WorkState): string[] {
   if (state.lines.length > 0) {
     return state.lines
   }
-  return [emptyNodeLine(state.status)]
+  return [emptyNodeLine(state.status, state.reason)]
 }
 
-function emptyNodeLine(status: WorkStatus): string {
+/**
+ * emptyNodeLine is all a node that has produced no output yet gets to say. A pending node prefers
+ * its recorded reason: a column of bare `waiting` cards is the same picture whether the lane is
+ * blocked behind another worktree or simply has nothing free, and those call for different actions.
+ */
+function emptyNodeLine(status: WorkStatus, reason: string | undefined): string {
   return Switch<WorkStatus, string>(status, {
     failed: () => 'failed',
     passed: () => 'ok',
-    pending: () => 'waiting',
+    pending: () => reason ?? 'waiting',
     running: () => 'running',
     skipped: () => 'skipped',
   })

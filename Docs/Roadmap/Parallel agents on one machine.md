@@ -12,7 +12,7 @@ shape of the problem.
 One reading, taken while a single `verify --complete` was running:
 
 - **Twelve registered verification lanes at once** — ten other worktrees running `verify`,
-  `verify-changed`, or `full-verify` — on 18 CPUs, with load peaking at **34.3**.
+  `verify-changed`, or `verify-full` — on 18 CPUs, with load peaking at **34.3**.
 - The same `verify --complete`, unchanged, measured **89s** earlier in the afternoon and **207s**
   under that load. Its serial floor went from 84s to 132s. Nothing about the tree changed.
 - Two of its suites then failed their per-test hang guards. Both passed in **0.6s** when run alone.
@@ -21,6 +21,14 @@ One reading, taken while a single `verify --complete` was running:
 
 That last point is the useful one. The machinery is honest about contention already; what it cannot
 do is prevent it.
+
+A second reading, on 2026-09-19, says the registry is not even a complete picture of what to wait
+for. Load stood at **22.2 on 18 CPUs with zero registered lanes**: an `xcodebuild` with its
+`swift-frontend` children and two bare `bun test` runs, none of which register. Half an hour earlier
+the same machine carried **thirteen** registered lanes at once. So the registry's own count swings
+between a large undercount and a large number, and a reader who waits for it to reach zero can be
+handed a machine at 120% load. Lane count and load average are two independent questions and both
+have to be asked; `./agent doctor` is the one command that already prints them together.
 
 ## Why the existing broker does not prevent it
 
@@ -36,7 +44,10 @@ anyway:
    small change to an existing mechanism and would have prevented the whole episode.
 2. **Only top-level lanes register.** A bare `bun test`, a `./tao test`, an `xcodebuild`, a Chrome
    smoke started by hand: all invisible. Ten agents running `verify` coordinate; ten agents running
-   `bun test` do not.
+   `bun test` do not. Measured on 2026-09-19: an `xcodebuild` and two bare `bun test` runs held the
+   machine at load 22.2 while the registry reported no lane at all. This is the gap that makes the
+   registry unusable as a quiet-machine gate on its own, and it is why the acceptance measurements
+   below are still unobtained.
 3. **Few scarce resources are named.** The pattern exists and works — the machine-wide
    `studio-native-host` lease means a second worktree's native Studio lane fails immediately with
    `native-host-busy`, naming the holder, instead of timing out. What is missing is coverage: each
@@ -54,7 +65,7 @@ one the broker starves.
 
 Interactive work is distinguishable from batch work without guessing, because the entry points
 already differ: `test-file`, `test`, and `test-changed` are iteration lanes, while `verify`,
-`full-verify`, and `check` are batch lanes. Giving the iteration lanes a small reserved share, or
+`verify-full`, and `check` are batch lanes. Giving the iteration lanes a small reserved share, or
 simply admission priority, costs a batch lane seconds and saves an agent minutes on every edit. The
 same argument applies to `./tao check` and a single Studio smoke.
 
@@ -74,12 +85,45 @@ a queue. Serializing verification across worktrees would idle the machine whenev
 | ----------------------- | -------------------------------------------------------------------------- |
 | One simulator or device | Two agents installing to one UDID corrupt each other's install             |
 | The Android emulator    | One AVD, one instance                                                      |
-| The window server       | `full-verify` already declares it needs the GUI to itself                  |
+| The window server       | `verify-full` already declares it needs the GUI to itself                  |
 | Local InstantDB         | One Docker stack machine-wide by design; stopping it stops it for everyone |
 | A native Studio session | Already leased, and the worked example the rest should follow              |
 
-`verify` is worth naming explicitly as _not_ an example of this, because it is the intuitive guess:
-it holds no device, it is pure CPU, and it is exactly the thing a broker can divide.
+`verify` was originally named here explicitly as _not_ an example of this, on the reasoning that it
+holds no device, is pure CPU, and is exactly the thing a broker can divide. **That call was
+reversed on 2026-09-19, and this section is kept rather than deleted because the reversal is
+instructive.**
+
+The argument for sharing was that serializing verification idles the machine whenever less than
+`cpuCount` of work exists. Two things weigh against it, and only one of them is about time.
+
+The measurements in this same document show the sharing curve collapsing at the top end: the
+identical unchanged run took 92.5s at three lanes, 207.3s at five, and 1798.2s at fifteen. **State
+that carefully — it is a 3-to-15 ratio, not a comparison against a solo baseline**, because as this
+document records further down there is no single-lane wall time for the lane as a whole. On the
+packing-loss figures here, 0.0% at three lanes and 8.2% at five, sharing plausibly still wins at
+two to five agents. An earlier draft of this section claimed each lane cost "twenty times its solo
+price" and that serializing wins "from three agents upward"; neither is supported by these numbers,
+and the solo baseline that would settle it is one of the measurements still outstanding below.
+
+The second reason does not depend on timing at all: a verification is not just CPU, it is
+_evidence about a tree_, and a neighbouring landing invalidates it. Two agents verifying at once
+are not merely slower — they are often proving trees one of them is about to make stale, and the
+one that lands second pays for an entire second run. No wall-time measurement of the lanes
+themselves can see that cost.
+
+So the broad lanes — `verify`, `verify-full`, `verify-full-sandbox`, `test-all` — now take the
+machine-wide **landing lock** (`LandingLock.ts`), which is the same lock the landing itself takes,
+so claiming it once covers verifying and then moving refs. The narrow work stays free and
+unserialized, because an agent must always be able to check the change it just made: `test-file`,
+a named test, `test-retry`, `check`, `fix`, `fmt`. The diff-scoped lanes in between —
+`verify-changed`, `test-changed` — remain on ordinary slot admission.
+
+The cost of the reversal is real and worth stating: with two to five active agents, one now waits
+where before several ran at reduced width, and on the packing figures alone that is probably a loss
+in wall time. It is taken deliberately, for the invalidation reason rather than the throughput one,
+and because a lock is what makes landing safe at all. Establishing the solo baseline would let this
+section make the quantitative claim it currently cannot.
 
 ## What is duplicated fifteen times and need not be
 
@@ -151,7 +195,7 @@ worktrees are idle, and neither is blocked on code:
 - A single-lane `verify --complete` before-and-after pair. The components are measured (see the
   numbers above and in `packages/dev/README.md`) and the schedule report gives the packing loss —
   0.0% at three lanes, 8.2% at five — but there is no single-lane wall time for the lane as a whole.
-- A `just full-verify` before-and-after pair, unsandboxed. The lane is reachable from an agent
+- A `just verify-full` before-and-after pair, unsandboxed. The lane is reachable from an agent
   session: a browser smoke passes from one in 5.5s, so DEVENV-015's Chrome registration failure is
   specific to another harness's process context.
 
@@ -160,13 +204,49 @@ unshardable test item at 19.7s, and it is pinned at `--maxWorkers=3` by a reserv
 test gate held only twelve slots. Widening both together is a one-line change that wants a quiet
 machine to prove.
 
-Neither is assigned to a branch. Both are a measurement in a quiet window rather than a change, so
-whoever next has the machine to themselves can take them from here.
+### The second attempt, 2026-09-19, and what it settled
+
+A dedicated attempt on 2026-09-19 did not obtain any of the three, and the reason is worth recording
+because it is not the one the section above predicts. Waiting for the lane registry to reach zero is
+not sufficient and the attempt was designed around the wrong signal: the registry hit zero while the
+machine ran at load 22.2 on unregistered work, and over the window the count moved between thirteen
+lanes and none. Held against a gate of no lanes _and_ a low load average, no window of the two or
+three minutes a pair of runs needs ever opened.
+
+What the attempt did establish, none of which needs redoing:
+
+- **The registry is not the quiet-machine gate.** Both readings above. A future attempt should gate
+  on `./agent doctor`, which prints the lane count and the load average together, and should treat
+  the load average as the binding one.
+- **`runtime-jest` cannot be benchmarked outside a lane on an unprepared tree.** Run directly, it
+  fails 20 of 30 suites with `Something went wrong while compiling Tao tests`, because the generated
+  parser the suite compiles against is Git-ignored and a freshly switched worktree has not built it.
+  Run the lane, or `just verify`, before timing the suite by hand. `DEVENV-090` owns the diagnostic.
+- **An interleaved paired design does not rescue a contended measurement here.** Alternating
+  `--maxWorkers=3` and `6` round by round, so the same drifting load falls on both arms, still gave
+  the 3-worker arm a spread of 22.3s to 51.7s at load 34 to 47. The within-suite effect being looked
+  for is a few seconds; the noise is thirty. Contention does not average out at this ratio, and no
+  amount of repetition inside a busy window substitutes for a quiet one.
+
+So the three items stand, unchanged in substance and better specified:
+
+1. The single-lane `verify --complete` pair, `before` at `3e1ae411`. Switching HEAD to it needs an
+   unsandboxed shell.
+2. The single-lane `just verify-full` pair, unsandboxed.
+3. `runtime-jest` widened. `SUITE_TUNING`'s `cost` is the whole change: `TestNodes` passes it through
+   as both the node's reservation and Jest's `--maxWorkers`, so the two cannot drift. It is
+   deliberately left at `3`, because a widening that only a contended machine has seen is a guess.
+
+Neither is assigned to a branch. All three are a measurement in a quiet window rather than a change,
+so whoever next has the machine to themselves can take them from here — and should confirm the
+machine is theirs by load average, not by lane count.
 
 ## Sources
 
 - 2026-09-17 twelve-lane reading, and the `verify --complete` pair at 89s and 207s, taken while
   building the one-graph verification scheduler.
+- 2026-09-18 thirteen-lane reading and 2026-09-19 zero-lane-at-load-22.2 reading, taken during the
+  second attempt at the acceptance measurements.
 - `packages/dev/README.md` for what is shared today and what is not.
-- `Developer environment upgrades.md`, DEVENV-015 (Chrome registration) and DEVENV-066 to DEVENV-070
+- `Developer environment upgrades.md`, DEVENV-015 (Chrome registration) and DEVENV-066 to DEVENV-069
   (the runaway-process class, sandboxed `ps`, cross-worktree edit interference).

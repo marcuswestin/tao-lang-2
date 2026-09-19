@@ -996,6 +996,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
   const previewWindow = {}
   const preview = previewConnection('preview-capture', 'default', previewWindow)
   let rejected = ''
+  let rejectedName = ''
   preview.capture = {
     fixtureName: 'CapturedState',
     identity: {
@@ -1007,6 +1008,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
     },
     reject(error) {
       rejected = error.message
+      rejectedName = error.constructor.name
     },
     requestId: 'capture-1',
     resolve() {},
@@ -1017,6 +1019,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
       data: {
         channel: studioProtocolChannel,
         error: 'Provider capture failed safely.',
+        errorName: 'UserInputError',
         identity: {
           appName: 'Garden',
           previewInstanceId: preview.previewInstanceId,
@@ -1036,6 +1039,9 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
   )
 
   Expect(rejected).toBe('Provider capture failed safely.')
+  // The category survives the protocol: a capture that failed on the author's input must not reach
+  // the client as a host-environment fault.
+  Expect(rejectedName).toBe('UserInputError')
   Expect(preview.capture).toBeUndefined()
 })
 
@@ -1403,6 +1409,47 @@ Test('Studio Tao test output becomes structured results with navigable failures'
     column: 7,
     filePath: '/projects/My Notes/Notes.test.tao',
     line: 12,
+    message: 'expect text "Saved" expected rendered text but found none.',
+    name: 'Notes > creates a note',
+  }])
+})
+
+// The runner gives each Tao journey its own case, so a `.test.tao` file heads the group those cases
+// sit in instead of naming a case. The panel lists the files the run covered, and never the
+// generated Jest entrypoints — one per worker the run was allowed — that the cases were run from.
+Test('Studio Tao test output lists the test files its journeys were grouped under', () => {
+  const result = StudioTestOutput.parse({
+    durationMs: 1234,
+    exitCode: 1,
+    finishedAt: '2026-08-30T12:00:00.000Z',
+    id: 'run-2',
+    output: [
+      'PASS _gen_tao-app-test/tao-test-command/run-1-a/journeys/2/shard-1-of-2.jest.tsx',
+      '  Tao test command',
+      '    Notes.test.tao',
+      '      ✓ Notes > reads a note (12 ms)',
+      '      ✕ Notes > creates a note (7 ms)',
+      '',
+      'PASS _gen_tao-app-test/tao-test-command/run-1-a/journeys/2/shard-2-of-2.jest.tsx',
+      '  Tao test command',
+      '    Garden.test.tao',
+      '      ✓ Garden > plants a row (3 ms)',
+      '',
+      '  ● Tao test command › Notes.test.tao › Notes > creates a note',
+      '    Tao check failed: Notes > creates a note',
+      '    Source: /projects/My Notes/Notes.test.tao',
+      '    expect text "Saved" expected rendered text but found none.',
+      'Tests:       1 failed, 2 passed, 3 total',
+    ].join('\n'),
+    signal: null,
+  })
+
+  Expect(result.testFiles).toEqual([
+    'Notes.test.tao',
+    'Garden.test.tao',
+  ])
+  Expect(result.failures).toEqual([{
+    filePath: '/projects/My Notes/Notes.test.tao',
     message: 'expect text "Saved" expected rendered text but found none.',
     name: 'Notes > creates a note',
   }])

@@ -46,16 +46,27 @@ Examples:
   ./agent bench 25
   ./agent test
   ./agent test "formats imports"
+  ./agent test packages/parser/parser-tests/Parser.test.ts
+  ./agent test-all
   ./agent test-file packages/parser/parser-tests/Parser.test.ts
   ./agent test-changed
   ./agent test-retry
-  ./agent verify --changed
-  ./agent verify --complete
-  ./agent full-verify-sandbox
+  ./agent verify-changed
+  ./agent verify
+  ./agent verify-full-sandbox
 
-verify needs a scope: --changed runs the gates plus the test suites the branch diff reaches (iterate
-with it); --complete runs every suite (the gate before a reviewed commit or a merge). A lane whose
-tree is already recorded green prints that run's evidence and stops; --fresh runs it anyway.
+test takes one optional target and decides by whether it exists on disk: an existing file or
+directory is a path, anything else is a test-name pattern. It prints which reading it chose. A bare
+test runs the suites the branch diff reaches, which can be green while a suite the change broke
+never ran; a name pattern filters those same suites rather than widening back out to all of them.
+test-all runs every suite, and takes an optional name pattern of its own.
+
+Each verification scope is its own command rather than a flag: verify-changed runs the gates plus
+the test suites the branch diff reaches (iterate with it); verify runs every suite (the gate before
+a reviewed commit or a merge); verify-full adds the browser, native, and bundle lanes and needs the
+machine to itself; verify-full-sandbox runs that same membership in a managed shell without
+claiming its host-only lanes passed. A lane whose tree is already recorded green prints that run's
+evidence and stops; --no-cache runs it anyway.
 Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
 On a failure, read summary.json first: it names the first failing gate and its log.
 `

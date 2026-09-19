@@ -638,9 +638,9 @@ generated real WordFlower Studio host typechecks as one integration proof.
 The browser client is split into API/event, editor, matrix, shell, visual-editing, file-tree, and
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
 scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
-The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, but
-the simulated-user journey is quarantined from `full-verify` until it completes ten consecutive reliable
-normal-terminal runs; no final browser acceptance is claimed here.
+The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, and
+the simulated-user journey runs as an ordinary `verify-full` gate; it still owes the ten consecutive
+reliable normal-terminal runs DEVENV-042 asks for, so no final browser acceptance is claimed here.
 
 `./dev studio` and `./dev studio-native` both start the multi-project session server. Every opened project
 owns its own Expo server, generated preview runtime, preview session, file watcher, and initial compile;

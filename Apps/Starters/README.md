@@ -4,7 +4,8 @@ The starters are the projects `tao create` writes. Each folder here is the exact
 command's lowering for one reference plan in `packages/tao-cli/cli-src/create/starter-plans.ts`, byte
 for byte after canonical formatting, and `tao test Apps` runs every one of them. That is what keeps the
 lowering a proven, runnable app rather than a template that can rot: a change to the lowering either
-reproduces these folders or fails `creation-lowering.test.ts` with the first differing file.
+reproduces these folders or fails that starter's test — `creation-starter-notebook.test.ts` or
+`creation-starter-pantry.test.ts` — with the first differing file.
 
 Every starter follows the canonical layout from `Docs/Roadmap/Tao Revolution/Decisions.md` §1,
 restricted to what the toolchain runs today: `App.tao` (project and app), `Data.tao` (entities),
@@ -17,7 +18,8 @@ their tranches land.
 To change a starter, change the lowering or its reference plan, then regenerate:
 
 ```bash
-TAO_UPDATE_STARTERS=1 bun test packages/tao-cli/cli-tests/creation-lowering.test.ts
+TAO_UPDATE_STARTERS=1 bun test "$PWD/packages/tao-cli/cli-tests/creation-starter-notebook.test.ts" \
+  "$PWD/packages/tao-cli/cli-tests/creation-starter-pantry.test.ts"
 ```
 
 Do not edit the generated files by hand; the next test run would rewrite them. Add a `## <Name>`

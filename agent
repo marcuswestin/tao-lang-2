@@ -67,7 +67,21 @@ function report_install_failure() {
     echo "so reinstalling inside the sandbox will fail the same way. Some npm packages ship" >&2
     echo "files under paths an agent sandbox protects, such as .gitmodules or .idea/." >&2
     echo "Recover from an unsandboxed shell: bun install --cwd \"$SCRIPT_DIR\"" >&2
-    echo "or start a session with the sandbox off: just claude-unsandboxed" >&2
+    echo "or start a session with the sandbox off: just session-unsandboxed" >&2
+    return
+  fi
+
+  # The same protected-path denial reported from the other side: rather than refusing the write,
+  # the sandbox leaves the existing copy in place and Bun fails to link over it. The generic
+  # scratch advice below is wrong for this one — the scratch is fine and the partial tree is not —
+  # so it needs its own branch or the reader is sent to clean the wrong thing.
+  if [[ "$install_output" == *EEXIST*"failed to link package"* ]]; then
+    echo "Denied operation: replacing a package that is already linked." >&2
+    echo "A sandboxed install cannot overwrite the few packages shipping .idea/ or .gitmodules," >&2
+    echo "which the sandbox protects and no setting exempts, so the link fails on a package that" >&2
+    echo "is already present. Retrying sandboxed fails identically, and the partial tree must go." >&2
+    echo "Recover from an unsandboxed shell:" >&2
+    echo "  rm -rf \"$SCRIPT_DIR/node_modules\" && bun install --cwd \"$SCRIPT_DIR\" --frozen-lockfile" >&2
     return
   fi
 
@@ -118,7 +132,19 @@ function repair_dev_deps_if_unhealthy() {
     return 0
   fi
 
+  # Repair without --force first. --force re-links every package, including the few shipping .idea/
+  # or .gitmodules that a sandbox protects, so a forced repair fails on packages that were healthy —
+  # and fails partway, leaving the tree worse than the unhealthy one it was called to fix. A plain
+  # frozen-lockfile install writes only what is missing, which is what an unhealthy tree needs.
   local install_output
+  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" --frozen-lockfile 2>&1)"; then
+    touch "$INSTALL_STAMP"
+    if health_output="$(dependency_health 2>&1)"; then
+      return 0
+    fi
+  fi
+
+  # Only a tree still unhealthy after that has anything to gain from replacing packages wholesale.
   if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" --frozen-lockfile --force 2>&1)"; then
     echo "$install_output" >&2
     report_install_failure "$install_output"

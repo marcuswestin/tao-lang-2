@@ -66,8 +66,9 @@ The usual format applies. Two things are specific to this cut:
 
 ## Syncing `main` before the cut lands
 
-`merge-with-main`'s preflight requires local `main` to equal `origin/main`, and on a machine running
-several agents `main` moves while the cut is being prepared. Sync it deliberately rather than
+`merge-with-main`'s preflight requires local `main` to equal `origin/main` — the ref, not a checkout;
+no worktree has to be on `main`, because the command makes one when there is none. On a machine
+running several agents `main` moves while the cut is being prepared. Sync it deliberately rather than
 discovering the mismatch when the landing is refused:
 
 Fetching before and pushing after is part of landing, for every agent. A local `main` left ahead of

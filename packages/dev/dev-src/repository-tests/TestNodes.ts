@@ -53,8 +53,9 @@ export type SelectedSuite = {
   /**
    * Relative cost per shard unit, for a suite whose units the ledger has no timings for. The ledger
    * keys the Tao behavior tests as one unit, so it can say what the suite costs but nothing about how
-   * that cost divides between app roots; the number of test journeys under each root is the best
-   * proxy available, and balancing by it beats balancing by root count.
+   * that cost divides between app roots; the size of the Tao source under each root is the best proxy
+   * available, because compiling it is what that cost mostly is. The weights are relative to each
+   * other, not milliseconds — `taoAppShardUnits` owns how they are derived.
    */
   unitCostMs?: ReadonlyMap<string, number>
 }
@@ -93,6 +94,15 @@ const WALL_TIMEOUT_FACTOR = 6
 const WALL_TIMEOUT_FLOOR_MS = 120_000
 const WALL_TIMEOUT_CEILING_MS = 900_000
 const IDLE_TIMEOUT_FACTOR = 2
+/**
+ * The idle floor has to clear the longest a healthy suite may legitimately be silent, which is one
+ * test spending the whole of `TestRunner.MAX_TEST_DEADLINE_MS`: a gate lane runs its suites under a
+ * file reporter, so nothing reaches stdout between tests and a starved test looks exactly like a
+ * stalled one. Two such tests back to back is the bound this keeps room for. `test-runner.test.ts`
+ * holds the two constants together, because raising the deadline without raising this would start
+ * killing suites that were only slow. The import would be a cycle, hence a test rather than an
+ * expression.
+ */
 const IDLE_TIMEOUT_FLOOR_MS = 120_000
 
 /** build turns one run's selected suites into the nodes the graph will schedule. */

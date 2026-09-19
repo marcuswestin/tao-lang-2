@@ -249,10 +249,16 @@ export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerConte
 }
 
 function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
+  const checks = suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck)
+  // A suite's checks are the tests nested in it and nothing else, so a file-level test written as a
+  // leaf journey compiles to a suite of none. The validator rejects that shape; asserting it here
+  // keeps the one failure mode a test run cannot report — a file that runs nothing and passes —
+  // from surviving a compile that was told validation had already happened.
+  Assert(checks.length > 0, 'validated test suite declares at least one check', { suiteName: suite.name })
   return {
     name: AST.testDisplayName(suite),
     source: sourceLocation(suite),
-    checks: suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck),
+    checks,
   }
 }
 

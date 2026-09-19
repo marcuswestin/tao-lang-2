@@ -22,8 +22,8 @@ lower it deterministically. That gave hard guarantees on a narrow demo and taugh
 lesson so far - the model names the intent, Tao derives the code.
 
 That design was also a workaround. The on-device model has roughly a 4k-token window and no room for
-an iterative loop, so the PoC never let the model work: read, act, observe, act again. Tools like Codex
-and Claude Code get their power from exactly that loop. This slice explores the loop as a **second
+an iterative loop, so the PoC never let the model work: read, act, observe, act again. Coding agents
+get their power from exactly that loop. This slice explores the loop as a **second
 mode** in Studio, with two constraints that make it safe without a sandbox:
 
 1. **Tools only.** The model never gets a shell, never writes scripts, never names a filesystem path.

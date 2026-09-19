@@ -1,5 +1,7 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
+import { isAuditedSource } from '../simplify-audit/AuditedSource'
+import { kindChainsIn } from '../simplify-audit/KindChains'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -84,6 +86,104 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/** LedgerEntry is one backlog file as this rule sees it: its file name and the status it records. */
+export type LedgerEntry = {
+  name: string
+  /** The entry's own `**Status:**`, or an empty string when the file states none. */
+  status: string
+}
+
+/** LedgerSide is one half of the backlog: the entry files in a directory and the index that lists them. */
+export type LedgerSide = {
+  entries: readonly LedgerEntry[]
+  index: string
+}
+
+/** Statuses that mean an entry has been addressed, and therefore belongs in the archive. */
+const ARCHIVED_STATUSES = new Set(['Closed', 'Resolved'])
+const OPEN_INDEX = 'Developer environment upgrades.md'
+const ARCHIVE_INDEX = 'Developer environment upgrades archive.md'
+const OPEN_LINK_PREFIX = 'Developer environment upgrades/'
+const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
+
+/**
+ * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
+ * branches adding an entry each add a file and one line rather than colliding over a shared block.
+ * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
+ * a line can point at a file nobody wrote, and — because two new files merge silently where two new
+ * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
+ * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ *
+ * The backlog has two halves, open and archived, and an entry belongs to the half its own status
+ * names: the open index would otherwise regrow the unread tail the per-file layout was meant to end,
+ * one addressed entry at a time. An ID is unique across both halves, because an archived entry is
+ * still quoted by ID from commit messages and from other entries' dependencies.
+ */
+export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: LedgerSide): string[] {
+  const issues: string[] = []
+  const byId = new Map<string, string[]>()
+  for (
+    const [side, indexName, linkPrefix, archiveSide] of [
+      [open, OPEN_INDEX, OPEN_LINK_PREFIX, false],
+      [archived, ARCHIVE_INDEX, ARCHIVE_LINK_PREFIX, true],
+    ] as const
+  ) {
+    // Counted rather than collected: a merge that keeps both sides of a conflicting index edit
+    // leaves one file linked twice, which reads as correct from either direction — the file exists
+    // and it is listed — and is the one way this layout can still drift without a check below.
+    const linked = new Map<string, number>()
+    for (const match of side.index.matchAll(indexLinkPattern(linkPrefix))) {
+      const name = match[1]!
+      linked.set(name, (linked.get(name) ?? 0) + 1)
+    }
+    const entries = [...side.entries].filter(entry => entry.name.endsWith('.md'))
+      .sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      const id = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      if (id === undefined) {
+        issues.push(`${linkPrefix}${entry.name} must be named DEVENV-NNN-<slug>.md.`)
+        continue
+      }
+      byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
+      if (!linked.has(entry.name)) {
+        issues.push(`${indexName} needs an index line linking \`${entry.name}\`.`)
+      }
+      if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
+        issues.push(
+          archiveSide
+            ? `${linkPrefix}${entry.name} is \`${entry.status}\`; an entry that is not addressed`
+              + ' belongs in the open backlog.'
+            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it and its index line to`
+              + ' the archive in the change that addressed it.',
+        )
+      }
+    }
+    const present = new Set(entries.map(entry => entry.name))
+    for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
+      if (!present.has(name)) {
+        issues.push(`${indexName} links \`${name}\`, which does not exist.`)
+      }
+      if (count > 1) {
+        issues.push(`${indexName} links \`${name}\` ${count} times; keep one index line.`)
+      }
+    }
+  }
+  for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
+    if (names.length > 1) {
+      issues.push(
+        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')};`
+          + ' rename the later-merged file and its index line.',
+      )
+    }
+  }
+  return issues
+}
+
+/** The open index's links must not match the archive's, which extend them with one more segment. */
+function indexLinkPattern(linkPrefix: string): RegExp {
+  return new RegExp(`^- \\[DEVENV-\\d+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
+}
+
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
 export function justRecipeIssues(source: string): string[] {
   const recipes = justRecipeDefinitions(source)
@@ -93,7 +193,7 @@ export function justRecipeIssues(source: string): string[] {
   if (benchmark === undefined || !benchmark.includes('language-performance.ts')) {
     issues.push("Justfile recipe 'bench' must run the language performance benchmark.")
   }
-  for (const lane of ['check', 'verify', 'full-verify']) {
+  for (const lane of ['check', 'verify', 'verify-full']) {
     if (!recipes.has(lane)) {
       issues.push(`Justfile must declare recipe '${lane}'.`)
       continue
@@ -283,23 +383,21 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/studio-smoke/studio-real-app.test.ts:299',
   'packages/dev/studio-smoke/studio-real-app.test.ts:367',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:205',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:653',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:655',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:921',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:926',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:931',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:956',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1195',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1216',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1389',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1431',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1457',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:930',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:935',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:940',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:965',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1204',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1225',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1408',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1450',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1476',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
   'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
   'packages/studio/studio-src/StudioWelcome.ts:83',
   'packages/studio/studio-tests/studio-client.test.ts:626',
-  'packages/studio/studio-tests/studio-client.test.ts:2996',
+  'packages/studio/studio-tests/studio-client.test.ts:3043',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
   'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
@@ -382,8 +480,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:468',
-  'packages/dev/dev-tests/repo-lint.test.ts:469',
+  'packages/dev/dev-tests/repo-lint.test.ts:545',
+  'packages/dev/dev-tests/repo-lint.test.ts:546',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
@@ -574,6 +672,59 @@ export function conventionRuleIssues(
   return rule.allowlistBySite === true
     ? conventionSiteIssues(scanned, matches, allowlist, rule.staleDetail)
     : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
+}
+
+/**
+ * KIND_CHAIN_ALLOWLIST names the files that still dispatch through an `if`/`else if` chain over one
+ * `.kind`, `.type`, or `.$type`. It only shrinks: `Docs/Roadmap/Repository simplification 2` converts
+ * each to a `Switch` helper, and an entry goes stale when its file no longer holds a chain.
+ */
+const KIND_CHAIN_ALLOWLIST = [
+  'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
+  'packages/compiler/compiler-src/codegen/app/StateCompiler.ts',
+  'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
+  'packages/runtime/TaoRuntime-src/TR-persisted-state.ts',
+  'packages/runtime/TaoRuntime-src/TR-studio-device-client.ts',
+  'packages/runtime/TaoRuntime-src/TR-studio-journey.ts',
+  'packages/source-actions/source-actions-src/studio/studio-design-styles.ts',
+  'packages/studio/studio-src/StudioInspector.ts',
+  'packages/studio/studio-src/StudioPreviewManifest.ts',
+  'packages/studio/studio-src/StudioPreviewSession.ts',
+  'packages/studio/studio-src/StudioServer.ts',
+  'packages/studio/studio-src/StudioSketchCatalog.ts',
+  'packages/studio/studio-src/agent-chat/AgentChatSession.ts',
+  'packages/studio/studio-src/agent-chat/FeaturePlan.ts',
+  'packages/studio/studio-src/agent-chat/SemanticSnapshot.ts',
+  'packages/studio/studio-src/client/StudioApiClient.ts',
+  'packages/studio/studio-src/client/app/StudioCommandPaletteWiring.ts',
+  'packages/studio/studio-src/client/app/StudioScenarioActions.ts',
+  'packages/studio/studio-src/device/StudioDeviceGateway.ts',
+  'packages/validator/validator-src/validators/FunctionalCoreValidator.ts',
+  'packages/validator/validator-src/validators/StateValidator.ts',
+  'packages/validator/validator-src/validators/types-validator.ts',
+  'packages/validator/validator-src/validators/use-package-validator.ts',
+]
+
+/** kindChainIssues reports discriminant chains in non-test package source, which `Switch` would check for exhaustiveness. */
+export function kindChainIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = KIND_CHAIN_ALLOWLIST,
+): string[] {
+  const scanned = files.filter(file => isAuditedSource(file.path))
+  const matches = scanned.flatMap(file =>
+    kindChainsIn(file.path, file.source).map(chain => ({
+      detail:
+        `dispatches ${chain.length} branches on \`${chain.discriminant}\`; use a \`Switch\` helper over the union instead.`,
+      line: chain.line,
+      path: chain.path,
+    }))
+  )
+  return conventionIssues(
+    scanned,
+    matches,
+    allowlist,
+    'no longer dispatches through a discriminant chain; drop its repo lint allowlist entry.',
+  )
 }
 
 /** langiumImportIssues reports Langium imports outside the parser package. */
@@ -771,6 +922,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
   issues.push(...await readDelegationIssues(repoRoot))
+  issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
@@ -798,6 +950,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
     const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
     issues.push(...conventionRuleIssues(rule, files))
   }
+  issues.push(...kindChainIssues(packageFiles))
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
@@ -847,6 +1000,40 @@ async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {
     }
   }
   return paths
+}
+
+const DEVELOPER_ENVIRONMENT_INDEX = 'Docs/Roadmap/Developer environment upgrades.md'
+const DEVELOPER_ENVIRONMENT_ENTRIES = 'Docs/Roadmap/Developer environment upgrades'
+const DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX = 'Docs/Roadmap/Developer environment upgrades archive.md'
+const DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES = 'Docs/Roadmap/Developer environment upgrades/Archive'
+
+async function readDeveloperEnvironmentLedgerIssues(repoRoot: string): Promise<string[]> {
+  const entriesPath = FS.resolvePath(DEVELOPER_ENVIRONMENT_ENTRIES, repoRoot)
+  if (!(await FS.isDirectory(entriesPath))) {
+    return []
+  }
+  return developerEnvironmentLedgerIssues(
+    await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ENTRIES, DEVELOPER_ENVIRONMENT_INDEX),
+    await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES, DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX),
+  )
+}
+
+/** A half that no entry has reached yet has no index file, which is an empty side rather than an error. */
+async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexPath: string): Promise<LedgerSide> {
+  const entriesPath = FS.resolvePath(entriesDirectory, repoRoot)
+  if (!(await FS.isDirectory(entriesPath))) {
+    return { entries: [], index: '' }
+  }
+  const entries: LedgerEntry[] = []
+  for (const name of await FS.listDir(entriesPath)) {
+    if (!name.endsWith('.md')) {
+      continue
+    }
+    const source = await FS.readText(FS.resolvePath(name, entriesPath))
+    entries.push({ name, status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '' })
+  }
+  const index = FS.resolvePath(indexPath, repoRoot)
+  return { entries, index: (await FS.exists(index)) ? await FS.readText(index) : '' }
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {
