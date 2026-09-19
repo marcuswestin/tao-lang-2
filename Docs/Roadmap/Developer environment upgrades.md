@@ -1603,7 +1603,28 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
 - **Source:** 2026-09-18 subagent delegation branch, after merging main.
 
-### DEVENV-076 — A busy machine could admit no lane at all
+### DEVENV-076 — A documentation-only change selects no test suites
+
+- **Status:** Candidate
+- **Area:** Test selection
+- **Impact:** Documents that are now proven by a test suite — `Docs/Tutorials/Your First Tao App.md`
+  is replayed, formatted, validated, and run by `packages/tao-cli/cli-tests/tutorials.test.ts` — can
+  be edited and iterated on without that suite ever being selected. The breakage only surfaces at
+  `verify --complete`, which is the merge gate but not the iteration loop.
+- **Evidence:** `TestSelection.ts` treats `.md$` and `^Docs/` as `DOCUMENTATION_PATTERN` and skips
+  those paths entirely, so `./agent verify --changed` on a branch that only edits
+  `Docs/Tutorials/**` reports no selected suite.
+- **Workaround:** Run `just test-file packages/tao-cli/cli-tests/tutorials.test.ts` after editing a
+  tutorial, or rely on `verify --complete` before review.
+- **Proposed change:** Let a document declare the suite that proves it — a small map from path
+  prefix to suite in `TestSelection.ts`, seeded with `Docs/Tutorials/` to `tao-cli` — so a proven
+  document selects its prover while unproven documentation keeps skipping selection.
+- **Dependencies:** None.
+- **Acceptance:** `./agent verify --changed` on a branch that only edits `Docs/Tutorials/**` selects
+  the `tao-cli` suite and says which path selected it.
+- **Source:** 2026-09-17 tutorial test coverage work.
+
+### DEVENV-077 — A busy machine could admit no lane at all
 
 - **Status:** Incoming
 - **Area:** Parallel verification
@@ -1635,7 +1656,7 @@ an entry here may link one when the developer workflow is also affected.
   first node immediately, and a declined admission says what it is waiting for.
 - **Source:** 2026-09-18 repository-deduplication branch.
 
-### DEVENV-077 — A peer's exclusive confirmation blocks every other lane without bound
+### DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound
 
 - **Status:** Candidate
 - **Area:** Parallel verification
@@ -1650,7 +1671,7 @@ an entry here may link one when the developer workflow is also affected.
   1658, across a 60-second sample at six-second intervals. The test's own lane was registered and
   visible at `0/1` slots throughout. The same test passed in 24.7s minutes earlier, in a window with
   no lease, and hung identically at 45s on pre-change code while a lease was held, so this is the
-  lease and not the admission rule DEVENV-076 changed.
+  lease and not the admission rule DEVENV-077 changed.
 - **Evidence, second round:** the same evening, four `verify --changed` attempts on one branch were
   frozen by it, one of them mid-run between two gates. Sampled at six-second intervals, the lease
   passed between three different worktrees' lanes in a train of short holds, so a waiting lane that
@@ -1658,7 +1679,7 @@ an entry here may link one when the developer workflow is also affected.
   slot reserved, and nothing able to start. That is the reported symptom exactly — CPU far from
   pegged and tests not starting — reached without any slot being scarce.
 - **Evidence that the isolation is nominal:** the lease drains peers to zero slots, but slots do not
-  bound CPU demand (see DEVENV-076). Sampled during one such confirmation, with one slot reserved
+  bound CPU demand (see DEVENV-077). Sampled during one such confirmation, with one slot reserved
   machine-wide, the load average was 86 on 18 CPUs. A confirmation that believes it has the machine
   to itself can be measuring a host under five times its CPU count, and the one-minute load average
   it judges by is still mostly the drained peers' work. So the lease charges every other lane for an
@@ -1670,9 +1691,9 @@ an entry here may link one when the developer workflow is also affected.
   with `machine-contention` rather than hang until an unrelated timeout fires. A test that starts a
   real lane may also deserve an isolated registry root, which would make it independent of what the
   machine is doing at the time.
-- **Dependencies:** Adjacent to DEVENV-076: both are the machine refusing every admission at once,
+- **Dependencies:** Adjacent to DEVENV-077: both are the machine refusing every admission at once,
   and this is the remaining cause of it.
 - **Acceptance:** A lane blocked by a peer's exclusive confirmation either starts within a bounded
   wait or fails with a message naming the holder, and the test above does not depend on what other
   worktrees are doing.
-- **Source:** 2026-09-18 repository-deduplication branch, while verifying DEVENV-076.
+- **Source:** 2026-09-18 repository-deduplication branch, while verifying DEVENV-077.
