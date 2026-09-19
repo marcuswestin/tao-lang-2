@@ -84,6 +84,26 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/** LedgerEntry is one backlog file as this rule sees it: its file name and the status it records. */
+export type LedgerEntry = {
+  name: string
+  /** The entry's own `**Status:**`, or an empty string when the file states none. */
+  status: string
+}
+
+/** LedgerSide is one half of the backlog: the entry files in a directory and the index that lists them. */
+export type LedgerSide = {
+  entries: readonly LedgerEntry[]
+  index: string
+}
+
+/** Statuses that mean an entry has been addressed, and therefore belongs in the archive. */
+const ARCHIVED_STATUSES = new Set(['Closed', 'Resolved'])
+const OPEN_INDEX = 'Developer environment upgrades.md'
+const ARCHIVE_INDEX = 'Developer environment upgrades archive.md'
+const OPEN_LINK_PREFIX = 'Developer environment upgrades/'
+const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
+
 /**
  * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
  * branches adding an entry each add a file and one line rather than colliding over a shared block.
@@ -91,37 +111,59 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
  * a line can point at a file nobody wrote, and — because two new files merge silently where two new
  * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
  * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ *
+ * The backlog has two halves, open and archived, and an entry belongs to the half its own status
+ * names: the open index would otherwise regrow the unread tail the per-file layout was meant to end,
+ * one addressed entry at a time. An ID is unique across both halves, because an archived entry is
+ * still quoted by ID from commit messages and from other entries' dependencies.
  */
-export function developerEnvironmentLedgerIssues(entryFileNames: readonly string[], index: string): string[] {
-  // Counted rather than collected: a merge that keeps both sides of a conflicting index edit leaves
-  // one file linked twice, which reads as correct from either direction — the file exists and it is
-  // listed — and is the one way this layout can still drift without either check below noticing.
-  const linked = new Map<string, number>()
-  for (const match of index.matchAll(/^- \[DEVENV-\d+ — [^\]]+\]\(<Developer environment upgrades\/([^>]+)>\)/gm)) {
-    const name = match[1]!
-    linked.set(name, (linked.get(name) ?? 0) + 1)
-  }
-  const entries = [...entryFileNames].filter(name => name.endsWith('.md')).sort()
+export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: LedgerSide): string[] {
   const issues: string[] = []
   const byId = new Map<string, string[]>()
-  for (const name of entries) {
-    const id = name.match(/^(DEVENV-\d+)-/)?.[1]
-    if (id === undefined) {
-      issues.push(`Developer environment upgrades/${name} must be named DEVENV-NNN-<slug>.md.`)
-      continue
+  for (
+    const [side, indexName, linkPrefix, archiveSide] of [
+      [open, OPEN_INDEX, OPEN_LINK_PREFIX, false],
+      [archived, ARCHIVE_INDEX, ARCHIVE_LINK_PREFIX, true],
+    ] as const
+  ) {
+    // Counted rather than collected: a merge that keeps both sides of a conflicting index edit
+    // leaves one file linked twice, which reads as correct from either direction — the file exists
+    // and it is listed — and is the one way this layout can still drift without a check below.
+    const linked = new Map<string, number>()
+    for (const match of side.index.matchAll(indexLinkPattern(linkPrefix))) {
+      const name = match[1]!
+      linked.set(name, (linked.get(name) ?? 0) + 1)
     }
-    byId.set(id, [...byId.get(id) ?? [], name])
-    if (!linked.has(name)) {
-      issues.push(`Developer environment upgrades.md needs an index line linking \`${name}\`.`)
+    const entries = [...side.entries].filter(entry => entry.name.endsWith('.md'))
+      .sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      const id = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      if (id === undefined) {
+        issues.push(`${linkPrefix}${entry.name} must be named DEVENV-NNN-<slug>.md.`)
+        continue
+      }
+      byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
+      if (!linked.has(entry.name)) {
+        issues.push(`${indexName} needs an index line linking \`${entry.name}\`.`)
+      }
+      if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
+        issues.push(
+          archiveSide
+            ? `${linkPrefix}${entry.name} is \`${entry.status}\`; an entry that is not addressed`
+              + ' belongs in the open backlog.'
+            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it and its index line to`
+              + ' the archive in the change that addressed it.',
+        )
+      }
     }
-  }
-  const present = new Set(entries)
-  for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
-    if (!present.has(name)) {
-      issues.push(`Developer environment upgrades.md links \`${name}\`, which does not exist.`)
-    }
-    if (count > 1) {
-      issues.push(`Developer environment upgrades.md links \`${name}\` ${count} times; keep one index line.`)
+    const present = new Set(entries.map(entry => entry.name))
+    for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
+      if (!present.has(name)) {
+        issues.push(`${indexName} links \`${name}\`, which does not exist.`)
+      }
+      if (count > 1) {
+        issues.push(`${indexName} links \`${name}\` ${count} times; keep one index line.`)
+      }
     }
   }
   for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
@@ -133,6 +175,11 @@ export function developerEnvironmentLedgerIssues(entryFileNames: readonly string
     }
   }
   return issues
+}
+
+/** The open index's links must not match the archive's, which extend them with one more segment. */
+function indexLinkPattern(linkPrefix: string): RegExp {
+  return new RegExp(`^- \\[DEVENV-\\d+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
 }
 
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
@@ -433,8 +480,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:514',
-  'packages/dev/dev-tests/repo-lint.test.ts:515',
+  'packages/dev/dev-tests/repo-lint.test.ts:545',
+  'packages/dev/dev-tests/repo-lint.test.ts:546',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
@@ -903,14 +950,36 @@ async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {
 
 const DEVELOPER_ENVIRONMENT_INDEX = 'Docs/Roadmap/Developer environment upgrades.md'
 const DEVELOPER_ENVIRONMENT_ENTRIES = 'Docs/Roadmap/Developer environment upgrades'
+const DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX = 'Docs/Roadmap/Developer environment upgrades archive.md'
+const DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES = 'Docs/Roadmap/Developer environment upgrades/Archive'
 
 async function readDeveloperEnvironmentLedgerIssues(repoRoot: string): Promise<string[]> {
   const entriesPath = FS.resolvePath(DEVELOPER_ENVIRONMENT_ENTRIES, repoRoot)
   if (!(await FS.isDirectory(entriesPath))) {
     return []
   }
-  const index = await FS.readText(FS.resolvePath(DEVELOPER_ENVIRONMENT_INDEX, repoRoot))
-  return developerEnvironmentLedgerIssues(await FS.listDir(entriesPath), index)
+  return developerEnvironmentLedgerIssues(
+    await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ENTRIES, DEVELOPER_ENVIRONMENT_INDEX),
+    await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES, DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX),
+  )
+}
+
+/** A half that no entry has reached yet has no index file, which is an empty side rather than an error. */
+async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexPath: string): Promise<LedgerSide> {
+  const entriesPath = FS.resolvePath(entriesDirectory, repoRoot)
+  if (!(await FS.isDirectory(entriesPath))) {
+    return { entries: [], index: '' }
+  }
+  const entries: LedgerEntry[] = []
+  for (const name of await FS.listDir(entriesPath)) {
+    if (!name.endsWith('.md')) {
+      continue
+    }
+    const source = await FS.readText(FS.resolvePath(name, entriesPath))
+    entries.push({ name, status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '' })
+  }
+  const index = FS.resolvePath(indexPath, repoRoot)
+  return { entries, index: (await FS.exists(index)) ? await FS.readText(index) : '' }
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {
