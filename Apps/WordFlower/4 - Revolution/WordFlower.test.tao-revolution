@@ -1,16 +1,30 @@
-use WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerDrawer, WordFlowerFoundationTest from ./
+use SlotNav, StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
 
-// Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
-// and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
-// is expected to be decided in a future Next slice before implementation.
-test "WordFlower full target" {
+// A folder is one module, so nothing here imports the app file beside it: `use … from @pkg` is for
+// genuinely external packages and other folders (§1).
+
+// Directional journeys for the full target, written in the decided testing dialect
+// (`Docs/Roadmap/Tao Revolution/Decisions.md` §16).
+//
+// What that settles, and what it retires:
+//
+//   - `test "sentence"` is the journey; `check` is only ever the early-exit statement in an action,
+//     so the two words never meet
+//   - tests nest, and a parent's `on <device>` and `with <fixture>` apply to every test inside it
+//   - UI steps select by visible text or `#tag`. There are no role words: `expect role heading`,
+//     `press role button name …`, and `expect checkbox … unchecked` are retired, and role and name
+//     guarantees are enforced by the design's `rules { }` across scenarios instead
+//   - selectors never name a translation key, because the language has none. `text string
+//     .workspaces.EmptyTitle` is retired; a locale-independent assertion names the `phrase` instead
+//   - store checks are ordinary queries over plain values, not an assertion sub-language
+//   - the world a journey runs in is a named app variant, not an inline `run X with { … }` patch
+//   - a sidecar is stubbed by contract, addressed to the action, and a failure stub picks a
+//     **declared** case, so renaming one breaks the test at compile time
+
+test "WordFlower full target" on phone with StarterWorkspace {
    test "activates the workspace tab and fills the split" {
-      run WordFlower
-      expect text "Starter prompt: Morning pages"
-      expect text "Try writing for 10 minutes"
-      expect text "Tagged: daily, warmup"
-      enter "Novel" into #workspaceName
-      submit #workspaceName
+      run WordFlowerPreview
       expect text "Novel"
       press text "Workspace" // selection items are activated by their labels
       expect text "Choose a workspace"
@@ -19,82 +33,94 @@ test "WordFlower full target" {
          press text "Novel"
       }
       expect text "Files" // the split mounts with its pane titles
-      expect text "Novel"
+      expect text "Opening"
+   }
+
+   test "reveals rather than duplicates when the same document is opened twice" {
+      run WordFlowerPreview
+      press text "Workspace"
+      select #chooseWorkspace[1] { press text "Novel" }
+      select #files[1] { press #open }
+      expect text "Document: Opening"
+      select #files[1] { press #openViaBinding } // an equal mount is focused, never stacked
+      back
+      expect missing text "Document: Opening" // one occurrence existed, so one Back leaves it
    }
 
    test "asks before closing a document" {
-      run WordFlower
-      enter "Novel" into #workspaceName
-      submit #workspaceName
+      run WordFlowerPreview
       select #workspaces[1] {
          press #openWorkspace
       }
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
       select #documents[1] {
          press #openDocument
       }
-      expect text "Document: Chapter one"
+      expect text "Document: Opening"
       press #closeDocument
-      expect text "Close Chapter one?"
+      expect text "Close Opening?"
       press #cancelClose
-      expect text "Document: Chapter one" // cancelling answers none and the editor stays
+      expect text "Document: Opening" // cancelling answers none and the editor stays
       press #closeDocument
       press #confirmClose
-      expect missing text "Document: Chapter one"
+      expect missing text "Document: Opening"
    }
 
-   test "saving presents a keyed toast" {
-      run WordFlower
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
-      select #documents[1] {
-         press #openDocument
-      }
+   test "saves a composed draft and reverts it from the keyed toast" {
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
       expect text "Saves this session: 0"
-      expect checkbox #markFinal unchecked
-      press #markFinal
-      expect checkbox #markFinal checked
       enter "" into #documentTitle
       press #save
-      expect text "Document: Chapter one"
+      // `save` is refused by the entity's own `validate`, which invalidates the draft, so the
+      // sentence shows beside the field. `required` would not have blocked the write.
+      expect text "A document needs a title"
       expect text "Saves this session: 0"
-      enter "Opening" into #documentTitle
-      enter "The first line." into #documentBody
-      expect text "Words: 3"
+      enter "Opening night" into #documentTitle
+      enter "The first line. Then another." into #documentBody
+      expect text "Words: 5"
       press #save
       expect text "Saved"
-      expect text "Document: Opening"
+      expect text "Document: Opening night"
       expect text "Saves this session: 1"
+      press #revertSave
+      expect text "Document: Opening"
       enter "It began at sea." into #newParagraph
       submit #newParagraph
       expect #newParagraph input value ""
       expect text "It began at sea."
    }
 
-   test "preserves workspace and document CRUD through lifecycle states" {
-      run WordFlower
+   test "writes a workspace rename through on every keystroke" {
+      run WordFlowerPreview
       expect navigation title "WordFlower"
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      select #workspaces[1] {
-         press #openWorkspace
-      }
+      select #workspaces[1] { press #openWorkspace }
       expect navigation title "Novel"
       enter "Renamed novel" into #workspaceTitle
-      expect toolbar command "Save workspace" enabled
-      press toolbar command "Save workspace"
+      // Nothing is saved: a direct bind is the write, so the row and its chrome are already current.
       expect navigation title "Renamed novel"
       expect text "Workspace: Renamed novel"
-      press #addDocument
-      expect text "Document title is required"
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
+
+      // A store check is an ordinary query over plain values.
+      let Renamed = Workspaces where Name is "Renamed novel"
+      expect Renamed.Count is 1
+      expect Renamed[0].Documents.Count is 1
+      expect Renamed[0].Documents[0].Title is "Opening"
+   }
+
+   test "keeps an empty workspace name out of the store" {
+      run WordFlowerPreview
+      press #addWorkspace // disabled while the draft is empty, so nothing happens
+      expect missing text "A workspace needs a name"
+      submit #workspaceName
+      expect text "A workspace needs a name" // the `validate` sentence, shown by the overlay notice
+      press #dismissNotice
+      expect (Workspaces where Name is "").Count is 0
+   }
+
+   test "moves a document between drafts and finished and deletes it" {
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
       select #documents[1] {
          press #finish
       }
@@ -111,6 +137,8 @@ test "WordFlower full target" {
          press #deleteWorkspace
       }
       expect text "No workspaces yet"
+      // `(owned)` is cascade lifetime, so the documents went with the workspace.
+      expect Workspaces.Count is 0
    }
 
    test "a with-variant reconfigures the same app" {
@@ -129,12 +157,75 @@ test "WordFlower full target" {
    }
 }
 
+// A journey that must hold in any locale asserts the phrase value rather than its English.
+test "WordFlower translations" on phone with StarterWorkspace {
+   test "names a missing document from the shared phrase" {
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      delete Opening // the test's scope writes the store with full authority; it is the harness
+      expect text DocumentGone
+   }
+}
+
+// Fault injection proves atomicity, and the proof is read off the screen plus a query where the
+// absence matters. The injection is addressed at the provider and names the write that fails, never
+// a position inside a body that a later edit could reorder.
+test "WordFlower write outcomes" on phone with StarterWorkspace {
+   test "reports a rejected create and lands nothing" {
+      run WordFlowerPreview
+      datasource fails after create Workspace "the store rejected the workspace"
+      enter "Foxglove" into #workspaceName
+      submit #workspaceName
+      expect text "the store rejected the workspace"
+      expect (Workspaces where Name is "Foxglove").Count is 0
+   }
+
+   test "keeps an offline write queued rather than failed" {
+      run WordFlowerPreview
+      network offline
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter two" into #newDocumentTitle
+      submit #newDocumentTitle
+      expect text "Chapter two" // offline is never modelled as an error
+      network online
+      wait for sync
+      expect (Workspaces where Name is "Novel")[0].Documents.Count is 2
+   }
+}
+
+// A sidecar is stubbed by contract, addressed to the action rather than to a network, and a failure
+// stub picks one of the action's own declared cases.
+test "WordFlower export" on laptop with StarterWorkspace {
+   test "reports a declared export failure" {
+      action ExportDocument fails Offline
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect text "Exporting needs a connection."
+   }
+
+   test "reports a successful export" {
+      // A success stub supplies the value, so it needs no type name.
+      action ExportDocument returns "https://example.com/opening.md"
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      press key "primary+e" // the command's portable modifier shortcut, never a platform key
+      press #export
+      expect text "Exported"
+      press #closeExport
+   }
+}
+
 // T4's test vocabulary drives the semantic attention reducer directly. These journeys remain in
 // the Revolution sketch so later product breadth cannot silently regress the settled keyboard
 // model or replace it with a second focus owner.
-test "WordFlower keyboard attention" {
+test "WordFlower keyboard attention" on laptop {
    test "narrows and activates a workspace without Back disturbing attention" {
-      run WordFlower
+      run WordFlowerPreview
       enter "Home" into #workspaceName
       submit #workspaceName
       enter "Projects" into #workspaceName
@@ -151,7 +242,7 @@ test "WordFlower keyboard attention" {
    }
 
    test "shows stable generated hints only on demand" {
-      run WordFlower
+      run WordFlowerPreview
       enter "Home" into #workspaceName
       submit #workspaceName
       enter "Projects" into #workspaceName
@@ -168,7 +259,7 @@ test "WordFlower keyboard attention" {
    }
 
    test "engages the editor and invokes the focus bar chord" {
-      run WordFlower
+      run WordFlowerPreview
       enter "Novel" into #workspaceName
       submit #workspaceName
       select #workspaces[1] { press #openWorkspace }
@@ -189,7 +280,7 @@ test "WordFlower keyboard attention" {
    }
 
    test "surfaces only the promoted document verb and runs its accelerator" {
-      run WordFlower
+      run WordFlowerPreview
       enter "Novel" into #workspaceName
       submit #workspaceName
       select #workspaces[1] { press #openWorkspace }
@@ -209,7 +300,7 @@ test "WordFlower keyboard attention" {
    }
 
    test "opens and narrows the generated command palette" {
-      run WordFlower
+      run WordFlowerPreview
       expect missing text "Command palette"
       press key "primary+k"
       expect {
@@ -221,7 +312,7 @@ test "WordFlower keyboard attention" {
    }
 
    test "opens an overview of the navigator and persistent focus region" {
-      run WordFlower
+      run WordFlowerPreview
       enter "Home" into #workspaceName
       submit #workspaceName
       select #workspaces[1] { press #openWorkspace }
@@ -243,7 +334,84 @@ test "WordFlower keyboard attention" {
    }
 }
 
-test "WordFlower navigation foundation" {
+// ---------------------------------------------------------------------------------------------
+// The navigation-foundation harness
+// ---------------------------------------------------------------------------------------------
+//
+// A deterministic harness with only StackNav and SlotNav and no Design or Datasource capability, so
+// navigation foundations stay executable independently of them, plus the declaration-refinement
+// forms. This is test scaffolding, not product, so it lives beside the journeys that exercise it
+// rather than in the app file — `Apps/WordFlower/README.md`: WordFlower stays a real product and
+// never accumulates demo-only surface.
+
+type FoundationHomeStack is StackNav with {
+   Initial is FoundationHome
+}
+
+nav FoundationStack = FoundationHomeStack {}
+nav FoundationStackWith = FoundationHomeStack with {}
+let FoundationStackLet = FoundationHomeStack {}
+let FoundationStackLetWith = FoundationHomeStack with {}
+nav FoundationNavigator = SlotNav { Initial FoundationStack }
+
+app WordFlowerFoundationTest {
+   Name "WordFlower Navigation Foundation Test"
+   view FoundationNavigator
+}
+
+app WordFlowerDeclarationHead {
+   Name "WordFlower Declaration Head"
+   view FoundationStack
+}
+
+app WordFlowerDeclarationHeadWith = app with {
+   Name "WordFlower Declaration Head With"
+   view FoundationStackWith
+}
+
+let WordFlowerDeclarationLet = app {
+   Name "WordFlower Declaration Let"
+   view FoundationStackLet
+}
+
+let WordFlowerDeclarationLetWith = app with {
+   Name "WordFlower Declaration Let With"
+   view FoundationStackLetWith
+}
+
+scene FoundationHome() {
+   Title "Navigation foundation"
+   render Col() {
+      Text("Foundation home marker")
+      FormButton("Open deterministic detail") {
+         on press -> { present FoundationDetail() }
+      }
+      FormButton("Open deterministic slot") {
+         on press -> { present FoundationSlot() in FoundationNavigator }
+      }
+   }
+}
+
+scene FoundationDetail() {
+   Title "Foundation detail"
+   render Col() {
+      Text("Foundation detail marker")
+      FormButton("Reset foundation app") {
+         on press -> { replace FoundationNavigator in WordFlowerFoundationTest }
+      }
+   }
+}
+
+view FoundationSlot() {
+   render Col() {
+      Text("Foundation slot marker")
+      FormButton("Restore initial stack") {
+         on press -> { dismiss }
+      }
+   }
+}
+
+test "WordFlower navigation foundation" on phone {
    test "native back uses the semantic reducer" {
       run WordFlowerFoundationTest
       expect navigation title "Navigation foundation"
@@ -267,7 +435,7 @@ test "WordFlower navigation foundation" {
    }
 }
 
-test "WordFlower declaration refinement forms" {
+test "WordFlower declaration refinement forms" on phone {
    test "a primitive head with canonical construction works" {
       run WordFlowerDeclarationHead
       expect text "Foundation home marker"
@@ -286,42 +454,5 @@ test "WordFlower declaration refinement forms" {
    test "an inferred let with explicit refinement works" {
       run WordFlowerDeclarationLetWith
       expect text "Foundation home marker"
-   }
-}
-
-// Testing vocabulary intended beyond the MVP tier: focused renders with state overrides, app-level
-// overrides, role and accessibility-state selectors, and localized string keys.
-test "WordFlower revolution" {
-   let LongTitle = "A Complete History of the Semicolon, Volume Two"
-
-   test "renders one view in isolation with overridden state" {
-      render ReadingView(Document) with Focused { }
-
-      expect role heading name LongTitle
-      expect checkbox label "Final" unchecked
-   }
-
-   test "runs the app against a named datasource and theme" {
-      run WordFlower with {
-         datasource.appId "wordflower-empty"
-         theme WordFlowerDesign
-      }
-
-      expect #emptyState {
-         text string .workspaces.EmptyTitle // localized string keys, not literal copy
-      }
-      expect missing #loadingSpinner
-   }
-
-   test "exports a document and reports failure through a presentation result" {
-      run WordFlower with {
-         datasource.appId "wordflower-seeded"
-      }
-
-      press label "Workspace"
-      press role button name "Open document"
-      press #export
-      expect text "Exporting"
-      expect button "Export" disabled
    }
 }
