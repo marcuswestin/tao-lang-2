@@ -155,9 +155,11 @@ are TypeScript values, not templates on disk.
   `app.config.js`, `app-config.cjs`, `metro.config.cjs`, `app.json`, `index.ts`, `plugins/`, and
   `assets/` (1.9 MB, nearly all of it the two app icons). `tao test` additionally needs
   `jest.tao-test.config.cjs` and the `jest.shared.config.cjs` it requires, `jest.config.cjs`,
-  `tsconfig.json`, `runtime-toolchain-src/testing/` including the device-module setup file, and the
-  `runtime-toolchain-tests/tao-test-command.jest.tsx` entry its `testMatch` names (a further
-  168 KB). Omitting the second group is the quiet way to make slice 5 unreachable.
+  `tsconfig.json`, `runtime-toolchain-src/testing/`, and every `runtime-toolchain-tests/` file the
+  config names through `testMatch`, `moduleNameMapper`, or `setupFilesAfterEnv` — today the
+  fallback entrypoint, the journey harness, and two module mocks (a further 212 KB). Read the
+  config rather than this list when building the payload; it changes. Omitting this group is the
+  quiet way to make slice 5 unreachable.
 
 **Never embed.** The Expo host `node_modules`, 355 MB of resolved closure, read by the Expo CLI,
 Metro, and Jest. See F6.
@@ -391,6 +393,15 @@ order:
 Call sites to convert: the module-level `CLI_PACKAGE_ROOT` in `app-modules.ts`, `Stdlib.rootPath`,
 `RuntimeToolchainPaths.packageRoot`, and `StudioHighlight`'s `Repo.resolvePath` of the TextMate
 grammar. `process.execPath` is correct inside a compiled binary (F1), which is what makes this work.
+
+Build the seam beside `packages/shared/shared-src/TaoStdlib.ts` rather than next to any one reader.
+That module already owns `TAO_STDLIB_ROOT` for exactly this reason — two memoizing schemes that
+cannot reach each other both have to answer for a redirected stdlib — and it establishes the two
+rules a resource root inherits: the declared value must be absolute, and it is part of the identity
+that `tao test` and the repository build key their compiled output on. A resource root that moves
+without changing that identity silently reuses a compile against a different stdlib.
+`TAO_TEST_NODE_MODULES_ROOT` in `jest.shared.config.cjs` is the same idea already applied to the
+host's dependency root, and is what lets a versioned host work without a config rewrite.
 
 Unpack on first use of a version, into `versions/<v>/resources`, behind a completion stamp so a
 half-written unpack is never read. Verify after unpacking rather than trusting it — F2 shows a
