@@ -704,6 +704,7 @@ function bunSuite(
   const testReport = context.reportRoot === undefined
     ? undefined
     : nativeReport(context.nodeName, suite, 'bun-junit', context.reportRoot)
+  const tuningArgs = GateCatalog.suiteTuning(suite).args ?? []
   const args = [
     'test',
     // Bun reads a bare relative path as a filter, walks the whole repository to resolve it, and
@@ -714,11 +715,50 @@ function bunSuite(
     ...(testReport === undefined
       ? ['--reporter=dot']
       : ['--reporter=junit', `--reporter-outfile=${testReport.path}`]),
-    ...(GateCatalog.suiteTuning(suite).args ?? []),
+    ...tuningArgs,
+    ...(tuningArgs.some(arg => arg.startsWith('--timeout='))
+      ? []
+      : [`--timeout=${starvationAdjustedTimeoutMs(Shared.Platform.loadAverage(), Shared.Platform.cpuCount())}`]),
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
   return { args, command: 'bun', cwd: repositoryRoot, files, testReport }
 }
+
+/**
+ * starvationAdjustedTimeoutMs keeps the per-test bound denominated in work rather than in wall time.
+ *
+ * Bun's deadline is wall time, which is the work a test performed plus the time it spent off CPU
+ * waiting for the rest of the machine. Holding it fixed therefore makes the pass/fail judgment a
+ * function of how busy the machine is, which is not a property of the test: the Studio client bundle
+ * measures 1.4s in isolation and was killed at Bun's five seconds with four lanes in flight. Raising
+ * the bound to a flat sixty seconds, as the suites below do, buys that tolerance by giving up the
+ * budget entirely — a test that genuinely regressed to forty seconds would pass in silence.
+ *
+ * So the budget stays fixed and only the deadline stretches, by the run-queue depth this machine is
+ * actually carrying. On a machine this run has to itself the result is exactly Bun's own five
+ * seconds and the budget is unchanged; the bound relaxes only while the load average says the
+ * slowdown is the machine's doing. A suite that declares its own `--timeout` keeps it: those bounds
+ * are hang guards chosen for tests that legitimately do tens of seconds of work, and scaling a hang
+ * guard is meaningless.
+ */
+function starvationAdjustedTimeoutMs(loadAverage: number, cpuCount: number): number {
+  // The one-minute average lags the load it reports, so a run climbing toward saturation is always
+  // read as quieter than the test is experiencing: the run that motivated this measured 2.3x by load
+  // while the killed test itself ran 3.7x slower than in isolation.
+  const observed = loadAverage / Math.max(1, cpuCount) * LOAD_AVERAGE_LAG_ALLOWANCE
+  const factor = Math.min(Math.max(observed, 1), MAX_STARVATION_FACTOR)
+  return Math.round(TEST_BUDGET_MS * factor)
+}
+
+/** Bun's own per-test default, which is what an uncontended machine keeps. */
+const TEST_BUDGET_MS = 5_000
+/** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
+const LOAD_AVERAGE_LAG_ALLOWANCE = 2
+/**
+ * The ceiling, in budgets: a deadline past this is no longer distinguishing a starved test from a
+ * hung one, and sixty seconds is the bound this repository already accepts as "only a hang trips it".
+ */
+const MAX_STARVATION_FACTOR = 12
 
 function taoAppsSuite(roots: readonly string[], repositoryRoot: string): TestProcess {
   return { args: ['test', ...roots], command: './tao', cwd: repositoryRoot, files: roots }
@@ -804,6 +844,7 @@ export const TestRunner = {
   runTestFile,
   runTestRequest,
   runTests,
+  starvationAdjustedTimeoutMs,
   suiteInventory,
   testFile,
   testNodesFor,

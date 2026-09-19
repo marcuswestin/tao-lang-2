@@ -70,6 +70,35 @@ Describe('test runner suite registry', () => {
 
     Expect(argsOf(byName, 'dev')).toContain('--concurrent')
     Expect(argsOf(byName, 'dev')).toContain('--timeout=60000')
+    // A suite that chose its own bound keeps exactly that one: a second `--timeout` would leave
+    // which bound is in force up to Bun's argument precedence rather than to this table.
+    Expect(argsOf(byName, 'dev').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
+  })
+
+  Test('gives a suite that declares no bound one work-denominated timeout', async () => {
+    const { byName } = await discover()
+
+    // Bun's per-test deadline is wall time, so leaving it at the five-second default makes the
+    // judgment depend on how busy the machine is rather than on what the test did. Studio is the
+    // suite that exposed it: its client bundle measures 1.4s alone and was killed at 5s beside
+    // three other lanes. Every Bun suite therefore carries an explicit bound.
+    const bounds = argsOf(byName, 'studio').filter(argument => argument.startsWith('--timeout='))
+    Expect(bounds).toHaveLength(1)
+    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(5_000)
+  })
+
+  Test('spends the per-test budget on work, and stretches the deadline only while the machine is loaded', () => {
+    const { starvationAdjustedTimeoutMs } = TestRunner
+
+    // A machine this run has to itself keeps Bun's own five seconds, so a test that genuinely
+    // regresses is still caught. This is the case a flat sixty-second bound gives up.
+    Expect(starvationAdjustedTimeoutMs(2, 18)).toBe(5_000)
+    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(5_000)
+    // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
+    // than in isolation. The deadline has to clear that multiple, and does.
+    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBeGreaterThan(5_000 * 3.7)
+    // Past the ceiling the deadline stops distinguishing a starved test from a hung one.
+    Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(60_000)
   })
 
   Test('names every Bun test file absolutely, so the runner never walks the repository to find it', async () => {
