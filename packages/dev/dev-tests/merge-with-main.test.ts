@@ -273,6 +273,14 @@ Describe('merge-with-main', () => {
 
     Expect(() => validateMergeMessage('No bullets')).toThrow(Errors.UserInputError)
     Expect(() => validateMergeMessage('Summary\n\n- Good\n\n- Split')).toThrow(Errors.UserInputError)
+    // A bullet may wrap. Demanding one physical line per bullet only produced lines too long to
+    // read in a diff, and the message is prose for a human, not a record anything parses.
+    Expect(validateMergeMessage('Summary\n\n- A bullet that runs on\n  and wraps once\n- A second one'))
+      .toBe('Summary\n\n- A bullet that runs on\n  and wraps once\n- A second one')
+    // The block still has to start with a bullet, and a continuation still has to be indented.
+    Expect(() => validateMergeMessage('Summary\n\n  leading continuation\n- Late bullet'))
+      .toThrow(Errors.UserInputError)
+    Expect(() => validateMergeMessage('Summary\n\n- Good\nunindented prose')).toThrow(Errors.UserInputError)
     Expect(() => validateMergeMessage('Summary\n\n- Good\n\nCo-Authored-By: Bot <bot@example.test>'))
       .toThrow(Errors.UserInputError)
     Expect(() => validateMergeMessage('Summary\n\n- Good\nGenerated-By: Example automation'))

@@ -165,9 +165,16 @@ export function validateMergeMessage(source: string): string {
   if (lines[1] !== '') {
     Errors.throwUserInput('The merge message summary must be followed by one blank line.')
   }
-  if (lines.length < 3 || lines.slice(2).some(line => !/^- \S/u.test(line))) {
+  // A bullet may wrap onto indented continuation lines. Requiring each one to occupy a single
+  // physical line bought nothing — the appendix Git generates below it is already wrapped — and
+  // pushed authors into 240-character lines that no diff or terminal shows whole.
+  if (lines.length < 3 || !/^- \S/u.test(lines[2] ?? '')) {
+    Errors.throwUserInput('The merge message must continue with a `- ...` bullet after the summary.')
+  }
+  if (lines.slice(3).some(line => !/^- \S/u.test(line) && !/^ +\S/u.test(line))) {
     Errors.throwUserInput(
-      'The merge message must end with a contiguous bullet block using one `- ...` bullet per line.',
+      'The merge message must end with a contiguous bullet block: every line after the first bullet '
+        + 'either starts a new `- ...` bullet or is an indented continuation of the one above it.',
     )
   }
   assertNoAutomatedAttribution(message)
