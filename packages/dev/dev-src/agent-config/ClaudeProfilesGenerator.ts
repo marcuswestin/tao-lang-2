@@ -3,7 +3,7 @@ import { type AgentProfiles, inheritedWritePaths, readProfiles } from './AgentPr
 
 /**
  * Claude Code's settings model has no named permission profiles, so each opt-in profile becomes a
- * whole settings file that `just claude-<name>` launches with. Rendering them from
+ * whole settings file that `just session-<name>` launches with. Rendering them from
  * `.rulesync/profiles.jsonc` keeps them in step with the Codex profiles rendered from the same source.
  */
 const SETTINGS_SCHEMA = 'https://json.schemastore.org/claude-code-settings.json'

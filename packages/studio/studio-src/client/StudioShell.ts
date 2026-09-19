@@ -42,7 +42,7 @@ const dividerWidth = 4
 const editorMinimum = 240
 
 /** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
-export type StudioPaneControls = Readonly<{
+type StudioPaneControls = Readonly<{
   designLayout: (active: boolean) => void
   dispose: () => void
   showLeft: () => void

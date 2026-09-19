@@ -1,6 +1,6 @@
 {
   // Opt-in permission profiles layered over the default policy in permissions.jsonc. `./agent setup`
-  // renders each one into `.claude/settings.<name>.json` (which `just claude-<name>` launches with)
+  // renders each one into `.claude/settings.<name>.json` (which `just session-<name>` launches with)
   // and into the matching `tao-<name>` profile in `.codex/config.toml`. Edit this file, never the
   // generated ones. A profile is what the default policy deliberately lacks: the host commands it
   // prompts for, the commands that leave the sandbox, the directories and sockets it may write.
@@ -30,7 +30,7 @@
       "allowWrite": ["~/Library/Developer/Xcode/Archives"],
     },
     "unsandboxed": {
-      "description": "Claude Code with the Bash sandbox off; switch a running session with /sandbox.",
+      "description": "Tao unsandboxed: run with the Bash sandbox off; a running session can switch with /sandbox.",
       "sandbox": false,
     },
   },

@@ -164,6 +164,20 @@ export function white(value: string): string {
   return color(37, value)
 }
 
+/**
+ * green returns ANSI green text, for a line that says something succeeded. It colors
+ * unconditionally; a caller writing somewhere that may be a pipe or a log file decides whether to
+ * call it at all, with `isOutputTerminal`.
+ */
+export function green(value: string): string {
+  return color(32, value)
+}
+
+/** red returns ANSI red text, under the same rule as `green`: the caller decides when to color. */
+export function red(value: string): string {
+  return color(31, value)
+}
+
 /** askText prompts for a text response. */
 export async function askText(options: TextPromptOptions): Promise<string> {
   if (!isInteractive(options)) {
@@ -524,16 +538,8 @@ function cyan(value: string): string {
   return color(36, value)
 }
 
-function green(value: string): string {
-  return color(32, value)
-}
-
 function magenta(value: string): string {
   return color(35, value)
-}
-
-function red(value: string): string {
-  return color(31, value)
 }
 
 function yellow(value: string): string {

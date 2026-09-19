@@ -138,19 +138,19 @@ Describe('green tree records', () => {
     try {
       Expect(await GreenTree.find(root, keyFor('abc'), ['verify'])).toBeUndefined()
 
-      await GreenTree.record(root, 'full-verify', entryFor('abc', '/logs/full'))
+      await GreenTree.record(root, 'verify-full', entryFor('abc', '/logs/full'))
       await GreenTree.record(root, 'verify', entryFor('def', '/logs/verify', '2026-09-05T11:00:00Z'))
 
-      Expect(await GreenTree.find(root, keyFor('abc'), ['verify', 'full-verify'])).toEqual({
+      Expect(await GreenTree.find(root, keyFor('abc'), ['verify', 'verify-full'])).toEqual({
         at: '2026-09-05T10:00:00Z',
-        lane: 'full-verify',
+        lane: 'verify-full',
         logRoot: '/logs/full',
         toolchain: TOOLCHAIN,
         treeHash: 'abc',
       })
-      Expect((await GreenTree.find(root, keyFor('def'), ['verify', 'full-verify']))?.lane).toBe('verify')
-      Expect(await GreenTree.find(root, keyFor('def'), ['full-verify'])).toBeUndefined()
-      Expect(await GreenTree.find(root, keyFor('zzz'), ['verify', 'full-verify'])).toBeUndefined()
+      Expect((await GreenTree.find(root, keyFor('def'), ['verify', 'verify-full']))?.lane).toBe('verify')
+      Expect(await GreenTree.find(root, keyFor('def'), ['verify-full'])).toBeUndefined()
+      Expect(await GreenTree.find(root, keyFor('zzz'), ['verify', 'verify-full'])).toBeUndefined()
 
       // A new record for a lane replaces the old one; a lane proves one tree at a time.
       await GreenTree.record(root, 'verify', entryFor('ghi', '/logs/verify-2', '2026-09-05T12:00:00Z'))
@@ -341,7 +341,7 @@ Describe('green tree records', () => {
     try {
       await Expect(GreenTree.record(
         root,
-        'full-verify',
+        'verify-full',
         entryFor('abc', '/logs/full'),
         ['_typecheck', 'studio-smoke'],
         { neverRecord: new Set(['studio-smoke']) },
@@ -350,7 +350,7 @@ Describe('green tree records', () => {
       Expect(await GreenTree.load(root)).toEqual({ gates: {}, lanes: {} })
 
       // The same call without that gate is ordinary.
-      await GreenTree.record(root, 'full-verify', entryFor('abc', '/logs/full'), ['_typecheck'], {
+      await GreenTree.record(root, 'verify-full', entryFor('abc', '/logs/full'), ['_typecheck'], {
         neverRecord: new Set(['studio-smoke']),
       })
       Expect([...(await GreenTree.findGates(root, keyFor('abc'), ['_typecheck'])).proved.keys()])
@@ -381,15 +381,15 @@ Describe('green tree records', () => {
   Test('the skip line names the run it stands on and says when it was a superset lane', () => {
     const match = {
       at: '2026-09-05T10:00:00Z',
-      lane: 'full-verify',
-      logRoot: '/repo/.artifacts/logs/full-verify/run',
+      lane: 'verify-full',
+      logRoot: '/repo/.artifacts/logs/verify-full/run',
       toolchain: TOOLCHAIN,
       treeHash: 'abc',
     }
 
     Expect(GreenTree.describe('verify', match)).toContain('tree unchanged since the green run at 2026-09-05T10:00:00Z')
-    Expect(GreenTree.describe('verify', match)).toContain('full-verify, a superset of verify')
-    Expect(GreenTree.describe('full-verify', match)).not.toContain('superset')
-    Expect(GreenTree.describeGate(match)).toContain('/repo/.artifacts/logs/full-verify/run')
+    Expect(GreenTree.describe('verify', match)).toContain('verify-full, a superset of verify')
+    Expect(GreenTree.describe('verify-full', match)).not.toContain('superset')
+    Expect(GreenTree.describeGate(match)).toContain('/repo/.artifacts/logs/verify-full/run')
   })
 })

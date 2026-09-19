@@ -182,6 +182,8 @@ export type WorkSlotReservation = {
 export type WorkSlotBroker = {
   /** Returns no reservation when another lane currently owns the available capacity. */
   tryAcquire: (requestedSlots: number, allowPartial: boolean) => Promise<WorkSlotReservation | undefined>
+  /** Why the last admission was declined, shown on the waiting node so the run explains itself. */
+  readonly waitReason?: string | undefined
   /** Waits briefly for another process to publish a capacity change. */
   waitForAvailability: () => Promise<void>
 }
@@ -235,6 +237,23 @@ const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
 const BUDGET_ENV_KEYS = {
   taoTest: 'TAO_TEST_JOBS',
 } as const
+
+/**
+ * machineCapacityReason appends the broker's own explanation to the stable prefix every machine
+ * wait shares. The prefix is what the scheduler matches on; the suffix is for whoever is watching.
+ */
+function machineCapacityReason(detail: string | undefined): string {
+  return detail === undefined ? MACHINE_CAPACITY_REASON : `${MACHINE_CAPACITY_REASON}: ${detail}`
+}
+
+function isMachineCapacityReason(reason: string | undefined): reason is string {
+  return reason !== undefined && reason.startsWith(MACHINE_CAPACITY_REASON)
+}
+
+function machineCapacityDetail(reason: string): string | undefined {
+  const detail = reason.slice(MACHINE_CAPACITY_REASON.length).replace(/^: /, '')
+  return detail.length > 0 ? detail : undefined
+}
 
 /** createState returns the tracking state one node starts a run in. */
 function createState(node: WorkNode): WorkState {
@@ -369,7 +388,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     if (resource !== undefined) {
       return { detail: resource, kind: 'resource' }
     }
-    return state.reason === MACHINE_CAPACITY_REASON ? { kind: 'machine' } : { kind: 'capacity' }
+    if (!isMachineCapacityReason(state.reason)) {
+      return { kind: 'capacity' }
+    }
+    // The detail is what the broker said, so a run whose machine wait changes cause — a peer's
+    // exclusive confirmation, then an ordinary share — reports the two separately in its summary.
+    return { detail: machineCapacityDetail(state.reason), kind: 'machine' }
   }
 
   async function admit(): Promise<{ machineBlocked: boolean; settled: number; started: number }> {
@@ -405,9 +429,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       }
       if (options.slotBroker !== undefined && machineReservation === undefined) {
         machineBlocked = true
-        if (state.reason !== MACHINE_CAPACITY_REASON) {
-          state.reason = MACHINE_CAPACITY_REASON
-          emit({ kind: 'waiting', reason: MACHINE_CAPACITY_REASON, state })
+        const reason = machineCapacityReason(options.slotBroker.waitReason)
+        if (state.reason !== reason) {
+          state.reason = reason
+          emit({ kind: 'waiting', reason, state })
         }
         break
       }

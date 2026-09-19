@@ -5,6 +5,7 @@ import {
   buildSummary,
   classifyFailure,
   formatGateSummary,
+  formatVerdict,
   gateExitCode,
   rollupSuites,
 } from '../dev-src/repository-tests/RunSummary'
@@ -35,8 +36,8 @@ Describe('versioned run summary', () => {
     const summary = buildSummary({
       elapsedMs: 4_200,
       expectedMs: name => (name === 'studio-canary' ? 30_000 : undefined),
-      lane: 'full-verify',
-      logRoot: '/repo/.artifacts/logs/full-verify/stamp',
+      lane: 'verify-full',
+      logRoot: '/repo/.artifacts/logs/verify-full/stamp',
       states: [
         finishedState({ name: 'studio-smoke-native', needs: ['_compile'], resources: ['gui'] }),
         finishedState({ name: 'studio-canary', resources: ['gui'] }),
@@ -44,7 +45,7 @@ Describe('versioned run summary', () => {
     })
 
     Expect(summary.version).toBe(2)
-    Expect(summary.lane).toBe('full-verify')
+    Expect(summary.lane).toBe('verify-full')
     Expect(summary.gates[0]?.needs).toEqual(['_compile'])
     Expect(summary.gates[0]?.resources).toEqual(['gui'])
     Expect(summary.gates[0]?.expectedMs).toBeUndefined()
@@ -213,6 +214,65 @@ Describe('versioned run summary', () => {
     Expect(summary.gates[0]?.waits).toEqual([{ detail: '_fix-dprint', kind: 'dependency', ms: 900 }])
     // A node that never waited says nothing, so the field itself means "this one was held".
     Expect(summary.gates[1]?.waits).toBeUndefined()
+  })
+
+  Test('ends on a verdict, after the artifact paths and the failure excerpt', () => {
+    const passed = buildSummary({
+      elapsedMs: 58_200,
+      lane: 'verify',
+      logRoot: '/repo/.artifacts/logs/verify/stamp',
+      states: [finishedState({ name: '_repo-lint' })],
+    })
+    const failed = buildSummary({
+      elapsedMs: 12_000,
+      lane: 'verify',
+      logRoot: '/repo/.artifacts/logs/verify/stamp',
+      states: [
+        finishedState({ name: '_typecheck' }),
+        finishedState({ name: 'shared' }, { exitCode: 1, fullOutput: '(fail) parses', status: 'failed' }),
+      ],
+    })
+
+    // Last means last: a verdict above the failure excerpt is one a reader scrolls back to.
+    Expect(formatGateSummary(passed).split('\n').at(-1)).toBe('verify: PASSED in 58.2s')
+    Expect(formatGateSummary(failed).split('\n').at(-1)).toBe('verify: FAILED in 12.0s — first failure: shared')
+    Expect(formatGateSummary(failed)).toContain('First failure — shared')
+  })
+
+  Test('a lane skipped whole on a green record still states its verdict', () => {
+    const skipped = buildSummary({
+      elapsedMs: 300,
+      lane: 'verify-full-sandbox',
+      logRoot: '/repo/.artifacts/logs/verify-full/earlier',
+      states: [
+        finishedState({ name: '_typecheck' }, { elapsedMs: 0, exitCode: undefined, status: 'skipped' }),
+      ],
+    })
+
+    // Nothing ran, so nothing above the last line says whether the tree is good.
+    Expect(formatVerdict(skipped)).toBe('verify-full-sandbox: PASSED in 300ms')
+  })
+
+  Test('colors the verdict for a terminal and leaves a pipe free of escape codes', () => {
+    const passed = buildSummary({
+      elapsedMs: 1_000,
+      lane: 'check',
+      logRoot: '/repo/logs',
+      states: [finishedState({ name: '_repo-lint' })],
+    })
+    const failed = buildSummary({
+      elapsedMs: 1_000,
+      lane: 'check',
+      logRoot: '/repo/logs',
+      states: [finishedState({ name: '_repo-lint' }, { exitCode: 1, fullOutput: '(fail) x', status: 'failed' })],
+    })
+
+    Expect(formatVerdict(passed, { color: true })).toBe('[32mcheck: PASSED in 1.0s[0m')
+    Expect(formatVerdict(failed, { color: true })).toContain('[31m')
+    // The default is plain, so a lane that never decided cannot leave escape codes in a log file.
+    Expect(formatGateSummary(passed)).not.toContain('')
+    Expect(formatGateSummary(failed)).not.toContain('')
+    Expect(formatGateSummary(passed, { color: false })).not.toContain('')
   })
 
   Test('a test-runner timeout under measured contention is not hidden by its FAIL banner', () => {
