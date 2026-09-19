@@ -2,6 +2,66 @@
 
 ## Continuation evidence (current session)
 
+### Agreed cleanup after prototype review
+
+The follow-up places real-host orchestration and its dedicated fixtures in `packages/e2e-testing`.
+The developer command is a thin lazy package entry, while scoped globs register source and test
+coverage. Expanded source coverage is retained in each effect-boundary receipt; empty registrations
+are failures. Existing suites and their gate membership remain unchanged.
+
+`RuntimeCore.ts` is the public core facade. `Arrays.sorted` and `Arrays.reversed` centralize portable
+nonmutating ordering; explicitly named in-place helpers preserve intentional mutations. The shipped
+runtime uses these helpers and repository lint prevents raw ordering-method access elsewhere in it.
+`Effects` remains the same shared, host-neutral implementation.
+
+Tao-authored real-host journeys are accepted direction, not yet an implemented executor. Existing
+Maestro YAML and Playwright journeys remain the live proofs until equivalent source-linked Tao plans
+can drive the hosts and detect the same deliberate application faults. See the three ranked
+[next-slice contenders](Tao%20host%20control%20architecture.md#candidate-slices-for-discussion).
+
+The records below retain the prototype's earlier paths/counts as historical evidence. Follow-up
+validation under `.artifacts/host-testing/`:
+
+| Run                                    | Follow-up result                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `d5f65942-d3e5-4fa3-88ab-f77c6de65fb3` | All 31 controls passed, including shared/runtime array identity and scoped TS/TSX glob discovery                 |
+| `eec62284-52a0-415d-b8ec-8fabdb4f0028` | Effect/import boundary passed for 32 files expanded from three source patterns                                   |
+| `e2b00acf-5a3e-4cd4-8839-c8c987d22f37` | Independent E2E package typecheck passed                                                                         |
+| `ab87ee0e-42c1-4265-b24d-76ed5af8dbba` | Three Clockwork Chrome journeys passed, including concurrent-realm isolation                                     |
+| `1972bcee-4b08-41a5-bf74-17af4dcf456c` | HNReader Chrome navigation/order/reload-persistence journey passed                                               |
+| `201328e7-0ee8-4627-9ef5-a54b71923c97` | Frozen Clockwork countdown was detected at the intended healthy assertions; command intentionally exited nonzero |
+| `f79a90d4-26ff-4e92-8cf1-85628dcb1b6e` | Missing HNReader history writes were detected after browser reload; command intentionally exited nonzero         |
+| `e962f55f-acf9-41df-8e08-7fd51af6559b` | HNReader Release build/install and complete simulator journey passed, including OS kill/relaunch persistence     |
+
+The simulator recheck uses the shipped portable Arrays implementation. This follow-up did not repeat
+Clockwork's simulator journey, native mutation builds or physical-device installation; their earlier
+receipts below remain historical evidence. Physical-device UI acceptance and the Tao-plan executor
+remain incomplete. Fault JSON receipts preserve named assertion signatures and mutation provenance.
+
+Independent core review found two static destructuring forms that bypassed the array convention;
+assignment and for-of/in patterns are now covered alongside declarations and literal member access.
+The final repository lane is recorded separately at `.artifacts/logs/verify-full/latest/summary.json`;
+the opt-in host proofs above do not replace existing verification gates.
+
+The first follow-up full lane passed 40 gates and failed two: unused local exports (removed) and
+the existing simulated-user sketch-transition timeout. The isolated browser retry passed all four
+tests in 15.77 seconds. The failure and overlapping-load evidence are recorded under DEVENV-042 in
+the [developer-environment backlog](Developer%20environment%20upgrades.md); contention is not a proven
+cause. The final lane receipt above records verification after the export cleanup.
+That full retry (`2026-09-19T21-20-15-827Z-7571-cea3f64a`) passed 41 of 42 gates, with the same
+simulated-user unsnap transition failing. No other lane was registered. Full host verification
+was still red. Inspection found selection was applied before the board-settle wait and could be lost
+when the board was replaced; an empty selection intentionally means unsnap-all. The test now prepares
+the selection on the confirmed settled board, retaining the existing single real click and assertions.
+The corrected focused journey passed all four tests in 14.38 seconds.
+The final lane receipt above records validation after this narrow test-harness fix.
+Run `2026-09-19T21-27-48-281Z-47873-ffe742c3` passed every host and test gate, including the repaired
+simulated-user journey (46.1 seconds), but failed repository lint because nine existing raw-error
+allowlist line numbers moved with the test edit. Those exact locations were refreshed without adding
+exceptions. Final validation of that bookkeeping and the complete commit gate is recorded at
+`.artifacts/logs/verify/latest/summary.json`. The last full-lane receipt retains its failed lint status;
+host checks were not repeated after the allowlist/documentation-only follow-up.
+
 Ro authorized completing the review and committing the current milestone in chunks on 2026-09-19.
 Work is on `feat/real-host-testing-prototype` in the same worktree; no merge, push or new worktree is
 part of this authorization. The [host-control architecture recommendation](Tao%20host%20control%20architecture.md)
@@ -170,7 +230,7 @@ Use the existing worktree `/Users/ro/.codex/worktrees/40f2/tao-lang-2`. All chan
 the index and branch refs were not changed. Preserve them. Do not commit, stage, merge, or replace
 the worktree until Ro asks. Existing test suites and merge-gate membership are unchanged.
 
-Read [the prototype README](../../packages/dev/host-testing/README.md) and
+Read [the prototype README](../../packages/e2e-testing/README.md) and
 [the roadmap](Real-host%20testing%20prototype.md). Ro wants real browser/native/device evidence,
 explicitly registered new tests, and no imported legacy test infrastructure except HNReader as the
 initial existing subject. Clockwork is a new minimal harness fixture.

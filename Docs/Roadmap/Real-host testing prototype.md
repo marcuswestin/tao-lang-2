@@ -4,12 +4,32 @@
 
 Build an additive reference implementation before replacing existing testing. E2e means a real browser
 or native OS host; a build or runtime-renderer test is a different kind of evidence. Start from HNReader
-and a new focused Clockwork fixture. Register each new test explicitly and import no existing testing
+and a new focused Clockwork fixture. Register new coverage with scoped patterns and import no existing testing
 infrastructure other than the HNReader subject. Keep existing suites and merge gates intact. Do not
 commit until requested. Ro subsequently authorized completing review and committing this milestone
 in chunks on 2026-09-19; merging and pushing remain outside this task.
 
-Implementation and commands: [host-testing README](../../packages/dev/host-testing/README.md).
+Implementation and commands: [E2E testing README](../../packages/e2e-testing/README.md).
+
+## Accepted package and authoring boundaries
+
+`packages/e2e-testing` owns the additive real-host orchestration, control checks, browser/native
+journeys and dedicated Clockwork fixture. HNReader stays with its application; existing package tests
+stay with their packages. `./agent test-host` remains the opt-in command. Scoped source/test globs
+register coverage without file-by-file inventories; effect lint records the expanded files and fails
+on an empty registration. Command dispatch, build preparation, host execution and evidence reporting
+have separate named responsibilities.
+
+Tao is the agreed authored language for product journeys. A source-linked compiled journey plan and
+real-host executors are the next implementation boundary. The existing Playwright and Maestro
+journeys remain executable acceptance evidence until that replacement is proven; YAML is not the
+intended second authoring language. Physical termination/relaunch must remain distinct from an
+in-process renderer remount, and unsupported host steps must fail explicitly.
+
+Reusable host ownership, inspection and input belong below the journey runner so interactive
+development and visual iteration can use them without importing testing orchestration. A production
+host-control package will be extracted when those consumers are introduced; this cleanup adds no
+universal API, native driver or simulator pool.
 
 ## Prototype acceptance
 
@@ -29,10 +49,12 @@ The runtime adapter uses one controlled `TR.Clock` per JavaScript realm. The pur
 independent injected clocks in the same process. This establishes the prototype's isolation contract;
 it does not yet migrate the repository to a universal production effect API.
 
-The `RuntimeCore.ts` entry point at `@tao/runtime/core` exports the `Effects` namespace, re-exported
-through `@shared/core` and `@shared`. Its implementation stays in `core/Effects.ts` inside the shipped
-runtime package and has no imports, so sharing
-it introduces neither Node/React Native dependencies nor a new package to distribute.
+The `RuntimeCore.ts` entry point at `@tao/runtime/core` exports `Effects` and `Arrays`, re-exported
+through `@shared/core` and `@shared`. Their implementations stay inside the shipped runtime package
+without platform dependencies or a new distribution package. `Arrays.sorted` and `Arrays.reversed`
+return fresh arrays from readonly inputs; intentional mutation uses explicitly named in-place helpers.
+Repository lint keeps raw sorting/reversal methods inside `core/Arrays.ts` throughout shipped runtime
+source, preventing a recurrence of the native Hermes `toSorted` startup failure.
 
 Native physical-device driving and broad lint enforcement remain open implementation work. No test
 suite has been retired and no pre-merge gate has been replaced.
@@ -43,7 +65,7 @@ suite has been retired and no pre-merge gate has been replaced.
 | ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | HNReaderStub, browser        | `browser/hnreader.host.spec.ts`                             | Story comments, return navigation, two opened stories in newest-first order, persistence after page reload                            |
 | Clockwork, browser           | `browser/clockwork.host.spec.ts`                            | Visible color action and countdown after controlled runtime scheduling                                                                |
-| Browser realm isolation      | `environment/clockwork-browser.host.spec.ts`                | Separate clocks and random streams in fresh browser contexts                                                                          |
+| Browser realm isolation      | `browser/clockwork-environment.host.spec.ts`                | Separate clocks and random streams in fresh browser contexts                                                                          |
 | Effects core and enforcement | Explicit `controls` Playwright project                      | Same-process session isolation, invalid controls, lifecycle cleanup, synchronous clock observation, scoped effect/import restrictions |
 | Native subjects              | `native/flows/clockwork.yaml`, `native/flows/hnreader.yaml` | Intended simulator OS input, deep-link controls, and process-relaunch persistence; acceptance depends on native receipts              |
 

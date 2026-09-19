@@ -137,18 +137,24 @@ its artifacts before releasing ownership; device cleanup must verify the lease a
 
 ## Candidate slices for discussion
 
-1. **Owned browser sessions:** a small Tao API using Playwright library; two concurrent sessions,
-   source-aware inspection, screenshot/input, explicit close, and a recorded visual-editing loop.
-   Prove no cross-session storage, input or artifact interference with deliberate faults.
-2. **Native driver comparison:** one persistent Appium XCUITest session on the simulator and roPhone,
-   the existing HNReader lifecycle journey, and a visual-edit loop. Compare maintenance/startup/debug
-   costs against the existing Maestro flow before deciding whether native journeys migrate.
-3. **Native pool and handoff:** per-UDID ownership, two simultaneous simulators, separate build budget,
-   retained development sessions, owner-crash recovery and stale-token rejection. No automatic
-   preemption; prove another session survives each injected cleanup/ownership failure.
-4. **Unified source targeting and proof inventory:** versioned rendered-occurrence targets on both
-   hosts, source-to-screen navigation, truthful capability reporting, and a coverage map before any
-   existing suite replacement. Broader driver/platform support follows demonstrated demand.
+1. **Tao-authored real-host journeys (recommended first).** Compile the existing HNReader persistence
+   journey into a source-linked declarative plan and execute it on browser and simulator; add the
+   Clockwork journey in Tao. Keep compiler/plan ownership independent of the drivers. Any retained
+   Maestro YAML becomes generated driver output. Acceptance: one authored journey per behavior,
+   real host input and lifecycle, source-line failures, explicit unsupported capabilities, and the
+   same deliberate countdown/persistence faults detected on both hosts. Existing in-process suites
+   stay intact. This removes duplicate authoring before expanding the driver surface.
+2. **Owned browser development sessions.** Extract the reusable production host-control boundary
+   beneath `packages/e2e-testing`, backed by Playwright library. Demonstrate two concurrent sessions
+   with inspection, screenshots, input, explicit close and a visual-editing loop. Acceptance: no
+   cross-session storage/input/artifact interference, revision-bound observations, and a separate
+   immutable acceptance run after editing. Start with the capabilities that those demonstrations need.
+3. **Persistent native control and physical-device acceptance.** Evaluate an Appium XCUITest session
+   on a simulator and roPhone against the existing HNReader lifecycle journey and a visual-edit loop.
+   Add explicit per-target ownership and prove a second simulator is unaffected by the first session's
+   input and cleanup. Acceptance: actual physical UI assertions, source/build/target receipts,
+   stale-owner rejection, and measured startup/debugging costs before selecting the lasting native
+   driver. Full pooling, adaptive budgets and retention policy follow this bounded proof.
 
 Slices are proposals, not scheduled implementation or completed capabilities. The current additive
 prototype and its [handoff evidence](Real-host%20testing%20handoff.md) remain the reviewable milestone.
