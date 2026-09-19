@@ -7,7 +7,8 @@
 project {
    id "skillet"
    name "Skillet"
-   remote none
+   version "1.0.0"
+   DefaultApp Skillet
    license MIT
 
    targets phone, tablet, laptop
@@ -16,17 +17,17 @@ project {
 
 // -- Capabilities ---------------------------------------------------------------------------------------
 //
-// A capability is a value the app selects, so a variant can swap it for a simulated one and a check
-// can drive it. Permissions state why they are asked for; the runtime asks on first use.
+// A capability is a value the app selects, so a variant can swap it for a simulated one and a test can
+// drive it. Permissions state why they are asked for; the runtime asks on first use.
 
 datasource Kitchen = Cloud {
    AppId "skillet"
-   Writes optimistic
    Conflicts fieldwise latest // write-through's honest policy: independent fields, last write wins
    Deletes tombstones for 30 days
+   // The full closure of what stays usable with no network, including the map tiles.
    Offline {
       Enabled Me.KeepOffline
-      Keep Household where Me in Family of Household // a kept kitchen carries its recipes, plan, list, and photos
+      Recipes, Meals, Groceries, Pantry, Timers, MapTiles for MyKitchen
    }
 }
 
@@ -34,12 +35,14 @@ datasource OnDevice = Local { StorageKey "skillet" }
 
 files Photos = Files { Kinds image; Limit 20 megabytes each; Offline readable and writable }
 
-notifications Alerts = Notifications { QuietHours 22:00 .. 07:00 } // a timer still rings; a meal reminder waits
+// The provider carries no quiet-hours window: do-not-disturb belongs to the person's Focus modes, and a
+// notification says its own urgency (`notify time sensitive` for a timer, plain `notify` for a meal).
+notifications Alerts = Notifications { }
 
-permissions SkilletPermissions {
-   notifications optional because "Tell you when a timer finishes."
-   location while using because "Show which shop is nearest when you build a list."
-}
+// Each permission is its own binding carrying the human reason shown at first use, and reads as a
+// multi-state value a screen can render honestly (`when LocationAccess { granted -> … }`).
+permissions NotificationAccess { Reason "Tell you when a timer finishes." }
+permissions LocationAccess { Reason "Show which shop is nearest when you build a list." }
 
 // -- Navigation -----------------------------------------------------------------------------------------
 //
@@ -51,9 +54,10 @@ nav LoadingNav = StackNav { Initial Loading }
 nav WelcomeNav = StackNav { Initial Welcome }
 
 nav RecipeWorkspace = SplitNav {
-   Compact { Progression @list -> @detail, Back reverse }
-   @list { Content StackNav { Initial RecipeLibrary }, Width 420, CollapsePriority 1 } // 1 collapses first: a tablet shows the recipe
-   @detail { Content SlotNav { Initial NoRecipeSelected }, Width min 460, CollapsePriority 2 }
+   // The order of the names is the compact-width progression; no arrow appears.
+   Compact { Progression @list, @detail; Back reverse }
+   @list { Content StackNav { Initial RecipeLibrary }, Width 420, CollapseOrder 1 } // order 1 folds first: a tablet keeps the recipe
+   @detail { Content SlotNav { Initial NoRecipeSelected }, Width min 460, CollapseOrder 2 }
 }
 
 nav SkilletNavigator = SelectionNav {
@@ -77,7 +81,7 @@ app Skillet {
    Files Photos
    Notifications Alerts
    Places
-   Permissions SkilletPermissions
+   Permissions { NotificationAccess, LocationAccess }
 
    // The root is live and follows the account: welcome until you belong to a kitchen, then the kitchen.
    // Starting one, accepting an invitation, and leaving are ordinary writes — no screen replaces the
@@ -87,7 +91,8 @@ app Skillet {
       none -> WelcomeNav
       otherwise -> SkilletNavigator
    }
-   Language Me.Language // which `words` the app renders in; the device language until signed in
+   // The language is the per-app language the person sets in the system Settings, read as `Locale`;
+   // it chooses which `words` block renders, and no app picker duplicates it.
 
    // What comes back after a relaunch: the navigator, its selections, and open windows. Sheets, menus,
    // and toasts do not. An incoming link always wins over restoration.
@@ -119,7 +124,7 @@ app Skillet {
    }
 }
 
-// The same app on the device store, for `just dev-on-device` and for checks that never reach an
+// The same app on the device store, for `just dev-on-device` and for tests that never reach an
 // account. A variant leaves Skillet unchanged: links and targets still name `Skillet`.
 app SkilletOnDevice = Skillet with {
    Name "Skillet (on device)"

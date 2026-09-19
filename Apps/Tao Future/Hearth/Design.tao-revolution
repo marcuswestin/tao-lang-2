@@ -1,161 +1,112 @@
-// Hearth's design. Screens state meaning; this file decides appearance. The same size classes drive
-// navigation, grids, panes, chrome, and design.
+// Hearth's design. Screens state meaning; this file decides appearance. One declaration, organized as
+// typed value blocks plus styles, screens, and rules — no tokens block, no meaning layer, no dark block:
+// a semantic role is a derived entry whose value is conditional on the environment.
 
 design HearthDesign {
-   personality calm
-   density comfortable
-   sizes { narrow below 600; medium from 600 below 900; wide from 900 }
+   colors {
+      cream #FFF9EF
+      paper #FFFFFF
+      oat #F2E8D5
+      charcoal #292821
+      smoke #6D6A60
+      moss #47745A { 40 #86A894, 80 #31513F } // a family: moss, moss.40, moss.80
+      clay #B86143
+      sky #4D7591
+      plum #76536F
+      alarm #A83D3D
+      night #171814
+      soot #22231E
+      ash #2B2C25
 
-   tokens {
-      color {
-         cream #FFF9EF
-         paper #FFFFFF
-         oat #F2E8D5
-         charcoal #292821
-         smoke #6D6A60
-         moss #47745A
-         mossDeep #31513F
-         clay #B86143
-         sky #4D7591
-         plum #76536F
-         danger #A83D3D
-         night #171814
-         soot #22231E
-         ash #2B2C25
-      }
-      space { xxs 2; xs 4; sm 8; md 12; lg 16; xl 24; xxl 40; screen 20 }
-      radius { sm 8; md 14; lg 22; pill 999 }
-      shadow {
-         soft [offset 8, blur 28, opacity 8%]
-         raised [offset 14, blur 42, opacity 14%]
-      }
-      type {
-         display [size 36, weight bold, line 42]
-         title [size 24, weight semibold, line 30]
-         heading [size 17, weight semibold, line 22]
-         body [size 16, line 23]
-         label [size 16, weight medium, line 20]
-         caption [size 13, line 18]
-      }
-      motion { quick 120 ms; calm 220 ms; page 300 ms }
+      canvas    when Scheme is Dark night / not cream
+      surface   when Scheme is Dark soot / not paper
+      sunken    when Scheme is Dark ash / not oat
+      inverse   when Scheme is Dark cream / not charcoal
+      ink       when Scheme is Dark cream / not charcoal
+      muted     when Scheme is Dark oat / not smoke
+      subtle    when Scheme is Dark ash / not oat
+      accent    moss.80
+      good      moss
+      danger    alarm
+      onAccent  paper
+
+      // Every list carries an accent; the parameterized entry keys the case type, so a mark is one
+      // design line rather than a product-code branch.
+      listAccent(Accent) when Accent { Moss -> moss, Clay -> clay, Sky -> sky, Plum -> plum }
    }
 
-   meaning {
-      background.canvas cream
-      background.surface paper
-      background.sunken oat
-      background.inverse charcoal
-      background.primary moss
-      background.danger danger
-      ink.text charcoal
-      ink.muted smoke
-      ink.accent mossDeep
-      ink.good moss
-      ink.danger danger
-      ink.inverse cream
-      ink.onPrimary paper
-      border.subtle oat
-      border.accent mossDeep
+   sizes {
+      xxs 2.px, xs 4.px, sm 8.px, md 12.px, lg 16.px, xl 24.px, xxl 40.px
+      screen 20.px, touch 48.px
+      pill 999.px
+      readable 1.rem
    }
 
-   dark {
-      background.canvas night
-      background.surface soot
-      background.sunken ash
-      background.inverse cream
-      ink.text cream
-      ink.muted oat
-      ink.inverse charcoal
-      border.subtle ash
+   shadows {
+      soft [offset 8.px, blur 28.px, opacity 8%]
+      raised [offset 14.px, blur 42.px, opacity 14%]
    }
 
-   // Every list carries an accent; the palette keys the case type so a mark is one design line.
-   palette Accent { Moss moss; Clay clay; Sky sky; Plum plum }
-
-   pageTitle [type display, ink text]
-   title [type title, ink text]
-   sectionTitle [type heading, ink text]
-   body [type body, ink text]
-   label [type label, ink text]
-   caption [type caption, ink muted]
-   muted [ink muted]
-   danger [ink danger]
-   strike [decoration strike]
-   center [align center]
-
-   screen [fill, background canvas, content top center]
-   page [fill, width max 1120, pad screen, gap lg, pad xxl when wide]
-   surface [background surface, border subtle, radius md]
-   card [surface, pad md, gap sm, shadow soft, pad lg when wide]
-   selected [background sunken, border accent]
-   chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption]
-   toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow raised]
-
-   accentMark(Of) [size 12, radius pill, background Accent.Of]
-
-   style Button {
-      base [type label, tap min 48, content center center, gap sm, radius pill, pad horizontal md vertical sm]
-      variant intent {
-         primary [background primary, ink onPrimary]
-         secondary [background surface, ink text, border subtle]
-         quiet [background none, ink text]
-         destructive [background danger, ink onPrimary]
-      }
-      state hover [overlay own ink 8%]
-      state pressed [scale 0.98]
-      state disabled [opacity 45%]
-      state busy [opacity 60%]
-      default { intent secondary }
-   }
-   style TextInput {
-      base [background surface, border subtle, radius sm, pad md, type body, tap min 48]
-      state focus [border accent, ring accent]
-      state rejected [border danger]
-   }
-   style Checkbox {
-      base [size 24, radius sm, border subtle, tap min 48]
-      state checked [background primary, ink onPrimary]
-      state focus [ring accent]
+   text {
+      pageTitle [size 36.px, weight bold, line 42.px]
+      title [size 24.px, weight semibold, line 30.px]
+      sectionTitle [size 17.px, weight semibold, line 22.px]
+      body [size 16.px, line 1.44]
+      label [size 16.px, weight medium, line 20.px]
+      caption [size 13.px, line 18.px, ink muted]
    }
 
-   patterns {
-      pattern EmptyState {
-         layout [content center center, gap md, pad xl, width max 560]
-         slots {
-            icon [size 40, ink accent]
-            title [type title, align center]
-            body [type body, ink muted, align center]
-            action [primary]
-      }  }
-      pattern Line {
-         layout [content left center, gap md, pad vertical sm, tap min 48]
-         slots {
-            leading [hug]
-            content [claim 1, compress]
-            trailing [hug, ink muted]
-      }  }
+   screens { narrow below 600.px, medium below 900.px, wide }
+
+   styles {
+      App [background canvas]
+      Text [ink ink]
+      Col [gap sm]
+      Row [gap sm]
+      Button [label, tap min touch, content center center, gap sm, radius pill,
+              pad horizontal md vertical sm, background surface, ink ink, border subtle,
+              overlay own ink 8% when hovered, scale 0.98 when pressed,
+              tap min 52.px when TextScale > 1.6]
+      TextInput [background surface, border subtle, radius sm, pad md, body, tap min touch,
+                 border accent when focused, ring accent when focused]
+      Checkbox [size 24.px, radius sm, border subtle, tap min touch, ring accent when focused]
+      Hint [background inverse, ink inverse, radius sm, pad horizontal sm vertical xxs, caption]
+      Overview [background surface, border subtle, radius md, pad md, gap xs, shadow raised]
+
+      muted [ink muted]
+      danger [ink danger]
+      strike [decoration strike]
+      center [align center]
+
+      primary [background accent, ink onAccent]
+      secondary [background surface, ink ink, border subtle]
+      quiet [background none, ink ink]
+      destructive [background danger, ink onAccent]
+
+      screen [fill, background canvas, content top center]
+      page [fill, width max 1120.px, pad screen, gap lg, pad xxl when wide]
+      surface [background surface, border subtle, radius md]
+      card [surface, pad md, gap sm, shadow soft, pad lg when wide, pad md when TextScale > 1.6]
+      selected [background sunken, border accent]
+      chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption]
+      toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow raised]
+
+      line [content left center, gap md, pad vertical sm, tap min touch]
+      lead [hug]
+      main [claim 1, compress]
+      trail [hug, ink muted]
    }
 
    rules {
-      contrast minimum wcag.aa
-      tapTarget minimum 44
-      rawColor allowed never
-      headingOrder required
-      accessibleName required on interactive
-      textScale upTo 200%
-      status communicates with icon and text
-      map requires ordered alternative
-      motion communicates no unique meaning
+      rule contrast at least wcag.aa
+      rule tap targets at least 44.px
+      rule every interactive element is named
+      rule heading order is sequential
+      rule raw visual values stay inside the design
+      rule text survives 200% scale without clipping
+      rule no horizontal overflow except maps
+      rule meaning survives without color or motion
+      rule status is carried by an icon as well as a color
+      rule motion carries no unique meaning
    }
-
-   environment pointer touch { tapTarget minimum 48 }
-   environment pointer precise { density compact; hover visible }
-   environment motion reduced { motion none; meaning preserved }
-   environment contrast high { border stronger; ink.muted ink.text }
-   environment textScale above 160% { card [pad md, gap sm]; style Button { base [tap min 52] } }
-
-   platform ios { material glass }
-   platform android { dynamicColor yes; elevation tonal }
-   platform web { hover yes; focusRing visible }
-   platform macos { windowToolbar unified }
 }

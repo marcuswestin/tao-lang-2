@@ -2,11 +2,17 @@
 // one question.
 
 use primary from @tao/keys
+use Interval from @tao/time
+use Account, SignIn, SignOut from @tao/auth
 
 // -- Live handles ------------------------------------------------------------------------------------------
 //
+// Identity is a library with swappable providers, not language surface: one binding at the app root,
+// and every screen reads `Me` from here (a handle with availability — loading, none, available).
+//
 // The open home is a preference on the account, so `MyHome` is a value and the app root can be a `when`
 // over it. Joining, switching, and leaving are ordinary writes; no screen replaces the root.
+let Me = Account
 let MyHome = Me.CurrentHome
 let MyMembership = exactly one Me.Memberships where Home is MyHome
 
@@ -18,7 +24,6 @@ guard default {
    unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask someone at home to invite you back.")
    rejected -> Problem { Text(Problem) [caption, danger] }
    error -> Message { Text(Message) [body] }
-   failed -> Problem { present Notice(Problem) as toast (Key: "failed") }
 }
 
 // -- Frames --------------------------------------------------------------------------------------------------
@@ -34,18 +39,18 @@ view Section(Title text) {
 }  }
 
 view EmptyState(Icon icon, Title text, Body text) {
-   render Col [pattern EmptyState] {
-      Icon(Icon) [@icon]
-      Text(Title) [@title]
-      Text(Body) [@body]
-      Col [@action] { @@content }
+   render Col [content center center, gap md, pad xl, width max 520] {
+      Icon(Icon) [size 34, ink muted, decorative]
+      Text(Title) [title, center]
+      Text(Body) [body, muted, center]
+      Col [gap sm] { @@content }
 }  }
 
 // -- Views ------------------------------------------------------------------------------------------------------
 
 type Tone is one of Neutral, Good, Warning
 
-view Status(Message text, Tone Tone (default Neutral), Announce yes / no (default no)) {
+view Status(Message text, Tone default Neutral, Announce yes / no default no) {
    let Symbol = when Tone { Neutral -> "circle"; Good -> "checkmark.circle"; Warning -> "exclamationmark.triangle" }
    render Row [content left center, gap sm, announce when Announce] {
       Icon(Symbol) [muted, ink good when Tone is Good, ink danger when Tone is Warning]
@@ -58,21 +63,21 @@ view OfflineNotice() {
 
 phrase MarkDone(Title text) = "Mark { Title } done"
 
-// One row serves Today, every list, the week, and search. It has no press of its own: the `List` that
+// One row serves Today, every list, the week, and search. It has no press of its own: the `loop` that
 // holds it says what selecting does. Ticking runs the completion transaction; `runs latest per Item`
 // keys the guard to the row, so a quick tick-untick on one item settles on the last state.
 view HearthItemRow(Item) {
-   let Now = now every minute
+   state Clock = Interval(1.min)
    action Tick(Done yes / no) runs latest per Item { do SetDone(Item, Done) }
-   render Row [pattern Line] {
+   render Row [line] {
       #tick
-      Checkbox(Value: Item.Complete, Label: MarkDone(Item.Title)) [@leading] { on change -> Done { do Tick(Done) } }
-      Col [@content, gap xxs] {
+      Checkbox(Value: Item.Complete, Label: MarkDone(Item.Title)) [lead] { on change -> Done { do Tick(Done) } }
+      Col [main, gap xxs] {
          Text(Item.Title, Lines: 1) [body, strike when Item is Complete]
          if Item.Note is not empty { Text(Item.Note, Lines: 1) [caption] }
       }
-      Row [content right center, gap xs, @trailing] {
-         if Item.Due is not none { Text(Item.Due.Short) [chip, ink danger when Item.Due < Now and Item is Open] }
+      Row [content right center, gap xs, trail] {
+         if Item.Due is not none { Text(Item.Due.Short) [chip, ink danger when Item.Due < Clock.Value and Item is Open] }
          if Item.Assignee is not none { Text(Item.Assignee.Name) [chip] }
          if Item.Place is not none { Icon("mappin", Label: Item.Place.Name) [muted] }
 }  }  }
@@ -83,7 +88,6 @@ view HearthItemRow(Item) {
 // carries the entity's own `required` copy — "Say what needs doing" is written once, on the data — and an
 // abandoned capture never syncs to the whole home.
 
-folder
 action OpenQuickCapture() {
    present QuickCapture(MyHome) as sheet
 }
@@ -106,17 +110,17 @@ view QuickCapture(Home) {
    render Col [card, width max 560, gap md] {
       guard Lists
       if Lists is empty { Text("Make a list first, then add to it.") [body, muted] }
-      Choice(Value: New.HearthList, Options: Lists, Label: "List")
+      Choice(Value: bind New.HearthList, Options: Lists, Label: "List")
       #captureTitle
-      TextInput(Value: New.Title, Label: "What needs doing?", Focus: initial) { on submit Add }
-      TextInput(Value: New.Note, Label: "Notes", Lines: 3)
-      DateTimeInput(Value: New.Due, Label: "When")
-      Choice(Value: New.Assignee, Options: Home.Memberships.Person, Placeholder: "Nobody yet", Label: "Who")
+      TextInput(Value: bind New.Title, Label: "What needs doing?", Focus: initial) { on submit -> { do Add() } }
+      TextInput(Value: bind New.Note, Label: "Notes", Lines: 3)
+      DateTimeInput(Value: bind New.Due, Label: "When")
+      Choice(Value: bind New.Assignee, Options: Home.Memberships.Person, Placeholder: "Nobody yet", Label: "Who")
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> dismiss }
+         Button("Cancel") [secondary] { on press -> { dismiss } }
          #captureAdd
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }
 
 // -- The one question -----------------------------------------------------------------------------------------
@@ -126,9 +130,9 @@ view Confirm(Question text, Body text, Verb text) responds yes / no {
       Text(Question) [sectionTitle]
       Text(Body) [body]
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond no }
+         Button("Cancel") [secondary] { on press -> { respond no } }
          #confirm
-         Button(Verb) [destructive] { on press -> respond yes }
+         Button(Verb) [destructive] { on press -> { respond yes } }
 }  }  }
 
 view Notice(Message text) {
@@ -137,7 +141,6 @@ view Notice(Message text) {
 
 // -- Find anything ---------------------------------------------------------------------------------------------
 
-folder
 action OpenFindSheet() {
    present FindSheet() as sheet
 }
@@ -148,9 +151,9 @@ command FindAnything() {
 }
 
 view FindSheet() {
-   Search Query
+   state Query = ""
    query Hits from MyHome.Lists.Items {
-      search Query in Title, Note, Comments.Body
+      search Query
       order by relevance
       limit 20
    }
@@ -158,10 +161,10 @@ view FindSheet() {
       if Query is empty { Text("Search every list in this home.") [muted, pad md] }
       guard Hits
       if Hits is empty and Query is not empty { Text("Nothing matches.") [muted, pad md] }
-      List(Hits) {
-         Row [pattern Line] {
-            Icon("checklist") [@leading]
-            Col [@content, gap xxs] {
+      loop Hits / HearthItem {
+         Row [line] {
+            Icon("checklist") [lead]
+            Col [main, gap xxs] {
                Text(HearthItem.Title) [body]
                Text(HearthItem.HearthList.Name) [caption]
          }  }
