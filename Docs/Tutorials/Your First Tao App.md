@@ -1,3 +1,12 @@
+<!--
+Every ```tao block carries a directive after the language word — `program`, `edit`, `edit tail`,
+`edit after=<kind>`, or `final` — which readers never see and which
+`packages/tao-cli/cli-tests/tutorials.test.ts` uses to replay this tutorial step by step. That suite
+formats and validates the file after every step, reproduces the finished file from the steps, and
+runs its behavior test. Keep the directives correct when editing a snippet; the suite says so when
+they are not.
+-->
+
 # Your First Tao App
 
 Build a reading list in one Tao file: add books, open one, edit it, mark it finished, and delete
@@ -19,11 +28,12 @@ One file with:
 
 ## Step 1 — the smallest app
 
-```tao
+```tao program
 use StackNav from @tao/nav
 use Col, Text from @tao/ui
 
 project {
+   id "reading-list"
    name "ReadingList"
    remote none
    license MIT
@@ -47,7 +57,9 @@ scene BookList() {
 
 Four declarations, and each one has a job:
 
-- **`project`** names the project. One per project.
+- **`project`** identifies the project. `id` is the stable identity the toolchain stores data and
+  releases under, and it never changes; `name` is the display name, which may. One `project` per
+  project.
 - **`app`** is what launches. `Navigator` names a navigator root directly; `view` instead names an
   ordinary shell view that may render a navigator.
 - **`nav`** is a navigator _value_. `StackNav` pushes and pops screens, and `Initial` is what it
@@ -62,14 +74,16 @@ The screen is a column with the words **Reading List**.
 
 ## Step 2 — layout
 
-The scene's render tree composes ordinary views and containers. Replace the `scene BookList()` declaration with this, and add
-`Row` and `ScrollView` to the `@tao/ui` use line:
+The scene's render tree composes ordinary views and containers. Take `Row` and `ScrollView` from
+`@tao/ui`:
 
-```tao
+```tao edit
 use Col, Row, ScrollView, Text from @tao/ui
 ```
 
-```tao
+Then replace the `scene BookList()` declaration with this:
+
+```tao edit
 scene BookList() {
    Title "Reading List"
    render ScrollView() {
@@ -97,7 +111,7 @@ same clauses you would otherwise write inline.
 
 Add this declaration after `app`:
 
-```tao
+```tao edit after=app
 design ReadingListDesign {
    // Flat tokens: a name bound to a value.
    paper #fbfaf7
@@ -115,7 +129,7 @@ design ReadingListDesign {
 
 Point the app at it by adding one line to `app ReadingList`:
 
-```tao
+```tao edit
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
@@ -125,7 +139,7 @@ app ReadingList {
 
 Now apply the bundles. A bundle goes in the same brackets as any other clause, and mixes with them:
 
-```tao
+```tao edit
 scene BookList() {
    Title "Reading List"
    render ScrollView() [screen] {
@@ -148,7 +162,7 @@ Two declarations turn this into a real app: what a book **is**, and where rows a
 
 Add the entity after `design`:
 
-```tao
+```tao edit after=design
 data Books / Book {
    Title text
    Author text (default "Unknown")
@@ -173,11 +187,11 @@ Reading it line by line:
 Then give the app somewhere to keep rows. Add a `Datasource` to `app ReadingList` and import
 `Local`:
 
-```tao
+```tao edit
 use Local from @tao/data/providers/local
 ```
 
-```tao
+```tao edit
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
@@ -190,9 +204,15 @@ app ReadingList {
 `Local` persists on the device. The `StorageKey` belongs to the configured store, not to the app's
 display name, which is what lets two variants of one app keep separate data.
 
-Now read the rows. Replace `scene BookList()` with:
+Now read the rows. Take `Spinner` from `@tao/ui`:
 
-```tao
+```tao edit
+use Col, Row, ScrollView, Spinner, Text from @tao/ui
+```
+
+And replace `scene BookList()` with this, followed by a new `view BookRow(Book)`:
+
+```tao edit
 scene BookList() {
    Title "Reading List"
    query Books { }
@@ -217,7 +237,7 @@ view BookRow(Book) {
 }  }
 ```
 
-Add `Spinner` to the `@tao/ui` use line. Four new ideas:
+Four new ideas:
 
 - **`query Books { }`** is a reactive list. Declare it before you use it; when rows change, the
   screen re-renders.
@@ -238,10 +258,16 @@ The list is empty, which is progress — nothing can create a book yet.
 
 ## Step 5 — creating rows
 
-Add `FormButton` and `TextInput` to the `@tao/ui` use line, then replace `scene BookList()` with the
-version below — `view BookRow(Book)` underneath it does not change:
+Take `FormButton` and `TextInput` from `@tao/ui`:
 
-```tao
+```tao edit
+use Col, FormButton, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
+```
+
+Then replace `scene BookList()` with the version below — `view BookRow(Book)` underneath it does not
+change:
+
+```tao edit
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
@@ -295,9 +321,9 @@ persisted it.
 
 A row you can only look at is not much use. Make the rows selectable, and give them somewhere to go.
 
-Add `on select` inside the loop:
+Replace the loop at the end of `scene BookList()` — everything from `#books` down — with this:
 
-```tao
+```tao edit tail
          #books
          loop Books / Book {
             BookRow(Book)
@@ -310,9 +336,15 @@ touched. **`present`** puts a view on screen; because the app's navigator is a `
 and Back pops it. The native bar reads `Title Book.Title` from that directly presented occurrence;
 if the saved title changes, the bar changes with it.
 
-Now the screen itself. Add `Checkbox` to the `@tao/ui` use line and add this declaration at the end:
+Now the screen itself. Take `Checkbox` from `@tao/ui`:
 
-```tao
+```tao edit
+use Checkbox, Col, FormButton, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
+```
+
+And add this declaration at the end:
+
+```tao edit
 scene BookScreen(Book) {
    Title Book.Title
    state TitleDraft = Book.Title
@@ -383,14 +415,15 @@ Add a book, tap the row, edit it, tick **Finished**, and press **Remove**.
 
 ## Step 7 — tabs
 
-One screen is a stack. Several areas are a selection. Replace the `nav LibraryStack` declaration
-with these two, add `SelectionNav` to the `@tao/nav` use line, and point the app at the new one:
+One screen is a stack. Several areas are a selection. Take `SelectionNav` from `@tao/nav`:
 
-```tao
+```tao edit
 use SelectionNav, StackNav from @tao/nav
 ```
 
-```tao
+Replace the `nav LibraryStack` declaration with these two:
+
+```tao edit
 nav LibraryStack = StackNav {
    Initial BookList
 }
@@ -410,7 +443,9 @@ nav ReadingListNavigator = SelectionNav {
 }  }
 ```
 
-```tao
+And point the app at the new one:
+
+```tao edit
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
@@ -422,7 +457,7 @@ app ReadingList {
 
 And a screen for the second tab, at the end of the file:
 
-```tao
+```tao edit
 scene About() {
    Title "About"
    render Col() [screen, gap 10] {
@@ -445,23 +480,50 @@ Same declaration, two shapes.
 The library still shows one list. Split it into _Reading_ and _Finished_, side by side when there is
 room and stacked when there is not.
 
-Add two more queries beside the first, and add `Panes` to the `@tao/ui` use line:
+Take `Panes` from `@tao/ui`:
 
-```tao
-query Books { }
-query Books as CurrentlyReading {
-   where is Reading
-}
-query Books as FinishedBooks {
-   where is Finished
-}
+```tao edit
+use Checkbox, Col, FormButton, Panes, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 ```
 
-`Books as CurrentlyReading` renames the source so one screen can hold several views of it, and
-`where is Reading` filters by the case name the entity declared. Replace everything from
-`guard Books empty` to the end of the render block with:
+Then replace `scene BookList()` one last time. Two more queries join the first, and the single loop
+becomes a `Panes` with one column each:
 
-```tao
+```tao edit
+scene BookList() {
+   Title "Reading List"
+   state NewTitle = ""
+   query Books { }
+   query Books as CurrentlyReading {
+      where is Reading
+   }
+   query Books as FinishedBooks {
+      where is Finished
+   }
+   action AddBook() {
+      guard NewTitle empty
+      create Book {
+         Title: NewTitle
+      }
+      set NewTitle = ""
+   }
+   render ScrollView() [screen] {
+      Col() [width max 960, centered, gap 10] {
+         Text("Reading List") [title]
+         guard Books {
+            loading -> { Spinner() }
+            error -> Message { Text("Could not load your books: { Message }") [body] }
+         }
+
+         #newTitle
+         TextInput(Value: NewTitle, Label: "Book title", Placeholder: "Add a book") {
+            on submit AddBook
+         }
+
+         #addBook
+         FormButton("Add book", Disabled: NewTitle is empty) {
+            on press AddBook
+         }
          Panes() [gap 16] {
             Col() [gap 6] {
                Text("Reading: { CurrentlyReading.Count }") [title]
@@ -483,6 +545,10 @@ query Books as FinishedBooks {
 }  }  }  }  }  }
 ```
 
+`Books as CurrentlyReading` renames the source so one screen can hold several views of it, and
+`where is Reading` filters by the case name the entity declared. The `guard Books empty` branch is
+gone: each column now says for itself when it has nothing in it.
+
 **`Panes`** is the whole adaptive story: it lays its children out side by side when each of them can
 have at least 320 logical pixels after gaps, and stacks them in source order when they cannot. There
 is no breakpoint syntax and no per-platform branch — the same declaration is a two-column desktop
@@ -497,11 +563,10 @@ Narrow the window until the two columns become one.
 Tao tests are journeys: they act on rendered controls the way a person would, and assert what is on
 screen. Add this at the end of the same file:
 
-```tao
+```tao edit
 test "Reading List" {
    test "adds a book, opens it, finishes it, and removes it" {
       run ReadingList
-
       expect navigation title "Reading List"
       expect text "Nothing on the go"
       enter "The Dispossessed" into #newTitle
@@ -544,12 +609,13 @@ test "Reading List" {
 
 ## The complete app
 
-```tao
+```tao final
 use Local from @tao/data/providers/local
 use SelectionNav, StackNav from @tao/nav
 use Checkbox, Col, FormButton, Panes, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 
 project {
+   id "reading-list"
    name "ReadingList"
    remote none
    license MIT
@@ -726,7 +792,6 @@ scene About() {
 test "Reading List" {
    test "adds a book, opens it, finishes it, and removes it" {
       run ReadingList
-
       expect navigation title "Reading List"
       expect text "Nothing on the go"
       enter "The Dispossessed" into #newTitle
