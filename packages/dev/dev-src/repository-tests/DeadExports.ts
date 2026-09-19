@@ -69,32 +69,37 @@ const TAO_RELATIVE_PATH = String.raw`\.{1,2}/[\w.\-@/]*`
 /** `<expression> from <path>` and every declaration form that ends in it. */
 const TAO_FROM_BINDING = new RegExp(String.raw`\bfrom\s+(${TAO_RELATIVE_PATH})`, 'g')
 
-/**
- * A continuation line of a foreign declaration: `fails <Case> "<sentence>"` or the trailing
- * `from <path>` on its own line. Anything else keeps `from` mid-line, so nothing folds by accident.
- */
-const TAO_DECLARATION_TAIL_LINE = new RegExp(
-  String.raw`^\s+(?:fails\s+[A-Za-z_]\w*\s+"|from\s+${TAO_RELATIVE_PATH}\s*$)`,
-)
-
 /** `action Name(…) = inject "<path>"`: the Revolution binding, which names a default export. */
 const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_PATH})"`)
 
 /**
  * Clauses the grammar allows between a foreign declaration's head and its `from`. Stripping them
  * leaves the head ending in its parameter list, so one backward scan reads the export name out of
- * every binding form: `runs latest`, `runs single`, `returns <type>`, and
- * `fails <case> "<sentence>"` (actions.langium), `responds` and `accepts [content] [slots …]`
- * (views.langium). The return type is any type expression a declaration may write: a name, an
- * optional name, `list of <name>`, or an inline record (Decisions §2).
+ * every binding form: `runs latest` and `fails <case> "<sentence>"` (actions.langium), `responds`
+ * and `accepts [content] [slots …]` (views.langium).
+ *
+ * `returns <type>` is the one entry no grammar rule produces yet, and it matches every type
+ * expression a declaration may write — a name, an optional name, `list of <name>`, or an inline
+ * record — because a narrower pattern leaves the clause unstripped and reads its last identifier as
+ * the export. `TAO_EXTENSIONS` deliberately
+ * includes the `.tao-revolution` spec tiers, which are written to
+ * `Docs/Roadmap/Tao Revolution/Decisions.md` §2 rather than to today's grammar and give a foreign
+ * action a return type; stripping the clause keeps this check reading those tiers instead of
+ * reporting every one of their bindings as a form it cannot read.
  */
 const TAO_BINDING_TAILS = [
-  /\s+runs\s+(?:latest|single)$/,
+  /\s+runs\s+latest$/,
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
-  /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
+  /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
 ]
+
+/**
+ * How many earlier lines a wrapped foreign declaration head may span before `from`. Only a line that
+ * strips to nothing continues the search, so the practical span is the declaration's clause count.
+ */
+const TAO_WRAPPED_HEAD_LIMIT = 4
 
 /** `import * as <Alias> from '<relative path>'`, the first half of a namespace facade. */
 const NAMESPACE_IMPORT = /import\s+\*\s+as\s+(\w+)\s+from\s+'(\.{1,2}\/[^']*)'/g
@@ -186,17 +191,15 @@ export function unusedExportsOf(report: unknown): UnusedExport[] {
  *
  * `use … from <path>` (imports.langium) names a Tao package rather than a module and is skipped,
  * as is anything inside a ```ts injection, whose body the compiler emits as its own module.
- *
- * A foreign declaration may lay its tails out one per line (Decisions §15 writes the failure-case
- * form that way), so continuation lines are folded onto their head before the scan and the binding
- * is still reported against the head's line.
  */
 export function taoForeignBindings(source: string): TaoBindingScan {
   const bindings: TaoForeignBinding[] = []
   const unreadable: number[] = []
   let injecting = false
-  foldTaoDeclarationTails(maskTaoComments(source).split('\n')).forEach((rawLine, index) => {
-    const code = maskTaoStrings(rawLine)
+  const rawLines = maskTaoComments(source).split('\n')
+  const codeLines = rawLines.map(maskTaoStrings)
+  rawLines.forEach((rawLine, index) => {
+    const code = codeLines[index]!
     const fences = (code.match(/```/g) ?? []).length
     const insideInjection = injecting
     if (fences % 2 === 1) {
@@ -215,7 +218,8 @@ export function taoForeignBindings(source: string): TaoBindingScan {
       return
     }
     for (const match of code.matchAll(TAO_FROM_BINDING)) {
-      const name = boundExportName(code.slice(0, match.index))
+      const head = code.slice(0, match.index)
+      const name = boundExportName(head) ?? wrappedExportName(codeLines, index, head)
       if (name === undefined) {
         unreadable.push(index + 1)
         continue
@@ -227,32 +231,36 @@ export function taoForeignBindings(source: string): TaoBindingScan {
 }
 
 /**
- * foldTaoDeclarationTails joins a foreign declaration written across several lines back into one,
- * so the backward scan for its export name still has the head in front of it. Only a line that
- * begins with `fails` or with `from <relative path>` folds, which is exactly the continuation shape
- * the grammar allows; every other line, including `query X from Path` and `draft New = Row from
- * Row`, keeps `from` mid-line and is left alone. Consumed lines become blank so the returned array
- * still indexes by source line.
+ * wrappedExportName reads the export name of a foreign declaration whose head wraps before its
+ * `from`, which is how `Decisions.md` §15 writes one carrying several `fails` clauses:
+ *
+ * ```tao
+ * action Publish(Value text)
+ *    fails Offline "Publishing is unavailable."
+ *    from ./Api.ts
+ * ```
+ *
+ * It joins earlier lines one at a time, nearest first, and stops at the first that reads. Joining is
+ * attempted only when `from` opens its own line, so a line carrying its own head text is never
+ * completed from its neighbour, and a blank line ends the search because no declaration spans one.
  */
-function foldTaoDeclarationTails(lines: readonly string[]): string[] {
-  const folded = [...lines]
-  for (let index = 1; index < folded.length; index += 1) {
-    if (!TAO_DECLARATION_TAIL_LINE.test(folded[index]!)) {
-      continue
-    }
-    let head = index - 1
-    while (head >= 0 && folded[head]!.trim() === '') {
-      head -= 1
-    }
-    if (head < 0 || TAO_FROM_BINDING.test(folded[head]!)) {
-      TAO_FROM_BINDING.lastIndex = 0
-      continue
-    }
-    TAO_FROM_BINDING.lastIndex = 0
-    folded[head] = `${folded[head]!.trimEnd()} ${folded[index]!.trim()}`
-    folded[index] = ''
+function wrappedExportName(codeLines: string[], index: number, head: string): string | undefined {
+  if (head.trim() !== '') {
+    return undefined
   }
-  return folded
+  let joined = head
+  for (let earlier = index - 1; earlier >= 0 && index - earlier <= TAO_WRAPPED_HEAD_LIMIT; earlier--) {
+    const line = codeLines[earlier]!
+    if (line.trim() === '') {
+      return undefined
+    }
+    joined = `${line} ${joined}`
+    const name = boundExportName(joined, 'parameter list required')
+    if (name !== undefined) {
+      return name
+    }
+  }
+  return undefined
 }
 
 /** maskTaoComments preserves lines and strings while hiding both Tao comment forms from the binding scan. */
@@ -332,8 +340,17 @@ function maskTaoStrings(line: string): string {
  * boundExportName reads the export name out of the text left of a `from`. After the declaration
  * tails are stripped the name is the identifier before the path, skipping one balanced parameter
  * or argument list — the same shape whether the binding is a declaration or a bridged expression.
+ *
+ * `'parameter list required'` refuses a head that does not end in one. A same-line read accepts
+ * either shape, because `nav Export from ./X.ts` legitimately has no list. A wrapped read must not:
+ * it walks backwards past lines it could not strip, so without the requirement an unstripped clause
+ * or an unrelated neighbouring line donates its last identifier — `fails Offline InviteUsed` binds
+ * the phrase, `runs single` binds `single`, and `let Other = Thing` binds `Thing`. Every declaration
+ * form whose head can wrap has clauses between its parameter list and its `from`, so requiring the
+ * list costs nothing and keeps a misread binding an `unreadable` one, which is the case the report
+ * calls serious.
  */
-function boundExportName(head: string): string | undefined {
+function boundExportName(head: string, shape?: 'parameter list required'): string | undefined {
   let text = head.trimEnd()
   for (let stripped = true; stripped;) {
     stripped = false
@@ -345,9 +362,10 @@ function boundExportName(head: string): string | undefined {
       }
     }
   }
-  if (text.endsWith(')')) {
-    text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
+  if (!text.endsWith(')')) {
+    return shape === 'parameter list required' ? undefined : /([A-Za-z_]\w*)$/.exec(text)?.[1]
   }
+  text = text.slice(0, openingParenthesisIndex(text)).trimEnd()
   return /([A-Za-z_]\w*)$/.exec(text)?.[1]
 }
 
