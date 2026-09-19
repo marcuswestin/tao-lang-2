@@ -6,7 +6,7 @@ import { runTaoCliForTest } from './test-cli-files'
 
 /*
  * `Docs/Tutorials/Your First Tao App.md` is the main learning path, so its snippets are the first
- * Tao a newcomer runs. They are proven the way `creation-lowering.test.ts` proves the starters: the
+ * Tao a newcomer runs. They are proven the way the starter tests prove the starters: the
  * document is the source, and this suite replays it. Every fenced `tao` block carries a directive in
  * its info string — invisible where the document renders — saying how a reader applies it:
  *
@@ -65,23 +65,40 @@ Describe('Docs tutorials', () => {
     const blocks = tutorialBlocks(await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL)))
     const root = await mkTestDir('tao-tutorial-steps-')
     try {
+      // Every step is written into one directory, so the replay opens one workspace instead of one
+      // per step. A parse loads only the documents its own entry reaches, so the steps stay
+      // invisible to each other and each file is still judged on its own.
+      const written = replayTutorial(blocks)
+        .map((step, index) => ({ ...step, file: FS.resolvePath(`step-${index + 1}.tao`, root) }))
+      for (const step of written) {
+        await FS.writeText(step.file, step.source)
+      }
+
+      const fixes = await runFix(root, { cwd: root })
+      const workspace = await Workspace.open(root)
+
+      // A file the batch never reached, or could not rewrite, is left exactly as written and would
+      // read as canonical, so every step has to come back from the run carrying a status of its own.
+      const statuses = new Map(fixes.map(fix => [fix.path, fix.status]))
+      const unfixed: string[] = []
       const noncanonical: string[] = []
       const problems: string[] = []
-      for (const [index, step] of replayTutorial(blocks).entries()) {
-        const directory = FS.resolvePath(`step-${index + 1}`, root)
-        const file = FS.resolvePath('ReadingList.tao', directory)
-        await FS.writeText(file, step.source)
-        await runFix(directory, { cwd: root })
-        if (await FS.readText(file) !== step.source) {
+      for (const step of written) {
+        const status = statuses.get(step.file)
+        if (status === undefined || status === 'error') {
+          unfixed.push(step.section)
+        }
+        if (await FS.readText(step.file) !== step.source) {
           noncanonical.push(step.section)
         }
-        const validation = await Workspace.validate(file)
+        const validation = await workspace.validate(step.file)
         problems.push(
           ...validation.diagnostics
             .filter(diagnostic => diagnostic.severity === 'error')
             .map(diagnostic => `${step.section}: ${diagnostic.message}`),
         )
       }
+      Expect(unfixed).toEqual([])
       Expect(noncanonical).toEqual([])
       Expect(problems).toEqual([])
     } finally {

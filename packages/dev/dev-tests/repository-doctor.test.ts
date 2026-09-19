@@ -203,7 +203,7 @@ Describe('repository doctor', () => {
         lanes: [
           {
             id: 'outer',
-            lane: 'full-verify',
+            lane: 'verify-full',
             maxSlots: 8,
             pid: 4242,
             repositoryRoot: '/w',
@@ -224,7 +224,7 @@ Describe('repository doctor', () => {
       },
     }))
 
-    Expect(check(report, 'machine lanes')?.detail).not.toContain('full-verify')
+    Expect(check(report, 'machine lanes')?.detail).not.toContain('verify-full')
     Expect(check(report, 'machine lanes')?.detail).toContain('test in this checkout')
   })
 

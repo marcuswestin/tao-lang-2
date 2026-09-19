@@ -223,9 +223,9 @@ shell-completion tail. Each is a plan-and-execute task on its own.
 
 The editor-ownership, source-identity, canvas geometry, pointer-release, drag-in, and sketch
 transaction defects have landed. What remains is ten consecutive reliable runs in a normal terminal
-before the lane rejoins the `full-verify` graph — a reliability gate, not a product defect.
+before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
 
-- Context: the **Make `just full-verify` pass its simulated-user lane** entry in `Roadmap.md`, the
+- Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
   `studio-hybrid-client` skill.
 
 ### A16 — A reachable datasource for the public demo

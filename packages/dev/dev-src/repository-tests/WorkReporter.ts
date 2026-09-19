@@ -67,6 +67,16 @@ function resolveMode(options: ResolveModeOptions = {}): OutputMode {
   return (options.outputIsTerminal ?? HCI.isOutputTerminal()) ? 'tui' : 'quiet'
 }
 
+/**
+ * colorizes decides whether a lane paints what it prints. `quiet` is the agent contract — a pipe, a
+ * log file, a nested gate — so it stays plain even when it is aimed at a terminal, and every other
+ * mode colors only when stdout is actually one. One rule, in the place that owns output modes, so a
+ * lane cannot leave escape codes in a file by choosing its own.
+ */
+function colorizes(mode: OutputMode, options: { outputIsTerminal?: boolean } = {}): boolean {
+  return mode !== 'quiet' && (options.outputIsTerminal ?? HCI.isOutputTerminal())
+}
+
 /** create returns the reporter for one mode. */
 function create(options: ReporterOptions): WorkReporterHandle {
   return Switch<OutputMode, WorkReporterHandle>(options.mode, {
@@ -163,6 +173,7 @@ function logSuffix(state: WorkState): string {
 
 /** WorkReporter owns output-mode selection and the reporters every lane shares. */
 export const WorkReporter = {
+  colorizes,
   create,
   resolveMode,
 } as const

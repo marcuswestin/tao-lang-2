@@ -233,13 +233,39 @@ const systemProcessSignalSeams: ProcessSignalSeams = {
   },
 }
 
+/**
+ * Identity is the start time alone. `command` is descriptive and deliberately not compared: it is
+ * read from the kernel's process name, which changes at `exec`, while the start time is set at
+ * `fork` and never moves. A shell that backgrounds `sleep 300` reports the PID between the two, so
+ * a snapshot taken then records the shell's own name and every later reading disagrees with it.
+ *
+ * Comparing it was wrong in the direction that matters. `signalTrackedProcesses` skipped a
+ * descendant that exec'd between the snapshot and the signal — the runaway this module exists to
+ * stop — and `waitForTrackedProcessesExit` called such a tree gone while it was still running. The
+ * `'test'` policy caches its descendant list once and reuses it across the 250ms SIGKILL
+ * escalation, so that window was milliseconds wide rather than microseconds.
+ */
 function sameProcess(current: TrackedProcess | undefined, expected: TrackedProcess): boolean {
-  return current?.startedAt === expected.startedAt && current.command === expected.command
+  return current !== undefined && current.startedAt === expected.startedAt
 }
 
+/**
+ * currentProcessIdentities answers for exactly the PIDs it was asked about; a PID that is gone is
+ * absent from the result. Outside Darwin the only reading available is `ps`, whose `lstart` has
+ * one-second granularity — enough to catch a PID the kernel handed on minutes later, not enough to
+ * catch one reused inside the same second. Darwin's libproc start time is microsecond-precise and
+ * needs no subprocess, which is why it is the primary path and the one every lane on this host
+ * takes.
+ */
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
   if (process.platform !== 'darwin') {
-    return new Map(processTable().map(process => [process.pid, process]))
+    // Filtered to the asked-about PIDs: the table is every process on the host, and handing the
+    // whole of it back made callers that pair each entry with its expected identity look up
+    // processes they never asked about and find nothing.
+    const wanted = new Set(pids)
+    return new Map(
+      processTable().filter(entry => wanted.has(entry.pid)).map(entry => [entry.pid, entry]),
+    )
   }
   const { dlopen, FFIType } = ffi()
   const library = dlopen('/usr/lib/libproc.dylib', {
@@ -259,11 +285,14 @@ function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedP
 }
 
 async function waitForTrackedProcessesExit(processes: readonly TrackedProcess[]): Promise<void> {
-  const expected = new Map(processes.map(process => [process.pid, process.startedAt]))
-  while (
-    [...currentProcessIdentities([...expected.keys()]).values()]
-      .some(process => sameProcess(process, processes.find(expected => expected.pid === process.pid)!))
-  ) {
+  // Asked of the expected processes rather than of whatever the reading returned, so an entry with
+  // no expectation behind it cannot be paired with one that is not there.
+  const pids = processes.map(process => process.pid)
+  for (;;) {
+    const current = currentProcessIdentities(pids)
+    if (!processes.some(expected => sameProcess(current.get(expected.pid), expected))) {
+      return
+    }
     await sleep(EXIT_POLL_MS)
   }
 }
