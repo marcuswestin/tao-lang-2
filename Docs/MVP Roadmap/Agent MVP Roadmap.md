@@ -80,17 +80,22 @@ These decide whether the people who do install Tao enjoy the first hour.
 
 ### A5 — Tutorials and examples that cannot rot
 
-`Docs/Tutorials/Your First Tao App.md` is the main learning path and nothing proves it still
-compiles. The starters are proven byte-for-byte by their lowering test; the tutorial and the example
-apps are not.
+The tutorial half has landed: `packages/tao-cli/cli-tests/tutorials.test.ts` replays
+`Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
+step, reproduces the finished file from the steps, and runs its behavior test through the real
+`tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
+`just` recipes, `--app` names, and `tao` subcommands the same suite checks still exist.
 
-- Shape: run the tutorial's finished file — ideally each step — as a test, the way
-  `creation-lowering.test.ts` proves the starters; choose and polish the public example set
-  (starters, HNReader, WordFlower Current) and label everything else as design material.
+What remains is the example set. The starters are proven byte-for-byte by their lowering test, but
+nothing says which examples a visitor is pointed at, and the apps under `Apps/` mix public examples
+with design material and test fixtures.
+
+- Shape: choose the public example set (starters, HNReader, WordFlower Current), polish it, and label
+  everything else as design material or test fixture in the README that owns it.
 - Context: `Apps/Starters/README.md`, `Apps/HNReader/`, `Apps/WordFlower/README.md`,
-  `packages/tao-cli/cli-tests/creation-lowering.test.ts`.
-- Done: a tutorial change that stops working fails a test, and every example a visitor is pointed at
-  runs on a fresh install.
+  `Apps/Test Apps/README.md`, `packages/tao-cli/cli-tests/tutorials.test.ts`.
+- Done: every example a visitor is pointed at runs on a fresh install, and the documents that point
+  at examples name only those.
 
 ### A6 — Release the IDE extension
 
@@ -207,9 +212,9 @@ shell-completion tail. Each is a plan-and-execute task on its own.
 
 The editor-ownership, source-identity, canvas geometry, pointer-release, drag-in, and sketch
 transaction defects have landed. What remains is ten consecutive reliable runs in a normal terminal
-before the lane rejoins the `full-verify` graph — a reliability gate, not a product defect.
+before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
 
-- Context: the **Make `just full-verify` pass its simulated-user lane** entry in `Roadmap.md`, the
+- Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
   `studio-hybrid-client` skill.
 
 ### A16 — A reachable datasource for the public demo

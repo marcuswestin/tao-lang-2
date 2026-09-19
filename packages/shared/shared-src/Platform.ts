@@ -6,6 +6,7 @@ import {
   type SpawnSyncOptions as NodeSpawnSyncOptions,
   type SpawnSyncReturns,
 } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { availableParallelism, loadavg } from 'node:os'
 import type { Readable } from 'node:stream'
 import { throwUnexpected } from './core/Errors'
@@ -44,6 +45,16 @@ export function processIsAlive(pid: number): boolean {
 /** randomUUID returns a fresh random identifier, for temporary names and tokens that must not collide. */
 export function randomUUID(): string {
   return globalThis.crypto.randomUUID()
+}
+
+/**
+ * sha256Hex reduces content to a hexadecimal digest. It is the digest seam `repo-lint`'s node-import
+ * rule names: a build stamp comparing what it read last time against what it reads now goes through
+ * here rather than importing `node:crypto` and taking an allowlist entry. The existing direct
+ * `node:crypto` hashing callers close onto this the next time each is swept.
+ */
+export function sha256Hex(content: string | Uint8Array): string {
+  return createHash('sha256').update(content).digest('hex')
 }
 
 /*

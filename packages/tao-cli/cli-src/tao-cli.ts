@@ -237,16 +237,30 @@ function createCommands(): Command {
     .command('test')
     .argument('[paths...]', 'Tao test files or directories to search. Defaults to the current directory.')
     .option(
+      '--name <pattern>',
+      'Run only the tests whose name matches this pattern, case-insensitively, anywhere in'
+        + ' "<file> <suite> > <test>". Runs every discovered test when omitted.',
+    )
+    .option(
       '--output <mode>',
       'Report the run as streamed lines or as a quiet summary with a log file (tui streams lines).'
         + ' Defaults to lines in a terminal and quiet otherwise.',
     )
+    .option(
+      '--pass-with-no-tests',
+      'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
+        + ' pattern. For a scheduler running one pattern across many suites.',
+    )
     .description('Run Tao tests declared in .tao files at or under the given paths.')
-    .action(async (paths: string[], options: { output?: string }) => {
+    .action(async (paths: string[], options: { name?: string; output?: string; passWithNoTests?: boolean }) => {
       try {
         const { TestOutput } = await import('./test-output')
         const { runTestCommand } = await import('./test-command')
-        await runTestCommand(paths.length > 0 ? paths : ['.'], { output: TestOutput.resolveMode(options.output) })
+        await runTestCommand(paths.length > 0 ? paths : ['.'], {
+          name: options.name,
+          output: TestOutput.resolveMode(options.output),
+          passWithNoTests: options.passWithNoTests,
+        })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

@@ -1,6 +1,6 @@
 import { StudioMatrixView, type StudioPreviewConnection } from '../StudioMatrixView'
 
-export type StudioCanvasFocusRect = Readonly<{ height: number; width: number; x: number; y: number }>
+type StudioCanvasFocusRect = Readonly<{ height: number; width: number; x: number; y: number }>
 
 export type StudioCanvasFocusDeps = Readonly<{
   button: HTMLButtonElement

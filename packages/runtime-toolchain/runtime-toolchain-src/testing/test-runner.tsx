@@ -35,12 +35,18 @@ type RunningApp = {
 export async function runTestFile(file: TestCompiler.File): Promise<void> {
   for (const suite of file.suites) {
     for (const check of suite.checks) {
-      await runCheck(suite.name, check)
+      await runTestCheck(suite.name, check)
     }
   }
 }
 
-async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
+/**
+ * runTestCheck runs one precompiled Tao journey through the Expo render harness. It is the whole of
+ * a journey's work: every isolation boundary below belongs to the check rather than to the file
+ * around it, so a caller may run one journey per test case or a file's journeys in a loop and get
+ * the same behaviour either way.
+ */
+export async function runTestCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
   let app: RunningApp | undefined
   try {
     TR.Data.beginTest()

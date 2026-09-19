@@ -41,6 +41,16 @@ Describe('output mode selection', () => {
     Expect(WorkReporter.resolveMode({ outputIsTerminal: false })).toBe('quiet')
   })
 
+  Test('colors only a terminal, and never the agent contract', () => {
+    // A quiet run is what a pipe, a log file, and a nested gate get, so it stays plain even when
+    // it was pinned onto a terminal; every other mode is already asking for a human's screen.
+    Expect(WorkReporter.colorizes('quiet', { outputIsTerminal: true })).toBe(false)
+    Expect(WorkReporter.colorizes('tui', { outputIsTerminal: true })).toBe(true)
+    Expect(WorkReporter.colorizes('lines', { outputIsTerminal: true })).toBe(true)
+    Expect(WorkReporter.colorizes('tui', { outputIsTerminal: false })).toBe(false)
+    Expect(WorkReporter.colorizes('lines', { outputIsTerminal: false })).toBe(false)
+  })
+
   Test('names where an unusable mode came from', () => {
     Expect(() => WorkReporter.resolveMode({ requested: 'dashboard' })).toThrow(
       "Unknown output mode 'dashboard' from --output",

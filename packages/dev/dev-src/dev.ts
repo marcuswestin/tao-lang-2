@@ -1,5 +1,6 @@
 import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
+import { CleanCommand } from './clean/CleanCommand'
 import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
@@ -9,7 +10,7 @@ import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
 import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
-import { formatGateSummary, gateExitCode } from './repository-tests/RunSummary'
+import { formatGateSummary, formatVerdict, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
 import { WorkReporter } from './repository-tests/WorkReporter'
 
@@ -26,12 +27,22 @@ type TestCommandOptions = {
   output?: string
 }
 
+/** The changed scope composes with a name filter, so `just test "<name>"` narrows twice rather than once. */
+type TestChangedCommandOptions = TestCommandOptions & {
+  name?: string
+}
+
 type GatesCommandOptions = {
-  fresh?: boolean
+  /**
+   * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
+   * flag arrives here as `cache === false` rather than as a positive field of its own.
+   */
+  cache?: boolean
   greenTree?: string[]
   jobs?: string
   json?: string
   lane?: string
+  needsMachine?: boolean
   output?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
@@ -42,8 +53,8 @@ type MergeCommandOptions = {
   dryRun?: boolean
   messageFile?: string
   skipAll?: boolean
-  skipFullVerify?: boolean
   skipVerify?: boolean
+  skipVerifyFull?: boolean
 }
 
 /** Help shared by every command that runs a work graph, so the modes are described once. */
@@ -67,16 +78,17 @@ await runWithCommands(commands => {
     .command('test-changed')
     .description('Run tests selected by changes since a ref or the main merge base.')
     .argument('[reference]', 'Git ref to compare directly instead of the default main merge base.')
+    .option('--name <pattern>', 'Filter the selected suites to the tests matching this name pattern.')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
-    .action(async (reference: string | undefined, options: TestCommandOptions = {}) => {
-      await runExitCommand(() => TestRunner.runChangedTests(reference, testRunOptions(options)))
+    .action(async (reference: string | undefined, options: TestChangedCommandOptions = {}) => {
+      await runExitCommand(() => TestRunner.runChangedTests(reference, options.name, testRunOptions(options)))
     })
 
   commands
     .command('test-file')
-    .description('Run one exact package Bun or runtime Jest test file.')
-    .argument('<path>', 'Repository-relative test file path.')
+    .description('Run one package Bun or runtime Jest test file, or every test file under a directory.')
+    .argument('<path>', 'Repository-relative test file, or a directory whose test files all run.')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (path: string, options: TestCommandOptions = {}) => {
@@ -116,32 +128,44 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--needs-machine', 'Refuse to start while another lane is registered on this machine.')
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
       '--green-tree <lanes...>',
       'Skip the run when the tree is already recorded green under any of these lanes; record this run under the first.',
     )
-    .option('--fresh', 'Ignore recorded green trees and run every gate.')
+    .option('--no-cache', 'Ignore recorded green trees and run every gate.')
+    // Through `runExitCommand` because a lane can now decline before it starts: a run refused for
+    // want of the machine is an expected answer, and it owes the reader one sentence rather than an
+    // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
-      const summary = await runGates({
-        gates,
-        greenTree: options.greenTree === undefined || options.greenTree.length === 0
-          ? undefined
-          : { fresh: options.fresh === true, lanes: options.greenTree },
-        jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
-        jsonPath: options.json,
-        lane: options.lane,
-        outputMode: WorkReporter.resolveMode({ requested: options.output }),
-        skipUnsandboxed: options.skipUnsandboxed === true,
-        skipped: options.skipped,
+      await runExitCommand(async () => {
+        const outputMode = WorkReporter.resolveMode({ requested: options.output })
+        const verdict = { color: WorkReporter.colorizes(outputMode) }
+        const summary = await runGates({
+          gates,
+          greenTree: options.greenTree === undefined || options.greenTree.length === 0
+            ? undefined
+            : { lanes: options.greenTree, noCache: options.cache === false },
+          jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+          jsonPath: options.json,
+          lane: options.lane,
+          needsMachine: options.needsMachine === true,
+          outputMode,
+          skipUnsandboxed: options.skipUnsandboxed === true,
+          skipped: options.skipped,
+        })
+        if (summary.greenTree !== undefined) {
+          // A lane that ran nothing still states its verdict, and states it the same way: the record
+          // it stood on is the explanation, the last line is the answer.
+          HCI.writeLine(GreenTree.describe(summary.lane, summary.greenTree))
+          HCI.writeLine(formatVerdict(summary, verdict))
+          return 0
+        }
+        HCI.writeLine(formatGateSummary(summary, verdict))
+        return gateExitCode(summary)
       })
-      if (summary.greenTree !== undefined) {
-        HCI.writeSuccess(`${GreenTree.describe(summary.lane, summary.greenTree)}\n`)
-        Platform.runtimeProcess.exit(0)
-      }
-      HCI.writeLine(formatGateSummary(summary))
-      Platform.runtimeProcess.exit(gateExitCode(summary))
     })
 
   commands
@@ -149,8 +173,8 @@ await runWithCommands(commands => {
     .description('Squash-merge the current feature branch into main and push it; flags only remove work.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option(
-      '--skip-full-verify',
-      'Skip just full-verify on the feature branch; the staged squash then gets just verify --complete instead.',
+      '--skip-verify-full',
+      'Skip just verify-full on the feature branch; the staged squash then gets just verify --complete instead.',
     )
     .option('--skip-all', 'Skip every check after one confirmation that defaults to No. Needs a terminal.')
     .option('--dry-run', 'Report the plan and change nothing.')
@@ -163,14 +187,22 @@ await runWithCommands(commands => {
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
           skipAll: options.skipAll === true,
-          skipFullVerify: options.skipFullVerify === true,
           skipVerify: options.skipVerify === true,
+          skipVerifyFull: options.skipVerifyFull === true,
         })
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('clean')
+    .description('Remove build artifacts and installed dependencies, reporting each step and what it cost.')
+    .option('--all', 'Also remove every remaining artifact and the generated native projects.')
+    .action(async (options: { all?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await CleanCommand.run({ scope: options.all === true ? 'all' : 'checkout' }))
     })
 
   commands

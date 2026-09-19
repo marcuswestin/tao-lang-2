@@ -9,7 +9,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  *
  * Membership stays in the Justfile. This catalog says nothing about which lane a gate belongs to: an
  * entry may name a gate the lane left out, and the graph ignores an edge whose other end is not
- * present, so one entry serves `check`, `verify`, and `full-verify` alike. A recipe with no entry
+ * present, so one entry serves `check`, `verify`, and `verify-full` alike. A recipe with no entry
  * runs as an ordinary single-slot node that waits for every writer in the lane, which is the safe
  * reading of a gate nobody has said anything about: a new gate is runnable, correctly ordered, and
  * merely later than it needs to be until someone narrows what it reads.
@@ -73,6 +73,17 @@ export type GateMetadata =
      * false green, which is why it is a declared property of the node rather than a heuristic.
      */
     hostDependent?: boolean
+    /**
+     * Declares that this node rewrites tracked source into its canonical form and derives nothing:
+     * its whole output is the tree, which a tree hash does describe. Only such a writer can be
+     * recorded green, and only when the prepare phase left the tree it ran against untouched —
+     * `GateRunner` establishes that second half, because a hash taken after a later writer finished
+     * may already contain an edit this one never saw.
+     *
+     * Declared per node rather than inferred from which classes it writes, so that a writer added
+     * later is not recordable by default. The safe answer for a writer is no.
+     */
+    canonicalises?: boolean
     /** File classes this node reads; it waits for their writers. `just` is implied for a recipe. */
     reads?: readonly SourceClass[]
     /** True when the node needs host capabilities the managed agent sandbox deliberately denies. */
@@ -85,8 +96,9 @@ export type GateMetadata =
     run?: GateCommand | ((admission: WorkAdmission) => GateCommand)
     /**
      * File classes this node rewrites. A node that writes anything is a prepare node: it runs under
-     * the per-checkout prepare lock, before the readers of its classes, and is never recorded green
-     * because its output is derived state a tree hash does not describe.
+     * the per-checkout prepare lock and before the readers of its classes. It is not recorded green
+     * unless it also declares `canonicalises`, because a generator's output is derived state a tree
+     * hash does not describe.
      */
     writes?: readonly SourceClass[]
   }
@@ -146,9 +158,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // that, and its own tests are then the ones starved — a trivial child `bun test` ran past a
   // fifteen-second bound with three shards of this suite in flight. Like Jest, it already saturates
   // what it is given, so it takes one reservation and stays whole. Its per-test bound is a hang
-  // guard and is set for the worst case this machine actually sees: five worktree lanes at once
-  // starved a trivial child `bun test` past fifteen seconds, and a starved test is not a failing one.
-  ['dev', { args: ['--concurrent', '--timeout=60000'], cost: 2, shardable: false }],
+  // guard, which it no longer has to spell out: `--concurrent` reports each test's duration as the
+  // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
+  // written `--timeout=60000` that used to sit here said only what the flag already implies.
+  ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ide-extension', { args: ['--concurrent'] }],
   // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
   // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
@@ -273,15 +286,15 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // The prepare phase, in the order its declared classes imply: the Justfile first because every
     // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
     // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
-    ['_fix-just-fmt', { priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
-    ['_fix-dprint', { priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
+    ['_fix-just-fmt', { canonicalises: true, priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
+    ['_fix-dprint', { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
     ['_parser-gen', { priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['gen-parser'] }],
     // `./tao fix` reports "0 fixed, 123 unchanged" in 5s of single-threaded language-service work,
     // and is the prepare phase's whole critical path. A workspace daemon is the lever on it; until
     // then `serial` is what tells the scheduler to pack the rest of the run around it.
     [
       '_fix-tao',
-      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], serial: true, writes: ['tao'] },
+      { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], serial: true, writes: ['tao'] },
     ],
     [
       '_compile-word-flower-app',
@@ -298,7 +311,9 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ['_dprint-check', { reads: ['ts'] }],
     ['_repo-lint', { reads: ['ts'] }],
     ['_runtime-pack-check', { reads: ['ts'] }],
-    ['dead-exports', { reads: ['ts'] }],
+    // It walks the `.tao` sources as well as the TypeScript, because a `.tao` binding is what keeps
+    // a bridged export out of its report; reading one mid-rewrite would report live code as dead.
+    ['dead-exports', { reads: ['tao', 'ts'] }],
     ['_doctor-json', { reads: ['ts'] }],
     ['_ide-extension-build', { reads: ['gen-parser', 'ts'] }],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
@@ -379,10 +394,52 @@ function isPrepare(name: string): boolean {
   return (metadata(name).writes ?? []).length > 0
 }
 
-/** isRecordable reports whether a node's verdict is fully described by the tree that produced it. */
+/**
+ * isRecordable reports whether a node's verdict is fully described by the tree that produced it.
+ *
+ * A node that writes nothing qualifies unless its verdict depended on the host. A node that writes
+ * qualifies only by saying so with `canonicalises`, because the safe answer for a writer is no and a
+ * writer added later must not inherit a yes it never asked for: a generator's output is Git-ignored
+ * and therefore outside the tree hash, so a matching hash cannot attest that the generated tree is
+ * current, or that it exists at all — a fresh checkout hashes identically to one that has it.
+ *
+ * `canonicalises` is necessary but not sufficient. A fixer's record is only sound when the prepare
+ * phase left the tree it ran against untouched, and `GateRunner` is what establishes that; this
+ * function cannot see it.
+ */
 function isRecordable(name: string): boolean {
   const gate = metadata(name)
-  return !isPrepare(name) && gate.hostDependent !== true
+  if (gate.hostDependent === true) {
+    return false
+  }
+  return (gate.writes ?? []).length === 0 || gate.canonicalises === true
+}
+
+/**
+ * The source classes a gate generates rather than a person writes. Their trees are Git-ignored, so
+ * the tree hash a green record is keyed by says nothing about whether they exist or are current — a
+ * fresh checkout hashes identically to one that has them.
+ */
+const GENERATED_CLASSES: readonly SourceClass[] = ['gen-app', 'gen-parser']
+
+/**
+ * unrunGeneratedReads names the generated classes a node reads whose writer this lane does not run.
+ *
+ * A reader's verdict is only as current as the generated trees it read, and no tree hash attests to
+ * those. When the writer runs in the same lane the reader is safe, because a generator is never
+ * recordable and so always regenerates. When it does not — a narrow `./dev gates` lane, or a lane
+ * list someone trims later — the reader's record would be asserting a generated tree it cannot see,
+ * and it has to run instead. This is the one remaining way a green record could outrun its inputs,
+ * so it is answered here rather than left to whoever writes the next lane list.
+ */
+function unrunGeneratedReads(name: string, lane: readonly string[]): SourceClass[] {
+  const running = new Set(lane)
+  return (metadata(name).reads ?? [])
+    .filter(sourceClass => GENERATED_CLASSES.includes(sourceClass))
+    .filter(sourceClass => {
+      const writer = writerOf(sourceClass)
+      return writer === undefined || !running.has(writer)
+    })
 }
 
 /** writerOf names the node that rewrites one class, when the catalog has one. */
@@ -486,5 +543,6 @@ export const GateCatalog = {
   suiteReads,
   suiteTuning,
   testDependencies,
+  unrunGeneratedReads,
   writerOf,
 } as const

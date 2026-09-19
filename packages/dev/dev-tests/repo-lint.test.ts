@@ -4,6 +4,7 @@ import {
   CONVENTION_RULES,
   conventionRuleIssues,
   crossPackageSourceImportIssues,
+  developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
   justRecipeIssues,
@@ -22,7 +23,7 @@ check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
+verify-full:
     ./dev gates _test
 _test:
     ./dev test
@@ -31,15 +32,15 @@ _test:
 Describe('repo lint contracts', () => {
   Test('keeps the language benchmark in bench and out of correctness gates', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _native"
+VERIFY_FULL_GATES := "_test _native"
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 check:
     ./dev gates _test
 verify: deps
     ./dev gates _test
-full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full: deps
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _native:
@@ -51,21 +52,21 @@ deps:
 
   Test('reports a benchmark reached through a verification gate variable and recipe', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _bench-check"
+VERIFY_FULL_GATES := "_test _bench-check"
 bench:
     bun run language-performance.ts
 check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full:
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _bench-check:
     just bench
 `)).toEqual([
-      "Justfile recipe 'full-verify' must not invoke the language performance benchmark.",
+      "Justfile recipe 'verify-full' must not invoke the language performance benchmark.",
     ])
   })
 
@@ -311,6 +312,51 @@ _bench-check:
     Expect(issues).toEqual([
       'Current must contain exactly one tranche status header across the directory.',
       'Next must contain exactly one tranche status header across the directory.',
+    ])
+  })
+
+  Test('reports developer-environment entries the index does not link, and links with no entry', () => {
+    const index = '# Developer environment upgrades\n\n'
+      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Resolved\n'
+      + '- [DEVENV-903 — Vanished](<Developer environment upgrades/DEVENV-903-vanished.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md'],
+      index,
+    )).toEqual([
+      'Developer environment upgrades.md needs an index line linking `DEVENV-902-unlisted.md`.',
+      'Developer environment upgrades.md links `DEVENV-903-vanished.md`, which does not exist.',
+    ])
+  })
+
+  Test('reports two developer-environment entries that claim the same ID', () => {
+    const index = '- [DEVENV-904 — One](<Developer environment upgrades/DEVENV-904-one.md>) — Candidate\n'
+      + '- [DEVENV-904 — Two](<Developer environment upgrades/DEVENV-904-two.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-904-one.md', 'DEVENV-904-two.md'], index)).toEqual([
+      'Developer environment upgrades: DEVENV-904 is claimed by DEVENV-904-one.md, DEVENV-904-two.md;'
+      + ' rename the later-merged file and its index line.',
+    ])
+  })
+
+  Test('reports one developer-environment entry the index links twice', () => {
+    // A merge that keeps both sides of a conflicting index edit lands here, and it reads as correct
+    // from either direction on its own: the file exists, and it is listed.
+    const index = '- [DEVENV-905 — Once](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+      + '- [DEVENV-905 — Again](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-905-twice.md'], index)).toEqual([
+      'Developer environment upgrades.md links `DEVENV-905-twice.md` 2 times; keep one index line.',
+    ])
+  })
+
+  Test('accepts a developer-environment directory whose entries and index agree', () => {
+    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Resolved\n'
+      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-901-one.md', 'DEVENV-902-two.md', '.DS_Store'], index))
+      .toEqual([])
+  })
+
+  Test('reports a developer-environment file that is not named for an ID', () => {
+    Expect(developerEnvironmentLedgerIssues(['notes.md'], '')).toEqual([
+      'Developer environment upgrades/notes.md must be named DEVENV-NNN-<slug>.md.',
     ])
   })
 
