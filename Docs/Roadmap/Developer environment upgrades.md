@@ -114,3 +114,4 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-093 — Ready branches convoy behind each other, each re-verifying the whole tree](<Developer environment upgrades/DEVENV-093-landing-branches-convoy-behind-each-other.md>) — Candidate
 - [DEVENV-094 — Simultaneous worktree finalizations collapse verification throughput](<Developer environment upgrades/DEVENV-094-simultaneous-finalizations-collapse-verification-throughput.md>) — Candidate
 - [DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27](<Developer environment upgrades/DEVENV-096-the-devenv-bun-cannot-produce-a-runnable-compiled-binary.md>) — Candidate
+- [DEVENV-097 — Verification in a freshly created worktree can never hit a green record](<Developer environment upgrades/DEVENV-097-verification-in-a-freshly-created-worktree-can-never-hit-a-green.md>) — Candidate

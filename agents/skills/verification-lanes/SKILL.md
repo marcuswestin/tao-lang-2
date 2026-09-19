@@ -130,6 +130,13 @@ description: >-
   (`git worktree add --detach <path> main`); every landing moves such a mirror forward itself while
   it is still clean and still where main was, and leaves an edited one alone with a warning. Treat a
   mirror as read-only: give it a branch of its own before working in it.
+- Landing is serialized machine-wide. The command takes a landing lease before preflight and holds it
+  until every ref it moves has moved, so a second landing names who holds it — worktree, branch, pid,
+  how long — and waits its turn rather than racing. There is no flag to skip the wait, and it offers
+  no takeover: ending someone else's landing part-way is not a decision to make on their behalf. The
+  lease is a local file, so it works with no network: offline, `main` still moves, and a local ref two
+  landings can race is exactly what the lease exists to protect. `./agent board` lists it beside every
+  worktree's state.
 - `merge-with-main`'s flags only remove work. `--skip-verify-full` omits `just verify-full` on the
   feature branch, so `just verify --complete` runs on the branch instead; `--skip-verify` omits that
   fallback pass; `--skip-all` implies both, asks once with No as the default, and needs a terminal,

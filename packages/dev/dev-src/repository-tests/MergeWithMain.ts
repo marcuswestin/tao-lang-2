@@ -1,6 +1,11 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 
 const SNAPSHOT_VERSION = 1
+const LANDING_RESOURCE_NAME = 'merge-with-main-landing'
+// Bounded rather than infinite: a peer whose process is gone is pruned by the registry, but one that
+// is merely wedged must eventually surface as an actionable error instead of hanging a landing.
+const LEASE_WAIT_TIMEOUT_MS = 6 * 60 * 60 * 1_000
 const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
@@ -113,6 +118,7 @@ export type MergeCommandRunner = (
 
 /** MergeWithMainDependencies isolates process, filesystem, terminal, and clock effects for testing. */
 export type MergeWithMainDependencies = {
+  acquireLease: typeof MachineLanes.acquireResource
   askConfirm: (message: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
@@ -134,6 +140,7 @@ type Worktree = {
 }
 
 const defaultDependencies: MergeWithMainDependencies = {
+  acquireLease: MachineLanes.acquireResource,
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
@@ -390,26 +397,83 @@ export const MergeWithMainCommand = {
     }
 
     await authorizeExecution(options, dependencies, preflight)
-    const snapshot = await createSnapshot(preflight, dependencies)
-    writeLines(dependencies, [
-      ...preflight.warnings.map(warning => `WARN  ${warning}`),
-      `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
-    ])
+    // Held across every ref this command moves, and released whichever way it ends.
+    const lease = await acquireLandingLease(dependencies, preflight)
+    try {
+      const snapshot = await createSnapshot(preflight, dependencies)
+      writeLines(dependencies, [
+        ...preflight.warnings.map(warning => `WARN  ${warning}`),
+        `PASS  Landing lease held for ${preflight.branch}.`,
+        `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
+      ])
 
-    await stabilizeAndVerify(snapshot, options, dependencies)
-    await verifyLandingSubject(snapshot, options, dependencies)
-    await landSquash(snapshot, preflight, dependencies)
-    await pushArchiveAndPreserve(snapshot, dependencies)
+      await stabilizeAndVerify(snapshot, options, dependencies)
+      await verifyLandingSubject(snapshot, options, dependencies)
+      await landSquash(snapshot, preflight, dependencies)
+      await pushArchiveAndPreserve(snapshot, dependencies)
 
-    const completed = [
-      `PASS  Merged '${preflight.branch}' into main and archived it as merged/${preflight.branch.slice(5)}.`,
-      `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
-      + 'archive its owning task when you are ready to remove it.',
-    ]
-    writeLines(dependencies, completed)
-    return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
+      const completed = [
+        `PASS  Merged '${preflight.branch}' into main and archived it as merged/${preflight.branch.slice(5)}.`,
+        `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
+        + 'archive its owning task when you are ready to remove it.',
+      ]
+      writeLines(dependencies, completed)
+      return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
+    } finally {
+      await lease.release()
+    }
   },
 } as const
+
+/**
+ * Landing moves refs, and two landings at once would move the same ones. The lease is the only thing
+ * that serializes them: `update-ref`'s compare-and-swap catches a peer that already moved `main`, but
+ * only after this run has paid for a full verification, and nothing at all protects the archive push
+ * or the branch deletion that follow.
+ *
+ * It is a file in the machine-wide registry, so it needs no network and is correct offline — which is
+ * the case that matters most, because with `commit-tree` and `update-ref` a landing moves local `main`
+ * whether or not a remote is ever reached. That local ref is what a second landing would race.
+ *
+ * Waiting is the behavior, not a fallback: there is no flag to skip it, and no takeover, because
+ * ending someone else's landing part-way is not a decision to make on their behalf.
+ */
+async function acquireLandingLease(
+  dependencies: MergeWithMainDependencies,
+  preflight: MergePreflight,
+): Promise<MachineResourceLease> {
+  const request = async (waitTimeoutMs: number) =>
+    await dependencies.acquireLease({
+      command: `merge-with-main ${preflight.branch}`,
+      name: LANDING_RESOURCE_NAME,
+      repositoryRoot: preflight.featureRoot,
+      waitTimeoutMs,
+    })
+  try {
+    return await request(0)
+  } catch (error) {
+    if (!(error instanceof MachineResourceBusyError)) {
+      throw error
+    }
+    const owner = error.owner
+    writeLines(dependencies, [
+      `WARN  Landing lease held by '${owner.command}' in ${owner.repositoryRoot} (PID ${owner.pid}), `
+      + `held for ${describeHeldFor(owner.startedAt, dependencies.now())}.`,
+      'WARN  Waiting for it; this landing starts as soon as that one ends.',
+    ])
+    return await request(LEASE_WAIT_TIMEOUT_MS)
+  }
+}
+
+/** Report how long a lease has been held, in the coarsest unit that still says something useful. */
+function describeHeldFor(startedAt: string, now: Date): string {
+  const elapsedMs = Math.max(0, now.getTime() - Date.parse(startedAt))
+  const minutes = Math.floor(elapsedMs / 60_000)
+  if (minutes < 1) {
+    return `${Math.max(1, Math.round(elapsedMs / 1_000))}s`
+  }
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
+}
 
 /** Report whether the feature branch's `just verify-full` pass is skipped, and by which flag. */
 function fullVerifySkippedBy(options: MergeWithMainOptions): string | undefined {
@@ -453,6 +517,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? 'PLAN  Run just verify --complete on the feature branch, because nothing else verified it.'
       : `PLAN  Skip just verify --complete because ${stagedVerifySkip} was passed; `
         + 'no lane will have verified these bytes.',
+    'PLAN  Take the machine-wide landing lease, waiting for any landing already holding it.',
     'PLAN  Build the squash commit with git commit-tree and move refs/heads/main to it only if it has '
     + 'not moved.',
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',

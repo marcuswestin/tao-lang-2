@@ -1,5 +1,6 @@
 import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import type { MachineResourceOwner } from '../dev-src/repository-tests/MachineLanes'
 import {
   type MergeCommandRunner,
   type MergeSnapshot,
@@ -42,7 +43,32 @@ function result(command: string, args: readonly string[], cwd: string | undefine
   return { args: [...args], command, cwd, error: undefined, exitCode, signal: null, stderr: '', stdout }
 }
 
+const realOwner: MachineResourceOwner = {
+  command: 'merge-with-main feat/integration',
+  id: 'landing-fixture',
+  name: 'merge-with-main-landing',
+  pid: 4242,
+  repositoryRoot: '/repo-feature',
+  startedAt: '2026-09-19T12:00:00.000Z',
+}
+
+/** A landing lease the tests drive: it counts acquisitions and releases so both can be asserted. */
+function fakeLeases() {
+  const state = { acquired: 0, released: 0 }
+  const take = () => {
+    state.acquired += 1
+    return {
+      owner: realOwner,
+      release: async () => {
+        state.released += 1
+      },
+    }
+  }
+  return { state, take }
+}
+
 function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
+  const leases = fakeLeases()
   const repository: FakeRepository = {
     branch: 'feat/example',
     builtHead: 'commit00000000000000000000000000000000000',
@@ -236,6 +262,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   }
 
   const dependencies: MergeWithMainDependencies = {
+    acquireLease: async () => leases.take(),
     askConfirm: async () => true,
     exists: async path => files.has(path) || snapshots.has(path),
     isInteractive: () => true,
@@ -274,7 +301,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, lines, moves, repository, snapshots }
+  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots }
 }
 
 Describe('merge-with-main', () => {
@@ -476,6 +503,44 @@ Describe('merge-with-main', () => {
     ).rejects.toThrow('Local main is not at origin/main')
     Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     Expect(stale.snapshots.size).toBe(0)
+  })
+
+  Test('takes the landing lease before moving any ref and releases it on success', async () => {
+    const fake = fakeDependencies()
+
+    const outcome = await MergeWithMainCommand.run(
+      { repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(fake.leases.acquired).toBe(1)
+    Expect(fake.leases.released).toBe(1)
+    Expect(fake.lines.some(line => line.includes('Landing lease held for'))).toBe(true)
+  })
+
+  Test('releases the landing lease when the landing fails', async () => {
+    const fake = fakeDependencies({ failMainPush: true })
+
+    await Expect(MergeWithMainCommand.run(
+      { repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )).rejects.toThrow()
+
+    Expect(fake.leases.acquired).toBe(1)
+    Expect(fake.leases.released).toBe(1)
+  })
+
+  Test('takes no landing lease for a dry run, which moves nothing', async () => {
+    const fake = fakeDependencies()
+
+    const outcome = await MergeWithMainCommand.run(
+      { dryRun: true, repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(outcome.mode).toBe('dry-run')
+    Expect(fake.leases.acquired).toBe(0)
   })
 
   Test('a flagless invocation lands and pushes without asking for confirmation', async () => {
@@ -1094,6 +1159,7 @@ Describe('merge-with-main', () => {
       )
 
       const dependencies: MergeWithMainDependencies = {
+        acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
         askConfirm: async () => true,
         exists: FS.exists,
         isInteractive: () => false,
