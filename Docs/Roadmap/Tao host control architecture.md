@@ -5,7 +5,8 @@
 Research and repository inspection on 2026-09-19 support one Tao-owned API for interactive development
 and real-host testing, with target-specific drivers underneath. Ro delegated the recommendation using
 simplicity, maintainability, ease of use, debugging, and parallel development as the priorities.
-This is the recommended next-slice direction, not an implemented API or permission to retire coverage.
+The additive first implementation now lives in `packages/host-control`,
+`packages/host-control-playwright`, and `packages/e2e-testing/journey`; existing coverage remains.
 
 “Tao CDP” describes the desired control surface here; it does not mean implementing Chrome DevTools
 Protocol on every host. The existing `StudioCdp` is a Chrome driver, not the source-aware contract.
@@ -136,6 +137,11 @@ explicit new acceptance attempt, retaining the failed attempt. Closing a browser
 its artifacts before releasing ownership; device cleanup must verify the lease and isolated app ID.
 
 ## Candidate slices for discussion
+
+Implementation status on 2026-09-19: slice 1 has a versioned Tao plan/interpreter and additive browser
+execution, while native execution still uses retained Maestro YAML; slice 2 has a real Playwright
+library adapter and concurrent-context proofs, but no CLI/Studio operator surface; slice 3 has a
+fenced Appium/XCUITest contract and fake-client parallelism proofs, but no real Appium/WDA run.
 
 1. **Tao-authored real-host journeys (recommended first).** Compile the existing HNReader persistence
    journey into a source-linked declarative plan and execute it on browser and simulator; add the

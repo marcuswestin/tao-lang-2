@@ -27,9 +27,10 @@ intended second authoring language. Physical termination/relaunch must remain di
 in-process renderer remount, and unsupported host steps must fail explicitly.
 
 Reusable host ownership, inspection and input belong below the journey runner so interactive
-development and visual iteration can use them without importing testing orchestration. A production
-host-control package will be extracted when those consumers are introduced; this cleanup adds no
-universal API, native driver or simulator pool.
+development and visual iteration can use them without importing testing orchestration. The production
+`tao-host-control` package now owns host-neutral sessions, semantic targets, revisions, and fenced
+machine-resource leases; browser control is supplied by its Playwright adapter. This cleanup adds no
+universal native driver or simulator pool.
 
 ## Prototype acceptance
 

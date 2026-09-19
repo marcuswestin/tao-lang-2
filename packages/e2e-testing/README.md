@@ -5,6 +5,11 @@ Playwright controls and browser journeys, isolated host builds, native proof orc
 and harness fixtures. `HostTestingCommand.ts` is its public package entry. Existing suites and merge
 gates are unchanged, and this package does not reuse their runners, fixtures, mocks, or `@shared/test`.
 
+The related `tao-host-control` package owns host-neutral sessions, semantic targets, revisions and
+fenced machine-resource leases. `tao-host-control-playwright` supplies owned Playwright-library browser
+contexts for interactive development and acceptance. The Appium XCUITest seam remains here while it
+is a bounded native spike rather than a proven production driver.
+
 `playwright.config.ts` discovers tests only through scoped control and subject-specific browser globs
 inside this package. HNReader is the only existing app admitted as a subject; Clockwork is a harness
 fixture. Production compiler, runtime, Expo configuration, and shared utilities are reused.
@@ -32,6 +37,7 @@ Each invocation writes a unique `.artifacts/host-testing/<run-id>/` directory.
 ./agent test-host check
 ./agent test-host lint
 ./agent test-host typecheck
+./agent test-host driver
 ./agent test-host prepare --app hnreader
 ./agent test-host export --app clockwork
 ./agent test-host browser --app hnreader
@@ -51,8 +57,9 @@ Native mutation runs use the same verdicts, requiring matching build provenance,
 Maestro JUnit, and exact command traces. HNReader requires successful history before an actual
 matching-app kill and launch, followed by the persistence assertion failure. Every mutation command
 exits nonzero, including an escaped mutation; a generic host failure is inconclusive.
-`prepare` only compiles; `export` also builds the web bundle.
-Neither claims UI behavior. Browser runs use installed Chrome with fresh Playwright contexts and
+`prepare` only compiles; `export` also builds the web bundle. When either is run with `--fault`, its
+receipt is explicitly `inconclusive` because no host assertion ran, even when mutation provenance is
+valid. Neither claims UI behavior. Browser runs use installed Chrome with fresh Playwright contexts and
 temporary profiles. To use Playwright's downloaded Chromium, run `setup`, then pass
 `--browser-channel chromium`. A browser launch failure is a failed proof, not a skipped test.
 
@@ -77,6 +84,11 @@ process has one session; concurrent native sessions need separate OS processes/d
 carry the run ID and reject mismatches. Reloading starts a fresh clock/random session while retained
 app storage is available for a persistence journey.
 
+Owned browser contexts are independent targets. Native targets and Appium driver ports use
+machine-wide generation-fenced leases with process identity; a demonstrably live owner is never
+reclaimed because its session is old. Acceptance sessions bind an immutable revision. Development
+sessions may publish a revision only through a driver operation that actually refreshes or deploys it.
+
 `HostTestEnvironment` adapts that core to a test bridge. The new test entry point alone installs
 the bridge. Production entry points do not import it.
 Browser tests use the bridge only for effects; product actions use real UI input. Native time advances
@@ -98,15 +110,17 @@ need stronger analysis before claiming comprehensive enforcement.
 - Retain the green browser/simulator receipts and establish physical-device UI acceptance.
 - Replace the physical iOS driver stub with an actual device UI driver.
 - Retain the demonstrated browser and simulator fault checks as the host coverage grows.
-- Implement the Tao-plan host executor in its next slice; this package currently dispatches only the
-  explicit host-testing modes documented above.
-- Implement and evaluate the [host-control recommendation](../../Docs/Roadmap/Tao%20host%20control%20architecture.md)
-  before promotion. It recommends Playwright library behind the browser adapter, independently of
-  the universal API and host-free runner choices; the current PoC still uses Playwright Test.
+- Connect the Tao-plan interpreter to the lasting native driver and prove the authored HNReader
+  journey, including exact `#reading[n]` scopes, on simulator and physical iOS.
+- Bind the Appium seam to a pinned real client/server lifecycle, then measure WebDriverAgent signing,
+  cold/warm startup, inspection, screenshot, input and recovery costs before promoting it.
+- Expose owned development sessions through the CLI/Studio surface after the session API settles;
+  the opt-in driver lane proves the reusable browser-driver contract, not a finished operator workflow.
 - Decide the production-wide effect interfaces and migrate callers before broadening lint enforcement.
 - Map required behavior to independently asserted journeys and lower-level exceptions; prove parity
   before retiring any old suite. Measure the new suite's cost and diagnostic usefulness.
-- Add device admission/locking before allowing concurrent invocations against the same native target.
+- Preserve generation-fenced device admission in every native-driver path and extend its concurrency
+  proofs when new target kinds are added.
 
 The compiled artifact digest identifies generated app files, not the full runtime/toolchain closure;
 it is provenance for this prototype, not a cache key or a complete reproducible-build guarantee.

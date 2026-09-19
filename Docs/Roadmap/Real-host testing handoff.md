@@ -14,10 +14,29 @@ nonmutating ordering; explicitly named in-place helpers preserve intentional mut
 runtime uses these helpers and repository lint prevents raw ordering-method access elsewhere in it.
 `Effects` remains the same shared, host-neutral implementation.
 
-Tao-authored real-host journeys are accepted direction, not yet an implemented executor. Existing
-Maestro YAML and Playwright journeys remain the live proofs until equivalent source-linked Tao plans
-can drive the hosts and detect the same deliberate application faults. See the three ranked
-[next-slice contenders](Tao%20host%20control%20architecture.md#candidate-slices-for-discussion).
+The first host-control slices are now implemented additively. Compiler test plans have a versioned
+public IR; a source-linked host journey interpreter compiles the existing HNReader persistence check
+and a new Clockwork Tao check without invoking the in-process runner. An additive HNReader browser
+test executes that authored plan through real browser input. Native `#tag[n]` targeting is represented
+exactly by the Appium seam, but no real Appium transport has run the journey, so the retained Maestro
+YAML remains the simulator acceptance proof.
+
+`packages/host-control` owns the neutral session, revision, target and fencing contract plus the
+machine-wide named-resource lease extracted from developer automation. Live owners are never evicted
+solely by age. `packages/host-control-playwright` owns fresh Playwright library contexts; five real
+Chrome tests in the opt-in `./agent test-host driver` lane prove concurrent
+storage/input/artifact isolation, concrete observed-target binding, development revision publication,
+stale-revision rejection and immutable acceptance without entering cacheable host-free verification. The bounded
+Appium XCUITest seam under `packages/e2e-testing/native/appium` has eleven fake-client proofs for
+target and port isolation, signing inputs, exact tag occurrence, serialized input, displayed-state
+inspection, retryable receipt-first cleanup and revision fencing. It has not
+started Appium, WebDriverAgent, a simulator session or a physical-device UI session.
+
+Review follow-up also closes the remaining CloudKit default-container hole, requires explicit JUnit
+success evidence, writes inconclusive verdicts for faulted prepare/export-only runs, resolves Maestro
+flows from the worktree rather than process cwd, and makes the HNReader native clock-control receipt
+visible before its countdown-dependent actions. Existing suites, Playwright proofs and Maestro flows
+remain registered and intact.
 
 The records below retain the prototype's earlier paths/counts as historical evidence. Follow-up
 validation under `.artifacts/host-testing/`:
@@ -32,6 +51,14 @@ validation under `.artifacts/host-testing/`:
 | `201328e7-0ee8-4627-9ef5-a54b71923c97` | Frozen Clockwork countdown was detected at the intended healthy assertions; command intentionally exited nonzero |
 | `f79a90d4-26ff-4e92-8cf1-85628dcb1b6e` | Missing HNReader history writes were detected after browser reload; command intentionally exited nonzero         |
 | `e962f55f-acf9-41df-8e08-7fd51af6559b` | HNReader Release build/install and complete simulator journey passed, including OS kill/relaunch persistence     |
+| `a56ca3e8-a587-452f-9248-c3ae0d77d707` | All 59 then-registered controls passed, including compiled-wrapper execution and Appium lifecycle proofs         |
+| `37290bbf-28cf-4c17-94ea-3128fdc99e2a` | Both HNReader Chrome journeys passed: the retained proof and the Tao-authored source-linked journey              |
+| `f67362af-80d8-4ba1-804a-8be36db78c47` | Missing HNReader writes failed both expected reload assertions and produced a `detected` fault verdict           |
+| `b20d015a-7ba2-4dd0-87f6-019287b3b1cc` | HNReader Release build/install and complete iOS 27 simulator journey passed on an explicitly selected target     |
+| `1eee32cb-7085-457a-9ac4-c17a8b0de6df` | Five real-Chrome driver proofs passed in the dedicated opt-in host-dependent lane                                |
+| `a4d2c2b8-7000-481d-99f1-682b56f3780d` | All 62 final controls passed, including driver registration and immutable Appium screenshot/revision evidence    |
+| `f439ee02-9ecf-45e8-be12-442a33c2a10c` | Independent E2E package typecheck passed                                                                         |
+| `dbcb9cb5-7bb5-4318-8b08-d2cc32041f6e` | Effect/import boundary passed for 43 explicitly registered files                                                 |
 
 The simulator recheck uses the shipped portable Arrays implementation. This follow-up did not repeat
 Clockwork's simulator journey, native mutation builds or physical-device installation; their earlier
