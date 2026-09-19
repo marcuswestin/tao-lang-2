@@ -116,8 +116,6 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
       }
     }
   }
-    }
-  }
 
   const results: InPlace.Result[] = []
   for (const file of files) {
@@ -257,10 +255,15 @@ function replayedDiagnostics(
       message: diagnostic.message,
       severity: 'warning',
       source: 'validator',
+      ...(diagnostic.code === undefined ? {} : { code: diagnostic.code }),
+      ...(diagnostic.nodeType === undefined ? {} : { nodeType: diagnostic.nodeType }),
       ...(diagnostic.character === undefined || diagnostic.line === undefined ? {} : {
         range: {
           start: { character: diagnostic.character, line: diagnostic.line },
-          end: { character: diagnostic.character, line: diagnostic.line },
+          end: {
+            character: diagnostic.endCharacter ?? diagnostic.character,
+            line: diagnostic.endLine ?? diagnostic.line,
+          },
         },
       }),
     })
@@ -276,9 +279,14 @@ function recordableWarnings(
 ): readonly CheckCacheDiagnostic[] {
   return Diagnostics.warnings(diagnostics).flatMap(diagnostic =>
     diagnostic.filePath === undefined ? [] : [{
-      ...(diagnostic.range === undefined
-        ? {}
-        : { character: diagnostic.range.start.character, line: diagnostic.range.start.line }),
+      ...(diagnostic.range === undefined ? {} : {
+        character: diagnostic.range.start.character,
+        endCharacter: diagnostic.range.end.character,
+        endLine: diagnostic.range.end.line,
+        line: diagnostic.range.start.line,
+      }),
+      ...(diagnostic.code === undefined ? {} : { code: diagnostic.code }),
+      ...(diagnostic.nodeType === undefined ? {} : { nodeType: diagnostic.nodeType }),
       message: diagnostic.message,
       path: FS.relativePath(workspaceRoot, diagnostic.filePath),
     }]
