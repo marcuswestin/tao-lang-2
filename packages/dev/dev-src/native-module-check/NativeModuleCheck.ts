@@ -45,7 +45,7 @@ export type NativeModuleCheckDependencies = {
   writeLine: (message: string) => void
 }
 
-export type NativeModuleCheckOptions = {
+type NativeModuleCheckOptions = {
   artifactRoot?: string
   repositoryRoot?: string
   runtimeToolchainRoot?: string
