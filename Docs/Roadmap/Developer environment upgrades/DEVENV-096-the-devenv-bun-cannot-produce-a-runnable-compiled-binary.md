@@ -1,4 +1,4 @@
-# DEVENV-092 — The devenv Bun cannot produce a runnable compiled binary on macOS 27
+# DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27
 
 - **Status:** Candidate
 - **Area:** Toolchain pin

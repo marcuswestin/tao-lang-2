@@ -4,12 +4,6 @@ const SNAPSHOT_VERSION = 1
 const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
-/**
- * Where a main worktree goes when the repository has none. Inside the invoking checkout's ignored
- * artifacts, because a sandboxed shell may only write within its own worktree; stable rather than
- * stamped, so a retry after a failed landing finds the staged squash its snapshot refers to.
- */
-const TEMPORARY_MAIN_WORKTREE = '.artifacts/merge/main-worktree'
 const MERGE_PHASES: readonly MergePhase[] = [
   'prepared',
   'feature-integrated',
@@ -70,25 +64,20 @@ export type MergeSnapshot = {
   currentFeatureHead: string
   currentFeatureDiff: string
   currentFeatureStatus: string
+  /** Where `refs/heads/main` points now. A ref, not a checkout: no worktree holds main. */
   currentMainHead: string
-  currentMainDiff: string
-  currentMainStatus: string
   featureHead: string
   featureIndexTree: string
   featureRoot: string
   featureTree: string
   mainHead: string
-  mainIndexTree: string
-  mainRoot: string
-  mainTree: string
-  /** Whether this command created `mainRoot` and must remove it once the landing is complete. */
-  mainWorktreeIsTemporary: boolean
   messageFile: string
+  /** The commit this landing built, once it exists; what `--abort` removes main from. */
+  landedHead?: string
   phase: MergePhase
   remoteFeatureHead?: string
   remoteMainHead: string
   snapshotPath: string
-  stagedTree?: string
   version: typeof SNAPSHOT_VERSION
 }
 
@@ -96,20 +85,12 @@ export type MergeSnapshot = {
 export type MergePreflight = {
   branch: string
   branchHead: string
-  /** Whether `mainRoot` names a worktree execution must create, rather than one that already exists. */
-  createsMainWorktree: boolean
-  /**
-   * Whether `mainRoot` is this command's own scratch worktree rather than a checkout the developer
-   * keeps. It is not the same question as `createsMainWorktree`: a failed landing leaves its
-   * temporary worktree in place, and the next run then finds it as an ordinary main worktree with
-   * no installed dependencies — which is exactly what the `--skip-verify-full` refusal is about.
-   */
-  mainWorktreeIsTemporary: boolean
   featureRoot: string
   mainHead: string
-  mainRoot: string
   message: string
   messageFile: string
+  /** Detached, clean worktrees sitting at main's tip: mirrors this landing moves forward with main. */
+  mirrorRoots: string[]
   remoteFeatureHead?: string
   remoteFeatureBehind: boolean
   remoteMainHead: string
@@ -203,7 +184,9 @@ export function validateMergeMessage(source: string): string {
 }
 
 function assertNoAutomatedAttribution(message: string): void {
-  if (/^(?:co-authored-by|generated(?:-by|-with)?|ai-assisted-by|assisted-by):\s*\S/imu.test(message)) {
+  // Indentation included: the squash appendix quotes each landed commit's body indented by four
+  // spaces, so an attribution trailer arrives shifted right and used to slip past this check.
+  if (/^[ \t]*(?:co-authored-by|generated(?:-by|-with)?|ai-assisted-by|assisted-by):\s*\S/imu.test(message)) {
     Errors.throwUserInput('The merge message must not contain automated-author attribution.')
   }
 }
@@ -262,24 +245,21 @@ export async function inspectMergePreflight(
   if (featureWorktrees.length !== 1 || featureWorktrees[0]?.path !== featureRoot) {
     Errors.throwUserInput(`Branch '${branch}' must be checked out only in the invoking worktree.`)
   }
+  // A landing moves `refs/heads/main` and builds its commit with plumbing, so it needs no checkout
+  // on main and must not have one. A checked-out branch is a promise that a worktree's index and
+  // files match it: move the ref underneath and `git status` there reports the whole landing as
+  // uncommitted deletions. Worse, a shared checkout left holding a staged squash is work any other
+  // agent's `git commit` can pick up, which is how a landing once reached main as someone else's
+  // commit. Mirrors are detached instead, and this command moves them forward itself.
   const mainWorktrees = worktrees.filter(worktree => worktree.branch === MAIN_BRANCH)
-  if (mainWorktrees.length > 1) {
+  if (mainWorktrees.length > 0) {
     Errors.throwUserInput(
-      `Expected at most one main worktree, found ${mainWorktrees.length}: `
-        + `${mainWorktrees.map(worktree => worktree.path).join(', ')}.`,
+      `No worktree may have '${MAIN_BRANCH}' checked out while landing; ${
+        mainWorktrees.map(worktree => worktree.path).join(', ')
+      } does. Main is a ref this command moves, not a workspace: switch that checkout to a branch of `
+        + `its own (git -C <path> switch -c <name>), or make it a mirror that follows main `
+        + `(git -C <path> checkout --detach ${MAIN_BRANCH}).`,
     )
-  }
-  // A checkout on main is somewhere to stage the squash, not a precondition the developer owes this
-  // command. Working directly in the primary checkout on a feature branch leaves no worktree on
-  // main at all, which is an ordinary way to work and used to stop the landing outright. When there
-  // is none, execution makes one and removes it again; preflight only names where it would go, so a
-  // dry run still changes nothing.
-  const createsMainWorktree = mainWorktrees.length === 0
-  const temporaryMainRoot = FS.resolvePath(TEMPORARY_MAIN_WORKTREE, featureRoot)
-  const mainRoot = mainWorktrees[0]?.path ?? temporaryMainRoot
-  const mainWorktreeIsTemporary = mainRoot === temporaryMainRoot
-  if (!createsMainWorktree) {
-    assertClean('main', mainRoot, await status(dependencies, mainRoot))
   }
   // Read through the ref rather than through a checkout's HEAD, so both cases answer identically.
   const localMain = await dependencies.run('git', {
@@ -294,25 +274,7 @@ export async function inspectMergePreflight(
     )
   }
   const mainHead = localMain.stdout.trim()
-  // The staged squash is verified in the main worktree only when the feature branch's own full
-  // verification was skipped. A worktree this command just created has no installed dependencies,
-  // so that lane could not run there — and silently skipping it would be the one thing this command
-  // must never do.
-  if (
-    mainWorktreeIsTemporary && fullVerifySkippedBy(options) !== undefined
-    && stagedVerifySkippedBy(options) === undefined
-  ) {
-    Errors.throwUserInput(
-      `${fullVerifySkippedBy(options)} moves verification onto the staged squash, which runs in a worktree on `
-        + `main. ${
-          createsMainWorktree
-            ? 'There is none, and one created here would have no installed dependencies.'
-            : `The only one is this command's own scratch worktree at ${mainRoot}, left by a landing that failed, `
-              + 'and it has no installed dependencies either.'
-        } Either drop that flag, or create a main worktree yourself: `
-        + `git worktree add <path> ${MAIN_BRANCH}.`,
-    )
-  }
+  const mirrorRoots = await readMirrorRoots(dependencies, worktrees, mainHead)
 
   const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, `merged/${branch.slice(5)}`])
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
@@ -366,19 +328,39 @@ export async function inspectMergePreflight(
   return {
     branch,
     branchHead,
-    createsMainWorktree,
     featureRoot,
     mainHead,
-    mainRoot,
-    mainWorktreeIsTemporary,
     message,
     messageFile,
+    mirrorRoots,
     remoteFeatureHead,
     remoteFeatureBehind,
     remoteMainHead,
     remoteMergedHead,
     warnings,
   }
+}
+
+/**
+ * readMirrorRoots finds the checkouts that exist to show what main holds. A mirror is detached at
+ * main's tip and clean, which is what makes it safe to move: nothing is being edited there, and no
+ * ref points at it, so this command can fast-forward its files the moment main moves. A worktree
+ * detached anywhere else is someone reading history and is left alone; a dirty one is someone's
+ * work, whatever its HEAD says.
+ */
+async function readMirrorRoots(
+  dependencies: MergeWithMainDependencies,
+  worktrees: readonly Worktree[],
+  mainHead: string,
+): Promise<string[]> {
+  const candidates = worktrees.filter(worktree => worktree.branch === undefined && worktree.head === mainHead)
+  const mirrors: string[] = []
+  for (const candidate of candidates) {
+    if (await status(dependencies, candidate.path) === '') {
+      mirrors.push(candidate.path)
+    }
+  }
+  return mirrors
 }
 
 /** MergeWithMainCommand is the CLI wiring surface consumed by `dev.ts`. */
@@ -408,9 +390,6 @@ export const MergeWithMainCommand = {
     }
 
     await authorizeExecution(options, dependencies, preflight)
-    if (preflight.createsMainWorktree) {
-      await createMainWorktree(preflight, dependencies)
-    }
     const snapshot = await createSnapshot(preflight, dependencies)
     writeLines(dependencies, [
       ...preflight.warnings.map(warning => `WARN  ${warning}`),
@@ -418,8 +397,8 @@ export const MergeWithMainCommand = {
     ])
 
     await stabilizeAndVerify(snapshot, options, dependencies)
-    await squashAndVerify(snapshot, options, dependencies)
-    await commitSquash(snapshot, preflight.message, dependencies)
+    await verifyLandingSubject(snapshot, options, dependencies)
+    await landSquash(snapshot, preflight, dependencies)
     await pushArchiveAndPreserve(snapshot, dependencies)
 
     const completed = [
@@ -437,7 +416,7 @@ function fullVerifySkippedBy(options: MergeWithMainOptions): string | undefined 
   return options.skipVerifyFull === true ? '--skip-verify-full' : options.skipAll === true ? '--skip-all' : undefined
 }
 
-/** Report whether the staged squash's `just verify --complete` pass is skipped, and by which flag. */
+/** Report whether the fallback `just verify --complete` pass is skipped, and by which flag. */
 function stagedVerifySkippedBy(options: MergeWithMainOptions): string | undefined {
   return options.skipVerify === true ? '--skip-verify' : options.skipAll === true ? '--skip-all' : undefined
 }
@@ -449,22 +428,13 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
   return [
     `PASS  Feature branch: ${preflight.branch} at ${shortSha(preflight.branchHead)}`,
     `PASS  Feature worktree clean: ${preflight.featureRoot}`,
-    preflight.createsMainWorktree
-      ? `PASS  Local main is current at ${shortSha(preflight.mainHead)}; no worktree has it checked out.`
-      : `PASS  Main worktree clean and current: ${preflight.mainRoot} at ${shortSha(preflight.mainHead)}`,
+    `PASS  Local main is current at ${shortSha(preflight.mainHead)}; no worktree has it checked out.`,
     `PASS  ${REMOTE}/main is an ancestor of the feature branch.`,
     `PASS  Merge message: ${preflight.messageFile}`,
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
-    ...(preflight.createsMainWorktree
-      ? [
-        `PLAN  Create a temporary worktree on main at ${preflight.mainRoot}, and remove it when the landing completes.`,
-      ]
-      : preflight.mainWorktreeIsTemporary
-      ? [
-        `PLAN  Reuse this command's own worktree at ${preflight.mainRoot}, left by a landing that failed, `
-        + 'and remove it when this landing completes.',
-      ]
+    ...(preflight.mirrorRoots.length > 0
+      ? [`PLAN  Move ${preflight.mirrorRoots.length} main mirror(s) forward: ${preflight.mirrorRoots.join(', ')}.`]
       : []),
     'PLAN  Write a safety snapshot before moving any ref.',
     ...(preflight.remoteFeatureBehind
@@ -477,14 +447,14 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? 'PLAN  Run just verify-full on the feature branch.'
       : `PLAN  Skip just verify-full on the feature branch because ${fullVerifySkip} was passed.`,
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
-    'PLAN  Squash onto main and prove the staged tree equals the feature tree.',
     fullVerifySkip === undefined
-      ? "PLAN  Accept that tree equality as the staged squash's evidence; full verification proved the same bytes."
+      ? 'PLAN  Land the verified feature tree itself; full verification proved exactly those bytes.'
       : stagedVerifySkip === undefined
-      ? 'PLAN  Run just verify --complete on the staged squash, because nothing else verified this branch.'
-      : `PLAN  Skip just verify --complete on the staged squash because ${stagedVerifySkip} was passed; `
+      ? 'PLAN  Run just verify --complete on the feature branch, because nothing else verified it.'
+      : `PLAN  Skip just verify --complete because ${stagedVerifySkip} was passed; `
         + 'no lane will have verified these bytes.',
-    "PLAN  Commit the staged squash with Git's generated squash appendix.",
+    'PLAN  Build the squash commit with git commit-tree and move refs/heads/main to it only if it has '
+    + 'not moved.',
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Land it with: ${command}`,
@@ -543,75 +513,18 @@ function skipAllPrompt(branch: string): string {
     + 'so it cannot be fast-forwarded away afterwards. Really merge with nothing checked at all?'
 }
 
-/**
- * createMainWorktree gives the landing somewhere to stage its squash when the repository has no
- * checkout on main.
- *
- * It is a plain `git worktree add`, which writes only into a directory that did not exist — so it
- * runs inside the agent sandbox, where checking a ref out over existing protected files does not.
- * An earlier run that failed partway leaves its worktree behind on purpose, holding the staged
- * squash its snapshot refers to; preflight then finds it as an ordinary main worktree and this is
- * never reached.
- */
-async function createMainWorktree(
-  preflight: MergePreflight,
-  dependencies: MergeWithMainDependencies,
-): Promise<void> {
-  if (await dependencies.exists(preflight.mainRoot)) {
-    Errors.throwUserInput(
-      `Cannot create a main worktree at ${preflight.mainRoot}: something is already there, and Git did not `
-        + 'report it as a worktree. Remove it, or run `git worktree prune`, and try again.',
-    )
-  }
-  await runChecked(
-    dependencies,
-    'git',
-    ['worktree', 'add', preflight.mainRoot, MAIN_BRANCH],
-    preflight.featureRoot,
-    true,
-  )
-  writeLines(dependencies, [
-    `PASS  Created a temporary worktree on ${MAIN_BRANCH} at ${preflight.mainRoot}; it is removed when the `
-    + 'landing completes.',
-  ])
-}
-
-/**
- * removeMainWorktree takes back what `createMainWorktree` made, once the landing is complete and
- * nothing refers to it any more. A failed landing keeps it: its staged squash is what `--abort`
- * restores from, and the snapshot that names it lives in the invoking worktree.
- */
-async function removeMainWorktree(
-  snapshot: MergeSnapshot,
-  dependencies: MergeWithMainDependencies,
-): Promise<void> {
-  if (!snapshot.mainWorktreeIsTemporary) {
-    return
-  }
-  await runChecked(
-    dependencies,
-    'git',
-    ['worktree', 'remove', '--force', snapshot.mainRoot],
-    snapshot.featureRoot,
-    true,
-  )
-}
-
 async function createSnapshot(
   preflight: MergePreflight,
   dependencies: MergeWithMainDependencies,
 ): Promise<MergeSnapshot> {
   const createdAt = dependencies.now().toISOString()
   const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${Platform.randomUUID().slice(0, 8)}`
-  // A snapshot is what `--abort` restores from, so it cannot live inside a checkout this command
-  // removes on its way out. The invoking worktree is preserved through success and failure alike.
-  const snapshotRoot = preflight.mainWorktreeIsTemporary ? preflight.featureRoot : preflight.mainRoot
-  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, snapshotRoot)
-  const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
+  // A snapshot is what `--abort` restores from, and the invoking worktree is preserved through
+  // success and failure alike, so it is the one place a snapshot is always still there to read.
+  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, preflight.featureRoot)
+  const [featureTree, featureIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
     git(dependencies, preflight.featureRoot, ['write-tree']).then(result => result.stdout.trim()),
-    git(dependencies, preflight.mainRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
-    git(dependencies, preflight.mainRoot, ['write-tree']).then(result => result.stdout.trim()),
   ])
   const snapshot: MergeSnapshot = {
     branch: preflight.branch,
@@ -619,18 +532,12 @@ async function createSnapshot(
     currentFeatureDiff: '',
     currentFeatureHead: preflight.branchHead,
     currentFeatureStatus: '',
-    currentMainDiff: '',
     currentMainHead: preflight.mainHead,
-    currentMainStatus: '',
     featureHead: preflight.branchHead,
     featureIndexTree,
     featureRoot: preflight.featureRoot,
     featureTree,
     mainHead: preflight.mainHead,
-    mainIndexTree,
-    mainRoot: preflight.mainRoot,
-    mainTree,
-    mainWorktreeIsTemporary: preflight.mainWorktreeIsTemporary,
     messageFile: preflight.messageFile,
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
@@ -704,19 +611,13 @@ async function stabilizeAndVerify(
     if (remoteMain === fetchedMain) {
       snapshot.remoteMainHead = remoteMain
       await persistSnapshot(snapshot, dependencies)
-      const mainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+      const mainHead = await readMainRef(snapshot, dependencies)
       if (mainHead !== fetchedMain) {
         // Keep main untouched until the feature has been fully verified against the stable remote
         // head. A red full verification can therefore only leave command-owned feature changes.
-        await runAndSnapshot(
-          snapshot,
-          'git',
-          ['merge', '--ff-only', `${REMOTE}/${MAIN_BRANCH}`],
-          snapshot.mainRoot,
-          'feature-verified',
-          dependencies,
-          { mutation: 'main' },
-        )
+        // Compare-and-swap, so a peer landing at the same moment loses the race rather than the ref.
+        await moveMainRef(snapshot, fetchedMain, mainHead, dependencies)
+        await advanceSnapshot(snapshot, 'feature-verified', dependencies)
       }
       return
     }
@@ -734,121 +635,194 @@ async function stabilizeAndVerify(
   }
 }
 
-async function squashAndVerify(
+/**
+ * verifyLandingSubject proves the bytes about to become main's next commit.
+ *
+ * The subject is the feature head's tree, because preflight required main to be merged into the
+ * branch first: squashing that branch onto main can only produce the tree the branch already has.
+ * So when full verification ran, it ran on exactly these bytes and nothing is re-run; when it was
+ * skipped, this is where `just verify --complete` happens — on the feature worktree, which is the
+ * only checkout involved in a landing at all.
+ */
+async function verifyLandingSubject(
   snapshot: MergeSnapshot,
   options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await assertExpectedLocalState(snapshot, dependencies)
-  const stableFeatureHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-  const stableFeatureTree = (await git(
-    dependencies,
-    snapshot.featureRoot,
-    ['rev-parse', `${stableFeatureHead}^{tree}`],
-  )).stdout.trim()
-  const squashResult = await dependencies.run('git', {
-    args: ['merge', '--squash', stableFeatureHead],
-    cwd: snapshot.mainRoot,
-    stdio: 'stream',
-  })
-  if (squashResult.exitCode !== 0 || squashResult.error !== undefined || squashResult.signal !== null) {
-    await captureFailedMutation(snapshot, 'main', dependencies)
-    assertCommandSucceeded(squashResult)
-  }
-  const afterSquash = await readLocalState(snapshot, dependencies)
-  assertFeatureMatches(snapshot, afterSquash)
-  if (afterSquash.mainHead !== snapshot.currentMainHead || hasUnstagedOrUntracked(afterSquash.mainStatus)) {
-    Errors.throwUserInput('Repository state changed unexpectedly while preparing the staged squash.')
-  }
-  const stagedTree = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
-  snapshot.stagedTree = stagedTree
-  adoptLocalState(snapshot, afterSquash)
-  snapshot.phase = 'squashed'
-  await persistSnapshot(snapshot, dependencies)
-  if (stagedTree !== stableFeatureTree) {
-    Errors.throwUnexpected('The staged squash tree does not equal the verified feature tree.', {
-      details: { stagedTree, stableFeatureTree },
-    })
-  }
-  const mainHeadBeforeVerify = snapshot.currentMainHead
+  const featureTree = await readFeatureTree(snapshot, dependencies)
+  await advanceSnapshot(snapshot, 'squashed', dependencies)
   const fullVerifySkip = fullVerifySkippedBy(options)
   const stagedVerifySkip = stagedVerifySkippedBy(options)
   if (fullVerifySkip === undefined) {
-    // Git has just said the staged squash is the same tree, byte for byte, as the feature head
-    // full verification proved a moment ago. Running the repository's slowest lane over those same
-    // bytes a second time can only reproduce that verdict, so the equality above is the evidence.
-    // `--skip-verify` therefore changes nothing here; it only has an effect once nothing else ran.
     writeLines(dependencies, [
-      `PASS  Staged squash tree ${shortSha(stagedTree)} equals the fully verified feature tree; `
+      `PASS  Landing the fully verified feature tree ${shortSha(featureTree)} itself; `
       + 'not verifying the same bytes twice.',
     ])
     await advanceSnapshot(snapshot, 'main-verified', dependencies)
   } else if (stagedVerifySkip === undefined) {
-    // Nothing has verified this branch yet, so the staged squash is where it happens.
+    // Nothing has verified this branch yet, so this is where it happens.
     await runAndSnapshot(
       snapshot,
       'just',
       ['verify', '--complete'],
-      snapshot.mainRoot,
+      snapshot.featureRoot,
       'main-verified',
       dependencies,
       { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
     )
   } else {
-    // The tree equality above still held, so the squash is the feature tree; nothing verified it.
     writeLines(dependencies, [
-      `WARN  Skipped just verify --complete on staged squash tree ${shortSha(stagedTree)} because `
-      + `${stagedVerifySkip} was passed; it equals the feature tree, which no lane verified.`,
+      `WARN  Skipped just verify --complete on feature tree ${shortSha(featureTree)} because `
+      + `${stagedVerifySkip} was passed; no lane verified these bytes.`,
     ])
     await advanceSnapshot(snapshot, 'main-verified', dependencies)
   }
-  const stagedTreeAfterVerify = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
-  const mainHeadAfterVerify = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-  if (stagedTreeAfterVerify !== stagedTree || mainHeadAfterVerify !== mainHeadBeforeVerify) {
-    Errors.throwUnexpected('Verification changed the staged squash or moved main.')
+  if (await readFeatureTree(snapshot, dependencies) !== featureTree) {
+    Errors.throwUnexpected('Verification changed the tree this landing was about to commit.')
   }
 }
 
-async function commitSquash(
+/**
+ * landSquash builds main's next commit and moves the ref to it, without a working tree anywhere.
+ *
+ * A commit is a tree, its parents, and a message, and `git commit-tree` makes one from those three
+ * directly. Nothing is staged, so there is no window in which a shared checkout holds this landing's
+ * work for another process to commit, and a landing that fails leaves nothing behind at all: the
+ * commit exists only from the moment the ref moves to it.
+ *
+ * The ref moves by compare-and-swap. `git update-ref` with an expected old value refuses when a peer
+ * landed first, which turns a race into a clean refusal instead of a check that can only report the
+ * damage afterwards.
+ */
+async function landSquash(
   snapshot: MergeSnapshot,
-  message: string,
+  preflight: MergePreflight,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  const squashMessagePath = FS.resolvePath(
-    (await git(
-      dependencies,
-      snapshot.mainRoot,
-      ['rev-parse', '--git-path', 'SQUASH_MSG'],
-    )).stdout.trim(),
-    snapshot.mainRoot,
-  )
-  if (!await dependencies.exists(squashMessagePath)) {
-    Errors.throwUnexpected('git merge --squash did not produce SQUASH_MSG.')
-  }
-  const appendix = (await dependencies.readText(squashMessagePath)).trim()
-  if (!appendix.startsWith('Squashed commit of the following:')) {
-    Errors.throwUnexpected('Git produced an unrecognised squash appendix.', { details: { squashMessagePath } })
-  }
+  const featureTree = await readFeatureTree(snapshot, dependencies)
+  const appendix = await squashAppendix(snapshot, dependencies)
   const commitMessagePath = `${snapshot.snapshotPath}.commit-message`
-  const finalMessage = `${message}\n\n${appendix}\n`
+  const finalMessage = `${preflight.message}\n\n${appendix}\n`
   assertNoAutomatedAttribution(finalMessage)
   await dependencies.writeText(commitMessagePath, finalMessage)
-  await runAndSnapshot(
-    snapshot,
-    'git',
-    ['commit', '-F', commitMessagePath],
-    snapshot.mainRoot,
-    'committed',
+  const landed = (await runChecked(
     dependencies,
-    { mutation: 'main' },
-  )
-  const committedTree = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim()
-  if (snapshot.stagedTree === undefined || committedTree !== snapshot.stagedTree) {
-    Errors.throwUnexpected('The committed main tree does not equal the verified squash tree.', {
-      details: { committedTree, verifiedTree: snapshot.stagedTree },
+    'git',
+    ['commit-tree', featureTree, '-p', snapshot.currentMainHead, '-F', commitMessagePath],
+    snapshot.featureRoot,
+  )).stdout.trim()
+  snapshot.landedHead = landed
+  await persistSnapshot(snapshot, dependencies)
+  const committedTree = (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${landed}^{tree}`]))
+    .stdout.trim()
+  if (committedTree !== featureTree) {
+    Errors.throwUnexpected('The built squash commit does not carry the verified tree.', {
+      details: { committedTree, featureTree },
     })
   }
+  await moveMainRef(snapshot, landed, snapshot.currentMainHead, dependencies)
+  await advanceSnapshot(snapshot, 'committed', dependencies)
+  await refreshMirrors(snapshot, preflight, landed, dependencies)
   await assertExpectedLocalState(snapshot, dependencies)
+}
+
+/**
+ * squashAppendix reproduces what `git merge --squash` would have written into `SQUASH_MSG`: the
+ * landed commits in `git log`'s default format, newest first. It is the record of what the one
+ * commit on main contains, and `main`'s history is written this way throughout.
+ */
+async function squashAppendix(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<string> {
+  const log = (await runChecked(
+    dependencies,
+    'git',
+    ['log', `${snapshot.currentMainHead}..${snapshot.currentFeatureHead}`],
+    snapshot.featureRoot,
+  )).stdout.trim()
+  if (log === '') {
+    Errors.throwUnexpected('The feature branch adds no commits to main.')
+  }
+  return `Squashed commit of the following:\n\n${log}`
+}
+
+/**
+ * refreshMirrors moves the read-only checkouts that exist to show main's content. Each was detached
+ * at main's previous tip and clean when preflight looked, so moving it is a fast-forward of files
+ * nobody is editing. One that has since been touched is left alone and said so: a mirror is a
+ * convenience, never a reason to fail a landing that has already moved the ref.
+ */
+async function refreshMirrors(
+  snapshot: MergeSnapshot,
+  preflight: MergePreflight,
+  landed: string,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  for (const mirror of preflight.mirrorRoots) {
+    const head = (await git(dependencies, mirror, ['rev-parse', 'HEAD'])).stdout.trim()
+    if (head !== snapshot.mainHead || await status(dependencies, mirror) !== '') {
+      writeLines(dependencies, [
+        `WARN  Left the main mirror at ${mirror} alone: it is no longer clean at main's previous tip.`,
+      ])
+      continue
+    }
+    const moved = await dependencies.run('git', {
+      args: ['checkout', '--detach', landed],
+      cwd: mirror,
+      stdio: 'pipe',
+    })
+    writeLines(dependencies, [
+      moved.exitCode === 0
+        ? `PASS  Moved the main mirror at ${mirror} to ${shortSha(landed)}.`
+        : `WARN  Could not move the main mirror at ${mirror}; refresh it with git -C ${mirror} `
+          + `checkout --detach ${MAIN_BRANCH}.`,
+    ])
+  }
+}
+
+/** readFeatureTree reads the tree of the branch tip, which is what a landing commits. */
+async function readFeatureTree(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<string> {
+  return (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim()
+}
+
+/** readMainRef reads `refs/heads/main` itself; no worktree holds it, so there is no HEAD to consult. */
+async function readMainRef(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<string> {
+  return (await git(dependencies, snapshot.featureRoot, ['rev-parse', `refs/heads/${MAIN_BRANCH}`])).stdout.trim()
+}
+
+/**
+ * moveMainRef is the only way this command moves main, and it never moves it blind: `update-ref`
+ * with an expected old value is atomic, so two landings on one machine cannot interleave. The loser
+ * is told main moved, which is a state it can recover from by merging main and verifying again.
+ */
+async function moveMainRef(
+  snapshot: MergeSnapshot,
+  next: string,
+  expected: string,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  const moved = await dependencies.run('git', {
+    args: ['update-ref', '-m', `merge-with-main: ${snapshot.branch}`, `refs/heads/${MAIN_BRANCH}`, next, expected],
+    cwd: snapshot.featureRoot,
+    stdio: 'pipe',
+  })
+  if (moved.exitCode !== 0 || moved.error !== undefined || moved.signal !== null) {
+    const observed = await readMainRef(snapshot, dependencies)
+    Errors.throwUserInput(
+      `refs/heads/${MAIN_BRANCH} moved to ${shortSha(observed)} while this landing was verifying `
+        + `${shortSha(expected)}; nothing was changed. Merge main into '${snapshot.branch}', verify, and retry.`,
+    )
+  }
+  snapshot.currentMainHead = next
+  await persistSnapshot(snapshot, dependencies)
 }
 
 async function pushArchiveAndPreserve(
@@ -863,11 +837,11 @@ async function pushArchiveAndPreserve(
       `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
       `${MAIN_BRANCH}:${MAIN_BRANCH}`,
     ],
-    cwd: snapshot.mainRoot,
+    cwd: snapshot.featureRoot,
     stdio: 'stream',
   })
   if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
-    const observedMain = (await remoteHeads(dependencies, snapshot.mainRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    const observedMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
     if (observedMain === snapshot.currentMainHead) {
       // A transport can report failure after the remote accepted the update. The exact remote ref
       // is stronger evidence than the process result, so recovery must stay on the irreversible side.
@@ -950,15 +924,11 @@ async function pushArchiveAndPreserve(
   // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
   // after the remote is safely archived. The preceding push/archive phases make this forced local
   // deletion deliberate and recoverable.
-  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.mainRoot, true)
-  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.mainRoot, true)
+  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.featureRoot, true)
+  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.featureRoot, true)
   snapshot.phase = 'complete'
-  // Read main one last time before the worktree that holds it may be taken away. The snapshot lives
-  // in ignored artifacts that outlast both the local feature branch and a temporary main worktree.
-  snapshot.currentMainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-  snapshot.currentMainStatus = await status(dependencies, snapshot.mainRoot)
+  snapshot.currentMainHead = await readMainRef(snapshot, dependencies)
   await persistSnapshot(snapshot, dependencies)
-  await removeMainWorktree(snapshot, dependencies)
 }
 
 async function abortMerge(
@@ -985,25 +955,20 @@ async function abortMerge(
   }
 
   await assertSnapshotState(snapshot, dependencies)
-  await runChecked(dependencies, 'git', ['reset', '--hard', snapshot.mainHead], snapshot.mainRoot, true)
+  // Main is a ref, so restoring it is a compare-and-swap back to where preflight found it. A landing
+  // that never reached the ref has nothing here to undo, which is the ordinary case now that the
+  // commit is built only at the moment it lands.
+  const currentMain = await readMainRef(snapshot, dependencies)
+  if (currentMain !== snapshot.mainHead) {
+    await moveMainRef(snapshot, snapshot.mainHead, currentMain, dependencies)
+  }
   await runChecked(dependencies, 'git', ['reset', '--hard', snapshot.featureHead], snapshot.featureRoot, true)
-  const squashMessagePath = FS.resolvePath(
-    (await git(
-      dependencies,
-      snapshot.mainRoot,
-      ['rev-parse', '--git-path', 'SQUASH_MSG'],
-    )).stdout.trim(),
-    snapshot.mainRoot,
-  )
-  await dependencies.remove(squashMessagePath)
   await dependencies.remove(`${snapshot.snapshotPath}.commit-message`)
   snapshot.phase = 'aborted'
   snapshot.currentFeatureDiff = ''
   snapshot.currentFeatureHead = snapshot.featureHead
   snapshot.currentFeatureStatus = ''
-  snapshot.currentMainDiff = ''
   snapshot.currentMainHead = snapshot.mainHead
-  snapshot.currentMainStatus = ''
   await persistSnapshot(snapshot, dependencies)
   const lines = [`PASS  Restored main and '${snapshot.branch}' to their recorded pre-merge state.`]
   writeLines(dependencies, lines)
@@ -1017,12 +982,6 @@ async function assertSnapshotState(
   const current = await readLocalState(snapshot, dependencies)
   if (!localStateMatches(snapshot, current)) {
     Errors.throwUserInput('Repository state no longer matches the merge snapshot; refusing to discard later work.')
-  }
-  if (snapshot.stagedTree !== undefined) {
-    const stagedTree = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
-    if (stagedTree !== snapshot.stagedTree) {
-      Errors.throwUserInput('The staged tree no longer matches the merge snapshot; refusing to discard later work.')
-    }
   }
 }
 
@@ -1043,17 +1002,12 @@ async function readSnapshot(path: string, dependencies: MergeWithMainDependencie
     || typeof value.currentFeatureDiff !== 'string'
     || typeof value.currentFeatureHead !== 'string'
     || typeof value.currentFeatureStatus !== 'string'
-    || typeof value.currentMainDiff !== 'string'
     || typeof value.currentMainHead !== 'string'
-    || typeof value.currentMainStatus !== 'string'
     || typeof value.featureHead !== 'string'
     || typeof value.featureIndexTree !== 'string'
     || typeof value.featureRoot !== 'string'
     || typeof value.featureTree !== 'string'
     || typeof value.mainHead !== 'string'
-    || typeof value.mainIndexTree !== 'string'
-    || typeof value.mainRoot !== 'string'
-    || typeof value.mainTree !== 'string'
     || typeof value.messageFile !== 'string'
     || !isMergePhase(value.phase)
     || typeof value.remoteMainHead !== 'string'
@@ -1082,28 +1036,25 @@ async function assertExpectedLocalState(
   }
 }
 
+/** LocalState is what this command owns: one feature worktree, and main as a ref. */
 type LocalState = {
   featureDiff: string
   featureHead: string
   featureStatus: string
-  mainDiff: string
   mainHead: string
-  mainStatus: string
 }
 
 async function readLocalState(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<LocalState> {
-  const [featureHead, mainHead, featureDiff, mainDiff, featureStatus, mainStatus] = await Promise.all([
+  const [featureHead, mainHead, featureDiff, featureStatus] = await Promise.all([
     git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
-    git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
+    readMainRef(snapshot, dependencies),
     diff(dependencies, snapshot.featureRoot),
-    diff(dependencies, snapshot.mainRoot),
     status(dependencies, snapshot.featureRoot),
-    status(dependencies, snapshot.mainRoot),
   ])
-  return { featureDiff, featureHead, featureStatus, mainDiff, mainHead, mainStatus }
+  return { featureDiff, featureHead, featureStatus, mainHead }
 }
 
 function localStateMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
@@ -1111,8 +1062,6 @@ function localStateMatches(snapshot: MergeSnapshot, current: LocalState): boolea
     && current.featureDiff === snapshot.currentFeatureDiff
     && current.featureStatus === snapshot.currentFeatureStatus
     && current.mainHead === snapshot.currentMainHead
-    && current.mainDiff === snapshot.currentMainDiff
-    && current.mainStatus === snapshot.currentMainStatus
 }
 
 function assertLocalStateMatches(snapshot: MergeSnapshot, current: LocalState): void {
@@ -1121,28 +1070,14 @@ function assertLocalStateMatches(snapshot: MergeSnapshot, current: LocalState): 
   }
 }
 
-function assertFeatureMatches(snapshot: MergeSnapshot, current: LocalState): void {
-  if (!featureMatches(snapshot, current)) {
-    Errors.throwUserInput('The feature worktree changed unexpectedly while the merge command was running.')
-  }
-}
-
 function assertMainMatches(snapshot: MergeSnapshot, current: LocalState): void {
   if (!mainMatches(snapshot, current)) {
-    Errors.throwUserInput('The main worktree changed unexpectedly while the merge command was running.')
+    Errors.throwUserInput('refs/heads/main moved unexpectedly while the merge command was running.')
   }
-}
-
-function featureMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
-  return current.featureHead === snapshot.currentFeatureHead
-    && current.featureDiff === snapshot.currentFeatureDiff
-    && current.featureStatus === snapshot.currentFeatureStatus
 }
 
 function mainMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
   return current.mainHead === snapshot.currentMainHead
-    && current.mainDiff === snapshot.currentMainDiff
-    && current.mainStatus === snapshot.currentMainStatus
 }
 
 function adoptLocalState(snapshot: MergeSnapshot, current: LocalState): void {
@@ -1150,12 +1085,6 @@ function adoptLocalState(snapshot: MergeSnapshot, current: LocalState): void {
   snapshot.currentFeatureDiff = current.featureDiff
   snapshot.currentFeatureStatus = current.featureStatus
   snapshot.currentMainHead = current.mainHead
-  snapshot.currentMainDiff = current.mainDiff
-  snapshot.currentMainStatus = current.mainStatus
-}
-
-function hasUnstagedOrUntracked(statusOutput: string): boolean {
-  return statusOutput.split('\n').filter(Boolean).some(line => line.startsWith('??') || line[1] !== ' ')
 }
 
 async function advanceSnapshot(
@@ -1267,7 +1196,7 @@ async function runAndSnapshot(
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
   options: {
-    mutation?: 'feature' | 'main' | 'none'
+    mutation?: 'feature' | 'none'
     stdio?: CLI.CommandStdio
   } = {},
 ): Promise<CLI.CommandResult> {
@@ -1282,15 +1211,10 @@ async function runAndSnapshot(
   const current = await readLocalState(snapshot, dependencies)
   if (mutation === 'none') {
     assertLocalStateMatches(snapshot, current)
-  } else if (mutation === 'feature') {
+  } else {
     assertMainMatches(snapshot, current)
     if (current.featureStatus !== '' || current.featureDiff !== '') {
       Errors.throwUserInput('The feature worktree was not clean after the command-owned Git operation.')
-    }
-  } else {
-    assertFeatureMatches(snapshot, current)
-    if (current.mainStatus !== '' || current.mainDiff !== '') {
-      Errors.throwUserInput('The main worktree was not clean after the command-owned Git operation.')
     }
   }
   adoptLocalState(snapshot, current)
@@ -1302,19 +1226,14 @@ async function runAndSnapshot(
 
 async function captureFailedMutation(
   snapshot: MergeSnapshot,
-  mutation: 'feature' | 'main' | 'none',
+  mutation: 'feature' | 'none',
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   const current = await readLocalState(snapshot, dependencies)
   const targetIsRecoverable = mutation === 'feature'
-    ? mainMatches(snapshot, current)
-      && current.featureHead === snapshot.currentFeatureHead
-      && recoverableMergeFailureStatus(current.featureStatus)
-    : mutation === 'main'
-    ? featureMatches(snapshot, current)
-      && current.mainHead === snapshot.currentMainHead
-      && recoverableMergeFailureStatus(current.mainStatus)
-    : false
+    && mainMatches(snapshot, current)
+    && current.featureHead === snapshot.currentFeatureHead
+    && recoverableMergeFailureStatus(current.featureStatus)
   if (localStateMatches(snapshot, current) || targetIsRecoverable) {
     adoptLocalState(snapshot, current)
   }
