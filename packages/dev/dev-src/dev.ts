@@ -268,8 +268,17 @@ await runWithCommands(commands => {
     .command('doctor')
     .description('Diagnose this checkout without changing it.')
     .option('--json', 'Print a versioned structured report instead of PASS/WARN/FAIL lines.')
-    .action(async (options: { json?: boolean } = {}) => {
-      Platform.runtimeProcess.exit(await RepositoryDoctorCommand.run({ json: options.json === true }))
+    .option(
+      '--fingerprint',
+      'Print only the environment fingerprint, which carries nothing personal and always exits 0.',
+    )
+    .action(async (options: { fingerprint?: boolean; json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(
+        await RepositoryDoctorCommand.run({
+          fingerprint: options.fingerprint === true,
+          json: options.json === true,
+        }),
+      )
     })
 
   commands
