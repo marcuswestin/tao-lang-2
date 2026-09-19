@@ -139,7 +139,7 @@ when the index names a file that does not exist, or when two files claim the sam
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
 - [DEVENV-087 — A permission pattern matched only one of git's two argument orders](<Developer environment upgrades/DEVENV-087-a-permission-pattern-matched-only-one-of-git-s-two-orders.md>) — Resolved
 - [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — Candidate
-- [DEVENV-089 — A fixture holding the output-capture queue through a spawn stalls its whole shard](<Developer environment upgrades/DEVENV-089-a-fixture-holding-the-output-capture-queue-through-a-spawn.md>) — Candidate
+- [DEVENV-090 — A fixture holding the output-capture queue through a spawn stalls its whole shard](<Developer environment upgrades/DEVENV-090-a-fixture-holding-the-output-capture-queue-through-a-spawn.md>) — Candidate
 - [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 
 ### DEVENV-030 — Managed-shell command constraints

@@ -52,7 +52,7 @@ const TOOL_PROBES = [
  * FingerprintComponent is one piece of the toolchain. An absent tool keeps its row rather than
  * disappearing: "watchman is not installed" is the answer to a whole class of reports.
  */
-export type FingerprintComponent = {
+type FingerprintComponent = {
   hash?: string
   name: string
   present: boolean
