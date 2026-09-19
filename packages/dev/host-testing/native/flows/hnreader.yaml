@@ -1,0 +1,36 @@
+appId: ${TAO_HOST_TEST_APP}
+---
+- launchApp
+- assertVisible: "Host ready: run ${TAO_HOST_TEST_RUN_ID} · seed ${TAO_HOST_TEST_SEED}"
+- assertVisible: "Hacker News"
+- assertVisible: "Show HN: A Tao reader"
+- tapOn: "Show HN: A Tao reader"
+- assertVisible: "Yes, queries evaluate locally."
+- tapOn: "Back"
+- assertVisible: "Hacker News"
+- openLink: "taohostpoc-${TAO_HOST_TEST_RUN_ID}://control?runId=${TAO_HOST_TEST_RUN_ID}&advanceMs=1000"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- tapOn: "Why local-first sync wins"
+- assertVisible: "No comments yet"
+- tapOn: "Back"
+- assertVisible: "Hacker News"
+- tapOn: "Reading"
+- assertVisible: "2 opened"
+- assertVisible:
+    text: "Why local-first sync wins"
+    above:
+      text: "Show HN: A Tao reader"
+- killApp
+- launchApp
+- assertVisible: "Host ready: run ${TAO_HOST_TEST_RUN_ID} · seed ${TAO_HOST_TEST_SEED}"
+- assertVisible: "Hacker News"
+- tapOn: "Reading"
+- assertVisible: "2 opened"
+- assertVisible:
+    text: "Why local-first sync wins"
+    above:
+      text: "Show HN: A Tao reader"

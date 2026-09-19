@@ -65,6 +65,20 @@ await runWithCommands(commands => {
   commands.name('dev')
 
   commands
+    .command('test-host')
+    .description('Run the opt-in real-host testing prototype, independently of existing suites.')
+    .argument('[mode]', 'check, lint, typecheck, format, prepare, export, browser, ios, device, or setup.', 'check')
+    .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
+    .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
+    .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
+    .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
+    .action(async (mode, options) => {
+      const { runHostTesting } = await import('../host-testing/HostTestingCommand')
+      await runHostTesting(mode, options)
+    })
+
+  commands
     .command('test')
     .description('Run package tests in parallel.')
     .argument('[pattern]', 'Optional test name pattern.')

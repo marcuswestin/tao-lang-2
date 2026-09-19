@@ -4,6 +4,7 @@
     "dev-src/**/*",
     "dev-tests/**/*",
     "performance-checks/**/*",
+    "host-testing/**/*",
     "studio-smoke/**/*"
   ],
   "compilerOptions": {

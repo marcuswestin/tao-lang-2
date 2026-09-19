@@ -83,6 +83,11 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
+# Run the opt-in real-host testing prototype; does not run or replace the existing suites
+[group('Host proofs')]
+test-host *ARGS:
+    ./dev test-host {{ ARGS }}
+
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
 studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
