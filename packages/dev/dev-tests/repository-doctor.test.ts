@@ -1,7 +1,8 @@
 import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   type DoctorFacts,
+  type DoctorReport,
   doctorReport,
   formatCheck,
   readDoctorFacts,
@@ -18,6 +19,14 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     dependencyIssues: [],
     devenvProfileNode: '/w/.devenv/profile/bin/node',
     direnvAllowed: true,
+    fingerprint: {
+      architecture: 'arm64',
+      kernel: { name: 'Darwin', version: '27.0.0' },
+      os: { build: '26A428', name: 'macOS', version: '27.0' },
+      tao: { commit: '3e1ae411dff6', describe: '3e1ae411', modified: false },
+      toolchain: [{ name: 'bun', present: true, version: '1.3.13' }],
+      version: 1,
+    },
     generatedParserArtifacts: [{ path: 'packages/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
     linkedWorktree: true,
     lockfilePresent: true,
@@ -194,7 +203,7 @@ Describe('repository doctor', () => {
         lanes: [
           {
             id: 'outer',
-            lane: 'full-verify',
+            lane: 'verify-full',
             maxSlots: 8,
             pid: 4242,
             repositoryRoot: '/w',
@@ -215,7 +224,7 @@ Describe('repository doctor', () => {
       },
     }))
 
-    Expect(check(report, 'machine lanes')?.detail).not.toContain('full-verify')
+    Expect(check(report, 'machine lanes')?.detail).not.toContain('verify-full')
     Expect(check(report, 'machine lanes')?.detail).toContain('test in this checkout')
   })
 
@@ -233,6 +242,18 @@ Describe('repository doctor', () => {
     Expect(lines.find(line => line.startsWith('WARN  worktree'))).toContain(
       '\n       Name a branch before committing: git switch -c feat/<name>',
     )
+  })
+
+  Test('offers the environment fingerprint on screen and in the structured report', async () => {
+    const report = doctorReport(facts())
+    const printed = await withCapturedOutput(() => RepositoryDoctorCommand.writeReport(report, {}))
+    const json = await withCapturedOutput(() => RepositoryDoctorCommand.writeReport(report, { json: true }))
+
+    // The screen is where somebody about to file a report learns that a pasteable block exists.
+    Expect(printed.stdout).toContain('macOS 27.0 (26A428) · Darwin 27.0.0 · arm64')
+    Expect(printed.stdout).toContain('Tao 3e1ae411dff6 · bun 1.3.13')
+    Expect(printed.stdout).toContain('./agent doctor --fingerprint')
+    Expect((JSON.parse(json.stdout) as DoctorReport).fingerprint).toEqual(report.fingerprint)
   })
 
   Test('creates nothing in a checkout that has never been built', async () => {

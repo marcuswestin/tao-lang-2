@@ -14,6 +14,9 @@ export const testValidationMessages = {
   advanceNegative: '`advance` cannot move the clock backwards.',
   testPlacement: 'Test declarations are only allowed at file level or inside another test.',
   testBlock: (name: string) => `Only nested tests are allowed in test '${name}'.`,
+  emptySuite: (name: string) =>
+    `Test '${name}' declares no checks, so it would run nothing. A file-level test is a suite of`
+    + ` nested tests: move its steps into test "<what it proves>" { … } inside it.`,
   checkBlock: (name: string) =>
     `Only run, press, enter, submit, back, and expect statements are allowed in test '${name}'.`,
   runPlacement: 'Run steps are only allowed inside test blocks.',
@@ -128,6 +131,14 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
         ctx.error(statement, testValidationMessages.testBlock(AST.testDisplayName(test)))
       }
     }
+    return
+  }
+  // A file-level test is a suite, and the compiler takes its checks from the tests nested in it and
+  // from nothing else. Written as a leaf it parses, validates step by step, and then compiles to a
+  // suite of zero checks — a file that runs nothing and passes, which is the one test failure mode
+  // nothing downstream can notice. The steps are not wrong; the level they sit at is.
+  if (AST.isTaoFile(owner)) {
+    ctx.error(test, testValidationMessages.emptySuite(AST.testDisplayName(test)))
     return
   }
   validateLeafTest(test, ctx)

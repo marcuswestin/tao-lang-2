@@ -4,6 +4,18 @@ function createRuntimeJestConfig(options) {
     preset: 'jest-expo',
     testTimeout: options.testTimeout ?? 30_000,
     testMatch: options.testMatch,
+    // Jest builds the file map it discovers tests from by crawling `roots`, and `roots` defaults to
+    // `rootDir` — this whole package. `rootDir` also holds `_gen_tao-app-test`, the cache of
+    // compiled run roots, and that cache exists in order to grow: retaining a passing run root is
+    // what spares the next run its compile. So the better the cache works, the longer the crawl
+    // gets, and every run pays it whether or not it reuses anything. Measured at 34,337 cached
+    // files, a whole-package crawl cost 1.22s against 0.22s for the two directories below.
+    //
+    // Naming the directories a run actually reads is what takes that off, and it is safe because
+    // Jest resolves a path against the filesystem rather than against this map. The mapped
+    // `@runtime/*` and `@shared/*` modules already prove it: they live outside `rootDir` altogether
+    // and resolve. A config that generates test files elsewhere adds that directory to this list.
+    roots: options.roots ?? ['<rootDir>/runtime-toolchain-tests', '<rootDir>/runtime-toolchain-src'],
     moduleNameMapper: {
       '^@runtime/TR$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
       '^@tao/runtime$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',

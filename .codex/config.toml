@@ -162,4 +162,4 @@ description = "Tao release: add the local Xcode archive destination; credentials
 
 [permissions.tao-unsandboxed]
 extends = ":danger-full-access"
-description = "Claude Code with the Bash sandbox off; switch a running session with /sandbox."
+description = "Tao unsandboxed: run with the Bash sandbox off; a running session can switch with /sandbox."

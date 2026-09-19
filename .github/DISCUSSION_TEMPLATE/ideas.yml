@@ -1,0 +1,53 @@
+# Filed under the `ideas` category, whose slug this filename must match.
+title: "What I want to build: "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The open-ended half of "I tried to build X and could not". Use this when you have not hit a
+        specific wall yet — when you can see the app you want and cannot see how Tao would let you
+        say it, or when you looked at Tao and decided not to start.
+
+        There is nothing to reproduce here and nothing to reduce. Describe the app.
+
+  - type: textarea
+    id: what-you-want-to-build
+    attributes:
+      label: What do you want to build?
+      description: >
+        The app or the feature, described the way you would describe it to somebody who has never
+        heard of Tao.
+    validations:
+      required: true
+
+  - type: textarea
+    id: where-tao-runs-out
+    attributes:
+      label: Where does Tao run out?
+      description: >
+        The part you cannot see a way to express. If you are not sure whether it runs out or you
+        just have not found it, say that — "I could not find it" is an answer we act on.
+    validations:
+      required: true
+
+  - type: textarea
+    id: how-it-should-read
+    attributes:
+      label: How should it read?
+      description: >
+        Write the Tao you wish existed. It does not have to parse, or resemble anything Tao does
+        today. How somebody wants to say a thing is the input this language is designed from.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: how-you-do-it-today
+    attributes:
+      label: How would you build this without Tao?
+      description: >
+        The stack you would otherwise reach for, and what it costs you. Knowing what we are being
+        compared against tells us how much of the gap matters.
+    validations:
+      required: false

@@ -725,6 +725,7 @@ type StudioPreviewFixtureCapturedMessage = {
 type StudioPreviewFixtureCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
+  errorName: StudioRuntimeCaptureErrorName
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
@@ -779,7 +780,7 @@ type StudioPreviewRuntimeCapturedMessage = {
   type: 'preview-runtime-captured'
 }
 
-export type StudioRuntimeCaptureErrorName =
+type StudioRuntimeCaptureErrorName =
   | 'HostEnvironmentError'
   | 'UnexpectedBehaviorError'
   | 'UserInputError'
@@ -805,7 +806,7 @@ type StudioPreviewLogMessage = {
 }
 
 /** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
-export type StudioDebugStep = {
+type StudioDebugStep = {
   action: string
   declaration?: string
   path: string
@@ -823,7 +824,7 @@ export type StudioDebugCommandMessage = {
 }
 
 /** StudioPreviewDebugMessage carries one debugger event: a journal entry, a pause, or a resume. */
-export type StudioPreviewDebugMessage = {
+type StudioPreviewDebugMessage = {
   channel: typeof studioProtocolChannel
   event: StudioJsonValue
   identity: StudioPreviewIdentity
@@ -873,7 +874,7 @@ export type StudioPreviewCanvasGestureMessage = {
 }
 
 /** Parent-owned mode state tells a preview synchronously whether its wheel gestures belong to Canvas. */
-export type StudioCanvasGestureOwnershipMessage = {
+type StudioCanvasGestureOwnershipMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
   owned: boolean
@@ -1631,6 +1632,9 @@ function parsePreviewFixtureCaptureFailed(
   return {
     channel: studioProtocolChannel,
     error: value['error'],
+    // A preview running older code sends no category. Defaulting keeps its failure readable instead
+    // of rejecting the whole message, and matches how such a failure was reported before.
+    errorName: runtimeCaptureErrorName(value['errorName']) ? value['errorName'] : 'HostEnvironmentError',
     identity,
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],

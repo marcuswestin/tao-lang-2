@@ -1563,6 +1563,7 @@ function postCaptureFailure(
   host.parent.postMessage({
     channel: studioProtocolChannel,
     error: error instanceof Error ? error.message : String(error),
+    errorName: runtimeCaptureErrorName(error),
     identity: previewIdentity(config),
     protocolVersion: studioProtocolVersion,
     requestId,

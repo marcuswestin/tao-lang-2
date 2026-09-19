@@ -4,6 +4,7 @@ import {
   CONVENTION_RULES,
   conventionRuleIssues,
   crossPackageSourceImportIssues,
+  developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
   justRecipeIssues,
@@ -12,6 +13,7 @@ import {
   repoLintIssues,
   wordFlowerDirectoryIssues,
 } from '../dev-src/repository-tests/repo-lint'
+import type { LedgerSide } from '../dev-src/repository-tests/repo-lint'
 
 const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'
@@ -22,7 +24,7 @@ check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
+verify-full:
     ./dev gates _test
 _test:
     ./dev test
@@ -31,15 +33,15 @@ _test:
 Describe('repo lint contracts', () => {
   Test('keeps the language benchmark in bench and out of correctness gates', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _native"
+VERIFY_FULL_GATES := "_test _native"
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 check:
     ./dev gates _test
 verify: deps
     ./dev gates _test
-full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full: deps
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _native:
@@ -51,21 +53,21 @@ deps:
 
   Test('reports a benchmark reached through a verification gate variable and recipe', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _bench-check"
+VERIFY_FULL_GATES := "_test _bench-check"
 bench:
     bun run language-performance.ts
 check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full:
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _bench-check:
     just bench
 `)).toEqual([
-      "Justfile recipe 'full-verify' must not invoke the language performance benchmark.",
+      "Justfile recipe 'verify-full' must not invoke the language performance benchmark.",
     ])
   })
 
@@ -311,6 +313,81 @@ _bench-check:
     Expect(issues).toEqual([
       'Current must contain exactly one tranche status header across the directory.',
       'Next must contain exactly one tranche status header across the directory.',
+    ])
+  })
+
+  Test('reports developer-environment entries the index does not link, and links with no entry', () => {
+    const index = '# Developer environment upgrades\n\n'
+      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Candidate\n'
+      + '- [DEVENV-903 — Vanished](<Developer environment upgrades/DEVENV-903-vanished.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      openSide(index, ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md']),
+      emptySide,
+    )).toEqual([
+      'Developer environment upgrades.md needs an index line linking `DEVENV-902-unlisted.md`.',
+      'Developer environment upgrades.md links `DEVENV-903-vanished.md`, which does not exist.',
+    ])
+  })
+
+  Test('reports two developer-environment entries that claim the same ID, in either half', () => {
+    const index = '- [DEVENV-904 — One](<Developer environment upgrades/DEVENV-904-one.md>) — Candidate\n'
+    const archiveIndex = '- [DEVENV-904 — Two](<Developer environment upgrades/Archive/DEVENV-904-two.md>) — Resolved\n'
+    Expect(developerEnvironmentLedgerIssues(
+      openSide(index, ['DEVENV-904-one.md']),
+      archivedSide(archiveIndex, ['DEVENV-904-two.md']),
+    )).toEqual([
+      'Developer environment upgrades: DEVENV-904 is claimed by Developer environment upgrades/DEVENV-904-one.md,'
+      + ' Developer environment upgrades/Archive/DEVENV-904-two.md;'
+      + ' rename the later-merged file and its index line.',
+    ])
+  })
+
+  Test('reports one developer-environment entry the index links twice', () => {
+    // A merge that keeps both sides of a conflicting index edit lands here, and it reads as correct
+    // from either direction on its own: the file exists, and it is listed.
+    const index = '- [DEVENV-905 — Once](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+      + '- [DEVENV-905 — Again](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(openSide(index, ['DEVENV-905-twice.md']), emptySide)).toEqual([
+      'Developer environment upgrades.md links `DEVENV-905-twice.md` 2 times; keep one index line.',
+    ])
+  })
+
+  Test('accepts a developer-environment backlog whose entries, statuses, and both indexes agree', () => {
+    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Candidate\n'
+      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Incoming\n'
+    const archiveIndex =
+      '- [DEVENV-900 — Done](<Developer environment upgrades/Archive/DEVENV-900-done.md>) — Resolved\n'
+    Expect(developerEnvironmentLedgerIssues(
+      {
+        entries: [
+          { name: 'DEVENV-901-one.md', status: 'Candidate' },
+          { name: 'DEVENV-902-two.md', status: 'Incoming' },
+          { name: '.DS_Store', status: '' },
+        ],
+        index,
+      },
+      archivedSide(archiveIndex, ['DEVENV-900-done.md']),
+    )).toEqual([])
+  })
+
+  Test('reports an addressed entry left in the open backlog, and an open one left in the archive', () => {
+    const index = '- [DEVENV-901 — Done](<Developer environment upgrades/DEVENV-901-done.md>) — Resolved\n'
+    const archiveIndex =
+      '- [DEVENV-902 — Open](<Developer environment upgrades/Archive/DEVENV-902-open.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      { entries: [{ name: 'DEVENV-901-done.md', status: 'Resolved' }], index },
+      { entries: [{ name: 'DEVENV-902-open.md', status: 'Candidate' }], index: archiveIndex },
+    )).toEqual([
+      'Developer environment upgrades/DEVENV-901-done.md is `Resolved`; move it and its index line to the archive'
+      + ' in the change that addressed it.',
+      'Developer environment upgrades/Archive/DEVENV-902-open.md is `Candidate`; an entry that is not addressed'
+      + ' belongs in the open backlog.',
+    ])
+  })
+
+  Test('reports a developer-environment file that is not named for an ID', () => {
+    Expect(developerEnvironmentLedgerIssues(openSide('', ['notes.md']), emptySide)).toEqual([
+      'Developer environment upgrades/notes.md must be named DEVENV-NNN-<slug>.md.',
     ])
   })
 
@@ -687,4 +764,15 @@ type TestFile = {
 
 function file(path: string, source: string, bytes?: Uint8Array): TestFile {
   return { bytes, path, source }
+}
+
+const emptySide: LedgerSide = { entries: [], index: '' }
+
+/** The status each helper gives its entries is the one that belongs in that half, so only the case under test differs. */
+function openSide(index: string, names: readonly string[]): LedgerSide {
+  return { entries: names.map(name => ({ name, status: 'Candidate' })), index }
+}
+
+function archivedSide(index: string, names: readonly string[]): LedgerSide {
+  return { entries: names.map(name => ({ name, status: 'Resolved' })), index }
 }

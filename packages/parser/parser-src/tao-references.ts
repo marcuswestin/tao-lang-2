@@ -187,13 +187,13 @@ export class TaoReferences extends Langium.DefaultReferences {
 }
 
 /** layoutWordFullName returns the hyphenated-and-dotted full name of a LayoutWord. */
-export function layoutWordFullName(word: AST.LayoutWord): string {
+function layoutWordFullName(word: AST.LayoutWord): string {
   const head = [word.value, ...word.suffixes].join('-')
   return word.pathSegments.length > 0 ? `${head}.${word.pathSegments.join('.')}` : head
 }
 
 /** findDesignMember searches all member kinds of a design declaration for a matching name. */
-export function findDesignMember(
+function findDesignMember(
   design: AST.DesignDeclaration,
   name: string,
 ): AST.Node | undefined {

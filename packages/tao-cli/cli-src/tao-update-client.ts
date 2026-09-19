@@ -9,7 +9,7 @@ import type {
 
 export type TaoUpdateFetch = (input: string, init?: RequestInit) => Promise<Response>
 
-export type { ExpoUpdateAsset, ExpoUpdateManifest, ExpoUpdatePlatform, TaoPublishedUpdate, TaoUpdateHistory }
+export type { ExpoUpdateAsset, ExpoUpdateManifest, ExpoUpdatePlatform, TaoPublishedUpdate }
 
 export type TaoUpdatePublication = {
   applicationId: string

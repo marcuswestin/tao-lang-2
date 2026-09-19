@@ -1,5 +1,6 @@
-import { FS, Repo, Time } from '@shared'
+import { Errors, FS, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
+import { FlakeTolerance } from './FlakeTolerance'
 import { GateCatalog } from './GateCatalog'
 import {
   GreenTree,
@@ -8,7 +9,13 @@ import {
   type GreenTreeRecord,
   type TreeFingerprint,
 } from './GreenTree'
-import { type ContentionReport, type MachineLane, MachineLanes, type MachineResourceLease } from './MachineLanes'
+import {
+  type ContentionReport,
+  type LaneRecord,
+  type MachineLane,
+  MachineLanes,
+  type MachineResourceLease,
+} from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
@@ -52,8 +59,8 @@ export type RunGatesOptions = {
    * lane and lanes whose gate membership contains it. Absent, no record is read or written.
    */
   greenTree?: {
-    /** Ignore every record and run; the run still records its own green tree. */
-    fresh?: boolean
+    /** Ignore every record and run anyway; the run still records its own green tree. */
+    noCache?: boolean
     /** Injected by tests; defaults to hashing the Git working tree. */
     hashTree?: (repositoryRoot: string) => Promise<string>
     lanes: readonly string[]
@@ -61,11 +68,23 @@ export type RunGatesOptions = {
   jobs?: number
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
   jsonPath?: string
+  /**
+   * Refuse to start while another lane is registered on this machine. For a lane whose gates drive
+   * the window server, sharing the host is not slowness but interference, so the honest answer is
+   * to decline rather than to produce a verdict about the contention.
+   */
+  needsMachine?: boolean
   /** Artifact lane; names the log directory and appears in the summary. */
   lane?: string
   logRoot?: string
   /** Injected CPU total for deterministic coordination tests. */
   machineCpuCount?: number
+  /**
+   * Injected load reading for deterministic coordination tests. A run's contention verdict decides
+   * whether it warns and whether it teaches the timings store, so a test that means an idle or a
+   * busy machine says which rather than inheriting whatever the host is doing.
+   */
+  machineLoadAverage?: () => number
   now?: () => number
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
@@ -85,6 +104,14 @@ export type RunGatesOptions = {
     run: WorkCommand,
   ) => Promise<{ exitCode: number; output: string }>
 }
+
+/**
+ * The `tao test` opt-out, spelled here the way `TAO_TEST_JOBS` is: the command owns the contract and
+ * this package only sets it. `tao test` reuses a previous passing run's compiled apps when nothing
+ * they are built from has changed, which is a memoized verdict of exactly the kind `--no-cache`
+ * exists to refuse. A `--no-cache` lane therefore compiles every app for itself.
+ */
+export const TAO_TEST_NO_CACHE_ENV_KEY = 'TAO_TEST_NO_CACHE'
 
 const DEFAULT_LANE = 'verify'
 /** The two lane-list names that stand for the whole test selection rather than a recipe. */
@@ -106,20 +133,25 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const now = options.now ?? Time.nowMs
   const startedAt = now()
   const fingerprintOf = treeFingerprinter(options)
-  // Fingerprinted before anything runs. A --fresh run reads no proof but still needs this seed,
+  // Fingerprinted before anything runs. A --no-cache run reads no proof but still needs this seed,
   // because the drift guard below compares what the readers proved against what the run leaves.
   const startingTree = options.greenTree === undefined ? undefined : await fingerprintOf(location.repositoryRoot)
   const toolchain = options.greenTree === undefined ? undefined : await GreenTree.toolchain(location.repositoryRoot)
   const startingKey: GreenTreeKey | undefined = startingTree === undefined || toolchain === undefined
     ? undefined
     : { toolchain, treeHash: startingTree.hash }
-  const readsGreenTree = options.greenTree !== undefined && options.greenTree.fresh !== true
+  const readsGreenTree = options.greenTree !== undefined && options.greenTree.noCache !== true
   // A whole-lane record may stand in for the lane only when every node in it is one the key
-  // describes. A lane holding a host-dependent node cannot be skipped wholesale, however green its
-  // record: the record would be asserting that Chrome, Electrobun, the simulator, and the window
-  // server behave here as they did on the run that wrote it, which no tree hash says. Such a lane
-  // still skips its recordable nodes one by one below, which is the same saving without the lie.
-  const wholeLaneSkippable = options.gates.every(name => GateCatalog.isRecordable(name) || GateCatalog.isPrepare(name))
+  // describes — exactly the nodes `isRecordable` admits, and no others. A lane holding a
+  // host-dependent node cannot be skipped wholesale, however green its record: it would be
+  // asserting that Chrome, Electrobun, the simulator, and the window server behave here as they did
+  // on the run that wrote it, which no tree hash says. Neither can a lane holding a generator: its
+  // output is Git-ignored and so outside the hash, and `just verify && just clean && just verify`
+  // would otherwise match the record at an unchanged tree and report PASSED having generated
+  // nothing. Such a lane still skips its recordable nodes one by one below, which is the same
+  // saving without the lie, and a generator skipped that way costs its own stamp check rather than
+  // its full run.
+  const wholeLaneSkippable = options.gates.every(name => GateCatalog.isRecordable(name))
   if (readsGreenTree && wholeLaneSkippable && startingKey !== undefined) {
     const match = await GreenTree.find(location.repositoryRoot, startingKey, options.greenTree!.lanes)
     if (match !== undefined) {
@@ -135,7 +167,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const unsandboxedSkips = options.skipUnsandboxed === true
     ? options.gates
       .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
-      .map(name => `${name}=requires unsandboxed host capabilities; run just full-verify outside the sandbox`)
+      .map(name => `${name}=requires unsandboxed host capabilities; run just verify-full outside the sandbox`)
     : []
 
   const recipeGates = runnableGates.filter(name => !isTestGate(name))
@@ -154,8 +186,16 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // `studio#2` would then skip a process covering different files than the one that earned it, and
   // some file could go unproved while the lane reported green. A suite name is stable, and its
   // record is written only when every one of its shards passed.
+  //
+  // Either kind may only stand on a record while every generated tree it reads is being regenerated
+  // beside it. Those trees are Git-ignored and so outside the key; a lane that reads one without
+  // running its generator would be skipping work on a hash that cannot speak for the input.
   const suites = [...new Set(suiteOfNode.values())]
-  const recordable = [...recipeGates.filter(name => GateCatalog.isRecordable(name)), ...suites]
+  const canStandOnRecord = (name: string) => GateCatalog.unrunGeneratedReads(name, options.gates).length === 0
+  const recordable = [
+    ...recipeGates.filter(name => GateCatalog.isRecordable(name) && canStandOnRecord(name)),
+    ...suites.filter(canStandOnRecord),
+  ]
   const unstable = await unstableSuites(location.repositoryRoot, testPlan?.states ?? [])
   const proved = !readsGreenTree || startingKey === undefined
     ? { excluded: [] as readonly string[], proved: new Map<string, GreenTreeRecord>() }
@@ -186,11 +226,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
+  // Asked before this lane registers: a lane that can see its own registration finds a holder every
+  // time and refuses every time.
+  await refuseWithoutMachine(options, location.lane)
   // Every worktree on this machine reserves against the same CPUs. Registration establishes this
   // lane's ceiling; the broker recomputes its fair share at every node admission.
   const machineLane = await MachineLanes.acquire({
     lane: location.lane,
     cpuCount: options.machineCpuCount,
+    loadAverage: options.machineLoadAverage,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
@@ -207,15 +251,23 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const { contention, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
     const onPrepareFinished = () => {
-      if (options.greenTree !== undefined) {
-        // Mutators intentionally rewrite the tree. Snapshot only once they have all settled, so a
-        // later edit by anyone else cannot be mistaken for bytes this run proved.
-        snapshot = fingerprintOf(location.repositoryRoot)
+      if (options.greenTree === undefined) {
+        void prepareLease?.release()
+        return
       }
-      void prepareLease?.release()
+      // Mutators intentionally rewrite the tree. Snapshot only once they have all settled, so a
+      // later edit by anyone else cannot be mistaken for bytes this run proved — and hold the
+      // prepare lock until that snapshot is taken, because a peer released to run its own fixers
+      // rewrites the tree while it is still being hashed, and the hash would then describe a tree
+      // that never existed.
+      snapshot = fingerprintOf(location.repositoryRoot)
+      // Not `void snapshot.finally(...)`: that chain rejects with the snapshot and nothing is
+      // listening on it, which is an unhandled rejection rather than a release. The rejection
+      // itself is answered where the snapshot is awaited, below.
+      void snapshot.catch(() => undefined).then(async () => await prepareLease?.release())
     }
     const graphResult = await WorkGraph.run(states, {
-      env: machineLane.id === undefined ? undefined : { [MachineLanes.LANE_ID_ENV_KEY]: machineLane.id },
+      env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true),
       expectedMs,
       jobs: machineLane.ceiling,
       onEvent: event => {
@@ -247,7 +299,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       })
     }
     return graphResult
-  }, machineLane).finally(async () => await prepareLease?.release())
+  }, machineLane).finally(async () => {
+    // The lane body can return while the tree is still being hashed — the read-only phase runs on
+    // after the last writer finishes, and the contention retry can outlast it too. Releasing here
+    // without waiting hands a peer the prepare lock mid-hash, and its fixers then rewrite the tree
+    // into a hash describing a state that never existed. The early release above is what keeps the
+    // lock from being held for the whole read-only phase; this one is only the backstop.
+    await snapshot.catch(() => undefined)
+    await prepareLease?.release()
+  })
 
   verifiedTree = await snapshot
   // Reading a test node's structured report can still fail it — a node that exited zero without
@@ -258,6 +318,16 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     : await TestRunner.observationsFor(
       testPlan.states.filter(state => states.some(candidate => candidate.name === state.name)),
       location.repositoryRoot,
+    )
+  // A node whose every failing test the ledger has already watched flip without its file changing
+  // stops failing this lane. The states themselves are left failed: the summary is the one place
+  // that decides a verdict, so the green record below still refuses a node that exited non-zero,
+  // and `RunTimings` still declines to learn from it.
+  const tolerance = testPlan === undefined || result.interrupted
+    ? FlakeTolerance.empty()
+    : FlakeTolerance.apply(
+      testPlan.states.filter(state => states.some(candidate => candidate.name === state.name)),
+      await TestLedger.tolerated(location.repositoryRoot),
     )
   const schedule = WorkSchedule.report(result)
   const summary = buildSummary({
@@ -272,6 +342,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     schedule,
     states,
     suiteOf: name => suiteOfNode.get(name),
+    toleratedFlakes: tolerance.demoted.map(flake => ({
+      evidence: flake.evidence,
+      file: flake.file,
+      id: flake.id,
+      node: flake.node,
+    })),
   })
   for (const excluded of proved.excluded) {
     summary.warnings = [...summary.warnings, GreenTree.describeExclusion(excluded)]
@@ -283,12 +359,21 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     summary.status = 'failed'
     summary.warnings = [...summary.warnings, driftWarning(verifiedTree, finalTree)]
   }
+  // The same question asked of this run's own prepare phase. A node skipped on an earlier proof was
+  // proved against the tree this run started from; if the fixers then rewrote that tree, nothing
+  // checked those nodes against the tree the run leaves behind. That is not evidence, and a run that
+  // is not evidence must not exit 0 — `merge-with-main` reads the exit code and nothing else.
+  if (proved.proved.size > 0 && verifiedTree !== undefined && verifiedTree.hash !== startingTree?.hash) {
+    summary.status = 'failed'
+    summary.warnings = [...summary.warnings, STALE_PROOF_WARNING]
+  }
   // A lane record is only written when the lane's own membership is fully describable by the key,
   // for the same reason it is only read then. A lane whose nodes include a host-dependent one, or a
   // suite the flake ledger has seen flip, records its nodes and not itself.
   const recordsLane = wholeLaneSkippable && unstable.size === 0
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
     await recordGreen({
+      canStandOnRecord,
       lane: recordsLane,
       key: startingKey,
       lanes: options.greenTree.lanes,
@@ -368,6 +453,14 @@ async function unstableSuites(
 
 /** recordGreen stores what this run proved, and only what a tree and a toolchain fully describe. */
 async function recordGreen(options: {
+  /**
+   * Whether a node's verdict is one a tree hash can speak for in this lane. It gates writing a
+   * record as well as reading one: a reader of a generated tree whose generator did not run here
+   * was judged against whatever that Git-ignored tree happened to hold, so recording it at this
+   * tree's hash would let a later lane skip it on evidence about bytes nothing attests to. Reading
+   * alone was guarded, which left `./dev gates <subset>` able to write exactly that record.
+   */
+  canStandOnRecord: (name: string) => boolean
   key?: GreenTreeKey
   /** False when this lane's own membership is not fully described by the key; its nodes still are. */
   lane: boolean
@@ -386,25 +479,24 @@ async function recordGreen(options: {
   if (key === undefined || verifiedTree === undefined) {
     return
   }
-  if (options.provedCount > 0 && verifiedTree.hash !== options.startingTree?.hash) {
-    // A node skipped on an earlier proof was proved against the tree this run started from. If the
-    // fixers then rewrote that tree, this run proves nothing about the tree it leaves behind.
-    options.summary.warnings = [
-      ...options.summary.warnings,
-      'nodes were skipped on an earlier proof and the prepare phase then changed the tree; '
-      + 'this run is not green evidence. Re-run with --fresh.',
-    ]
-    return
-  }
+  // The verified tree is snapshotted once, when the *last* writer finishes — not when each one
+  // does. A fixer that exited early therefore ran against a tree that a later writer's runtime gave
+  // someone else time to edit, and recording it at the verified hash would claim it reached its
+  // fixpoint on bytes it never read. Only when the prepare phase changed nothing is every writer
+  // provably at its fixpoint on exactly the recorded tree; otherwise the writers sit this one out
+  // and the readers, whose verdicts are about the tree rather than about rewriting it, still count.
+  const preparePreservedTree = verifiedTree.hash === options.startingTree?.hash
   const passedGates = options.states
     .filter(state => state.status === 'passed' && GateCatalog.isRecordable(state.name))
+    .filter(state => preparePreservedTree || !GateCatalog.isPrepare(state.name))
     .map(state => state.name)
     .filter(name => options.suiteOf(name) === undefined)
+    .filter(options.canStandOnRecord)
   await GreenTree.record(
     location.repositoryRoot,
     options.lane ? options.lanes[0] ?? location.lane : undefined,
     { at: new Date().toISOString(), logRoot: location.logRoot, toolchain: key.toolchain, treeHash: verifiedTree.hash },
-    [...passedGates, ...provedSuites(options.states, options.suiteOf)],
+    [...passedGates, ...provedSuites(options.states, options.suiteOf).filter(options.canStandOnRecord)],
     {
       neverRecord: new Set(
         options.states.filter(state => !GateCatalog.isRecordable(state.name)).map(state => state.name),
@@ -434,6 +526,10 @@ function provedSuites(
     .map(([suite]) => suite)
 }
 
+/** Why a run that reused proofs and then rewrote the tree under them cannot report itself green. */
+const STALE_PROOF_WARNING = 'nodes were skipped on an earlier proof and the prepare phase then '
+  + 'changed the tree; this run is not green evidence. Re-run with --no-cache.'
+
 /** driftWarning names what changed under a run, because "the tree changed" is not actionable. */
 function driftWarning(before: TreeFingerprint, after: TreeFingerprint): string {
   const changed = GreenTree.changedPaths(before, after)
@@ -462,6 +558,65 @@ async function acquirePrepare(
   })
 }
 
+/**
+ * refuseWithoutMachine stops a lane that needs the machine while another lane holds part of it.
+ *
+ * Every other kind of contention on this host is a scheduling problem: lanes divide the CPUs and a
+ * busy machine makes a run slower, not wrong. The browser and native gates are the exception,
+ * because they drive one window server and one set of simulators between them — two runs do not
+ * halve each other's speed, they click into each other's windows. A verdict produced under that is
+ * about the contention rather than about the branch, so this declines to produce one.
+ *
+ * It declines rather than waits: the lane it is waiting for may be a person's interactive session
+ * with no end in sight, and a command that says why it will not run is more useful than one that
+ * hangs. Nothing is held, so retrying costs nothing once the other lane finishes.
+ *
+ * The predicate is any registered lane, not only one that itself drives the window server, and that
+ * is wider than the reason above on purpose: a purely CPU-bound lane still starves the timing-
+ * sensitive gates this one is about to run, which is the same wrong verdict by a different route.
+ * The window server is why the refusal exists; starvation is why it does not try to be clever about
+ * which neighbour it found. Two such lanes starting together can both read an empty registry and
+ * both proceed — this narrows a window rather than closing one, and the loser of that race is a
+ * slow, noisy run rather than a wrong one.
+ */
+async function refuseWithoutMachine(options: RunGatesOptions, lane: string): Promise<void> {
+  if (options.needsMachine !== true) {
+    return
+  }
+  const inspection = await MachineLanes.inspectLanes(options.registryRoot)
+  // A registry the host will not reveal proves nothing in either direction. Refusing on it would
+  // make this lane unrunnable wherever the registry cannot be read, over a conflict that may not
+  // exist; the lane runs, and the contention report still says what it saw.
+  if (!inspection.available || inspection.lanes.length === 0) {
+    return
+  }
+  const holders = inspection.lanes.map(describeLaneHolder).join(', ')
+  Errors.throwHostEnvironment(
+    `${lane} needs this machine to itself: ${holders} ${inspection.lanes.length === 1 ? 'is' : 'are'} already `
+      + 'running. Its browser and native gates share one window server, so a run beside another lane '
+      + 'reports that interference rather than this branch. Wait for that lane to finish or stop it, then retry.',
+  )
+}
+
+/**
+ * describeLaneHolder names one registered lane the way `MachineLanes.describeExclusiveHolder` names
+ * the holder of an exclusive confirmation, so the two refusals a developer can meet read alike.
+ */
+function describeLaneHolder(record: LaneRecord): string {
+  return record.lane.length === 0 || record.repositoryRoot.length === 0
+    ? `PID ${record.pid}`
+    : `${record.lane} in ${FS.basename(record.repositoryRoot)}`
+}
+
+/** graphEnvironment is what every child of one lane's graph inherits beyond its own command's env. */
+function graphEnvironment(laneId: string | undefined, noCache: boolean): Record<string, string> | undefined {
+  const environment = {
+    ...(laneId === undefined ? {} : { [MachineLanes.LANE_ID_ENV_KEY]: laneId }),
+    ...(noCache ? { [TAO_TEST_NO_CACHE_ENV_KEY]: 'true' } : {}),
+  }
+  return Object.keys(environment).length === 0 ? undefined : environment
+}
+
 /** treeFingerprinter resolves how this run identifies the tree, honoring an injected hasher. */
 function treeFingerprinter(options: RunGatesOptions): (repositoryRoot: string) => Promise<TreeFingerprint> {
   const injected = options.greenTree?.hashTree
@@ -480,7 +635,9 @@ function greenTreeSummary(
 ): GateSummary {
   const reason = `tree unchanged since the green ${match.lane} run at ${match.at}`
   return {
-    elapsedMs,
+    // Rounded like every other summary's: the field is a published integer, and the verdict line
+    // renders it as `105ms` rather than as the raw fraction of a millisecond the clock returned.
+    elapsedMs: Math.round(elapsedMs),
     gates: options.gates.map(name => ({ elapsedMs: 0, name, reason, status: 'skipped' })),
     greenTree: match,
     lane,

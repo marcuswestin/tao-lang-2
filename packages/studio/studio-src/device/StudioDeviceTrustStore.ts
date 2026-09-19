@@ -1,5 +1,5 @@
 import { StudioDeviceTrust, type TaoStudioDeviceIdentity } from '@runtime/TR-studio-device-trust'
-import { CLI, Errors, FS, HCI, Json, Platform, Time } from '@shared'
+import { Errors, FS, HCI, Json, Platform, ProcessTree, Time } from '@shared'
 // `@shared/FS` has no exclusive-create helper, and creating the identity is the one place that needs
 // one: two Studio processes starting together must not each believe they wrote the installation key.
 import * as nodeFs from 'node:fs/promises'
@@ -719,6 +719,7 @@ async function retireLegacyLinkIfUnchanged(
 
 /** Narrow seams for concurrency mutation tests; production uses the same functions without hooks. */
 export const StudioDeviceTrustStoreTesting = {
+  inspectProcessIdentity,
   lockOwnerIsLive,
   observeFileClaim,
   observeLegacyLock,
@@ -762,28 +763,34 @@ async function lockOwnerIsLive(
   if (identity.evidence === 'gone') {
     return false
   }
-  return !(
-    identity.evidence === 'alive'
+  // Only a start time read the same way as the recorded one can contradict it. An owner file from a
+  // build that read it differently is uncertainty, and uncertainty leaves the lock where it is.
+  const comparable = identity.evidence === 'alive'
     && owner.processStartedAt !== undefined
     && identity.startedAt !== undefined
-    && owner.processStartedAt !== identity.startedAt
-  )
+    && owner.processStartedAt.startsWith(IDENTITY_SCHEME) === identity.startedAt.startsWith(IDENTITY_SCHEME)
+  return !(comparable && owner.processStartedAt !== identity.startedAt)
 }
+
+/**
+ * IDENTITY_SCHEME prefixes a recorded process start time with how it was read.
+ *
+ * This used to shell out to `ps -o lstart=`, which an agent sandbox denies outright — so every
+ * sandboxed run fell through to a bare liveness check and silently lost the start-time comparison
+ * that is the whole protection against a reused PID. `ProcessTree` reads the same fact through
+ * libproc with no subprocess at all, which is why it exists.
+ *
+ * The two spellings are not comparable, and an owner file written by an older build holds the old
+ * one. Recording the scheme is what lets `lockOwnerIsLive` tell "a different process now holds this
+ * PID" from "I cannot compare these two", because only the first may take a lock away.
+ */
+const IDENTITY_SCHEME = 'proc:'
 
 async function inspectProcessIdentity(pid: number): Promise<ProcessIdentity> {
   try {
-    // `lstart` follows locale and time zone; pin both so every process compares the same spelling.
-    const result = await CLI.run('ps', {
-      args: ['-o', 'lstart=', '-p', String(pid)],
-      env: { LC_ALL: 'C', TZ: 'UTC' },
-      stdio: 'pipe',
-    })
-    const startedAt = result.stdout.trim()
-    if (result.error === undefined && result.exitCode === 0 && startedAt.length > 0) {
-      return { evidence: 'alive', startedAt }
-    }
-    if (result.error === undefined && !Platform.processIsAlive(pid)) {
-      return { evidence: 'gone' }
+    const identity = ProcessTree.identities([pid]).get(pid)
+    if (identity !== undefined) {
+      return { evidence: 'alive', startedAt: `${IDENTITY_SCHEME}${identity.startedAt}` }
     }
   } catch {
     // An unreadable process table is uncertainty, never permission to steal another process's lock.
