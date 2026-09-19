@@ -1,5 +1,6 @@
 import { Errors, FS, Platform, Time } from '@shared'
 import { MachineLanes } from './MachineLanes'
+import { VerificationLanes } from './VerificationLanes'
 
 /**
  * The landing lock is the one thing agents on this machine take turns holding. It answers a single
@@ -450,20 +451,8 @@ async function holding<T>(options: AcquireLandingLockOptions, work: (hold: Landi
   }
 }
 
-/**
- * The lanes that may not run without the lock. Membership is by breadth, not by whether the lane is
- * merge evidence: these are the runs that take the machine for minutes, so two of them at once is
- * both agents finishing later than either would alone, and a landing that follows one of them is
- * standing on a tree a neighbour may already have invalidated.
- *
- * Everything narrower stays free on purpose. An agent must be able to check the small change it
- * just made without waiting on anybody — `test-file`, a named test, `test-retry`, `check`, `fix`,
- * `fmt` — and the diff-scoped lanes in between (`verify-changed`, `test-changed`) are throttled by
- * the existing machine-lane slot admission rather than by this lock. An agent waiting for the lock
- * is encouraged to keep running those narrow tests so that its own turn is likely to pass; it is
- * equally free to simply wait.
- */
-const LOCKED_LANES: readonly string[] = ['test-all', 'verify', 'verify-full', 'verify-full-sandbox']
+/** The lanes that may not run without the lock; the list itself lives with the other lane names. */
+const LOCKED_LANES: readonly string[] = VerificationLanes.LOCKED
 
 /** Report whether this lane may only run while its worktree holds the landing lock. */
 function requiresLock(lane: string): boolean {
