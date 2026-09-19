@@ -52,40 +52,40 @@ function owningAppDeclaration(state: AST.StateDeclaration): AST.AppDeclaration {
 }
 
 function compilePersistedType(type: ASTUtils.TaoType): Compiled {
-  if (type.kind === 'primitive') {
-    if (['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)) {
-      return gen`{ kind: "primitive", name: ${gen.jsLiteral(type.primitive)} }`
-    }
-    unsupportedPersistedType(type)
-  }
-  if (type.kind === 'list') {
-    return gen`{ kind: "list"${type.element ? gen`, element: ${compilePersistedType(type.element)}` : gen``} }`
-  }
-  if (type.kind === 'enum') {
-    const identity = compileDeclarationIdentity(type.declaration)
-    return gen`{ kind: "enum", declaration: ${identity}.canonical, cases: [${
-      gen.join(
-        AST.caseSetCasesOf(type.declaration),
-        caseSetCase => gen`${gen.jsLiteral(AST.caseSetCaseName(caseSetCase))}`,
-      )
-    }] }`
-  }
-  if (type.kind === 'item' && type.item) {
-    return gen`{ kind: "item", properties: {
+  return Switch.kind(type, {
+    primitive: type => {
+      if (['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)) {
+        return gen`{ kind: "primitive", name: ${gen.jsLiteral(type.primitive)} }`
+      }
+      unsupportedPersistedType(type)
+    },
+    list: type => gen`{ kind: "list"${type.element ? gen`, element: ${compilePersistedType(type.element)}` : gen``} }`,
+    item: type =>
+      type.item
+        ? gen`{ kind: "item", properties: {
       ${
-      gen.list(type.item.properties, property =>
-        gen`
+          gen.list(type.item.properties, property =>
+            gen`
         ${gen.jsLiteral(property.name)}: { optional: ${property.optional}, type: ${
-          compilePersistedType(Type.ofProperty(property))
-        } },
+              compilePersistedType(Type.ofProperty(property))
+            } },
       `)
-    }
+        }
     } }`
-  }
-  if (type.kind === 'union') {
-    return gen`{ kind: "union", members: [${gen.join(type.members, compilePersistedType)}] }`
-  }
-  unsupportedPersistedType(type)
+        : unsupportedPersistedType(type),
+    entity: type => unsupportedPersistedType(type),
+    enum: type => {
+      const identity = compileDeclarationIdentity(type.declaration)
+      return gen`{ kind: "enum", declaration: ${identity}.canonical, cases: [${
+        gen.join(
+          AST.caseSetCasesOf(type.declaration),
+          caseSetCase => gen`${gen.jsLiteral(AST.caseSetCaseName(caseSetCase))}`,
+        )
+      }] }`
+    },
+    union: type => gen`{ kind: "union", members: [${gen.join(type.members, compilePersistedType)}] }`,
+    unresolved: type => unsupportedPersistedType(type),
+  })
 }
 
 /**

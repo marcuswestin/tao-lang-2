@@ -73,9 +73,6 @@ const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO
  */
 const MAX_ENTRIES = 512
 
-/** How an absent declared input is recorded, so that its appearance or removal changes the hash. */
-const ABSENT = '<absent>'
-
 /** Where Langium's generated parser is written; Git ignores it, so it is walked rather than listed. */
 const GENERATED_PARSER_ROOT = 'packages/parser/parser-src/_gen_tao-parser'
 
@@ -268,7 +265,7 @@ async function toolchainIdentity(repositoryRoot: string): Promise<string | undef
     `generated-parser\n${await generatedParserIdentity(root)}`,
     await fileEntry(root, FS.resolvePath('bun.lock', root)),
     await fileEntry(root, FS.resolvePath('package.json', root)),
-    `${TaoStdlib.DECLARED_ROOT_ENV}\n${declaredStdlibRoot ?? ABSENT}`,
+    `${TaoStdlib.DECLARED_ROOT_ENV}\n${declaredStdlibRoot ?? TaoStdlib.ABSENT}`,
   ])
 }
 
@@ -285,7 +282,7 @@ async function stdlibIsHashed(declaredRoot: string, packagesRoot: string): Promi
 async function generatedParserIdentity(repositoryRoot: string): Promise<string> {
   const generatedRoot = FS.resolvePath(GENERATED_PARSER_ROOT, repositoryRoot)
   if (!await FS.isDirectory(generatedRoot)) {
-    return ABSENT
+    return TaoStdlib.ABSENT
   }
   const paths: string[] = []
   for await (const path of FS.walk(generatedRoot, { includeHidden: true })) {
@@ -302,7 +299,7 @@ async function generatedParserIdentity(repositoryRoot: string): Promise<string> 
  */
 async function treeIdentity(root: string): Promise<string> {
   if (!await FS.isDirectory(root)) {
-    return ABSENT
+    return TaoStdlib.ABSENT
   }
   const paths = await Repo.filesUnder(root, { excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames })
   return await FS.filesIdentity(paths.map(path => [FS.relativePath(root, path), path]))
@@ -337,7 +334,7 @@ async function ancestorDeclarationIdentity(repositoryRoot: string, workspaceRoot
 async function fileEntry(repositoryRoot: string, path: string): Promise<string> {
   const relative = FS.relativePath(repositoryRoot, path)
   if (!await FS.isFile(path)) {
-    return `${relative}\n${ABSENT}`
+    return `${relative}\n${TaoStdlib.ABSENT}`
   }
   return `${relative}\n${await FS.filesIdentity([[relative, path]])}`
 }

@@ -1,7 +1,5 @@
 import type TR from '@runtime/TR'
-import { Assert, Errors } from '@shared/core'
-
-const NANOSECONDS_PER_MILLISECOND = 1e6
+import { Assert, Errors, Time } from '@shared/core'
 
 /**
  * HttpProvider serves query-driven remote reads over an in-memory snapshot store. The provider is
@@ -21,7 +19,7 @@ export function HttpProvider(): TR.DataProvider {
       const cacheForNs = context.configuration['CacheFor'] as number | undefined
       return {
         fill: (request, ops) => runAdapterFill(adapter, request, ops),
-        fillCacheMs: (cacheForNs ?? 0) / NANOSECONDS_PER_MILLISECOND,
+        fillCacheMs: (cacheForNs ?? 0) / Time.NANOSECONDS_PER_MILLISECOND,
         load: () => snapshots.get(context.storageKey),
         referenceToken: reference => reference.id,
         reset: () => {
