@@ -20,12 +20,23 @@
   `main ... is already contained in this branch` from that local ref. That is a stale-`main`
   judgment presented as a passing check — a landing finalize called ready can still be refused by
   `merge-with-main`'s preflight, which does reach the remote.
-- **Workaround:** Run the dry run unsandboxed. Run `finalize` unsandboxed too, or fetch `origin`
-  first, so its containment check reads a current `main`.
+
+  2026-09-19, the landing half: the unsandboxed retry that rescues the dry run does not rescue the
+  landing. `just merge-with-main` with the sandbox off is refused by the Claude Code auto-mode
+  classifier before it runs (`Blocked by classifier`), and sandboxed it fails on the same
+  `git ls-remote` as the dry run. So on a branch Ro has asked an agent to land, both routes are shut:
+  the agent can prove the branch is landable and cannot land it. `./dev merge-with-main --dry-run`
+  unsandboxed still passes its whole preflight, so what is denied is the mutation, not the query.
+- **Workaround:** Run the dry run unsandboxed to confirm the branch, and run `finalize` unsandboxed
+  too — or fetch `origin` first — so its containment check reads a current `main`. Then have Ro run
+  `just merge-with-main` in their own terminal.
 - **Proposed change:** Either exclude `./dev merge-with-main *` from the sandbox, which is defensible
   because the plain command is already the landing command and pushing still stops for Ro, or have
   the preflight report a failed remote query as an environment failure that names the sandbox and the
-  unsandboxed retry, rather than as a bare command failure.
+  unsandboxed retry, rather than as a bare command failure. Note that the sandbox exclusion alone
+  does not make the command reachable from a Claude Code agent: the classifier denial is independent
+  of `.rulesync/permissions.jsonc` and has to be settled in the harness settings, or the instruction
+  that an agent carries work "all the way to that command" has to say plainly that Ro runs it.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-068 owns the
   general case of a child process denied an operation the shell may perform; DEVENV-087 owns the
   argument-order gap in the same rule.
