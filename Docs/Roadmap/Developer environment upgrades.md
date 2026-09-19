@@ -142,7 +142,7 @@ when the index names a file that does not exist, or when two files claim the sam
 - [DEVENV-087 — A permission pattern matched only one of git's two argument orders](<Developer environment upgrades/DEVENV-087-a-permission-pattern-matched-only-one-of-git-s-two-orders.md>) — Resolved
 - [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — In progress
 - [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
-- [DEVENV-090 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/DEVENV-090-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Candidate
+- [DEVENV-092 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/DEVENV-092-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Candidate
 
 ### DEVENV-030 — Managed-shell command constraints
 

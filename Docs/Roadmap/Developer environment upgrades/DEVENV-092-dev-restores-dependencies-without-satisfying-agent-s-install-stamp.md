@@ -1,4 +1,4 @@
-# DEVENV-090 — `./dev` restores dependencies without satisfying `./agent`'s install stamp
+# DEVENV-092 — `./dev` restores dependencies without satisfying `./agent`'s install stamp
 
 - **Status:** Candidate
 - **Area:** Dependency installation
