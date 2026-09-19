@@ -2,26 +2,26 @@
 
 scene AroundScreen() {
    Title "Around"
-   state Selected HearthItem (optional)
+   state Selected HearthItem?
    // A query clause may carry a trailing `when`, like a design clause: without location there is no
    // `Here`, so the radius and the distance order fall away and the list is still every errand.
    query Errands from MyHome.Lists.Items {
       where is Open and Place is not none
-      where Place within Me.AroundRadius of Here when location is granted
-      order by distance from Here when location is granted, Due
+      where Place within Me.AroundRadius of Here when LocationAccess is granted
+      order by distance from Here when LocationAccess is granted, Due
    }
 
    render ScrollView [screen] {
       Col [page, width max 1100] {
          Row [content spread center, gap md] {
             Text("Things near you") [title]
-            Stepper(Value: Me.AroundRadius, Range: 1 km .. 30 km, Step: 1 km, Label: "Search radius") [caption]
+            Stepper(Value: bind Me.AroundRadius, Range: 1.km .. 30.km, Step: 1.km, Label: "Search radius") [caption]
          }
 
          // A permission is a value with states, so this reads what is true instead of guessing. Without
          // location, the list is still every errand — just not sorted by distance.
-         when location {
-            unknown -> Button("Show what's near me", Icon: "location") [secondary] { on press -> ask location }
+         when LocationAccess {
+            unknown -> Button("Show what's near me", Icon: "location") [secondary] { on press -> { ask LocationAccess } }
             asking -> Status("Finding you…")
             denied -> Status("Errands stay available as a list without location access.", Tone: Warning)
             unavailable -> Status("Location is unavailable on this device.")
@@ -34,17 +34,22 @@ scene AroundScreen() {
          }
 
          Panes [gap lg] {
-            // The map and the list are the same interaction over the same rows: pins follow the list's order,
-            // and choosing one selects the other. The design's rules require the list beside the map.
-            Map(Errands as Item, Place: Item.Place, Label: "Map of errands", Selected: Selected) [claim 2, height min 320, radius lg] {
+            // A map must name a non-map alternative over the same rows, so the errands are never only a
+            // graphic. Pins follow the collection's order, and selecting a row marks the same errand.
+            Map(Errands, Place: Item.Place, Label: "Map of errands") [claim 2, height min 320, radius lg] {
                pin label Item.Title
                route
                me
+            } alternative {
+               loop Errands / Item { HearthItemRow(Item) }
             }
             #errands
-            List(Errands as Item, Selected: Selected) [claim 1] {
-               // Selecting a row selects its pin (`Selected:` is two-way); the chevron opens the item.
-               Row [gap xs, content left center] {
-                  HearthItemRow(Item) [claim 1]
-                  Button(Icon: "chevron.right", Label: "Open { Item.Title }") [quiet] { on press -> open ItemLink(Item) }
+            Col [claim 1, gap xs] {
+               loop Errands / Item {
+                  // Selecting a row marks it here and on the map; the chevron opens the item.
+                  Row [gap xs, content left center, selected when Selected is Item] {
+                     HearthItemRow(Item) [claim 1]
+                     Button(Icon: "chevron.right", Label: "Open { Item.Title }") [quiet] { on press -> { open ItemLink(Item) } }
+                  }
+                  on select -> { set Selected = Item }
 }  }  }  }  }  }

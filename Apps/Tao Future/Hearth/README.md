@@ -21,9 +21,9 @@ described in [`../README.md`](../README.md).
 | `Lists.tao-revolution`       | lists, the shopping fold, one item (write-through, comments, photos, a window), sharing |
 | `Week.tao-revolution`        | the week grid, dragging plans between days                                              |
 | `Around.tao-revolution`      | errands near you, on a map and in a list                                                |
-| `Design.tao-revolution`      | sizes, tokens, meaning, dark, the accent palette, bundles, styles, patterns, rules      |
+| `Design.tao-revolution`      | colors, sizes, shadows, text, screens, styles, and the rules that check them            |
 | `Words.tao-revolution`       | Spanish                                                                                 |
-| `Scenarios.tao-revolution`   | the states this app is reviewed and audited in, and the design check                    |
+| `Scenarios.tao-revolution`   | the states this app is reviewed, screenshotted, and audited in                          |
 | `Hearth.test.tao-revolution` | the journeys                                                                            |
 | `Justfile`                   | the developer loop                                                                      |
 
@@ -32,8 +32,8 @@ described in [`../README.md`](../README.md).
 - **A preference as the root** — `Me.CurrentHome`; a person with two homes switches by a write.
 - **A draft for capture, write-through for the item** — the one rule about where inputs bind, both halves.
 - **`SetDone` with `runs latest per Item`** — a quick tick-untick settles on the last state.
-- **A grid over generated days with drops between them** — `Grid(WeekOf(WeekStart) as Day) [columns 1 when narrow, 7 when wide]`, `List(…, Accepts: HearthItem) { on drop -> … }`.
+- **A grid over generated days with drops between them** — `Grid [columns 1 when narrow, 7 when wide] { loop WeekOf(WeekStart) / Day { … } }`, a container that `Accepts: HearthItem` and answers `on drop`.
 - **`order by distance from Here`** and a `Map` over the same rows as the list beside it.
-- **A shopping fold** — `group by Title, Unit; sum Quantity`; one tick, every source row.
+- **A shopping fold** — `group by Title, Unit` with `Quantity = sum(Quantity)`; one tick, every source row.
 - **A projection with a filtered relation** — `Items where is Open { … Place { Name, Coordinate } }`.
-- **A reminder to the assignee, otherwise the adults** — `to Item.Assignee otherwise Stewards of Item.List.Home`.
+- **A reminder to the assignee, otherwise the adults** — `to HearthItem.Assignee otherwise Stewards of HearthItem.HearthList.Home`.

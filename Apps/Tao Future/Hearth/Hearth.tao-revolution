@@ -7,7 +7,8 @@
 project {
    id "hearth"
    name "Hearth"
-   remote none
+   version "1.0.0"
+   DefaultApp Hearth
    license MIT
 
    targets phone, tablet, laptop
@@ -18,12 +19,12 @@ project {
 
 datasource HomeCloud = Cloud {
    AppId "hearth"
-   Writes optimistic
    Conflicts fieldwise latest // write-through's honest policy: independent fields, last write wins
    Deletes tombstones for 30 days
+   // The full closure of what stays usable with no network, including the map tiles.
    Offline {
       Enabled Me.KeepOffline
-      Keep Home where Me in Family of Home // a kept home carries its lists, photos, and the map around its places
+      HearthLists, HearthItems, Comments, Photos, MapTiles for MyHome
    }
 }
 
@@ -31,12 +32,14 @@ datasource OnDevice = Local { StorageKey "hearth" }
 
 files HomePhotos = Files { Kinds image; Limit 10 megabytes each; Offline readable and writable }
 
-notifications Reminders = Notifications { QuietHours 21:00 .. 08:00 }
+// The provider carries no quiet-hours window: do-not-disturb belongs to the person's Focus modes, and
+// each notification says its own urgency.
+notifications Reminders = Notifications { }
 
-permissions HearthPermissions {
-   notifications optional because "Remind whoever is taking care of something before it is due."
-   location while using because "Show the errands near you, in the order you would walk them."
-}
+// Each permission is its own binding carrying the human reason shown at first use, and reads as a
+// multi-state value a screen can render honestly (`when LocationAccess { granted -> … }`).
+permissions NotificationAccess { Reason "Remind whoever is taking care of something before it is due." }
+permissions LocationAccess { Reason "Show the errands near you, in the order you would walk them." }
 
 // -- Navigation -----------------------------------------------------------------------------------------
 
@@ -44,9 +47,10 @@ nav LoadingNav = StackNav { Initial Loading }
 nav WelcomeNav = StackNav { Initial Welcome }
 
 nav ListsWorkspace = SplitNav {
-   Compact { Progression @list -> @detail, Back reverse }
-   @list { Content StackNav { Initial HearthListIndex }, Width 360, CollapsePriority 1 } // 1 collapses first
-   @detail { Content SlotNav { Initial HearthListWelcome }, Width min 420, CollapsePriority 2 }
+   // The order of the names is the compact-width progression; no arrow appears.
+   Compact { Progression @list, @detail; Back reverse }
+   @list { Content StackNav { Initial HearthListIndex }, Width 360, CollapseOrder 1 } // order 1 folds first
+   @detail { Content SlotNav { Initial HearthListWelcome }, Width min 420, CollapseOrder 2 }
 }
 
 nav HomeNavigator = SelectionNav {
@@ -70,7 +74,7 @@ app Hearth {
    Files HomePhotos
    Notifications Reminders
    Places
-   Permissions HearthPermissions
+   Permissions { NotificationAccess, LocationAccess }
 
    // The root follows the account and its open home. A person may belong to more than one home — a kid
    // with two houses is the ordinary case — so the open home is a preference on the account, and making
@@ -82,7 +86,8 @@ app Hearth {
       unauthorized -> WelcomeNav // an owner removed me; the picker shows my other homes
       otherwise -> HomeNavigator
    }
-   Language Me.Language
+   // The language is the per-app language the person sets in the system Settings, read as `Locale`;
+   // it chooses which `words` block renders, and no app picker duplicates it.
 
    Restore automatic { Exclude sheets, menus, toasts }
 

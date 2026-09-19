@@ -167,3 +167,35 @@ that are yours. Four are already covered above — 3 under `R4`, 6 under `R1` an
   without asking? rustup downloads silently; 90 MB unannounced may not be what you want.
 - **Question 5:** which distribution channels the first release carries — an install script alone,
   or script plus Homebrew plus npm. Each is a surface that has to keep working.
+
+### R14 — The spellings the Tao Future consolidation had to choose
+
+Process step 3 (`A12`) aligned Skillet, Hearth, and Wayfare to `Decisions.md` and found nine
+constructs the apps genuinely need that no decision covers, plus one place where `Decisions.md`
+still disagrees with itself. Each is listed in `Apps/Tao Future/README.md`; the port chose a spelling so
+the apps would read as one dialect, and none of those choices is a decision.
+
+The ten: the reorder affordance and the drop target as container members (`Col(Reorderable: …)`,
+`Col(Accepts: …)` with `on drop`) now that `List` is retired and §18 fixes only `Reorderable: yes`;
+`where` on a `loop`; `first N of`; a composite `unique A, B`; `order by relevance`;
+`device.timeZone` and the `Connection` and `Sync` environment values, none of which §13's
+environment table carries; `X.Cases`; `to X otherwise Y` and a `never` schedule case in an
+automation; `runs single per Row`; and the world controls a journey uses beyond §16's named set
+(`clock`, `advance`, `collaborator`, `capture shared link`, `expect notification`, `expect window`,
+`move … onto …`); and `invalidate <Draft> with <Problem>`, which the apps use at six sites where §5
+decides the opposite shape — a bare `save` whose unhandled rejection populates `Draft.Invalid` and
+`Draft.Problems` with no `when` at the site.
+
+One self-contradiction remains: §1 says two visibility modifiers "and no others" while §8's command
+example and `visibility.langium` carry five (`file`, `folder`, `package`, `workspace`, `public`).
+The apps follow §1 and use only `file` and `public`. The other one this pass reported —
+`TabNav` against `SelectionNav` — was settled while `Apps/WordFlower/4 - Revolution` was rewritten:
+§10 now retires `TabNav` without an alias, which is the spelling these apps had already chosen.
+
+- Blocks: nothing in the first hour, and no tranche until one of these constructs is the one being
+  implemented. It blocks the graduation promise: a file graduates by rename alone, so a spelling
+  decided differently later is an edit at graduation time, which is the thing the rule forbids.
+- **Recommended:** settle the remaining contradiction now, since it is a one-word correction to
+  `Decisions.md` and the implementation already chose. Take the nine as a decision round when the
+  first tranche reaches one of them, rather than deciding ten spellings with no code pressing on
+  them.

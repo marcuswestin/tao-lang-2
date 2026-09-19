@@ -78,7 +78,10 @@ const TAO_INJECT_BINDING = new RegExp(String.raw`=\s*inject\s+"(${TAO_RELATIVE_P
  * every binding form: `runs latest` and `fails <case> "<sentence>"` (actions.langium), `responds`
  * and `accepts [content] [slots …]` (views.langium).
  *
- * `returns <type>` is the one entry no grammar rule produces yet. `TAO_EXTENSIONS` deliberately
+ * `returns <type>` is the one entry no grammar rule produces yet, and it matches every type
+ * expression a declaration may write — a name, an optional name, `list of <name>`, or an inline
+ * record — because a narrower pattern leaves the clause unstripped and reads its last identifier as
+ * the export. `TAO_EXTENSIONS` deliberately
  * includes the `.tao-revolution` spec tiers, which are written to
  * `Docs/Roadmap/Tao Revolution/Decisions.md` §2 rather than to today's grammar and give a foreign
  * action a return type; stripping the clause keeps this check reading those tiers instead of
@@ -89,7 +92,7 @@ const TAO_BINDING_TAILS = [
   /\s+fails\s+[A-Za-z_]\w*\s+"(?:[^"\\]|\\.)*"$/,
   /\s+responds\s+[A-Za-z_]\w*$/,
   /\s+accepts(?:\s+[A-Za-z_]\w*)?(?:\s+slots\s+@[\w.\-@/]+(?:\s*,\s*@[\w.\-@/]+)*)?$/,
-  /\s+returns\s+[A-Za-z_]\w*$/,
+  /\s+returns\s+(?:(?:list\s+of\s+)?[A-Za-z_][\w.]*\??|\{[^{}]*\})$/,
 ]
 
 /**

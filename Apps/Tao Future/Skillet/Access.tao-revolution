@@ -80,7 +80,7 @@ access Timer {
 // they are not in the list. It is addressed by a rotating capability, so revoking is not hiding a live
 // URL — every link already sent stops resolving.
 
-public publish Recipe when Recipe is Shared as SharedRecipe by capability Recipe.ShareCode {
+publish Recipe when Recipe is Shared as SharedRecipe by capability Recipe.ShareCode {
    Title
    Course
    Servings
@@ -92,7 +92,7 @@ public publish Recipe when Recipe is Shared as SharedRecipe by capability Recipe
 
 // An invitation shows the kitchen's name before you belong to it, and whether it is open to anyone
 // holding it — and nothing else.
-public publish Household as InvitedKitchen by capability Invite.Code {
+publish Household as InvitedKitchen by capability Invite.Code {
    Name
    Anyone = Invite.Email is none // open to whoever holds the link
 }

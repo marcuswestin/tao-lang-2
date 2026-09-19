@@ -15,10 +15,15 @@ type RecipeDraft is {
    Source text
 }
 
-action FetchRecipe(Link text) returns RecipeDraft = inject "./FetchRecipe.ts"
+// `<expression> from <path>` is the whole boundary: no `implement`, no `inject`, no kind word, and no
+// inline fence. A foreign action declares its failure cases on its head, so a test stubbing one picks a
+// declared case and renaming that case breaks the test at compile time.
+action FetchRecipe(Link text) returns RecipeDraft
+   fails NotARecipe "No recipe was found on that page."
+   fails Unreachable "That page could not be read."
+   from ./FetchRecipe.ts
 
 // App-wide, mounted on the navigator.
-folder
 action OpenImportSheet() {
    // Visibility follows permission to create a Recipe in MyKitchen.Recipes, resolved by the store.
    present ImportSheet() as sheet
@@ -33,25 +38,31 @@ command ImportRecipe() {
 file view ImportSheet() {
    state Link = ""
 
+   state Refusal = ""
+
    // `runs single`: a second press while the first fetch is in flight is ignored, not queued. Dismissing
-   // the sheet cancels a fetch in flight. Each `let` may be refused: the sidecar's `reject("…")` and the
-   // transaction's rejection both end the action and surface through `guard default`'s `failed`.
+   // the sheet cancels a fetch in flight. A declared failure aborts the whole joined call and discards
+   // its private writes, and the outcome belongs to this site — nothing shows unless it is named here.
    action Import() runs single {
-      stop if Link is empty
-      let Imported = FetchRecipe(Link)
-      // One transaction: the recipe, its ingredients, and its steps land together or not at all.
-      let Recipe = SaveImportedRecipe(MyKitchen, Imported)
-      dismiss
-      open RecipeLink(Recipe)
-   }
+      check Link is not empty
+      when do FetchRecipe(Link) {
+         saved -> RecipeDraft {
+            // One transaction: the recipe, its ingredients, and its steps land together or not at all.
+            let Recipe = SaveImportedRecipe(MyKitchen, RecipeDraft)
+            dismiss
+            open RecipeLink(Recipe)
+         }
+         error -> Message { set Refusal = Message } // the declared case's sentence, beside the field
+   }  }
 
    render Col [card, width max 560, gap md] {
       Text("Paste a link to a recipe on the web.") [body, muted]
       #importLink
-      TextInput(Value: Link, Label: "Link", Placeholder: "https://…", Keyboard: url, Focus: initial) { on submit Import }
-      if Import running { Status("Reading the page…", Announce: yes) }
+      TextInput(Value: bind Link, Label: "Link", Placeholder: "https://…", Keyboard: url, Focus: initial) { on submit -> { do Import() } }
+      if Import.Running { Status("Reading the page…", Announce: yes) }
+      if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> dismiss }
+         Button("Cancel") [secondary] { on press -> { dismiss } }
          #import
-         Button("Import", Disabled: Link is empty, Busy: Import running) [primary] { on press Import }
+         Button("Import", Disabled: Link is empty) [primary, busy when Import.Running] { on press -> { do Import() } }
 }  }  }

@@ -3,10 +3,13 @@
 //
 // This file holds the project, the capabilities, the navigation, the app, and settings.
 
+use SignOut from @tao/auth
+
 project {
    id "wayfare"
    name "Wayfare"
-   remote none
+   version "1.0.0"
+   DefaultApp Wayfare
    license MIT
 
    targets phone, tablet, laptop
@@ -17,16 +20,15 @@ project {
 
 datasource Caravan = Cloud {
    AppId "wayfare"
-   Writes optimistic
    // Field-wise latest is the policy for what writes through — a day's title, a visited mark. The stop
    // editor's composed edit goes through a draft, whose `conflict` outcome is the keep-mine conversation;
    // the two never overlap.
    Conflicts fieldwise latest
    Deletes tombstones for 30 days
+   // The full closure of what stays usable with no network: the itinerary, its files, and the map.
    Offline {
       Enabled Me.KeepTripsOffline
-      Keep Trip where Me in TripFolk of Trip // a kept trip carries its days, stops, notes, documents…
-      MapTiles around Trip.Days.Stops.Place within 8 km // …and the map around its places
+      Days, Stops, Attachments, Documents, MapTiles for MyTrip
    }
 }
 
@@ -36,24 +38,24 @@ files TripFiles = Files { Kinds image, pdf; Limit 25 megabytes each; Offline rea
 
 notifications Departures = Notifications { }
 
-permissions WayfarePermissions {
-   notifications optional because "Say when a stop is about to start."
-   location while using because "Show today's stops on the map around you."
-}
+// Each permission is its own binding carrying the human reason shown at first use, and reads as a
+// multi-state value a screen can render honestly (`when LocationAccess { granted -> … }`).
+permissions NotificationAccess { Reason "Say when a stop is about to start." }
+permissions LocationAccess { Reason "Show today's stops on the map around you." }
 
 // -- Navigation -----------------------------------------------------------------------------------------
 //
 // The workspace is a three-pane split — the library with the open trip's overview over it, one day's
 // plan, one stop's details — that a laptop shows side by side, a tablet shows two of and walks to the
 // third, and a phone walks as a stack in `Compact`'s authored order, reversing it on Back. Nothing here
-// names a device. `CollapsePriority 1` collapses first: on a tablet the trip pane folds away and the day
-// and its stop stay side by side.
+// names a device. `CollapseOrder 1` folds first: on a tablet the trip pane folds away and the day
+// and its stop stay side by side. The order of the progression names is the compact-width order.
 
 nav TripWorkspace = SplitNav {
-   Compact { Progression @trip -> @day -> @details, Back reverse }
-   @trip { Content StackNav { Initial TripLibrary }, Width 360, CollapsePriority 1 }
-   @day { Content SlotNav { Initial NoTripOpen }, Width min 400, CollapsePriority 3 }
-   @details { Content SlotNav { Initial NoStopSelected }, Width min 380, CollapsePriority 2 }
+   Compact { Progression @trip, @day, @details; Back reverse }
+   @trip { Content StackNav { Initial TripLibrary }, Width 360, CollapseOrder 1 }
+   @day { Content SlotNav { Initial NoTripOpen }, Width min 400, CollapseOrder 3 }
+   @details { Content SlotNav { Initial NoStopSelected }, Width min 380, CollapseOrder 2 }
 }
 
 nav WayfareNavigator = SelectionNav {
@@ -75,11 +77,12 @@ app Wayfare {
    Files TripFiles
    Notifications Departures
    Places
-   Permissions WayfarePermissions
+   Permissions { NotificationAccess, LocationAccess }
    // Trips are browsable signed out (the library shows the sign-in panel); a link into a private trip waits
    // for the account. So the root is one navigator, and `Me` is guarded where it matters.
    view WayfareNavigator
-   Language Me.Language
+   // The language is the per-app language the person sets in the system Settings, read as `Locale`;
+   // it chooses which `words` block renders, and no app picker duplicates it.
    Restore automatic { Exclude sheets, menus, toasts }
 
    // The overview lives in the trip pane, a stack over the library: `reveal` into a stack pushes what is
@@ -132,13 +135,16 @@ scene SettingsScreen() {
    action ConfirmDeleteAccount() runs single {
       // Visibility follows the signed-in account. The delete effect and explicit confirmation carry
       // destructive behavior; commands need no separate role marker.
-      stop unless ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
-      do DeleteMyAccount() // a sole owner is refused with the trip's own sentence
+      let Sure = ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
+      check Sure
+      when do DeleteMyAccount() { // a sole owner is refused with the trip's own sentence
+         rejected -> Problem { present Notice(Problem) as toast (Key: "problem") }
+      }
    }
    command DeleteAccount() {
       Title "Delete my account"
       Icon "person.crop.circle.badge.xmark"
-      Enabled Me is signed in
+      Enabled Me is not none
       do ConfirmDeleteAccount()
    }
 
@@ -147,26 +153,25 @@ scene SettingsScreen() {
          Section("Account") {
             when Me {
                loading -> Status("Opening Wayfare…")
-               signed out -> {
+               none -> {
                   Text("Sign in to sync trips with your other devices and the people you travel with.") [body]
-                  SignInPanel
+                  SignInPanel()
                }
                error -> Message { Status(Message, Tone: Warning) }
                otherwise -> {
                   Text(Me.Name) [body]
                   Text(Me.Email) [caption]
-                  Choice(Value: Me.Language, Label: "Language", Options: project.languages)
-                  Button("Sign out") [quiet] { on press -> sign out }
-                  DeleteAccount [quiet]
+                  Button("Sign out") [quiet] { on press -> { do SignOut() } }
+                  Button(DeleteAccount) [quiet]
          }  }  }
          Section("Travel") {
-            Toggle(Value: Me.KeepTripsOffline, Label: "Keep trips available offline")
+            Toggle(Value: bind Me.KeepTripsOffline, Label: "Keep trips available offline")
             Text("Kept trips include the itinerary, private notes, documents, and the map around saved places.") [caption]
-            PermissionRow(notifications, Label: "Stop reminders")
-            PermissionRow(location, Label: "Today's map")
+            PermissionRow(NotificationAccess, Label: "Stop reminders")
+            PermissionRow(LocationAccess, Label: "Today's map")
          }
          Section("Sync") {
-            OfflineNotice
-            SyncBadge
-            Button("Sync now", Busy: Sync is Syncing) [quiet] { on press -> sync now }
+            OfflineNotice()
+            SyncBadge()
+            Button("Sync now", Busy: Sync is Syncing) [quiet] { on press -> { sync now } }
 }  }  }  }
