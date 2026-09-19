@@ -50,6 +50,38 @@ function detail(node: SnapshotNode | undefined): Json {
   return (node?.detail ?? {}) as Json
 }
 
+type FeatureFieldSample = Readonly<{ note: string; value: string }>
+
+/**
+ * The value this PoC invents for a required field of a fixture row it is writing. A field type with
+ * no entry here — and a relation with no existing fixture row to point at — is left out of the row.
+ */
+function sampleFieldValue(
+  field: Readonly<{ name: string; type: string }>,
+  context: Readonly<{
+    bindings: readonly Readonly<{ entity: string; handle: string }>[]
+    label: string
+    snapshot: SemanticSnapshot
+  }>,
+): FeatureFieldSample | undefined {
+  const samples: Readonly<Record<string, () => FeatureFieldSample | undefined>> = {
+    number: () => ({ note: 'filled with 1', value: '1' }),
+    relation: () => {
+      const target = [...context.snapshot.nodes.values()].find(n =>
+        n.kind === 'entity' && detail(n)['singular'] === field.name
+      )
+      const existing = target === undefined
+        ? undefined
+        : context.bindings.find(b => b.entity === String(detail(target)['singular']))
+      return existing === undefined
+        ? undefined
+        : { note: `bound to existing fixture row ${existing.handle}`, value: existing.handle }
+    },
+    text: () => ({ note: 'filled with sample text', value: JSON.stringify(`${context.label} sample`) }),
+  }
+  return samples[field.type]?.()
+}
+
 /** analogies lists, per entity, the yes/no fields that already have the full write + present pattern. */
 function analogies(snapshot: SemanticSnapshot): Json[] {
   const result: Json[] = []
@@ -459,21 +491,10 @@ export async function lowerFeature(
     if (info['hasDefault'] === true || info['optional'] === true) {
       continue
     }
-    if (field.type === 'text') {
-      rowFields.push(`${field.name}: ${JSON.stringify(`${shape.label} sample`)}`)
-      hardCoded.push(`${field.name} filled with sample text`)
-    } else if (field.type === 'number') {
-      rowFields.push(`${field.name}: 1`)
-      hardCoded.push(`${field.name} filled with 1`)
-    } else if (field.type === 'relation') {
-      const target = [...snapshot.nodes.values()].find(n => n.kind === 'entity' && detail(n)['singular'] === field.name)
-      const existing = target === undefined
-        ? undefined
-        : bindings.find(b => b.entity === String(detail(target)['singular']))
-      if (existing !== undefined) {
-        rowFields.push(`${field.name}: ${existing.handle}`)
-        hardCoded.push(`${field.name} bound to existing fixture row ${existing.handle}`)
-      }
+    const sample = sampleFieldValue(field, { bindings, label: shape.label, snapshot })
+    if (sample !== undefined) {
+      rowFields.push(`${field.name}: ${sample.value}`)
+      hardCoded.push(`${field.name} ${sample.note}`)
     }
   }
   rowFields.push(`${F}: true`)

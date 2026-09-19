@@ -15,7 +15,7 @@ import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
 import { mountStudioCanvasFocus } from './app/StudioCanvasFocus'
-import { mountStudioCommandPalette } from './app/StudioCommandPaletteWiring'
+import { isStudioCommandPaletteShortcut, mountStudioCommandPalette } from './app/StudioCommandPaletteWiring'
 import { connectStudioEvents, StudioCompileStatus, StudioStatusLine } from './app/StudioCompileEvents'
 import { StudioDrawerPanels } from './app/StudioDrawerPanels'
 import { StudioEditorSession } from './app/StudioEditorSession'
@@ -437,7 +437,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (isStudioSaveShortcut(event)) {
         event.preventDefault()
         void session.saveActive()
-      } else if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
+      } else if (isStudioCommandPaletteShortcut(event)) {
         event.preventDefault()
         commands.toggle()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {

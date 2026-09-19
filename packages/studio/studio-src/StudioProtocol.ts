@@ -1,6 +1,5 @@
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
-import { Assert } from '@shared/core'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import type {
   StudioCompileCompletion,
@@ -8,6 +7,7 @@ import type {
   StudioWatchResult,
 } from './StudioCompileCoordinator'
 import type { StudioPreviewManifestV2 } from './StudioPreviewManifest'
+import type { StudioRoute } from './StudioRoutes'
 import type { StudioServerInvalidation } from './StudioServerDatasource'
 import type {
   studioSketchCatalogFormatVersion,
@@ -25,228 +25,24 @@ export const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoS
 
 /*
  * StudioProtocol is the one wire contract between the Studio server, the browser client, the Tao-side
- * foreign actions, and the preview iframe. Every DTO, route, and event either side sends is declared
- * here once, so a shape or path only exists in one place and a mismatch fails to typecheck rather
- * than at runtime.
+ * foreign actions, and the preview iframe. Every DTO and event either side sends is declared here
+ * once, so a shape only exists in one place and a mismatch fails to typecheck rather than at
+ * runtime. `StudioRoutes` owns the addressing — window paths, the route table, and the transport —
+ * and is re-exported here so one import still reaches the whole contract.
  */
 
 export const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
 export const studioProtocolChannel = TaoStudioProtocolVersions.channel
 export const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 
-// ---- Session identity and window paths
-
-/** The grammar of one opaque window/session id; anything else in a path never reaches a session. */
-const sessionIdGrammar = '[A-Za-z0-9_-]{1,128}'
-const sessionIdPattern = new RegExp(`^${sessionIdGrammar}$`)
-const sessionWindowPattern = new RegExp(`^/sessions/(${sessionIdGrammar})(/.*)?$`)
-const sessionWindowRootPattern = new RegExp(`^/sessions/${sessionIdGrammar}$`)
-
-/** Every Studio page is served under `/sessions/<id>`, and every session endpoint hangs off that window path. */
-export const StudioSessionPath = {
-  /** endpoint scopes one session route under the window that owns it. */
-  endpoint(sessionId: string, path: string): string {
-    return `${this.window(sessionId)}${path}`
-  },
-  isValidSessionId(value: string): boolean {
-    return sessionIdPattern.test(value)
-  },
-  /** isWindowRoot accepts exactly `/sessions/<id>`, the URL a session transition may land on. */
-  isWindowRoot(pathname: string): boolean {
-    return sessionWindowRootPattern.test(pathname)
-  },
-  /** route splits a request path into the window's session id and the path the session sees. */
-  route(pathname: string): { pathname: string; sessionId: string } | undefined {
-    const matched = pathname.match(sessionWindowPattern)
-    return matched === null ? undefined : { pathname: matched[2] ?? '/', sessionId: matched[1]! }
-  },
-  /** sessionIdOf reads the session id a page location is scoped to, if any. */
-  sessionIdOf(pathname: string): string | undefined {
-    return this.route(pathname)?.sessionId
-  },
-  window(sessionId: string): string {
-    return `/sessions/${encodeURIComponent(sessionId)}`
-  },
-} as const
-
-// ---- Route table
-
-type StudioRouteMethod = 'GET' | 'POST' | 'WS'
-
-/** One HTTP or WebSocket route; a `:name` segment is a parameter, and `:sessionId` must satisfy the id grammar. */
-export type StudioRoute = Readonly<{ method: StudioRouteMethod; path: string }>
-
-/** Routes served at the server root: the Welcome surface and session management. */
-const managerRoutes = {
-  closeAllSessions: { method: 'POST', path: '/api/sessions/close-all' },
-  closeSession: { method: 'POST', path: '/api/sessions/:sessionId/close' },
-  openSession: { method: 'POST', path: '/api/sessions/open' },
-  root: { method: 'GET', path: '/' },
-  sessions: { method: 'GET', path: '/api/sessions' },
-  switchSession: { method: 'POST', path: '/api/sessions/:sessionId/switch' },
-  welcome: { method: 'GET', path: '/welcome' },
-} as const satisfies Record<string, StudioRoute>
-
-/** Routes served under one session window; the handshake advertises this table as `endpoints`. */
-const sessionRoutes = {
-  agentChat: { method: 'POST', path: '/api/agent-chat/:command' },
-  agentChatStream: { method: 'POST', path: '/api/agent-chat/stream/:command' },
-  aiAvailability: { method: 'GET', path: '/api/ai/availability' },
-  aiFixture: { method: 'POST', path: '/api/ai/fixture' },
-  dataFill: { method: 'POST', path: '/api/data/fill' },
-  deviceCapture: { method: 'POST', path: '/api/device/capture' },
-  deviceHighlight: { method: 'POST', path: '/api/device/highlight' },
-  deviceLaunch: { method: 'GET', path: '/api/device/launch' },
-  deviceLaunchOpen: { method: 'POST', path: '/api/device/launch/open' },
-  devicePairingConfirm: { method: 'POST', path: '/api/device/pairing/confirm' },
-  devicePairingDecline: { method: 'POST', path: '/api/device/pairing/decline' },
-  devicePairingOpen: { method: 'POST', path: '/api/device/pairing/open' },
-  deviceReconnect: { method: 'POST', path: '/api/device/reconnect' },
-  deviceRevoke: { method: 'POST', path: '/api/device/revoke' },
-  deviceSelectCell: { method: 'POST', path: '/api/device/select-cell' },
-  deviceStatus: { method: 'GET', path: '/api/device/status' },
-  events: { method: 'WS', path: '/events' },
-  file: { method: 'GET', path: '/api/file' },
-  fileCreate: { method: 'POST', path: '/api/file/create' },
-  fileDelete: { method: 'POST', path: '/api/file/delete' },
-  fileDraft: { method: 'POST', path: '/api/file/draft' },
-  fileMoveGenerated: { method: 'POST', path: '/api/file/move-generated' },
-  fileRename: { method: 'POST', path: '/api/file/rename' },
-  files: { method: 'GET', path: '/api/files' },
-  languageHighlight: { method: 'POST', path: '/api/language/highlight' },
-  languageLsp: { method: 'WS', path: '/api/language/lsp' },
-  previewApplied: { method: 'POST', path: '/api/preview/applied' },
-  previewCell: { method: 'GET', path: '/api/preview/cell' },
-  previewCellBootstrap: { method: 'GET', path: '/api/preview/cell/bootstrap' },
-  previewCellInstance: { method: 'POST', path: '/api/preview/cell/instance' },
-  previewCellReconfigure: { method: 'POST', path: '/api/preview/cell/reconfigure' },
-  previewDiagnosis: { method: 'GET', path: '/api/preview/diagnosis' },
-  previewInstance: { method: 'POST', path: '/api/preview/instance' },
-  previewLayoutMeasurements: { method: 'POST', path: '/api/preview/layout-measurements' },
-  previewManifest: { method: 'GET', path: '/api/preview/manifest' },
-  protocol: { method: 'GET', path: '/api/protocol' },
-  shipBeta: { method: 'POST', path: '/api/ship/beta' },
-  sketchAction: { method: 'POST', path: '/api/sketches/action' },
-  sketchFlowAction: { method: 'POST', path: '/api/sketches/flow/action' },
-  sketchSnapApply: { method: 'POST', path: '/api/sketches/snap/apply' },
-  sketchSnapPropose: { method: 'POST', path: '/api/sketches/snap/propose' },
-  sketchSnapUndo: { method: 'POST', path: '/api/sketches/snap/undo' },
-  sketchUnsnapApply: { method: 'POST', path: '/api/sketches/unsnap/apply' },
-  sketches: { method: 'GET', path: '/api/sketches' },
-  sourceAction: { method: 'POST', path: '/api/source-action' },
-  sourceActionInspect: { method: 'POST', path: '/api/source-action/inspect' },
-  sourceActionPropose: { method: 'POST', path: '/api/source-action/propose' },
-  sourceActionUndo: { method: 'POST', path: '/api/source-action/undo' },
-  testsRun: { method: 'POST', path: '/api/tests/run' },
-  testsStatus: { method: 'GET', path: '/api/tests/status' },
-} as const satisfies Record<string, StudioRoute>
-
-const routePatterns = new Map<StudioRoute, RegExp>()
-
-/** StudioRoutes is the one route table the server dispatcher, the handshake, and every client consume. */
-export const StudioRoutes = {
-  /** The browser client page of one session window. */
-  client: { method: 'GET', path: '/' },
-  /** The client bundle, served at the root and under any session window alike. */
-  clientBundle: { method: 'GET', path: '/studio.js' },
-  /** Development servers answer their bundle revision here so an open client can reload itself. */
-  devRevision: { method: 'GET', path: '/studio-dev/revision' },
-  manager: managerRoutes,
-  session: sessionRoutes,
-
-  /** match returns the route's parameters when `pathname` is that route, and undefined otherwise. */
-  match(route: StudioRoute, pathname: string): Readonly<Record<string, string>> | undefined {
-    if (!route.path.includes(':')) {
-      return pathname === route.path ? {} : undefined
-    }
-    const groups = pathname.match(routePattern(route))?.groups
-    if (groups === undefined) {
-      return undefined
-    }
-    try {
-      return Object.fromEntries(Object.entries(groups).map(([name, value]) => [name, decodeURIComponent(value)]))
-    } catch {
-      return undefined
-    }
-  },
-  /** matchesRequest is `match` plus the method check the HTTP dispatcher applies. */
-  matchesRequest(route: StudioRoute, method: string, pathname: string): boolean {
-    return route.method === method && this.match(route, pathname) !== undefined
-  },
-  /** path fills the route's parameters, so a caller never spells a parameterised path by hand. */
-  path(route: StudioRoute, parameters: Readonly<Record<string, string>> = {}): string {
-    return route.path.replaceAll(/:([A-Za-z]+)/g, (_segment, name: string): string => {
-      const value: string | undefined = parameters[name]
-      Assert.defined(value, `a ${name} for the Studio route ${route.path}`)
-      return encodeURIComponent(value)
-    })
-  },
-} as const
-
-function routePattern(route: StudioRoute): RegExp {
-  const cached = routePatterns.get(route)
-  if (cached !== undefined) {
-    return cached
-  }
-  const source = route.path
-    .split('/')
-    .map(segment =>
-      segment === ':sessionId'
-        ? `(?<sessionId>${sessionIdGrammar})`
-        : segment.startsWith(':')
-        ? `(?<${segment.slice(1)}>[^/]+)`
-        : segment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    )
-    .join('/')
-  const pattern = new RegExp(`^${source}$`)
-  routePatterns.set(route, pattern)
-  return pattern
-}
-
-/** Every session-scoped route, in the shape the handshake advertises. */
-export const studioSessionEndpoints: readonly StudioRoute[] = Object.values(sessionRoutes)
-
-// ---- Transport
-
-export type StudioJsonPostInit = Readonly<{
-  body: string
-  headers: Readonly<{ 'content-type': 'application/json' }>
-  method: 'POST'
-}>
-
-/** One Studio JSON reply, unwrapped: the typed body on success, or the `{ error, details }` failure shape. */
-export type StudioJsonReply<Result> =
-  | Readonly<{ body: Result; ok: true; status: number }>
-  | Readonly<{ details?: Readonly<Record<string, unknown>>; error?: string; ok: false; status: number }>
-
-/** StudioTransport is what every HTTP or WebSocket caller of the session routes shares. */
-export const StudioTransport = {
-  jsonPostInit(body: unknown): StudioJsonPostInit {
-    return { body: JSON.stringify(body), headers: { 'content-type': 'application/json' }, method: 'POST' }
-  },
-  async readJsonReply<Result>(response: Pick<Response, 'json' | 'ok' | 'status'>): Promise<StudioJsonReply<Result>> {
-    const body = await response.json() as unknown
-    if (response.ok) {
-      return { body: body as Result, ok: true, status: response.status }
-    }
-    const failure = typeof body === 'object' && body !== null ? body as Readonly<Record<string, unknown>> : {}
-    const details = failure['details']
-    return {
-      ...(typeof details === 'object' && details !== null
-        ? { details: details as Readonly<Record<string, unknown>> }
-        : {}),
-      ...(typeof failure['error'] === 'string' ? { error: failure['error'] } : {}),
-      ok: false,
-      status: response.status,
-    }
-  },
-  /** webSocketUrl resolves a path against the page or server URL and swaps in the matching socket scheme. */
-  webSocketUrl(path: string, base: string): string {
-    const url = new URL(path, base)
-    const socketProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${socketProtocol}${url.toString().slice(url.protocol.length)}`
-  },
-} as const
+export {
+  type StudioJsonPostInit,
+  type StudioRoute,
+  StudioRoutes,
+  studioSessionEndpoints,
+  StudioSessionPath,
+  StudioTransport,
+} from './StudioRoutes'
 
 // ---- Session DTOs
 
@@ -998,6 +794,17 @@ export const StudioProtocol = {
   parseWindowMessage,
 } as const
 
+/**
+ * Every window message carries the same channel and protocol version. A parser validates and returns
+ * only the fields its own message owns; `envelope` stamps the two the transport owns, so neither is
+ * spelled again per message and neither can be forgotten.
+ */
+function envelope<FieldsT extends { type: StudioWindowMessage['type'] }>(
+  fields: FieldsT,
+): FieldsT & { channel: typeof studioProtocolChannel; protocolVersion: typeof studioProtocolVersion } {
+  return { ...fields, channel: studioProtocolChannel, protocolVersion: studioProtocolVersion }
+}
+
 /** messageOrigin returns the exact target/check origin to use with window.postMessage. */
 function messageOrigin(url: string): string | undefined {
   try {
@@ -1032,6 +839,39 @@ function parseWindowMessage(
   return message
 }
 
+/**
+ * One parser per window message, keyed by the message's own `type`. Adding a member to
+ * `StudioWindowMessage` without a parser here fails to compile, so no message can reach a receiver
+ * unvalidated.
+ */
+const windowMessageParsers: {
+  [TypeT in StudioWindowMessage['type']]: (value: StudioJsonObject) => StudioWindowMessage | undefined
+} = {
+  'debug-command': parseDebugCommand,
+  'highlight-source': parseHighlightSource,
+  'preview-applied': parsePreviewApplied,
+  'preview-canvas-gesture': parsePreviewCanvasGesture,
+  'preview-console': parsePreviewLog,
+  'preview-debug': parsePreviewDebug,
+  'preview-fixture-capture-failed': parsePreviewFixtureCaptureFailed,
+  'preview-fixture-captured': parsePreviewFixtureCaptured,
+  'preview-hover-source': parsePreviewSource,
+  'preview-journey-recording-state': parsePreviewJourneyRecordingState,
+  'preview-journey-replay-failed': parsePreviewJourneyReplayFailed,
+  'preview-journey-replay-settled': parsePreviewJourneyReplaySettled,
+  'preview-journey-step-recorded': parsePreviewJourneyStepRecorded,
+  'preview-layout-measurements': parsePreviewLayoutMeasurements,
+  'preview-runtime-capture-failed': parsePreviewRuntimeCaptureFailed,
+  'preview-runtime-captured': parsePreviewRuntimeCaptured,
+  'preview-runtime-failure': parsePreviewRuntimeFailure,
+  'preview-scheme-changed': parsePreviewScheme,
+  'preview-select-source': parsePreviewSource,
+  'set-canvas-gestures': parseCanvasGestureOwnership,
+  'set-journey-recording': parseJourneyRecordingControl,
+  'source-action': parseSourceActionEnvelope,
+  'source-action-undo': parseSourceActionUndoEnvelope,
+}
+
 function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   if (
     !isObject(value)
@@ -1040,73 +880,10 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   ) {
     return undefined
   }
-  if (value['type'] === 'preview-applied') {
-    return parsePreviewApplied(value)
-  }
-  if (value['type'] === 'preview-hover-source' || value['type'] === 'preview-select-source') {
-    return parsePreviewSource(value)
-  }
-  if (value['type'] === 'highlight-source') {
-    return parseHighlightSource(value)
-  }
-  if (value['type'] === 'preview-fixture-captured') {
-    return parsePreviewFixtureCaptured(value)
-  }
-  if (value['type'] === 'preview-fixture-capture-failed') {
-    return parsePreviewFixtureCaptureFailed(value)
-  }
-  if (value['type'] === 'preview-runtime-failure') {
-    return parsePreviewRuntimeFailure(value)
-  }
-  if (value['type'] === 'preview-runtime-captured') {
-    return parsePreviewRuntimeCaptured(value)
-  }
-  if (value['type'] === 'preview-runtime-capture-failed') {
-    return parsePreviewRuntimeCaptureFailed(value)
-  }
-  if (value['type'] === 'preview-console') {
-    return parsePreviewLog(value)
-  }
-  if (value['type'] === 'preview-debug') {
-    return parsePreviewDebug(value)
-  }
-  if (value['type'] === 'debug-command') {
-    return parseDebugCommand(value)
-  }
-  if (value['type'] === 'preview-scheme-changed') {
-    return parsePreviewScheme(value)
-  }
-  if (value['type'] === 'preview-layout-measurements') {
-    return parsePreviewLayoutMeasurements(value)
-  }
-  if (value['type'] === 'preview-canvas-gesture') {
-    return parsePreviewCanvasGesture(value)
-  }
-  if (value['type'] === 'set-canvas-gestures') {
-    return parseCanvasGestureOwnership(value)
-  }
-  if (value['type'] === 'set-journey-recording') {
-    return parseJourneyRecordingControl(value)
-  }
-  if (value['type'] === 'preview-journey-step-recorded') {
-    return parsePreviewJourneyStepRecorded(value)
-  }
-  if (value['type'] === 'preview-journey-recording-state') {
-    return parsePreviewJourneyRecordingState(value)
-  }
-  if (value['type'] === 'preview-journey-replay-settled') {
-    return parsePreviewJourneyReplaySettled(value)
-  }
-  if (value['type'] === 'preview-journey-replay-failed') {
-    return parsePreviewJourneyReplayFailed(value)
-  }
-  if (value['type'] === 'source-action') {
-    return parseSourceActionEnvelope(value)
-  }
-  if (value['type'] === 'source-action-undo') {
-    return parseSourceActionUndoEnvelope(value)
-  }
-  return undefined
+  const parse = windowMessageParsers[value['type'] as StudioWindowMessage['type']] as
+    | ((candidate: StudioJsonObject) => StudioWindowMessage | undefined)
+    | undefined
+  return parse?.(value)
 }
 
 function parseJourneyRecordingControl(value: StudioJsonObject): StudioJourneyRecordingControlMessage | undefined {
@@ -1120,17 +897,15 @@ function parseJourneyRecordingControl(value: StudioJsonObject): StudioJourneyRec
   ) {
     return undefined
   }
-  return {
+  return envelope({
     active: value['active'],
     ...(value['captureSensitiveText'] === undefined
       ? {}
       : { captureSensitiveText: value['captureSensitiveText'] as boolean }),
-    channel: studioProtocolChannel,
     identity,
-    protocolVersion: studioProtocolVersion,
     recordingId: value['recordingId'],
     type: 'set-journey-recording',
-  }
+  })
 }
 
 function parsePreviewJourneyStepRecorded(
@@ -1146,15 +921,13 @@ function parsePreviewJourneyStepRecorded(
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
-    protocolVersion: studioProtocolVersion,
     recordingId: value['recordingId'],
     sequence,
     step,
     type: 'preview-journey-step-recorded',
-  }
+  })
 }
 
 function parsePreviewJourneyRecordingState(
@@ -1162,25 +935,29 @@ function parsePreviewJourneyRecordingState(
 ): StudioPreviewJourneyRecordingStateMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
   const sequence = nonNegativeInteger(value['sequence'])
-  const status = value['status']
+  const status = journeyRecordingStatus(value['status'])
   if (
     identity === undefined
     || identity.cellId === undefined
     || sequence === undefined
+    || status === undefined
     || !boundedText(value['recordingId'], 256)
-    || (status !== 'invalidated' && status !== 'recording' && status !== 'stopped')
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
-    protocolVersion: studioProtocolVersion,
     recordingId: value['recordingId'],
     sequence,
     status,
     type: 'preview-journey-recording-state',
-  }
+  })
+}
+
+function journeyRecordingStatus(
+  value: unknown,
+): StudioPreviewJourneyRecordingStateMessage['status'] | undefined {
+  return value === 'invalidated' || value === 'recording' || value === 'stopped' ? value : undefined
 }
 
 function parsePreviewJourneyReplaySettled(
@@ -1189,12 +966,10 @@ function parsePreviewJourneyReplaySettled(
   const identity = parsePreviewIdentity(value['identity'])
   return identity?.cellId === undefined
     ? undefined
-    : {
-      channel: studioProtocolChannel,
+    : envelope({
       identity,
-      protocolVersion: studioProtocolVersion,
       type: 'preview-journey-replay-settled',
-    }
+    })
 }
 
 function parsePreviewJourneyReplayFailed(
@@ -1203,13 +978,11 @@ function parsePreviewJourneyReplayFailed(
   const identity = parsePreviewIdentity(value['identity'])
   return identity?.cellId === undefined || !boundedText(value['error'], 4_096)
     ? undefined
-    : {
-      channel: studioProtocolChannel,
+    : envelope({
       error: value['error'],
       identity,
-      protocolVersion: studioProtocolVersion,
       type: 'preview-journey-replay-failed',
-    }
+    })
 }
 
 function parseRecordedJourneyStep(value: unknown): StudioRecordedJourneyStep | undefined {
@@ -1287,13 +1060,11 @@ function parsePreviewLayoutMeasurements(
       ...(raw['studioRectId'] === undefined ? {} : { studioRectId: raw['studioRectId'] }),
     })
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
     measurements,
-    protocolVersion: studioProtocolVersion,
     type: 'preview-layout-measurements',
-  }
+  })
 }
 
 function parsePreviewCanvasGesture(value: StudioJsonObject): StudioPreviewCanvasGestureMessage | undefined {
@@ -1306,30 +1077,26 @@ function parsePreviewCanvasGesture(value: StudioJsonObject): StudioPreviewCanvas
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     clientX: value['clientX'] as number,
     clientY: value['clientY'] as number,
     deltaX: value['deltaX'] as number,
     deltaY: value['deltaY'] as number,
     identity,
-    protocolVersion: studioProtocolVersion,
     type: 'preview-canvas-gesture',
     zoom: value['zoom'],
-  }
+  })
 }
 
 function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
   return identity === undefined || typeof value['owned'] !== 'boolean'
     ? undefined
-    : {
-      channel: studioProtocolChannel,
+    : envelope({
       identity,
       owned: value['owned'],
-      protocolVersion: studioProtocolVersion,
       type: 'set-canvas-gestures',
-    }
+    })
 }
 
 function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage | undefined {
@@ -1351,10 +1118,8 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
-    protocolVersion: studioProtocolVersion,
     scheme: {
       capability: scheme['capability'] as StudioPreviewSchemeMessage['scheme']['capability'],
       requested: scheme['requested'] as StudioPreviewSchemeMessage['scheme']['requested'],
@@ -1362,7 +1127,7 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
       source: scheme['source'] as StudioPreviewSchemeMessage['scheme']['source'],
     },
     type: 'preview-scheme-changed',
-  }
+  })
 }
 
 function parsePreviewRuntimeCaptured(value: StudioJsonObject): StudioPreviewRuntimeCapturedMessage | undefined {
@@ -1371,14 +1136,12 @@ function parsePreviewRuntimeCaptured(value: StudioJsonObject): StudioPreviewRunt
   if (identity === undefined || capture === undefined || !nonEmptyString(value['requestId'])) {
     return undefined
   }
-  return {
+  return envelope({
     capture,
-    channel: studioProtocolChannel,
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-captured',
-  }
+  })
 }
 
 function parsePreviewRuntimeCaptureFailed(
@@ -1393,15 +1156,13 @@ function parsePreviewRuntimeCaptureFailed(
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     error: value['error'],
     errorName: value['errorName'],
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-capture-failed',
-  }
+  })
 }
 
 function runtimeCaptureErrorName(value: unknown): value is StudioRuntimeCaptureErrorName {
@@ -1424,15 +1185,13 @@ function parseDebugCommand(value: StudioJsonObject): StudioDebugCommandMessage |
   ) {
     return undefined
   }
-  return {
+  return envelope({
     ...(actions === undefined ? {} : { actions: actions as readonly string[] }),
-    channel: studioProtocolChannel,
     command,
     identity,
-    protocolVersion: studioProtocolVersion,
     ...(steps === undefined ? {} : { steps: steps as readonly StudioDebugStep[] }),
     type: 'debug-command',
-  }
+  })
 }
 
 function isDebugStep(value: unknown): value is StudioDebugStep {
@@ -1451,13 +1210,11 @@ function parsePreviewDebug(value: StudioJsonObject): StudioPreviewDebugMessage |
   if (identity === undefined || !isJsonValue(event)) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     event,
     identity,
-    protocolVersion: studioProtocolVersion,
     type: 'preview-debug',
-  }
+  })
 }
 
 function parsePreviewLog(value: StudioJsonObject): StudioPreviewLogMessage | undefined {
@@ -1473,15 +1230,13 @@ function parsePreviewLog(value: StudioJsonObject): StudioPreviewLogMessage | und
   ) {
     return undefined
   }
-  return {
+  return envelope({
     arguments: arguments_,
-    channel: studioProtocolChannel,
     identity,
     level: value['level'] as StudioPreviewLogMessage['level'],
-    protocolVersion: studioProtocolVersion,
     timestamp,
     type: 'preview-console',
-  }
+  })
 }
 
 function parsePreviewRuntimeFailure(value: StudioJsonObject): StudioPreviewRuntimeFailureMessage | undefined {
@@ -1490,13 +1245,11 @@ function parsePreviewRuntimeFailure(value: StudioJsonObject): StudioPreviewRunti
   if (identity === undefined || capture === undefined || capture.failure === undefined) {
     return undefined
   }
-  return {
+  return envelope({
     capture,
-    channel: studioProtocolChannel,
     identity,
-    protocolVersion: studioProtocolVersion,
     type: 'preview-runtime-failure',
-  }
+  })
 }
 
 function parseRuntimeCapture(value: unknown): StudioRuntimeCaptureArtifact | undefined {
@@ -1612,14 +1365,12 @@ function parsePreviewFixtureCaptured(value: StudioJsonObject): StudioPreviewFixt
   if (identity === undefined || fixture === undefined || !nonEmptyString(value['requestId'])) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     fixture,
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-fixture-captured',
-  }
+  })
 }
 
 function parsePreviewFixtureCaptureFailed(
@@ -1629,17 +1380,15 @@ function parsePreviewFixtureCaptureFailed(
   if (identity === undefined || !nonEmptyString(value['requestId']) || !nonEmptyString(value['error'])) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     error: value['error'],
     // A preview running older code sends no category. Defaulting keeps its failure readable instead
     // of rejecting the whole message, and matches how such a failure was reported before.
     errorName: runtimeCaptureErrorName(value['errorName']) ? value['errorName'] : 'HostEnvironmentError',
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-fixture-capture-failed',
-  }
+  })
 }
 
 function parseFixturePlan(value: unknown): StudioFixturePlan | undefined {
@@ -1701,14 +1450,12 @@ function parsePreviewApplied(value: StudioJsonObject): StudioPreviewAppliedMessa
   if (appliedRevision !== compileRevision) {
     return undefined
   }
-  return {
+  return envelope({
     appliedRevision,
-    channel: studioProtocolChannel,
     compileRevision,
     identity,
-    protocolVersion: studioProtocolVersion,
     type: 'preview-applied',
-  }
+  })
 }
 
 function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage | undefined {
@@ -1722,13 +1469,11 @@ function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage
   ) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
-    protocolVersion: studioProtocolVersion,
     range,
     type,
-  }
+  })
 }
 
 function parseHighlightSource(value: StudioJsonObject): StudioHighlightSourceMessage | undefined {
@@ -1738,13 +1483,11 @@ function parseHighlightSource(value: StudioJsonObject): StudioHighlightSourceMes
   if (identity === undefined || (rawRange !== undefined && range === undefined)) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     identity,
-    protocolVersion: studioProtocolVersion,
     range,
     type: 'highlight-source',
-  }
+  })
 }
 
 function parseSourceActionEnvelope(value: unknown): StudioSourceActionEnvelope | undefined {
@@ -1764,16 +1507,14 @@ function parseSourceActionEnvelope(value: unknown): StudioSourceActionEnvelope |
   if (identity === undefined || action === undefined || checkpoint === undefined) {
     return undefined
   }
-  return {
+  return envelope({
     action,
-    channel: studioProtocolChannel,
     checkpoint,
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     sourceActionVersion: studioSourceActionVersion,
     type: 'source-action',
-  }
+  })
 }
 
 function parseSourceActionUndoEnvelope(value: unknown): StudioSourceActionUndoEnvelope | undefined {
@@ -1792,15 +1533,13 @@ function parseSourceActionUndoEnvelope(value: unknown): StudioSourceActionUndoEn
   if (identity === undefined) {
     return undefined
   }
-  return {
-    channel: studioProtocolChannel,
+  return envelope({
     checkpointId: value['checkpointId'],
     identity,
-    protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     sourceActionVersion: studioSourceActionVersion,
     type: 'source-action-undo',
-  }
+  })
 }
 
 function parseSourceActionCheckpoint(value: unknown): StudioSourceActionCheckpoint | undefined {

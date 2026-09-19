@@ -254,17 +254,17 @@ export class AgentChatSession {
         }
       }
       this.#messages.push(...await result.responseMessages)
-      const pending: AgentChatApproval[] = []
-      for (const part of await result.content) {
-        if (part.type === 'tool-approval-request' && part.isAutomatic !== true) {
-          pending.push({
+      // An automatic approval is the policy answering for itself; only the rest wait on a person.
+      const pending: AgentChatApproval[] = (await result.content).flatMap(part =>
+        part.type === 'tool-approval-request' && part.isAutomatic !== true
+          ? [{
             approvalId: part.approvalId,
             input: part.toolCall.input,
             toolName: part.toolCall.toolName,
             ...(part.reason === undefined ? {} : { reason: part.reason }),
-          })
-        }
-      }
+          }]
+          : []
+      )
       const resultSteps = await result.steps
       const steps = resultSteps.length
       const segmentUsage = await result.totalUsage
