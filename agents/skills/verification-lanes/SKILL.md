@@ -163,10 +163,37 @@ The question is not how substantial the change is. It is whether the gates can p
 
 - Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
   with a timeout. The poll costs a model turn per iteration and rounds the wait up to its sleep, and
-  the gate is no faster for being backgrounded.
+  the gate is no faster for being backgrounded. **Reporting while a lane runs** below owns the one
+  case that overrides this: a lane too long to wait out, with Ro waiting on it.
 - Refresh the roadmap, ledger, and spec documents the work changed **before** verifying. A tracked
   edit made after a green lane changes the tree that lane proved, so the next lane runs everything
   again from nothing.
 - A lane that is slow is usually not a regression. Read the `contention` block in
   `.artifacts/logs/<lane>/latest/summary.json` before diagnosing anything: it names how many lanes
   shared the machine and what the load reached.
+
+## Reporting while a lane runs
+
+A finalize whose verification runs for many minutes is the one place where backgrounding a gate is
+right, because Ro is waiting on it and a silent agent is indistinguishable from a stuck one. What
+backgrounding buys is the turn in which to say something; it does not buy the right to say nothing.
+
+- Decide by how long the run is, not by which is tidier. A gate that finishes inside a minute runs
+  in the foreground with a timeout. `finalize`'s verification lane, `verify-full`, and the landing
+  run in the background with a report attached.
+- Report about every 20 seconds, from the moment the lane starts until it reports its own verdict.
+  Each note is one line: what finished since the last note, what is running now, and anything that
+  has already failed. Do not wait to be asked, and do not wait for something interesting — a note
+  that says only that the same node is still running is the report Ro wants, because it dates the
+  silence.
+- Take progress from the backgrounded command's own output and from the run's stamp directory,
+  `.artifacts/logs/<lane>/<stamp>/`, where each node's `.log` lands as that node completes. `latest`
+  and `summary.json` are written when the lane finishes, so never wait on them for progress and
+  never read the previous run's `latest` as if it were this one's.
+- Report what the run printed, not a verdict of your own. A node that timed out under load is the
+  runner's to classify on its isolated retry: say it failed, say the retry decides, and leave it
+  there. Nothing is green or red before its summary exists.
+- Stop reporting when the lane reports. Then give the outcome once, with the evidence that stands
+  behind it and the gates that did not run, as any finished lane is reported.
+- This overrides nothing else. Do not background a gate that would have finished in the foreground,
+  and never add a sleep loop whose only product is a progress note.
