@@ -137,21 +137,18 @@ tests written in Tao, green in Current, for every construct introduced.
     now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
     -- the preview runtime, the session, and one revision both halves agree on -- is in
     `Docs/Roadmap/Tao Studio v2/Exploration - Studio server hot reload.md`.
-- [ ] Make `just verify-full` pass its simulated-user lane
+- [x] Make `just verify-full` pass its simulated-user lane
+  - Closed by `34132956`: the journey ran ten consecutive green normal-terminal runs and
+    `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again, with
+    `VERIFY_FULL_SKIPPED` now empty. `just studio-smoke
+    packages/dev/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
-    transaction defects found through this journey have landed with focused coverage. That does not
-    promote the lane to final evidence: the complete simulated-user journey still needs ten
-    consecutive reliable normal-terminal runs before it rejoins `verify-full`.
-  - Do not widen `previewOriginPath` to make the lane pass. The stub preview builds its identity by
-    fetching `/api/protocol` and `/api/file`, which that six-endpoint allowlist deliberately keeps
-    away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
-    `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
-    stub onto that contract instead.
-  - The lane remains quarantined from the `verify-full` graph with its stated reliability reason;
-    `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it directly for
-    acceptance evidence, and re-adding it to the graph is one catalog edit after the ten-run gate.
-  - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
-    `agents/skills/studio-hybrid-client/SKILL.md`.
+    transaction defects it found landed with focused coverage along the way.
+  - Standing rule for whoever touches the stub preview next: do not widen `previewOriginPath`. The
+    stub builds its identity by fetching `/api/protocol` and `/api/file`, which that six-endpoint
+    allowlist deliberately keeps away from a preview origin; a real preview receives `path` and
+    `sourceVersion` from Studio's own `postEditorSelection` message and knows its source ranges from
+    the bundle it runs.
 - [ ] Implement a drag-and-drop example app
   - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
     (loop vs cell vs scroll container), drag previews, declarable drop targets (including
