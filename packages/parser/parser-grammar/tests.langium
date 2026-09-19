@@ -9,9 +9,12 @@ import "./terminals"
 entry TestsGrammarEntrypoint:
     TestDeclaration;
 
-// A test declares what it exercises before what it asserts: `test Button "Handles press" { … }`,
-// or `test Button { test "…" { … } }` for a group. Visibility lets a package publish its suite, so
-// another implementation can be held to the same journeys.
+// A test declares what it exercises before what it asserts: `test Button { test "…" { … } }`. The
+// grammar also admits a leaf spelling, `test Button "Handles press" { … }`, which the compiler has
+// never supported: a file-level test is a suite, and it takes its checks from the tests nested in
+// it, so a leaf compiles to a suite of nothing. The validator rejects that shape rather than letting
+// a file silently run no checks. Visibility lets a package publish its suite, so another
+// implementation can be held to the same journeys.
 TestDeclaration:
     visibility=DeclarationVisibility? 'test'
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
