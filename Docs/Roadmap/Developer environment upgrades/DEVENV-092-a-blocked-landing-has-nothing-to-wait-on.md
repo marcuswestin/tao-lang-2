@@ -2,9 +2,11 @@
 
 - **Status:** Candidate
 - **Area:** Verification and landing
-- **Impact:** `merge-with-main` has two preconditions an agent cannot influence and cannot wait on:
-  a peer's staged squash sitting in a main worktree, and `verify-full`'s requirement that no other
-  Tao lane is registered. Both are refusals, not queues. On a machine running many agents this turns
+- **Impact:** `merge-with-main` has three preconditions an agent cannot influence and cannot wait
+  on: a peer's staged squash sitting in a main worktree, `verify-full`'s requirement that no other
+  Tao lane is registered, and local `main` matching `origin/main` — which a peer breaks for
+  everyone in the window between committing its squash and pushing it. All three are refusals, not
+  queues. On a machine running many agents this turns
   landing into a race that the agent checking least often wins, and every loser either polls — which
   costs a model turn per check — or gives up and hands the landing back to Ro although the branch is
   ready. Observed cost here: four refused attempts across about ninety minutes on a branch that was
@@ -15,6 +17,10 @@
   `verify-full needs this machine to itself: verify in untitled-session-3c4023, verify in
   agent-merge-finalization-perf-99c35b, verify in hungry-shtern-cf1fdd, verify in
   simplify-repo-dedup-908830, verify in tao-lang-2 are already running.`
+  Then, once the machine was quiet:
+  `Local main is not at origin/main (21905bc44c86); refresh it before merging.` — a peer had
+  committed its squash and not yet pushed, which no waiter can distinguish from an abandoned local
+  `main` except by waiting to see whether it moves.
   The lane registry at `~/.cache/tao/machine-lanes/*.lane.json` already records exactly who holds
   the machine, and a created main worktree is already discoverable, so both refusals are computed
   from state a waiter could subscribe to. DEVENV-001 admits lanes machine-wide; this is the same
