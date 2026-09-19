@@ -16,7 +16,7 @@
   branch's most recent and least significant commit — followed by every line of all four commit
   messages as separate bullets, including the three earlier commit subjects. `--fresh` is documented
   as the flag that redrafts the message, which implies the default does not.
-- **Workaround:** Write the merge message *after* running `finalize`, not before; or copy it aside
+- **Workaround:** Write the merge message _after_ running `finalize`, not before; or copy it aside
   first. Neither is discoverable from the command's help.
 - **Proposed change:** Draft only when no message file exists, and otherwise leave the existing one
   alone and report that it was kept, reserving replacement for `--fresh`. If the default must keep
