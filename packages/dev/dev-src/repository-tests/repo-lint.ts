@@ -399,7 +399,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/studio/studio-tests/studio-client.test.ts:626',
   'packages/studio/studio-tests/studio-client.test.ts:3043',
   // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
+  'packages/icloud-native/plugins/with-tao-icloud.cjs:32',
   'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',

@@ -12,6 +12,7 @@ import UIKit
 /// Tao provider chose — so the merge policy lives in JavaScript, next to the fold.
 public final class TaoCloudKitModule: Module {
   private var sessions: [String: Any] = [:]
+  private static let cloudKitContainersInfoKey = "TaoCloudKitContainerIdentifiers"
 
   public func definition() -> ModuleDefinition {
     Name("TaoCloudKit")
@@ -87,6 +88,30 @@ public final class TaoCloudKitModule: Module {
     )
   }
 
+  /// The Expo plugin writes this declaration while adding the matching signed entitlement. iOS has
+  /// no public API to read the current process's entitlements, so do not call CKContainer.default()
+  /// unless that build-time handoff proves the plugin participated in this app's configuration.
+  @available(iOS 17.0, macOS 14.0, *)
+  fileprivate static func container(_ requested: String?) throws -> CKContainer {
+    let declared = Bundle.main.object(forInfoDictionaryKey: cloudKitContainersInfoKey) as? [String] ?? []
+    guard !declared.isEmpty else {
+      throw Exception(
+        name: "CloudKitConfigurationMissing",
+        description: "CloudKit sync needs an iCloud container configured by tao-icloud-native. Add the CloudKit service to this app's Expo configuration and rebuild.",
+      )
+    }
+    if let requested {
+      guard declared.contains(requested) else {
+        throw Exception(
+          name: "CloudKitConfigurationMissing",
+          description: "CloudKit sync requested a container that this app's tao-icloud-native configuration does not declare.",
+        )
+      }
+      return CKContainer(identifier: requested)
+    }
+    return CKContainer.default()
+  }
+
   private func stopSession(_ sessionId: String) {
     guard let session = sessions.removeValue(forKey: sessionId) else {
       return
@@ -135,7 +160,7 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
   private let lock = NSLock()
 
   init(container: String?, zoneName: String, stateFileName: String, emit: @escaping ([String: Any?]) -> Void) throws {
-    let ckContainer = container == nil ? CKContainer.default() : CKContainer(identifier: container!)
+    let ckContainer = try TaoCloudKitModule.container(container)
     self.database = ckContainer.privateCloudDatabase
     self.zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
     self.emit = emit
