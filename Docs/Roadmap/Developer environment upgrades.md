@@ -1505,7 +1505,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite
 
-- **Status:** Candidate
+- **Status:** Incoming
 - **Area:** Verification diagnostics
 - **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
   an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
@@ -1520,6 +1520,11 @@ an entry here may link one when the developer workflow is also affected.
   and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
   All four pass when the file is run alone on an idle machine. Across four `verify --complete` runs the
   failure set tracked host load, shrinking from four to one as the load average fell from 86.5 to 18.8.
+  The same three reappeared later that day at `load peaked at 31.8`, and the load they turn on is not
+  something lane admission can govern: sampled every ten seconds while they failed, the machine's total
+  reserved slots stayed at 1 across five registered lanes while the load average ran 86 down to 20. The
+  contention these tests trip over is the load ratio alone — the warning they received says `no other
+  Tao lane registered` — so no admission rule makes them green.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
@@ -1538,7 +1543,11 @@ an entry here may link one when the developer workflow is also affected.
   store the test demanded is exactly what the design withholds. That test now asserts what each outcome
   requires — no store when a summary reports contention, a whole one when none does — and passed twenty
   consecutive isolated runs where it had been failing about half. The three `gate-runner.test.ts`
-  assertions this entry names are untouched and still carry the issue.
+  assertions were fixed the same way on `feat/lane-admission-share`: `RunGatesOptions` gained an
+  injected `machineLoadAverage` beside the `machineCpuCount` it already had, the suite's shared helper
+  and the two timings-store tests pin an idle machine, and a new test pins a contended one and asserts
+  the other half — the contention warning appears and no durations file is written. The whole file
+  passed at load 44.15 on 18 CPUs, which is the condition that had been failing it.
 
 ### DEVENV-074 — `./agent fix` cannot format the skills it is told to format
 
@@ -1614,3 +1623,77 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** `./agent verify --changed` on a branch that only edits `Docs/Tutorials/**` selects
   the `tao-cli` suite and says which path selected it.
 - **Source:** 2026-09-17 tutorial test coverage work.
+
+### DEVENV-077 — A busy machine could admit no lane at all
+
+- **Status:** Incoming
+- **Area:** Parallel verification
+- **Impact:** Every lane on the machine could sit at zero running nodes while the CPUs were mostly
+  idle. A lane that joined while the machine was fully reserved never started its first node, so an
+  agent watching `0/9 done, 0 running, 9 pending` had no way to tell a stalled run from a slow one,
+  and the natural response — start another verification — made the reservation total worse.
+- **Evidence:** On an 18-CPU host, `~/.cache/tao/machine-lanes` held eleven live lanes reserving
+  exactly 18 of 18 slots while CPU sat near a quarter busy; a run started under that condition
+  produced no output for 19 minutes against 89 seconds on its own. Admission gated on
+  `globallyAvailable = cpuCount - Σ slots`, which is zero in that state, so `tryAcquire` returned
+  nothing to anyone and the one-slot floor `fairAllocations` documents never applied. A freed slot
+  went to whichever lane polled first, with backoff to 500ms and no queue, so a newly started lane
+  could lose repeatedly to lanes already running.
+- **Workaround:** Was to wait for other worktrees to finish, or to delete lane records by hand.
+- **Proposed change:** Honour the one-slot floor at admission: a lane running nothing is admitted
+  one slot whatever the machine-wide total says, and the total still governs above that floor. The
+  bound becomes `cpuCount` plus at most one slot per idle lane. Deleting the machine-wide check
+  outright was tried first and is worse: a lane's share shrinks as lanes join while its reservations
+  do not, so each new lane could stack a full share on top of reservations taken under wider ones,
+  and the total could reach several times `cpuCount`. The check is a fairness bound rather than a
+  CPU one either way — lanes reserving 4-6 slots drove load past 21 on 18 CPUs, because one slot may
+  run a whole test file's parallel children. Measured further apart the two barely relate at all: with
+  five lanes registered and exactly one slot reserved machine-wide, the load average ran from 86 down
+  to 20 over fifty seconds. Nothing admission does to the slot total governs that number.
+- **Dependencies:** Revises DEVENV-001, which introduced the global check together with the fair
+  shares and the one-slot floor those shares still provide. Fixed on `feat/lane-admission-share`.
+- **Acceptance:** A lane that registers against a registry whose slots are all reserved admits its
+  first node immediately, and a declined admission says what it is waiting for.
+- **Source:** 2026-09-18 repository-deduplication branch.
+
+### DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound
+
+- **Status:** Candidate
+- **Area:** Parallel verification
+- **Impact:** While any lane holds the machine-wide exclusive lease, `tryAcquire` returns nothing to
+  every other lane, and a waiting lane retries forever with no deadline. A `./dev test` lane started
+  inside a test therefore hangs until that test's own timeout, so a gate reddens for something
+  another worktree is doing. On a machine running several lanes, contention confirmations are
+  frequent enough that this is a routine failure rather than a rare one.
+- **Evidence:** `packages/dev/dev-tests/test-runner.test.ts`, `an exact-file subset does not teach
+  the full-suite timing estimate`, timed out at 60s in a lane and again at 120s in isolation, while
+  `~/.cache/tao/machine-lanes/.exclusive` was continuously held — first by PID 14313, then by PID
+  1658, across a 60-second sample at six-second intervals. The test's own lane was registered and
+  visible at `0/1` slots throughout. The same test passed in 24.7s minutes earlier, in a window with
+  no lease, and hung identically at 45s on pre-change code while a lease was held, so this is the
+  lease and not the admission rule DEVENV-077 changed.
+- **Evidence, second round:** the same evening, four `verify --changed` attempts on one branch were
+  frozen by it, one of them mid-run between two gates. Sampled at six-second intervals, the lease
+  passed between three different worktrees' lanes in a train of short holds, so a waiting lane that
+  loses the gap waits again; the machine sat at load 11.4 on 18 CPUs with four lanes registered, one
+  slot reserved, and nothing able to start. That is the reported symptom exactly — CPU far from
+  pegged and tests not starting — reached without any slot being scarce.
+- **Evidence that the isolation is nominal:** the lease drains peers to zero slots, but slots do not
+  bound CPU demand (see DEVENV-077). Sampled during one such confirmation, with one slot reserved
+  machine-wide, the load average was 86 on 18 CPUs. A confirmation that believes it has the machine
+  to itself can be measuring a host under five times its CPU count, and the one-minute load average
+  it judges by is still mostly the drained peers' work. So the lease charges every other lane for an
+  isolation its own verdict does not actually get.
+- **Workaround:** Re-run the file when no other worktree is confirming. A waiting node now names the
+  holding lane, so the cause is visible in the run rather than only in the registry.
+- **Proposed change:** Decide what an exclusive confirmation may cost its peers. A holder that keeps
+  the machine past a bound should lose it or be reported; a lane that waits past one should fail
+  with `machine-contention` rather than hang until an unrelated timeout fires. A test that starts a
+  real lane may also deserve an isolated registry root, which would make it independent of what the
+  machine is doing at the time.
+- **Dependencies:** Adjacent to DEVENV-077: both are the machine refusing every admission at once,
+  and this is the remaining cause of it.
+- **Acceptance:** A lane blocked by a peer's exclusive confirmation either starts within a bounded
+  wait or fails with a message naming the holder, and the test above does not depend on what other
+  worktrees are doing.
+- **Source:** 2026-09-18 repository-deduplication branch, while verifying DEVENV-077.

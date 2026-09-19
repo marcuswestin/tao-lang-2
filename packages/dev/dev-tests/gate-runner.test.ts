@@ -9,6 +9,16 @@ import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
 
+/**
+ * IDLE_MACHINE is the precondition these tests have always meant. A run's contention verdict turns
+ * on the host's load average, and a contended run warns about it and declines to teach the timings
+ * store — correct behavior that fails any assertion written for a quiet machine. Pinning the
+ * reading states the precondition instead of inheriting whatever the other worktrees on this host
+ * are doing; `CONTENDED_MACHINE` pins the other side, so both verdicts are covered deliberately.
+ */
+const IDLE_MACHINE = () => 0
+const CONTENDED_MACHINE = () => 1_000
+
 async function run(gates: readonly string[], script: GateScript, extra: Record<string, unknown> = {}) {
   const root = await mkTestDir('tao-gate-runner-')
   try {
@@ -17,6 +27,7 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
       gates,
       jobs: 2,
       logRoot: FS.resolvePath('logs', root),
+      machineLoadAverage: IDLE_MACHINE,
       registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
       runGate: async (name, logPath) => {
@@ -159,6 +170,35 @@ Describe('repository gate runner', () => {
     Expect(formatGateSummary(summary)).toContain('! _ide-extension-build: Warning:')
   })
 
+  Test('reports a contended host alongside the gate warnings, and teaches no timings from it', async () => {
+    const root = await mkTestDir('tao-gate-runner-contended-')
+    const registryRoot = await mkTestDir('tao-gate-runner-contended-lanes-')
+    try {
+      const summary = await runGates({
+        gates: ['_repo-lint'],
+        machineCpuCount: 8,
+        machineLoadAverage: CONTENDED_MACHINE,
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async (_gate, logPath) => {
+          await FS.writeText(logPath, 'Warning: rule declared but never referenced')
+          return { exitCode: 0, output: 'Warning: rule declared but never referenced' }
+        },
+      })
+
+      Expect(summary.status).toBe('passed')
+      Expect(summary.warnings).toContain('_repo-lint: Warning: rule declared but never referenced')
+      Expect(summary.warnings.some(warning => warning.startsWith('machine contention:'))).toBe(true)
+      // Durations measured while the host was busy would teach the next run to expect the wrong
+      // thing, so a contended run records none. This is the behavior the idle assertions above
+      // would silently invert if the load reading were ever dropped.
+      Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+      await FS.remove(registryRoot)
+    }
+  })
+
   Test('runs every gate exactly once, whatever the concurrency', async () => {
     const { started } = await run(['a', 'b', 'c', 'd', 'e'], {})
 
@@ -291,6 +331,7 @@ Describe('repository gate runner', () => {
     try {
       await runGates({
         gates: ['_repo-lint'],
+        machineLoadAverage: IDLE_MACHINE,
         registryRoot,
         repositoryRoot: root,
         runGate: async () => ({ exitCode: 0, output: '' }),
@@ -315,6 +356,7 @@ Describe('repository gate runner', () => {
     try {
       await runGates({
         gates: ['_repo-lint', '_doctor-json'],
+        machineLoadAverage: IDLE_MACHINE,
         registryRoot,
         repositoryRoot: root,
         runGate: async name => ({

@@ -66,6 +66,12 @@ export type RunGatesOptions = {
   logRoot?: string
   /** Injected CPU total for deterministic coordination tests. */
   machineCpuCount?: number
+  /**
+   * Injected load reading for deterministic coordination tests. A run's contention verdict decides
+   * whether it warns and whether it teaches the timings store, so a test that means an idle or a
+   * busy machine says which rather than inheriting whatever the host is doing.
+   */
+  machineLoadAverage?: () => number
   now?: () => number
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
@@ -191,6 +197,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const machineLane = await MachineLanes.acquire({
     lane: location.lane,
     cpuCount: options.machineCpuCount,
+    loadAverage: options.machineLoadAverage,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,

@@ -73,8 +73,9 @@ description: >-
   corrections so the message never describes an earlier state of the branch.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
-  bullets. Do not add Git's squash appendix or any automated-author attribution; the command
-  validates the complete final message and appends Git's generated appendix itself.
+  bullets, each free to wrap onto indented continuation lines. Do not add Git's squash appendix or
+  any automated-author attribution; the command validates the complete final message and appends
+  Git's generated appendix itself.
 - `merge-with-main`'s flags only remove work. `--skip-full-verify` omits `just full-verify` on the
   feature branch, so the staged squash gets `just verify --complete` instead; `--skip-verify` omits
   that staged-squash pass; `--skip-all` implies both, asks once with No as the default, and needs a
