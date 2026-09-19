@@ -229,7 +229,7 @@ async function fileForPlan(
   for (const suite of plan.suites) {
     suites.push(await suiteForPlan(suite, context))
   }
-  return { sourcePath: plan.sourcePath, suites }
+  return { sourcePath: plan.sourcePath, suites, version: plan.version }
 }
 
 async function suiteForPlan(
