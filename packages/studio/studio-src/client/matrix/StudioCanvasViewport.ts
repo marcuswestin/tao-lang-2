@@ -6,7 +6,7 @@
  * person zooms or pans.
  */
 
-export type StudioCanvasViewportState = Readonly<{ x: number; y: number; z: number }>
+type StudioCanvasViewportState = Readonly<{ x: number; y: number; z: number }>
 type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: number }>
 
 const minimumScale = 0.1
@@ -115,7 +115,7 @@ export type StudioCanvasViewportDeps = Readonly<{
   onChange?: (next: StudioCanvasViewportState) => void
 }>
 
-export type StudioCanvasWheelGesture = Readonly<{
+type StudioCanvasWheelGesture = Readonly<{
   clientX: number
   clientY: number
   deltaX: number

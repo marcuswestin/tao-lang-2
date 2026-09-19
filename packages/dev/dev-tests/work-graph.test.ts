@@ -637,6 +637,40 @@ Describe('work graph scheduling', () => {
     Expect(state.reason).toBeUndefined()
   })
 
+  Test("carries the broker's explanation onto the node that is waiting for the machine", async () => {
+    const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
+    const reasons: string[] = []
+    let attempts = 0
+    const broker = {
+      tryAcquire: async () => ++attempts < 3 ? undefined : { release: async () => {}, slots: 1 },
+      waitForAvailability: async () => {},
+      // A lane that changes why it is blocked reports both, rather than the first one forever.
+      get waitReason() {
+        return attempts < 2
+          ? 'another lane is confirming exclusively (verify in other-worktree)'
+          : 'this lane holds 2 of its 2 slots; 9 lanes are registered'
+      },
+    }
+
+    await WorkGraph.run([state], {
+      jobs: 1,
+      onEvent: event => {
+        if (event.kind === 'waiting') {
+          reasons.push(event.reason)
+        }
+      },
+      runNode: async () => ({ exitCode: 0 }),
+      slotBroker: broker,
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(reasons).toEqual([
+      'waiting for machine capacity: another lane is confirming exclusively (verify in other-worktree)',
+      'waiting for machine capacity: this lane holds 2 of its 2 slots; 9 lanes are registered',
+    ])
+    Expect(state.status).toBe('passed')
+  })
+
   Test('asks the broker again when external capacity returns before a local node finishes', async () => {
     const firstDone = Deferred()
     const capacityChanged = Deferred()

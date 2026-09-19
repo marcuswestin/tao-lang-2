@@ -84,6 +84,57 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/**
+ * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
+ * branches adding an entry each add a file and one line rather than colliding over a shared block.
+ * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
+ * a line can point at a file nobody wrote, and — because two new files merge silently where two new
+ * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
+ * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ */
+export function developerEnvironmentLedgerIssues(entryFileNames: readonly string[], index: string): string[] {
+  // Counted rather than collected: a merge that keeps both sides of a conflicting index edit leaves
+  // one file linked twice, which reads as correct from either direction — the file exists and it is
+  // listed — and is the one way this layout can still drift without either check below noticing.
+  const linked = new Map<string, number>()
+  for (const match of index.matchAll(/^- \[DEVENV-\d+ — [^\]]+\]\(<Developer environment upgrades\/([^>]+)>\)/gm)) {
+    const name = match[1]!
+    linked.set(name, (linked.get(name) ?? 0) + 1)
+  }
+  const entries = [...entryFileNames].filter(name => name.endsWith('.md')).sort()
+  const issues: string[] = []
+  const byId = new Map<string, string[]>()
+  for (const name of entries) {
+    const id = name.match(/^(DEVENV-\d+)-/)?.[1]
+    if (id === undefined) {
+      issues.push(`Developer environment upgrades/${name} must be named DEVENV-NNN-<slug>.md.`)
+      continue
+    }
+    byId.set(id, [...byId.get(id) ?? [], name])
+    if (!linked.has(name)) {
+      issues.push(`Developer environment upgrades.md needs an index line linking \`${name}\`.`)
+    }
+  }
+  const present = new Set(entries)
+  for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
+    if (!present.has(name)) {
+      issues.push(`Developer environment upgrades.md links \`${name}\`, which does not exist.`)
+    }
+    if (count > 1) {
+      issues.push(`Developer environment upgrades.md links \`${name}\` ${count} times; keep one index line.`)
+    }
+  }
+  for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
+    if (names.length > 1) {
+      issues.push(
+        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')};`
+          + ' rename the later-merged file and its index line.',
+      )
+    }
+  }
+  return issues
+}
+
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
 export function justRecipeIssues(source: string): string[] {
   const recipes = justRecipeDefinitions(source)
@@ -93,7 +144,7 @@ export function justRecipeIssues(source: string): string[] {
   if (benchmark === undefined || !benchmark.includes('language-performance.ts')) {
     issues.push("Justfile recipe 'bench' must run the language performance benchmark.")
   }
-  for (const lane of ['check', 'verify', 'full-verify']) {
+  for (const lane of ['check', 'verify', 'verify-full']) {
     if (!recipes.has(lane)) {
       issues.push(`Justfile must declare recipe '${lane}'.`)
       continue
@@ -382,8 +433,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:468',
-  'packages/dev/dev-tests/repo-lint.test.ts:469',
+  'packages/dev/dev-tests/repo-lint.test.ts:514',
+  'packages/dev/dev-tests/repo-lint.test.ts:515',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
@@ -771,6 +822,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
   issues.push(...await readDelegationIssues(repoRoot))
+  issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
@@ -847,6 +899,18 @@ async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {
     }
   }
   return paths
+}
+
+const DEVELOPER_ENVIRONMENT_INDEX = 'Docs/Roadmap/Developer environment upgrades.md'
+const DEVELOPER_ENVIRONMENT_ENTRIES = 'Docs/Roadmap/Developer environment upgrades'
+
+async function readDeveloperEnvironmentLedgerIssues(repoRoot: string): Promise<string[]> {
+  const entriesPath = FS.resolvePath(DEVELOPER_ENVIRONMENT_ENTRIES, repoRoot)
+  if (!(await FS.isDirectory(entriesPath))) {
+    return []
+  }
+  const index = await FS.readText(FS.resolvePath(DEVELOPER_ENVIRONMENT_INDEX, repoRoot))
+  return developerEnvironmentLedgerIssues(await FS.listDir(entriesPath), index)
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {

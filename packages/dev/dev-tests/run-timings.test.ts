@@ -61,7 +61,7 @@ Describe('run timings store', () => {
       })
       await RunTimings.record({
         durations: new Map([['doctor', 200]]),
-        lane: 'full-verify',
+        lane: 'verify-full',
         repositoryRoot: root,
         stamp: '2026-09-01T00-01-00-000Z',
       })
@@ -73,7 +73,7 @@ Describe('run timings store', () => {
         nodes: { _test: 2_500, _typecheck: 1_000 },
         stamp: '2026-09-01T00-00-00-000Z',
       })
-      Expect(JSON.parse(lines[1]!).lane).toBe('full-verify')
+      Expect(JSON.parse(lines[1]!).lane).toBe('verify-full')
     })
   })
 

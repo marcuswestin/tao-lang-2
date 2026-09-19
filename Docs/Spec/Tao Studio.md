@@ -639,7 +639,7 @@ The browser client is split into API/event, editor, matrix, shell, visual-editin
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
 scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
 The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, but
-the simulated-user journey is quarantined from `full-verify` until it completes ten consecutive reliable
+the simulated-user journey is quarantined from `verify-full` until it completes ten consecutive reliable
 normal-terminal runs; no final browser acceptance is claimed here.
 
 `./dev studio` and `./dev studio-native` both start the multi-project session server. Every opened project

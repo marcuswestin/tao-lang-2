@@ -174,6 +174,36 @@ Describe('Studio device trust store', () => {
     ).toBe(true)
   })
 
+  Test('never steals a lock from an owner whose start time it cannot compare', async () => {
+    // An owner file written by a build that read process start times differently — this one shelled
+    // out to `ps`, which an agent sandbox denies, before it moved to the libproc reader — carries a
+    // spelling this build cannot compare. Two incomparable strings are not evidence that the PID
+    // changed hands, and only that evidence may take a lock away.
+    Expect(
+      await StudioDeviceTrustStoreTesting.lockOwnerIsLive(
+        { pid: 4242, processStartedAt: 'Mon Sep  1 12:00:00 2026', token: 'owner' },
+        async () => ({ evidence: 'alive', startedAt: 'proc:1789812267:567095' }),
+      ),
+    ).toBe(true)
+    // Same scheme, different value, is the reuse this comparison exists to catch.
+    Expect(
+      await StudioDeviceTrustStoreTesting.lockOwnerIsLive(
+        { pid: 4242, processStartedAt: 'proc:1789812267:567095', token: 'owner' },
+        async () => ({ evidence: 'alive', startedAt: 'proc:1789899999:111111' }),
+      ),
+    ).toBe(false)
+  })
+
+  Test('reads a live process start time without a subprocess the sandbox can deny', async () => {
+    // The point of the change: this process is alive, and its identity must carry a start time here.
+    // The `ps` reader returned `unknown` with no start time in every sandboxed run, which quietly
+    // disabled the reuse check above.
+    const identity = await StudioDeviceTrustStoreTesting.inspectProcessIdentity(Platform.runtimeProcess.pid)
+
+    Expect(identity.evidence).toBe('alive')
+    Expect(identity.evidence === 'alive' ? identity.startedAt : undefined).toBeDefined()
+  })
+
   Test('rejects a stale legacy directory whose old protocol cannot be reclaimed safely', async () => {
     await withRoot(async root => {
       const legacyPath = FS.resolvePath('.studio-device-trust.lock', root)

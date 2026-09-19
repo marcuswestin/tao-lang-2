@@ -506,22 +506,27 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  // The invalid source here is deliberately one the compiler can still lower: step order is a
+  // semantic rule, not a shape the plan compiler asserts on, so skipping validation yields a real
+  // plan rather than trading one refusal for another.
   Test('can compile test plans without rerunning semantic validation', async () => {
     await withTaoFiles(
       'tao-workspace-test-plan-skip-validation-',
       {
-        'Main.test.tao': 'test "Empty" { }\n',
+        'Main.test.tao':
+          'test "Suite" {\n   test "out of order" {\n      expect text "Hello"\n      run MyApp\n   }\n}\n'
+          + 'app MyApp { view MainView }\nview MainView() { }\n',
       },
       async (paths, rootDir) => {
         const workspace = await Workspace.open(rootDir)
 
         await Expect(workspace.compileTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
-          "Test 'Empty' must start exactly one app with run.",
+          'Test steps must come after the run step.',
         )
         const plan = await workspace.compileTestPlan(paths['Main.test.tao']!, { skipValidation: true })
 
-        Expect(plan.suites[0]?.name).toBe('Empty')
-        Expect(plan.suites[0]?.checks).toEqual([])
+        Expect(plan.suites[0]?.name).toBe('Suite')
+        Expect(plan.suites[0]?.checks.map(check => check.name)).toEqual(['out of order'])
       },
     )
   })

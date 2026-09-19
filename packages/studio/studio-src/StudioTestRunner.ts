@@ -51,8 +51,16 @@ export const StudioTestOutput = {
     const failed = summaryCount(parseOutput, 'Tests', 'failed')
     const testFiles = [
       ...new Set([
-        ...matches(output, /(?:PASS|FAIL)\s+([^\n]+)/g),
+        // A `PASS`/`FAIL` line heads a Jest entrypoint. `tao test` generates one of those per worker
+        // it may use, so those paths name the runner's own scaffolding rather than anything a Tao
+        // author wrote; the per-journey tree under each of them names the `.test.tao` files it
+        // covered, which is what the panel lists.
+        ...matches(output, /(?:PASS|FAIL)\s+([^\n]+)/g).filter(path => path.endsWith('.test.tao')),
         ...matches(output, /[✓✕]\s+([^\n]+\.test\.tao)(?:\s|$)/g),
+        // The runner gives each Tao journey its own case, so a `.test.tao` file names the group
+        // those cases sit in rather than a case of its own: an indented line that is only the name.
+        // The lookahead keeps a failure's own `Source: …/X.test.tao` line out of the file list.
+        ...matches(output, /^[ \t]+(?!Source:)([^\s][^\n]*\.test\.tao)$/gm),
       ]),
     ]
     const noTests = /No Tao tests found\b/.test(output)

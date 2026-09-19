@@ -27,10 +27,24 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * (`StudioPackagedService.ts`, `StudioPackagedService.ts`, `TaoStudioBrowser.tsx`). Their own exports
  * are the surface they exist to publish, so knip does not report them.
  *
- * Findings do not fail this check. Removing an export is a reviewed change, so the run is a report
- * and exits 0 with a list. What does fail it is the check going stale: a `.tao` binding form this
- * scanner cannot read, or one naming a file or symbol that is not there. Either means the filter is
- * now hiding real findings, and that must never pass silently.
+ * Findings fail this check. An export nothing imports is dead weight, and a report nobody has to
+ * act on is how it accumulates; the remedy is almost always to drop the `export` keyword from a
+ * symbol whose own module is its only user, which the typechecker proves right or wrong at once.
+ *
+ * What may survive is an export something outside the TypeScript import graph really reaches: a
+ * consumer of `@tao/runtime`, of the published `tao` CLI, or of `@tao/*`, or a module loaded as
+ * text rather than imported. Each of those is recorded in the declaring package, in a file named
+ * for the one reason its exports are there — `packages/tao-cli/cli-src/subprocess-test-api.ts` is
+ * the only such record today — which `config/knip.json` declares an entry point by path so the
+ * record does not itself read as dead. That is knip's own documented answer — re-export from an
+ * entry file — rather than the per-symbol `@public` JSDoc tag knip also offers and its own guide
+ * discourages. One file per reason, not one per package: a second reason earns a second named file,
+ * so no record decays into a list of exports nobody can account for. A record is a claim that
+ * something uses the symbol, and is deleted when that stops being true.
+ *
+ * The other failure is the check going stale: a `.tao` binding form this scanner cannot read, or
+ * one naming a file or symbol that is not there. Either means the filter is now hiding real
+ * findings, and that must never pass silently.
  */
 
 /** Where the repository's TypeScript lives, matching the workspaces `config/knip.json` declares. */
@@ -541,7 +555,7 @@ export type DeadExportsOptions = {
   repositoryRoot?: string
 }
 
-/** runDeadExports reports every unused export the repository's own bindings do not explain. */
+/** runDeadExports fails on every unused export the repository's own bindings do not explain. */
 export async function runDeadExports(options: DeadExportsOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const readKnipReport = options.readKnipReport ?? runKnip
@@ -558,7 +572,7 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
   )
 
   for (const entry of review.reported) {
-    HCI.writeLine(`dead exports: ${entry.file}:${entry.line} ${entry.name} is exported but never imported.`)
+    HCI.writeErrorLine(`dead exports: ${entry.file}:${entry.line} ${entry.name} is exported but never imported.`)
   }
   HCI.writeLine(
     `dead exports: ${review.reported.length} unused, `
@@ -566,7 +580,14 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
       + `${review.facadeReached} reached through a namespace facade, `
       + `${review.typeImported} republished by an import-type query.`,
   )
-  HCI.writeLine('dead exports: reported only; removing or de-exporting a symbol is a reviewed change.')
+  if (review.reported.length > 0) {
+    HCI.writeErrorLine(
+      'Remove each symbol, or drop its `export` where its own module is the only user. An export '
+        + 'something outside the TypeScript import graph really reaches is re-exported instead from '
+        + 'a file in the declaring package named for which consumer reaches it, added to that '
+        + "package's entry points in config/knip.json.",
+    )
+  }
 
   for (const issue of review.staleness) {
     HCI.writeErrorLine(`dead exports: ${issue}`)
@@ -576,9 +597,8 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
       'The .tao binding scanner in packages/dev/dev-src/repository-tests/DeadExports.ts no longer '
         + 'reads these bindings, so it is hiding real findings. Teach it the form, or fix the binding.',
     )
-    return 1
   }
-  return 0
+  return review.reported.length > 0 || review.staleness.length > 0 ? 1 : 0
 }
 
 /**
