@@ -11,6 +11,12 @@ needs to be installable, explorable, and honest about what it does not do yet.
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 
+An item is marked **done** here only once it is on `main`. Work in progress lives on branches, which
+this document deliberately does not name because they move faster than it does: `./agent board`
+reports every worktree, its branch, and whether it carries a merge message, which is where to look
+before starting an item so two agents do not build the same thing. As of 2026-09-19 that board shows
+branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`.
+
 ## Release blockers
 
 Without these a visitor cannot use Tao at all.
@@ -233,14 +239,12 @@ Work with an existing plan that needs implementation rather than decision: the d
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
 
-### A15 — Studio's simulated-user lane
+### A15 — Studio's simulated-user lane — **done**
 
-The editor-ownership, source-identity, canvas geometry, pointer-release, drag-in, and sketch
-transaction defects have landed. What remains is ten consecutive reliable runs in a normal terminal
-before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
-
-- Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
-  `studio-hybrid-client` skill.
+Closed by `34132956`. The journey ran ten consecutive green runs in a normal terminal and
+`studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again; `VERIFY_FULL_SKIPPED`
+is empty, so the release no longer carries a quarantined lane. The editor-ownership, source-identity,
+canvas geometry, pointer-release, drag-in, and sketch transaction defects it found landed with it.
 
 ### A16 — A reachable datasource for the public demo
 
