@@ -164,6 +164,10 @@ Describe('gate catalog metadata', () => {
     // The Tao gates do read `.tao` sources, so they still wait for the fixer that rewrites them.
     Expect(nodeOf('_tao-check').needs).toContain('_fix-tao')
     Expect(nodeOf('_compile-word-flower-app').needs).toContain('_fix-tao')
+    // `dead-exports` is a TypeScript gate that reads `.tao` too: a `.tao` binding is what keeps a
+    // bridged export out of its report, so a torn read of one would fail the lane on live code.
+    Expect(nodeOf('dead-exports').needs).toContain('_fix-tao')
+    Expect(nodeOf('dead-exports').needs).toContain('_fix-dprint')
   })
 
   Test('makes every recipe-backed node wait for the Justfile formatter, and no runner-backed one', () => {
@@ -200,9 +204,22 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.metadata('_compile-word-flower-app').writes).toEqual(['gen-app'])
     for (const name of PREPARE_GATES) {
       Expect(GateCatalog.isPrepare(name)).toBe(true)
-      // A writer's output is derived state no tree hash describes, so a record can never stand for
-      // it: proving it again is the only way to know its output is present.
+      // Exhaustive rather than a hand-written list: a writer added later is non-recordable until it
+      // declares `canonicalises`, which is what keeps the safe answer the default one.
+      Expect(GateCatalog.isRecordable(name)).toBe(GateCatalog.metadata(name).canonicalises === true)
+    }
+    // A generator's output is derived state no tree hash describes, so a record can never stand for
+    // it: proving it again is the only way to know its output is present. A fresh checkout and a
+    // reclaimed `.artifacts` hash identically to a checkout that has the generated trees.
+    for (const name of ['_parser-gen', '_compile-word-flower-app']) {
       Expect(GateCatalog.isRecordable(name)).toBe(false)
+    }
+    // A fixer's output is the tracked tree itself, which the hash does describe. A record is keyed
+    // by the verified tree the prepare phase left behind, so at that hash the fixer has already
+    // reached its fixpoint and re-running it is the `0 fixed, N unchanged` no-op it reports. This is
+    // what lets an unchanged tree skip the prepare chain that is every lane's serial floor.
+    for (const name of ['_fix-just-fmt', '_fix-dprint', '_fix-tao']) {
+      Expect(GateCatalog.isRecordable(name)).toBe(true)
     }
     for (const name of ['_typecheck', '_repo-lint', '_tao-check', '_ide-extension-build', 'dead-exports']) {
       Expect(GateCatalog.metadata(name).writes).toBeUndefined()
@@ -357,8 +374,8 @@ Describe('gate catalog metadata', () => {
 Describe('gate catalog scheduling', () => {
   Test('keeps full and sandbox verification on one identical gate membership', async () => {
     const [full, sandbox] = await Promise.all([
-      justGateNames('full-verify'),
-      justGateNames('full-verify-sandbox'),
+      justGateNames('verify-full'),
+      justGateNames('verify-full-sandbox'),
     ])
 
     Expect(full).toEqual(sandbox)

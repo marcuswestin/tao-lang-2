@@ -128,12 +128,12 @@ Describe('repository gate runner', () => {
 
   Test('reports a skipped gate as skipped, with why, and never as passed', async () => {
     const { summary } = await run(['_repo-lint'], {}, {
-      skipped: ['studio-smoke=slow lane; run just studio-smoke or just full-verify'],
+      skipped: ['studio-smoke=slow lane; run just studio-smoke or just verify-full'],
     })
 
     const skipped = summary.gates.find(gate => gate.name === 'studio-smoke')
     Expect(skipped?.status).toBe('skipped')
-    Expect(skipped?.reason).toBe('slow lane; run just studio-smoke or just full-verify')
+    Expect(skipped?.reason).toBe('slow lane; run just studio-smoke or just verify-full')
     Expect(summary.gates.filter(gate => gate.status === 'passed').map(gate => gate.name)).toEqual(['_repo-lint'])
     Expect(formatGateSummary(summary)).toContain('1 passed, 0 failed, 1 skipped')
   })
@@ -520,17 +520,19 @@ Describe('gate runner green trees', () => {
   async function runOnce(
     root: string,
     options: {
-      fresh?: boolean
       gates?: readonly string[]
       hash: string
       lanes: readonly string[]
+      noCache?: boolean
       script?: GateScript
     },
   ) {
     const started: string[] = []
     const summary = await runGates({
-      gates: options.gates ?? ['_repo-lint', '_typecheck'],
-      greenTree: { fresh: options.fresh, hashTree: async () => options.hash, lanes: options.lanes },
+      // Two recordable readers that read no generated class, so a record stands for them in a lane
+      // holding no generator. `_typecheck` reads both generated trees and is the wrong default here.
+      gates: options.gates ?? ['_dprint-check', '_repo-lint'],
+      greenTree: { hashTree: async () => options.hash, lanes: options.lanes, noCache: options.noCache },
       jobs: 2,
       lane: options.lanes[0],
       logRoot: FS.resolvePath('logs', root),
@@ -550,7 +552,7 @@ Describe('gate runner green trees', () => {
     const root = await mkTestDir('tao-gate-runner-green-')
     try {
       const first = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
-      Expect(first.started.sort()).toEqual(['_repo-lint', '_typecheck'])
+      Expect(first.started.sort()).toEqual(['_dprint-check', '_repo-lint'])
       Expect(first.summary.greenTree).toBeUndefined()
 
       const second = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
@@ -567,26 +569,26 @@ Describe('gate runner green trees', () => {
       Expect(second.summary.gates[0]?.reason).toContain('tree unchanged since the green verify run')
 
       const edited = await runOnce(root, { hash: 'tree-2', lanes: ['verify'] })
-      Expect(edited.started.sort()).toEqual(['_repo-lint', '_typecheck'])
+      Expect(edited.started.sort()).toEqual(['_dprint-check', '_repo-lint'])
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('a red run records nothing, and --fresh runs everything while still recording', async () => {
+  Test('a red run records nothing, and --no-cache runs everything while still recording', async () => {
     const root = await mkTestDir('tao-gate-runner-green-red-')
     try {
       const red = await runOnce(root, {
         hash: 'tree-1',
         lanes: ['verify'],
-        script: { _typecheck: { exitCode: 1, output: 'boom' } },
+        script: { '_dprint-check': { exitCode: 1, output: 'boom' } },
       })
       Expect(red.summary.status).toBe('failed')
 
       const again = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
       Expect(again.started.length).toBe(2)
 
-      const fresh = await runOnce(root, { fresh: true, hash: 'tree-1', lanes: ['verify'] })
+      const fresh = await runOnce(root, { hash: 'tree-1', lanes: ['verify'], noCache: true })
       Expect(fresh.started.length).toBe(2)
       Expect(fresh.summary.greenTree).toBeUndefined()
       Expect((await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })).started).toEqual([])
@@ -667,17 +669,43 @@ Describe('gate runner green trees', () => {
     }
   })
 
+  Test('a reader of a generated tree stands on its record only while the generator runs beside it', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-generated-')
+    try {
+      // `_typecheck` compiles `_gen_tao-app` and `_gen_tao-parser`. Both are Git-ignored, so the
+      // tree hash its record is keyed by says nothing about whether they exist or are current — a
+      // fresh checkout hashes identically to one that has them.
+      const both = ['_compile-word-flower-app', '_parser-gen', '_typecheck']
+      await runOnce(root, { gates: both, hash: 'tree-1', lanes: ['verify'] })
+
+      // With both generators in the lane they regenerate whatever the record says, because a
+      // generator is never recordable, so the record is safe to stand on.
+      const withGenerators = await runOnce(root, { gates: both, hash: 'tree-1', lanes: ['verify'] })
+      Expect(withGenerators.started.sort()).toEqual(['_compile-word-flower-app', '_parser-gen'])
+
+      // Drop the one that writes the generated app and the same record no longer covers it.
+      const withoutAppGenerator = await runOnce(root, {
+        gates: ['_parser-gen', '_typecheck'],
+        hash: 'tree-1',
+        lanes: ['verify'],
+      })
+      Expect(withoutAppGenerator.started.sort()).toEqual(['_parser-gen', '_typecheck'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('a lane stands on a superset lane record but a superset never stands on a subset', async () => {
     const root = await mkTestDir('tao-gate-runner-green-superset-')
     try {
-      await runOnce(root, { hash: 'tree-1', lanes: ['full-verify'] })
+      await runOnce(root, { hash: 'tree-1', lanes: ['verify-full'] })
 
-      const verify = await runOnce(root, { hash: 'tree-1', lanes: ['verify', 'full-verify'] })
+      const verify = await runOnce(root, { hash: 'tree-1', lanes: ['verify', 'verify-full'] })
       Expect(verify.started).toEqual([])
-      Expect(verify.summary.greenTree?.lane).toBe('full-verify')
+      Expect(verify.summary.greenTree?.lane).toBe('verify-full')
 
-      await runOnce(root, { hash: 'tree-2', lanes: ['verify', 'full-verify'] })
-      const full = await runOnce(root, { hash: 'tree-2', lanes: ['full-verify'] })
+      await runOnce(root, { hash: 'tree-2', lanes: ['verify', 'verify-full'] })
+      const full = await runOnce(root, { hash: 'tree-2', lanes: ['verify-full'] })
       // The subset lane's record is not accepted as the superset's, so this run happens — but the
       // gates that record proved at this exact tree are not run a second time.
       Expect(full.summary.greenTree).toBeUndefined()
@@ -702,41 +730,41 @@ Describe('gate runner green trees', () => {
       const full = await runOnce(root, {
         gates: ['_parser-gen', '_repo-lint', '_typecheck', 'dead-exports'],
         hash: 'tree-1',
-        lanes: ['full-verify'],
+        lanes: ['verify-full'],
       })
       // `_parser-gen` fills a generated directory the tree hash does not describe, so a record can
-      // never stand for it; `dead-exports` has no record of its own yet.
-      Expect(full.started.sort()).toEqual(['_parser-gen', 'dead-exports'])
+      // never stand for it; `dead-exports` has no record of its own yet; and `_typecheck` reads the
+      // generated app, whose generator this lane does not run, so its record cannot be trusted here.
+      Expect(full.started.sort()).toEqual(['_parser-gen', '_typecheck', 'dead-exports'])
       Expect(full.summary.status).toBe('passed')
 
       // What the superset run proved is now recorded too, so the subset lane stands on its record.
-      const again = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+      const again = await runOnce(root, { gates: ['_repo-lint'], hash: 'tree-1', lanes: ['verify'] })
       Expect(again.started).toEqual([])
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('a run that skipped gates on an earlier proof is not green evidence once the tree moves', async () => {
+  Test('a run that skipped gates on an earlier proof is not green evidence once its fixers move the tree', async () => {
     const root = await mkTestDir('tao-gate-runner-green-moved-')
     try {
       await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
 
-      // The fix gates rewrote the tree after the skip decision was made on the old one.
-      let hash = 'tree-1'
+      // The lane includes a fixer, so the prepare phase runs and can move the tree under the
+      // readers that were skipped on the earlier proof. The three readings are the starting tree,
+      // the post-prepare snapshot, and the final tree: the last two agree, so this is the fixers'
+      // own rewrite and not concurrent drift — which is the case only this guard catches.
+      const hashes = ['tree-1', 'tree-2', 'tree-2']
       const moved = await runGates({
-        gates: ['_repo-lint', '_typecheck', 'dead-exports'],
+        gates: ['_fix-dprint', '_repo-lint', '_typecheck'],
         greenTree: {
-          hashTree: async () => {
-            const current = hash
-            hash = 'tree-2'
-            return current
-          },
+          hashTree: async () => hashes.shift()!,
           // A lane no whole-lane record covers, so the run happens and reaches its gate records.
-          lanes: ['full-verify'],
+          lanes: ['verify-full'],
         },
         jobs: 2,
-        lane: 'full-verify',
+        lane: 'verify-full',
         logRoot: FS.resolvePath('logs-moved', root),
         registryRoot: FS.resolvePath('registry', root),
         repositoryRoot: root,
@@ -746,7 +774,13 @@ Describe('gate runner green trees', () => {
         },
       })
 
-      Expect(moved.warnings.some(warning => warning.includes('not green evidence'))).toBe(true)
+      // Exiting 0 here is the whole failure: `merge-with-main` reads the exit code and nothing else,
+      // so a warning alone would let an unproved tree through.
+      Expect(moved.status).toBe('failed')
+      Expect(moved.warnings).toContain(
+        'nodes were skipped on an earlier proof and the prepare phase then changed the tree; '
+          + 'this run is not green evidence. Re-run with --no-cache.',
+      )
       // Nothing was recorded against the tree this run left behind.
       Expect((await runOnce(root, { hash: 'tree-2', lanes: ['verify'] })).started.length).toBe(2)
     } finally {

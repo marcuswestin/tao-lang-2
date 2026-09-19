@@ -3,6 +3,7 @@ import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@sha
 import { GateCatalog } from '../dev-src/repository-tests/GateCatalog'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
+import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import type { GateSummary } from '../dev-src/repository-tests/RunSummary'
 
 /**
@@ -213,13 +214,13 @@ Describe('two lanes in one checkout', () => {
           repositoryRoot: root,
           runGate: async () => ({ exitCode: 0, output: '' }),
         })
-      const summaries = await Promise.all([lane('verify', registries[0]!), lane('full-verify', registries[1]!)])
+      const summaries = await Promise.all([lane('verify', registries[0]!), lane('verify-full', registries[1]!)])
 
       Expect(summaries.map(summary => summary.status)).toEqual(['passed', 'passed'])
       const store = await GreenTree.load(root)
       // Both lane records survived, and neither lane lost a gate record to the other's rename.
       Expect(store.lanes['verify']?.treeHash).toBe('shared-tree')
-      Expect(store.lanes['full-verify']?.treeHash).toBe('shared-tree')
+      Expect(store.lanes['verify-full']?.treeHash).toBe('shared-tree')
       Expect(gates.map(gate => store.gates[gate]?.treeHash)).toEqual(['shared-tree', 'shared-tree', 'shared-tree'])
       // Every file in the directory is a complete record, and no temporary file was orphaned.
       const files = await FS.listDir(FS.resolvePath(GreenTree.STORE_DIR, root))
@@ -227,7 +228,7 @@ Describe('two lanes in one checkout', () => {
         'gate-_repo-lint.json',
         'gate-_typecheck.json',
         'gate-dead-exports.json',
-        'lane-full-verify.json',
+        'lane-verify-full.json',
         'lane-verify.json',
       ])
       for (const file of files) {
@@ -282,6 +283,75 @@ Describe('two lanes in one checkout', () => {
     } finally {
       await FS.remove(root)
       await Promise.all(registries.map(async registry => await FS.remove(registry)))
+    }
+  })
+})
+
+/**
+ * The one lane that refuses to share. Every other kind of contention here is about dividing the
+ * machine fairly; this is about a lane whose gates cannot be divided at all, because they drive one
+ * window server between them.
+ */
+Describe('a lane that needs the machine to itself', () => {
+  Test('refuses while another lane is registered, names it, and runs once it is gone', async () => {
+    const root = await mkTestDir('tao-verify-needs-machine-')
+    const holderRoot = await mkTestDir('tao-verify-needs-machine-holder-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const started: string[] = []
+    const lane = async () =>
+      await runGates({
+        gates: [READER_GATE],
+        lane: 'verify-full',
+        needsMachine: true,
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async gate => {
+          started.push(gate)
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+    const holder = await MachineLanes.acquire({ lane: 'dev-test', registryRoot, repositoryRoot: holderRoot })
+    try {
+      // The refusal names the holder the way an exclusive confirmation names it — lane, then the
+      // worktree it is running in — so the two waits a developer can meet read alike.
+      await Expect(lane()).rejects.toThrow(`dev-test in ${FS.basename(holderRoot)}`)
+      await Expect(lane()).rejects.toThrow('needs this machine to itself')
+      // Refused means refused: nothing ran, so nothing was proved and nothing was recorded.
+      Expect(started).toEqual([])
+
+      await holder.release()
+      const summary = await lane()
+      Expect(summary.status).toBe('passed')
+      Expect(started).toEqual([READER_GATE])
+    } finally {
+      await holder.release()
+      await FS.remove(root)
+      await FS.remove(holderRoot)
+    }
+  })
+
+  Test('lets every other lane share the machine, however many are registered', async () => {
+    const root = await mkTestDir('tao-verify-shares-machine-')
+    const holderRoot = await mkTestDir('tao-verify-shares-machine-holder-')
+    const registryRoot = FS.resolvePath('registry', root)
+
+    const holder = await MachineLanes.acquire({ lane: 'dev-test', registryRoot, repositoryRoot: holderRoot })
+    try {
+      // Refusing is this one lane's property, declared by the Justfile that owns lane membership.
+      // Without the flag a busy machine is a scheduling fact, and the broker's share handles it.
+      const summary = await runGates({
+        gates: [READER_GATE],
+        lane: 'verify',
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+      Expect(summary.status).toBe('passed')
+    } finally {
+      await holder.release()
+      await FS.remove(root)
+      await FS.remove(holderRoot)
     }
   })
 })
