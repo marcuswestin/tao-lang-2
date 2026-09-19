@@ -219,6 +219,12 @@ report-test-stats limit="20":
     echo
     ./dev test-slowest --limit "{{ limit }}"
 
+# Bring a feature branch to the state where merge-with-main can run; safe and cheap to re-run
+[arg('check', long='check', value='true')]
+[arg('fresh', long='fresh', value='true')]
+finalize check='false' fresh='false':
+    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
+
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
 [arg('message_file', long='message-file')]
@@ -264,6 +270,10 @@ dead-exports:
 [group('Report')]
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
+
+# Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
+board *ARGS:
+    ./dev board {{ ARGS }}
 
 # Report process, socket, simulator, and local-service capabilities without changing anything
 [group('Report')]
