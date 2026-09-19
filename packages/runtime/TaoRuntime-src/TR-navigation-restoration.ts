@@ -276,7 +276,7 @@ export class NavigationRestorationController {
   }
 
   private unsubscribe(): void {
-    for (const unsubscribe of this.subscriptions.splice(0).toReversed()) {
+    for (const unsubscribe of this.subscriptions.splice(0).reverse()) {
       unsubscribe()
     }
   }

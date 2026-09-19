@@ -231,7 +231,7 @@ function validateCodec(codec: TaoStudioStateDomainCodec<unknown>): void {
 function canonicalDataState(snapshots: Readonly<Record<string, string>>): TaoStudioStateSeed {
   return Object.freeze({
     snapshots: Object.freeze(
-      Object.fromEntries(Object.entries(snapshots).toSorted(([left], [right]) => left.localeCompare(right))),
+      Object.fromEntries(Object.entries(snapshots).sort(([left], [right]) => left.localeCompare(right))),
     ),
     version: studioStateSeedVersion,
   })

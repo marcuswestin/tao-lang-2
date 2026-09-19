@@ -397,7 +397,7 @@ export class RuntimeAppDefinition implements Subscription {
   }
 
   back(): boolean {
-    for (const auxiliary of Object.values(this.auxiliaries).toReversed()) {
+    for (const auxiliary of Object.values(this.auxiliaries).reverse()) {
       if (this.mutateNavigation(auxiliary, () => auxiliary.back())) {
         this.browserHistory.reducerBackCompleted({
           context: this.browserContext(auxiliary),
@@ -667,7 +667,7 @@ export class RuntimeAppDefinition implements Subscription {
       }))
     }
     return () => {
-      for (const dispose of disposers.toReversed()) {
+      for (const dispose of [...disposers].reverse()) {
         dispose()
       }
       for (const selection of selections) {

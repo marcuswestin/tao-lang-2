@@ -425,7 +425,7 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   private backHosted(): boolean {
     // Later mounts first, the order the app itself uses for its auxiliaries.
-    for (const mount of this.hostedNavigations().toReversed()) {
+    for (const mount of this.hostedNavigations().reverse()) {
       if (!mount.canGoBack) {
         continue
       }

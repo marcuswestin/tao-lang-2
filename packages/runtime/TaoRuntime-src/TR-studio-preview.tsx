@@ -1947,7 +1947,7 @@ function bestRenderGap(
       continue
     }
     const horizontal = renderFlowIsHorizontal(candidates)
-    const sorted = candidates.toSorted((left, right) =>
+    const sorted = [...candidates].sort((left, right) =>
       renderCenter(left.element.getBoundingClientRect(), horizontal)
       - renderCenter(right.element.getBoundingClientRect(), horizontal)
     )

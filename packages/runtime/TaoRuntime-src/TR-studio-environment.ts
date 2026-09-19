@@ -382,7 +382,7 @@ function providerOverlay(
     capture: () =>
       Object.freeze({
         snapshots: Object.freeze(
-          Object.fromEntries([...state.snapshots.entries()].toSorted(([left], [right]) => left.localeCompare(right))),
+          Object.fromEntries([...state.snapshots.entries()].sort(([left], [right]) => left.localeCompare(right))),
         ),
         version: studioStateSeedVersion,
       }),
@@ -436,9 +436,9 @@ export function capturedFixture(
     if (envelope.rows === undefined || typeof envelope.rows !== 'object') {
       throw new UserInputError('Tao Studio cannot capture an invalid provider snapshot as a fixture.')
     }
-    const entityNames = Object.keys(envelope.rows).toSorted().join('\0')
+    const entityNames = Object.keys(envelope.rows).sort().join('\0')
     const schema = schemas.find(candidate =>
-      Object.keys(candidate.definition.entities).toSorted().join('\0') === entityNames
+      Object.keys(candidate.definition.entities).sort().join('\0') === entityNames
     )
     if (schema === undefined) {
       throw new UserInputError('Tao Studio cannot match a provider snapshot to its data schema.')
