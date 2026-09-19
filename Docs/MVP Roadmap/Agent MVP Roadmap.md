@@ -22,7 +22,7 @@ and reports a syntax error as `Expected: Tao source without syntax errors when a
 fixes` with no line, column, or description. Errors are most of what a person exploring a new
 language sees.
 
-- Context: `packages/validator`, `packages/tao-cli/cli-src`, the `error-handling` skill, and the
+- Context: `packages/validator`, `packages/tao-cli/cli-src`, the Errors section of `packages/AGENTS.md`, and the
   `tao check` entry under **Build the enforcement and diagnostics surface** in `Roadmap.md`.
 - Done: validation errors and parse errors reach the CLI with file, line, column, and a readable
   message; the exit code reflects failure; tests cover both kinds; the roadmap line that says
@@ -229,7 +229,7 @@ transaction defects have landed. What remains is ten consecutive reliable runs i
 before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
 
 - Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
-  `studio-hybrid-client` skill.
+  `packages/studio/AGENTS.md`.
 
 ### A16 — A reachable datasource for the public demo
 

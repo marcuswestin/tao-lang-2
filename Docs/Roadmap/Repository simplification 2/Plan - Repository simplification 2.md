@@ -3,7 +3,7 @@
 Status: Wave 0 landed; Wave 1 not started. Decisions settled with Ro on 2026-09-19. The `simplify-repo` skill
 owns the repeatable method; this document owns this run: its baseline, fences, waves, and ledger.
 
-The first pass is archived at `Docs/Roadmap/Archive/Repository simplification/`. It and its three
+The first pass is archived at `Docs/Archive/Plans/Repository simplification/`. It and its three
 follow-ups took dead exports, name-level duplicate helpers, typed errors, the Studio wire contract,
 and the `repo-lint` convention table. Its Documentation and Command-surface parts never started.
 

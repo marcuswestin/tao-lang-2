@@ -1,6 +1,6 @@
 # Tao Roadmap
 
-Open work only. Completed work is recorded under `Docs/Roadmap/Archive/`.
+Open work only. Completed work is recorded under `Docs/Archive/`.
 
 `Apps/WordFlower/README.md` owns the tranche mechanics language features are built through. The
 language target and the program that reaches it — first MVP, then Revolution — are owned by
@@ -151,7 +151,7 @@ tests written in Tao, green in Current, for every construct introduced.
     `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it directly for
     acceptance evidence, and re-adding it to the graph is one catalog edit after the ten-run gate.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
-    `agents/skills/studio-hybrid-client/SKILL.md`.
+    `packages/studio/AGENTS.md`.
 - [ ] Implement a drag-and-drop example app
   - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
     (loop vs cell vs scroll container), drag previews, declarable drop targets (including
@@ -268,7 +268,7 @@ Product and codebase backlog, unordered.
 
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
-    `Docs/Roadmap/Archive/Repository simplification/Plan - Repository simplification.md`. Each item
+    `Docs/Archive/Plans/Repository simplification/Plan - Repository simplification.md`. Each item
     below was judged worth doing but not worth widening that plan's diff:
     - **No disabled state on the entry file in Studio's file tree.** The old `protectedPath` option
       went with the legacy DOM tree, where it only ever disabled buttons in a section that was never
@@ -383,14 +383,14 @@ Product and codebase backlog, unordered.
   selectable-row focus-intake slice.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
-- `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
-- `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
+- `Docs/Archive/Plans/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Docs/Archive/Plans/Verification orchestration/` — the completed verification-orchestration program: one
   dependency-aware, duration-informed scheduler for every test and verification lane, the live dashboard
   for humans on `check`/`verify`/`verify-full`, the file-backed quiet output contract for agents, and
   `verify-full`'s Studio lanes parallelized on per-worker resources.
-- `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
-- `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
-- `Docs/Roadmap/September squash-merge remediation.md` — the September squash-merge audit's 183
+- `Docs/Archive/Plans/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
+- `Docs/Archive/Reports/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
+- `Docs/Archive/Reports/September squash-merge remediation.md` — the September squash-merge audit's 183
   tracked findings (implemented) and the follow-up branch's open items, including a second,
   independent findings list that is cross-checked but not yet triaged.
-- `Docs/Roadmap/Archive/` — frozen records of completed work.
+- `Docs/Archive/` — frozen records of completed work.
