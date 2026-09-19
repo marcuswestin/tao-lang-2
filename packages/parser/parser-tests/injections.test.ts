@@ -74,7 +74,7 @@ Describe('parser: injections', () => {
     Expect(parseResult.diagnostics).toHaveLength(2)
     Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
     Expect(Diagnostics.allWithSeverity(parseResult.diagnostics, 'error')).toBe(true)
-    Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
+    Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, ' is in scope.')).toBe(true)
   })
 })
 

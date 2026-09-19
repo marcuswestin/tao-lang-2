@@ -1,5 +1,5 @@
 import { Packages } from '@ast-utils'
-import { Errors, FS } from '@shared'
+import { type Diagnostic, Errors, FS } from '@shared'
 
 /** InPlace groups shared Tao CLI in-place file processing types. */
 export namespace InPlace {
@@ -7,8 +7,10 @@ export namespace InPlace {
   export type Result = {
     path: string
     status: 'changed' | 'unchanged' | 'error'
+    /** error states an operation failure that produced no positioned diagnostic of its own. */
     error?: string
-    warnings?: readonly string[]
+    /** diagnostics are the file's own lexer, parser, linker, and validator findings, in report order. */
+    diagnostics?: readonly Diagnostic[]
   }
 
   /** PathOptions configures path resolution for in-place Tao file commands. */
@@ -25,6 +27,7 @@ export namespace InPlace {
 
 /** inPlace owns common Tao CLI in-place file processing helpers. */
 export const inPlace = {
+  errorResult: inPlaceError,
   generatedRootPackageFile,
   processFile,
   workspaceRootForPath,
@@ -95,7 +98,7 @@ async function writeWhenChanged(path: string, before: string, after: string): Pr
   return { path, status: 'changed' }
 }
 
-/** inPlaceError returns an error result for one in-place file operation. */
+/** inPlaceError returns an error result for one in-place file operation that carried no diagnostic. */
 function inPlaceError(path: string, error: unknown): InPlace.Result {
   return { path, status: 'error', error: Errors.formatForUser(error) }
 }

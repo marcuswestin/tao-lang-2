@@ -107,7 +107,7 @@ Describe('validator: selectable loops', () => {
         }
         Text(Row)
       `),
-      "Could not resolve reference to ValueDeclaration named 'Row'.",
+      "No value named 'Row' is in scope.",
     ),
   )
 })

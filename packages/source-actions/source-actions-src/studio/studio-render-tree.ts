@@ -32,7 +32,7 @@ import { ensureUiNamesImported } from './studio-use-imports'
 /**
  * wrapRender wraps a rendered node in a Studio-owned Stack() container. The wrapper is a stdlib
  * element like any palette insertion, so the file's `use … from @tao/ui` gains it when it is missing;
- * otherwise the wrap compiles into "Could not resolve reference to RenderTarget named 'Stack'".
+ * otherwise the wrap compiles into "No view named 'Stack' is in scope.".
  */
 export async function wrapRender(
   document: AST.Document,
