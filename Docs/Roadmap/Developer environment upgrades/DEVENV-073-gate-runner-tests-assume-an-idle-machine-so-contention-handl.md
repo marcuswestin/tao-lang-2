@@ -30,6 +30,14 @@
   lane classified it `repository` — worth naming, because a retry is machine-exclusive within its lane
   and not on a box running fourteen of them, and that classification is what a reader takes as proof
   the branch under test is at fault.
+  A fourth file shows the same class reaching a test that is not about verification at all, and shows
+  why the isolated retry does not save it: on 2026-09-19 at a peak load of 723.9 on 18 CPUs,
+  `dev-data.test.ts`'s `rejects a save while the server is away and resumes on the server that replaces
+  it` failed after 6.2s and the lane classified the node `test-assertion`, which is not a retryable
+  kind — so it was the one node of four that never got a second pass, while `studio`, `tao-cli`, and
+  `tao-apps` all failed and then passed on theirs. The file passes 14 of 14 in 741ms alone. A
+  contention failure that lands as a failed assertion rather than a timeout is therefore invisible to
+  the retry policy, and reads in the summary as the branch's own defect.
 - **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
   whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
   re-reading the warning text for a contention line.
@@ -39,6 +47,8 @@
   force the teach-the-store path rather than depend on the host being quiet.
 - **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
   about the tests' assumptions, not that behavior.
+- **Acceptance (added):** A contention-caused assertion failure is either retried like a timeout or
+  named as contention in the summary, so no lane reports a busy machine as the branch's defect.
 - **Acceptance:** The four assertions pass whether or not the runner samples contention while they run,
   proved by pinning both conditions rather than by repeat runs on a busy host, and a genuine
   timings-store regression still fails them.
