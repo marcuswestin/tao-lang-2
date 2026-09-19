@@ -1,4 +1,4 @@
-# DEVENV-090 — A fixture holding the output-capture queue through a spawn stalls its whole shard
+# DEVENV-092 — A fixture holding the output-capture queue through a spawn stalls its whole shard
 
 - **Status:** Candidate
 - **Area:** Test execution
