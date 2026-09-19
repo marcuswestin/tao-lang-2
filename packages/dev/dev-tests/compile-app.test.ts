@@ -1,12 +1,14 @@
-import { CLI, FS, Platform, Repo, Time } from '@shared'
+import { CLI, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   COMPILE_INPUT_FILES,
   COMPILE_SOURCE_ROOTS,
   type CompileAppOptions,
   compileAppOutputHash,
+  NO_CACHE_ENV_KEYS,
   runCompileApp,
 } from '../dev-src/repository-tests/CompileApp'
+import { TAO_TEST_NO_CACHE_ENV_KEY } from '../dev-src/repository-tests/GateRunner'
 
 const APP_PATH = 'Apps/Example/Example.tao'
 const OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
@@ -47,7 +49,12 @@ function compiler(exitCode = 0) {
 }
 
 /** run invokes the stamp against the fixture roots rather than the repository's real ones. */
-async function run(root: string, compile: CompileAppOptions['compile'], appName = 'Example'): Promise<number> {
+async function run(
+  root: string,
+  compile: CompileAppOptions['compile'],
+  appName = 'Example',
+  overrides: Partial<CompileAppOptions> = {},
+): Promise<number> {
   return await runCompileApp({
     appName,
     appPath: APP_PATH,
@@ -56,6 +63,7 @@ async function run(root: string, compile: CompileAppOptions['compile'], appName 
     outputRoot: OUTPUT_ROOT,
     repositoryRoot: root,
     sourceRoots: SOURCE_ROOTS,
+    ...overrides,
   })
 }
 
@@ -407,24 +415,23 @@ Describe('app compilation staleness stamp', () => {
   Test('rebuilds when the lane says not to trust recorded evidence', async () => {
     const root = await repository()
     const tao = compiler()
-    const previous = Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
     try {
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls).toHaveLength(1)
 
-      Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = 'true'
-      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(await run(root, tao.compile, 'Example', { noCache: true })).toBe(0)
 
       Expect(tao.calls).toHaveLength(2)
     } finally {
-      if (previous === undefined) {
-        delete Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
-      } else {
-        Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = previous
-      }
       await FS.remove(root)
     }
+  })
+
+  // The flag reaches this gate as an environment variable a lane sets on every child of its graph,
+  // and the two ends live in modules that never read each other's source.
+  Test('reads the variable the lane actually sets', () => {
+    Expect(NO_CACHE_ENV_KEYS).toContain(TAO_TEST_NO_CACHE_ENV_KEY)
   })
 
   // Both lists are hand-maintained, and a path that stops existing is recorded `<absent>` rather

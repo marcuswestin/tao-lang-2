@@ -105,7 +105,7 @@ const ABSENT = '<absent>'
  * `TAO_CHECK_NO_CACHE` is honoured too, because `tao check` reads both and the two schemes cover
  * the same compile.
  */
-const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO_CACHE']
+export const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO_CACHE']
 
 /** cacheDisabled reports whether this run was told to ignore the stamp entirely. */
 function cacheDisabled(): boolean {
@@ -127,6 +127,12 @@ export type CompileAppOptions = {
   compile?: (appPath: string, appName: string | undefined, repositoryRoot: string) => Promise<number>
   inputFiles?: readonly string[]
   outputRoot?: string
+  /**
+   * Ignore the stamp and compile regardless, defaulting to what the environment says. It is a field
+   * so a test can exercise it without writing to the process environment: this suite runs
+   * `--concurrent`, so an environment a test mutates is one every sibling running beside it reads.
+   */
+  noCache?: boolean
   repositoryRoot?: string
   sourceRoots?: readonly string[]
 }
@@ -142,7 +148,7 @@ export async function runCompileApp(options: CompileAppOptions): Promise<number>
   }
 
   // Asked once, so the pre-lock and in-lock answers cannot disagree.
-  const honoursStamp = !cacheDisabled()
+  const honoursStamp = !(options.noCache ?? cacheDisabled())
   const inputs = await compileAppInputHash(repositoryRoot, appPath, options)
   if (honoursStamp && await compileAppIsUpToDate(repositoryRoot, outputRoot, stampPath, inputs)) {
     HCI.writeLine('compile app: up to date')

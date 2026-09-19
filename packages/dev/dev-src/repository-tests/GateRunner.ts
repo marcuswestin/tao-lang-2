@@ -111,7 +111,7 @@ export type RunGatesOptions = {
  * they are built from has changed, which is a memoized verdict of exactly the kind `--no-cache`
  * exists to refuse. A `--no-cache` lane therefore compiles every app for itself.
  */
-const TAO_TEST_NO_CACHE_ENV_KEY = 'TAO_TEST_NO_CACHE'
+export const TAO_TEST_NO_CACHE_ENV_KEY = 'TAO_TEST_NO_CACHE'
 
 const DEFAULT_LANE = 'verify'
 /** The two lane-list names that stand for the whole test selection rather than a recipe. */
