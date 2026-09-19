@@ -4,6 +4,7 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { type CreateCommandOptions, type CreationPrompts, runCreate } from '../cli-src/create/create-command'
 import type { CreationLane } from '../cli-src/create/creation-lanes'
+import { lowerCreationPlan } from '../cli-src/create/creation-lowering'
 import { runTaoCliForTest } from './test-cli-files'
 
 const wholePlan: JsonObject = {
@@ -126,19 +127,23 @@ Describe('tao create command', () => {
         value: sampleRows,
       }])
       const stopped: string[] = []
+      // Everything this test names is settled before the confirmation, so it declines: lowering,
+      // formatting, and validating a shaped project are proved by the end-to-end test above and by
+      // the starter tests, and running them again here costs seconds per test.
       const result = await runCreate('Plan trips with friends', {
         cwd: root,
         id: 'our-trips',
-        interactive: false,
+        interactive: true,
         lanes: [fakeLane(provider, stopped)],
         output,
+        prompts: scriptedPrompts({ confirm: [true, false] }, []),
         runTests: false,
-        yes: true,
       })
       Expect(result.plan.id).toBe('our-trips')
+      Expect(result.directory).toBe(FS.resolvePath('our-trips', root))
       Expect(result.plan.entities.map(entity => entity.plural)).toEqual(['Trips'])
       Expect(stopped).toEqual(['stopped'])
-      Expect(await FS.exists(FS.resolvePath('our-trips/Trips/Trips.tao', root))).toBe(true)
+      Expect(Object.keys(lowerCreationPlan(result.plan))).toContain('Trips/Trips.tao')
       Expect(captured()).toContain('Shaping the project with Fake lane.')
       Expect(captured()).toContain('Shaped by Fake lane.')
       Expect(captured()).toContain('Trips / Trip: Title (text, title), Days (number), Booked (yes/no); 2 sample rows')
@@ -154,7 +159,7 @@ Describe('tao create command', () => {
         interactive: true,
         lanes: [fakeLane(provider)],
         output,
-        prompts: scriptedPrompts({ confirm: [false, true], text: ['my-notes'] }, asked),
+        prompts: scriptedPrompts({ confirm: [false, false], text: ['my-notes'] }, asked),
         runTests: false,
       })
       Expect(asked).toEqual([
@@ -163,9 +168,9 @@ Describe('tao create command', () => {
         `Create ${FS.displayPath(FS.resolvePath('my-notes', root))}?`,
       ])
       Expect(provider.calls).toEqual([])
-      Expect(result.created).toBe(true)
+      Expect(result.created).toBe(false)
       Expect(result.plan.id).toBe('my-notes')
-      Expect(await FS.exists(FS.resolvePath('my-notes/App.tao', root))).toBe(true)
+      Expect(result.directory).toBe(FS.resolvePath('my-notes', root))
     })
   })
 
@@ -195,8 +200,13 @@ Describe('tao create command', () => {
         output,
         runTests: false,
       }
-      const result = await runCreate('A notebook', options)
-      Expect(result.created).toBe(true)
+      // A run that cannot ask has already chosen its lane, and said so, by the time it looks at the
+      // directory. A directory already standing at the id this description derives ends the run
+      // there, so the lane decision is read without generating a project again.
+      await FS.mkdir(FS.resolvePath('a-notebook', root))
+      await Expect(runCreate('A notebook', options)).rejects.toThrow(
+        `Cannot create project 'a-notebook': ${FS.displayPath(FS.resolvePath('a-notebook', root))} already exists.`,
+      )
       Expect(provider.calls).toEqual([])
       Expect(captured()).toContain('Fake lane is available; pass --yes or --ai ollama to use it.')
 
@@ -215,13 +225,13 @@ Describe('tao create command', () => {
         ai: 'none',
         brief: { paletteFromImage: async () => palette },
         cwd: root,
-        interactive: false,
+        interactive: true,
         output,
+        prompts: scriptedPrompts({ confirm: [false] }, []),
         runTests: false,
-        yes: true,
       })
       Expect(result.plan.palette).toEqual(palette)
-      Expect(await FS.readText(FS.resolvePath('Design.tao', result.directory))).toContain('canvas #fdf6e3')
+      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvas #fdf6e3')
       Expect(captured()).toContain(`Read colors from ${FS.displayPath(image)}.`)
     })
   })
@@ -237,13 +247,13 @@ Describe('tao create command', () => {
       }
       const result = await runCreate('A notebook', {
         cwd: root,
-        interactive: false,
+        interactive: true,
         lanes: [broken],
         output,
+        prompts: scriptedPrompts({ confirm: [true, false] }, []),
         runTests: false,
-        yes: true,
       })
-      Expect(result.created).toBe(true)
+      Expect(result.plan.entities.map(entity => entity.plural)).toEqual(['Items'])
       Expect(captured()).toContain(
         'Broken lane could not be used (the helper did not compile). The plain starter is used instead.',
       )
@@ -267,8 +277,9 @@ Describe('tao create command', () => {
       Expect(provider.calls).toEqual([])
 
       let rejection: string | undefined
+      // The id prompt has done its work by the time the confirmation is asked, so this one declines.
       const prompts: CreationPrompts = {
-        confirm: async () => true,
+        confirm: async () => false,
         text: async (_message, defaultValue, validate) => {
           rejection = validate('taken')
           return defaultValue
@@ -283,7 +294,7 @@ Describe('tao create command', () => {
         runTests: false,
       })
       Expect(rejection).toContain('already exists')
-      Expect(result.created).toBe(true)
+      Expect(result.plan.id).toBe('a-notebook')
     })
   })
 
