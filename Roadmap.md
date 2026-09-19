@@ -8,6 +8,10 @@ language target and the program that reaches it — first MVP, then Revolution �
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
+The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
+agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
+judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
+
 ## Ro STACK
 
 - [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
@@ -17,6 +21,11 @@ app feature and Tao test proves each capability).
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in
     `Docs/Roadmap/Developer environment upgrades.md`.
+- [ ] Decide how parallel agents share one machine.
+  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
+    wall time and starved suites past their hang guards. What to share, what to serialize, what is
+    duplicated per worktree for no reason, and where a single orchestrator does and does not help
+    live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
 ## Documentation cleanup
 
@@ -36,6 +45,21 @@ neither blocks a tranche.
     an authoritative map of what every document is for. An audit produced concrete per-file
     dispositions, but it predates the tranche 4 documentation edits, so re-verify each finding
     against the current files before acting on it.
+
+## Subagent delegation
+
+How agents in this repository delegate, and at which model tier. The guidance, the profiles, the
+three harnesses' defaults, and the fan-out and second-opinion procedures have landed;
+`Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns what is left and the
+calibration period that ends the ask-Ro clause.
+
+- [ ] Decide whether the two fan-outs get saved `Workflow` scripts. The plan states the case against
+      shipping them unasked: one harness only, unprovable without a supervised run, and a fan-out at
+      September's scale is the machine-contention problem rather than a use of it.
+- [ ] Benchmark a few representative tasks with and without delegation, once load-aware admission
+      lands and the machine is quiet enough for the measurement to mean anything.
+- [ ] End calibration when the delegation log says the routing table is right, then delete the
+      ask-Ro clause and the three logging hooks.
 
 ## The Tao Revolution program
 
@@ -102,29 +126,28 @@ tests written in Tao, green in Current, for every construct introduced.
     ledger. `packages/studio/README.md` owns how to run, inspect, and recover Studio.
   - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
-    No native transport is implemented and a real-iPhone spike remains required. Exploration:
+    The authenticated gateway, cross-process trust/revocation, Bonjour rediscovery, QR/deep-link
+    fallback, LAN/cable selection, and device host are implemented in software. Real-device and
+    physical-cable acceptance remain required. Exploration:
     `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
   - A `./dev studio` session reloads its browser client but not its server, so a page can be rebuilt from
     sources the running server has not loaded and then call an endpoint that does not exist yet. The rebuild
     now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
     -- the preview runtime, the session, and one revision both halves agree on -- is in
     `Docs/Roadmap/Tao Studio v2/Exploration - Studio server hot reload.md`.
-- [ ] Make `just full-verify` pass its simulated-user lane
-  - The lane was unreachable until the old `_full-verify-studio` recipe was repaired, so its browser
-    assertions had never run once. Five defects behind them are fixed. The one left is that
-    `postEditorSelection` is driven from `client/StudioApp.ts` by the shell's own CodeMirror while
-    `.studio-editor` is also mounted by the Tao product host: the page holds two `.cm-editor`
-    instances and the shell's is a 0x0 orphan, so no selection identity reaches a preview and
-    editor-to-preview highlight sync is broken for real users, not only for the smoke. Closing it
-    means routing the shell's editor-driven behavior onto the Tao-rendered editor.
+- [ ] Make `just verify-full` pass its simulated-user lane
+  - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
+    transaction defects found through this journey have landed with focused coverage. That does not
+    promote the lane to final evidence: the complete simulated-user journey still needs ten
+    consecutive reliable normal-terminal runs before it rejoins `verify-full`.
   - Do not widen `previewOriginPath` to make the lane pass. The stub preview builds its identity by
     fetching `/api/protocol` and `/api/file`, which that six-endpoint allowlist deliberately keeps
     away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
     `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
     stub onto that contract instead.
-  - The lane is quarantined from the `full-verify` graph with a stated reason (its palette-to-preview
-    drop stalls before source mutation); `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
-    runs it directly while it is being repaired, and re-adding it to the graph is one catalog edit.
+  - The lane remains quarantined from the `verify-full` graph with its stated reliability reason;
+    `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it directly for
+    acceptance evidence, and re-adding it to the graph is one catalog edit after the ten-run gate.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
     `agents/skills/studio-hybrid-client/SKILL.md`.
 - [ ] Implement a drag-and-drop example app
@@ -144,13 +167,16 @@ tests written in Tao, green in Current, for every construct introduced.
     `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
 - [ ] Add the Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
-- [ ] Implement `tao ship`
-  - Decisions settled 2026-09-02; slice 1 is ready for an implementation prompt. `tao ship` bumps
-    the project version, builds locally through Xcode from a derived Expo host, uploads with the
-    App Store Connect API key, and submits to App Store review; `--beta` sends the build to
-    TestFlight with named recipients; the accepted identifiers live in `.tao-project/lock.jsonc`.
-    Slice 2 adds `--update` for compiled-bundle updates and chooses its update server. Plan and
-    research: `Docs/Roadmap/Tao ship/`.
+- [x] Implement `tao ship`
+  - The command is a filesystem-only transaction: it may inspect Git for exact provenance but never
+    stages, commits, tags, or pushes. It updates source-owned version metadata and the `ship` concern
+    in the project's single `.tao-project/lock.jsonc` atomically, preserving the caller's index and
+    refs. Local Xcode/App Store Connect and TestFlight (`--beta`) flows are implemented, as are
+    compatible Expo-protocol updates and rollback over Tao's update service. Compatibility combines
+    native runtime identity with canonical semantic schema identity and is checked against every
+    supported binary. Unknown export-compliance status is omitted rather than asserted exempt.
+    External App Store/TestFlight success, installed-binary OTA, signed/notarized Studio, and real
+    device acceptance remain separately unverified. Plan and research: `Docs/Roadmap/Tao ship/`.
 - [ ] Build the Tao Studio companion app
   - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
     with Tao Studio, and for pre-release testing and feedback by members a developer invites to
@@ -244,9 +270,9 @@ Product and codebase backlog, unordered.
     below was judged worth doing but not worth widening that plan's diff:
     - **No disabled state on the entry file in Studio's file tree.** The old `protectedPath` option
       went with the legacy DOM tree, where it only ever disabled buttons in a section that was never
-      displayed. The rule itself is enforced server-side and predates all of this —
-      `StudioProjectSession.ts:602` and `:625` reject renaming or deleting the active app entry file
-      on the only path a client can reach. What is missing is the affordance: the tree offers the
+      displayed. The rule itself is enforced server-side by the entry-file guards in
+      `packages/studio/studio-src/session/StudioFileOperations.ts`, which reject renaming or deleting
+      the active app entry file on the only path a client can reach. What is missing is the affordance: the tree offers the
       action and the server refuses it, instead of not offering it.
     - **Roughly two dozen raw `Error`s handed to a promise rejection.** `repo-lint` now ratchets them
       through `CONVENTION_RULES.rejectedRawError` per file rather than per count, so a new rejection inside an
@@ -337,8 +363,8 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Authority.md` — authority exploration with open dialogue: lowering the decided access/publish/secrets model into the provider's own rule language, remote authorization semantics for `through` grants, the remote-refusal contract, redaction, and the two-account proof app over InstantDB.
 - `Docs/Roadmap/Deterministic simulation.md` — deterministic whole-app simulation exploration: the determinism boundary, the scripted-world harness over the Studio cell pipeline, schema-derived property testing, journal-based replay and time-travel, and design rules across cells.
 - `Docs/Roadmap/Device capabilities.md` — device-capabilities exploration for the RN/Expo bridge item: the config-through-one-engine recommendation, permission case sets, outcome delivery into `when do`, scripted capability drivers, and the proving sequence.
-- `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
-- `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
+- `Docs/Roadmap/Tao ship.md` — the historical ship exploration plus its reconciled landed contract: filesystem-only local builds, App Store/TestFlight lifecycle, compatible OTA, variants, and the still-open hosted-runtime and commercial questions.
+- `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the implementation record for `tao ship [path] --app <App>`, local Xcode/App Store/TestFlight operation, resumable lifecycle, and compatible OTA; its EAS and Android material is retained only as dated research.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
 - `Docs/Roadmap/Freehand UI sketching/` — FS-D1–FS-D20 design record, reconciled product stories and
   hand-authored wireframes, requirement prompt, and ordered implementation plan for Studio-owned
@@ -358,8 +384,11 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
 - `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
   dependency-aware, duration-informed scheduler for every test and verification lane, the live dashboard
-  for humans on `check`/`verify`/`full-verify`, the file-backed quiet output contract for agents, and
-  `full-verify`'s Studio lanes parallelized on per-worker resources.
+  for humans on `check`/`verify`/`verify-full`, the file-backed quiet output contract for agents, and
+  `verify-full`'s Studio lanes parallelized on per-worker resources.
 - `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
 - `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
+- `Docs/Roadmap/September squash-merge remediation.md` — the September squash-merge audit's 183
+  tracked findings (implemented) and the follow-up branch's open items, including a second,
+  independent findings list that is cross-checked but not yet triaged.
 - `Docs/Roadmap/Archive/` — frozen records of completed work.

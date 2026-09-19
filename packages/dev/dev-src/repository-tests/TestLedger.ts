@@ -37,6 +37,8 @@ export type RecordTestRunOptions = {
   /** True only for a complete, unfiltered, non-interrupted `just test` invocation. */
   fullRun: boolean
   observations: readonly TestObservation[]
+  /** Synthetic files whose observations cover only part of their durable inventory. */
+  partialFiles?: readonly string[]
   repositoryRoot?: string
   startedAt: number
 }
@@ -54,12 +56,52 @@ export type RetrySelection = {
 }
 
 export type Flake = {
+  /** Failures at the end of the window with nothing but failures after them. */
+  consecutiveFailures: number
   file: string
+  /** The file identity every counted reversal was observed at; the latest event's. */
+  fileIdentity: string
   id: string
   name: string
+  /** How many events of this test the window held, so thin evidence is visible as thin. */
+  observed: number
   reversals: number
   suite: string
 }
+
+/** ToleratedFlake is a flake the thresholds below say may stop failing a lane, and why. */
+export type ToleratedFlake = Flake & {
+  /** One line naming what demoted this test, for the run summary that must say so out loud. */
+  evidence: string
+}
+
+/**
+ * How much evidence it takes before a test's failure stops failing a lane, and what takes it back.
+ *
+ * The window is the last `FLAKE_WINDOW_EVENTS` recorded outcomes of that test, which is also what
+ * history compaction retains per test: the window is exactly the evidence that survives, rather
+ * than a second number that can disagree with it.
+ *
+ * Two reversals, not one. One reversal is `passed` then `failed` — which is precisely what a real
+ * regression looks like before anyone fixes it, and tolerating it would hide the regression this
+ * whole mechanism exists not to hide. Two reversals means the test has gone pass → fail → pass (or
+ * fail → pass → fail) with no change to its own file: it has already contradicted itself, which is
+ * what non-determinism is and what a broken test never does.
+ *
+ * Tolerance is then withdrawn as soon as the test stops flipping and starts simply failing.
+ * `FLAKE_MAX_CONSECUTIVE_FAILURES` trailing failures in the window plus the failure being judged
+ * now is three consecutive failures, and no flake history however long survives that.
+ *
+ * Every count is at one file identity, and it is the current one. The window is first cut back to
+ * the trailing events that share the latest `fileIdentity`, and `tolerated` additionally requires
+ * that identity to be what the file hashes to now — so editing a flaky test drops its reputation
+ * with it, and the next run judges the new file on its own outcomes. Counting reversals across the
+ * whole window and only comparing adjacent pairs is not the same thing: reversals earned before an
+ * edit would then be reported beside the edited file's identity, and a test that now fails every
+ * time would keep the tolerance the old bytes earned.
+ *
+ * The three numbers live with the other durable-state constants below.
+ */
 
 const LEDGER_PATH = '.artifacts/testing/ledger.json'
 const HISTORY_PATH = '.artifacts/testing/history.jsonl'
@@ -67,6 +109,10 @@ const HISTORY_MAX_BYTES = 4_000_000
 const HISTORY_TARGET_BYTES = 3_000_000
 const HISTORY_EVENTS_PER_TEST = 20
 const HISTORY_MIN_EVENTS_PER_TEST = 2
+/** The three flake-tolerance thresholds; `ToleratedFlake` above says why each is what it is. */
+const FLAKE_WINDOW_EVENTS = HISTORY_EVENTS_PER_TEST
+const FLAKE_MIN_REVERSALS = 2
+const FLAKE_MAX_CONSECUTIVE_FAILURES = 2
 const LEDGER_LOCK_TIMEOUT_MS = 30_000
 const VERSION = 1 as const
 
@@ -116,7 +162,12 @@ async function recordRunUnlocked(
   // A native report is the complete current inventory for every file it names. Remove records for
   // tests deleted or renamed in that file before adding its current observations; otherwise one
   // deleted failure would make `test-retry` select the file forever.
-  const observedFiles = new Set(options.observations.map(observation => `${observation.suite}\0${observation.file}`))
+  const partialFiles = new Set(options.partialFiles ?? [])
+  const observedFiles = new Set(
+    options.observations
+      .filter(observation => !partialFiles.has(observation.file))
+      .map(observation => `${observation.suite}\0${observation.file}`),
+  )
   for (const [id, record] of Object.entries(store.tests)) {
     if (observedFiles.has(`${record.suite}\0${record.file}`)) {
       delete store.tests[id]
@@ -199,26 +250,91 @@ async function flakes(repositoryRoot = Repo.getRoot(), limit = 20): Promise<Flak
     byTest.set(event.id, entries)
   }
   return [...byTest.entries()]
-    .map(([id, entries]) => {
-      let reversals = 0
-      for (let index = 1; index < entries.length; index += 1) {
-        const previous = entries[index - 1]!
-        const current = entries[index]!
-        if (
-          previous.fileIdentity === current.fileIdentity
-          && previous.outcome !== 'skipped'
-          && current.outcome !== 'skipped'
-          && previous.outcome !== current.outcome
-        ) {
-          reversals += 1
-        }
-      }
-      const latest = entries.at(-1)!
-      return { file: latest.file, id, name: latest.name, reversals, suite: latest.suite }
-    })
+    .map(([id, entries]) => flakeOf(id, entries.slice(-FLAKE_WINDOW_EVENTS)))
     .filter(flake => flake.reversals > 0)
     .sort((left, right) => right.reversals - left.reversals || left.id.localeCompare(right.id))
     .slice(0, positiveLimit(limit))
+}
+
+/** flakeOf measures one test's window: how often it contradicted itself, and how it ends. */
+function flakeOf(id: string, recorded: readonly TestHistoryEvent[]): Flake {
+  const window = atLatestIdentity(recorded)
+  let reversals = 0
+  for (let index = 1; index < window.length; index += 1) {
+    const previous = window[index - 1]!
+    const current = window[index]!
+    if (
+      previous.outcome !== 'skipped'
+      && current.outcome !== 'skipped'
+      && previous.outcome !== current.outcome
+    ) {
+      reversals += 1
+    }
+  }
+  let consecutiveFailures = 0
+  for (let index = window.length - 1; index >= 0 && window[index]!.outcome === 'failed'; index -= 1) {
+    consecutiveFailures += 1
+  }
+  const latest = window.at(-1)!
+  return {
+    consecutiveFailures,
+    file: latest.file,
+    fileIdentity: latest.fileIdentity,
+    id,
+    name: latest.name,
+    observed: window.length,
+    reversals,
+    suite: latest.suite,
+  }
+}
+
+/**
+ * atLatestIdentity cuts the window back to the events recorded against the bytes the file holds
+ * now, which is the only stretch of history that says anything about the test as it is written
+ * today. Comparing each adjacent pair's identity is not enough on its own: a window that flipped
+ * twice at the old bytes and then failed once at the new ones still counts two reversals, while
+ * `latest` reports the new identity — so `tolerated`, which checks that identity against the file,
+ * hands a test that now fails every time the tolerance it earned before it was edited. Everything
+ * downstream — the reversal count, the trailing failures, and `observed` — is measured on the cut
+ * window, so all three describe the same bytes.
+ */
+function atLatestIdentity(window: readonly TestHistoryEvent[]): readonly TestHistoryEvent[] {
+  const latest = window.at(-1)
+  if (latest === undefined) {
+    return window
+  }
+  let start = window.length - 1
+  while (start > 0 && window[start - 1]!.fileIdentity === latest.fileIdentity) {
+    start -= 1
+  }
+  return window.slice(start)
+}
+
+/**
+ * tolerated names the tests the recorded history says are non-deterministic rather than broken, so
+ * a lane may decline to fail on them. It is deliberately a ledger question and not a runner one:
+ * the only thing that earns tolerance is what this checkout has actually observed.
+ */
+async function tolerated(repositoryRoot = Repo.getRoot()): Promise<ToleratedFlake[]> {
+  const candidates = (await flakes(repositoryRoot, Number.MAX_SAFE_INTEGER))
+    .filter(flake =>
+      flake.reversals >= FLAKE_MIN_REVERSALS && flake.consecutiveFailures < FLAKE_MAX_CONSECUTIVE_FAILURES
+    )
+  if (candidates.length === 0) {
+    return []
+  }
+  // The evidence is about a file's bytes. If the file has changed since, the new file has no
+  // reputation and its failures are judged on their own.
+  const identities = await identitiesFor(candidates.map(candidate => candidate.file), repositoryRoot)
+  return candidates
+    .filter(candidate => identities.get(candidate.file) === candidate.fileIdentity)
+    .map(candidate => ({ ...candidate, evidence: describeFlake(candidate) }))
+}
+
+/** describeFlake is the one line a run summary prints beside a test it declined to fail on. */
+function describeFlake(flake: Flake): string {
+  return `${flake.reversals} outcome reversal${flake.reversals === 1 ? '' : 's'} in the last `
+    + `${flake.observed} recorded run${flake.observed === 1 ? '' : 's'} with no change to ${flake.file}`
 }
 
 /** slowest reports the current rolling duration rather than one potentially noisy sample. */
@@ -436,6 +552,9 @@ function isTimestamp(value: unknown): value is string {
 
 /** TestLedger owns durable per-test state, retry selection, and history-backed reports. */
 export const TestLedger = {
+  FLAKE_MAX_CONSECUTIVE_FAILURES,
+  FLAKE_MIN_REVERSALS,
+  FLAKE_WINDOW_EVENTS,
   HISTORY_PATH,
   LEDGER_PATH,
   VERSION,
@@ -446,4 +565,5 @@ export const TestLedger = {
   selectRetryFiles,
   slowest,
   testId,
+  tolerated,
 } as const

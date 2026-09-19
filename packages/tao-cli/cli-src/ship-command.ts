@@ -1,4 +1,4 @@
-import { Errors, HCI } from '@shared'
+import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { planShipActions } from './ship-actions'
 import { inspectShipGit, type ShipGitState, shipSourceMatchesBuild } from './ship-git'
@@ -14,6 +14,7 @@ import {
 import {
   decideShipVersion,
   deriveShipIdentity,
+  nextBuildNumber,
   type ShipBump,
   shipInputHash,
   type ShipVersion,
@@ -26,6 +27,7 @@ import {
   type ShipPreflightIssue,
 } from './ship-preflight'
 import { discoverShipProject, selectShipApp, type ShipProject, type ShipProjectApp } from './ship-project'
+import { withShipTransaction } from './ship-transaction'
 
 export type ShipCommandOptions = {
   appName?: string
@@ -75,38 +77,40 @@ export async function runShipCommand(
   dependencies: ShipCommandDependencies = {},
 ): Promise<'cancelled' | 'dry-run' | 'shipped'> {
   validateOptions(options)
-  const prepared = await prepareShip(targetPath, options, dependencies)
-  writePlan(prepared, options)
-  if (options.dryRun) {
-    return 'dry-run'
-  }
-  requirePassingPreflight(prepared.issues)
-  if (!options.yes) {
-    const proceed = await HCI.askConfirm({
-      defaultValue: true,
-      input: options.input,
-      interactive: options.interactive,
-      message: 'Proceed with these actions?',
-      output: options.output,
-    })
-    if (!proceed) {
-      return 'cancelled'
+  const project = await discoverShipProject(targetPath)
+  return await withShipTransaction(project.root, async () => {
+    const prepared = await prepareShip(project, options, dependencies)
+    writePlan(prepared, options)
+    if (options.dryRun) {
+      return 'dry-run'
     }
-  }
-  const execute = dependencies.execute ?? (async (value: PreparedShip, commandOptions: ShipCommandOptions) => {
-    const { executePreparedShip } = await import('./ship-executor')
-    await executePreparedShip(value, commandOptions)
+    requirePassingPreflight(prepared.issues)
+    if (!options.yes) {
+      const proceed = await HCI.askConfirm({
+        defaultValue: true,
+        input: options.input,
+        interactive: options.interactive,
+        message: 'Proceed with these actions?',
+        output: options.output,
+      })
+      if (!proceed) {
+        return 'cancelled'
+      }
+    }
+    const execute = dependencies.execute ?? (async (value: PreparedShip, commandOptions: ShipCommandOptions) => {
+      const { executePreparedShip } = await import('./ship-executor')
+      await executePreparedShip(value, commandOptions)
+    })
+    await execute(prepared, options)
+    return 'shipped'
   })
-  await execute(prepared, options)
-  return 'shipped'
 }
 
 async function prepareShip(
-  targetPath: string,
+  project: ShipProject,
   options: ShipCommandOptions,
   dependencies: ShipCommandDependencies = {},
 ): Promise<PreparedShip> {
-  const project = await discoverShipProject(targetPath)
   const app = await resolveApp(project, options)
   const primaryAppName = project.primaryAppName
   const hashInput = {
@@ -125,24 +129,37 @@ async function prepareShip(
     primaryAppName,
     projectId: project.id,
   })
-  const git = await inspectShipGit(project.root)
+  const lockPath = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, project.root)
+  const git = await inspectShipGit(project.root, { excludePaths: [lockPath] })
   const consumed = entry.lastBuild?.version === project.version && entry.lastBuild.submittedForReview === true
   const versionDecision = decideShipVersion(project.version, { consumed, forcedBump: options.bump })
   const buildSourceMatches = entry.lastBuild === undefined
     ? false
-    : await shipSourceMatchesBuild(
-      git,
-      entry.lastBuild.commit,
-      `${project.root}/${SHIP_LOCK_RELATIVE_PATH}`,
-    )
-  const incompleteUpload = entry.lastBuild?.processed === false
+    : shipSourceMatchesBuild(git, {
+      commit: entry.lastBuild.commit,
+      dirty: entry.lastBuild.dirty ?? false,
+      dirtyFingerprint: entry.lastBuild.dirtyFingerprint,
+    })
+  const terminalBuild = entry.lastBuild?.processingState === 'FAILED'
+    || entry.lastBuild?.processingState === 'INVALID'
+  const incompleteUpload = entry.lastBuild?.processed === false && !terminalBuild
+  const dirtyTestFlightPromotion = options.betaRecipients === undefined
+    && entry.lastBuild?.distribution === 'testflight'
+    && entry.lastBuild.dirty === true
   const reuseBuild = !options.update
+    && git.root !== undefined
     && !versionDecision.bumped
+    && !dirtyTestFlightPromotion
     && entry.lastBuild?.version === versionDecision.version
     && (incompleteUpload || (options.betaRecipients === undefined
       && entry.lastBuild.processed === true
       && buildSourceMatches))
-  const buildNumber = reuseBuild ? entry.lastBuild!.number : timestampBuildNumber(dependencies.now?.() ?? new Date())
+  const buildNumber = reuseBuild
+    ? entry.lastBuild!.number
+    : nextBuildNumber(
+      timestampBuildNumber(dependencies.now?.() ?? new Date()),
+      entry.lastBuild === undefined ? [] : [entry.lastBuild.number],
+    )
   const actions = planShipActions({
     appName: app.name,
     betaRecipients: options.betaRecipients,
@@ -302,9 +319,12 @@ function validateOptions(options: ShipCommandOptions): void {
   }
 }
 
-/** acceptedEntryWithRunState returns the lock update the executor persists at its checkpoints. */
+/** acceptedEntryWithRunState returns the ship-only lock update the executor persists at its checkpoints. */
 export function acceptedEntryWithRunState(prepared: PreparedShip, entry: ShipLockEntry): TaoProjectLock {
-  return putShipLockEntry(prepared.lock, { ...entry, inputHash: prepared.inputHash, status: 'accepted' })
+  return putShipLockEntry(
+    { schemaVersion: 1 },
+    { ...entry, inputHash: prepared.inputHash, status: 'accepted' },
+  )
 }
 
 export function preparedKeyPath(prepared: PreparedShip): string {

@@ -21,7 +21,7 @@ export const ProjectFormatter = {
   },
 
   ProjectDefaultApp(f) {
-    f.oneSpaceAfter('DefaultApp')
+    f.oneSpaceBetweenProperties('word', 'app')
   },
 
   ProjectRemote(f) {

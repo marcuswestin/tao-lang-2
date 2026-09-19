@@ -69,4 +69,17 @@ Describe('Tao formatter fixtures and scenarios', () => {
       `,
     ),
   )
+
+  Test(
+    'inserts the required space between focus and its tag',
+    formats(
+      `test "focus spacing"{test "focuses"{focus#target}}`,
+      `
+        test "focus spacing" {
+           test "focuses" {
+              focus #target
+        }  }
+      `,
+    ),
+  )
 })

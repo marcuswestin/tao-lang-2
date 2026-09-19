@@ -8,13 +8,8 @@
       // The repository's own workflow surface. Agents run these without asking.
       "./agent *": "allow",
       "./dev *": "allow",
-      // Browser smoke is a deliberate host escape: StudioCdp forces headless mode, a fresh
-      // tao-studio-chrome-* temporary profile, and an ephemeral DevTools port.
-      "./dev studio-smoke *": "allow",
       "./tao *": "allow",
       "just *": "allow",
-      "just studio-smoke *": "allow",
-      "just studio-proof-real-app *": "allow",
       "just native-module-check": "allow",
       "bun install *": "allow",
       "bun run *": "allow",
@@ -54,32 +49,42 @@
       "git ls-files *": "allow",
       "git remote -v": "allow",
       "git tag --list *": "allow",
-      // The macOS sandbox denies process-table access. Keep the permitted ps output shapes fixed,
-      // while allowing agents to terminate a PID now that Ro has explicitly authorized it.
-      "ps -o comm=,lstart= -p *": "allow",
-      "ps -o pid=,ppid=,lstart=,command= -p *": "allow",
+      // The macOS sandbox denies process-table access outright, so every `ps` shape an agent may
+      // run has to be named here and excluded from the sandbox below; anything unlisted fails with
+      // "operation not permitted" rather than with a permission prompt.
+      //
+      // Prefer `ProcessTree` over any of these. On macOS it reads the same facts through libproc
+      // with no subprocess at all, which is why a `ps` denial cannot break it — and why a liveness
+      // check built on `ps` silently lost its start-time comparison in every sandboxed run.
+      //
+      // The whole-table read and the per-PID start time are both read-only. The residual hazard is
+      // the trailing wildcard: `ps -E` prints another same-user process's environment, which can
+      // hold tokens the `read` denies below exist to keep out. Nothing in this repository runs it,
+      // and there is no bash deny rule to forbid it, so it is recorded here as the boundary rather
+      // than hidden. Termination prefixes stay absent entirely.
       "ps -axo pid=,ppid=,lstart=,command=": "allow",
+      "ps -o lstart= -p *": "allow",
       "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
-      "kill -0 *": "allow",
-      "/bin/kill -0 *": "allow",
-      "kill -TERM *": "allow",
-      "/bin/kill -TERM *": "allow",
-      "kill -KILL *": "allow",
-      "/bin/kill -KILL *": "allow",
       // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
       // remain approval boundaries and belong to an explicitly selected native workflow.
       "adb devices *": "allow",
       "adb get-state *": "allow",
       "emulator -list-avds": "allow",
       "xcrun simctl list *": "allow",
-      // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
-      // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
-      // outward-facing step and is deliberately absent from this list.
+      // Merging runs without a prompt. An agent decides which branch lands on main, and when, on
+      // its own judgment; `verification-lanes` owns where that judgment stops and hands the
+      // landing to Ro. A bare `git push` is the outward-facing step and is deliberately absent
+      // from this list — the landing command does its own pushing, under that same judgment.
       "git merge *": "allow",
       // Read-only remote queries, so agents can inspect origin. Pushing stays absent
       // above by design; the sandbox exclusion below is what lets its prompt succeed.
       "git fetch origin *": "allow",
+      // Both orders, because git accepts the flag on either side of the remote and a pattern that
+      // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
+      // preflight runs `git ls-remote --heads origin refs/heads/...`, which `git ls-remote origin *`
+      // cannot match, so the landing command failed inside the sandbox on its own remote query.
       "git ls-remote origin *": "allow",
+      "git ls-remote --heads origin *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
@@ -114,28 +119,12 @@
         // These commands need host process or native-service access the sandbox cannot express.
         // Every entry also has a matching allow rule above; the Codex generator derives the
         // project-local outside-sandbox rules from that intersection.
-        "ps -o comm=,lstart= -p *",
-        "ps -o pid=,ppid=,lstart=,command= -p *",
         "ps -axo pid=,ppid=,lstart=,command=",
-        "kill -0 *",
-        "/bin/kill -0 *",
-        "kill -TERM *",
-        "/bin/kill -TERM *",
-        "kill -KILL *",
-        "/bin/kill -KILL *",
+        "ps -o lstart= -p *",
         "adb devices *",
         "adb get-state *",
         "emulator -list-avds",
         "xcrun simctl list *",
-        // macOS may abort Chrome before DevTools starts when its process is launched inside the
-        // shell sandbox. Only the repository browser-smoke entrypoints escape; arbitrary Chrome
-        // launches and native Studio remain sandboxed or reviewed.
-        "./dev studio-smoke *",
-        "just studio-smoke *",
-        "just studio-proof-real-app *",
-        // CocoaPods and Xcode build services need host capabilities outside the shell sandbox.
-        // Keep this exact standalone check outside routine verification and broader native commands.
-        "just native-module-check",
         "gh *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
@@ -144,6 +133,7 @@
         // push, and ls-remote while the credential deny still binds every other command.
         "git fetch origin *",
         "git ls-remote origin *",
+        "git ls-remote --heads origin *",
         "git push *",
         // Removing a worktree writes outside this checkout. It still prompts, which is
         // correct for a command that deletes directories.
@@ -154,11 +144,14 @@
         // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
         // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
         // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
-        // main, and when, is still Ro's decision: an agent merges because Ro asked, not on its own
-        // initiative.
+        // main, and when, is the agent's own judgment; `verification-lanes` owns where that
+        // judgment stops.
         "git merge *",
-        "git reset --merge*",
+        "git reset --merge",
         "git reset --hard HEAD",
+        // Expo prebuild, CocoaPods, and xcodebuild need native host services and writable caches.
+        // The exact recipe stays standalone and never joins ordinary verification.
+        "just native-module-check",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
@@ -206,6 +199,9 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
+          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
+          // during the sanctioned native-module compiler proof.
+          "repo1.maven.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

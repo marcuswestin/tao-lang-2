@@ -2,6 +2,7 @@ import { EditorState, RangeSet } from '@codemirror/state'
 import { type Decoration, EditorView } from '@codemirror/view'
 import { Assert } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
+import { codeEditorExternalSelection, codeEditorExternalUpdate } from '../code-editor-src/CodeEditor'
 import { CodeEditorLens, type CodeEditorLensNode } from '../code-editor-src/CodeEditorLens'
 
 const doc = [
@@ -207,6 +208,39 @@ Describe('code editor syntax lens', () => {
     Expect(hiddenTexts(moved)).toEqual(['state Open = true', 'gap', 'title', '// note', 'hero'])
   })
 
+  Test('a navigation landing on the exact start of hidden text peeks that region open', () => {
+    const composing = lensState(['structure'])
+    const moved = composing.update({ selection: { anchor: handler.body!.from } }).state
+
+    Expect(CodeEditorLens.peeks(moved)).toEqual([handler.from])
+    Expect(hiddenTexts(moved)).not.toContain('-> { set Open = false }')
+  })
+
+  Test('re-fold and lens changes keep the caret region folded until a new navigation', () => {
+    const outline = lensState([])
+    const peeked = outline.update({ selection: { anchor: at('set Open = false') } }).state
+    Expect(CodeEditorLens.peeks(peeked)).toEqual([view.from])
+
+    const refolded = peeked.update({ effects: CodeEditorLens.effects.refold.of(null) }).state
+    Expect(CodeEditorLens.peeks(refolded)).toEqual([])
+    Expect(hiddenTexts(refolded)).toHaveLength(1)
+
+    const changed = peeked.update({
+      effects: CodeEditorLens.effects.setConfig.of({ active: ['structure'], facets }),
+    }).state
+    Expect(CodeEditorLens.peeks(changed)).toEqual([])
+    Expect(hiddenTexts(changed)).toContain('-> { set Open = false }')
+  })
+
+  Test('deleting an atomic hidden region reveals it without deleting source', () => {
+    const outline = lensState([])
+    const deletion = outline.update({ changes: { from: view.body!.from, to: view.body!.to } }).state
+
+    Expect(deletion.doc.toString()).toBe(doc)
+    Expect(CodeEditorLens.peeks(deletion)).toEqual([view.from])
+    Expect(hiddenTexts(deletion)).toEqual([])
+  })
+
   Test('maps its nodes through edits until the next classification arrives', () => {
     const composing = lensState(['structure'])
     const edited = composing.update({ changes: { from: 0, insert: '// top\n' } }).state
@@ -220,6 +254,46 @@ Describe('code editor syntax lens', () => {
       'hero',
     ])
     Expect(CodeEditorLens.spans(edited)[1]?.from).toBe(layoutGap.body!.from + 7)
+  })
+
+  Test('preserves the fold projection and peeks across a host content update', () => {
+    const composing = lensState(['structure'])
+      .update({ effects: CodeEditorLens.effects.peek.of([handler.from]) }).state
+    const next = doc.replace('state Open = true', 'state Open = false')
+    const updated = composing.update({
+      ...codeEditorExternalUpdate(
+        doc,
+        next,
+        { anchor: at('set Open = false'), head: at('set Open = false') },
+      ),
+      effects: CodeEditorLens.effects.externalEdit.of(null),
+    }).state
+
+    Expect(updated.doc.toString()).toBe(next)
+    Expect(CodeEditorLens.peeks(updated)).toEqual([handler.from + 1])
+    Expect(hiddenTexts(updated)).not.toContain('-> { set Open = false }')
+    Expect(hiddenTexts(updated)).toContain('state Open = false')
+  })
+
+  Test('keeps a deliberately refolded caret hidden across an external content update', () => {
+    const selected = lensState(['structure']).update({
+      selection: { anchor: handler.from, head: handler.from },
+    }).state
+    const refolded = selected.update({ effects: CodeEditorLens.effects.refold.of(null) }).state
+    Expect(hiddenTexts(refolded)).toContain('-> { set Open = false }')
+
+    const next = doc.replace('state Open = true', 'state Open = false')
+    const selection = codeEditorExternalSelection(refolded.selection.main, {
+      anchor: refolded.selection.main.anchor,
+      head: refolded.selection.main.head,
+    })
+    const updated = refolded.update({
+      ...codeEditorExternalUpdate(doc, next, selection),
+      effects: CodeEditorLens.effects.externalEdit.of(null),
+    }).state
+
+    Expect(updated.selection.main.anchor).toBe(handler.from + 1)
+    Expect(hiddenTexts(updated)).toContain('-> { set Open = false }')
   })
 
   Test('drops its projection when the whole document is replaced and ignores an incomplete map', () => {

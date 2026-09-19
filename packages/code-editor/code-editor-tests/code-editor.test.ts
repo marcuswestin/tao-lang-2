@@ -3,6 +3,7 @@ import { Expect, Test } from '@shared/test'
 import TR from 'tao-runtime/TR'
 import {
   codeEditorBaseExtensions,
+  codeEditorExternalUpdate,
   CodeEditorHighlighting,
   invokeEditorChange,
   webSocketTransport,
@@ -31,6 +32,17 @@ Test('@tao/code-editor builds bounded syntax decorations from host tokens', () =
   ], 13)
 
   Expect(decorations.size).toBe(2)
+})
+
+Test('@tao/code-editor maps external edits through the smallest changed range', () => {
+  Expect(codeEditorExternalUpdate(
+    'view Main() {\n   Text("old")\n}',
+    'view Main() {\n   Text("new")\n}',
+    { anchor: 27, head: 27 },
+  )).toEqual({
+    changes: { from: 23, insert: 'new', to: 26 },
+    selection: { anchor: 27, head: 27 },
+  })
 })
 
 Test('@tao/code-editor closes a failed startup socket before falling back', async () => {

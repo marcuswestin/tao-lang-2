@@ -68,7 +68,7 @@
           "target": {
             "elementName": "Text",
             "path": "@/studio/View2.tao",
-            "renderId": "/Users/ro/.codex/worktrees/f274/tao-lang-2/Apps/HNReader/@/studio/View2.tao:367:381",
+            "renderId": "@/studio/View2.tao:367:381",
             "sourceVersion": "text-v1:474:0bq3xmn186pher",
             "studioRectId": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
             "view": "View2"

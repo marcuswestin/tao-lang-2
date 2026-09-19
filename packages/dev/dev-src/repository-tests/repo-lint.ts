@@ -1,4 +1,5 @@
-import { FS, HCI, Platform, Repo } from '@shared'
+import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { readDelegationIssues } from '../delegation/DelegationProfiles'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -83,6 +84,57 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/**
+ * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
+ * branches adding an entry each add a file and one line rather than colliding over a shared block.
+ * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
+ * a line can point at a file nobody wrote, and — because two new files merge silently where two new
+ * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
+ * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ */
+export function developerEnvironmentLedgerIssues(entryFileNames: readonly string[], index: string): string[] {
+  // Counted rather than collected: a merge that keeps both sides of a conflicting index edit leaves
+  // one file linked twice, which reads as correct from either direction — the file exists and it is
+  // listed — and is the one way this layout can still drift without either check below noticing.
+  const linked = new Map<string, number>()
+  for (const match of index.matchAll(/^- \[DEVENV-\d+ — [^\]]+\]\(<Developer environment upgrades\/([^>]+)>\)/gm)) {
+    const name = match[1]!
+    linked.set(name, (linked.get(name) ?? 0) + 1)
+  }
+  const entries = [...entryFileNames].filter(name => name.endsWith('.md')).sort()
+  const issues: string[] = []
+  const byId = new Map<string, string[]>()
+  for (const name of entries) {
+    const id = name.match(/^(DEVENV-\d+)-/)?.[1]
+    if (id === undefined) {
+      issues.push(`Developer environment upgrades/${name} must be named DEVENV-NNN-<slug>.md.`)
+      continue
+    }
+    byId.set(id, [...byId.get(id) ?? [], name])
+    if (!linked.has(name)) {
+      issues.push(`Developer environment upgrades.md needs an index line linking \`${name}\`.`)
+    }
+  }
+  const present = new Set(entries)
+  for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
+    if (!present.has(name)) {
+      issues.push(`Developer environment upgrades.md links \`${name}\`, which does not exist.`)
+    }
+    if (count > 1) {
+      issues.push(`Developer environment upgrades.md links \`${name}\` ${count} times; keep one index line.`)
+    }
+  }
+  for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
+    if (names.length > 1) {
+      issues.push(
+        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')};`
+          + ' rename the later-merged file and its index line.',
+      )
+    }
+  }
+  return issues
+}
+
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
 export function justRecipeIssues(source: string): string[] {
   const recipes = justRecipeDefinitions(source)
@@ -92,7 +144,7 @@ export function justRecipeIssues(source: string): string[] {
   if (benchmark === undefined || !benchmark.includes('language-performance.ts')) {
     issues.push("Justfile recipe 'bench' must run the language performance benchmark.")
   }
-  for (const lane of ['check', 'verify', 'full-verify']) {
+  for (const lane of ['check', 'verify', 'verify-full']) {
     if (!recipes.has(lane)) {
       issues.push(`Justfile must declare recipe '${lane}'.`)
       continue
@@ -250,30 +302,85 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
   + ' for host and environment failures.'
 
 /**
- * A raw `Error` handed to a promise rejection reaches a reader exactly as a thrown one does, but the
- * throw rule cannot see it. This is its own ratchet so the two lists stay legible: the entries here
- * are the sites that predate the taxonomy, not an exemption for new ones.
+ * A raw `Error` handed to a promise rejection reaches a reader exactly as a thrown one does. Each
+ * exemption names one exact `path:line`, so an emitted script or a test probe cannot grant the rest
+ * of its file permission to add more unclassified errors.
  */
 const RAW_ERROR_ALLOWLIST = [
-  // Emitted text: browser-evaluated bodies, the Electrobun main, an inline page script, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
-  'packages/dev/studio-smoke/studio-real-app.test.ts',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts',
-  'packages/studio/studio-src/StudioWelcome.ts',
-  // The leaf that builds the taxonomy's own cancellation error.
-  'packages/shared/shared-src/core/Errors.ts',
-  // Tests that hand an unknown raw error to the code under test to prove it is classified.
-  'packages/dev/dev-tests/agent-config-generation.test.ts',
-  'packages/dev/dev-tests/claude-profiles-generation.test.ts',
-  'packages/dev/dev-tests/codex-config-generation.test.ts',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts',
-  'packages/dev/dev-tests/studio-companion-device.test.ts',
-  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
-  'packages/shared/shared-tests/test-helpers.test.ts',
-  'packages/stdlib/stdlib-tests/data-providers.test.ts',
-  'packages/studio/studio-tests/studio-client.test.ts',
-  'packages/studio/studio-tests/studio-server-datasource.test.ts',
+  // Emitted browser and Electrobun bodies, where no Tao module loads.
+  'packages/dev/dev-src/studio/StudioCdp.ts:232',
+  'packages/dev/dev-src/studio/StudioCdp.ts:283',
+  'packages/dev/dev-src/studio/StudioCdp.ts:293',
+  'packages/dev/dev-src/studio/StudioCdp.ts:330',
+  'packages/dev/dev-src/studio/StudioCdp.ts:341',
+  'packages/dev/dev-src/studio/StudioCdp.ts:373',
+  'packages/dev/dev-src/studio/StudioCdp.ts:533',
+  'packages/dev/dev-src/studio/StudioCdp.ts:561',
+  'packages/dev/dev-src/studio/StudioCdp.ts:730',
+  'packages/dev/dev-src/studio/StudioCdp.ts:880',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:542',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:582',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:729',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:736',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:742',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:763',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:766',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:128',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:264',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:292',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:299',
+  'packages/dev/studio-smoke/studio-real-app.test.ts:367',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:205',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:653',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:655',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:921',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:926',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:931',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:956',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1195',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1216',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1389',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1431',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1457',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
+  'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
+  'packages/studio/studio-src/StudioWelcome.ts:83',
+  'packages/studio/studio-tests/studio-client.test.ts:626',
+  'packages/studio/studio-tests/studio-client.test.ts:3043',
+  // Expo config plugins execute as standalone CommonJS host scripts.
+  'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
+  // The shared leaf builds the Web-standard cancellation error itself.
+  'packages/shared/shared-src/core/Errors.ts:160',
+  // Tests hand raw unknown failures to production boundaries to prove their classification.
+  'packages/dev/dev-tests/agent-config-generation.test.ts:44',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
+  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
+  'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
+  'packages/dev/dev-tests/studio-companion-device.test.ts:560',
+  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
+  'packages/runtime/TR-tests/TR-async.test.ts:43',
+  'packages/runtime/TR-tests/TR-async.test.ts:57',
+  'packages/runtime/TR-tests/TR-data.test.ts:387',
+  'packages/runtime/TR-tests/TR-data.test.ts:616',
+  'packages/runtime/TR-tests/TR-data.test.ts:963',
+  'packages/runtime/TR-tests/TR-data.test.ts:981',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:40',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:46',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:67',
+  'packages/runtime/TR-tests/TR-error-containment.test.ts:69',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:489',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:510',
+  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:511',
+  'packages/shared/shared-tests/test-helpers.test.ts:45',
+  'packages/stdlib/stdlib-tests/data-providers.test.ts:86',
+  'packages/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 
 const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must exist rather than be thrown,'
@@ -300,34 +407,53 @@ const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 
 const NODE_IMPORT_ALLOWLIST = [
   // `node:crypto` hashing, until a `Platform` digest seam exists.
-  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts',
-  'packages/dev/dev-src/repository-tests/GreenTree.ts',
-  'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
-  'packages/dev/dev-src/repository-tests/TestLedger.ts',
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioNative.ts',
-  'packages/dev/dev-src/studio/StudioReview.ts',
-  'packages/dev/dev-tests/studio-review.test.ts',
-  'packages/tao-cli/cli-src/ship-executor.ts',
-  'packages/tao-cli/cli-src/ship-model.ts',
-  'packages/update-server/update-server-src/main.ts',
-  'packages/update-server/update-server-src/update-service.ts',
-  'packages/update-server/update-server-tests/update-server.test.ts',
+  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts:1',
+  'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
+  'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
+  'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
+  'packages/dev/dev-src/studio/StudioCdp.ts:2',
+  'packages/dev/dev-src/studio/StudioCdp.ts:3',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:697',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:699',
+  'packages/dev/dev-src/studio/StudioNative.ts:4',
+  'packages/dev/dev-src/studio/StudioNative.ts:5',
+  'packages/dev/dev-src/studio/StudioReview.ts:2',
+  'packages/dev/dev-tests/studio-review.test.ts:3',
+  'packages/tao-cli/cli-src/ship-executor.ts:3',
+  'packages/tao-cli/cli-src/ship-model.ts:2',
+  'packages/update-server/update-server-src/main.ts:3',
+  'packages/update-server/update-server-src/update-service.ts:2',
+  'packages/update-server/update-server-tests/update-server.test.ts:3',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-src/app-store-connect-auth.ts',
-  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
+  'packages/tao-cli/cli-src/app-store-connect-auth.ts:2',
+  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
   // `node:net` port probes and socket connections.
-  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts',
-  'packages/generation/generation-live/apple-foundation-models.live.ts',
+  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
+  'packages/generation/generation-live/apple-foundation-models.live.ts:3',
+  'packages/generation/generation-live/apple-foundation-models.live.ts:4',
+  // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
+  'packages/dev/dev-tests/repo-lint.test.ts:514',
+  'packages/dev/dev-tests/repo-lint.test.ts:515',
+  'packages/dev/dev-tests/work-graph.test.ts:465',
+  'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
-  'packages/tao-cli/cli-tests/compile-command.test.ts',
-  'packages/tao-cli/cli-tests/create-command.test.ts',
-  'packages/tao-cli/cli-tests/dev-command.test.ts',
-  'packages/tao-cli/cli-tests/test-cli-files.ts',
+  'packages/tao-cli/cli-tests/compile-command.test.ts:3',
+  'packages/tao-cli/cli-tests/create-command.test.ts:4',
+  'packages/tao-cli/cli-tests/dev-command.test.ts:3',
+  'packages/tao-cli/cli-tests/test-cli-files.ts:3',
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
-  'packages/studio/studio-src/StudioClientAssets.ts',
-  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts',
+  'packages/studio/studio-src/StudioClientAssets.ts:3',
+  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
+  // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
+  'packages/runtime-toolchain/app-config.cjs:1',
+  'packages/runtime-toolchain/app-config.cjs:2',
+  'packages/runtime-toolchain/metro.config.cjs:2',
+  'packages/runtime-toolchain/metro.config.cjs:3',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:1',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:2',
+  // A test proves the packaged CommonJS entry can resolve its generated dependency.
+  'packages/icloud-native/icloud-native-tests/icloud-native.test.ts:210',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
@@ -391,8 +517,9 @@ const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
  * The wrapper patterns are written so this file never matches them: each spells its target with an
  * escape or a group, and the details above name the construct without writing it.
  */
-/** A static value import from a `node:` module; `import type` is not a platform call and passes. */
-const NODE_IMPORT_PATTERN = /^import\s+(?!type\b)[^'"]*from\s*['"]node:/gm
+/** A static import/re-export, dynamic import, or CommonJS require from `node:`; `type` remains type-only. */
+const NODE_IMPORT_PATTERN =
+  /(?:^\s*(?:import|export)\s+(?!type\b)(?:[^'"\n]*\s+from\s+)?['"]node:|\b(?:import|require)\s*\(\s*['"]node:)/gm
 const CONSOLE_CALL_PATTERN = /(?<![\w$.\-])console\.(?:debug|error|info|log|warn)\b/g
 const PROCESS_ACCESS_PATTERN = /(?<![\w$.])process\.(?:argv|cwd|env|exitCode|exit|stderr|stdin|stdout)\b/g
 const BUN_CONVENIENCE_PATTERN = /\bBun\.(?:randomUUIDv7|semver|sleep|TOML)\b/g
@@ -409,6 +536,8 @@ type ConventionMatch = {
 /** ConventionRule is one pattern-and-allowlist convention over package source. */
 export type ConventionRule = {
   allowlist: readonly string[]
+  /** When true, each allowlist entry is one exact `path:line`, rather than permission for its whole file. */
+  allowlistBySite?: boolean
   detail: string
   /** Path prefixes the rule does not apply to at all, as opposed to files still allowed an exception. */
   excludePathPrefixes?: readonly string[]
@@ -449,13 +578,14 @@ export const CONVENTION_RULES = {
   },
   rawError: {
     allowlist: RAW_ERROR_ALLOWLIST,
+    allowlistBySite: true,
     detail: RAW_ERROR_DETAIL,
-    excludePathPrefixes: ['packages/runtime/'],
     pattern: RAW_ERROR_PATTERN,
     staleDetail: 'no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
   },
   nodeImport: {
     allowlist: NODE_IMPORT_ALLOWLIST,
+    allowlistBySite: true,
     detail: NODE_IMPORT_DETAIL,
     excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
     pattern: NODE_IMPORT_PATTERN,
@@ -491,7 +621,10 @@ export function conventionRuleIssues(
   allowlist: readonly string[] = rule.allowlist,
 ): string[] {
   const scanned = files.filter(file => !rule.excludePathPrefixes?.some(prefix => file.path.startsWith(prefix)))
-  return conventionIssues(scanned, conventionMatches(scanned, rule.pattern, rule.detail), allowlist, rule.staleDetail)
+  const matches = conventionMatches(scanned, rule.pattern, rule.detail)
+  return rule.allowlistBySite === true
+    ? conventionSiteIssues(scanned, matches, allowlist, rule.staleDetail)
+    : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
 }
 
 /** langiumImportIssues reports Langium imports outside the parser package. */
@@ -540,29 +673,78 @@ export function crossPackageSourceImportIssues(
  * gate runner itself rather than of one node.
  */
 const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
-const DEV_LAZY_IMPORT_PREFIXES = ['./studio/', './expo-dev-loop/', '@studio']
-/** Matches a static `import` statement, wrapped or not, and never the `import(...)` call form. */
-const STATIC_IMPORT_PATTERN = /^import\b(?!\s*\()[^'"]*['"]([^'"]+)['"]/gm
+const DEV_LAZY_IMPORT_DIRECTORIES = ['studio', 'expo-dev-loop']
+/** Matches static imports and re-exports, wrapped or not, and never the `import(...)` call form. */
+const STATIC_MODULE_PATTERN = /^(?:import\b(?!\s*\()|export\b)[^'"]*['"]([^'"]+)['"]/gm
 
 /** devLazyStudioImportIssues reports static Studio or Expo imports in the `./dev` entry. */
 export function devLazyStudioImportIssues(
   files: readonly SourceFile[],
   entryPath: string = DEV_ENTRY_PATH,
 ): string[] {
-  return files
-    .filter(file => file.path === entryPath)
-    .flatMap(file =>
-      [...file.source.matchAll(STATIC_IMPORT_PATTERN)]
-        .filter(match => DEV_LAZY_IMPORT_PREFIXES.some(prefix => match[1]!.startsWith(prefix)))
-        .map(match => ({
-          detail: `statically imports \`${match[1]}\`; load it with \`await import(...)\` inside the command`
-            + ' action so the lane commands start in a checkout that has never generated the parser.',
+  const byPath = new Map(files.map(file => [file.path, file]))
+  const queue: Array<{ chain: readonly string[]; path: string }> = [{ chain: [entryPath], path: entryPath }]
+  const visited = new Set<string>()
+  const issues: Array<{ detail: string; line: number; path: string }> = []
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    if (visited.has(current.path)) {
+      continue
+    }
+    visited.add(current.path)
+    const file = byPath.get(current.path)
+    if (file === undefined) {
+      continue
+    }
+    for (const match of file.source.matchAll(STATIC_MODULE_PATTERN)) {
+      const specifier = match[1]!
+      const target = resolveLocalModule(file.path, specifier, byPath)
+      const forbidden = specifier === '@studio'
+        || ['./studio', './expo-dev-loop'].some(prefix =>
+          current.path === entryPath && (specifier === prefix || specifier.startsWith(`${prefix}/`))
+        )
+        || target !== undefined
+          && DEV_LAZY_IMPORT_DIRECTORIES.some(directory => target.startsWith(`packages/dev/dev-src/${directory}/`))
+      if (forbidden) {
+        const chain = [...current.chain, target ?? specifier]
+        issues.push({
+          detail: `statically reaches \`${target ?? specifier}\` through ${chain.join(' -> ')}; load the boundary with`
+            + ' `await import(...)` inside the command action so the lane commands start in a checkout that has never'
+            + ' generated the parser.',
           line: lineNumber(file.source, match.index),
           path: file.path,
-        }))
-    )
-    .map(issueLine)
-    .sort()
+        })
+      } else if (target !== undefined && !visited.has(target)) {
+        queue.push({ chain: [...current.chain, target], path: target })
+      }
+    }
+  }
+  return issues.map(issueLine).sort()
+}
+
+function resolveLocalModule(
+  importingPath: string,
+  specifier: string,
+  files: ReadonlyMap<string, SourceFile>,
+): string | undefined {
+  if (!specifier.startsWith('.')) {
+    return undefined
+  }
+  const parts = importingPath.split('/')
+  parts.pop()
+  for (const segment of specifier.split('/')) {
+    if (segment === '.' || segment === '') {
+      continue
+    }
+    if (segment === '..') {
+      parts.pop()
+    } else {
+      parts.push(segment)
+    }
+  }
+  const base = parts.join('/')
+  return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]
+    .find(candidate => files.has(candidate))
 }
 
 function conventionIssues(
@@ -577,6 +759,27 @@ function conventionIssues(
   return [
     ...matches.filter(match => !allowed.has(match.path)).map(issueLine),
     ...allowlist.filter(path => scanned.has(path) && !offending.has(path)).map(path => `${path} ${staleDetail}`),
+  ].sort()
+}
+
+function conventionSiteIssues(
+  files: readonly SourceFile[],
+  matches: readonly ConventionMatch[],
+  allowlist: readonly string[],
+  staleDetail: string,
+): string[] {
+  const allowed = new Set(allowlist)
+  const scanned = new Set(files.map(file => file.path))
+  const matchSites = new Set(matches.map(match => `${match.path}:${match.line}`))
+  return [
+    ...matches.filter(match => !allowed.has(`${match.path}:${match.line}`)).map(issueLine),
+    ...allowlist
+      .filter(site => {
+        const separator = site.lastIndexOf(':')
+        const path = separator < 0 ? site : site.slice(0, separator)
+        return scanned.has(path) && !matchSites.has(site)
+      })
+      .map(site => `${site} ${staleDetail}`),
   ].sort()
 }
 
@@ -618,6 +821,8 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
+  issues.push(...await readDelegationIssues(repoRoot))
+  issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
@@ -636,23 +841,76 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
     issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
 
-  const packageFiles: SourceFile[] = []
-  for await (
-    const path of FS.walk(FS.resolvePath('packages', repoRoot), {
-      excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
-      extensions: ['.ts', '.tsx'],
-    })
-  ) {
-    packageFiles.push({ path: FS.relativePath(repoRoot, path), source: await FS.readText(path) })
-  }
+  const executableFiles = await readExecutableFiles(repoRoot)
+  const packageFiles = executableFiles.filter(file =>
+    file.path.startsWith('packages/') && (file.path.endsWith('.ts') || file.path.endsWith('.tsx'))
+  )
   issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
-  for (const rule of Object.values(CONVENTION_RULES)) {
-    issues.push(...conventionRuleIssues(rule, packageFiles))
+  for (const [name, rule] of Object.entries(CONVENTION_RULES)) {
+    const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
+    issues.push(...conventionRuleIssues(rule, files))
   }
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   return issues
+}
+
+const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+
+async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
+  const tracked = await CLI.run('git', {
+    args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'Apps', 'packages'],
+    cwd: repoRoot,
+  })
+  const paths = tracked.exitCode === 0
+    ? tracked.stdout.split('\0').filter(isExecutableRepositoryPath)
+    : await walkedExecutablePaths(repoRoot)
+  const files: SourceFile[] = []
+  for (const path of paths) {
+    const absolutePath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(absolutePath)) {
+      files.push({ path: FS.slashPath(path), source: await FS.readText(absolutePath) })
+    }
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+function isExecutableRepositoryPath(path: string): boolean {
+  const segments = FS.slashPath(path).split('/')
+  return EXECUTABLE_EXTENSIONS.some(extension => path.endsWith(extension))
+    && !segments.some(segment => segment === '.artifacts' || segment === 'node_modules' || segment.startsWith('_gen_'))
+}
+
+async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {
+  const paths: string[] = []
+  for (const root of ['Apps', 'packages']) {
+    const absoluteRoot = FS.resolvePath(root, repoRoot)
+    if (!await FS.isDirectory(absoluteRoot)) {
+      continue
+    }
+    for await (
+      const path of FS.walk(absoluteRoot, {
+        excludeDirectory: name => name === '.artifacts' || name === 'node_modules' || name.startsWith('_gen_'),
+        extensions: EXECUTABLE_EXTENSIONS,
+      })
+    ) {
+      paths.push(FS.relativePath(repoRoot, path))
+    }
+  }
+  return paths
+}
+
+const DEVELOPER_ENVIRONMENT_INDEX = 'Docs/Roadmap/Developer environment upgrades.md'
+const DEVELOPER_ENVIRONMENT_ENTRIES = 'Docs/Roadmap/Developer environment upgrades'
+
+async function readDeveloperEnvironmentLedgerIssues(repoRoot: string): Promise<string[]> {
+  const entriesPath = FS.resolvePath(DEVELOPER_ENVIRONMENT_ENTRIES, repoRoot)
+  if (!(await FS.isDirectory(entriesPath))) {
+    return []
+  }
+  const index = await FS.readText(FS.resolvePath(DEVELOPER_ENVIRONMENT_INDEX, repoRoot))
+  return developerEnvironmentLedgerIssues(await FS.listDir(entriesPath), index)
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {

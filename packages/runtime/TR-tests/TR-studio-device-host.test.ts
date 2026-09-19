@@ -1,12 +1,16 @@
 import { Describe, Expect, MockModule, reactNativeStubs, Test } from '@shared/test'
+import TR from '../TaoRuntime-src/TR'
+import { runtimeAppIsRegisteredForTest } from '../TaoRuntime-src/TR-navigation-app'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '../TaoRuntime-src/TR-studio-device-client'
 import { deviceViewportNotice, networkConditionOf, viewportLine } from '../TaoRuntime-src/TR-studio-device-host'
 import type { TaoStudioDeviceCellIdentity } from '../TaoRuntime-src/TR-studio-device-protocol'
 import { StudioDeviceTrust } from '../TaoRuntime-src/TR-studio-device-trust'
+import { createStudioSubjectApp } from '../TaoRuntime-src/TR-studio-subject'
 
 const scriptURL = 'http://192.168.1.20:8081/index.bundle?platform=ios&dev=true&hot=false'
 const secureStoreValues = new Map<string, string>()
 const openedSockets: FakeWebSocket[] = []
+const optionalNativeModuleCalls: string[] = []
 
 /** A WebSocket the transport adapter drives; a test plays the server through its handlers. */
 class FakeWebSocket {
@@ -57,6 +61,12 @@ MockModule('expo-secure-store', () => ({
     secureStoreValues.set(key, value)
   },
 }))
+MockModule('expo-modules-core', () => ({
+  requireOptionalNativeModule(name: string) {
+    optionalNativeModuleCalls.push(name)
+    return (globalThis as { expo?: { modules?: Record<string, unknown> } }).expo?.modules?.[name] ?? null
+  },
+}))
 
 const {
   badgeDragBounds,
@@ -70,6 +80,7 @@ const {
   resolveDeviceBootstrap,
   secureStoreStorage,
   shouldAcknowledgeCell,
+  studioBonjourGateways,
   studioDeviceAppStateAction,
   studioDeviceAppStateHandler,
   webSocketTransport,
@@ -171,6 +182,66 @@ Describe('Studio device host bootstrap', () => {
     Expect(hello['device']).toEqual({ appVersion: '1.0.0', model: 'iOS phone', name: 'roPhone', os: 'iOS 26.0' })
     client.stop()
     Expect(openedSockets[0]!.closed?.code).toBe(1000)
+  })
+
+  Test('accepts only well-formed Tao Studio Bonjour records and preserves the advertised key', () => {
+    const studio = StudioDeviceTrust.generateIdentity()
+    Expect(studioBonjourGateways([
+      {
+        host: 'ro-mac.local.',
+        port: 8790,
+        protocol: 'tao-studio-device-v1',
+        studioPublicKey: studio.publicKey,
+      },
+      { host: 'evil.local/path', port: 8790, protocol: 'tao-studio-device-v1', studioPublicKey: studio.publicKey },
+      { host: 'old.local', port: 8790, protocol: 'tao-studio-device-v0', studioPublicKey: studio.publicKey },
+      { host: 'other.local', port: 0, protocol: 'tao-studio-device-v1', studioPublicKey: studio.publicKey },
+    ])).toEqual([{ studioPublicKey: studio.publicKey, url: 'ws://ro-mac.local:8790/device' }])
+  })
+
+  Test('wires the companion native Bonjour module into authenticated reconnects', async () => {
+    const platform = globalThis as {
+      WebSocket?: unknown
+      expo?: { modules?: { TaoStudioDiscovery?: { discover(timeoutMs: number): Promise<unknown> } } }
+    }
+    const realWebSocket = platform.WebSocket
+    const realExpo = platform.expo
+    const studio = StudioDeviceTrust.generateIdentity()
+    const stored = { identity: StudioDeviceTrust.generateIdentity(), pinnedStudioKey: studio.publicKey }
+    secureStoreValues.set('tao-studio-device-v1', JSON.stringify(stored))
+    optionalNativeModuleCalls.splice(0)
+    let timeout: number | undefined
+    platform.WebSocket = FakeWebSocket
+    platform.expo = {
+      modules: {
+        TaoStudioDiscovery: {
+          async discover(timeoutMs) {
+            timeout = timeoutMs
+            return [{
+              host: 'rediscovered.local.',
+              port: '9123',
+              protocol: 'tao-studio-device-v1',
+              studioPublicKey: studio.publicKey,
+            }]
+          },
+        },
+      },
+    }
+    let client: StudioDeviceClient | undefined
+    try {
+      const resolution = createNativeStudioDeviceClient()
+      Expect(resolution.kind).toBe('ready')
+      client = (resolution as { client: StudioDeviceClient }).client
+      await client.start()
+      Expect(optionalNativeModuleCalls).toEqual(['TaoStudioDiscovery'])
+      Expect(timeout).toBe(750)
+      Expect(openedSockets.at(-1)?.url).toBe('ws://rediscovered.local:9123/device')
+    } finally {
+      client?.stop()
+      platform.WebSocket = realWebSocket
+      platform.expo = realExpo
+      secureStoreValues.clear()
+    }
   })
 })
 
@@ -318,6 +389,25 @@ Describe('Studio device host cell acknowledgement', () => {
 
   Test('a later identity is unaffected by an earlier one having errored', () => {
     Expect(shouldAcknowledgeCell('a:2', undefined, 'a:1')).toBe(true)
+  })
+})
+
+Describe('Studio device synthetic app lifecycle', () => {
+  Test('does not register an app produced by an abandoned render before commit', async () => {
+    const home = TR.Navigation.View({ name: 'Synthetic Home', render: () => null })
+    const slot = TR.Navigation.Declaration('Synthetic Slot', TR.NavKind.Slot())
+    const app = createStudioSubjectApp(
+      () => ({
+        auxiliaries: () => ({}),
+        name: 'Synthetic Subject',
+        navigator: () => TR.Navigation.Configure(slot, { Initial: home }),
+        restoration: { exclusions: [], mode: 'fresh', variant: 'studio-subject' },
+      }),
+      {},
+    )
+    Expect(runtimeAppIsRegisteredForTest(app)).toBe(false)
+    app.dispose()
+    Expect(runtimeAppIsRegisteredForTest(app)).toBe(false)
   })
 })
 

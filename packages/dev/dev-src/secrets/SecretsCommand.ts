@@ -166,12 +166,7 @@ async function decryptSecrets(environment: SecretsEnvironment): Promise<number> 
     HCI.writeLine(`No secrets are stored yet. Add one with \`just secrets add <KEY>\`.`)
     return 0
   }
-  const values = new Map<string, string>()
-  // One `age` call per secret means one Touch ID prompt per secret. The plugin coalesces prompts that arrive
-  // together, and a store this size is a handful of keys, so this stays one interaction in practice.
-  for (const name of names.sort()) {
-    values.set(name, (await environment.cipher.decrypt(store.secrets[name]!.value.join('\n'))).trimEnd())
-  }
+  const values = await decryptedValues(store, environment.cipher)
   const path = Repo.resolvePath(ENV_PATH)
   // The plaintext store is owner-only. `mode` applies to a fresh file and this command rewrites an
   // existing one every run, so the mode is asserted afterwards as well.
@@ -180,6 +175,17 @@ async function decryptSecrets(environment: SecretsEnvironment): Promise<number> 
   HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${ENV_PATH}.\n`)
   HCI.writeLine(`Anything you maintain by hand belongs in ${LOCAL_PATH}, which this never writes.`)
   return 0
+}
+
+/** Decrypt without normalizing any byte represented by the UTF-8 plaintext string. */
+async function decryptedValues(store: SecretStore, cipher: Cipher): Promise<Map<string, string>> {
+  const values = new Map<string, string>()
+  // One `age` call per secret means one Touch ID prompt per secret. The plugin coalesces prompts that arrive
+  // together, and a store this size is a handful of keys, so this stays one interaction in practice.
+  for (const name of Object.keys(store.secrets).sort()) {
+    values.set(name, await cipher.decrypt(store.secrets[name]!.value.join('\n')))
+  }
+  return values
 }
 
 /** add encrypts one pasted secret into the store, without echoing it or writing it anywhere in the clear. */
@@ -271,3 +277,6 @@ async function setupSecrets(): Promise<number> {
   }
   return 0
 }
+
+/** Narrow test seam for proving the ciphertext-to-plaintext boundary is byte preserving. */
+export const SecretsCommand = { testing: { decryptedValues } } as const

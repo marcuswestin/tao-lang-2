@@ -27,7 +27,6 @@ type MetroResolutionContext = {
 }
 
 const config = require('../metro.config.cjs') as MetroConfig
-
 Describe('Expo Metro configuration', () => {
   Test('keeps Metro shared caches for the stable runtime-toolchain project', () => {
     Expect(config.fileMapCacheDirectory).toBe(undefined)
@@ -40,7 +39,6 @@ Describe('Expo Metro configuration', () => {
     const outsideTmp = FS.resolvePath('unrelated-tmp', fixtureRoot)
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
     const configPath = FS.resolvePath('metro.config.cjs', disposableRoot)
-    const resultPath = FS.resolvePath('cache-result.json', disposableRoot)
 
     try {
       await FS.copyFile(Repo.resolvePath('packages/runtime-toolchain/metro.config.cjs'), configPath)
@@ -49,26 +47,21 @@ Describe('Expo Metro configuration', () => {
         FS.resolvePath('node_modules', disposableRoot),
       )
       await FS.mkdir(outsideTmp)
+      const expoEntry = require.resolve('expo/metro-config', { paths: [disposableRoot] })
+      const expoMetroEntry = require.resolve('@expo/metro-config', { paths: [FS.dirname(expoEntry)] })
+      const metroCacheEntry = require.resolve('metro-cache', { paths: [FS.dirname(expoMetroEntry)] })
 
       const childSource = String.raw`
         void (async () => {
-          const fs = require('node:fs/promises')
-          const path = require('node:path')
-
           const configPath = ${JSON.stringify(configPath)}
-          const resultPath = ${JSON.stringify(resultPath)}
-          const projectRoot = path.dirname(configPath)
-          const expoEntry = require.resolve('expo/metro-config', { paths: [projectRoot] })
-          const expoMetroEntry = require.resolve('@expo/metro-config', { paths: [path.dirname(expoEntry)] })
-          const metroCacheEntry = require.resolve('metro-cache', { paths: [path.dirname(expoMetroEntry)] })
-          const { FileStore } = require(metroCacheEntry)
+          const { FileStore } = require(${JSON.stringify(metroCacheEntry)})
           const config = require(configPath)
           const cacheStores = config.cacheStores({ FileStore })
-          await cacheStores[0].set(Buffer.from([0xab, 0xcd]), { owner: 'disposable-host' })
-          await fs.writeFile(resultPath, JSON.stringify({
+          await cacheStores[0].set(Buffer.from([0xab, 0xcd]), {
+            owner: 'disposable-host',
             cacheStoreCount: cacheStores.length,
             fileMapCacheDirectory: config.fileMapCacheDirectory,
-          }))
+          })
         })()
       `
       const child = await CLI.run('node', {
@@ -82,12 +75,10 @@ Describe('Expo Metro configuration', () => {
 
       Expect(child.stderr).toBe('')
       Expect(child.exitCode).toBe(0)
-      Expect(await FS.readJson(resultPath)).toEqual({
-        cacheStoreCount: 1,
-        fileMapCacheDirectory: FS.resolvePath('.metro-file-map', disposableRoot),
-      })
       Expect(await FS.readJson(FS.resolvePath('.metro-cache/ab/cd', disposableRoot))).toEqual({
         owner: 'disposable-host',
+        cacheStoreCount: 1,
+        fileMapCacheDirectory: FS.resolvePath('.metro-file-map', disposableRoot),
       })
       Expect(await FS.exists(FS.resolvePath('metro-cache/ab/cd', outsideTmp))).toBe(false)
       Expect(FS.pathIsWithin(FS.resolvePath('.metro-cache/ab/cd', disposableRoot), disposableRoot)).toBe(true)

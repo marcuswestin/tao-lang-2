@@ -1,5 +1,5 @@
 import { ASTUtils } from '@ast-utils'
-import { AST, Parser, URI } from '@parser'
+import { AST, Langium, Parser, URI } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
 
@@ -158,7 +158,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(headerWord?.$cstNode).toBeDefined()
     const headerDecls = services.language.references.References.findDeclarations(headerWord!.$cstNode!)
-    Expect(headerDecls).toEqual([headerMember])
+    Expect(headerDecls).toHaveLength(1)
+    Expect(headerDecls[0]).toBe(headerMember)
 
     // [headerTitle] at render site resolves to 'headerTitle' bundle in HNDesign
     const titleWord = AST.streamAllContents(file).find(
@@ -166,7 +167,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(titleWord?.$cstNode).toBeDefined()
     const titleDecls = services.language.references.References.findDeclarations(titleWord!.$cstNode!)
-    Expect(titleDecls).toEqual([titleMember])
+    Expect(titleDecls).toHaveLength(1)
+    Expect(titleDecls[0]).toBe(titleMember)
 
     // 'accent' in [pad 14, bg accent] inside the design bundle resolves to 'accent' token in HNDesign
     const accentWord = AST.streamAllContents(file).find(
@@ -174,7 +176,8 @@ Describe('parser: minimal design declarations', () => {
     )
     Expect(accentWord?.$cstNode).toBeDefined()
     const accentDecls = services.language.references.References.findDeclarations(accentWord!.$cstNode!)
-    Expect(accentDecls).toEqual([accentToken])
+    Expect(accentDecls).toHaveLength(1)
+    Expect(accentDecls[0]).toBe(accentToken)
 
     // References to 'header' bundle includes declaration and render site
     const headerRefs = services.language.references.References.findReferences(headerMember!, {
@@ -245,16 +248,21 @@ Describe('parser: minimal design declarations', () => {
     const references = services.language.references.References
 
     // The render site resolves to the design its own app mounts, never to the other project's `header`.
-    Expect(references.findDeclarations(words(shippedFile, 'header')[0]!.$cstNode!))
-      .toEqual([bundle(shippedDesign, 'header')])
+    const shippedHeaderDecls = references.findDeclarations(words(shippedFile, 'header')[0]!.$cstNode!)
+    Expect(shippedHeaderDecls).toHaveLength(1)
+    Expect(shippedHeaderDecls[0]).toBe(bundle(shippedDesign, 'header'))
 
     // `palette.60` inside each design names that design's own shade -- the most specific name that
     // resolves, not the `palette` entry it hangs off, and not the other project's shade of the same
-    // name. Identity is asserted directly: deep-comparing a linked AST node walks the whole document.
-    Expect(references.findDeclarations(words(shippedFile, 'palette')[0]!.$cstNode!))
-      .toEqual([familyMember(shippedDesign, 'palette', '60')])
-    Expect(references.findDeclarations(words(draftFile, 'palette')[0]!.$cstNode!))
-      .toEqual([familyMember(draftDesign, 'palette', '60')])
+    // name. Identity is asserted directly, never structurally: `@shared/test` refuses a deep-equality
+    // matcher on a Langium node because bun's formatter expands one exponentially through its
+    // `$container` links, which has taken a 128 GB machine out of application memory.
+    const shippedShadeDecls = references.findDeclarations(words(shippedFile, 'palette')[0]!.$cstNode!)
+    Expect(shippedShadeDecls).toHaveLength(1)
+    Expect(shippedShadeDecls[0]).toBe(familyMember(shippedDesign, 'palette', '60'))
+    const draftShadeDecls = references.findDeclarations(words(draftFile, 'palette')[0]!.$cstNode!)
+    Expect(draftShadeDecls).toHaveLength(1)
+    Expect(draftShadeDecls[0]).toBe(familyMember(draftDesign, 'palette', '60'))
 
     // Find-references is identity-based. The shipped `header` is used once, at its render site; the
     // draft's is declared and never used. Matching on spelling alone gave each the other's uses too.
@@ -266,4 +274,146 @@ Describe('parser: minimal design declarations', () => {
       references.findReferences(bundle(draftDesign, 'header'), { includeDeclaration: false }).toArray(),
     ).toEqual([])
   })
+
+  Test('keeps file-private sibling designs out of definition lookup', async () => {
+    const { services } = Parser.createContext()
+    const source = `view Main() { render Col() [privateCard] }\nview Col() { }`
+    const privateDesign = `design PrivateTheme { privateCard [pad 8] }`
+    const sourceDoc = services.shared.workspace.LangiumDocumentFactory.fromString(source, URI.file('/app/Main.tao'))
+    const designDoc = services.shared.workspace.LangiumDocumentFactory.fromString(
+      privateDesign,
+      URI.file('/app/PrivateTheme.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(sourceDoc)
+    services.shared.workspace.LangiumDocuments.addDocument(designDoc)
+    await services.shared.workspace.DocumentBuilder.build([sourceDoc, designDoc], { eagerLinking: true })
+
+    const file = sourceDoc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const word = AST.streamAllContents(file).find(
+      node => AST.isLayoutWord(node) && node.value === 'privateCard',
+    )
+    Expect(word?.$cstNode).toBeDefined()
+    Expect(services.language.references.References.findDeclarations(word!.$cstNode!)).toHaveLength(0)
+  })
+
+  Test('finds design references inside structured blocks without replacing dotted suffixes', async () => {
+    const { services } = Parser.createContext()
+    const source = `
+      design Theme {
+        colors {
+          palette #112233 { 60 #001122 }
+          accent palette.60
+        }
+      }
+    `
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      source,
+      URI.file('/Theme.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+
+    const file = doc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const design = file.statements.find(AST.isDesignDeclaration)!
+    const palette = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!
+    const shade = palette.family!.members[0]!
+    const references = services.language.references.References
+
+    const paletteRefs = references.findReferences(palette, { includeDeclaration: false }).toArray()
+    Expect(paletteRefs).toHaveLength(1)
+    Expect(doc.textDocument.getText(paletteRefs[0]!.segment.range)).toBe('palette')
+
+    const shadeRefs = references.findReferences(shade, { includeDeclaration: false }).toArray()
+    Expect(shadeRefs).toHaveLength(1)
+    Expect(doc.textDocument.getText(shadeRefs[0]!.segment.range)).toBe('60')
+  })
+
+  Test('resolves and renames each dotted design path token by declaration identity', async () => {
+    const { services } = Parser.createLspContext()
+    const source = `design Theme { colors { palette #112233 { 60 #001122 } accent palette.60 } }`
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      source,
+      URI.file('/Theme.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+
+    const file = doc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const design = file.statements.find(AST.isDesignDeclaration)!
+    const palette = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!
+    const shade = palette.family!.members[0]!
+    const pathOffset = source.lastIndexOf('palette.60')
+    const root = file.$cstNode!
+    const head = Langium.CstUtils.findLeafNodeAtOffset(root, pathOffset + 2)!
+    const suffix = Langium.CstUtils.findLeafNodeAtOffset(root, pathOffset + 'palette.'.length)!
+    const references = services.language.references.References
+
+    const headDeclarations = references.findDeclarations(head)
+    const suffixDeclarations = references.findDeclarations(suffix)
+    Expect(headDeclarations).toHaveLength(1)
+    Expect(headDeclarations[0] === palette).toBe(true)
+    Expect(suffixDeclarations).toHaveLength(1)
+    Expect(suffixDeclarations[0] === shade).toBe(true)
+
+    const rename = services.language.lsp.RenameProvider
+    Expect(rename).toBeDefined()
+    if (!rename) {
+      return
+    }
+    const headEdit = await rename.rename(doc, {
+      newName: 'swatch',
+      position: doc.textDocument.positionAt(pathOffset + 2),
+      textDocument: { uri: doc.uri.toString() },
+    })
+    Expect(renameSegments(doc, headEdit)).toEqual(['palette', 'palette'])
+    Expect(applyRename(doc, headEdit)).toBe(
+      `design Theme { colors { swatch #112233 { 60 #001122 } accent swatch.60 } }`,
+    )
+
+    const shadeEdit = await rename.rename(doc, {
+      newName: '70',
+      position: doc.textDocument.positionAt(pathOffset + 'palette.'.length),
+      textDocument: { uri: doc.uri.toString() },
+    })
+    Expect(renameSegments(doc, shadeEdit)).toEqual(['60', '60'])
+    Expect(applyRename(doc, shadeEdit)).toBe(
+      `design Theme { colors { palette #112233 { 70 #001122 } accent palette.70 } }`,
+    )
+  })
 })
+
+type RenameEdit = { changes?: Record<string, readonly Langium.TextEdit[]> } | null | undefined
+
+function renameSegments(document: Langium.LangiumDocument<AST.TaoFile>, edit: RenameEdit): string[] {
+  return renameEdits(document, edit).map(change => document.textDocument.getText(change.range)).toSorted()
+}
+
+function applyRename(document: Langium.LangiumDocument<AST.TaoFile>, edit: RenameEdit): string {
+  let source = document.textDocument.getText()
+  for (
+    const change of renameEdits(document, edit).toSorted((left, right) =>
+      document.textDocument.offsetAt(right.range.start) - document.textDocument.offsetAt(left.range.start)
+    )
+  ) {
+    const start = document.textDocument.offsetAt(change.range.start)
+    const end = document.textDocument.offsetAt(change.range.end)
+    source = `${source.slice(0, start)}${change.newText}${source.slice(end)}`
+  }
+  return source
+}
+
+function renameEdits(document: Langium.LangiumDocument<AST.TaoFile>, edit: RenameEdit): readonly Langium.TextEdit[] {
+  return edit?.changes?.[document.uri.toString()] ?? []
+}

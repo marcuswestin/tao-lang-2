@@ -1,6 +1,7 @@
-# Proposed Decisions amendment — project version and DefaultApp
+# Adopted Decisions amendment — project version and DefaultApp
 
-Fold the following into Decisions §11, **App composition and providers**.
+Status: adopted and folded into Decisions §11, **App composition and providers**, on 2026-09-16.
+This file retains the focused amendment record.
 
 ## Project release metadata
 
@@ -22,5 +23,7 @@ project {
 - `DefaultApp` references one `app` declaration in the project, including a declared app variant.
   A project may omit it. A command's explicit `--app` selection wins; an interactive tool may ask
   when neither is present.
+- `DefaultApp` is parsed as a capitalized identifier and validated in this project slot; it remains
+  source-compatible without becoming a grammar keyword.
 - Each field may appear at most once. These fields are project/tooling metadata and do not add
   runtime-visible app state.

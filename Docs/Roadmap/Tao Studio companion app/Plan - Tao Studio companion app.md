@@ -1,9 +1,10 @@
 # Plan - Tao Studio companion app
 
-Status: product direction settled; the development foundation and Slice 1 are implemented in software
-(protocol, gateway, trust, native host, companion shell, Studio popover, install tooling) with focused
-tests; the physical proof record is in `Slice 1 - Device protocol and trust.md`; later slices remain
-planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
+Status: product direction settled; the development foundation, Slice 1, and the packet-23 trust and
+rediscovery hardening are implemented in software (protocol, gateway, cross-process trust/revocation,
+native host, authenticated Bonjour, QR/deep-link fallback, companion shell, Studio popover, and install
+tooling) with focused tests. Physical cable/LAN evidence remains separate and unverified here; later
+product slices remain planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.
@@ -67,8 +68,10 @@ One `tao-studio-device-v1` control protocol supports three transports:
 1. **Development bootstrap.** Studio gives the installed development client its Metro URL, candidate
    Studio gateway addresses, and an ephemeral pairing attempt. Both screens show the same short
    authentication code before Studio grants persistent device trust.
-2. **Dependable LAN path.** Add Bonjour advertisement/discovery after the direct-address real-device
-   proof. Use Network.framework in the iOS client, including peer-to-peer Wi-Fi where available.
+2. **Dependable LAN path.** Studio advertises authenticated Bonjour candidates. The current iOS module
+   discovers `_tao-studio._tcp` on the local domain through Foundation's `NetServiceBrowser` and
+   `NetService`; a trusted device verifies the pinned Studio identity before adopting rediscovered
+   endpoints. This implementation does not claim peer-to-peer Wi-Fi discovery.
 3. **Internet path.** Studio and device hold outbound authenticated WebSockets to the Tao relay. The
    relay routes encrypted, project-scoped messages without gaining source or filesystem authority.
 
@@ -76,12 +79,14 @@ A QR/deep link remains the universal fallback. It contains endpoint, session id,
 and one short-lived challenge, never a reusable credential. The device key lives in Keychain and enables
 foreground reconnection while project trust and runtime compatibility remain valid.
 
-Network.framework is Apple's recommended API for Bonjour advertise/browse/connect. Do not build new work
-on Multipeer Connectivity: its current public classes are deprecated. DeviceDiscoveryUI is not a Slice 1
+Network.framework remains the preferred candidate if Tao later adds an explicitly supported
+peer-to-peer browse/connect path; the current software does not use it. Do not build new work on
+Multipeer Connectivity: its current public classes are deprecated. DeviceDiscoveryUI is not a Slice 1
 dependency: its documented Mac app-to-app surface is Mac Catalyst, while Studio currently uses Electrobun.
-Revisit it only if a maintained Catalyst or native helper boundary makes it an actual fit. The UI always
-labels **LAN**, **peer-to-peer**, or **Tao relay**. Backgrounding pauses the control plane; foregrounding
-revalidates and catches up rather than pretending iOS guarantees a permanent socket.
+Revisit it only if a maintained Catalyst or native helper boundary makes it an actual fit. Any future
+transport UI must label **LAN**, **peer-to-peer**, or **Tao relay** truthfully. Backgrounding pauses the
+control plane; foregrounding revalidates and catches up rather than pretending iOS guarantees a permanent
+socket.
 
 The code plane stays separate: Metro/Fast Refresh for development; a signed, runtime-compatible complete
 update for a distributed preview. A control connection never grants arbitrary live code to an App Store
@@ -89,8 +94,8 @@ build.
 
 ## Development foundation - verified 2026-09-02
 
-This is the concrete basis for Slice 1. It deliberately proves one local development path before adding
-Bonjour, the Tao relay, beta delivery, or App Store constraints.
+This is the historical baseline from which Slice 1 began. Bonjour has since landed in software; the Tao
+relay, beta delivery, and App Store constraints remain later work.
 
 ### Live repository facts
 
@@ -399,9 +404,9 @@ physical-rendering acceptance.
 
 - Fixed Expo development build, Studio-owned Metro, generated `TaoStudioDeviceHost`, and a separate narrow
   LAN device gateway.
-- Supported install/open automation, direct-address bootstrap, QR fallback, short-code trust, revocation,
-  reconnect, and exact revision acknowledgement. Bonjour follows the direct real-device proof;
-  DeviceDiscoveryUI and the internet relay do not block this slice.
+- Supported install/open automation, direct-address bootstrap, authenticated Bonjour rediscovery, QR
+  fallback, short-code trust, cross-process revocation, reconnect, LAN/cable selection, and exact
+  revision acknowledgement. DeviceDiscoveryUI and the internet relay do not block this slice.
 - Render the selected app and switch among three scenarios.
 
 Acceptance: a real iPhone installs without starting a second Metro, opens from Studio, pairs in a few taps,

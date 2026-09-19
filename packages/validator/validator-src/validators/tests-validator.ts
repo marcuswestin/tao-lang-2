@@ -14,6 +14,9 @@ export const testValidationMessages = {
   advanceNegative: '`advance` cannot move the clock backwards.',
   testPlacement: 'Test declarations are only allowed at file level or inside another test.',
   testBlock: (name: string) => `Only nested tests are allowed in test '${name}'.`,
+  emptySuite: (name: string) =>
+    `Test '${name}' declares no checks, so it would run nothing. A file-level test is a suite of`
+    + ` nested tests: move its steps into test "<what it proves>" { … } inside it.`,
   checkBlock: (name: string) =>
     `Only run, press, enter, submit, back, and expect statements are allowed in test '${name}'.`,
   runPlacement: 'Run steps are only allowed inside test blocks.',
@@ -67,11 +70,8 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
-  [AST.PressPhaseStep.$type]: [validatePressPlacement, validatePointerSelector],
-  [AST.HoverStep.$type]: [validateHoverPlacement, validatePointerSelector],
-  [AST.FocusStep.$type]: [validateFocusPlacement, validateFocusVocabulary],
-  [AST.PressKeyStep.$type]: [validatePressPlacement, validatePressKeyVocabulary],
-  [AST.NarrowStep.$type]: [validateNarrowPlacement, validateNarrowVocabulary],
+  [AST.PressWordStep.$type]: [validatePressPlacement, validatePressWordStep],
+  [AST.InteractionWordStep.$type]: validateInteractionWordStep,
   [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
   [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
   [AST.TagEnterStep.$type]: validateEnterPlacement,
@@ -133,6 +133,14 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
     }
     return
   }
+  // A file-level test is a suite, and the compiler takes its checks from the tests nested in it and
+  // from nothing else. Written as a leaf it parses, validates step by step, and then compiles to a
+  // suite of zero checks — a file that runs nothing and passes, which is the one test failure mode
+  // nothing downstream can notice. The steps are not wrong; the level they sit at is.
+  if (AST.isTaoFile(owner)) {
+    ctx.error(test, testValidationMessages.emptySuite(AST.testDisplayName(test)))
+    return
+  }
   validateLeafTest(test, ctx)
 }
 
@@ -169,12 +177,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
-      PressPhaseStep: checkStepOrder,
-      HoverStep: checkStepOrder,
-      FocusStep: checkStepOrder,
+      PressWordStep: checkStepOrder,
+      InteractionWordStep: checkStepOrder,
       PressToolbarCommandStep: checkStepOrder,
-      PressKeyStep: checkStepOrder,
-      NarrowStep: checkStepOrder,
       ExpectInteractionStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
@@ -202,12 +207,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.ExpectScopeStep
       | AST.PressTextStep
       | AST.TagPressStep
-      | AST.PressPhaseStep
-      | AST.HoverStep
-      | AST.FocusStep
+      | AST.PressWordStep
+      | AST.InteractionWordStep
       | AST.PressToolbarCommandStep
-      | AST.PressKeyStep
-      | AST.NarrowStep
       | AST.ExpectInteractionStep
       | AST.SubmitInputStep
       | AST.TagSubmitStep
@@ -222,22 +224,50 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
   }
 }
 
-function validatePressKeyVocabulary(step: AST.PressKeyStep, ctx: ValidationContext): void {
-  if (step.subject !== 'key') {
-    ctx.error(step, testValidationMessages.interactionVocabulary('key'))
+function validatePressWordStep(step: AST.PressWordStep, ctx: ValidationContext): void {
+  if (step.subject === 'key') {
+    if (step.target === undefined || step.selector !== undefined) {
+      ctx.error(step, testValidationMessages.interactionVocabulary('key "value"'))
+    }
+    if (AST.findOwningScenario(step)) {
+      ctx.error(step, testValidationMessages.interactionVocabulary('down or up in a scenario'))
+    }
+    return
   }
+  if (step.subject !== 'down' && step.subject !== 'up') {
+    ctx.error(step, testValidationMessages.interactionVocabulary('key, down, or up'))
+  }
+  validatePointerSelector(step, ctx)
 }
 
-function validateNarrowVocabulary(step: AST.NarrowStep, ctx: ValidationContext): void {
-  if (step.head !== 'narrow') {
-    ctx.error(step, testValidationMessages.interactionVocabulary('narrow'))
+function validateInteractionWordStep(
+  step: AST.InteractionWordStep,
+  ctx: ValidationContext,
+  file: AST.TaoFile,
+): void {
+  if (step.head === 'hover') {
+    validateHoverPlacement(step, ctx, file)
+    validatePointerSelector(step, ctx)
+    return
   }
-}
-
-function validateFocusVocabulary(step: AST.FocusStep, ctx: ValidationContext): void {
-  if (step.head !== 'focus') {
-    ctx.error(step, testValidationMessages.interactionVocabulary('focus'))
+  if (step.head === 'focus') {
+    validateFocusPlacement(step, ctx, file)
+    if (step.tag === undefined) {
+      ctx.error(step, testValidationMessages.interactionVocabulary('focus #tag'))
+    }
+    return
   }
+  if (step.head === 'narrow') {
+    validateNarrowPlacement(step, ctx, file)
+    if (step.target === undefined || step.selector !== undefined) {
+      ctx.error(step, testValidationMessages.interactionVocabulary('narrow "text"'))
+    }
+    if (AST.findOwningScenario(step)) {
+      ctx.error(step, testValidationMessages.interactionVocabulary('hover or focus in a scenario'))
+    }
+    return
+  }
+  ctx.error(step, testValidationMessages.interactionVocabulary('hover, focus, or narrow'))
 }
 
 function validateInteractionExpectation(step: AST.ExpectInteractionStep, ctx: ValidationContext): void {
@@ -326,7 +356,7 @@ function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationCo
   }
 }
 
-function validatePointerSelector(step: AST.PressPhaseStep | AST.HoverStep, ctx: ValidationContext): void {
+function validatePointerSelector(step: AST.PressWordStep | AST.InteractionWordStep, ctx: ValidationContext): void {
   if (
     step.selector !== undefined && !supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])
   ) {

@@ -72,11 +72,10 @@ are retained as execution history, not current syntax or architecture.
   for the tranche that makes it observable.
 - Each tranche's **Open before starting** list is settled by Ro in `2 - Next` before the tranche
   begins; nothing in it is for the implementer to guess.
-- **The decisions are authoritative with respect to every markdown document in the repository**
-  (Ro, 2026-09-02). Where a live document — `Decisions.md` included — disagrees with the design
-  summary, the document is updated; the tranche that touches an area reconciles that area, and T7
-  sweeps everything at the end. `Docs/Spec/` describes the implemented contract and follows
-  implementation rather than leading it; `Docs/Roadmap/Archive/` stays frozen unless Ro asks.
+- **`Docs/Roadmap/Tao Revolution/Decisions.md` is authoritative.** The design summary preserves
+  rationale, while `Docs/Spec/` describes the implemented contract and follows implementation rather
+  than leading it. The tranche that touches an area reconciles all three; `Docs/Roadmap/Archive/`
+  stays frozen unless Ro asks.
 
 ## Sequence
 
@@ -533,7 +532,7 @@ stages beyond these rows land only when measurement justifies them.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pointer and touch parity          | Press, focus, hover, and selectable-row focus intake use semantic operations.                                                              | Add long-press/right-click → verbs, empty-region click → region focus, and drag target/drop semantics.                                                                                                      |
 | Narrowing presentation            | Mounted items and controls form the candidate set; the generated surface displays the typed query, matching targets, and the empty result. | Subdue rather than unmount nonmatches when the forcing visual design is settled.                                                                                                                            |
-| Verb-pending UI                   | The reducer models pending targets, store-search results, and scalar values.                                                               | Mount the whole-screen chooser, store-backed entity picker, and inline text/duration prompt.                                                                                                                |
+| Verb-pending UI                   | The reducer and generated pending surface accept an already-decided entity, mounted/store-backed entity choices, and inline scalar values. | Landed; focused runtime coverage proves entity-picker, store fallback, scalar input, cancellation, and dispatch of the displayed choice.                                                                    |
 | Contextual Help                   | The outline and bindings contain its source information.                                                                                   | Derive and mount KEY-D13's Help layer with keyboard and accessibility coverage.                                                                                                                             |
 | Virtualized targeting             | Stage one targets mounted nodes only.                                                                                                      | Extend KEY-D9 to off-window loop rows and scroll the chosen row into view.                                                                                                                                  |
 | No-target movement                | The reducer calls an optional scroll hook when no candidate movement applies.                                                              | Register scroll-container hosts, map direction to scrolling, and prove the transcript story.                                                                                                                |

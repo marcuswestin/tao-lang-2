@@ -10,7 +10,7 @@ import {
   StudioDiagnosticNavigation,
   StudioSourceNavigation,
 } from '../StudioEditor'
-import type { StudioActivePreview, StudioPreviewConnection } from '../StudioMatrixView'
+import { revealCanvasNode, type StudioActivePreview, type StudioPreviewConnection } from '../StudioMatrixView'
 import type { StudioScreenItem, StudioSearchResult } from '../StudioRailPanels'
 import type { StudioOpenFile } from './StudioEditorSession'
 
@@ -18,6 +18,7 @@ export type StudioAppNavigationDeps = Readonly<{
   activePreview: StudioActivePreview
   focusEditor: () => void
   openFile: (path: string) => Promise<StudioOpenFile | undefined>
+  onReveal: () => void
   previewManifest: () => StudioPreviewManifestV2 | undefined
   previews: readonly StudioPreviewConnection[]
   project: string
@@ -30,6 +31,7 @@ export type StudioAppNavigationDeps = Readonly<{
 /** Every way into a source location: diagnostics, screens, search hits, test failures, device taps. */
 export class StudioAppNavigation {
   readonly #deps: StudioAppNavigationDeps
+  #deviceSelectionInitialized = false
   #lastDeviceSelection = 0
 
   constructor(deps: StudioAppNavigationDeps) {
@@ -61,7 +63,7 @@ export class StudioAppNavigation {
     )
     if (preview !== undefined) {
       this.#deps.activePreview.activate(preview)
-      preview.frame?.scrollIntoView({ block: 'center' })
+      revealCanvasNode(preview.frame)
     }
     const path = this.#relativePath(item.path)
     const opened = await this.#deps.openFile(path)
@@ -129,10 +131,16 @@ export class StudioAppNavigation {
    * whatever now occupies those offsets.
    */
   async revealDeviceSelection(selection: StudioDeviceStatus['selection']): Promise<void> {
+    if (!this.#deviceSelectionInitialized) {
+      this.#deviceSelectionInitialized = true
+      this.#lastDeviceSelection = selection?.sequence ?? 0
+      return
+    }
     if (selection === undefined || selection.sequence <= this.#lastDeviceSelection) {
       return
     }
     this.#lastDeviceSelection = selection.sequence
+    this.#deps.onReveal()
     const opened = await StudioSourceNavigation.openAndSelect({
       identity: { path: selection.sourcePath, sourceVersion: selection.sourceVersion },
       openFile: async path => await this.#deps.openFile(path),
@@ -152,6 +160,7 @@ export class StudioAppNavigation {
 
   /** Scrolls the model editor to the selection; the visible editor mirrors it and takes focus. */
   #reveal(editor: EditorView, selection: Readonly<{ anchor: number; head?: number }>): void {
+    this.#deps.onReveal()
     editor.dispatch({
       effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
       selection,

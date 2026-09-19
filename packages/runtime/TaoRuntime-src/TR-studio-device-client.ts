@@ -62,6 +62,12 @@ export type TaoStudioDeviceStorage = {
   save(record: TaoStudioDeviceStoredRecord): Promise<void>
 }
 
+/** A Bonjour result is only a reconnect candidate after its Studio key matches the device's pin. */
+type TaoStudioDeviceDiscoveredGateway = {
+  studioPublicKey: string
+  url: string
+}
+
 /** The non-secret facts a loaded bundle needs to find and introduce itself to the gateway. */
 export type TaoStudioDeviceBootstrap = {
   /** Gateway WebSocket URLs, in the order to try them. */
@@ -84,6 +90,8 @@ export type StudioDeviceClientOptions = {
    * free of the capture registry, and so a test can hand it a capture that fails.
    */
   captureRuntime?: () => Promise<unknown>
+  /** Discovers nearby Studios after pairing; the client, not the discovery transport, enforces the pin. */
+  discover?: () => Promise<readonly TaoStudioDeviceDiscoveredGateway[]>
   frameLimitBytes?: number
   handshakeTimeoutMs?: number
   now?: () => number
@@ -234,6 +242,8 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
   let current: Attempt | undefined
   let retryTimer: unknown
   let started = false
+  let roundCandidates = [...options.bootstrap.candidates]
+  let roundGeneration = 0
   /** Numbers this device's edit requests so a result can be matched to the request that caused it. */
   let sourceActionCounter = 0
 
@@ -302,7 +312,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     const delayMs = Math.min(backoff.initialMs * 2 ** (attempts - 1), backoff.maxMs)
     retryTimer = timers.setTimeout(() => {
       retryTimer = undefined
-      dial(0)
+      void beginRound()
     }, delayMs)
     update({ attempts, retryAt: now() + delayMs })
   }
@@ -324,7 +334,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     }
     const lastError = { code, message }
     const nextCandidate = attempt.candidateIndex + 1
-    if (!attempt.welcomed && !options_.halt && nextCandidate < options.bootstrap.candidates.length) {
+    if (!attempt.welcomed && !options_.halt && nextCandidate < roundCandidates.length) {
       update({ lastError })
       dial(nextCandidate)
       return
@@ -345,7 +355,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
   const redial = (attempt: Attempt): void => {
     settle(attempt, normalCloseCode, 'reconnect')
     if (started) {
-      dial(0)
+      void beginRound()
     }
   }
 
@@ -360,15 +370,34 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     }
   }
 
-  const sendSealed = (attempt: Attempt, message: TaoStudioDeviceDeviceMessage): void => {
+  const sealedText = (attempt: Attempt, message: TaoStudioDeviceDeviceMessage): string | undefined => {
     if (attempt.settled || attempt.keys === undefined) {
-      return
+      return undefined
     }
-    attempt.sendSeq += 1
+    const text = JSON.stringify(StudioDeviceTrust.seal(attempt.keys, attempt.sendSeq + 1, message))
+    return StudioDeviceProtocol.utf8ByteLength(text) <= frameLimitBytes ? text : undefined
+  }
+
+  const sendSealed = (attempt: Attempt, message: TaoStudioDeviceDeviceMessage): boolean => {
+    const text = sealedText(attempt, message)
+    if (text === undefined) {
+      if (!attempt.settled && attempt.keys !== undefined) {
+        update({
+          lastError: {
+            code: 'oversized',
+            message: `The device message is too large for the ${frameLimitBytes}-byte sealed-frame limit.`,
+          },
+        })
+      }
+      return false
+    }
     try {
-      attempt.socket.send(JSON.stringify(StudioDeviceTrust.seal(attempt.keys, attempt.sendSeq, message)))
+      attempt.socket.send(text)
+      attempt.sendSeq += 1
+      return true
     } catch (error) {
       failed(attempt, 'transport', errorMessage(error))
+      return false
     }
   }
 
@@ -390,10 +419,12 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     void capture().then(
       artifact => {
         const message: TaoStudioDeviceDeviceMessage = { capture: artifact, requestId, type: 'device.runtimeCaptured' }
-        const size = JSON.stringify(message).length
-        if (size > frameLimitBytes) {
+        const text = sealedText(attempt, message)
+        if (text === undefined) {
+          const clearBytes = StudioDeviceProtocol.utf8ByteLength(JSON.stringify(message))
           sendSealed(attempt, {
-            error: `The captured state is ${size} bytes, over the ${frameLimitBytes}-byte frame limit.`,
+            error:
+              `The captured state is ${clearBytes} bytes before sealing and does not fit the ${frameLimitBytes}-byte sealed-frame limit.`,
             requestId,
             type: 'device.runtimeCaptureFailed',
           })
@@ -407,10 +438,11 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     )
   }
 
-  const sendWhenConnected = (message: TaoStudioDeviceDeviceMessage): void => {
+  const sendWhenConnected = (message: TaoStudioDeviceDeviceMessage): boolean => {
     if (current !== undefined && current.welcomed) {
-      sendSealed(current, message)
+      return sendSealed(current, message)
     }
+    return false
   }
 
   const startHeartbeat = (attempt: Attempt, intervalMs: number): void => {
@@ -676,7 +708,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     if (current !== undefined) {
       settle(current, normalCloseCode, 'redial')
     }
-    const url = options.bootstrap.candidates[candidateIndex]
+    const url = roundCandidates[candidateIndex]
     RuntimeAssert.defined(url, 'gateway candidate index is within the candidate list', { candidateIndex })
     const attempt: Attempt = {
       candidateIndex,
@@ -732,6 +764,27 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     update({ deviceFingerprint: StudioDeviceTrust.fingerprint(identity.publicKey) })
   }
 
+  /** Starts one candidate round, preferring authenticated rediscovery and retaining the launch URL as fallback. */
+  async function beginRound(): Promise<void> {
+    const generation = ++roundGeneration
+    let discovered: readonly TaoStudioDeviceDiscoveredGateway[] = []
+    if (pinnedStudioKey !== undefined && options.discover !== undefined) {
+      try {
+        discovered = await options.discover()
+      } catch {
+        // Discovery is an optimization over the QR/deep-link bootstrap, never a reason not to dial it.
+      }
+    }
+    if (!started || generation !== roundGeneration) {
+      return
+    }
+    const authenticated = discovered
+      .filter(candidate => candidate.studioPublicKey === pinnedStudioKey && validGatewayUrl(candidate.url))
+      .map(candidate => candidate.url)
+    roundCandidates = [...new Set([...authenticated, ...options.bootstrap.candidates])]
+    dial(0)
+  }
+
   return {
     /**
      * The revision is the one the caller has on screen. The client cannot check it against a
@@ -754,7 +807,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       await persist()
       if (started) {
         clearRetry()
-        dial(0)
+        await beginRound()
       }
     },
     reconnect() {
@@ -764,7 +817,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       clearRetry()
       update({ attempts: 0, lastError: undefined, retryAt: undefined })
       if (identity !== undefined) {
-        dial(0)
+        void beginRound()
       }
     },
     report(level, message) {
@@ -779,8 +832,33 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       sendWhenConnected({ occurrence, type: 'device.selectSource' })
     },
     log(entries) {
-      if (entries.length > 0) {
-        sendWhenConnected({ entries, type: 'device.log' })
+      if (entries.length === 0 || current === undefined || !current.welcomed) {
+        return
+      }
+      let batch: TaoStudioDeviceLogEntry[] = []
+      for (const entry of entries) {
+        const candidate = [...batch, entry]
+        if (sealedText(current, { entries: candidate, type: 'device.log' }) !== undefined) {
+          batch = candidate
+          continue
+        }
+        if (batch.length > 0) {
+          sendSealed(current, { entries: batch, type: 'device.log' })
+          batch = []
+        }
+        if (sealedText(current, { entries: [entry], type: 'device.log' }) !== undefined) {
+          batch = [entry]
+        } else {
+          update({
+            lastError: {
+              code: 'oversized',
+              message: `A device log entry does not fit the ${frameLimitBytes}-byte sealed-frame limit.`,
+            },
+          })
+        }
+      }
+      if (batch.length > 0) {
+        sendSealed(current, { entries: batch, type: 'device.log' })
       }
     },
     setNetwork(network) {
@@ -805,12 +883,13 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
         await loadIdentity()
       }
       if (started && current === undefined && retryTimer === undefined) {
-        dial(0)
+        await beginRound()
       }
     },
     state: () => snapshot,
     stop() {
       started = false
+      roundGeneration += 1
       clearRetry()
       if (current !== undefined) {
         settle(current, normalCloseCode, 'stopped')
@@ -855,6 +934,16 @@ function trustFailureCode(error: unknown): TaoStudioDeviceClientErrorCode {
 function socketHost(url: string): string | undefined {
   const match = socketHostPattern.exec(url)
   return match === null ? undefined : `${match[1]}${match[2] ?? ''}`
+}
+
+/** Bonjour data is untrusted bytes; accept only the gateway endpoint shape Studio itself advertises. */
+function validGatewayUrl(url: string): boolean {
+  const match = /^(?:ws):\/\/(?:\[[0-9a-fA-F:]+\]|[a-zA-Z0-9][a-zA-Z0-9.-]*):(\d{1,5})\/device$/.exec(url)
+  if (match === null) {
+    return false
+  }
+  const port = Number(match[1])
+  return port > 0 && port <= 65_535
 }
 
 /**

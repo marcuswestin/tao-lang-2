@@ -21,6 +21,11 @@ import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
 import { studioProtocolChannel, studioProtocolVersion, studioSourceActionVersion } from '../StudioProtocol'
+import {
+  type StartedStudioDeviceBonjour,
+  startStudioDeviceBonjour,
+  type StudioDeviceBonjourOptions,
+} from './StudioDeviceBonjour'
 import type {
   StudioDeviceConnection,
   StudioDeviceSourceSelection,
@@ -58,6 +63,8 @@ export type StudioDeviceGatewaySessions = {
 }
 
 export type StudioDeviceGatewayOptions = {
+  /** Disable in tests, or inject a recorder; production advertises the authenticated gateway. */
+  bonjour?: false | ((options: StudioDeviceBonjourOptions) => StartedStudioDeviceBonjour | undefined)
   handshakeTimeoutMs?: number
   hostname?: string
   /** Candidate LAN hosts a phone may reach; shown in the status snapshot, never used to bind. */
@@ -68,11 +75,13 @@ export type StudioDeviceGatewayOptions = {
   port?: number
   sessions: StudioDeviceGatewaySessions
   trustStore: StudioDeviceTrustStore
+  /** How often a live gateway observes revocations written by another Studio process. */
+  trustRefreshMs?: number
 }
 
 export type StudioDeviceStatusListener = (status: StudioDeviceStatus) => void
 
-type ConnectionState = 'closed' | 'confirm' | 'connected' | 'hello' | 'pairing'
+type ConnectionState = 'authenticating' | 'closed' | 'confirm' | 'connected' | 'hello' | 'pairing'
 
 type Connection = {
   appliedRevision?: number
@@ -139,6 +148,7 @@ export class StudioDeviceGateway {
   static readonly deviceManifest = deviceManifest
 
   readonly port: number
+  #bonjour?: StartedStudioDeviceBonjour
   readonly #connections = new Set<Connection>()
   readonly #handshakeTimeoutMs: number
   readonly #hostsProvider: () => Promise<readonly string[]>
@@ -152,9 +162,15 @@ export class StudioDeviceGateway {
   /** Capture requests waiting on a device answer, keyed by the id the request carried. */
   readonly #captures = new Map<
     string,
-    { resolve: (result: { capture?: unknown; error?: string }) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      resolve: (result: { capture?: unknown; error?: string }) => void
+      sessionId: string
+      timer: ReturnType<typeof setTimeout>
+    }
   >()
   readonly #store: StudioDeviceTrustStore
+  readonly #trustRefreshMs: number
+  #trustRefreshTimer?: ReturnType<typeof setTimeout>
   #hosts: readonly string[] = []
   /** Advances on every device selection so the workbench can tell a new tap from a re-sent status. */
   #selectionSequence = 0
@@ -168,6 +184,7 @@ export class StudioDeviceGateway {
     this.#pairingWindowMs = options.pairingWindowMs ?? TaoStudioDeviceProtocol.pairingWindowMs
     this.#sessions = options.sessions
     this.#store = options.trustStore
+    this.#trustRefreshMs = options.trustRefreshMs ?? 1_000
     this.#server = Bun.serve<SocketData>({
       fetch: (request, server) => this.#fetch(request, server),
       hostname: options.hostname ?? '0.0.0.0',
@@ -182,11 +199,19 @@ export class StudioDeviceGateway {
       },
     })
     this.port = this.#server.port ?? options.port ?? 0
+    this.#scheduleTrustRefresh()
   }
 
   static async start(options: StudioDeviceGatewayOptions): Promise<StudioDeviceGateway> {
     const gateway = new StudioDeviceGateway(options)
     await gateway.#refreshHosts()
+    if (options.bonjour !== false) {
+      gateway.#bonjour = (options.bonjour ?? startStudioDeviceBonjour)({
+        log: gateway.#log,
+        port: gateway.port,
+        studioPublicKey: gateway.#store.publicKey(),
+      })
+    }
     return gateway
   }
 
@@ -314,6 +339,31 @@ export class StudioDeviceGateway {
     return { requested }
   }
 
+  /** detachSession drops every resource that still points at a project session that has closed. */
+  detachSession(sessionId: string): { detached: number } {
+    let detached = 0
+    for (const connection of [...this.#connections]) {
+      if (connection.ref?.sessionId === sessionId) {
+        this.#reject(connection, 'unknown-session', 'The Studio project session closed.')
+        detached += 1
+      }
+    }
+    for (const [requestId, pending] of this.#captures) {
+      if (pending.sessionId === sessionId) {
+        clearTimeout(pending.timer)
+        this.#captures.delete(requestId)
+        pending.resolve({ error: 'The Studio project session closed.' })
+      }
+    }
+    const state = this.#states.get(sessionId)
+    if (state?.pairing !== undefined) {
+      clearTimeout(state.pairing.timer)
+    }
+    state?.listeners.clear()
+    this.#states.delete(sessionId)
+    return { detached }
+  }
+
   /**
    * Outlines one render on the connected device, which is the other half of selecting both ways:
    * the workbench calls this when a person selects source on the Mac. Passing no occurrence clears
@@ -360,7 +410,7 @@ export class StudioDeviceGateway {
         this.#captures.delete(requestId)
         resolve({ error: `The device did not answer the capture request within ${timeoutMs}ms.` })
       }, timeoutMs)
-      this.#captures.set(requestId, { resolve, timer })
+      this.#captures.set(requestId, { resolve, sessionId, timer })
       this.#sendSealed(connection, { requestId, type: 'studio.captureRuntime' })
     })
   }
@@ -387,6 +437,10 @@ export class StudioDeviceGateway {
       state.listeners.clear()
     }
     this.#states.clear()
+    this.#bonjour?.stop()
+    this.#bonjour = undefined
+    clearTimeout(this.#trustRefreshTimer)
+    this.#trustRefreshTimer = undefined
     this.#server.stop(true)
   }
 
@@ -424,18 +478,22 @@ export class StudioDeviceGateway {
     if (connection.state === 'closed') {
       return
     }
+    if (connection.state === 'authenticating') {
+      this.#reject(connection, 'malformed', 'The device sent another handshake frame before authentication finished.')
+      return
+    }
     if (typeof raw !== 'string') {
       this.#reject(connection, 'malformed', 'Expected a text frame.')
       return
     }
     if (connection.state === 'hello' || connection.state === 'confirm') {
-      this.#clearFrame(connection, raw)
+      void this.#clearFrame(connection, raw)
     } else {
       this.#sealedFrame(connection, raw)
     }
   }
 
-  #clearFrame(connection: Connection, text: string): void {
+  async #clearFrame(connection: Connection, text: string): Promise<void> {
     const parsed = StudioDeviceProtocol.parseText(text, TaoStudioDeviceProtocol.helloLimitBytes)
     if (parsed.kind === 'oversized') {
       this.#reject(
@@ -470,7 +528,7 @@ export class StudioDeviceGateway {
         this.#reject(connection, 'malformed', 'Expected device.hello first.')
         return
       }
-      this.#hello(connection, message)
+      await this.#hello(connection, message)
       return
     }
     if (message.type !== 'device.confirm') {
@@ -480,7 +538,7 @@ export class StudioDeviceGateway {
     this.#confirm(connection, message)
   }
 
-  #hello(connection: Connection, hello: TaoStudioDeviceHelloMessage): void {
+  async #hello(connection: Connection, hello: TaoStudioDeviceHelloMessage): Promise<void> {
     const ref = this.#resolveSession(hello)
     if (ref === undefined) {
       this.#reject(connection, 'unknown-session', 'No open Studio project matches this hello.')
@@ -498,6 +556,18 @@ export class StudioDeviceGateway {
       || !StudioDeviceTrust.validNonce(hello.nonce)
     ) {
       this.#reject(connection, 'malformed', 'Handshake keys must be 32-byte base64 values and the nonce 16 bytes.')
+      return
+    }
+    connection.state = 'authenticating'
+    try {
+      await this.#store.refresh()
+    } catch (error) {
+      this.#log(`could not refresh device trust: ${Errors.formatForLog(error)}`)
+      this.#reject(connection, 'gateway-stopped', 'Studio could not read the device trust store.')
+      return
+    }
+    if (!this.#connections.has(connection) || this.#resolveSession(hello) === undefined) {
+      this.#reject(connection, 'unknown-session', 'The Studio project session closed during the handshake.')
       return
     }
     let mode: 'pair' | 'reconnect'
@@ -1160,6 +1230,43 @@ export class StudioDeviceGateway {
       this.#hosts = [...await this.#hostsProvider()]
     } catch (error) {
       this.#log(`could not list gateway hosts: ${Errors.formatForLog(error)}`)
+    }
+  }
+
+  #scheduleTrustRefresh(): void {
+    this.#trustRefreshTimer = setTimeout(() => {
+      this.#trustRefreshTimer = undefined
+      void this.#refreshTrust().finally(() => {
+        if (!this.#stopped) {
+          this.#scheduleTrustRefresh()
+        }
+      })
+    }, this.#trustRefreshMs)
+  }
+
+  async #refreshTrust(): Promise<void> {
+    try {
+      await this.#store.refresh()
+    } catch (error) {
+      this.#log(`could not refresh device trust: ${Errors.formatForLog(error)}`)
+      return
+    }
+    const affected = new Set<string>()
+    for (const connection of [...this.#connections]) {
+      if (
+        connection.state === 'connected'
+        && connection.devicePublicKey !== undefined
+        && !this.#store.isTrusted(connection.devicePublicKey)
+      ) {
+        if (connection.ref !== undefined) {
+          affected.add(connection.ref.sessionId)
+        }
+        this.#sendSealed(connection, { reason: 'Studio revoked this device.', type: 'studio.revoked' })
+        this.#reject(connection, 'revoked', 'Studio revoked this device.')
+      }
+    }
+    for (const sessionId of affected) {
+      this.#emit(sessionId)
     }
   }
 }

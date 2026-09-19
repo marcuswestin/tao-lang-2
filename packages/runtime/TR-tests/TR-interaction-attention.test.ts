@@ -2,13 +2,15 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { DesignControls } from '../TaoRuntime-src/TR-design'
-import { InteractionAttention } from '../TaoRuntime-src/TR-interaction-attention'
+import { InteractionAttention, runtimeInteractionValue } from '../TaoRuntime-src/TR-interaction-attention'
 import { CommandCatalog } from '../TaoRuntime-src/TR-interaction-catalog'
 import {
   InteractionOutline,
   siblingRegionIdentity,
   type TaoInteractionOccurrence,
   type TaoOutlineEntry,
+  type TaoOutlineLiveNode,
+  visualOrder,
 } from '../TaoRuntime-src/TR-interaction-outline'
 
 function register(outline: InteractionOutline, entry: TaoOutlineEntry): () => void {
@@ -43,6 +45,41 @@ function item(
 }
 
 Describe('TR.Interaction attention', () => {
+  Test('orders structural rows independently of scrolling and unequal control heights', () => {
+    const nodes = [
+      measuredNode('right-tall', { height: 90, width: 20, x: 80, y: 10 }),
+      measuredNode('left-short', { height: 30, width: 20, x: 10, y: 40 }),
+      measuredNode('second-row', { height: 20, width: 20, x: 5, y: 110 }),
+    ]
+
+    Expect(visualOrder(nodes).map(node => node.identity)).toEqual([
+      'left-short',
+      'right-tall',
+      'second-row',
+    ])
+    const scrolled = nodes.map(node =>
+      measuredNode(node.identity, {
+        ...node.live!.measure!()!,
+        y: node.live!.measure!()!.y - 240,
+      })
+    )
+    Expect(visualOrder(scrolled).map(node => node.identity)).toEqual([
+      'left-short',
+      'right-tall',
+      'second-row',
+    ])
+  })
+
+  Test('keeps registration order when any candidate has no complete visual measurement', () => {
+    const measured = measuredNode('measured', { height: 20, width: 20, x: 80, y: 20 })
+    const unmeasured = measuredNode('unmeasured', undefined)
+
+    Expect(visualOrder([measured, unmeasured]).map(node => node.identity)).toEqual([
+      'measured',
+      'unmeasured',
+    ])
+  })
+
   Test('narrows by greedy locale-aware word-prefix subsequence and eagerly targets one result', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
@@ -334,14 +371,15 @@ Describe('TR.Interaction attention', () => {
     const schema = TR.Data.Schema({
       entities: {
         Document: { collection: 'Documents', fields: { Title: { kind: 'text' } } },
-        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text', title: true } } },
       },
       name: 'InteractionPicker',
     }, testDataConnection())
     TR.Data.Create(schema, 'Document', { Title: TR.Value('Other') })
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
     TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Archive') })
     const otherDocument = schema.query({ entity: 'Document', filters: [] })[0]
-    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[1]
     let selected: unknown
     const move = TR.Interaction.Command({
       action: fills =>
@@ -382,9 +420,94 @@ Describe('TR.Interaction attention', () => {
 
     Expect(attention.read().verbPending).toMatchObject({ request: 'search', slot: 'Workspace' })
     Expect(attention.choosePendingSearchResult(TR.Value(otherDocument))).toBe(false)
-    Expect(attention.choosePendingSearchResult(TR.Value(workspace))).toBe(true)
+    Expect(attention.pressKey('a')).toBe(true)
+    Expect(attention.pendingSearchResults().map(result => result.label)).toEqual(['Archive'])
+    Expect(attention.read().targetLabel).toBe('Archive')
+    Expect(attention.pressKey('Enter')).toBe(true)
     Expect(selected).toBe(workspace)
     Expect(attention.read().verbPending).toBeUndefined()
+  })
+
+  // Generated command bodies evaluate a fill and hand the result to a runtime action, which
+  // evaluates it once more. A fill that only survives the first evaluation fails inside the action,
+  // where the failure is reported as a contained action error rather than a rejected fill.
+  Test('supplies picker and scalar fills that a generated action can evaluate twice', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const schema = TR.Data.Schema({
+      entities: {
+        Folder: { collection: 'Folders', fields: { Name: { kind: 'text', title: true } } },
+        Note: {
+          collection: 'Notes',
+          fields: {
+            Folder: { kind: 'relation', relation: 'Folder' },
+            Title: { kind: 'text', title: true },
+          },
+        },
+      },
+      name: 'InteractionFills',
+    }, testDataConnection())
+    TR.Data.Create(schema, 'Folder', { Name: TR.Value('Archive') })
+    TR.Data.Create(schema, 'Folder', { Name: TR.Value('Home') })
+    const folders = schema.query({ entity: 'Folder', filters: [] })
+    const archive = folders.find(entry => TR.Data.Read(entry, 'Name') === 'Archive')
+    const folder = folders.find(entry => TR.Data.Read(entry, 'Name') === 'Home')
+    TR.Data.Create(schema, 'Note', { Folder: TR.Value(archive), Title: TR.Value('Draft note') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]
+    const file = TR.Interaction.Command({
+      // Exactly the shape the compiler emits: every fill is evaluated before the runtime call, and
+      // the runtime call evaluates what it is given.
+      action: fills =>
+        TR.Action(() => {
+          TR.Data.Update(fills['Note']!.evaluate(), {
+            Folder: fills['Destination']!.evaluate(),
+            Title: fills['Label']!.evaluate(),
+          })
+        }),
+      members: { Key: () => TR.Value('f'), Title: () => TR.Value('File note') },
+      name: 'FileNote',
+      slots: ['Note', 'Destination', 'Label'],
+    })
+    catalog.register({
+      commands: [{
+        command: () => file,
+        identity: '@ui/Notes.FileNote',
+        name: 'FileNote',
+        scope: { kind: 'module' },
+        slots: [
+          { entity: true, name: 'Note', required: true, type: 'Note' },
+          { entity: true, name: 'Destination', required: true, type: 'Folder' },
+          { entity: false, name: 'Label', required: true, type: 'text' },
+        ],
+        static: { key: 'f', title: 'File note' },
+      }],
+      module: '@ui/Notes',
+    })
+    register(outline, region('notes', { primary: true }))
+    register(
+      outline,
+      item('note', 'notes', 'Draft note', {
+        commandPolicy: { hidden: [], surfaced: ['@ui/Notes.FileNote'] },
+        entityType: 'Note',
+        runtimeValue: TR.Value(note),
+      }),
+    )
+    attention.revalidateOutline()
+    attention.target('note')
+    attention.openVerbs()
+    attention.pressKey('f')
+
+    Expect(attention.read().verbPending).toMatchObject({ request: 'search', slot: 'Destination' })
+    const result = attention.pendingSearchResults().find(entry => entry.label === 'Home')
+    Expect(result?.value.evaluate().evaluate().jsValue).toBe(folder)
+    Expect(attention.choosePendingSearchResult(result!.value)).toBe(true)
+    Expect(attention.read().verbPending).toMatchObject({ request: 'input', slot: 'Label' })
+    Expect(attention.providePendingValue(runtimeInteractionValue('Filed note'))).toBe(true)
+
+    Expect(attention.read().verbPending).toBeUndefined()
+    Expect(TR.Data.Read(note, 'Title')).toBe('Filed note')
+    Expect(TR.Data.Read(note, 'Folder')).toBe(folder)
   })
 
   Test('does not invoke a fallback after a void-returning mounted activation', () => {
@@ -490,6 +613,41 @@ Describe('TR.Interaction attention', () => {
     Expect(engaged).toBe(1)
     Expect(submitted).toBe(0)
     Expect(attention.read().engaged).toBe('title')
+  })
+
+  Test('engaging clears the narrowing that selected the target', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    register(outline, item('sibling', 'main', 'Sibling row'))
+    register(outline, {
+      corpus: () => ['Document title'],
+      identity: 'title',
+      kind: 'input',
+      label: () => 'Document title',
+      live: { engage: () => {} },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    for (const key of ['d', 'o', 'c']) {
+      Expect(attention.pressKey(key)).toBe(true)
+    }
+    Expect(attention.read().narrowing).toBe('doc')
+    Expect(attention.read().target).toBe('title')
+
+    Expect(attention.pressKey('Enter')).toBe(true)
+
+    Expect(attention.read().engaged).toBe('title')
+    Expect(attention.read().narrowing).toBe('')
+    Expect(attention.read().target).toBe('title')
+
+    // Escape only has to disengage: the narrowing that chose the input is already gone, so the next
+    // letter starts a fresh narrowing instead of extending `doc`.
+    Expect(attention.pressKey('Escape')).toBe(true)
+    Expect(attention.read().engaged).toBe(undefined)
+    Expect(attention.pressKey('s')).toBe(true)
+    Expect(attention.read().narrowing).toBe('s')
   })
 
   Test('applies engaged input, target, mounted view, app command, then reducer precedence', () => {
@@ -635,7 +793,7 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['Scoped'])
   })
 
-  Test('dispatches a bare declared command key instead of typing it into narrowing', () => {
+  Test('uses a bare declared command key only inside the target verb layer', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
     const attention = new InteractionAttention(outline, catalog)
@@ -658,24 +816,93 @@ Describe('TR.Interaction attention', () => {
     })
     register(outline, region('main', { primary: true }))
     register(outline, item('draft', 'main', 'Draft'))
+    catalog.registerSurface({ commands: [save], hidden: [], identity: 'Draft row' }, 'draft')
     attention.revalidateOutline()
 
     Expect(attention.pressKey('s')).toBe(true)
-    Expect(invoked).toEqual(['Save'])
-    Expect(attention.read().narrowing).toBe('')
-    Expect(attention.read().mode).toBe('navigating')
-
-    // A letter no command declares still narrows, so the shortcut has not swallowed the alphabet.
-    Expect(attention.pressKey('d')).toBe(true)
-    Expect(invoked).toEqual(['Save'])
-    Expect(attention.read().narrowing).toBe('d')
+    Expect(invoked).toEqual([])
+    Expect(attention.read().narrowing).toBe('s')
     Expect(attention.pressKey('Backspace')).toBe(true)
 
-    // The exclusion contract: a generated hint key never takes `s`, so `s` still reaches the command.
-    Expect(attention.pressKey('/')).toBe(true)
-    Expect(attention.read().mode).toBe('hints')
+    attention.target('draft')
+    attention.openVerbs()
     Expect(attention.pressKey('s')).toBe(true)
-    Expect(invoked).toEqual(['Save', 'Save'])
+    Expect(invoked).toEqual(['Save'])
+    Expect(attention.read().narrowing).toBe('')
+  })
+
+  Test('does not dispatch a row-scoped shortcut until that row is targeted', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const rowCommand = (name: string) =>
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Key: () => TR.Value('primary+e'), Title: () => TR.Value(name) },
+        name,
+      })
+    register(outline, region('rows', { primary: true }))
+    register(outline, item('first', 'rows', 'First'))
+    register(outline, item('second', 'rows', 'Second'))
+    catalog.registerSurface({ commands: [rowCommand('Edit first')], hidden: [], identity: 'First row' }, 'first')
+    catalog.registerSurface({ commands: [rowCommand('Edit second')], hidden: [], identity: 'Second row' }, 'second')
+    attention.revalidateOutline()
+
+    Expect(attention.read().target).toBeUndefined()
+    Expect(attention.pressKey('primary+e')).toBe(false)
+    Expect(invoked).toEqual([])
+
+    attention.target('first')
+    Expect(attention.pressKey('primary+e')).toBe(true)
+    Expect(invoked).toEqual(['Edit first'])
+  })
+
+  Test('narrows palette letters and cycles its selected command with arrows', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const registerCommand = (name: string) => {
+      const command = TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Title: () => TR.Value(name) },
+        name,
+      })
+      catalog.register({
+        commands: [{
+          command: () => command,
+          identity: name,
+          name,
+          scope: { kind: 'module' },
+          slots: [],
+          static: { title: name },
+        }],
+        module: `@test/${name}`,
+      })
+    }
+    registerCommand('Archive')
+    registerCommand('Duplicate')
+    register(outline, region('main', { primary: true }))
+    attention.revalidateOutline()
+
+    attention.pressKey('primary+k')
+    Expect(attention.read().target).toBe('Archive')
+    Expect(attention.pressKey('d')).toBe(true)
+    Expect(attention.read().narrowing).toBe('d')
+    Expect(attention.read().target).toBe('Duplicate')
+    Expect(invoked).toEqual([])
+
+    attention.pressKey('Backspace')
+    Expect(attention.read().target).toBe('Duplicate')
+    attention.pressKey('ArrowDown')
+    Expect(attention.read().target).toBe('Archive')
+    attention.pressKey('ArrowDown')
+    Expect(attention.read().target).toBe('Duplicate')
+    attention.pressKey('ArrowUp')
+    Expect(attention.read().target).toBe('Archive')
+    attention.pressKey('Enter')
+    Expect(invoked).toEqual(['Archive'])
   })
 
   Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {
@@ -1121,3 +1348,18 @@ Describe('TR.Interaction attention', () => {
     Expect(blurs).toBe(2)
   })
 })
+
+function measuredNode(
+  identity: string,
+  bounds: ReturnType<NonNullable<NonNullable<TaoOutlineEntry['live']>['measure']>>,
+): TaoOutlineLiveNode {
+  return {
+    identity,
+    kind: 'item',
+    label: () => identity,
+    live: { measure: () => bounds },
+    mount: 1,
+    order: 1,
+    provenance: {},
+  }
+}

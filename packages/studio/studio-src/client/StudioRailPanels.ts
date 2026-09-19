@@ -65,12 +65,14 @@ export const StudioRailPanels = {
       while (start !== -1 && results.length < 100) {
         const lineStart = document.content.lastIndexOf('\n', start - 1) + 1
         const lineEnd = document.content.indexOf('\n', start)
+        const end = start + query.trim().length
         results.push({
           detail: document.content.slice(lineStart, lineEnd === -1 ? document.content.length : lineEnd).trim(),
-          end: start + query.trim().length,
+          end,
           kind: 'text',
           label: `${fileLabel(document.path)}:${lineNumber(document.content, start)}`,
           path: document.path,
+          range: { end: sourcePosition(document.content, end), start: sourcePosition(document.content, start) },
           ...(document.sourceVersion === undefined ? {} : { sourceVersion: document.sourceVersion }),
           start,
         })
@@ -89,11 +91,11 @@ function fileLabel(path: string): string {
 }
 
 function lineNumber(content: string, offset: number): number {
-  let line = 1
-  for (let index = 0; index < offset; index += 1) {
-    if (content[index] === '\n') {
-      line += 1
-    }
-  }
-  return line
+  return sourcePosition(content, offset).line + 1
+}
+
+function sourcePosition(content: string, offset: number): { character: number; line: number } {
+  const before = content.slice(0, offset)
+  const line = before.split('\n').length - 1
+  return { character: offset - (before.lastIndexOf('\n') + 1), line }
 }

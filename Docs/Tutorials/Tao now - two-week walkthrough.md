@@ -1,10 +1,18 @@
-# Tao now: a two-week walkthrough
+# Tao now: a living walkthrough
 
-This is a linear tour of the user-visible work landed from 2026-08-23 through 2026-09-06. It is
-for an experienced developer who already has this repository checked out. **Verified** means the
-step was exercised in Studio or a running Tao app while this guide was written; **not verified here**
-means the implementation and tests exist, but this host lacked the required service, credential,
-device, or browser capability.
+This began as a linear tour of the user-visible work landed from 2026-08-23 through 2026-09-06 and
+was reconciled with the current software contract on 2026-09-16. It is for an experienced developer
+who already has this repository checked out. **Verified** means the step was exercised in Studio or a
+running Tao app during the walkthrough pass; later contract corrections are not retroactively counted
+as live evidence. **Not verified here** means the implementation and tests exist, but this host lacked
+the required service, credential, device, or browser capability.
+
+This is a dated record, not a living contract: what it says was **verified** was verified on those
+dates and has not been re-run since. What it cannot be allowed to do is name things that no longer
+exist, so `packages/tao-cli/cli-tests/tutorials.test.ts` checks every repository path, `just` recipe,
+`--app` name, and `tao` subcommand it mentions against the repository on every run. A rename that
+leaves this walkthrough behind fails that test. For behavior that is current by construction, read
+`Your First Tao App.md`, whose every step the same suite compiles and runs.
 
 ## What landed
 
@@ -20,9 +28,10 @@ device, or browser capability.
   and device kits, native navigation chrome/restoration, and keyboard-first command discovery.
 - **A broader data boundary:** provider-neutral connections now cover InstantDB, a machine-local Dev
   datasource, whole-snapshot iCloud storage, and granular CloudKit records.
-- **A developer-to-release path:** `tao create`, local visual review, Studio beta shipping, App Store
-  dry runs/releases, over-the-air updates and rollback, plus substantially stronger verification and
-  diagnostic automation.
+- **A developer-to-release path:** `tao create`, local visual review, the Studio beta-shipping entry
+  point, App Store dry-run orchestration, and implemented over-the-air update and rollback paths, plus
+  substantially stronger verification and diagnostic automation. This walkthrough did not perform an
+  App Store or TestFlight release or an installed-binary OTA.
 
 Several commits in the period were plans, internal simplifications, or verification infrastructure;
 they are useful groundwork but are not presented below as already usable product behavior.
@@ -50,8 +59,6 @@ Start with the deterministic HNReader variant so that the tour does not depend o
 ```sh
 ./dev studio Apps/HNReader --app HNReaderStub
 ```
-
-![Annotated overview of the Tao Studio workbench](<Images/Tao Studio overview.png>)
 
 1. Use the **Project** and **app** selectors at the top to change the open project or app variant.
 2. Use the left rail for **Files**, **Components**, **Screens**, **Design tokens**, **Data**,
@@ -156,8 +163,8 @@ and live scenario switching were all verified. Use an ordinary terminal for a ph
 its CoreDevice connection is outside the agent sandbox.
 
 Open **Agent**, choose project chat or the current scenario, ask a question, then review any proposed
-source change before applying it. During this pass, Studio reached `claude-sonnet-5` and attempted an
-answer, but Anthropic rejected the configured API key as invalid. Correct the secret with
+source change before applying it. During this pass, Studio reached the configured model and attempted an
+answer, but the provider rejected the configured API key as invalid. Correct the secret with
 `just secrets`, restart Studio, and retry; do not print or expose the decrypted secret while
 diagnosing it.
 
@@ -196,20 +203,24 @@ Finally, rehearse the real release plan without mutating App Store state:
 ./tao ship Apps/HNReader --app HNReader --dry-run
 ```
 
-The dry run completed and listed the tag, release compile, Studio-marker check, iOS prebuild,
-archive/sign, upload, version attachment, and submission actions. Studio's orange **Beta ship** button
+The dry run completed and listed the source-version write, atomic lock update, release compile,
+Studio-marker check, iOS prebuild, archive/sign, upload, version attachment, and submission actions.
+It did not mutate source, lock, Git index, refs, App Store state, or the network. A non-dry ship may
+write source and `.tao-project/lock.jsonc`, but it never stages, commits, tags, or pushes; committing
+those files remains the developer's action. Studio's orange **Beta ship** button
 is not another preview: it performs a beta ship with confirmation bypassed, so use it only when a real
 TestFlight upload is intended. `tao ship --update` and `--rollback` are the corresponding OTA paths;
 they were not run because they change release state.
 
 ## Verification boundary
 
-- **Live-verified:** Studio launch and HNReader live/stub canvases; app switching; project panels,
+- **Walkthrough evidence at the time:** Studio launch and HNReader live/stub canvases; app switching; project panels,
   lenses, scenarios, data, drawers, selection/focus, workspace modes, and device pairing;
   standalone HNReaderStub plus keyboard hints/palette; WordFlower focus pause/resume/relaunch;
   representative native component, Device Kit, and navigation paths; Companion pairing, rendering,
   and scenario switching; `tao create --ai none`; `tao review`; `tao ship --dry-run`; and the slow
-  Studio browser-smoke lane.
+  Studio browser-smoke lane. This dated walkthrough is not final simulated-user acceptance: that
+  journey is currently quarantined from `verify-full` pending ten consecutive reliable browser runs.
 - **Present but not end-to-end verified:** freehand persistence/snap, every native control interaction,
   sharing, chromeless navigation/restoration, a successful Studio agent answer, and Dev/iCloud/CloudKit
   native behavior.

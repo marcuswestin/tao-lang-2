@@ -65,10 +65,9 @@ Describe('compiler: interaction attention', () => {
         }
       }
       view FocusBar() {
-        render Text("Focus session") [fill when focused, hug when Sidebar is active,
+        render Text("Focus session") [fill when focused, hug when FocusBar is active,
           compress when Scheme is Dark]
       }
-      view Sidebar() { render Text("Sidebar") }
       view StatusBar() { render Text("Focus session") }
     `)
 
@@ -81,7 +80,7 @@ Describe('compiler: interaction attention', () => {
     Expect(code).not.toContain('"members":["Focus session"]')
     Expect(code).not.toContain('"members":["Shell"]')
     Expect(code).toContain(
-      'designSpec: TR.Design.Spec([["fill","when","focused"],["hug","when","Sidebar","is","active"],["compress","when","Scheme","is","Dark"]])',
+      'designSpec: TR.Design.Spec([["fill","when","focused"],["hug","when","FocusBar","is","active"],["compress","when","Scheme","is","Dark"]])',
     )
     Expect(code).not.toContain('OutlineRegionScope')
   })

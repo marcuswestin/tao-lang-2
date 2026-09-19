@@ -1,8 +1,10 @@
+import { CLI, Repo } from '@shared'
 import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   type CloudKitEvent,
   type CloudKitRecord,
+  cloudKitStateFileName,
   cloudKitZonesOver,
   type TaoCloudKitNativeModule,
 } from '../icloud-native-src/cloudkit-native'
@@ -92,6 +94,7 @@ Describe('tao-icloud-native CloudKit zones', () => {
     }
     await zone.send([record])
     await zone.fetch()
+    await Promise.resolve()
     const sessionId = native.started[0]!.sessionId
 
     native.emit({ batchId: 'batch-1', kind: 'fetched', modifications: [record], deletions: ['gone'], sessionId })
@@ -107,7 +110,13 @@ Describe('tao-icloud-native CloudKit zones', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    Expect(native.started).toEqual([{ container: 'iCloud.example', sessionId, zoneName: 'Notes' }])
+    Expect(native.started).toEqual([{
+      container: 'iCloud.example',
+      sessionId,
+      stateFileName: cloudKitStateFileName('iCloud.example', 'Notes'),
+      zoneName: 'Notes',
+    }])
+    Expect(native.replayed).toEqual([sessionId])
     Expect(native.sends).toEqual([[sessionId, [record]]])
     Expect(native.fetches).toEqual([sessionId])
     Expect(native.acknowledged).toEqual([[sessionId, 'batch-1']])
@@ -122,9 +131,91 @@ Describe('tao-icloud-native CloudKit zones', () => {
     )
     await Expect(failing.send([record])).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
   })
+
+  Test('subscribes before replaying the durable inbox and distinguishes structural state identities', async () => {
+    const native = fakeCloudKitModule({ replayBatch: 'durable-batch' })
+    const zone = cloudKitZonesOver(native.module)('a.b', 'c')
+    const batches: string[] = []
+    zone.subscribe({
+      accountChanged: () => undefined,
+      failed: () => undefined,
+      fetched: (_modifications, _deletions, acknowledge) => {
+        batches.push('fetched')
+        void acknowledge()
+      },
+      sent: () => undefined,
+      zoneReset: () => undefined,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    Expect(batches).toEqual(['fetched'])
+    Expect(native.order).toEqual(['listener', 'start', 'replay'])
+    Expect(native.acknowledged).toEqual([[native.started[0]!.sessionId, 'durable-batch']])
+    Expect(cloudKitStateFileName('a.b', 'c')).not.toBe(cloudKitStateFileName('a', 'b.c'))
+  })
+
+  Test('replays and derives non-aliasing state identities in independent processes', async () => {
+    const modulePath = Repo.resolvePath('packages/icloud-native/icloud-native-src/cloudkit-native.ts')
+    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const run = async (container: string, zoneName: string) => {
+      const script = `
+        import { cloudKitStateFileName, cloudKitZonesOver } from ${JSON.stringify(modulePath)}
+        import { HCI } from ${JSON.stringify(sharedPath)}
+        let listener = () => {}
+        let sessionId = ''
+        const batches = []
+        const native = {
+          acknowledgeFetched: async () => {},
+          addListener: (_name, next) => { listener = next; return { remove() {} } },
+          fetchChanges: async () => {},
+          replayInbox: async id => listener({ batchId: 'durable', kind: 'fetched', sessionId: id }),
+          sendChanges: async () => {},
+          start: async id => {
+            sessionId = id
+            listener({ batchId: 'early', kind: 'fetched', sessionId: id })
+          },
+          stop: async () => {},
+        }
+        const zone = cloudKitZonesOver(native)(${JSON.stringify(container)}, ${JSON.stringify(zoneName)})
+        zone.subscribe({
+          accountChanged() {}, failed() {}, sent() {}, zoneReset() {},
+          fetched(_modifications, _deletions, acknowledge) { batches.push('fetched'); void acknowledge() },
+        })
+        await Promise.resolve()
+        await Promise.resolve()
+        HCI.writeLine(JSON.stringify({ batches, sessionId, state: cloudKitStateFileName(${JSON.stringify(container)}, ${
+        JSON.stringify(zoneName)
+      }) }))
+      `
+      const result = await CLI.run('bun', { args: ['-e', script], stdio: 'pipe' })
+      Expect(result.exitCode).toBe(0)
+      return JSON.parse(result.stdout) as { batches: string[]; sessionId: string; state: string }
+    }
+
+    const [left, right] = await Promise.all([run('a.b', 'c'), run('a', 'b.c')])
+    Expect(left.batches).toEqual(['fetched', 'fetched'])
+    Expect(right.batches).toEqual(['fetched', 'fetched'])
+    // Process-local session ids may repeat; the durable state identities must not.
+    Expect(left.sessionId).toBe(right.sessionId)
+    Expect(left.state).not.toBe(right.state)
+  })
 })
 
 Describe('tao-icloud-native config plugin', () => {
+  Test('resolves the conventional app.plugin subpath through Expo’s actual resolver', async () => {
+    const packageRoot = Repo.resolvePath('packages/icloud-native')
+    const expoPackage = Repo.resolvePath('packages/icloud-native/node_modules/expo/package.json')
+    const script = `
+      const { createRequire } = require('node:module')
+      const expoRequire = createRequire(require.resolve(${JSON.stringify(expoPackage)}))
+      const { resolveConfigPluginFunction } = expoRequire('@expo/config-plugins/build/utils/plugin-resolver')
+      const plugin = resolveConfigPluginFunction(${JSON.stringify(packageRoot)}, 'tao-icloud-native')
+    `
+    const result = await CLI.run('node', { args: ['-e', script], stdio: 'pipe' })
+    Expect(result.exitCode).toBe(0)
+  })
+
   Test('derives the default container from the bundle identifier', () => {
     Expect(resolveContainers(undefined, 'lang.tao.notes')).toEqual(['iCloud.lang.tao.notes'])
     Expect(resolveContainers(['iCloud.custom', 'iCloud.custom'], 'lang.tao.notes')).toEqual(['iCloud.custom'])
@@ -159,23 +250,45 @@ Describe('tao-icloud-native config plugin', () => {
       'com.apple.developer.icloud-services': ['CloudKit'],
     })
   })
+
+  Test('grants document ubiquity only to containers mounted by the Documents provider', () => {
+    Expect(
+      iCloudEntitlements(
+        {},
+        ['iCloud.lang.tao.documents', 'iCloud.lang.tao.records'],
+        ['CloudDocuments', 'CloudKit'],
+        ['iCloud.lang.tao.documents'],
+      ),
+    ).toEqual({
+      'com.apple.developer.icloud-container-identifiers': [
+        'iCloud.lang.tao.documents',
+        'iCloud.lang.tao.records',
+      ],
+      'com.apple.developer.icloud-services': ['CloudDocuments', 'CloudKit'],
+      'com.apple.developer.ubiquity-container-identifiers': ['iCloud.lang.tao.documents'],
+    })
+  })
 })
 
-function fakeCloudKitModule(options: { sendFailure?: string } = {}): {
+function fakeCloudKitModule(options: { replayBatch?: string; sendFailure?: string } = {}): {
   acknowledged: unknown[][]
   emit(event: CloudKitEvent): void
   fetches: string[]
   module: TaoCloudKitNativeModule
+  order: string[]
+  replayed: string[]
   sends: unknown[][]
-  started: Array<{ container: string | null; sessionId: string; zoneName: string }>
+  started: Array<{ container: string | null; sessionId: string; stateFileName: string; zoneName: string }>
   stopped: string[]
 } {
   const listeners = new Set<(event: CloudKitEvent) => void>()
   const state = {
     acknowledged: [] as unknown[][],
     fetches: [] as string[],
+    order: [] as string[],
+    replayed: [] as string[],
     sends: [] as unknown[][],
-    started: [] as Array<{ container: string | null; sessionId: string; zoneName: string }>,
+    started: [] as Array<{ container: string | null; sessionId: string; stateFileName: string; zoneName: string }>,
     stopped: [] as string[],
   }
   const module: TaoCloudKitNativeModule = {
@@ -183,11 +296,21 @@ function fakeCloudKitModule(options: { sendFailure?: string } = {}): {
       state.acknowledged.push([sessionId, batchId])
     },
     addListener: (_event, listener) => {
+      state.order.push('listener')
       listeners.add(listener)
       return { remove: () => listeners.delete(listener) }
     },
     fetchChanges: async sessionId => {
       state.fetches.push(sessionId)
+    },
+    replayInbox: async sessionId => {
+      state.order.push('replay')
+      state.replayed.push(sessionId)
+      if (options.replayBatch !== undefined) {
+        for (const listener of [...listeners]) {
+          listener({ batchId: options.replayBatch, kind: 'fetched', sessionId })
+        }
+      }
     },
     sendChanges: async (sessionId, records) => {
       if (options.sendFailure !== undefined) {
@@ -195,8 +318,9 @@ function fakeCloudKitModule(options: { sendFailure?: string } = {}): {
       }
       state.sends.push([sessionId, records])
     },
-    start: async (sessionId, container, zoneName) => {
-      state.started.push({ container, sessionId, zoneName })
+    start: async (sessionId, container, zoneName, stateFileName) => {
+      state.order.push('start')
+      state.started.push({ container, sessionId, stateFileName, zoneName })
     },
     stop: async sessionId => {
       state.stopped.push(sessionId)
@@ -211,6 +335,8 @@ function fakeCloudKitModule(options: { sendFailure?: string } = {}): {
     },
     fetches: state.fetches,
     module,
+    order: state.order,
+    replayed: state.replayed,
     sends: state.sends,
     started: state.started,
     stopped: state.stopped,

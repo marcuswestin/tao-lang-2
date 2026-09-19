@@ -113,4 +113,26 @@ Describe('tao create brief', () => {
     Expect(brief.sources).toEqual([{ kind: 'url', url: 'https://example.com/private', error: 'HTTP 403' }])
     Expect(briefPrompt(brief, 500)).toContain('could not be read (HTTP 403)')
   })
+
+  Test('cancels a streaming URL body as soon as the source ceiling is reached', async () => {
+    let pulls = 0
+    let cancelled = false
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        controller.enqueue(encoder.encode('x'.repeat(300_000)))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const brief = await buildCreationBrief('Read https://example.com/huge', {
+      fetch: async () => new Response(body, { headers: { 'content-type': 'text/plain' } }),
+    })
+
+    Expect(brief.sources).toEqual([{ kind: 'url', url: 'https://example.com/huge', text: 'x'.repeat(6_000) }])
+    Expect(cancelled).toBe(true)
+    Expect(pulls).toBeLessThanOrEqual(3)
+  })
 })

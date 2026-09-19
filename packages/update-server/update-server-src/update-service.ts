@@ -173,6 +173,9 @@ async function publishUpdate(
     if (source === undefined) {
       requestError(400, `Rollback source update '${data.sourceUpdateId}' does not exist in this channel.`)
     }
+    if (!publicationDataMatchesSource(data, source)) {
+      requestError(400, `A rollback must republish the exact immutable source update '${data.sourceUpdateId}'.`)
+    }
   }
   const platform = publicationPlatform(data.metadata)
   const id = context.createUpdateId()
@@ -196,6 +199,37 @@ async function publishUpdate(
   }
   await context.store.putUpdate({ platform, publication })
   return Http.jsonResponse(publication, 201)
+}
+
+function publicationDataMatchesSource(
+  data: TaoUpdatePublicationData,
+  source: { platform: ExpoUpdatePlatform; publication: TaoPublishedUpdate },
+): boolean {
+  const manifest = source.publication.manifest
+  return publicationPlatform(data.metadata) === source.platform
+    && data.dataSchemaFingerprint === source.publication.dataSchemaFingerprint
+    && data.runtimeVersion === manifest.runtimeVersion
+    && sameJson(data.assets, manifest.assets)
+    && sameJson(data.extra, manifest.extra)
+    && sameJson(data.launchAsset, manifest.launchAsset)
+    && sameJson(data.metadata, manifest.metadata)
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => sameJson(value, right[index]))
+  }
+  if (!Json.isRecord(left) || !Json.isRecord(right)) {
+    return false
+  }
+  const leftKeys = Object.keys(left).toSorted()
+  const rightKeys = Object.keys(right).toSorted()
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => key === rightKeys[index] && sameJson(left[key], right[key]))
 }
 
 async function readUpdate(

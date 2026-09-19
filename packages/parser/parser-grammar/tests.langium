@@ -9,9 +9,12 @@ import "./terminals"
 entry TestsGrammarEntrypoint:
     TestDeclaration;
 
-// A test declares what it exercises before what it asserts: `test Button "Handles press" { … }`,
-// or `test Button { test "…" { … } }` for a group. Visibility lets a package publish its suite, so
-// another implementation can be held to the same journeys.
+// A test declares what it exercises before what it asserts: `test Button { test "…" { … } }`. The
+// grammar also admits a leaf spelling, `test Button "Handles press" { … }`, which the compiler has
+// never supported: a file-level test is a suite, and it takes its checks from the tests nested in
+// it, so a leaf compiles to a suite of nothing. The validator rejects that shape rather than letting
+// a file silently run no checks. Visibility lets a package publish its suite, so another
+// implementation can be held to the same journeys.
 TestDeclaration:
     visibility=DeclarationVisibility? 'test'
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
@@ -21,10 +24,10 @@ TestDeclaration:
 // slot fill. That is what lets the ID-headed `narrow "..."` seam remain spelling-validated without
 // becoming grammatically indistinguishable from `Title "..."` in an ordinary view body.
 TestBlock returns Block:
-    '{' statements+=(AppBlockDiagnosticStatement | NarrowStep)* '}';
+    '{' statements+=(AppBlockDiagnosticStatement | InteractionWordStep)* '}';
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
-    | PressKeyStep | NarrowStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
+type CheckStep = RunStep | PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
+    | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
     | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep
     | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep
     | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep
@@ -41,25 +44,16 @@ TagPressStep:
 
 // Phase and pointer steps are ordinary test steps as well as the deliberately narrow journey
 // surface scenarios may replay. A phase press keeps the same selector family as plain `press`.
-PressPhaseStep:
-    'press' phase=('down' | 'up') (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+PressWordStep:
+    'press' subject=ID (selector=TestSelector? target=STRING | tag=TagOrHexColor);
 
-HoverStep:
-    'hover' (selector=TestSelector? target=STRING | tag=TagOrHexColor);
-
-// Focus is intentionally tag-only: focus is about one stable element identity, not matching text.
-// Keep the head ID-based so `focus` remains available to `expect focus region` and ordinary names.
-FocusStep:
-    head=ID tag=TagOrHexColor;
+// The ID-headed interaction seam keeps hover, focus, and narrow available as ordinary declaration
+// names. Their distinct target shapes and scenario eligibility are semantic validation concerns.
+InteractionWordStep:
+    head=ID (selector=TestSelector? target=STRING | tag=TagOrHexColor);
 
 // Interaction vocabulary stays ID-headed and spelling-validated. `key`, `narrow`, `target`,
 // `focus`, `region`, and `verbs` therefore remain available as ordinary names elsewhere.
-PressKeyStep:
-    'press' subject=ID value=STRING;
-
-NarrowStep:
-    head=ID value=STRING;
-
 PressToolbarCommandStep:
     'press' surface=ID 'command' value=Expression;
 

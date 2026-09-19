@@ -1,4 +1,5 @@
 import React from 'react'
+import { accessibilityStateProps } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
@@ -781,7 +782,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                 {
                   nativeProps: {
                     accessibilityRole: 'tab',
-                    accessibilityState: { selected: item.key === this.activeKey },
+                    ...accessibilityStateProps({ selected: item.key === this.activeKey }),
                   },
                 },
               ),
@@ -841,7 +842,11 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     const activeIndex = this.items.indexOf(active)
     const next = this.items.length > 1 ? this.items[(activeIndex + 1) % this.items.length] : undefined
     const nextIcon = next ? selectionItemIconName(next.definition) : undefined
+    const activePresentable = active.entries.at(-1)?.presentable
     const observable = taoProps?.navigationHostActive !== false
+      && !(activePresentable !== undefined
+        && isNavigation(activePresentable)
+        && activePresentable.contentIsCovered())
     return React.createElement(runtime.View, {
       children: [
         ...this.items.map(item =>
@@ -857,32 +862,34 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
             style: item === active ? toggleItemStyle : hiddenToggleItemStyle,
           })
         ),
-        React.createElement(SelectionToggleBar, {
-          back: () => {
-            this.back()
-          },
-          canGoBack: this.canGoBack,
-          chrome: active.chrome,
-          fallbackTitle: String(active.definition.label.evaluate().jsValue),
-          key: 'toggle-bar',
-          name: this.name,
-          // Glass follows the same switch as every native surface, so checks keep the portable bar.
-          native: this.nativeSurface && nativeNavigationModule() !== undefined,
-          ...(next
-            ? {
-              next: {
-                ...(nextIcon ? { icon: nextIcon } : {}),
-                key: next.key,
-                label: String(next.definition.label.evaluate().jsValue),
-              },
-            }
-            : {}),
-          observable,
-          select: key => {
-            this.activate(key)
-          },
-          taoProps,
-        }),
+        observable
+          ? React.createElement(SelectionToggleBar, {
+            back: () => {
+              this.back()
+            },
+            canGoBack: this.canGoBack,
+            chrome: active.chrome,
+            fallbackTitle: String(active.definition.label.evaluate().jsValue),
+            key: 'toggle-bar',
+            name: this.name,
+            // Glass follows the same switch as every native surface, so checks keep the portable bar.
+            native: this.nativeSurface && nativeNavigationModule() !== undefined,
+            ...(next
+              ? {
+                next: {
+                  ...(nextIcon ? { icon: nextIcon } : {}),
+                  key: next.key,
+                  label: String(next.definition.label.evaluate().jsValue),
+                },
+              }
+              : {}),
+            observable,
+            select: key => {
+              this.activate(key)
+            },
+            taoProps,
+          })
+          : null,
       ],
       style: [navigationHostStyle, mountedDesignStyle(taoProps, 'NavigationHost')],
     })

@@ -9,6 +9,14 @@ export type DeclarationNamespace = 'type' | 'value'
 export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
+const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
+
+/** rememberVisibleWorkspaceFiles binds every parsed root to the complete workspace loaded with it. */
+export function rememberVisibleWorkspaceFiles(files: readonly AST.TaoFile[]): void {
+  for (const file of files) {
+    visibleWorkspaceFiles.set(file, files)
+  }
+}
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
 export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
@@ -665,6 +673,63 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
     }
   }
   return declarations
+}
+
+/**
+ * visibleValueDeclarations returns the effective file-level value table used by ordinary value
+ * references. The order deliberately matches ValueScopeProvider: `folder` siblings and explicit
+ * imports occupy its inner imported scope, while declarations in this file are the outer fallback.
+ * The guard is applied before names are claimed so the type and value namespaces remain distinct.
+ */
+export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+): readonly DeclarationT[] {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return []
+  }
+  const visible: DeclarationT[] = []
+  const names = new Set<string>()
+  const add = (declaration: AST.Node) => {
+    if (
+      AST.isDeclaration(declaration)
+      && declarationNamespace(declaration) === 'value'
+      && guard(declaration)
+      && !names.has(declaration.name)
+    ) {
+      names.add(declaration.name)
+      visible.push(declaration)
+    }
+  }
+  const currentPath = AST.getDocument(root).uri.path
+  const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/'))
+  for (const file of visibleWorkspaceFiles.get(root) ?? []) {
+    const path = AST.getDocument(file).uri.path
+    if (file === root || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+      continue
+    }
+    for (const declaration of file.statements) {
+      if (
+        AST.isDeclaration(declaration)
+        && 'visibility' in declaration
+        && declaration.visibility === 'folder'
+      ) {
+        add(declaration)
+      }
+    }
+  }
+  for (const statement of root.statements) {
+    if (AST.isUseStatement(statement)) {
+      for (const declaration of resolvedImportedDeclarations(statement)) {
+        add(declaration)
+      }
+    }
+  }
+  for (const declaration of importableValueDeclarationsInFile(root)) {
+    add(declaration)
+  }
+  return visible
 }
 
 function effectiveConfigurationProperties(

@@ -62,7 +62,13 @@ export function stripJsonc(source: string): string {
     }
     if (character === '/' && source[index + 1] === '*') {
       const blockEnd = source.indexOf('*/', index + 2)
-      index = blockEnd === -1 ? source.length : blockEnd + 2
+      if (blockEnd === -1) {
+        // Preserve the invalid token so JSON.parse rejects an unterminated comment rather than
+        // accepting the valid prefix this helper happened to finish before it.
+        output += source.slice(index)
+        break
+      }
+      index = blockEnd + 2
       continue
     }
     if (character === '}' || character === ']') {

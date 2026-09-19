@@ -1,4 +1,4 @@
-import { Assert, CLI, FS, Repo } from '@shared'
+import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 
@@ -38,7 +38,7 @@ Describe('Tao app TypeScript modules', () => {
     Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', TaoAppModules.runtimeRoot()))).toBe(true)
   })
 
-  Test('a relocated CLI uses its own carried module, and says so when it carries none', async () => {
+  Test('packages a real runtime into a relocated CLI artifact, and says so when it carries none', async () => {
     const root = await mkTestDir('tao-cli-relocated-')
     try {
       // A CLI tree with no sibling `packages/runtime`: everything in-repo resolves through that sibling,
@@ -48,9 +48,24 @@ Describe('Tao app TypeScript modules', () => {
 
       await Expect(async () => TaoAppModules.runtimeRoot(cliRoot)).toThrow('has no @tao/runtime module')
 
-      const carried = FS.resolvePath('modules/@tao/runtime', cliRoot)
-      await FS.writeText(FS.resolvePath('TaoRuntime-src/TR.ts', carried), 'export default {}\n')
+      const runtimeSource = Repo.resolvePath('packages/runtime')
+      const carried = await TaoAppModules.packageRuntime(cliRoot, runtimeSource)
       Expect(TaoAppModules.runtimeRoot(cliRoot)).toBe(carried)
+      Expect(await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', carried))).toBe(
+        await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', runtimeSource)),
+      )
+      Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR-data.ts', carried))).toBe(true)
+
+      const project = FS.resolvePath('created', root)
+      await FS.writeText(FS.resolvePath('tsconfig.json', project), PROJECT_TSCONFIG)
+      await TaoAppModules.ensureProject(project, cliRoot)
+      Expect(await FS.realPath(FS.resolvePath('node_modules/@tao/runtime', project))).toBe(await FS.realPath(carried))
+      const resolved = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['-e', 'await Bun.write(Bun.stdout, import.meta.resolve("@tao/runtime"))'],
+        cwd: project,
+      })
+      Assert(resolved.exitCode === 0, 'the relocated consumer resolves its carried runtime', resolved)
+      Expect(resolved.stdout).toContain('/modules/@tao/runtime/TaoRuntime-src/TR.ts')
     } finally {
       await FS.remove(root)
     }

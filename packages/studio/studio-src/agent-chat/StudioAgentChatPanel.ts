@@ -28,9 +28,16 @@ type TurnResult = {
   availability?: Availability
   codeChanges?: { granted: boolean; requests: { reason: string; missing: string }[] }
   verdict?: { status: 'held' | 'broke' | 'unknown'; heading: string; detail?: string; broke: { name: string }[] }
+  verdicts?: readonly {
+    changeId: string
+    status: 'held' | 'broke' | 'unknown'
+    heading: string
+    detail?: string
+    broke: { name: string }[]
+  }[]
 }
 
-export type AgentChatHistoryItem =
+type AgentChatHistoryItem =
   | { role: 'user'; text: string }
   | {
     role: 'assistant'
@@ -43,6 +50,7 @@ export type AgentChatHistoryItem =
     toolCalls?: ToolCall[]
     usage?: { inputTokens?: number; outputTokens?: number }
     verdict?: TurnResult['verdict']
+    verdicts?: TurnResult['verdicts']
   }
 
 export type StudioAgentChatPanelHooks = {
@@ -52,6 +60,14 @@ export type StudioAgentChatPanelHooks = {
 }
 
 type Tone = 'error' | 'info' | 'ok' | 'quiet' | 'warn'
+
+export const StudioAgentAnnouncements = {
+  /** Streaming deltas stay visual; one final string is announced when the stream completes. */
+  completed(turn: Readonly<{ text?: string }>): string | undefined {
+    return turn.text === undefined || turn.text === '' ? undefined : turn.text
+  },
+  streamingAriaLive: 'off',
+} as const
 
 export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentChatPanelHooks): void {
   const panel = document.createElement('section')
@@ -68,7 +84,8 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       </label>
     </div>
     <div class="chat-status studio-agent-status" role="status"></div>
-    <div class="chat-log studio-agent-log" aria-live="polite"></div>
+    <div class="chat-log studio-agent-log"></div>
+    <div class="chat-announcer studio-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="studio-agent-composer">
       <input class="chat-input studio-input" placeholder="Ask about this app…" aria-label="Ask the agent">
       <button class="chat-send studio-button" data-variant="primary" type="button">Ask</button>
@@ -82,6 +99,17 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   const input = panel.querySelector<HTMLInputElement>('.chat-input')!
   const send = panel.querySelector<HTMLButtonElement>('.chat-send')!
   const mode = panel.querySelector<HTMLSelectElement>('.chat-mode')!
+  const announcer = panel.querySelector<HTMLElement>('.chat-announcer')!
+  let busy = false
+  let cloudConfigured = true
+
+  function setBusy(value: boolean): void {
+    busy = value
+    send.disabled = value
+    input.disabled = value
+    mode.disabled = value
+    cloud.disabled = value || !cloudConfigured
+  }
 
   function line(text: string, tone: Tone = 'quiet'): HTMLElement {
     const element = document.createElement('div')
@@ -174,8 +202,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   }
 
   function showAvailability(state: Availability): void {
+    cloudConfigured = state.configured
     cloud.checked = state.enabled
-    cloud.disabled = !state.configured
+    cloud.disabled = busy || !state.configured
     status.textContent = state.reason
       ?? `Answering with ${state.model}. This app's declarations and, when the model looks something up, excerpts of Tao's own spec are sent.`
     status.dataset['state'] = state.enabled ? 'on' : 'off'
@@ -243,7 +272,10 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   }
 
   async function resume(responses: { approvalId: string; approved: boolean }[]): Promise<void> {
-    send.disabled = true
+    if (busy) {
+      return
+    }
+    setBusy(true)
     const live = liveTurn()
     live.tool('continuing')
     try {
@@ -260,22 +292,27 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       live.done()
       log.append(line(`Studio could not continue: ${String(error)}`, 'error'))
     } finally {
-      send.disabled = false
+      setBusy(false)
       log.scrollTop = log.scrollHeight
     }
   }
 
   mode.addEventListener('change', () => {
     void (async () => {
-      await StudioApiClient.agentChat('mode', { mode: mode.value })
-      log.replaceChildren()
-      log.append(
-        line(
-          mode.value === 'scenario'
-            ? 'Scenario mode: the agent can add scenarios and tests. It must ask before changing app code.'
-            : 'Chat mode: ask anything, and the agent can propose changes you approve before they land.',
-        ),
-      )
+      setBusy(true)
+      try {
+        await StudioApiClient.agentChat('mode', { mode: mode.value })
+        log.replaceChildren()
+        log.append(
+          line(
+            mode.value === 'scenario'
+              ? 'Scenario mode: the agent can add scenarios and tests. It must ask before changing app code.'
+              : 'Chat mode: ask anything, and the agent can propose changes you approve before they land.',
+          ),
+        )
+      } finally {
+        setBusy(false)
+      }
     })()
   })
 
@@ -293,6 +330,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     const block = document.createElement('div')
     block.className = 'studio-agent-message'
     block.dataset['role'] = 'agent'
+    // The changing transcript is visible but deliberately silent to assistive technology. The final answer
+    // is announced once through `chat-announcer` after the stream has completed.
+    block.setAttribute('aria-live', StudioAgentAnnouncements.streamingAriaLive)
     const who = document.createElement('div')
     who.className = 'studio-agent-who'
     who.textContent = 'Tao'
@@ -339,6 +379,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     }
     if (turn.text !== undefined && turn.text !== '') {
       say('agent', turn.text)
+      announcer.textContent = StudioAgentAnnouncements.completed(turn) ?? ''
     }
     if (turn.status === 'budget-exhausted' && turn.message !== undefined) {
       log.append(line(turn.message, 'warn'))
@@ -352,8 +393,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     if (turn.status === 'needs-approval' && (turn.pendingApprovals ?? []).length > 0) {
       askApproval(turn.pendingApprovals ?? [])
     }
-    if (turn.verdict !== undefined) {
-      showVerdict(turn.verdict)
+    const verdicts = turn.verdicts ?? (turn.verdict === undefined ? [] : [turn.verdict])
+    for (const verdict of verdicts) {
+      showVerdict(verdict)
     }
     const codeChanges = turn.codeChanges
     if (codeChanges !== undefined && !codeChanges.granted && codeChanges.requests.length > 0) {
@@ -395,13 +437,16 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   }
 
   async function ask(): Promise<void> {
+    if (busy) {
+      return
+    }
     const question = input.value.trim()
     if (question === '') {
       return
     }
     input.value = ''
     say('you', question)
-    send.disabled = true
+    setBusy(true)
     const live = liveTurn()
     live.tool('thinking')
     try {
@@ -419,7 +464,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       live.done()
       log.append(line(`Studio could not reach the chat: ${String(error)}`, 'error'))
     } finally {
-      send.disabled = false
+      setBusy(false)
       log.scrollTop = log.scrollHeight
     }
   }
@@ -488,8 +533,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
             log.append(box)
           }
         }
-        if (item.verdict !== undefined) {
-          showVerdict(item.verdict)
+        const verdicts = item.verdicts ?? (item.verdict === undefined ? [] : [item.verdict])
+        for (const verdict of verdicts) {
+          showVerdict(verdict)
         }
         const codeChanges = item.codeChanges
         if (codeChanges !== undefined && !codeChanges.granted && codeChanges.requests.length > 0) {

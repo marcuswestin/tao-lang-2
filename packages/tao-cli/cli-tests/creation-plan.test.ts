@@ -75,6 +75,12 @@ Describe('tao create plan', () => {
     unknownField.samples['Trips']![0]!['Cost'] = 3
     Expect(validateCreationPlan(unknownField).join(' ')).toContain("unknown field 'Cost'")
 
+    for (const invalidNumber of [-2, 1e30, 1e-7]) {
+      const numeric = validPlan()
+      numeric.samples['Trips']![0]!['Days'] = invalidNumber
+      Expect(validateCreationPlan(numeric).join(' ')).toContain("field 'Days' must be a number value")
+    }
+
     const reservedField = validPlan()
     reservedField.entities[0]!.fields.push({ name: 'Id', type: 'number' })
     Expect(validateCreationPlan(reservedField).join(' ')).toContain("field 'Id' is reserved")
@@ -140,7 +146,7 @@ Describe('tao create plan', () => {
     const entity = validPlan().entities[0]!
     const schema = sampleRowsSchema(entity)
     Expect(Object.keys(schema.properties!['rows']!.items!.properties!)).toEqual(['Title', 'Days', 'Booked'])
-    Expect(schema.properties!['rows']!.items!.required).toEqual(['Title'])
+    Expect(schema.properties!['rows']!.items!.required).toEqual(['Title', 'Days', 'Booked'])
 
     Expect(sampleRowsFromJson(entity, {
       rows: [{ Title: 'Lisbon', Days: 4, Booked: false, Bogus: 'x', CreatedAt: 'now' }, 'junk', {

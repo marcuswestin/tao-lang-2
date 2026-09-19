@@ -1,6 +1,6 @@
 import { FS, Platform, Repo } from '@shared'
 import { RunTimings } from './RunTimings'
-import { WorkGraph, type WorkState } from './WorkGraph'
+import { type WorkEvent, WorkGraph, type WorkState } from './WorkGraph'
 
 /**
  * Every lane leaves the same trail: `.artifacts/logs/<lane>/<stamp>/` with one `<node>.log` per
@@ -30,8 +30,20 @@ export type FinishRunOptions = {
    */
   recordTimings?: boolean
   states: readonly WorkState[]
+  /**
+   * Durations to record beside the nodes' own, for a name the run did not schedule directly. A
+   * sharded suite is the case: its shards are the nodes, and the suite still has to measure itself
+   * or its shard count can never change again.
+   */
+  extraDurations?: ReadonlyMap<string, number>
   /** The lane's own rollup, written as `summary.json`. */
   summary: unknown
+}
+
+/** LiveRunWriter publishes a completed node's log before its reporter announces the path. */
+export type LiveRunWriter = {
+  finish: () => Promise<void>
+  handle: (event: WorkEvent) => void
 }
 
 const SUMMARY_FILE = 'summary.json'
@@ -64,13 +76,37 @@ async function assignLogPaths(states: readonly WorkState[], location: RunLocatio
   }
 }
 
+/**
+ * liveWriter forwards progress immediately, except completion: that event is forwarded only after
+ * the node's log exists. A quiet reporter can therefore print a path another process can open at
+ * that moment, even while the rest of the lane is still running.
+ */
+function liveWriter(location: RunLocation, forward: (event: WorkEvent) => void): LiveRunWriter {
+  const writes: Promise<void>[] = []
+  return {
+    finish: async () => await Promise.all(writes).then(() => {}),
+    handle: event => {
+      if (event.kind !== 'complete') {
+        forward(event)
+        return
+      }
+      writes.push(writeCompletedLog(event.state, location).then(() => forward(event)))
+    },
+  }
+}
+
+async function writeCompletedLog(state: WorkState, location: RunLocation): Promise<void> {
+  await FS.mkdir(location.logRoot)
+  if (state.logPath !== undefined) {
+    await FS.writeText(state.logPath, state.fullOutput)
+  }
+}
+
 /** finishRun writes the node logs, the summary, the `latest` link, and this run's timings. */
 async function finishRun(options: FinishRunOptions): Promise<string> {
   await FS.mkdir(options.location.logRoot)
   await Promise.all(options.states.map(async state => {
-    if (state.logPath !== undefined) {
-      await FS.writeText(state.logPath, state.fullOutput)
-    }
+    await writeCompletedLog(state, options.location)
     const initialAttempt = state.attempts?.[0]
     if (initialAttempt !== undefined) {
       const initialPath = FS.resolvePath(
@@ -85,7 +121,7 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
   await refreshLatest(options.location)
   if (options.recordTimings !== false) {
     await RunTimings.record({
-      durations: measuredDurations(options.states),
+      durations: new Map([...measuredDurations(options.states), ...options.extraDurations ?? []]),
       lane: options.location.lane,
       repositoryRoot: options.location.repositoryRoot,
       stamp: options.location.stamp,
@@ -104,7 +140,15 @@ async function writeSummaryCopy(jsonPath: string, repositoryRoot: string, summar
   return path
 }
 
-/** refreshLatest repoints `<lane>/latest` at this run; a host that refuses links is not a failure. */
+/**
+ * refreshLatest repoints `<lane>/latest` at this run, atomically.
+ *
+ * Removing the link and recreating it leaves a window with no `latest` at all, and two lanes of one
+ * checkout finishing together make the loser's create fail outright. An agent reading `latest` in
+ * that window sees nothing rather than the previous run. Creating the new link under a unique name
+ * beside it and renaming it over the old one has no such window: a reader sees the old run or the
+ * new one, never neither. A host that refuses links loses the shortcut, not the run.
+ */
 async function refreshLatest(location: RunLocation): Promise<void> {
   try {
     await FS.replaceSymlink(FS.basename(location.logRoot), FS.resolvePath(LATEST_LINK, location.laneRoot))
@@ -127,6 +171,7 @@ export const RunArtifacts = {
   SUMMARY_FILE,
   assignLogPaths,
   finishRun,
+  liveWriter,
   locate,
   writeSummaryCopy,
 } as const

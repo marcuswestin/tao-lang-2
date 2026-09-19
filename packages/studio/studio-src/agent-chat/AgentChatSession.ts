@@ -4,7 +4,7 @@
 // runaway turn, the pause when a tool needs a person's approval, and the transcript that says afterwards
 // exactly which tools ran and what they returned.
 
-import { type LanguageModel, type ModelMessage, stepCountIs, streamText, type ToolSet } from 'ai'
+import { type LanguageModel, type ModelMessage, streamText, type ToolSet } from 'ai'
 import type { AgentChatToolCall } from './AgentChatTools'
 
 /**
@@ -56,6 +56,22 @@ export type AgentChatSessionOptions = {
 }
 
 const DEFAULT_MAX_STEPS = 12
+const AGENT_TURN_INPUT_TOKEN_LIMIT = 64_000
+const AGENT_TURN_OUTPUT_TOKEN_LIMIT = 8_000
+
+type TokenUsage = { inputTokens: number; outputTokens: number }
+
+function usageOf(steps: readonly { usage: { inputTokens?: number; outputTokens?: number } }[]): TokenUsage {
+  return steps.reduce<TokenUsage>((total, step) => ({
+    inputTokens: total.inputTokens + (step.usage.inputTokens ?? 0),
+    outputTokens: total.outputTokens + (step.usage.outputTokens ?? 0),
+  }), { inputTokens: 0, outputTokens: 0 })
+}
+
+/** UTF-8 bytes are a deliberately conservative provider-neutral upper bound for ordinary tokenization. */
+function estimatedInputTokens(value: unknown): number {
+  return new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value)).length
+}
 
 /**
  * AgentChatSession holds one conversation. It is deliberately server-side and stateful: the messages, and
@@ -65,6 +81,9 @@ export class AgentChatSession {
   #options: AgentChatSessionOptions
   #messages: ModelMessage[] = []
   #pending: AgentChatApproval[] = []
+  /** Usage belongs to a user turn, including every continuation after an approval pause. */
+  #turnUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
+  #turnSteps = 0
 
   constructor(options: AgentChatSessionOptions) {
     this.#options = options
@@ -102,6 +121,8 @@ export class AgentChatSession {
         usage: {},
       }
     }
+    this.#turnUsage = { inputTokens: 0, outputTokens: 0 }
+    this.#turnSteps = 0
     this.#messages.push({ content: text, role: 'user' })
     return await this.#run(onEvent)
   }
@@ -149,12 +170,63 @@ export class AgentChatSession {
   async #run(onEvent?: (event: AgentChatEvent) => void): Promise<AgentChatTurn> {
     const maxSteps = this.#options.maxSteps ?? DEFAULT_MAX_STEPS
     const approvalRequired = new Set(this.#options.approvalRequired ?? [])
+    const priorUsage = { ...this.#turnUsage }
+    const priorSteps = this.#turnSteps
+    const estimatedPrompt = estimatedInputTokens({
+      instructions: this.#options.instructions,
+      messages: this.#messages,
+      tools: this.#options.tools,
+    })
+    const remainingInput = AGENT_TURN_INPUT_TOKEN_LIMIT - priorUsage.inputTokens
+    const remainingOutput = AGENT_TURN_OUTPUT_TOKEN_LIMIT - priorUsage.outputTokens
+    if (remainingInput <= 0 || remainingOutput <= 0 || estimatedPrompt > remainingInput) {
+      return {
+        message: remainingOutput <= 0
+          ? 'The 8k output-token budget is already exhausted. Start a new, narrower turn.'
+          : 'The remaining 64k input-token budget cannot fit this conversation. Start a new, narrower turn.',
+        pendingApprovals: [],
+        status: 'budget-exhausted',
+        steps: this.#turnSteps,
+        text: '',
+        toolCalls: this.#options.drain?.() ?? [],
+        usage: { ...this.#turnUsage },
+      }
+    }
+    let inputPreflightStopped = false
     try {
       const result = streamText({
         instructions: this.#options.instructions,
+        // This provider-neutral setting is also reduced before every later model step. A provider therefore
+        // never receives permission to produce more than the output tokens left in this Tao-owned turn.
+        maxOutputTokens: Math.max(1, AGENT_TURN_OUTPUT_TOKEN_LIMIT - priorUsage.outputTokens),
         messages: this.#messages,
         model: this.#options.model,
-        stopWhen: stepCountIs(maxSteps),
+        prepareStep: ({ steps }) => {
+          const current = usageOf(steps)
+          return {
+            maxOutputTokens: Math.max(
+              1,
+              AGENT_TURN_OUTPUT_TOKEN_LIMIT - priorUsage.outputTokens - current.outputTokens,
+            ),
+          }
+        },
+        stopWhen: [
+          ({ steps }) => priorSteps + steps.length >= maxSteps,
+          ({ steps }) => {
+            const current = usageOf(steps)
+            const inputUsed = priorUsage.inputTokens + current.inputTokens
+            const outputUsed = priorUsage.outputTokens + current.outputTokens
+            // Before another tool-loop call, reserve enough input for the conversation that call would send.
+            // This may stop early, but it never claims a hard ceiling while dispatching a prompt that cannot
+            // fit in the remaining provider-neutral budget.
+            const nextPrompt = estimatedPrompt + estimatedInputTokens(steps.map(step => step.content))
+            inputPreflightStopped = inputUsed < AGENT_TURN_INPUT_TOKEN_LIMIT
+              && inputUsed + nextPrompt > AGENT_TURN_INPUT_TOKEN_LIMIT
+            return inputUsed >= AGENT_TURN_INPUT_TOKEN_LIMIT
+              || outputUsed >= AGENT_TURN_OUTPUT_TOKEN_LIMIT
+              || inputPreflightStopped
+          },
+        ],
         tools: this.#options.tools,
         ...(approvalRequired.size === 0 ? {} : {
           toolApproval: ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
@@ -193,26 +265,55 @@ export class AgentChatSession {
           })
         }
       }
-      this.#pending = pending
-      const steps = (await result.steps).length
+      const resultSteps = await result.steps
+      const steps = resultSteps.length
+      const segmentUsage = await result.totalUsage
+      this.#turnSteps += steps
+      this.#turnUsage = {
+        inputTokens: this.#turnUsage.inputTokens + (segmentUsage.inputTokens ?? 0),
+        outputTokens: this.#turnUsage.outputTokens + (segmentUsage.outputTokens ?? 0),
+      }
       // A turn that stopped on the step ceiling with a tool call still open has not answered; saying so is
       // more useful than presenting a partial answer as a whole one.
-      const exhausted = pending.length === 0 && steps >= maxSteps && await result.finishReason === 'tool-calls'
-      const usage = await result.totalUsage
+      const exhaustedSteps = this.#turnSteps >= maxSteps && await result.finishReason === 'tool-calls'
+      const exhaustedInput = this.#turnUsage.inputTokens >= AGENT_TURN_INPUT_TOKEN_LIMIT
+        || inputPreflightStopped
+      const exhaustedOutput = this.#turnUsage.outputTokens >= AGENT_TURN_OUTPUT_TOKEN_LIMIT
+        || await result.finishReason === 'length'
+      const tokenExhausted = exhaustedInput || exhaustedOutput
+      // A fixed token ceiling wins over an approval pause. Continuing that pause would necessarily dispatch
+      // another model call in the same turn, so deny the unexecuted tools and end the turn truthfully.
+      const effectivePending = tokenExhausted ? [] : pending
+      if (tokenExhausted && pending.length > 0) {
+        this.#messages.push({
+          content: pending.map(approval => ({
+            approvalId: approval.approvalId,
+            approved: false,
+            reason: 'The turn token budget was exhausted before approval.',
+            type: 'tool-approval-response' as const,
+          })),
+          role: 'tool',
+        })
+      }
+      this.#pending = effectivePending
+      const exhausted = tokenExhausted || (pending.length === 0 && exhaustedSteps)
       return {
-        pendingApprovals: pending,
-        status: pending.length > 0 ? 'needs-approval' : exhausted ? 'budget-exhausted' : 'complete',
-        steps,
+        pendingApprovals: effectivePending,
+        status: exhausted ? 'budget-exhausted' : effectivePending.length > 0 ? 'needs-approval' : 'complete',
+        steps: this.#turnSteps,
         text: await result.text,
         toolCalls: this.#options.drain?.() ?? [],
         usage: {
-          ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
-          ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+          inputTokens: this.#turnUsage.inputTokens,
+          outputTokens: this.#turnUsage.outputTokens,
         },
         ...(exhausted
           ? {
-            message:
-              `The step budget of ${maxSteps} ran out before the model finished. Ask a narrower question, or raise the budget.`,
+            message: exhaustedInput
+              ? `The 64k input-token budget ran out before the model finished. Start a new, narrower turn.`
+              : exhaustedOutput
+              ? `The 8k output-token budget ran out before the model finished. Start a new, narrower turn.`
+              : `The step budget of ${maxSteps} ran out before the model finished. Ask a narrower question, or raise the budget.`,
           }
           : {}),
       }

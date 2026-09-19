@@ -3,8 +3,8 @@
   // Canonical agent lifecycle hooks for this repository, one source for two harnesses.
   // `./agent setup` renders them through rulesync's hooks feature into .claude/settings.json and
   // .codex/hooks.json. Edit this file, never the generated ones. Keep every command
-  // harness-neutral: a relative path, which rulesync prefixes with `$CLAUDE_PROJECT_DIR` for
-  // Claude Code and leaves as is for Codex, and no field one harness does not document.
+  // harness-neutral: discover the worktree root through Git so a harness launched from any
+  // repository subdirectory reaches the same script, and use no field one harness does not document.
   "hooks": {
     // Every harness reaches the repository's one setup entry, `./agent setup`, before an agent's
     // first command. Worktrunk runs it from its blocking `pre-start` hook (.config/wt.toml) and
@@ -25,7 +25,39 @@
     "sessionStart": [
       {
         "type": "command",
-        "command": "./packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null",
+      },
+    ],
+    // The three delegation hooks record what this repository actually hands to subagents, so that
+    // the routing table in the `delegation` skill is tuned against evidence instead of impression.
+    // They exist for the calibration period and come out when it ends; `Docs/Roadmap/Subagent
+    // delegation/Plan - Subagent delegation.md` holds the criteria for that.
+    //
+    // No single event carries everything. Only the spawning tool call knows the model and the
+    // brief, and it knows the model solely when the caller named one — an omission that is itself
+    // the signal, because the guidance says to name a tier rather than inherit the caller's. Only
+    // the subagent events carry an agent id, so only they can bound a duration, and only a stop
+    // event's `effort` describes the subagent rather than its caller. `./agent delegation-report`
+    // reconciles what arrives and says which fields were missing rather than inferring them.
+    //
+    // Claude Code renamed this tool from `Task` to `Agent`; the matcher follows the current name.
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "Agent",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true",
+      },
+    ],
+    "subagentStart": [
+      {
+        "type": "command",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true",
+      },
+    ],
+    "subagentStop": [
+      {
+        "type": "command",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true",
       },
     ],
   },

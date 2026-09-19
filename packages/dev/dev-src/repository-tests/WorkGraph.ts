@@ -1,15 +1,24 @@
-import { CLI, Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
 import { OutputText } from '../cli/OutputText'
 
 /**
  * One scheduler for every parallel repository lane. A node says what must pass before it starts,
- * how much CPU width it occupies, which exclusive resources it holds, and whether it rewrites the
- * tree; the graph turns that into a start order, a slot budget, and a worker budget for nested
- * runners. It never writes to the terminal: a run emits events and the reporters decide what a
- * human or an agent sees.
+ * how much CPU width it occupies, and which exclusive resources it holds; the graph turns that into
+ * a start order and a slot budget. It never writes to the terminal: a run emits events and the
+ * reporters decide what a human or an agent sees.
  *
  * The admission policy is the one `TestRunner` proved on suites — priority first, then longest
  * remaining path, with a head-of-line hold so a wide node is not starved by cheap ones.
+ *
+ * The kernel knows nothing about this repository. It has no notion of a fixer, a generated
+ * directory, a test suite, or a shard: a caller that needs one node to precede another says so with
+ * an edge. There used to be one exception — a `mutatesTree` bit whose nodes every other node in the
+ * run waited for — and it made the whole lane serial behind the slowest fixer. `GateCatalog` now
+ * derives those edges from what each node writes and reads, so the ordering is declared where the
+ * repository facts live and the scheduler is left with edges alone.
+ *
+ * A run also records why each node waited and when it was admitted, which is what makes the schedule
+ * reviewable: `WorkSchedule` turns those into a makespan, a serial floor, and idle slot-seconds.
  */
 
 /** WorkStatus declares the lifecycle state of one node. `skipped` is never reported as `passed`. */
@@ -17,6 +26,9 @@ export type WorkStatus = 'failed' | 'passed' | 'pending' | 'running' | 'skipped'
 
 /** WorkFailureKind is the machine-readable reason a node did not pass. */
 export type WorkFailureKind = 'dependency' | 'interrupted' | 'nonzero-exit' | 'process-error' | 'timeout'
+
+/** WorkTimeoutKind distinguishes a node that ran too long from one that went quiet. */
+type WorkTimeoutKind = 'idle' | 'wall-clock'
 
 /** WorkFailure keeps retry and reporting policy out of human-readable output matching. */
 export type WorkFailure = {
@@ -55,7 +67,7 @@ export type WorkAdmission = {
 export type WorkNode = {
   name: string
   /**
-   * The process the node runs, through `CLI.start` with piped output: a command, or a builder
+   * The process the node runs with piped output in its own process group: a command, or a builder
    * handed what the graph admitted so the command can carry its granted width or worker index.
    */
   run: WorkCommand | ((admission: WorkAdmission) => WorkCommand)
@@ -68,10 +80,15 @@ export type WorkNode = {
   budgetEnvKeys?: readonly string[]
   /** Worker slots reserved while running (CPU width). Default 1. */
   cost?: number
+  /**
+   * Milliseconds of silence after which a still-running node is killed and marked failed. A runaway
+   * that allocates without printing — bun's assertion formatter on a multiply-reachable value is the
+   * worked example — produces no output at all, so the wall-clock bound below is the only other
+   * thing that would ever notice it, and it is necessarily much larger.
+   */
+  idleTimeoutMs?: number
   /** Display and log-file name; defaults to `name`. */
   label?: string
-  /** True for nodes that rewrite the source tree; every non-mutating node in the run waits for them. */
-  mutatesTree?: boolean
   /** Names of nodes that must pass before this node starts. Unknown names are ignored. */
   needs?: readonly string[]
   /** Hand-pinned start-order override. Default 0; measured durations refine within a priority. */
@@ -79,10 +96,26 @@ export type WorkNode = {
   /** Named exclusive resources (e.g. `gui`); nodes sharing one never run concurrently. */
   resources?: readonly string[]
   /**
+   * True for a node that cannot use more than one core however long it runs: a single-threaded tool,
+   * or one unsharded test process. Its width is one slot, and it sorts ahead of its equal-priority
+   * neighbours, because a run can be no shorter than its longest serial node and everything else can
+   * be packed around one.
+   */
+  serial?: boolean
+  /**
    * Milliseconds after which a still-running node is killed and marked failed, so one hung
    * process cannot hold the whole lane open. Unset means unbounded.
    */
   timeoutMs?: number
+}
+
+/** WorkWait records one reason a node was not started yet, and how long that reason held. */
+export type WorkWait = {
+  /** What held the node: an unpassed edge, a held resource, local width, or the machine broker. */
+  kind: 'capacity' | 'dependency' | 'machine' | 'resource'
+  /** The dependency or resource name, when the kind names one. */
+  detail?: string
+  ms: number
 }
 
 /** WorkState tracks one node's output, status, and timing across a run. */
@@ -102,8 +135,12 @@ export type WorkState = {
   reason?: string
   /** True once a node that failed under machine contention has been run again on its own. */
   retried?: boolean
+  /** The width the machine broker granted this node, once it was admitted. */
+  slots?: number
   startedAt?: number
   status: WorkStatus
+  /** Why this node was not started earlier, longest reason first; empty for one that never waited. */
+  waits?: readonly WorkWait[]
 }
 
 /** WorkEvent is what a run reports as it progresses; reporters consume nothing else. */
@@ -145,6 +182,8 @@ export type WorkSlotReservation = {
 export type WorkSlotBroker = {
   /** Returns no reservation when another lane currently owns the available capacity. */
   tryAcquire: (requestedSlots: number, allowPartial: boolean) => Promise<WorkSlotReservation | undefined>
+  /** Why the last admission was declined, shown on the waiting node so the run explains itself. */
+  readonly waitReason?: string | undefined
   /** Waits briefly for another process to publish a capacity change. */
   waitForAvailability: () => Promise<void>
 }
@@ -165,9 +204,13 @@ export type WorkRunOptions = {
   watchInterrupt?: (interrupt: () => void) => () => void
 }
 
-/** WorkRunResult reports how a whole run ended. */
+/** WorkRunResult reports how a whole run ended, including what the schedule had to work with. */
 export type WorkRunResult = {
+  /** Local worker width this run was allowed, which is the divisor for idle slot-seconds. */
+  capacity: number
+  finishedAt: number
   interrupted: boolean
+  startedAt: number
   states: readonly WorkState[]
 }
 
@@ -184,13 +227,33 @@ const OUTPUT_LINE_LIMIT = 6
 const COLD_START_MS_PER_SLOT = 1_000
 const INTERRUPTED_REASON = 'interrupted'
 const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
-/** How long a cancelled process gets to honor SIGTERM before it is killed outright. */
-const FORCE_KILL_GRACE_MS = 10_000
-/** Env keys the nested runners read their own worker budget from. */
+/**
+ * Env key the one remaining nested runner reads its own worker budget from. `./tao test` is the
+ * published product CLI and sizes itself to the machine unless told otherwise, so a node that runs
+ * it has to hand down the width the graph reserved. There used to be a second key for a nested
+ * `./dev test`, which existed only because the test gate started a second scheduler inside itself;
+ * suites and shards are ordinary nodes now, so nothing nests and nothing divides the machine twice.
+ */
 const BUDGET_ENV_KEYS = {
-  devTest: 'TAO_DEV_TEST_JOBS',
   taoTest: 'TAO_TEST_JOBS',
 } as const
+
+/**
+ * machineCapacityReason appends the broker's own explanation to the stable prefix every machine
+ * wait shares. The prefix is what the scheduler matches on; the suffix is for whoever is watching.
+ */
+function machineCapacityReason(detail: string | undefined): string {
+  return detail === undefined ? MACHINE_CAPACITY_REASON : `${MACHINE_CAPACITY_REASON}: ${detail}`
+}
+
+function isMachineCapacityReason(reason: string | undefined): reason is string {
+  return reason !== undefined && reason.startsWith(MACHINE_CAPACITY_REASON)
+}
+
+function machineCapacityDetail(reason: string): string | undefined {
+  const detail = reason.slice(MACHINE_CAPACITY_REASON.length).replace(/^: /, '')
+  return detail.length > 0 ? detail : undefined
+}
 
 /** createState returns the tracking state one node starts a run in. */
 function createState(node: WorkNode): WorkState {
@@ -219,9 +282,13 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   const ranks = criticalPathRanks(states, options.expectedMs)
   const pending = [...states].sort(startOrder(states, ranks))
   const running = new Map<WorkState, RunningNode>()
+  /** What each pending node was blocked on when the last admission scan looked. */
+  const heldBy = new Map<WorkState, Pick<WorkWait, 'detail' | 'kind'>>()
   const heldResources = new Set<string>()
   const workersAdmitted = new Map<string, number>()
   const runOne = options.runNode ?? runProcess
+  const startedAt = Date.now()
+  let lastScanAt = startedAt
   let availableSlots = capacity
   let interrupted = false
 
@@ -242,10 +309,17 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   emit({ kind: 'planned', states })
   try {
     while (pending.length > 0 || running.size > 0) {
+      accountWaits()
       const admission = await admit()
       if (running.size === 0) {
         if (admission.machineBlocked) {
           await options.slotBroker?.waitForAvailability()
+          continue
+        }
+        if (admission.settled > 0) {
+          // A dependency skip can make an earlier pending node newly skippable. Re-scan before
+          // deciding the remainder is a cycle; priority ordering does not guarantee dependencies
+          // appear before every descendant.
           continue
         }
         if (admission.started === 0) {
@@ -258,7 +332,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         }
         continue
       }
-      await Promise.race([...running.values()].map(node => node.promise))
+      const localCompletion = [...running.values()].map(node => node.promise)
+      await Promise.race(
+        admission.machineBlocked && options.slotBroker !== undefined
+          ? [...localCompletion, options.slotBroker.waitForAvailability()]
+          : localCompletion,
+      )
     }
   } catch (error) {
     // A scheduler/broker failure must not let already-admitted children outlive the lane record
@@ -271,10 +350,55 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     stopWatchingInterrupt()
   }
   emit({ kind: 'done', interrupted, states })
-  return { interrupted, states }
+  return { capacity, finishedAt: Date.now(), interrupted, startedAt, states }
 
-  async function admit(): Promise<{ machineBlocked: boolean; started: number }> {
+  /**
+   * accountWaits charges the time since the last admission scan to whatever was holding each
+   * still-pending node *at the start* of that slice, then records what is holding it now for the
+   * next one. Charging what is holding it now would misattribute every node's last slice: a scan
+   * only happens when something completes, so by the time the scan looks, the dependency the node
+   * was waiting for has already passed and the wait would be filed under capacity instead. A node
+   * with exactly one dependency would then never report waiting on it.
+   */
+  function accountWaits(): void {
+    const now = Date.now()
+    const sliceMs = now - lastScanAt
+    lastScanAt = now
+    for (const state of pending) {
+      if (state.status !== 'pending') {
+        continue
+      }
+      const held = heldBy.get(state)
+      if (held !== undefined && sliceMs > 0) {
+        addWait(state, held, sliceMs)
+      }
+      heldBy.set(state, blockingReason(state))
+    }
+  }
+
+  /** blockingReason names the first thing standing between a pending node and its start. */
+  function blockingReason(state: WorkState): Pick<WorkWait, 'detail' | 'kind'> {
+    const dependency = (state.node.needs ?? [])
+      .map(need => states.find(candidate => candidate.name === need))
+      .find(candidate => candidate !== undefined && candidate.status !== 'passed')
+    if (dependency !== undefined) {
+      return { detail: dependency.name, kind: 'dependency' }
+    }
+    const resource = (state.node.resources ?? []).find(candidate => heldResources.has(candidate))
+    if (resource !== undefined) {
+      return { detail: resource, kind: 'resource' }
+    }
+    if (!isMachineCapacityReason(state.reason)) {
+      return { kind: 'capacity' }
+    }
+    // The detail is what the broker said, so a run whose machine wait changes cause — a peer's
+    // exclusive confirmation, then an ordinary share — reports the two separately in its summary.
+    return { detail: machineCapacityDetail(state.reason), kind: 'machine' }
+  }
+
+  async function admit(): Promise<{ machineBlocked: boolean; settled: number; started: number }> {
     let started = 0
+    let settled = 0
     let machineBlocked = false
     for (let index = 0; index < pending.length;) {
       const state = pending[index]!
@@ -282,6 +406,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       if (failedDependency !== undefined) {
         pending.splice(index, 1)
         finishWithoutRunning(state, `dependency failed: ${failedDependency}`, emit)
+        settled += 1
         continue
       }
       if (!isReady(state, states) || !resourcesAvailable(state, heldResources)) {
@@ -300,13 +425,14 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       )
       if (interrupted || pending[index] !== state || state.status !== 'pending') {
         await machineReservation?.release()
-        return { machineBlocked: false, started }
+        return { machineBlocked: false, settled, started }
       }
       if (options.slotBroker !== undefined && machineReservation === undefined) {
         machineBlocked = true
-        if (state.reason !== MACHINE_CAPACITY_REASON) {
-          state.reason = MACHINE_CAPACITY_REASON
-          emit({ kind: 'waiting', reason: MACHINE_CAPACITY_REASON, state })
+        const reason = machineCapacityReason(options.slotBroker.waitReason)
+        if (state.reason !== reason) {
+          state.reason = reason
+          emit({ kind: 'waiting', reason, state })
         }
         break
       }
@@ -319,12 +445,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       startNode(state, slots, machineReservation)
       started += 1
     }
-    return { machineBlocked, started }
+    return { machineBlocked, settled, started }
   }
 
   function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
     let cancel = () => {}
-    let timedOut = false
+    let expiry: WorkTimeoutKind | undefined
     const admission: WorkAdmission = { slots, workerIndex: nextWorkerIndex(state.node.workerPool) }
     const run = typeof state.node.run === 'function' ? state.node.run(admission) : state.node.run
     const context: WorkRunContext = {
@@ -336,41 +462,69 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       },
       onOutput: output => {
         appendOutput(state, output)
+        restartIdleTimer()
         emit({ kind: 'output', output, state })
       },
     }
+    state.slots = slots
     state.status = 'running'
     state.reason = undefined
     state.startedAt = Date.now()
     emit({ kind: 'start', state })
-    const timeout = state.node.timeoutMs === undefined ? undefined : setTimeout(() => {
-      timedOut = true
-      cancel()
-    }, state.node.timeoutMs)
+    const expire = (kind: WorkTimeoutKind) => {
+      if (expiry === undefined) {
+        expiry = kind
+        cancel()
+      }
+    }
+    const timeout = state.node.timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => expire('wall-clock'), state.node.timeoutMs)
+    let idleTimeout: ReturnType<typeof setTimeout> | undefined
+    // The idle bound is armed from the start, not from the first byte: a node that never prints
+    // anything is exactly the case it exists for.
+    function restartIdleTimer(): void {
+      if (state.node.idleTimeoutMs === undefined) {
+        return
+      }
+      if (idleTimeout !== undefined) {
+        clearTimeout(idleTimeout)
+      }
+      idleTimeout = setTimeout(() => expire('idle'), state.node.idleTimeoutMs)
+    }
+    restartIdleTimer()
 
     const promise = executeNode(state, context, runOne).finally(async () => {
       if (timeout !== undefined) {
         clearTimeout(timeout)
       }
+      if (idleTimeout !== undefined) {
+        clearTimeout(idleTimeout)
+      }
       availableSlots += slots
       for (const resource of state.node.resources ?? []) {
         heldResources.delete(resource)
       }
-      running.delete(state)
-      if (timedOut) {
+      if (expiry !== undefined) {
         state.status = 'failed'
-        state.reason = `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
+        state.reason = expiry === 'idle'
+          ? `timed out after ${formatTimeout(state.node.idleTimeoutMs ?? 0)} with no output`
+          : `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
         state.failure = { kind: 'timeout', message: state.reason }
         if (!state.fullOutput.includes(state.reason)) {
           appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${state.reason}\n`)
         }
       }
-      if (interrupted && !timedOut && state.status === 'failed') {
+      if (interrupted && expiry === undefined && state.status === 'failed') {
         state.status = 'failed'
         state.reason = INTERRUPTED_REASON
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
       }
       await machineReservation?.release()
+      // Keep the node in `running` through asynchronous broker cleanup. The scheduler uses this map
+      // as its drain condition; deleting first lets the graph return and its caller remove the
+      // registry root while a reservation is still trying to lock it.
+      running.delete(state)
       emit({ kind: 'complete', state })
     })
     running.set(state, { cancel: () => cancel(), promise })
@@ -417,37 +571,70 @@ async function executeNode(
   }
 }
 
-/** runProcess is the default runner: one child process with its output piped back to the graph. */
+/**
+ * runProcess is the default runner: one child process in its own process group, with its output
+ * piped back to the graph.
+ *
+ * A node runs detached deliberately, unlike an ordinary `CLI.start` child. The graph owns when a
+ * node stops — a timeout, an idle bound, an interrupt — and a lane that was itself interrupted must
+ * be able to stop a node that is ignoring SIGTERM without the terminal's own signal racing it.
+ * Everything a node started is stopped with it: `ProcessTree` snapshots the owned tree before
+ * cancellation can orphan any of it, signals each PID only while its OS start identity still
+ * matches so a reused PID can never be hit, and escalates to SIGKILL after a grace period, because
+ * a node cancelled for hanging may ignore SIGTERM — the Studio canary's surviving launch process
+ * did — and would then hold the lane open through the very mechanism meant to unblock it.
+ *
+ * It stops what it started and nothing else. A sibling agent's `bun test`, Metro, simulator, or
+ * Studio session shares this machine and this checkout, and is never signalled by name, port, or
+ * working directory.
+ */
 async function runProcess(_state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
-  let command: CLI.StartedCommand | undefined
+  const child = Platform.spawn(context.run.command, {
+    args: [...context.run.args],
+    cwd: context.run.cwd,
+    detached: true,
+    env: context.env,
+    stdio: 'pipe',
+  })
   let forceKill: ReturnType<typeof setTimeout> | undefined
+  let trackedDescendants: TrackedProcess[] = []
+  child.stdout?.on('data', chunk => context.onOutput(String(chunk)))
+  child.stderr?.on('data', chunk => context.onOutput(String(chunk)))
+  let cancelled = false
   try {
-    command = CLI.start(context.run.command, {
-      args: [...context.run.args],
-      cwd: context.run.cwd,
-      env: context.env,
-      onOutput: (_stream, chunk) => context.onOutput(String(chunk)),
-      stdio: 'pipe',
-    })
-    const started = command
     context.onCancel(() => {
-      started.kill('SIGTERM')
-      // A node cancelled for hanging may ignore SIGTERM — the canary's surviving launch process
-      // did — and would then hold the lane open through the very mechanism meant to unblock it.
-      forceKill = setTimeout(() => started.kill('SIGKILL'), FORCE_KILL_GRACE_MS)
+      cancelled = true
+      trackedDescendants = child.pid === undefined ? [] : ProcessTree.descendants(child.pid)
+      ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
+      ProcessTree.signalGroup(child.pid, 'SIGTERM')
+      forceKill = setTimeout(() => {
+        ProcessTree.signalTracked(trackedDescendants, 'SIGKILL')
+        ProcessTree.signalGroup(child.pid, 'SIGKILL')
+      }, ProcessTree.FORCE_KILL_GRACE_MS)
     })
-    return await waitForCommand(started)
+    const outcome = await waitForProcess(child)
+    if (cancelled) {
+      await Promise.all([
+        ProcessTree.waitForGroupExit(child.pid),
+        ProcessTree.waitForTrackedExit(trackedDescendants),
+      ])
+    }
+    return outcome
   } finally {
     if (forceKill !== undefined) {
       clearTimeout(forceKill)
     }
-    command?.dispose()
+    child.stdin?.destroy()
+    child.stdout?.destroy()
+    child.stderr?.destroy()
+    child.removeAllListeners()
   }
 }
 
-async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome> {
+async function waitForProcess(child: ReturnType<typeof Platform.spawn>): Promise<WorkOutcome> {
   return await new Promise(resolve => {
     let settled = false
+    let processError: Error | undefined
     const finish = (outcome: WorkOutcome) => {
       if (settled) {
         return
@@ -455,12 +642,12 @@ async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome>
       settled = true
       resolve(outcome)
     }
-    command.onceError(error => {
+    child.once('error', error => {
+      processError = error
       finish({ error, exitCode: null })
     })
-    command.waitForClose().then(result => {
-      finish({ error: command.error, exitCode: result.exitCode })
-      return result
+    child.once('close', exitCode => {
+      finish({ error: processError, exitCode })
     })
   })
 }
@@ -492,18 +679,10 @@ function failedDependencyName(state: WorkState, states: readonly WorkState[]): s
 }
 
 function isReady(state: WorkState, states: readonly WorkState[]): boolean {
-  if (state.node.mutatesTree !== true && states.some(other => other.node.mutatesTree === true && !isFinished(other))) {
-    // A node that rewrites the tree must complete before anything reads the tree in the same run.
-    return false
-  }
   return (state.node.needs ?? []).every(need => {
     const dependency = states.find(candidate => candidate.name === need)
     return dependency === undefined || dependency.status === 'passed'
   })
-}
-
-function isFinished(state: WorkState): boolean {
-  return state.status === 'failed' || state.status === 'passed' || state.status === 'skipped'
 }
 
 function resourcesAvailable(state: WorkState, heldResources: ReadonlySet<string>): boolean {
@@ -517,8 +696,13 @@ function startOrder(
   const declarationOrder = new Map(states.map((state, index) => [state.name, index]))
   const rankOf = (state: WorkState) => ranks.get(state.name) ?? 0
   const orderOf = (state: WorkState) => declarationOrder.get(state.name) ?? 0
+  // A serial node is a floor on the whole run: it cannot be made shorter by any amount of machine,
+  // and everything else can be packed around it. Starting it before its equal-priority neighbours
+  // is therefore free, and starting it late costs the run its own length.
+  const serialFirst = (state: WorkState) => state.node.serial === true ? 1 : 0
   return (left, right) =>
     nodePriority(right.node) - nodePriority(left.node)
+    || serialFirst(right) - serialFirst(left)
     || rankOf(right) - rankOf(left)
     || orderOf(left) - orderOf(right)
 }
@@ -578,25 +762,12 @@ function nestedRunnerBudgetKeys(command: WorkCommand): readonly string[] {
   const isBunRun = FS.basename(command.command) === 'bun' && command.args[0] === 'run'
   const runner = FS.basename(isBunRun ? command.args[1] ?? '' : command.command).replace(/\.ts$/, '')
   const subcommand = isBunRun ? command.args[2] : command.args[0]
-  if (subcommand !== 'test') {
-    return []
-  }
-  if (runner === 'tao') {
-    return [BUDGET_ENV_KEYS.taoTest]
-  }
-  return runner === 'dev' ? [BUDGET_ENV_KEYS.devTest] : []
+  return subcommand === 'test' && runner === 'tao' ? [BUDGET_ENV_KEYS.taoTest] : []
 }
 
-/** resolveCapacity resolves the worker width of a run: `--jobs`, then the env budget, then CPUs. */
+/** resolveCapacity resolves the worker width of a run: `--jobs`, then the whole machine. */
 function resolveCapacity(requestedJobs: number | undefined): number {
-  if (requestedJobs !== undefined) {
-    return requestedJobs
-  }
-  const envJobs = Number(Platform.runtimeProcess.env[BUDGET_ENV_KEYS.devTest] ?? '')
-  if (Number.isInteger(envJobs) && envJobs > 0) {
-    return envJobs
-  }
-  return Platform.cpuCount()
+  return requestedJobs ?? Platform.cpuCount()
 }
 
 function watchProcessInterrupt(interrupt: () => void): () => void {
@@ -604,11 +775,24 @@ function watchProcessInterrupt(interrupt: () => void): () => void {
 }
 
 function nodeCost(node: WorkNode | undefined): number {
-  return Math.max(1, node?.cost ?? 1)
+  // A serial node occupies one core by definition, so its width is one whatever else it declares.
+  return node?.serial === true ? 1 : Math.max(1, node?.cost ?? 1)
 }
 
 function nodePriority(node: WorkNode): number {
   return node.priority ?? 0
+}
+
+/** addWait folds one slice of waiting into the node's per-reason totals, longest reason first. */
+function addWait(state: WorkState, reason: Pick<WorkWait, 'detail' | 'kind'>, sliceMs: number): void {
+  const waits = [...state.waits ?? []]
+  const existing = waits.find(wait => wait.kind === reason.kind && wait.detail === reason.detail)
+  if (existing === undefined) {
+    waits.push({ ...reason, ms: sliceMs })
+  } else {
+    existing.ms += sliceMs
+  }
+  state.waits = waits.toSorted((left, right) => right.ms - left.ms)
 }
 
 function appendOutput(state: WorkState, output: string): void {

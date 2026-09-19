@@ -7,10 +7,8 @@ import { Assert, FS, Repo } from '../shared-src/shared'
  * code itself — comments stripped, the runtime's naming prefix removed — so a change to one side
  * that is not made to the other fails here rather than going unnoticed.
  *
- * Two runtime copies are deliberately not compared because they have diverged on purpose:
- * `TR-switch.ts` is a value-only subset of `Switch_TypeSafe.ts` with a precompiled-table entry
- * point, and `TR-errors.ts`'s `errorMessage` names message-less platform events that
- * `Errors.messageOf` flattens to `[object Object]`.
+ * `TR-switch.ts` is deliberately not compared because it is a value-only subset of
+ * `Switch_TypeSafe.ts` with a precompiled-table entry point.
  */
 
 const runtimeSrc = 'packages/runtime/TaoRuntime-src'
@@ -33,6 +31,28 @@ Describe('runtime mirrors of shared code', () => {
     )
       .replaceAll('RuntimeTestOverride', 'TestOverride')
       .replaceAll('runtimeTestOverrideSlot', 'testOverrideSlot')
+
+    Expect(runtime).toBe(shared)
+  })
+
+  Test('Bun and Jest publish the same Tao fixture helpers', async () => {
+    const bun = namedReexports(await sourceOf(`${sharedSrc}/testing/Test-Bun.ts`), './TaoFixtures')
+    const jest = namedReexports(await sourceOf(`${sharedSrc}/testing/Test-Jest.ts`), './TaoFixtures')
+
+    Expect(bun).toEqual(jest)
+  })
+
+  Test('runtime error messages mirror shared unknown-value messages', async () => {
+    const shared = functionsFrom(await sourceOf(`${sharedSrc}/core/Errors.ts`), [
+      'errorDetail',
+      'messageOf',
+      'describeThrownValue',
+    ])
+    const runtime = functionsFrom(await sourceOf(`${runtimeSrc}/TR-errors.ts`), [
+      'errorDetail',
+      'errorMessage',
+      'describeThrownValue',
+    ]).replace('errorMessage', 'messageOf')
 
     Expect(runtime).toBe(shared)
   })
@@ -86,6 +106,39 @@ function codeFrom(source: string, start: string): string {
   const index = code.indexOf(start)
   Assert(index >= 0, `mirrored code starts at '${start}'`, { start })
   return code.slice(index)
+}
+
+/** namedReexports reads the stable named public surface re-exported from one local module. */
+function namedReexports(source: string, module: string): string[] {
+  const match = [...source.matchAll(/export\s+\{([\s\S]*?)\}\s+from\s+'([^']+)'/g)]
+    .find(candidate => candidate[2] === module)
+  Assert.defined(match?.[1], `source re-exports names from '${module}'`, { module })
+  return match[1].split(',').map(name => name.trim().replace(/^type\s+/, '')).filter(Boolean).toSorted()
+}
+
+/** functionsFrom compares hand-copied function implementations without making shared depend on runtime. */
+function functionsFrom(source: string, names: readonly string[]): string {
+  return names.map(name => functionFrom(source, name)).join('\n')
+}
+
+function functionFrom(source: string, name: string): string {
+  const start = source.indexOf(`function ${name}(`)
+  Assert(start >= 0, `source declares function '${name}'`, { name })
+  const bodyStart = source.indexOf('{', start)
+  Assert(bodyStart >= 0, `function '${name}' has a body`, { name })
+  let depth = 0
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') {
+      depth += 1
+    }
+    if (source[index] === '}') {
+      depth -= 1
+    }
+    if (depth === 0) {
+      return source.slice(start, index + 1)
+    }
+  }
+  Assert(false, `function '${name}' has a closing brace`, { name })
 }
 
 /** quotedWords is the list of single-quoted words inside the first capture of `pattern`. */

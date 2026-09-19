@@ -1,56 +1,51 @@
-import { Errors, FS } from '@shared'
+import { CLI, Errors, FS, Platform, Time } from '@shared'
 import { DevDataProtocol } from './DevDataBootstrap'
 
-/**
- * The dev data server behind the `Dev` datasource: one WebSocket stream per (app, storage key),
- * holding that stream's latest full snapshot in memory and in one file under the root directory,
- * and pushing every accepted write to every socket on the stream — the writer included, whose
- * runtime recognises its own snapshot. `tao dev` and Studio each host one for their process;
- * storage keyed by app lets several apps develop side by side without touching each other.
- *
- * The wire contract is `tao-dev-data-v1`, defined beside the client in
- * `packages/stdlib/@tao/data/providers/dev/Dev.ts`; this file mirrors its message shapes.
- */
-
+/** The capability-authenticated, filesystem-serialized authority behind the `Dev` datasource. */
 export type DevDataServerOptions = {
+  capability?: string
   hostname?: string
   log?: (line: string) => void
   port?: number
-  /** Where streams persist: `<rootDir>/<app>/<encoded storage key>.json`. */
   rootDir: string
 }
 
 type ClientMessage =
-  | { seq: number; snapshot: string; type: 'save' }
-  | { seq: number; type: 'reset' }
+  | { expectedRevision: number; seq: number; snapshot: string; type: 'save' }
+  | { expectedRevision: number; seq: number; type: 'reset' }
   | { seq: number; type: 'load' }
-
 type ServerMessage =
   | { revision: number; snapshot: string | null; type: 'snapshot' }
   | { revision: number; seq: number; type: 'ack' }
   | { message: string; seq: number; type: 'rejected' }
-
 type SocketData = { app: string; key: string; topic: string }
 type Socket = Bun.ServerWebSocket<SocketData>
-
-type Stream = {
-  queue: Promise<unknown>
-  revision: number
-  snapshot: string | undefined
-}
+type DurableStream = { revision: number; snapshot: string | undefined }
+type Stream = DurableStream & { data: SocketData; queue: Promise<unknown> }
 
 const appNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const capabilityPattern = /^[A-Za-z0-9_-]{32,256}$/
 const maxSnapshotBytes = 64 * 1024 * 1024
+const externalRefreshMs = 100
+const lockWaitMs = 5_000
+const stateFormat = 'tao-dev-data-state-v1'
 
 export class DevDataServer {
+  readonly capability: string
   readonly port: number
   readonly rootDir: string
   readonly #log: (line: string) => void
   readonly #server: Bun.Server<SocketData>
   readonly #streams = new Map<string, Stream>()
+  readonly #refreshTimer: ReturnType<typeof setInterval>
 
   private constructor(options: DevDataServerOptions) {
     this.rootDir = options.rootDir
+    this.capability = options.capability
+      ?? `${Platform.randomUUID().replaceAll('-', '')}${Platform.randomUUID().replaceAll('-', '')}`
+    if (!capabilityPattern.test(this.capability)) {
+      Errors.throwUnexpected('The dev data authority capability is malformed.')
+    }
     this.#log = options.log ?? (() => {})
     this.#server = Bun.serve<SocketData>({
       fetch: (request, server) => this.#fetch(request, server),
@@ -66,6 +61,11 @@ export class DevDataServer {
       },
     })
     this.port = this.#server.port ?? options.port ?? 0
+    this.#refreshTimer = setInterval(() => {
+      void this.#refreshExternalChanges().catch(error => {
+        this.#log(`external refresh failed: ${Errors.formatForLog(error)}`)
+      })
+    }, externalRefreshMs)
   }
 
   static async start(options: DevDataServerOptions): Promise<DevDataServer> {
@@ -73,21 +73,23 @@ export class DevDataServer {
     return new DevDataServer(options)
   }
 
-  /**
-   * stop cuts every socket and stops; streams stay on disk for the next server. The cut is forced
-   * rather than a close handshake: a client that reconnects on close would otherwise keep the
-   * handshake, and this stop, waiting on each other.
-   */
   async stop(): Promise<void> {
+    clearInterval(this.#refreshTimer)
     await this.#server.stop(true)
+    await Promise.all([...this.#streams.values()].map(stream => stream.queue.catch(() => undefined)))
   }
 
   #fetch(request: Request, server: Bun.Server<SocketData>): Response | undefined {
     const url = new URL(request.url)
     if (url.pathname === DevDataProtocol.probePath && request.method === 'GET') {
-      return jsonResponse({ protocol: DevDataProtocol.name })
+      return this.#authorized(request, url)
+        ? jsonResponse({ protocol: DevDataProtocol.name })
+        : jsonResponse({ error: 'Unauthorized.' }, 401)
     }
     if (url.pathname === DevDataProtocol.path) {
+      if (!this.#authorized(request, url)) {
+        return jsonResponse({ error: 'Unauthorized.' }, 401)
+      }
       const app = url.searchParams.get('app') ?? ''
       const key = url.searchParams.get('key') ?? ''
       if (!appNamePattern.test(app)) {
@@ -104,10 +106,16 @@ export class DevDataServer {
     return jsonResponse({ error: 'Not found.' }, 404)
   }
 
+  #authorized(request: Request, url: URL): boolean {
+    return url.searchParams.get('capability') === this.capability
+      || request.headers.get('authorization') === `Bearer ${this.capability}`
+  }
+
   #open(socket: Socket): void {
     socket.subscribe(socket.data.topic)
     void this.#enqueue(socket.data, async stream => {
-      send(socket, { revision: stream.revision, snapshot: stream.snapshot ?? null, type: 'snapshot' })
+      await this.#refresh(stream)
+      send(socket, snapshotMessage(stream))
     })
   }
 
@@ -120,80 +128,226 @@ export class DevDataServer {
     void this.#enqueue(socket.data, async stream => {
       try {
         if (message.type === 'load') {
-          // The answer precedes the ack on this one socket, so the client reads it in order.
-          send(socket, { revision: stream.revision, snapshot: stream.snapshot ?? null, type: 'snapshot' })
+          await this.#refresh(stream)
+          send(socket, snapshotMessage(stream))
           send(socket, { revision: stream.revision, seq: message.seq, type: 'ack' })
           return
         }
-        if (message.type === 'save') {
-          await writeAtomically(this.#pathFor(socket.data), message.snapshot)
-          stream.snapshot = message.snapshot
-        } else {
-          await FS.remove(this.#pathFor(socket.data))
-          stream.snapshot = undefined
-        }
-        stream.revision += 1
-        this.#server.publish(
-          socket.data.topic,
-          JSON.stringify({ revision: stream.revision, snapshot: stream.snapshot ?? null, type: 'snapshot' }),
+        const durable = await this.#transact(
+          socket.data,
+          message.expectedRevision,
+          message.type === 'save' ? message.snapshot : undefined,
         )
+        stream.revision = durable.revision
+        stream.snapshot = durable.snapshot
+        this.#publish(stream)
         send(socket, { revision: stream.revision, seq: message.seq, type: 'ack' })
         this.#log(`${socket.data.app} ${socket.data.key}: ${message.type} r${stream.revision}`)
       } catch (error) {
+        await this.#refresh(stream)
+        send(socket, snapshotMessage(stream))
         send(socket, { message: Errors.formatForUser(error), seq: message.seq, type: 'rejected' })
         this.#log(`${socket.data.app} ${socket.data.key}: ${message.type} failed: ${Errors.formatForLog(error)}`)
       }
     })
   }
 
-  /** enqueue runs one stream's work in order, loading the stream from disk the first time it is named. */
   #enqueue(data: SocketData, work: (stream: Stream) => Promise<void>): Promise<void> {
     let stream = this.#streams.get(data.topic)
     if (stream === undefined) {
-      const created: Stream = { queue: Promise.resolve(), revision: 0, snapshot: undefined }
-      created.queue = this.#load(data).then(snapshot => {
-        created.snapshot = snapshot
-        created.revision = 1
-      })
-      this.#streams.set(data.topic, created)
-      stream = created
+      stream = { data, queue: Promise.resolve(), revision: -1, snapshot: undefined }
+      this.#streams.set(data.topic, stream)
     }
     const current = stream
     const run = current.queue.then(() => work(current), () => work(current))
-    const settled: Promise<void> = run.catch(error => {
-      this.#log(`${data.app} ${data.key}: ${Errors.formatForLog(error)}`)
-    })
+    const settled = run.catch(error => this.#log(`${data.app} ${data.key}: ${Errors.formatForLog(error)}`))
     current.queue = settled
     return settled
   }
 
-  async #load(data: SocketData): Promise<string | undefined> {
+  async #refreshExternalChanges(): Promise<void> {
+    await Promise.all([...this.#streams.values()].map(stream =>
+      this.#enqueue(stream.data, async current => {
+        const before = current.revision
+        await this.#refresh(current)
+        if (current.revision !== before) {
+          this.#publish(current)
+        }
+      })
+    ))
+  }
+
+  async #refresh(stream: Stream): Promise<void> {
+    const durable = await withFileLock(this.#lockPath(stream.data), () => this.#read(stream.data))
+    stream.revision = durable.revision
+    stream.snapshot = durable.snapshot
+  }
+
+  async #transact(data: SocketData, expectedRevision: number, snapshot: string | undefined): Promise<DurableStream> {
+    return await withFileLock(this.#lockPath(data), async () => {
+      const current = await this.#read(data)
+      if (current.revision !== expectedRevision) {
+        Errors.throwHostEnvironment(
+          `Dev data changed concurrently (expected revision ${expectedRevision}, found ${current.revision}); reload and retry.`,
+        )
+      }
+      const next = { revision: current.revision + 1, snapshot }
+      await writeAtomically(
+        this.#pathFor(data),
+        JSON.stringify({
+          format: stateFormat,
+          revision: next.revision,
+          snapshot: next.snapshot ?? null,
+        }),
+      )
+      return next
+    })
+  }
+
+  async #read(data: SocketData): Promise<DurableStream> {
     const path = this.#pathFor(data)
     if (!await FS.isFile(path)) {
-      return undefined
+      return { revision: 0, snapshot: undefined }
     }
+    const content = await FS.readText(path)
+    let parsed: { format?: unknown; revision?: unknown; snapshot?: unknown }
     try {
-      return await FS.readText(path)
-    } catch (error) {
-      this.#log(`${data.app} ${data.key}: could not read ${path}: ${Errors.formatForLog(error)}`)
-      return undefined
+      parsed = JSON.parse(content) as { format?: unknown; revision?: unknown; snapshot?: unknown }
+    } catch {
+      Errors.throwHostEnvironment(`Dev data authority state is invalid: ${FS.displayPath(path)}.`)
     }
+    if (parsed.format !== stateFormat) {
+      // tao-dev-data-v1 originally persisted snapshot bytes directly. The first mutation migrates
+      // that legacy record into the explicitly tagged authority envelope atomically. Checking the
+      // tag, rather than field names such as `revision`, keeps arbitrary app JSON unambiguous.
+      return { revision: 1, snapshot: content }
+    }
+    if (
+      !Number.isSafeInteger(parsed.revision) || (parsed.revision as number) < 0
+      || !(typeof parsed.snapshot === 'string' || parsed.snapshot === null)
+    ) {
+      Errors.throwHostEnvironment(`Dev data authority state is invalid: ${FS.displayPath(path)}.`)
+    }
+    return { revision: parsed.revision as number, snapshot: parsed.snapshot ?? undefined }
+  }
+
+  #publish(stream: Stream): void {
+    this.#server.publish(stream.data.topic, JSON.stringify(snapshotMessage(stream)))
   }
 
   #pathFor(data: SocketData): string {
     return FS.resolvePath(`${data.app}/${encodeURIComponent(data.key)}.json`, this.rootDir)
   }
+
+  #lockPath(data: SocketData): string {
+    return `${this.#pathFor(data)}.lock`
+  }
 }
 
-/** writeAtomically lands a snapshot through a rename, so a reader never sees a half-written file. */
+async function withFileLock<Value>(lockPath: string, work: () => Promise<Value>): Promise<Value> {
+  const ownerFile = `${lockPath}.owner-${Platform.randomUUID()}`
+  await FS.writeJson(ownerFile, { pid: Platform.runtimeProcess.pid, startedAt: Date.now() }, { mode: 0o600 })
+  const ownerPath = await FS.realPath(ownerFile)
+  const deadline = Date.now() + lockWaitMs
+  try {
+    while (true) {
+      try {
+        await FS.symlink(ownerPath, lockPath)
+        break
+      } catch (error) {
+        if (errorCode(error) !== 'EEXIST') {
+          throw error
+        }
+        await reclaimStaleLock(lockPath)
+        if (Date.now() >= deadline) {
+          Errors.throwHostEnvironment(`Timed out waiting for the dev data authority lock ${FS.displayPath(lockPath)}.`)
+        }
+        await Time.sleep(10)
+      }
+    }
+    return await work()
+  } finally {
+    try {
+      if (await lockTarget(lockPath) === ownerPath) {
+        await FS.remove(lockPath)
+      }
+    } catch {
+      // A missing lock means this authority is already released; never remove another owner's lock.
+    }
+    await FS.remove(ownerFile)
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined
+}
+
+async function reclaimStaleLock(lockPath: string): Promise<void> {
+  const ownerPath = await lockTarget(lockPath)
+  if (ownerPath === undefined) {
+    return
+  }
+  if (await FS.isFile(ownerPath)) {
+    const owner = await FS.readJson<{ pid?: unknown }>(ownerPath).catch(() => undefined)
+    if (owner !== undefined && typeof owner.pid === 'number' && Platform.processIsAlive(owner.pid)) {
+      return
+    }
+  }
+  const root = FS.dirname(lockPath)
+  const targetKey = FS.basename(ownerPath).replaceAll(/[^a-zA-Z0-9._-]/g, '_')
+  const claimPrefix = `.dev-data-reclaim-${targetKey}-`
+  const claimPath = FS.resolvePath(
+    `${claimPrefix}${String(Date.now()).padStart(16, '0')}-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`,
+    root,
+  )
+  await FS.writeJson(claimPath, { pid: Platform.runtimeProcess.pid })
+  try {
+    await Time.sleep(10)
+    const claims: string[] = []
+    for (const entry of await FS.listDir(root)) {
+      if (!entry.startsWith(claimPrefix)) {
+        continue
+      }
+      const path = FS.resolvePath(entry, root)
+      const claim = await FS.readJson<{ pid?: unknown }>(path).catch(() => undefined)
+      if (claim === undefined || typeof claim.pid !== 'number' || !Platform.processIsAlive(claim.pid)) {
+        await FS.remove(path).catch(() => {})
+        continue
+      }
+      claims.push(path)
+    }
+    if (claims.toSorted()[0] === claimPath && await lockTarget(lockPath) === ownerPath) {
+      await FS.remove(lockPath)
+      await FS.remove(ownerPath).catch(() => {})
+    }
+  } finally {
+    await FS.remove(claimPath).catch(() => {})
+  }
+}
+
+/** lockTarget identifies a symlink target even after its owner file vanished. */
+async function lockTarget(lockPath: string): Promise<string | undefined> {
+  const result = await CLI.run('/usr/bin/readlink', { args: [lockPath], stdio: 'pipe' })
+  const target = result.stdout.trim()
+  return result.error === undefined && result.exitCode === 0 && target !== ''
+    ? FS.resolvePath(target, FS.dirname(lockPath))
+    : undefined
+}
+
 async function writeAtomically(path: string, content: string): Promise<void> {
-  const temporaryPath = `${path}.${crypto.randomUUID()}.tmp`
+  const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
   try {
     await FS.writeText(temporaryPath, content)
     await FS.move(temporaryPath, path)
   } finally {
     await FS.remove(temporaryPath)
   }
+}
+
+function snapshotMessage(stream: DurableStream): ServerMessage {
+  return { revision: stream.revision, snapshot: stream.snapshot ?? null, type: 'snapshot' }
 }
 
 function send(socket: Socket, message: ServerMessage): void {
@@ -215,11 +369,18 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | undefined {
   if (typeof seq !== 'number' || !Number.isSafeInteger(seq)) {
     return undefined
   }
-  if (record['type'] === 'save' && typeof record['snapshot'] === 'string') {
-    return { seq, snapshot: record['snapshot'], type: 'save' }
-  }
-  if (record['type'] === 'reset' || record['type'] === 'load') {
+  if (record['type'] === 'load') {
     return { seq, type: record['type'] }
+  }
+  const expectedRevision = record['expectedRevision']
+  if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 0) {
+    return undefined
+  }
+  if (record['type'] === 'save' && typeof record['snapshot'] === 'string') {
+    return { expectedRevision: expectedRevision as number, seq, snapshot: record['snapshot'], type: 'save' }
+  }
+  if (record['type'] === 'reset') {
+    return { expectedRevision: expectedRevision as number, seq, type: record['type'] }
   }
   return undefined
 }

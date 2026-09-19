@@ -10,7 +10,7 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
-import type { StudioDebugCommandMessage } from '../StudioProtocol'
+import type { StudioDebugCommandMessage, StudioPreviewCanvasGestureMessage } from '../StudioProtocol'
 import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
@@ -22,7 +22,11 @@ import { StudioEditorSession } from './app/StudioEditorSession'
 import { StudioInspection } from './app/StudioInspection'
 import { StudioMountSignal } from './app/StudioMountSignal'
 import { mountStudioPreviewReload, StudioPreviewNotice } from './app/StudioPreviewStatus'
-import { connectStudioPreviewMessages, wireStudioPreviews } from './app/StudioPreviewWiring'
+import {
+  connectStudioPreviewMessages,
+  forwardPreviewCanvasGesture,
+  wireStudioPreviews,
+} from './app/StudioPreviewWiring'
 import { publishStudioHostSnapshot } from './app/StudioProductHostState'
 import { StudioProjectSearch } from './app/StudioProjectSearch'
 import { StudioScenarioActions } from './app/StudioScenarioActions'
@@ -44,6 +48,7 @@ import {
   currentSourceIdentity,
   disconnectPreviews,
   mountCanvasViewport,
+  postCanvasGestureOwnership,
   postDebugCommand,
   postEditorSelection,
   refreshCellPreviews,
@@ -53,7 +58,13 @@ import {
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
 import { StudioRailPanels } from './StudioRailPanels'
-import { createStudioShell, type StudioClientConfig, StudioWorkbenchState } from './StudioShell'
+import {
+  createStudioShell,
+  type StudioClientConfig,
+  studioLayoutOwnsCanvasGestures,
+  studioLayoutPresetChangedEvent,
+  StudioWorkbenchState,
+} from './StudioShell'
 import { showSourceActionError } from './StudioVisualEditing'
 
 export { StudioDraftStatus } from './app/StudioCompileEvents'
@@ -78,6 +89,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const config = window.TaoStudioConfig ?? {}
   const view = createStudioShell(root, config)
   const { signal } = options
+  const disposeDialogs = StudioDialog.mount({ container: root, signal })
   // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
   const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
   let partialSession: StudioEditorSession | undefined
@@ -128,6 +140,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let projectFiles: readonly StudioFile[] = handshake.files
     let previewManifest = handshake.previewManifest
     let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
+    let editorRevealRevision = 0
 
     const publish = (): void =>
       publishStudioHostSnapshot({
@@ -144,11 +157,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         preview: activePreview.current(),
         project,
         projectFiles,
+        revealRevision: editorRevealRevision,
         searchResults: search.results(),
         sourceActionBusy: mutations.busy(),
         tests: drawer.tests(),
       })
     const renderInspector = (): void => inspection.render()
+    const advanceEditorReveal = (): void => {
+      editorRevealRevision += 1
+    }
 
     const previewNotice = new StudioPreviewNotice({
       compileState: () => compileState,
@@ -213,6 +230,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       activePreview,
       focusEditor: focusVisibleEditor,
       openFile: path => session.openFile(path),
+      onReveal: advanceEditorReveal,
       previewManifest: () => previewManifest,
       previews,
       project,
@@ -226,12 +244,18 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     mountStudioAgentChat(root, (path, refresh) => session.openFile(path, refresh))
     void drawer.loadTestStatus()
 
+    let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
+    const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
     const previewWiring = {
       activePreview,
+      canvasGesturesOwned,
       drawer,
       handshake,
       inspection,
       mutations,
+      onReveal: advanceEditorReveal,
+      onCanvasGesture: (preview: (typeof previews)[number], gesture: StudioPreviewCanvasGestureMessage) =>
+        forwardPreviewCanvasGesture(canvasViewport, preview, gesture),
       preview: view.preview,
       previews,
       publish,
@@ -239,6 +263,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       status: view.status,
     }
     const wirePreview = wireStudioPreviews(previewWiring)
+    const publishCanvasGestureOwnership = (): void => {
+      for (const preview of previews) {
+        postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned())
+      }
+    }
+    root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
     publish()
     view.searchInput.addEventListener('input', () => search.schedule())
     for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
@@ -377,17 +407,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     // The preview area is a canvas before it is a list: zoom and pan come up before anything is
     // selected, so the whole app can be seen at once and one view brought close.
-    mountCanvasViewport({ host: view.preview })
+    canvasViewport = mountCanvasViewport({
+      enabled: () => root.dataset['layoutPreset'] === 'design',
+      host: view.preview,
+    })
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
       onError: error => showSourceActionError(view.status, error),
       ownerFrame: candidate => {
         const owner = inspection.inspection()?.owner
-        return owner?.view === candidate ? owner.rect : undefined
+        return inspection.selectedOwnerIdentity()?.id === candidate ? owner?.rect : undefined
       },
       preview: view.preview,
       previews: () => previews,
-      selectedOwner: () => inspection.selectedOwner(),
+      selectedOwner: () => inspection.selectedOwnerIdentity(),
       status: view.status,
     })
     mountStudioPreviewReload(
@@ -610,14 +643,19 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         return
       }
       disposed = true
+      disposeDialogs()
       unregisterProductHost()
       publishStudioProductHostState({})
       disconnectEvents()
       window.removeEventListener('keydown', keydownListener, { capture: true })
       window.removeEventListener('beforeunload', beforeUnloadListener)
+      root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
       betaShip.dispose()
       devicePanel.dispose()
       disconnectPreviewMessages()
+      canvasFocus.dispose()
+      canvasViewport?.dispose()
+      view.dispose()
       search.dispose()
       drawer.dispose()
       session.dispose()
@@ -625,6 +663,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     return cleanup
   } catch (error) {
+    disposeDialogs()
+    view.dispose()
     partialSession?.dispose()
     partialDevicePanel?.dispose()
     disconnectPreviews(partialPreviews)

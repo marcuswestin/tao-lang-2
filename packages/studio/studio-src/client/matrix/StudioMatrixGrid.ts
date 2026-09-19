@@ -43,10 +43,12 @@ function reconcileMatrix<Item>(
     const row = rows.get(group.id) ?? document.createElement('section')
     row.className = 'studio-preview-group'
     row.dataset['taoStudioGroup'] = group.id
-    if (group.subjectView === undefined) {
+    if (group.subjectView === undefined || group.subjectViewId === undefined) {
       delete row.dataset['taoStudioGroupView']
+      delete row.dataset['taoStudioGroupViewId']
     } else {
       row.dataset['taoStudioGroupView'] = group.subjectView
+      row.dataset['taoStudioGroupViewId'] = group.subjectViewId
     }
     const heading = row.querySelector<HTMLElement>(':scope > .studio-preview-group-label')
       ?? document.createElement('h2')
@@ -105,12 +107,12 @@ function retireDepartedPreviewChildren(parent: HTMLElement, canvas: HTMLElement)
  * and a bar above the grid names the view and offers the way back. Cells stay mounted, so the app's
  * own previews keep their state while the person works on the one definition.
  */
-function focusCanvasView(parent: HTMLElement, viewName: string | undefined, exit: () => void): void {
+function focusCanvasView(parent: HTMLElement, viewId: string | undefined, exit: () => void): void {
   const state = canvasState(parent)
-  if (viewName === undefined) {
+  if (viewId === undefined) {
     delete state.focused
   } else {
-    state.focused = viewName
+    state.focused = viewId
   }
   parent.dataset['taoStudioCanvasExit'] = 'true'
   state.exit = exit
@@ -129,9 +131,9 @@ function applyCanvasFocus(parent: HTMLElement): void {
   const rows = [...canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')]
   // A focused view no scenario renders any more (renamed, removed, or its file no longer compiles)
   // leaves nothing to show alone. The app stays visible under the bar instead of the grid going blank.
-  const shown = focused !== undefined && rows.some(row => row.dataset['taoStudioGroupView'] === focused)
+  const shown = focused !== undefined && rows.some(row => row.dataset['taoStudioGroupViewId'] === focused)
   for (const row of rows) {
-    row.hidden = shown && row.dataset['taoStudioGroupView'] !== focused
+    row.hidden = shown && row.dataset['taoStudioGroupViewId'] !== focused
   }
   const existing = parent.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
   if (focused === undefined) {
@@ -144,9 +146,12 @@ function applyCanvasFocus(parent: HTMLElement): void {
   bar.className = 'studio-canvas-bar'
   bar.dataset['taoStudioCanvasBar'] = focused
   const label = bar.querySelector<HTMLElement>(':scope > span') ?? document.createElement('span')
+  const viewName = rows.find(row => row.dataset['taoStudioGroupViewId'] === focused)?.dataset['taoStudioGroupView']
+    ?? focused.split('#').at(-1)
+    ?? focused
   label.textContent = shown
-    ? `Editing ${focused} on its own. Changes land in that one view definition.`
-    : `${focused} is not rendered by any scenario right now, so the whole app is shown.`
+    ? `Editing ${viewName} on its own. Changes land in that one view definition.`
+    : `${viewName} is not rendered by any scenario right now, so the whole app is shown.`
   const back = bar.querySelector<HTMLButtonElement>(':scope > button') ?? document.createElement('button')
   back.type = 'button'
   back.textContent = 'Back to app'

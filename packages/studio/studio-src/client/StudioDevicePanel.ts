@@ -47,6 +47,7 @@ type StudioDevicePanelHost = {
   canOpen: boolean
   id: string
   installed: 'installed' | 'not installed' | 'unknown'
+  kind: 'device' | 'simulator'
   name: string
 }
 
@@ -316,13 +317,20 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
       body.push(note(current.install.unavailable))
     }
     for (const host of current.install.hosts) {
-      const openButton = actionButton('studio-device-open', 'Open on device', () =>
-        void run(async () => {
-          const result = await api.deviceLaunchOpen(host.id)
-          return `Opened Tao Companion on ${result.hostName}.`
-        }))
-      openButton.dataset['hostId'] = host.id
-      openButton.disabled = busy || !host.canOpen
+      const open = (route: 'auto' | 'cable', label: string): HTMLButtonElement => {
+        const openButton = actionButton('studio-device-open', label, () =>
+          void run(async () => {
+            const result = await api.deviceLaunchOpen(host.id, route)
+            return `Opened Tao Companion on ${result.hostName} over ${route === 'cable' ? 'cable' : 'LAN'}.`
+          }))
+        openButton.dataset['hostId'] = host.id
+        openButton.dataset['route'] = route
+        openButton.disabled = busy || !host.canOpen
+        return openButton
+      }
+      const openButton = host.kind === 'simulator'
+        ? open('auto', 'Open in simulator')
+        : actions(open('auto', 'Open over LAN'), open('cable', 'Open over cable'))
       body.push(row(host.name, host.installed, openButton))
     }
     if (current.install.unavailable === undefined && current.install.hosts.length === 0) {
@@ -620,6 +628,7 @@ function installModel(
       : host.installed
       ? 'installed' as const
       : 'not installed' as const,
+    kind: host.kind,
     name: host.name,
   }))
   const anyInstalled = hosts.some(host => host.installed === 'installed')

@@ -990,20 +990,27 @@ part has landed.
   descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
   selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
   word-prefix subsequences across rendered text, and a sole candidate becomes the target.
-- **Keyboard and pointer input share semantic operations.** Enter activates or engages; Escape
-  clears narrowing, disengages without losing the target, ascends, then opens overview; arrows move
+- **Keyboard and pointer input share semantic operations.** Enter activates or engages, and
+  engaging clears the narrowing that selected the target so narrowing never outlives its
+  engagement; Escape disengages without losing the target, clears narrowing, ascends, then opens
+  overview; arrows move
   region or target attention; `.` opens verbs; physical `Slash` toggles hints; and `primary+K`
-  opens the palette. Engaged input, modal occurrence, target, focused scene, app command, then
-  reducer key is the dispatch order. Modifier chords invoke directly, while bare letter keys act
-  only as verb accelerators. Pointer activation first targets the same node.
+  opens the palette. In the palette and pending-slot chooser, arrows cycle the displayed choices and
+  Enter invokes or accepts the selected choice. Authored bare-letter command keys invoke only as verb
+  accelerators while the verb layer is open. A currently displayed generated hint or overview key
+  enters its assigned identity; other letters extend narrowing, including in the palette. Keyboard
+  movement may target an input without engaging it; Enter engages the already targeted input.
+  Engaged input, modal occurrence, target, focused scene, app command, then reducer key is the
+  dispatch order. Modifier chords invoke directly. Pointer activation first targets the same node.
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
   commands, rendered inner controls, entity defaults, then other applicable commands. The first verb
   with a given visible label wins, so a verb menu never presents indistinguishable choices. Commands
   with open slots enter a pending flow that fills required slots in declaration order from mounted
-  entity targets, store search, or inline scalar input. The reducer-side request model has landed;
-  the store picker and scalar-input presentation have not.
+  entity targets, store search, or inline scalar input. The reducer and generated pending surface
+  have landed: an already-decided entity is accepted directly, otherwise entity slots use mounted
+  candidates and the store-backed picker, while scalar slots use inline input.
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
   use spelling-validated identifier seams rather than adding reserved grammar keywords.
@@ -1017,9 +1024,11 @@ part has landed.
   attention. Help remains unimplemented.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
-  label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer
-  keys and explicit shortcuts or accelerators are never allocated. Affordances remain absent until
-  the first hardware-key dispatch, while `press key` drives that same seam in tests.
+  label-derived letter, then another distinctive label letter, then a two-letter sequence. One
+  canonical key parser and identity-to-key resolver drives validation, reducer dispatch, and every
+  displayed assignment; a shown key cannot dispatch a different identity. Reducer keys and explicit
+  shortcuts or accelerators are never allocated. Affordances remain absent until the first
+  hardware-key dispatch, while `press key` drives that same seam in tests.
 
 ### The AI surface
 
@@ -1664,15 +1673,27 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   and severs persisted-state compatibility. Duplicate IDs are rejected when distinct dependencies
   meet locally and at publish time. Public alias chains flatten to the target's canonical identity
   while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
+- **Release metadata is source-owned.** `project` carries a numeric three-component SemVer as
+  `version "<major>.<minor>.<patch>"` and may name `DefaultApp <AppName>`. An explicit CLI
+  `--app` selection wins over `DefaultApp`; without either, tooling presents the available apps.
+  `DefaultApp` deliberately remains source-compatible spelling but is parsed as a capitalized
+  identifier and validated in the project slot rather than becoming a grammar keyword.
 
 ---
 
 ## 11. App composition and providers
 
-- **`project { id, name, targets, languages, license }` declares the product envelope**:
+- **`project { id, name, version, DefaultApp, targets, languages, license }` declares the product envelope**:
 
 ```swift
-project { id "skillet", name "Skillet", targets phone, tablet, laptop, languages "en-US", "es" }
+project {
+   id "skillet"
+   name "Skillet"
+   version "1.0.0"
+   DefaultApp Skillet
+   targets phone, tablet, laptop
+   languages "en-US", "es"
+}
 ```
 
 - **`app Name { … }` is the one composition root** selecting design, providers, permissions,

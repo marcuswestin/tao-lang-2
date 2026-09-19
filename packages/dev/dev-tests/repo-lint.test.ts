@@ -1,9 +1,10 @@
-import { FS } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   CONVENTION_RULES,
   conventionRuleIssues,
   crossPackageSourceImportIssues,
+  developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
   justRecipeIssues,
@@ -22,7 +23,7 @@ check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
+verify-full:
     ./dev gates _test
 _test:
     ./dev test
@@ -31,15 +32,15 @@ _test:
 Describe('repo lint contracts', () => {
   Test('keeps the language benchmark in bench and out of correctness gates', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _native"
+VERIFY_FULL_GATES := "_test _native"
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 check:
     ./dev gates _test
 verify: deps
     ./dev gates _test
-full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full: deps
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _native:
@@ -51,21 +52,21 @@ deps:
 
   Test('reports a benchmark reached through a verification gate variable and recipe', () => {
     Expect(justRecipeIssues(`
-FULL_VERIFY_GATES := "_test _bench-check"
+VERIFY_FULL_GATES := "_test _bench-check"
 bench:
     bun run language-performance.ts
 check:
     ./dev gates _test
 verify:
     ./dev gates _test
-full-verify:
-    ./dev gates {{ FULL_VERIFY_GATES }}
+verify-full:
+    ./dev gates {{ VERIFY_FULL_GATES }}
 _test:
     ./dev test
 _bench-check:
     just bench
 `)).toEqual([
-      "Justfile recipe 'full-verify' must not invoke the language performance benchmark.",
+      "Justfile recipe 'verify-full' must not invoke the language performance benchmark.",
     ])
   })
 
@@ -91,6 +92,17 @@ _bench-check:
       ['packages/studio/studio-src/Clean.ts'],
     )).toEqual([
       'packages/studio/studio-src/Clean.ts no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
+    ])
+  })
+
+  Test('a raw-error exemption allows one site rather than its whole file', () => {
+    const path = 'packages/runtime/TR-tests/failure.test.ts'
+    const source = `${rawError('first')}\n${rawError('second')}\n`
+    Expect(conventionRuleIssues(CONVENTION_RULES.rawError, [{ path, source }], [`${path}:1`])).toEqual([
+      `${path}:2 constructs a raw \`Error\`; where an error object must exist rather than be thrown,`
+      + ' build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+      + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
+      + ' `Errors.abortError(...)`.',
     ])
   })
 
@@ -220,6 +232,55 @@ _bench-check:
     }
   })
 
+  Test('scans Apps, runtime, and CommonJS executable sources for raw errors', async () => {
+    const root = await mkTestDir('tao-repo-lint-sources-')
+    try {
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root),
+        absorbed,
+      )
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root),
+        absorbed,
+      )
+      const source = `const failure = ${rawError('unclassified')}\n`
+      await FS.writeText(FS.resolvePath('Apps/Sample/Adapter.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/runtime/TR-tests/failure.test.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/plugin/config.cjs', root), source)
+
+      Expect(await repoLintIssues(root)).toEqual([
+        rawErrorIssue('Apps/Sample/Adapter.ts'),
+        rawErrorIssue('packages/plugin/config.cjs'),
+        rawErrorIssue('packages/runtime/TR-tests/failure.test.ts'),
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('scans untracked worktree sources while preserving ignores and repository boundaries', async () => {
+    const root = await mkTestDir('tao-repo-lint-worktree-')
+    try {
+      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+      await FS.writeText(FS.resolvePath('.gitignore', root), 'packages/ignored/\n')
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+      const source = `const failure = ${rawError('unclassified')}\n`
+      await FS.writeText(FS.resolvePath('Apps/Sample/NewAdapter.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/ignored/Ignored.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/tool/_gen_output/Ignored.ts', root), source)
+      await FS.writeText(FS.resolvePath('Outside.ts', root), source)
+
+      Expect(await repoLintIssues(root)).toEqual([rawErrorIssue('Apps/Sample/NewAdapter.ts')])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('ignores Tao-owned project state when checking absorbed source parity', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [
@@ -251,6 +312,51 @@ _bench-check:
     Expect(issues).toEqual([
       'Current must contain exactly one tranche status header across the directory.',
       'Next must contain exactly one tranche status header across the directory.',
+    ])
+  })
+
+  Test('reports developer-environment entries the index does not link, and links with no entry', () => {
+    const index = '# Developer environment upgrades\n\n'
+      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Resolved\n'
+      + '- [DEVENV-903 — Vanished](<Developer environment upgrades/DEVENV-903-vanished.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md'],
+      index,
+    )).toEqual([
+      'Developer environment upgrades.md needs an index line linking `DEVENV-902-unlisted.md`.',
+      'Developer environment upgrades.md links `DEVENV-903-vanished.md`, which does not exist.',
+    ])
+  })
+
+  Test('reports two developer-environment entries that claim the same ID', () => {
+    const index = '- [DEVENV-904 — One](<Developer environment upgrades/DEVENV-904-one.md>) — Candidate\n'
+      + '- [DEVENV-904 — Two](<Developer environment upgrades/DEVENV-904-two.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-904-one.md', 'DEVENV-904-two.md'], index)).toEqual([
+      'Developer environment upgrades: DEVENV-904 is claimed by DEVENV-904-one.md, DEVENV-904-two.md;'
+      + ' rename the later-merged file and its index line.',
+    ])
+  })
+
+  Test('reports one developer-environment entry the index links twice', () => {
+    // A merge that keeps both sides of a conflicting index edit lands here, and it reads as correct
+    // from either direction on its own: the file exists, and it is listed.
+    const index = '- [DEVENV-905 — Once](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+      + '- [DEVENV-905 — Again](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-905-twice.md'], index)).toEqual([
+      'Developer environment upgrades.md links `DEVENV-905-twice.md` 2 times; keep one index line.',
+    ])
+  })
+
+  Test('accepts a developer-environment directory whose entries and index agree', () => {
+    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Resolved\n'
+      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(['DEVENV-901-one.md', 'DEVENV-902-two.md', '.DS_Store'], index))
+      .toEqual([])
+  })
+
+  Test('reports a developer-environment file that is not named for an ID', () => {
+    Expect(developerEnvironmentLedgerIssues(['notes.md'], '')).toEqual([
+      'Developer environment upgrades/notes.md must be named DEVENV-NNN-<slug>.md.',
     ])
   })
 
@@ -400,6 +506,35 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports side-effect, re-exported, dynamic, and CommonJS node imports', () => {
+    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
+    const forms = [
+      "import 'node:fs'",
+      "export { readFile } from 'node:fs'",
+      "await import('node:path')",
+      "const crypto = require('node:crypto')",
+    ]
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nodeImport,
+      [{ path, source: forms.join('\n') }],
+      [],
+    )).toEqual(
+      forms.map((_, index) =>
+        `${path}:${index + 1} imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
+        + ' from `@shared`, and add the seam there when none fits.'
+      ),
+    )
+  })
+
+  Test('a node-import exemption allows one site rather than its whole file', () => {
+    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
+    const source = [importFrom('node:crypto'), importFrom('node:net')].join('\n')
+    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`])).toEqual([
+      `${path}:2 imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
+      + ' from `@shared`, and add the seam there when none fits.',
+    ])
+  })
+
   Test('leaves a type-only node import alone', () => {
     const typeImport = ['import type { Writable }', 'from', "'node:stream'"].join(' ')
     const source = `${typeImport}\n${importFrom('@shared')}`
@@ -511,9 +646,30 @@ Describe('repo lint conventions', () => {
       [{ path: entry, source: `${importFrom('@shared')}\n${importFrom('./studio/StudioSmoke')}` }],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/dev.ts:2 statically imports `./studio/StudioSmoke`; load it with'
-      + ' `await import(...)` inside the command action so the lane commands start in a checkout'
-      + ' that has never generated the parser.',
+      'packages/dev/dev-src/dev.ts:2 statically reaches `./studio/StudioSmoke` through'
+      + ' packages/dev/dev-src/dev.ts -> ./studio/StudioSmoke; load the boundary with `await import(...)` inside the'
+      + ' command action so the lane commands start in a checkout that has never generated the parser.',
+    ])
+  })
+
+  Test('reports Studio and Expo modules reached through a static local import chain', () => {
+    const entry = 'packages/dev/dev-src/dev.ts'
+    Expect(devLazyStudioImportIssues(
+      [
+        { path: entry, source: importFrom('./doctor/RepositoryDoctor') },
+        {
+          path: 'packages/dev/dev-src/doctor/RepositoryDoctor.ts',
+          source: importFrom('../expo-dev-loop/expo-runner/Ports'),
+        },
+        { path: 'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts', source: 'export const Ports = {}' },
+      ],
+      entry,
+    )).toEqual([
+      'packages/dev/dev-src/doctor/RepositoryDoctor.ts:1 statically reaches'
+      + ' `packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts` through packages/dev/dev-src/dev.ts ->'
+      + ' packages/dev/dev-src/doctor/RepositoryDoctor.ts ->'
+      + ' packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts; load the boundary with `await import(...)` inside'
+      + ' the command action so the lane commands start in a checkout that has never generated the parser.',
     ])
   })
 
@@ -546,6 +702,18 @@ function importFrom(specifier: string): string {
 /** rawThrow builds a raw `Error` throw at call time so this file never matches the rule it exercises. */
 function rawThrow(message: string): string {
   return `${['throw', 'new', 'Error'].join(' ')}('${message}')`
+}
+
+/** rawError builds a raw `Error` construction without making this test file violate its own rule. */
+function rawError(message: string): string {
+  return `${['new', 'Error'].join(' ')}('${message}')`
+}
+
+function rawErrorIssue(path: string): string {
+  return `${path}:1 constructs a raw \`Error\`; where an error object must exist rather than be thrown,`
+    + ' build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+    + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
+    + ' `Errors.abortError(...)`.'
 }
 
 function directory(currentFiles: readonly TestFile[], nextFiles: readonly TestFile[]) {

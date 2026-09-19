@@ -19,11 +19,11 @@ const pauseEvent: StudioJsonValue = {
 Describe('Studio debugger drawer', () => {
   Test('folds a root that runs to completion into one journal row', () => {
     const started = StudioDebugEvents.receive(StudioDebugEvents.empty(), {
-      entry: { action: 'RecordVote', frames: [], outcome: 'running', startedAt: 10 },
+      entry: { action: 'RecordVote', frames: ['RecordVote'], outcome: 'running', rootId: 1, startedAt: 10 },
       kind: 'journal',
     })
     const settled = StudioDebugEvents.receive(started, {
-      entry: { action: 'RecordVote', frames: ['RecordVote'], outcome: 'committed', startedAt: 10 },
+      entry: { action: 'RecordVote', frames: ['RecordVote'], outcome: 'committed', rootId: 1, startedAt: 10 },
       kind: 'journal',
     })
 
@@ -32,17 +32,17 @@ Describe('Studio debugger drawer', () => {
     Expect(settled.journal[0]).toMatchObject({ frames: ['RecordVote'], outcome: 'committed' })
   })
 
-  Test('keeps two roots that started at the same moment apart by action', () => {
+  Test('keeps repeated same-name roots that started at the same moment apart by root identity', () => {
     const first = StudioDebugEvents.receive(StudioDebugEvents.empty(), {
-      entry: { action: 'RecordVote', frames: [], outcome: 'running', startedAt: 10 },
+      entry: { action: 'RecordVote', frames: ['RecordVote'], outcome: 'running', rootId: 1, startedAt: 10 },
       kind: 'journal',
     })
     const second = StudioDebugEvents.receive(first, {
-      entry: { action: 'OpenStory', frames: [], outcome: 'running', startedAt: 10 },
+      entry: { action: 'RecordVote', frames: ['RecordVote'], outcome: 'running', rootId: 2, startedAt: 10 },
       kind: 'journal',
     })
 
-    Expect(second.journal.map(entry => entry.action)).toEqual(['RecordVote', 'OpenStory'])
+    Expect(second.journal.map(entry => entry.rootId)).toEqual([1, 2])
   })
 
   Test('holds the pause until the preview reports the root resumed', () => {
@@ -51,6 +51,13 @@ Describe('Studio debugger drawer', () => {
 
     const resumed = StudioDebugEvents.receive(paused, { kind: 'resumed' })
     Expect(resumed.pause).toBeUndefined()
+  })
+
+  Test('clears a stale pause and journal when its preview instance resets', () => {
+    const paused = StudioDebugEvents.receive(StudioDebugEvents.empty(), pauseEvent)
+    const reset = StudioDebugEvents.receive(paused, { kind: 'reset' })
+
+    Expect(reset).toEqual({ journal: [] })
   })
 
   Test('leaves the state alone when an event does not say what it is', () => {
@@ -115,6 +122,7 @@ Describe('Studio debugger drawer', () => {
           failureCase: 'AlreadyVoted',
           frames: ['RecordVote'],
           outcome: 'failed',
+          rootId: 1,
           startedAt: 10,
         },
         kind: 'journal',

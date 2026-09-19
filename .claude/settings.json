@@ -4,11 +4,7 @@
     "allow": [
       "Bash(./agent *)",
       "Bash(./dev *)",
-      "Bash(./dev studio-smoke *)",
       "Bash(./tao *)",
-      "Bash(/bin/kill -0 *)",
-      "Bash(/bin/kill -KILL *)",
-      "Bash(/bin/kill -TERM *)",
       "Bash(adb devices *)",
       "Bash(adb get-state *)",
       "Bash(bun install *)",
@@ -26,6 +22,7 @@
       "Bash(git fetch origin *)",
       "Bash(git log *)",
       "Bash(git ls-files *)",
+      "Bash(git ls-remote --heads origin *)",
       "Bash(git ls-remote origin *)",
       "Bash(git merge *)",
       "Bash(git remote -v)",
@@ -38,18 +35,12 @@
       "Bash(jq *)",
       "Bash(just *)",
       "Bash(just native-module-check)",
-      "Bash(just studio-proof-real-app *)",
-      "Bash(just studio-smoke *)",
-      "Bash(kill -0 *)",
-      "Bash(kill -KILL *)",
-      "Bash(kill -TERM *)",
       "Bash(ls *)",
       "Bash(lsof -nP -iTCP:* -sTCP:LISTEN -t)",
       "Bash(plutil -lint *)",
       "Bash(plutil -p *)",
       "Bash(ps -axo pid=,ppid=,lstart=,command=)",
-      "Bash(ps -o comm=,lstart= -p *)",
-      "Bash(ps -o pid=,ppid=,lstart=,command= -p *)",
+      "Bash(ps -o lstart= -p *)",
       "Bash(pwd)",
       "Bash(readlink *)",
       "Bash(realpath *)",
@@ -79,31 +70,22 @@
   "sandbox": {
     "enabled": true,
     "excludedCommands": [
-      "ps -o comm=,lstart= -p *",
-      "ps -o pid=,ppid=,lstart=,command= -p *",
       "ps -axo pid=,ppid=,lstart=,command=",
-      "kill -0 *",
-      "/bin/kill -0 *",
-      "kill -TERM *",
-      "/bin/kill -TERM *",
-      "kill -KILL *",
-      "/bin/kill -KILL *",
+      "ps -o lstart= -p *",
       "adb devices *",
       "adb get-state *",
       "emulator -list-avds",
       "xcrun simctl list *",
-      "./dev studio-smoke *",
-      "just studio-smoke *",
-      "just studio-proof-real-app *",
-      "just native-module-check",
       "gh *",
       "git fetch origin *",
       "git ls-remote origin *",
+      "git ls-remote --heads origin *",
       "git push *",
       "git worktree *",
       "git merge *",
-      "git reset --merge*",
-      "git reset --hard HEAD"
+      "git reset --merge",
+      "git reset --hard HEAD",
+      "just native-module-check"
     ],
     "filesystem": {
       "allowWrite": [
@@ -135,6 +117,7 @@
         "*.expo.dev",
         "*.expo.io",
         "exp.host",
+        "repo1.maven.org",
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",
@@ -176,7 +159,38 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
           }
         ]
       }

@@ -36,6 +36,30 @@ Describe('validator: multiple datasources', () => {
   )
 
   Test(
+    'resolves patched datasource names through ordinary folder visibility',
+    acceptsFiles({
+      'Main.tao': `
+        use StackNav from @tao/nav
+        ${stubView('Main')}
+        app Reader {
+          Name "Reader"
+          Navigator StackNav { Initial Main }
+          Datasource { Feed, Personal with { StorageKey "prod" } }
+        }
+      `,
+      'Sources.tao': `
+        use Local from @tao/data/providers/local
+        use Memory from @tao/data/providers/memory
+        folder data Stories / Story { Title text }
+        folder data Bookmarks / Bookmark { Note text }
+        folder type Personal is text
+        folder datasource Feed = Memory { Data { Stories } }
+        folder datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
+      `,
+    }),
+  )
+
+  Test(
     'accepts a reference that names its target when the field name differs',
     accepts(`
       ${prelude}
@@ -98,6 +122,18 @@ Describe('validator: multiple datasources', () => {
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
       datasourceMembershipMessages.overlappingMembership('Feed', 'Half', 'Stories'),
+    ),
+  )
+
+  Test(
+    'rejects an empty membership list instead of treating it as a catch-all',
+    rejects(
+      `
+        ${prelude}
+        datasource Empty = Memory { Data { } }
+        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Empty }
+      `,
+      datasourceMembershipMessages.emptyMembership('Empty'),
     ),
   )
 
@@ -321,6 +357,24 @@ Describe('validator: multiple datasources', () => {
       `,
       configuredValueValidationMessages.membershipPatch('Feed'),
       configuredValueValidationMessages.unknownConfiguration('Local', 'Bogus'),
+    ),
+  )
+
+  Test(
+    'requires a datasource-set patch to name the binding it targets',
+    rejects(
+      `
+        ${prelude}
+        datasource Feed = Memory { Data { Stories, Comments } }
+        datasource Personal = Local { StorageKey "personal" }
+        app Reader {
+          Name "Reader"
+          Navigator StackNav { Initial Main }
+          Datasource { Feed, Personal }
+        }
+        app Ambiguous = Reader with { Datasource with { StorageKey "prod" } }
+      `,
+      datasourceMembershipMessages.ambiguousBindingPatch('Ambiguous'),
     ),
   )
 

@@ -18,11 +18,13 @@ export const DEV_DATA_ROOT_PATH = '.artifacts/user/dev-data'
 /** The environment `tao dev` hands Expo so the checked-in `app.config.js` can write the manifest fact. */
 const DevDataEnvironment = {
   app: 'TAO_DEV_DATA_APP',
+  capability: 'TAO_DEV_DATA_CAPABILITY',
   port: 'TAO_DEV_DATA_PORT',
 } as const
 
 export type DevDataManifest = {
   app: string
+  capability: string
   port: number
   protocol: typeof DevDataProtocol.name
 }
@@ -39,11 +41,15 @@ export function devDataAppKey(projectRoot: string, appName: string): string {
 }
 
 /** devDataManifest is the `expo.extra.taoDevData` value a development build reads. */
-export function devDataManifest(port: number, app: string): DevDataManifest {
-  return { app, port, protocol: DevDataProtocol.name }
+export function devDataManifest(port: number, app: string, capability: string): DevDataManifest {
+  return { app, capability, port, protocol: DevDataProtocol.name }
 }
 
 /** devDataEnvironment is the same fact as environment variables, for `app.config.js` to read. */
-export function devDataEnvironment(port: number, app: string): Readonly<Record<string, string>> {
-  return { [DevDataEnvironment.app]: app, [DevDataEnvironment.port]: String(port) }
+export function devDataEnvironment(port: number, app: string, capability: string): Readonly<Record<string, string>> {
+  return {
+    [DevDataEnvironment.app]: app,
+    [DevDataEnvironment.capability]: capability,
+    [DevDataEnvironment.port]: String(port),
+  }
 }

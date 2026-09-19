@@ -37,6 +37,7 @@ const taoJourneyTargetPollIntervalMs = 16
 export async function waitForTaoJourneyTarget<Target>(
   find: () => Target | undefined,
   timeoutMs = taoJourneyTargetTimeoutMs,
+  signal?: AbortSignal,
 ): Promise<Target | undefined> {
   RuntimeAssert.input(
     Number.isFinite(timeoutMs) && timeoutMs >= 0,
@@ -45,6 +46,7 @@ export async function waitForTaoJourneyTarget<Target>(
   )
   const deadline = Date.now() + timeoutMs
   while (true) {
+    RuntimeAssert.input(signal?.aborted !== true, 'The Tao journey target wait was superseded before it finished.')
     const target = find()
     if (target !== undefined) {
       return target
@@ -53,8 +55,24 @@ export async function waitForTaoJourneyTarget<Target>(
     if (remaining <= 0) {
       return undefined
     }
-    await new Promise<void>(resolve => setTimeout(resolve, Math.min(taoJourneyTargetPollIntervalMs, remaining)))
+    await waitForJourneyPoll(Math.min(taoJourneyTargetPollIntervalMs, remaining), signal)
   }
+}
+
+/** waitForJourneyPoll clears its timer when a replacement replay aborts this acquisition. */
+function waitForJourneyPoll(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer)
+      }
+      signal?.removeEventListener('abort', finish)
+      resolve()
+    }
+    signal?.addEventListener('abort', finish, { once: true })
+    timer = setTimeout(finish, milliseconds)
+  })
 }
 
 export type TaoJourneyReplayGate = Readonly<{
@@ -100,7 +118,7 @@ export async function replayTaoJourney<Target>(
 async function replayTaoJourneySteps<Target>(
   steps: readonly TaoJourneyStep[],
   adapter: TaoJourneyAdapter<Target>,
-  scope?: Target,
+  scope?: () => Target | Promise<Target>,
 ): Promise<void> {
   for (const step of steps) {
     await replayTaoJourneyStep(step, adapter, scope)
@@ -112,12 +130,12 @@ async function replayTaoJourneySteps<Target>(
 async function replayTaoJourneyStep<Target>(
   step: TaoJourneyStep,
   adapter: TaoJourneyAdapter<Target>,
-  scope?: Target,
+  scope?: () => Target | Promise<Target>,
 ): Promise<void> {
   if (step.kind === 'advance') {
     RuntimeAssert.input(
-      Number.isSafeInteger(step.milliseconds) && step.milliseconds >= 0,
-      'A Tao journey can only advance by a non-negative whole number of milliseconds.',
+      Number.isFinite(step.milliseconds) && step.milliseconds >= 0,
+      'A Tao journey can only advance by a non-negative number of milliseconds.',
       { milliseconds: step.milliseconds },
     )
     await adapter.advance(step.milliseconds)
@@ -129,10 +147,14 @@ async function replayTaoJourneyStep<Target>(
       'A Tao journey can only select a positive whole-numbered row.',
       { index: step.index, tag: step.tag },
     )
-    await replayTaoJourneySteps(step.steps, adapter, await adapter.select(step.tag, step.index, scope))
+    await replayTaoJourneySteps(
+      step.steps,
+      adapter,
+      async () => await adapter.select(step.tag, step.index, scope ? await scope() : undefined),
+    )
     return
   }
-  await replayTaoJourneyEventStep(step, adapter, scope)
+  await replayTaoJourneyEventStep(step, adapter, scope ? await scope() : undefined)
 }
 
 /** replayTaoJourneyEventStep applies one event-only step without exposing the clock adapter surface. */

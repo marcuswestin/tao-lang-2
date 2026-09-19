@@ -4,6 +4,7 @@ import { StudioApiClient, StudioApiError } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import {
   awaitPreviewJourneyRecordingAcknowledgement,
+  revealCanvasNode,
   type StudioActivePreview,
   StudioJourneyRecorder,
   type StudioPreviewConnection,
@@ -47,7 +48,7 @@ export class StudioScenarioActions {
       this.#deps.status.textContent = 'The active preview cell does not expose fixture capture controls.'
       return
     }
-    preview.frame?.scrollIntoView({ block: 'center' })
+    revealCanvasNode(preview.frame)
     input.focus()
   }
 

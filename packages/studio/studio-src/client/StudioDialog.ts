@@ -36,6 +36,33 @@ export const StudioDialog = {
   async prompt(options: StudioPromptOptions): Promise<string | undefined> {
     return await open({ ...options, kind: 'prompt' })
   },
+  /** Binds dialogs to one ProductHost lifetime. Disposing the host cancels any pending answer. */
+  mount(options: Readonly<{ container: HTMLElement; signal?: AbortSignal }>): () => void {
+    const lifetime = new StudioDialogLifetime()
+    const mounted: Omit<DialogScope, 'dispose'> = {
+      container: options.container,
+      lifetime,
+      signal: options.signal,
+      token: Symbol('dialog-scope'),
+    }
+    scope?.dispose()
+    const abort = (): void => {
+      lifetime.dispose()
+    }
+    const dispose = (): void => {
+      abort()
+      options.signal?.removeEventListener('abort', abort)
+      if (scope?.token === mounted.token) {
+        scope = undefined
+      }
+    }
+    scope = { ...mounted, dispose }
+    options.signal?.addEventListener('abort', abort, { once: true })
+    if (options.signal?.aborted === true) {
+      dispose()
+    }
+    return dispose
+  },
 } as const
 
 /** Where keyboard focus sits when a key arrives, as far as the dialog's own keys are concerned. */
@@ -45,8 +72,8 @@ export type StudioDialogKeyAction = 'accept' | 'cancel'
 
 /**
  * StudioDialogKeys decides what a key does in an open dialog. Escape always cancels. Enter activates
- * the focused button, so Enter on Cancel cancels instead of applying; away from the buttons it
- * confirms a confirm dialog and submits a prompt from its input.
+ * the focused button, so Enter on Cancel cancels instead of applying; prompts also submit from their
+ * input. An Enter originating behind the modal has no dialog action.
  */
 export const StudioDialogKeys = {
   action(key: string, focus: StudioDialogFocus, kind: 'confirm' | 'prompt'): StudioDialogKeyAction | undefined {
@@ -62,7 +89,7 @@ export const StudioDialogKeys = {
     if (kind === 'prompt') {
       return focus === 'input' || focus === 'confirm' ? 'accept' : undefined
     }
-    return 'accept'
+    return focus === 'confirm' ? 'accept' : undefined
   },
 } as const
 
@@ -70,15 +97,50 @@ type DialogRequest =
   | (StudioConfirmOptions & { kind: 'confirm' })
   | (StudioPromptOptions & { kind: 'prompt' })
 
+type DialogScope = Readonly<{
+  container: HTMLElement
+  dispose: () => void
+  lifetime: StudioDialogLifetime
+  signal?: AbortSignal
+  token: symbol
+}>
+
 type OpenDialog = Readonly<{ backdrop: HTMLElement; cancel: () => void }>
 
 let current: OpenDialog | undefined
+let scope: DialogScope | undefined
+
+/** Cancels superseded and disposed dialog work without exposing DOM concerns to its owner. */
+export class StudioDialogLifetime {
+  #cancel: (() => void) | undefined
+
+  replace(cancel: () => void): () => void {
+    this.dispose()
+    this.#cancel = cancel
+    return () => {
+      if (this.#cancel === cancel) {
+        this.#cancel = undefined
+      }
+    }
+  }
+
+  dispose(): void {
+    const cancel = this.#cancel
+    this.#cancel = undefined
+    cancel?.()
+  }
+}
 
 function open(request: DialogRequest): Promise<string | undefined> {
   // A dialog opening over another answers the first as cancelled: its flow resumes with "no" instead
   // of waiting forever, and its key handling stops instead of eating Enter and Escape for the session.
   current?.cancel()
   return new Promise(resolve => {
+    const activeScope = scope
+    if (activeScope === undefined || activeScope.signal?.aborted === true) {
+      resolve(undefined)
+      return
+    }
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
     const backdrop = document.createElement('div')
     backdrop.className = 'studio-dialog-backdrop'
@@ -124,17 +186,25 @@ function open(request: DialogRequest): Promise<string | undefined> {
     dialog.append(actions)
     backdrop.append(dialog)
     const focusable: readonly HTMLElement[] = input === undefined ? [cancel, confirm] : [input, cancel, confirm]
+    let restoreBackground = (): void => {}
+    let releaseLifetime = (): void => {}
 
     const finish = (answer: string | undefined): void => {
       if (current?.backdrop !== backdrop) {
         return
       }
       current = undefined
+      releaseLifetime()
       document.removeEventListener('keydown', onKeyDown, true)
+      activeScope?.signal?.removeEventListener('abort', abort)
+      restoreBackground()
       backdrop.remove()
-      previouslyFocused?.focus()
+      if (previouslyFocused?.isConnected === true) {
+        previouslyFocused.focus()
+      }
       resolve(answer)
     }
+    const abort = (): void => finish(undefined)
     const accept = (): void => finish(input === undefined ? '' : input.value)
     const focusOf = (): StudioDialogFocus => {
       const active = document.activeElement
@@ -173,10 +243,35 @@ function open(request: DialogRequest): Promise<string | undefined> {
     document.addEventListener('keydown', onKeyDown, true)
 
     current = { backdrop, cancel: () => finish(undefined) }
-    ;(document.querySelector('.studio-shell') ?? document.body).append(backdrop)
+    releaseLifetime = activeScope.lifetime.replace(abort)
+    activeScope.container.append(backdrop)
+    restoreBackground = makeBackgroundInert(activeScope.container, backdrop)
+    activeScope.signal?.addEventListener('abort', abort, { once: true })
     ;(input ?? confirm).focus()
     input?.select()
   })
+}
+
+function makeBackgroundInert(container: HTMLElement, dialog: HTMLElement): () => void {
+  const previous = [...container.children].flatMap(child => {
+    if (!(child instanceof HTMLElement) || child === dialog) {
+      return []
+    }
+    const state = { ariaHidden: child.getAttribute('aria-hidden'), element: child, inert: child.inert }
+    child.inert = true
+    child.setAttribute('aria-hidden', 'true')
+    return [state]
+  })
+  return () => {
+    for (const state of previous) {
+      state.element.inert = state.inert
+      if (state.ariaHidden === null) {
+        state.element.removeAttribute('aria-hidden')
+      } else {
+        state.element.setAttribute('aria-hidden', state.ariaHidden)
+      }
+    }
+  }
 }
 
 function button(label: string, variant: 'ghost' | 'primary'): HTMLButtonElement {

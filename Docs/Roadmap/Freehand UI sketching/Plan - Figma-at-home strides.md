@@ -20,10 +20,10 @@ before placing survivors, so a removal no longer detaches the sketch host mid-ge
 the app visible when the focused view is no longer rendered; `remove-render` refuses a `#studio_rect_`
 marker (Unsnap first) and a container's only child; `tao check` warns about a shipping `Placeholder`
 under `@/studio` too (FS-D2) while Snap's measured `width` and `height` no longer count as explorations
-there; projection order is code-point order. Still open from that review: a Snap/Unsnap rollback when
-the catalog write succeeds and the source write fails; a catalog restore that checks the revision it
-restores over; one shared `#studio_rect_` marker decoder instead of three; and whether `hover`, `down`,
-and `up` stay global keywords, which is Ro's call.
+there; projection order is code-point order. The later hardening made Snap/Unsnap, restore, sketch
+revision, and rename operations cross-process transactions with version checks. The shared marker
+decoder remains a cleanup. `hover`, `down`, and `up` are ordinary spelling-validated test words,
+not global grammar keywords.
 
 Landed: L1 (ordered scenario steps, pointer phases, action stand-ins, optional fixture,
 `Placeholder`, `Spacer`), the root `@` package with Move to package, Slice 1 Draw, Slice 2 Snap with
@@ -31,13 +31,13 @@ the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundat
 roadmap's first two targets (Record journey, `tao review`).
 
 Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, is
-quarantined from `full-verify` again (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it). The landing
-fixed a real product bug it exposed: the board's pointer handler swallowed toolbar clicks, so Snap
-could not be pressed with a mouse. After that fix the synthetic CDP drags themselves proved
-nondeterministic (one run left the catalog at revision 1 with no rectangle), and the ledger in
-`Developer environment upgrades.md` asks for a deterministic browser action boundary and ten
-consecutive green runs before the lane rejoins the graph. Native and canary lanes report
-`native-host-busy` under an agent host and pass only from an ordinary Terminal.
+quarantined from `verify-full` again (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it). The landing
+and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
+source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
+including a real pointer-release drag-one-in target; no remaining failure has been attributed to the
+browser automation itself. The remaining gate is evidence: the complete journey must run green ten
+consecutive times in a normal Terminal before it rejoins `verify-full`. Native and canary acceptance
+remains a separate normal-Terminal gate.
 
 What the client offers today: drag on empty canvas creates a sketch; drag inside a sketch draws a
 rectangle; click selects and Shift-click extends; eight handles resize; Option-drag duplicates; the
@@ -85,12 +85,11 @@ flight. The lane now passes Draw, four further draws, Snap, and reload in a norm
 the sketch section in the Run preset at a designer-sized viewport, and records board state, the
 element under the pointer, host errors, and a screenshot on every sketch timeout.
 
-**Open.** Drag-one-in in the real browser: the release reaches the board and requests a
-one-rectangle Snap, which the server refuses because the rectangle sits between two flowed siblings
-(`Studio Snap cannot preserve authored source for interleaved rectangle geometry`). Stride 2 owns
-inserting into an existing flow or routing it through the proposal. Then ten consecutive green
-runs, remove the `FULL_VERIFY_SKIPPED` quarantine, restore the `agent-worktree-profile` expectation,
-and close DEVENV-042. Confirm native and canary from the Terminal in the same pass.
+**Current boundary.** The product path now has a real pointer-release drag-one-in target and preserves
+authored source through the proposal/transaction path. The simulated-user lane nevertheless stays
+quarantined until the complete journey records ten consecutive reliable normal-terminal runs; only
+then may `VERIFY_FULL_SKIPPED` be removed and DEVENV-042 resolved. Native and canary evidence remains
+separate and must be confirmed from the Terminal in the same acceptance pass.
 
 **Size.** S–M remaining. **Depends on.** Nothing.
 

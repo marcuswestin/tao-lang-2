@@ -1,12 +1,15 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 
-// TODO(merge-with-main-default): Change `execute`'s CLI default from false to true after this command
-// has landed several merges safely; retain an explicit `--dry-run` escape hatch when doing so.
-
 const SNAPSHOT_VERSION = 1
 const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
+/**
+ * Where a main worktree goes when the repository has none. Inside the invoking checkout's ignored
+ * artifacts, because a sandboxed shell may only write within its own worktree; stable rather than
+ * stamped, so a retry after a failed landing finds the staged squash its snapshot refers to.
+ */
+const TEMPORARY_MAIN_WORKTREE = '.artifacts/merge/main-worktree'
 const MERGE_PHASES: readonly MergePhase[] = [
   'prepared',
   'feature-integrated',
@@ -22,22 +25,27 @@ const MERGE_PHASES: readonly MergePhase[] = [
   'failed',
 ]
 
-/** MergeWithMainOptions is the flags-ready input accepted by the development CLI command. */
+/**
+ * MergeWithMainOptions is the flags-ready input accepted by the development CLI command.
+ *
+ * The plain invocation performs the landing: it moves refs, needs no confirmation, and pushes.
+ * Every other option only removes work, apart from `--abort`, `--dry-run`, and `--message-file`.
+ */
 export type MergeWithMainOptions = {
   /** Restore command-owned state from a snapshot instead of starting a merge. */
   abortSnapshot?: string
-  /** Perform the merge. The first release deliberately defaults to a ref-preserving dry run. */
-  execute?: boolean
+  /** Report the plan and change nothing. The only way to see the plan without landing. */
+  dryRun?: boolean
   /** Override `.artifacts/merge/<branch>.msg`. */
   messageFile?: string
   /** Override the current repository root, principally for tests. */
   repositoryRoot?: string
-  /** Explicitly authorize a push when no interactive terminal is available. */
-  push?: boolean
-  /** Skip the otherwise mandatory unsandboxed full verification. */
-  skipFullVerify?: boolean
-  /** Confirm execution non-interactively. This never implies `push`. */
-  yes?: boolean
+  /** Imply both skip options after one interactive confirmation that defaults to No. */
+  skipAll?: boolean
+  /** Skip the staged-squash `just verify --complete` pass. */
+  skipVerify?: boolean
+  /** Skip the otherwise mandatory unsandboxed full verification of the feature branch. */
+  skipVerifyFull?: boolean
 }
 
 /** MergePhase names each durable recovery boundary in the landing workflow. */
@@ -73,6 +81,8 @@ export type MergeSnapshot = {
   mainIndexTree: string
   mainRoot: string
   mainTree: string
+  /** Whether this command created `mainRoot` and must remove it once the landing is complete. */
+  mainWorktreeIsTemporary: boolean
   messageFile: string
   phase: MergePhase
   remoteFeatureHead?: string
@@ -86,13 +96,22 @@ export type MergeSnapshot = {
 export type MergePreflight = {
   branch: string
   branchHead: string
-  featurePushRequired: boolean
+  /** Whether `mainRoot` names a worktree execution must create, rather than one that already exists. */
+  createsMainWorktree: boolean
+  /**
+   * Whether `mainRoot` is this command's own scratch worktree rather than a checkout the developer
+   * keeps. It is not the same question as `createsMainWorktree`: a failed landing leaves its
+   * temporary worktree in place, and the next run then finds it as an ordinary main worktree with
+   * no installed dependencies — which is exactly what the `--skip-verify-full` refusal is about.
+   */
+  mainWorktreeIsTemporary: boolean
   featureRoot: string
   mainHead: string
   mainRoot: string
   message: string
   messageFile: string
   remoteFeatureHead?: string
+  remoteFeatureBehind: boolean
   remoteMainHead: string
   remoteMergedHead?: string
   warnings: string[]
@@ -163,9 +182,16 @@ export function validateMergeMessage(source: string): string {
   if (lines[1] !== '') {
     Errors.throwUserInput('The merge message summary must be followed by one blank line.')
   }
-  if (lines.length < 3 || lines.slice(2).some(line => !/^- \S/u.test(line))) {
+  // A bullet may wrap onto indented continuation lines. Requiring each one to occupy a single
+  // physical line bought nothing — the appendix Git generates below it is already wrapped — and
+  // pushed authors into 240-character lines that no diff or terminal shows whole.
+  if (lines.length < 3 || !/^- \S/u.test(lines[2] ?? '')) {
+    Errors.throwUserInput('The merge message must continue with a `- ...` bullet after the summary.')
+  }
+  if (lines.slice(3).some(line => !/^- \S/u.test(line) && !/^ +\S/u.test(line))) {
     Errors.throwUserInput(
-      'The merge message must end with a contiguous bullet block using one `- ...` bullet per line.',
+      'The merge message must end with a contiguous bullet block: every line after the first bullet '
+        + 'either starts a new `- ...` bullet or is an indented continuation of the one above it.',
     )
   }
   assertNoAutomatedAttribution(message)
@@ -237,13 +263,56 @@ export async function inspectMergePreflight(
     Errors.throwUserInput(`Branch '${branch}' must be checked out only in the invoking worktree.`)
   }
   const mainWorktrees = worktrees.filter(worktree => worktree.branch === MAIN_BRANCH)
-  if (mainWorktrees.length !== 1) {
-    Errors.throwUserInput(`Expected exactly one main worktree, found ${mainWorktrees.length}.`)
+  if (mainWorktrees.length > 1) {
+    Errors.throwUserInput(
+      `Expected at most one main worktree, found ${mainWorktrees.length}: `
+        + `${mainWorktrees.map(worktree => worktree.path).join(', ')}.`,
+    )
   }
-  const mainRoot = mainWorktrees[0]!.path
-  const mainStatus = await status(dependencies, mainRoot)
-  assertClean('main', mainRoot, mainStatus)
-  const mainHead = (await git(dependencies, mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+  // A checkout on main is somewhere to stage the squash, not a precondition the developer owes this
+  // command. Working directly in the primary checkout on a feature branch leaves no worktree on
+  // main at all, which is an ordinary way to work and used to stop the landing outright. When there
+  // is none, execution makes one and removes it again; preflight only names where it would go, so a
+  // dry run still changes nothing.
+  const createsMainWorktree = mainWorktrees.length === 0
+  const temporaryMainRoot = FS.resolvePath(TEMPORARY_MAIN_WORKTREE, featureRoot)
+  const mainRoot = mainWorktrees[0]?.path ?? temporaryMainRoot
+  const mainWorktreeIsTemporary = mainRoot === temporaryMainRoot
+  if (!createsMainWorktree) {
+    assertClean('main', mainRoot, await status(dependencies, mainRoot))
+  }
+  // Read through the ref rather than through a checkout's HEAD, so both cases answer identically.
+  const localMain = await dependencies.run('git', {
+    args: ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`],
+    cwd: featureRoot,
+    stdio: 'pipe',
+  })
+  if (localMain.exitCode !== 0) {
+    Errors.throwUserInput(
+      `This checkout has no local '${MAIN_BRANCH}' branch to merge onto; `
+        + `create it from ${REMOTE}/${MAIN_BRANCH} before landing.`,
+    )
+  }
+  const mainHead = localMain.stdout.trim()
+  // The staged squash is verified in the main worktree only when the feature branch's own full
+  // verification was skipped. A worktree this command just created has no installed dependencies,
+  // so that lane could not run there — and silently skipping it would be the one thing this command
+  // must never do.
+  if (
+    mainWorktreeIsTemporary && fullVerifySkippedBy(options) !== undefined
+    && stagedVerifySkippedBy(options) === undefined
+  ) {
+    Errors.throwUserInput(
+      `${fullVerifySkippedBy(options)} moves verification onto the staged squash, which runs in a worktree on `
+        + `main. ${
+          createsMainWorktree
+            ? 'There is none, and one created here would have no installed dependencies.'
+            : `The only one is this command's own scratch worktree at ${mainRoot}, left by a landing that failed, `
+              + 'and it has no installed dependencies either.'
+        } Either drop that flag, or create a main worktree yourself: `
+        + `git worktree add <path> ${MAIN_BRANCH}.`,
+    )
+  }
 
   const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, `merged/${branch.slice(5)}`])
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
@@ -252,14 +321,14 @@ export async function inspectMergePreflight(
   }
   if (mainHead !== remoteMainHead) {
     Errors.throwUserInput(
-      `The main worktree is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
+      `Local ${MAIN_BRANCH} is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
     )
   }
   // A remote feature branch left behind by earlier commits is the ordinary case, not an obstacle:
   // execution pushes it forward. Only a remote holding commits this worktree lacks must stop the
   // landing, because the squash would silently drop them.
   const remoteFeatureHead = remoteRefs.get(branch)
-  let featurePushRequired = false
+  let remoteFeatureBehind = false
   if (remoteFeatureHead !== undefined && remoteFeatureHead !== branchHead) {
     const contained = await dependencies.run('git', {
       args: ['merge-base', '--is-ancestor', remoteFeatureHead, branchHead],
@@ -271,7 +340,7 @@ export async function inspectMergePreflight(
           + 'fetch and reconcile it before landing the branch.',
       )
     }
-    featurePushRequired = true
+    remoteFeatureBehind = true
   }
   const remoteMergedHead = remoteRefs.get(`merged/${branch.slice(5)}`)
   if (remoteMergedHead !== undefined) {
@@ -297,13 +366,15 @@ export async function inspectMergePreflight(
   return {
     branch,
     branchHead,
-    featurePushRequired,
+    createsMainWorktree,
     featureRoot,
     mainHead,
     mainRoot,
+    mainWorktreeIsTemporary,
     message,
     messageFile,
     remoteFeatureHead,
+    remoteFeatureBehind,
     remoteMainHead,
     remoteMergedHead,
     warnings,
@@ -318,33 +389,36 @@ export const MergeWithMainCommand = {
   ): Promise<MergeWithMainResult> {
     if (options.abortSnapshot !== undefined) {
       if (
-        options.execute === true
-        || options.push === true
-        || options.skipFullVerify === true
+        options.dryRun === true
+        || options.skipAll === true
+        || options.skipVerifyFull === true
+        || options.skipVerify === true
         || options.messageFile !== undefined
       ) {
-        Errors.throwUserInput('--abort cannot be combined with merge execution options; only --yes is applicable.')
+        Errors.throwUserInput('--abort cannot be combined with the options that start a merge.')
       }
-      return await abortMerge(options, dependencies)
+      return await abortMerge(dependencies, options.abortSnapshot)
     }
 
     const preflight = await inspectMergePreflight(options, dependencies)
-    const lines = formatDryRun(preflight, options)
-    if (options.execute !== true) {
+    if (options.dryRun === true) {
+      const lines = formatDryRun(preflight, options)
       writeLines(dependencies, lines)
       return { lines, mode: 'dry-run' }
     }
 
     await authorizeExecution(options, dependencies, preflight)
+    if (preflight.createsMainWorktree) {
+      await createMainWorktree(preflight, dependencies)
+    }
     const snapshot = await createSnapshot(preflight, dependencies)
     writeLines(dependencies, [
       ...preflight.warnings.map(warning => `WARN  ${warning}`),
       `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
     ])
 
-    await catchUpRemoteFeature(snapshot, preflight, dependencies)
     await stabilizeAndVerify(snapshot, options, dependencies)
-    await squashAndVerify(snapshot, dependencies)
+    await squashAndVerify(snapshot, options, dependencies)
     await commitSquash(snapshot, preflight.message, dependencies)
     await pushArchiveAndPreserve(snapshot, dependencies)
 
@@ -358,40 +432,77 @@ export const MergeWithMainCommand = {
   },
 } as const
 
+/** Report whether the feature branch's `just verify-full` pass is skipped, and by which flag. */
+function fullVerifySkippedBy(options: MergeWithMainOptions): string | undefined {
+  return options.skipVerifyFull === true ? '--skip-verify-full' : options.skipAll === true ? '--skip-all' : undefined
+}
+
+/** Report whether the staged squash's `just verify --complete` pass is skipped, and by which flag. */
+function stagedVerifySkippedBy(options: MergeWithMainOptions): string | undefined {
+  return options.skipVerify === true ? '--skip-verify' : options.skipAll === true ? '--skip-all' : undefined
+}
+
 function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions): string[] {
   const command = executionCommand(options)
+  const fullVerifySkip = fullVerifySkippedBy(options)
+  const stagedVerifySkip = stagedVerifySkippedBy(options)
   return [
     `PASS  Feature branch: ${preflight.branch} at ${shortSha(preflight.branchHead)}`,
     `PASS  Feature worktree clean: ${preflight.featureRoot}`,
-    `PASS  Main worktree clean and current: ${preflight.mainRoot} at ${shortSha(preflight.mainHead)}`,
+    preflight.createsMainWorktree
+      ? `PASS  Local main is current at ${shortSha(preflight.mainHead)}; no worktree has it checked out.`
+      : `PASS  Main worktree clean and current: ${preflight.mainRoot} at ${shortSha(preflight.mainHead)}`,
     `PASS  ${REMOTE}/main is an ancestor of the feature branch.`,
     `PASS  Merge message: ${preflight.messageFile}`,
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
-    'PLAN  Write a safety snapshot before moving any ref.',
-    ...(preflight.featurePushRequired
-      ? [`PLAN  Push '${preflight.branch}' to ${REMOTE}, whose branch is behind this worktree.`]
+    ...(preflight.createsMainWorktree
+      ? [
+        `PLAN  Create a temporary worktree on main at ${preflight.mainRoot}, and remove it when the landing completes.`,
+      ]
+      : preflight.mainWorktreeIsTemporary
+      ? [
+        `PLAN  Reuse this command's own worktree at ${preflight.mainRoot}, left by a landing that failed, `
+        + 'and remove it when this landing completes.',
+      ]
       : []),
-    options.skipFullVerify === true
-      ? 'PLAN  Skip full verification because --skip-full-verify was explicit.'
-      : 'PLAN  Run just full-verify on the feature branch.',
+    'PLAN  Write a safety snapshot before moving any ref.',
+    ...(preflight.remoteFeatureBehind
+      ? [`PLAN  Keep the behind ${REMOTE}/${preflight.branch} unchanged until the verified archive replaces it.`]
+      : []),
+    ...(options.skipAll === true
+      ? ['PLAN  Ask once, defaulting to No, whether to merge with nothing verified at all.']
+      : []),
+    fullVerifySkip === undefined
+      ? 'PLAN  Run just verify-full on the feature branch.'
+      : `PLAN  Skip just verify-full on the feature branch because ${fullVerifySkip} was passed.`,
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
-    "PLAN  Squash onto main, compare tree hashes, run just verify --complete, and commit with Git's squash appendix.",
+    'PLAN  Squash onto main and prove the staged tree equals the feature tree.',
+    fullVerifySkip === undefined
+      ? "PLAN  Accept that tree equality as the staged squash's evidence; full verification proved the same bytes."
+      : stagedVerifySkip === undefined
+      ? 'PLAN  Run just verify --complete on the staged squash, because nothing else verified this branch.'
+      : `PLAN  Skip just verify --complete on the staged squash because ${stagedVerifySkip} was passed; `
+        + 'no lane will have verified these bytes.',
+    "PLAN  Commit the staged squash with Git's generated squash appendix.",
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
-    `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
+    `DRY RUN  No refs or worktrees changed. Land it with: ${command}`,
   ]
 }
 
 function executionCommand(options: MergeWithMainOptions): string {
-  // The printed command is the one a non-interactive shell can run, so it carries the confirmation
-  // flag; `--push` stays the operator's explicit choice and is added only when this run asked for it.
-  const parts = ['./dev', 'merge-with-main', '--execute', '--yes']
-  if (options.push === true) {
-    parts.push('--push')
+  // The plain invocation performs the landing, so the printed command carries only the options this
+  // run actually asked for; nothing has to be added to make it do its job.
+  const parts = ['./dev', 'merge-with-main']
+  if (options.skipAll === true) {
+    parts.push('--skip-all')
   }
-  if (options.skipFullVerify === true) {
-    parts.push('--skip-full-verify')
+  if (options.skipVerifyFull === true) {
+    parts.push('--skip-verify-full')
+  }
+  if (options.skipVerify === true) {
+    parts.push('--skip-verify')
   }
   if (options.messageFile !== undefined) {
     parts.push('--message-file', shellQuote(options.messageFile))
@@ -403,32 +514,87 @@ function shellQuote(value: string): string {
   return /^[\w./:@+-]+$/u.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`
 }
 
+/**
+ * The plain invocation is the authorization: it performs the landing and pushes without a prompt.
+ * Only `--skip-all` still asks, because it is the one combination that lands unverified bytes.
+ */
 async function authorizeExecution(
   options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
   preflight: MergePreflight,
 ): Promise<void> {
-  const interactive = dependencies.isInteractive()
-  if (!interactive && options.yes !== true) {
-    Errors.throwUserInput('Non-interactive execution requires --yes; dry-run remains available without it.')
+  if (options.skipAll !== true) {
+    return
   }
-  if (!interactive && options.push !== true) {
-    Errors.throwUserInput('Non-interactive execution requires explicit --push authorization.')
-  }
-  if (
-    interactive && options.yes !== true && !await dependencies.askConfirm(
-      `Execute the squash merge of '${preflight.branch}' into main?`,
+  if (!dependencies.isInteractive()) {
+    Errors.throwUserInput(
+      '--skip-all needs an interactive terminal to confirm; there is no flag that pre-answers its prompt.',
     )
-  ) {
+  }
+  if (!await dependencies.askConfirm(skipAllPrompt(preflight.branch))) {
     Errors.throwUserInput('Merge cancelled before changing repository state.')
   }
-  if (
-    interactive && options.push !== true && !await dependencies.askConfirm(
-      `Authorize pushing main and archiving '${preflight.branch}' on ${REMOTE}?`,
+}
+
+function skipAllPrompt(branch: string): string {
+  return `--skip-all runs no fix, no typecheck, no lint, no tests, no just verify-full on '${branch}', `
+    + 'and no just verify --complete on the staged squash. An unverified squash of '
+    + `'${branch}' would then be pushed to main, whose linear history is the product of squashing, `
+    + 'so it cannot be fast-forwarded away afterwards. Really merge with nothing checked at all?'
+}
+
+/**
+ * createMainWorktree gives the landing somewhere to stage its squash when the repository has no
+ * checkout on main.
+ *
+ * It is a plain `git worktree add`, which writes only into a directory that did not exist — so it
+ * runs inside the agent sandbox, where checking a ref out over existing protected files does not.
+ * An earlier run that failed partway leaves its worktree behind on purpose, holding the staged
+ * squash its snapshot refers to; preflight then finds it as an ordinary main worktree and this is
+ * never reached.
+ */
+async function createMainWorktree(
+  preflight: MergePreflight,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (await dependencies.exists(preflight.mainRoot)) {
+    Errors.throwUserInput(
+      `Cannot create a main worktree at ${preflight.mainRoot}: something is already there, and Git did not `
+        + 'report it as a worktree. Remove it, or run `git worktree prune`, and try again.',
     )
-  ) {
-    Errors.throwUserInput('Merge cancelled before changing repository state.')
   }
+  await runChecked(
+    dependencies,
+    'git',
+    ['worktree', 'add', preflight.mainRoot, MAIN_BRANCH],
+    preflight.featureRoot,
+    true,
+  )
+  writeLines(dependencies, [
+    `PASS  Created a temporary worktree on ${MAIN_BRANCH} at ${preflight.mainRoot}; it is removed when the `
+    + 'landing completes.',
+  ])
+}
+
+/**
+ * removeMainWorktree takes back what `createMainWorktree` made, once the landing is complete and
+ * nothing refers to it any more. A failed landing keeps it: its staged squash is what `--abort`
+ * restores from, and the snapshot that names it lives in the invoking worktree.
+ */
+async function removeMainWorktree(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (!snapshot.mainWorktreeIsTemporary) {
+    return
+  }
+  await runChecked(
+    dependencies,
+    'git',
+    ['worktree', 'remove', '--force', snapshot.mainRoot],
+    snapshot.featureRoot,
+    true,
+  )
 }
 
 async function createSnapshot(
@@ -437,7 +603,10 @@ async function createSnapshot(
 ): Promise<MergeSnapshot> {
   const createdAt = dependencies.now().toISOString()
   const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${Platform.randomUUID().slice(0, 8)}`
-  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, preflight.mainRoot)
+  // A snapshot is what `--abort` restores from, so it cannot live inside a checkout this command
+  // removes on its way out. The invoking worktree is preserved through success and failure alike.
+  const snapshotRoot = preflight.mainWorktreeIsTemporary ? preflight.featureRoot : preflight.mainRoot
+  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, snapshotRoot)
   const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
     git(dependencies, preflight.featureRoot, ['write-tree']).then(result => result.stdout.trim()),
@@ -461,6 +630,7 @@ async function createSnapshot(
     mainIndexTree,
     mainRoot: preflight.mainRoot,
     mainTree,
+    mainWorktreeIsTemporary: preflight.mainWorktreeIsTemporary,
     messageFile: preflight.messageFile,
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
@@ -470,35 +640,6 @@ async function createSnapshot(
   }
   await persistSnapshot(snapshot, dependencies)
   return snapshot
-}
-
-/** Carry a behind remote feature branch up to this worktree so a stale remote never blocks landing. */
-async function catchUpRemoteFeature(
-  snapshot: MergeSnapshot,
-  preflight: MergePreflight,
-  dependencies: MergeWithMainDependencies,
-): Promise<void> {
-  if (!preflight.featurePushRequired || snapshot.remoteFeatureHead === undefined) {
-    return
-  }
-  const pushed = snapshot.currentFeatureHead
-  await runChecked(
-    dependencies,
-    'git',
-    [
-      'push',
-      REMOTE,
-      `--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`,
-      `${snapshot.branch}:refs/heads/${snapshot.branch}`,
-    ],
-    snapshot.featureRoot,
-    true,
-  )
-  // The archive step deletes this branch under a lease, so the lease must name what is on the
-  // remote now rather than the head observed before this push.
-  snapshot.remoteFeatureHead = pushed
-  await persistSnapshot(snapshot, dependencies)
-  writeLines(dependencies, [`PASS  Pushed '${snapshot.branch}' to ${REMOTE} at ${shortSha(pushed)}.`])
 }
 
 async function stabilizeAndVerify(
@@ -530,12 +671,13 @@ async function stabilizeAndVerify(
       assertCommandSucceeded(ancestor)
     }
 
-    if (options.skipFullVerify !== true) {
+    const fullVerifySkip = fullVerifySkippedBy(options)
+    if (fullVerifySkip === undefined) {
       const verifiedHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
       await runAndSnapshot(
         snapshot,
         'just',
-        ['full-verify'],
+        ['verify-full'],
         snapshot.featureRoot,
         'feature-verified',
         dependencies,
@@ -548,6 +690,10 @@ async function stabilizeAndVerify(
         Errors.throwUnexpected('Full verification changed the feature branch or its tracked worktree state.')
       }
     } else {
+      dependencies.writeLine(
+        `WARN  Skipped just verify-full on '${snapshot.branch}' because ${fullVerifySkip} `
+          + 'was passed.',
+      )
       await advanceSnapshot(snapshot, 'feature-verified', dependencies)
     }
 
@@ -590,6 +736,7 @@ async function stabilizeAndVerify(
 
 async function squashAndVerify(
   snapshot: MergeSnapshot,
+  options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await assertExpectedLocalState(snapshot, dependencies)
@@ -624,15 +771,37 @@ async function squashAndVerify(
     })
   }
   const mainHeadBeforeVerify = snapshot.currentMainHead
-  await runAndSnapshot(
-    snapshot,
-    'just',
-    ['verify', '--complete'],
-    snapshot.mainRoot,
-    'main-verified',
-    dependencies,
-    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-  )
+  const fullVerifySkip = fullVerifySkippedBy(options)
+  const stagedVerifySkip = stagedVerifySkippedBy(options)
+  if (fullVerifySkip === undefined) {
+    // Git has just said the staged squash is the same tree, byte for byte, as the feature head
+    // full verification proved a moment ago. Running the repository's slowest lane over those same
+    // bytes a second time can only reproduce that verdict, so the equality above is the evidence.
+    // `--skip-verify` therefore changes nothing here; it only has an effect once nothing else ran.
+    writeLines(dependencies, [
+      `PASS  Staged squash tree ${shortSha(stagedTree)} equals the fully verified feature tree; `
+      + 'not verifying the same bytes twice.',
+    ])
+    await advanceSnapshot(snapshot, 'main-verified', dependencies)
+  } else if (stagedVerifySkip === undefined) {
+    // Nothing has verified this branch yet, so the staged squash is where it happens.
+    await runAndSnapshot(
+      snapshot,
+      'just',
+      ['verify', '--complete'],
+      snapshot.mainRoot,
+      'main-verified',
+      dependencies,
+      { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
+    )
+  } else {
+    // The tree equality above still held, so the squash is the feature tree; nothing verified it.
+    writeLines(dependencies, [
+      `WARN  Skipped just verify --complete on staged squash tree ${shortSha(stagedTree)} because `
+      + `${stagedVerifySkip} was passed; it equals the feature tree, which no lane verified.`,
+    ])
+    await advanceSnapshot(snapshot, 'main-verified', dependencies)
+  }
   const stagedTreeAfterVerify = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
   const mainHeadAfterVerify = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   if (stagedTreeAfterVerify !== stagedTree || mainHeadAfterVerify !== mainHeadBeforeVerify) {
@@ -687,8 +856,38 @@ async function pushArchiveAndPreserve(
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await advanceSnapshot(snapshot, 'push-started', dependencies)
-  await runChecked(dependencies, 'git', ['push', REMOTE, `${MAIN_BRANCH}:${MAIN_BRANCH}`], snapshot.mainRoot, true)
-  await advanceSnapshot(snapshot, 'pushed', dependencies)
+  const pushMain = await dependencies.run('git', {
+    args: [
+      'push',
+      REMOTE,
+      `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
+      `${MAIN_BRANCH}:${MAIN_BRANCH}`,
+    ],
+    cwd: snapshot.mainRoot,
+    stdio: 'stream',
+  })
+  if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
+    const observedMain = (await remoteHeads(dependencies, snapshot.mainRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    if (observedMain === snapshot.currentMainHead) {
+      // A transport can report failure after the remote accepted the update. The exact remote ref
+      // is stronger evidence than the process result, so recovery must stay on the irreversible side.
+      await advanceSnapshot(snapshot, 'pushed', dependencies)
+    } else if (observedMain !== undefined && observedMain !== snapshot.remoteMainHead) {
+      // The force-with-lease proves this push changed nothing. Restore the reversible phase so the
+      // guarded abort may remove only the local squash commit before a fresh preflight.
+      snapshot.phase = 'committed'
+      await persistSnapshot(snapshot, dependencies)
+      Errors.throwHostEnvironment(
+        `${REMOTE}/main moved to ${shortSha(observedMain)} before the verified squash could be pushed. `
+          + `The remote was not changed; abort this snapshot with ./dev merge-with-main --abort ${snapshot.snapshotPath}, `
+          + 'then merge current main into the feature branch, verify, and retry.',
+      )
+    } else {
+      assertCommandSucceeded(pushMain)
+    }
+  } else {
+    await advanceSnapshot(snapshot, 'pushed', dependencies)
+  }
 
   const archive = `merged/${snapshot.branch.slice(5)}`
   await runChecked(
@@ -754,17 +953,19 @@ async function pushArchiveAndPreserve(
   await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.mainRoot, true)
   await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.mainRoot, true)
   snapshot.phase = 'complete'
-  // The snapshot lives in main's ignored artifacts, so it survives local feature-branch deletion.
+  // Read main one last time before the worktree that holds it may be taken away. The snapshot lives
+  // in ignored artifacts that outlast both the local feature branch and a temporary main worktree.
   snapshot.currentMainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   snapshot.currentMainStatus = await status(dependencies, snapshot.mainRoot)
   await persistSnapshot(snapshot, dependencies)
+  await removeMainWorktree(snapshot, dependencies)
 }
 
 async function abortMerge(
-  options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
+  abortSnapshot: string,
 ): Promise<MergeWithMainResult> {
-  const path = FS.resolvePath(options.abortSnapshot!)
+  const path = FS.resolvePath(abortSnapshot)
   const snapshot = await readSnapshot(path, dependencies)
   if (phaseAtOrAfterPush(snapshot.phase)) {
     Errors.throwUserInput(
@@ -773,11 +974,10 @@ async function abortMerge(
         + 'do not reset or force-push main.',
     )
   }
-  if (!dependencies.isInteractive() && options.yes !== true) {
-    Errors.throwUserInput('Non-interactive --abort requires --yes.')
-  }
+  // Naming a snapshot is itself the request, so an unattended `--abort` proceeds. A human at a
+  // terminal still gets one chance to say no, because the restore discards command-owned commits.
   if (
-    dependencies.isInteractive() && options.yes !== true && !await dependencies.askConfirm(
+    dependencies.isInteractive() && !await dependencies.askConfirm(
       `Restore command-owned state recorded in '${path}'?`,
     )
   ) {

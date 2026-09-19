@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Errors, FS } from '@shared'
 import { applySourceEdits } from './studio-source-text'
 
 /** ensureNamedImport adds one declaration to the file's `use … from <importPath>`, creating the statement when missing. */
@@ -28,7 +29,12 @@ export function ensureNamedImport(
 }
 
 /** ensureUiNamesImported adds the named `@tao/ui` declarations to the file's import when missing. */
-export function ensureUiNamesImported(source: string, file: AST.TaoFile, required: readonly string[]): string {
+export function ensureUiNamesImported(
+  source: string,
+  file: AST.TaoFile,
+  required: readonly string[],
+  workspaceFiles: readonly AST.TaoFile[] = [file],
+): string {
   const uses = file.statements.filter(AST.isUseStatement)
   const imported = new Set(uses.flatMap(statement =>
     statement.importPath === '@tao/ui'
@@ -37,6 +43,43 @@ export function ensureUiNamesImported(source: string, file: AST.TaoFile, require
   ))
   if (required.every(name => imported.has(name))) {
     return source
+  }
+  const currentDirectory = FS.dirname(AST.getDocument(file).uri.fsPath)
+  const visibleNames = new Set([
+    ...AST.visibleValueDeclarations(file, AST.isDeclaration).map(declaration => declaration.name),
+    ...workspaceFiles.flatMap(candidate => {
+      if (candidate === file || FS.dirname(AST.getDocument(candidate).uri.fsPath) !== currentDirectory) {
+        return []
+      }
+      return candidate.statements.flatMap(statement =>
+        AST.isDeclaration(statement)
+          && AST.declarationNamespace(statement) === 'value'
+          && 'visibility' in statement
+          && statement.visibility === 'folder'
+          ? [statement.name]
+          : []
+      )
+    }),
+  ])
+  const foreignImports = new Map<string, string>()
+  for (const use of uses) {
+    if (use.importPath === '@tao/ui') {
+      continue
+    }
+    for (const declaration of use.importedDeclarations) {
+      foreignImports.set(declaration.$refText, use.importPath ?? 'a bare use statement')
+    }
+  }
+  for (const name of required) {
+    if (imported.has(name)) {
+      continue
+    }
+    const occupiedBy = visibleNames.has(name) ? 'a visible project declaration' : foreignImports.get(name)
+    if (occupiedBy !== undefined) {
+      Errors.throwUserInput(
+        `Studio cannot import '${name}' from @tao/ui because the name is already owned by ${occupiedBy}.`,
+      )
+    }
   }
   const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
   if (uiUse?.$cstNode !== undefined) {

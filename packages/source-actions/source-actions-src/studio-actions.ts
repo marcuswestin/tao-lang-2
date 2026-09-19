@@ -93,6 +93,6 @@ async function applyPatchContent(
     'snap-sketch-to-flow': async action => await snapSketchToFlow(document, action),
     'toggle-flow-direction': async action => await toggleFlowDirection(document, action),
     'unsnap-sketch-from-flow': async action => await unsnapSketchFromFlow(document, action),
-    'wrap-render': async action => await wrapRender(document, action),
+    'wrap-render': async action => await wrapRender(document, action, context),
   })
 }

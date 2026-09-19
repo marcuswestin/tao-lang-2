@@ -95,6 +95,8 @@ export class StudioCdp {
   private readonly unsubscribeBrowserEvents: Array<() => void>
   private closed = false
   private readonly consoleEntries: BrowserConsoleEntry[] = []
+  /** Each frame's own execution context, as opposed to the isolated worlds this harness creates. */
+  private readonly frameWorlds = new Map<string, number>()
 
   private constructor(
     private readonly client: StudioCdpTransport,
@@ -104,6 +106,10 @@ export class StudioCdp {
     this.unsubscribeBrowserEvents = [
       client.subscribe('Runtime.consoleAPICalled', params => this.collectConsoleEvent(params)),
       client.subscribe('Runtime.exceptionThrown', params => this.collectExceptionEvent(params)),
+      // A frame's own execution context is only ever announced, never queryable, so it is tracked
+      // from the moment the connection is configured.
+      client.subscribe('Runtime.executionContextCreated', params => this.trackExecutionContext(params)),
+      client.subscribe('Runtime.executionContextDestroyed', params => this.forgetExecutionContext(params)),
     ]
     // A blank Studio usually says why in the console and nowhere else, so every error and
     // uncaught exception is retained for the smoke run to fail on and for its artifacts.
@@ -248,6 +254,71 @@ export class StudioCdp {
     })
   }
 
+  /** Clicks one point inside an element's box, for targets whose own center is not the live hit area. */
+  async clickAtOffset(selector: string, offset: Point): Promise<void> {
+    await this.clickAt(await this.elementPointAtOffset(selector, offset, { element: 'clickable', gesture: 'click' }))
+  }
+
+  /**
+   * Resolves one viewport point inside an element's box, clamped to stay inside it.
+   *
+   * The element is scrolled into view with `nearest` rather than `center`: an element wider or
+   * taller than its scroller — a long source line, a full-height divider — has its leading edge
+   * pushed out of the visible box by centring, and the offset is measured from that leading edge.
+   * The resolved point is then required to actually hit the element, because pointer input reaches
+   * whatever is painted there and a silent miss is reported much later as an unrelated timeout.
+   */
+  private async elementPointAtOffset(
+    selector: string,
+    offset: Point,
+    labels: { element: string; gesture: string },
+  ): Promise<Point> {
+    requireFiniteNumber(offset.x, `Studio browser horizontal ${labels.gesture} offset`)
+    requireFiniteNumber(offset.y, `Studio browser vertical ${labels.gesture} offset`)
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
+    return await this.evaluate<Point>(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing ${labels.element} element: ' + selector)
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      const rect = element.getBoundingClientRect()
+      const x = rect.left + Math.max(1, Math.min(rect.width - 1, ${offset.x}))
+      const y = rect.top + Math.max(1, Math.min(rect.height - 1, ${offset.y}))
+      const covering = document.elementFromPoint(x, y)
+      if (covering !== null && covering !== element && !element.contains(covering)) {
+        const describe = node =>
+          node.tagName.toLowerCase()
+          + (typeof node.className === 'string' && node.className.length > 0 ? '.' + node.className.trim().split(/\\s+/u).join('.') : '')
+        throw new Error(
+          'Point ' + Math.round(x) + ',' + Math.round(y) + ' for ' + selector
+            + ' lands on ' + describe(covering) + ', not the element',
+        )
+      }
+      return { x, y }
+    })()`)
+  }
+
+  async wheel(
+    selector: string,
+    delta: Point,
+    options: { primary?: boolean } = {},
+  ): Promise<void> {
+    requireFiniteNumber(delta.x, 'Studio browser horizontal wheel delta')
+    requireFiniteNumber(delta.y, 'Studio browser vertical wheel delta')
+    const point = await this.elementCenter(selector, 'wheel target')
+    const primaryModifier = options.primary === true
+      ? await this.evaluate<boolean>("navigator.platform.toLowerCase().includes('mac')") ? 4 : 2
+      : 0
+    await this.client.send('Input.dispatchMouseEvent', {
+      deltaX: delta.x,
+      deltaY: delta.y,
+      modifiers: primaryModifier,
+      type: 'mouseWheel',
+      ...point,
+    })
+  }
+
   async drag(fromSelector: string, toSelector: string, options: { steps?: number } = {}): Promise<void> {
     const steps = options.steps ?? 8
     requirePositiveInteger(steps, 'Studio browser drag steps')
@@ -258,7 +329,18 @@ export class StudioCdp {
         const element = document.querySelector(selector)
         if (!(element instanceof HTMLElement)) throw new Error('Missing ' + label + ' element: ' + selector)
         const rect = element.getBoundingClientRect()
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        // An element taller or wider than the window — a scrolled editor's content, a long list —
+        // has its own centre outside the window, where pointer input never reaches it. The centre
+        // of the part actually on screen is both inside the element and somewhere a person could
+        // aim at.
+        const left = Math.max(rect.left, 0)
+        const right = Math.min(rect.right, window.innerWidth)
+        const top = Math.max(rect.top, 0)
+        const bottom = Math.min(rect.bottom, window.innerHeight)
+        if (right <= left || bottom <= top) {
+          throw new Error('No visible part of the ' + label + ' element: ' + selector)
+        }
+        return { x: (left + right) / 2, y: (top + bottom) / 2 }
       }
       return {
         start: center(${JSON.stringify(fromSelector)}, 'drag source'),
@@ -268,7 +350,16 @@ export class StudioCdp {
     await this.dispatchHtml5Drag(points.start, points.end, steps)
   }
 
-  async dragBy(selector: string, delta: Point, options: { steps?: number } = {}): Promise<void> {
+  /**
+   * `offset` starts the gesture at one point inside the element's box instead of its center, for a
+   * target whose center is not its live grab area — a long, thin divider that a floating panel
+   * covers over part of its length, say.
+   */
+  async dragBy(
+    selector: string,
+    delta: Point,
+    options: { offset?: Point; steps?: number } = {},
+  ): Promise<void> {
     const steps = options.steps ?? 8
     requirePositiveInteger(steps, 'Studio browser drag steps')
     requireFiniteNumber(delta.x, 'Studio browser horizontal drag delta')
@@ -283,23 +374,10 @@ export class StudioCdp {
       element.scrollIntoView({ block: 'center', inline: 'center' })
       return true
     })()`)
-    const start = await this.elementCenter(selector, 'drag source')
+    const start = options.offset === undefined
+      ? await this.elementCenter(selector, 'drag source')
+      : await this.elementPointAtOffset(selector, options.offset, { element: 'drag source', gesture: 'drag' })
     await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
-  }
-
-  /**
-   * Drags the pointer between two viewport points without scrolling anything first. Use it when the
-   * caller has already established, by hit-testing, exactly where the gesture must start and end.
-   */
-  async dragBetween(start: Point, end: Point, options: { steps?: number } = {}): Promise<void> {
-    const steps = options.steps ?? 8
-    requirePositiveInteger(steps, 'Studio browser drag steps')
-    for (
-      const [value, label] of [[start.x, 'start x'], [start.y, 'start y'], [end.x, 'end x'], [end.y, 'end y']] as const
-    ) {
-      requireFiniteNumber(value, `Studio browser drag ${label}`)
-    }
-    await this.dispatchDrag(start, end, steps)
   }
 
   /**
@@ -683,18 +761,52 @@ export class StudioCdp {
     return await this.evaluateInContext(expression)
   }
 
-  async evaluateInFrame<Result>(urlPrefix: string, expression: string): Promise<Result> {
-    const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
-    const frameId = findFrameId(tree.frameTree, urlPrefix)
-    if (frameId === undefined) {
+  /**
+   * Evaluates in a frame, by default in an isolated world: it shares the frame's DOM but not its
+   * JavaScript globals, which keeps the harness from disturbing the page it observes. `world: 'page'`
+   * runs in the frame's own context instead, for the few probes that have to read or write a global
+   * the page itself defines; an isolated world would write to a different `window` and the page
+   * would never see it.
+   */
+  async evaluateInFrame<Result>(
+    urlPrefix: string,
+    expression: string,
+    options: { world?: 'isolated' | 'page' } = {},
+  ): Promise<Result> {
+    let lastContextFailure: Error | undefined
+    const contextId = await Time.pollUntil(async () => {
+      try {
+        const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
+        const frameId = findFrameId(tree.frameTree, urlPrefix)
+        if (frameId === undefined) {
+          return undefined
+        }
+        if (options.world === 'page') {
+          return this.frameWorlds.get(frameId)
+        }
+        const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
+          frameId,
+          grantUniveralAccess: true,
+          worldName: 'tao-studio-smoke',
+        })
+        return world.executionContextId
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        lastContextFailure = Errors.asError(error)
+        return undefined
+      }
+    }, { intervalMs: 100, timeoutMs: 10_000 })
+    if (contextId === undefined) {
+      if (lastContextFailure !== undefined) {
+        throw lastContextFailure
+      }
       Errors.throwHostEnvironment(`Studio preview frame is missing: ${urlPrefix}`)
     }
-    const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
-      frameId,
-      grantUniveralAccess: true,
-      worldName: 'tao-studio-smoke',
-    })
-    return await this.evaluateInContext(expression, world.executionContextId)
+    // Do not retry after Runtime.evaluate begins: the page action may already have dispatched even
+    // when navigation destroys its response context. Repeating it could duplicate a user action.
+    return await this.evaluateInContext(expression, contextId)
   }
 
   async waitFor(expression: string, options: { timeoutMs?: number } = {}): Promise<void> {
@@ -704,6 +816,9 @@ export class StudioCdp {
         last = await this.evaluate(expression)
         return !!last
       } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
         last = Errors.messageOf(error)
         return false
       }
@@ -712,6 +827,32 @@ export class StudioCdp {
       return
     }
     Errors.throwHostEnvironment(`Timed out waiting for browser expression: ${expression}; last=${String(last)}`)
+  }
+
+  async waitForInFrame(
+    urlPrefix: string,
+    expression: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<void> {
+    let last: unknown
+    const satisfied = await Time.pollUntil(async () => {
+      try {
+        last = await this.evaluateInFrame(urlPrefix, expression)
+        return !!last
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        last = Errors.messageOf(error)
+        return false
+      }
+    }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 15_000 })
+    if (satisfied) {
+      return
+    }
+    Errors.throwHostEnvironment(
+      `Timed out waiting for browser frame expression: ${expression}; last=${String(last)}`,
+    )
   }
 
   private async evaluateInContext<Result>(expression: string, contextId?: number): Promise<Result> {
@@ -752,6 +893,30 @@ export class StudioCdp {
       level: typeof params['type'] === 'string' ? params['type'] : 'log',
       text: args.map(formatRemoteObject).join(' '),
     }, params['timestamp']))
+  }
+
+  private trackExecutionContext(params: unknown): void {
+    if (!isRecord(params) || !isRecord(params['context'])) {
+      return
+    }
+    const context = params['context']
+    const auxData = isRecord(context['auxData']) ? context['auxData'] : undefined
+    const frameId = auxData?.['frameId']
+    if (auxData?.['isDefault'] !== true || typeof frameId !== 'string' || typeof context['id'] !== 'number') {
+      return
+    }
+    this.frameWorlds.set(frameId, context['id'])
+  }
+
+  private forgetExecutionContext(params: unknown): void {
+    if (!isRecord(params) || typeof params['executionContextId'] !== 'number') {
+      return
+    }
+    for (const [frameId, contextId] of this.frameWorlds) {
+      if (contextId === params['executionContextId']) {
+        this.frameWorlds.delete(frameId)
+      }
+    }
   }
 
   private collectExceptionEvent(params: unknown): void {
@@ -798,8 +963,11 @@ const chromeNamedKeys: Readonly<Record<string, { code: string; windowsVirtualKey
   ArrowRight: { code: 'ArrowRight', windowsVirtualKeyCode: 39 },
   ArrowUp: { code: 'ArrowUp', windowsVirtualKeyCode: 38 },
   Backspace: { code: 'Backspace', windowsVirtualKeyCode: 8 },
+  Delete: { code: 'Delete', windowsVirtualKeyCode: 46 },
+  End: { code: 'End', windowsVirtualKeyCode: 35 },
   Enter: { code: 'Enter', windowsVirtualKeyCode: 13 },
   Escape: { code: 'Escape', windowsVirtualKeyCode: 27 },
+  Home: { code: 'Home', windowsVirtualKeyCode: 36 },
   Tab: { code: 'Tab', windowsVirtualKeyCode: 9 },
 }
 

@@ -19,6 +19,35 @@ Describe('tao ship compatibility fingerprints', () => {
     })
   })
 
+  Test('hashes canonical schema semantics instead of comments, whitespace, or trait order', async () => {
+    await withTaoFiles('tao-ship-semantic-fingerprint-', {
+      'App.tao': `data Notes / Note {
+        Title text (title, unique)
+        Body text? (search, default "")
+
+        index Title
+        order by Title desc
+      }`,
+    }, async paths => {
+      const root = FS.dirname(paths['App.tao']!)
+      const before = await dataSchemaFingerprint(root)
+      await FS.writeText(
+        paths['App.tao']!,
+        `
+        // Formatting and trait order do not change the stored schema.
+        data   Notes/Note{Title text(unique,title) Body text ? (default "",search)
+          index Title
+          order by Title desc
+        }
+      `,
+      )
+
+      Expect(await dataSchemaFingerprint(root)).toBe(before)
+      await FS.move(paths['App.tao']!, FS.resolvePath('Model.tao', root))
+      Expect(await dataSchemaFingerprint(root)).toBe(before)
+    })
+  })
+
   Test('reads Expo fingerprint output through an injected command runner', async () => {
     const runtimeRoot = await mkTestDir('tao-runtime-fingerprint-')
     await FS.writeJson(FS.resolvePath('_gen_tao-app/ship.json', runtimeRoot), { buildNumber: 'stale' })

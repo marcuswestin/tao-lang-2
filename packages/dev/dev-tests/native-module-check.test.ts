@@ -187,38 +187,6 @@ Describe('native module compiler check', () => {
     Expect(result.timedOut).toBe(true)
   })
 
-  Test('returns after a hard-kill bound even when a child never reports close', async () => {
-    const signals: string[] = []
-    let disposed = false
-    let outputClosed = false
-    const outcome = await NativeModuleCheck.testing.commandOutcome(
-      {
-        async closeOutput() {
-          outputClosed = true
-        },
-        dispose() {
-          disposed = true
-        },
-        error: undefined,
-        exitCode: null,
-        kill(signal) {
-          signals.push(signal ?? 'SIGTERM')
-          return true
-        },
-        pid: undefined,
-        waitForClose: () => new Promise(() => {}),
-      },
-      1,
-      1,
-      1,
-    )
-
-    Expect(outcome).toEqual({ exitCode: null, timedOut: true })
-    Expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
-    Expect(outputClosed).toBe(true)
-    Expect(disposed).toBe(true)
-  })
-
   Test('retains a failed target build with its target-specific phase', async () => {
     const events: string[] = []
     const output: string[] = []

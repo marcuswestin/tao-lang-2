@@ -448,12 +448,14 @@ argument source, its literal when it is a plain string, and the values it could 
 the section edits the literal (`set-text-content`, which rewrites only the first argument and keeps
 named arguments and the layout clause) or binds the leaf to one offered value (`bind-text`).
 
-Binding candidates are computed from the source at the render: the owning view's parameters, loop
-items and local values visible at that statement, and, for entity-typed values, every non-optional
-scalar field one level deep. A text value binds as `Text(Path)`; numbers and case values are
-interpolated as `Text("{ Path }")`. Optional fields, deeper relations, collections, app state, and
-imports are not offered. `bind-text` refuses any expression the inspection did not offer, so the
-client cannot write a path the source does not have.
+Binding candidates are computed from declaration identity and lexical scope at the render: the owning
+view's parameters, loop items and local values visible at that statement, and, for entity-typed
+values, every compatible non-optional scalar field one level deep. A text value binds as `Text(Path)`
+and a number is interpolated as `Text("{ Path }")`. Case/enum values are not offered because Tao has
+no adopted enum-to-text conversion syntax; Studio does not invent one. Optional fields, deeper
+relations, collections, app state, unresolved spellings, and imports that cannot be preflighted are
+not offered. `bind-text` refuses any expression the inspection did not offer, so the client cannot
+write a path the source does not have.
 
 These actions carry the ordinary render-occurrence identity and the same proposal, checkpoint, and
 undo path as every other visual edit; the server admits them only with that identity.
@@ -570,9 +572,10 @@ reactive Screen-class selection at use sites, pressed/focused/hovered interactio
 references work; the legacy numeric style surface remains compatible.
 
 The Inspector Data context reports the selected view/element and active cell, revision, and scenario.
-`StudioRenderInspection` does not yet publish an argument/binding graph, so the context states that binding
-metadata is unavailable instead of manufacturing it. The runtime likewise publishes no general action
-inventory; Actions exposes the supported Wrap in Stack source action and does not invent runtime invocation.
+`StudioRenderInspection` publishes declaration-resolved, scope-checked binding candidates for the Text
+actions described above rather than a second general-purpose binding graph. The runtime publishes no
+general action inventory; Actions exposes only implemented, preflighted source actions and does not
+invent runtime invocation.
 
 Problems provides project diagnostics with click-to-source, and Compile shows live status and revisions.
 Data requests a trusted runtime capture from the active preview, renders its datasource/entity rows, polls
@@ -635,8 +638,9 @@ generated real WordFlower Studio host typechecks as one integration proof.
 The browser client is split into API/event, editor, matrix, shell, visual-editing, file-tree, and
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
 scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
-The complete host-browser execution pass remains pending; its wide/narrow viewport, pane-resize,
-pointer-drag, screenshot, console, and exception operations are deterministic and contract-tested.
+The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, but
+the simulated-user journey is quarantined from `verify-full` until it completes ten consecutive reliable
+normal-terminal runs; no final browser acceptance is claimed here.
 
 `./dev studio` and `./dev studio-native` both start the multi-project session server. Every opened project
 owns its own Expo server, generated preview runtime, preview session, file watcher, and initial compile;
@@ -727,13 +731,21 @@ generated preview root mounts `TR.Studio.DeviceHost` on native platforms and the
 so one compilation and one Metro file graph drive both canvases. Trust is an authenticated X25519 exchange
 with Ed25519 identities, a six-digit code compared on both screens and confirmed in Studio, XChaCha20-Poly1305
 sealed frames with strictly increasing sequence numbers, Keychain storage on the device, and a revocable
-trusted-device list under the Studio user state root. A device is one more opaque preview instance of the
-cell it selects, acknowledges the exact compile revision it rendered, and follows Fast Refresh like the
-browser cell. The workbench **Device** popover opens the installed shell through Expo's dev-client link (with a
+trusted-device list under the Studio user state root. Trust/revocation writes are serialized across
+Studio processes, and the gateway acknowledges only effects that committed successfully. Closed or
+replaced sessions detach their device state, synthetic app/session records are not retained, and cells
+recover through compatible session/network changes. Sealed-frame limits include framing and
+authentication overhead. A device is one more opaque preview instance of the cell it selects,
+acknowledges the exact compile revision it rendered, and follows Fast Refresh like the browser cell.
+The workbench **Device** popover opens the installed shell through Expo's dev-client link (with a
 QR and copyable URL), runs pairing, shows compile versus applied revisions, switches scenarios, and revokes
 trust. The protocol, threat model, and message set are in
 `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. After pairing is
 confirmed, a device may send `device.selectCell`, `device.selectSource`, `device.setNetwork`,
 `device.sourceAction` (validated and applied with the same identity tuple as a browser request),
 `device.applied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
-`device.ping` is answered. Bonjour discovery, the Tao relay, and beta delivery remain roadmap work.
+`device.ping` is answered. Studio now advertises authenticated Bonjour candidates and a trusted device
+rediscovers the current gateway and Metro endpoints after a network or session change; the advertisement
+is bound to Studio's pinned identity and the QR/deep-link route remains the fallback. The device panel
+exposes LAN/cable choice. The Tao relay and companion beta delivery remain roadmap work, and this
+software contract is not evidence of a successful physical cable or other real-device run.

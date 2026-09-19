@@ -119,7 +119,8 @@ function connectionGroups(
     label: group.label,
     ...(() => {
       const subjectView = StudioMatrixLayout.subjectView(manifest, group.id)
-      return subjectView === undefined ? {} : { subjectView }
+      const subjectViewId = StudioMatrixLayout.subjectViewId(manifest, group.id)
+      return subjectView === undefined || subjectViewId === undefined ? {} : { subjectView, subjectViewId }
     })(),
     ...(() => {
       if (group.label !== 'sketch') {

@@ -7,7 +7,7 @@ import {
   type TaoStudioDeviceStudioMessage,
 } from '@runtime/TR-studio-device-protocol'
 import { StudioDeviceTrust, type TaoStudioDeviceSessionKeys } from '@runtime/TR-studio-device-trust'
-import { Errors, FS } from '@shared'
+import { CLI, Errors, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   StudioDeviceGateway,
@@ -21,6 +21,20 @@ import { StudioProjectSession } from '../studio-src/StudioProjectSession'
 import { systemLightScheme } from './test-studio-fixtures'
 
 Describe('Studio device gateway handshake', () => {
+  Test('advertises the exact gateway key and port and stops the Bonjour registration with the gateway', async () => {
+    let advertised: { port: number; studioPublicKey: string } | undefined
+    let stops = 0
+    await withGateway({
+      bonjour: options => {
+        advertised = { port: options.port, studioPublicKey: options.studioPublicKey }
+        return { args: [], stop: () => stops += 1 }
+      },
+    }, async env => {
+      Expect(advertised).toEqual({ port: env.gateway.port, studioPublicKey: env.store.publicKey() })
+    })
+    Expect(stops).toBe(1)
+  })
+
   Test('rejects an unknown device while pairing is closed and lets it in once a window opens', async () => {
     await withGateway({}, async env => {
       const device = new TestDevice(env.gateway.port)
@@ -181,6 +195,33 @@ Describe('Studio device gateway handshake', () => {
       await again.sendHello({ metroPort: env.metroPort })
       Expect((await again.rejected()).code).toBe('pairing-closed')
       Expect(await env.gateway.revoke(env.sessionId, device.identity.publicKey)).toEqual({ revoked: false })
+    })
+  })
+
+  Test('observes a revocation committed by an independent Studio process', async () => {
+    await withGateway({ trustRefreshMs: 20 }, async env => {
+      const device = await pairedDevice(env)
+      const modulePath = Repo.resolvePath('packages/studio/studio-src/device/StudioDeviceTrustStore.ts')
+      const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+      const result = await CLI.run('bun', {
+        args: [
+          '-e',
+          `
+          import { StudioDeviceTrustStore } from ${JSON.stringify(modulePath)}
+          import { HCI } from ${JSON.stringify(sharedPath)}
+          const store = await StudioDeviceTrustStore.open(${JSON.stringify(env.trustRoot)})
+          HCI.writeLine(String(await store.revoke(${JSON.stringify(device.identity.publicKey)})))
+        `,
+        ],
+        stdio: 'pipe',
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe('true')
+      Expect(await device.nextSealed()).toEqual({ reason: 'Studio revoked this device.', type: 'studio.revoked' })
+      Expect((await device.rejected()).code).toBe('revoked')
+      await until(() => env.gateway.status(env.sessionId).connection === undefined, {
+        description: 'the cross-process revocation to detach the live device',
+      })
     })
   })
 
@@ -493,6 +534,24 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('detaches a closed project session, its preview instance, and pending capture', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const assigned = await nextAssignedCell(device)
+      const capture = env.gateway.captureRuntime(env.sessionId, 60_000)
+      while ((await device.nextSealed()).type !== 'studio.captureRuntime') {
+        // Drain any compile or assignment state emitted before the capture request.
+      }
+
+      Expect(env.gateway.detachSession(env.sessionId)).toEqual({ detached: 1 })
+      Expect(await capture).toEqual({ error: 'The Studio project session closed.' })
+      Expect((await device.rejected()).code).toBe('unknown-session')
+      Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
+      Expect(env.gateway.status(env.sessionId).connection).toBeUndefined()
+    })
+  })
+
   Test('re-assigns the device when the cell it renders is reconfigured, and leaves other cells alone', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
@@ -681,6 +740,7 @@ type Env = {
   sessionId: string
   sessions: Map<string, StudioDeviceGatewaySessionRef>
   store: StudioDeviceTrustStore
+  trustRoot: string
 }
 
 /**
@@ -932,7 +992,11 @@ async function nextSourceActionResult(device: TestDevice): Promise<TaoStudioDevi
 }
 
 async function withGateway(
-  options: Partial<Pick<StudioDeviceGatewayOptions, 'handshakeTimeoutMs' | 'pairingWindowMs'>> & { source?: string },
+  options:
+    & Partial<
+      Pick<StudioDeviceGatewayOptions, 'bonjour' | 'handshakeTimeoutMs' | 'pairingWindowMs' | 'trustRefreshMs'>
+    >
+    & { source?: string },
   use: (env: Env) => Promise<void>,
 ): Promise<void> {
   const project = await openProject('Garden', 'tao-studio-device-', options.source)
@@ -947,6 +1011,7 @@ async function withGateway(
   const clock = { now: fixedNow }
   const gateway = await StudioDeviceGateway.start({
     ...options,
+    bonjour: options.bonjour ?? false,
     hostname: '127.0.0.1',
     hosts: async () => ['192.168.1.20'],
     now: () => clock.now,
@@ -964,6 +1029,7 @@ async function withGateway(
       sessionId: 'first_session',
       sessions,
       store,
+      trustRoot,
     })
   } finally {
     gateway.stop()

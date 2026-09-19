@@ -34,7 +34,12 @@ function resolveContainers(containers, bundleIdentifier) {
 }
 
 /** iCloudEntitlements merges the iCloud entitlements for the given services into a plist. */
-function iCloudEntitlements(entitlements, containers, services = [cloudDocumentsService]) {
+function iCloudEntitlements(
+  entitlements,
+  containers,
+  services = [cloudDocumentsService],
+  documentContainers = services.includes(cloudDocumentsService) ? containers : [],
+) {
   const merged = (existing, additions) => [...new Set([...(Array.isArray(existing) ? existing : []), ...additions])]
   const result = {
     ...entitlements,
@@ -42,7 +47,7 @@ function iCloudEntitlements(entitlements, containers, services = [cloudDocuments
     [servicesKey]: merged(entitlements[servicesKey], services),
   }
   if (services.includes(cloudDocumentsService)) {
-    result[ubiquityContainersKey] = merged(entitlements[ubiquityContainersKey], containers)
+    result[ubiquityContainersKey] = merged(entitlements[ubiquityContainersKey], documentContainers)
   }
   return result
 }
@@ -55,7 +60,10 @@ function withTaoICloud(config, props = {}) {
   const services = resolveServices(props.services)
   const entitled = withEntitlementsPlist(config, modConfig => {
     const containers = resolveContainers(props.containers, modConfig.ios && modConfig.ios.bundleIdentifier)
-    modConfig.modResults = iCloudEntitlements(modConfig.modResults, containers, services)
+    const documentContainers = Array.isArray(props.documentContainers)
+      ? [...new Set(props.documentContainers.filter(value => containers.includes(value)))]
+      : containers
+    modConfig.modResults = iCloudEntitlements(modConfig.modResults, containers, services, documentContainers)
     if (services.includes(cloudKitService)) {
       // CloudKit's sync engine learns of other devices' changes through silent pushes.
       modConfig.modResults[apsEnvironmentKey] = modConfig.modResults[apsEnvironmentKey] || 'production'

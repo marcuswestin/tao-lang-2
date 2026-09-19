@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { ContentionRetry } from '../dev-src/repository-tests/ContentionRetry'
-import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import { type MachineLane, MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
 import { buildSummary, classifyFailure } from '../dev-src/repository-tests/RunSummary'
 import { WorkGraph, type WorkState } from '../dev-src/repository-tests/WorkGraph'
@@ -77,6 +77,74 @@ Describe('contended failure confirmation', () => {
     Expect(state.fullOutput).toBe('ok on its own')
     Expect(state.attempts?.[0]?.fullOutput).toContain('timed out after 5000ms')
     Expect(state.attempts?.[1]?.fullOutput).toBe('ok on its own')
+  })
+
+  Test('releases isolation between serial confirmations', async () => {
+    const root = await mkTestDir('tao-contention-isolation-')
+    const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root })
+    const states = ['first', 'second'].map(name => failedState(name, 'timed out after 5000ms'))
+    const events: string[] = []
+    const machineLane: MachineLane = {
+      acquireExclusive: async () => {
+        events.push('exclusive')
+        return {
+          release: async () => {
+            events.push('release-exclusive')
+          },
+        }
+      },
+      capacity: 1,
+      ceiling: 1,
+      report: () => contended,
+      release: async () => {},
+      tryAcquire: async () => ({
+        release: async () => {
+          events.push('release-slot')
+        },
+        slots: 1,
+      }),
+      waitForAvailability: async () => {},
+      waitReason: undefined,
+    }
+
+    await ContentionRetry.confirmContendedFailures({
+      contention: contended,
+      location,
+      machineLane,
+      runNode: async state => {
+        events.push(`run-${state.name}`)
+        return { exitCode: 0 }
+      },
+      states,
+    })
+
+    Expect(events).toEqual([
+      'exclusive',
+      'run-first',
+      'release-slot',
+      'release-exclusive',
+      'exclusive',
+      'run-second',
+      'release-slot',
+      'release-exclusive',
+    ])
+  })
+
+  Test('runs dependents that were skipped only because a recovered gate had failed', async () => {
+    const compile = failedState('compile', 'timed out after 5000ms')
+    const test = WorkGraph.createState({ name: 'test', needs: ['compile'], run: { args: [], command: 'true' } })
+    test.status = 'skipped'
+    test.reason = 'dependency failed: compile'
+    const report = WorkGraph.createState({ name: 'report', needs: ['test'], run: { args: [], command: 'true' } })
+    report.status = 'skipped'
+    report.reason = 'dependency failed: test'
+
+    const { attempted } = await runRetry([compile, test, report], contended, ['compile', 'test', 'report'])
+
+    Expect(attempted).toEqual(['compile', 'test', 'report'])
+    Expect([compile.status, test.status, report.status]).toEqual(['passed', 'passed', 'passed'])
+    Expect(test.retried).toBeUndefined()
+    Expect(report.retried).toBeUndefined()
   })
 
   Test('a suite that times out again on its own stays failed and says the retry confirmed it', async () => {

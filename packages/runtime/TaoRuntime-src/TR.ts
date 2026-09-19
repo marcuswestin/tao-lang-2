@@ -2,10 +2,13 @@ import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import {
   actionFailureCaseName,
+  captureActionContinuation,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
+  resumeActionContinuation,
   runAction,
+  type TaoActionContinuation,
   type TaoDeclaredFailure,
   transactionResource,
 } from './TR-action-transactions'
@@ -326,6 +329,16 @@ class TR {
     metadata: RuntimeActionMetadata = {},
   ): TR.Action<Args> {
     return new RuntimeAction(body, metadata)
+  }
+
+  /** ActionContinuation captures the transaction generated async segments resume into. */
+  static ActionContinuation(): TaoActionContinuation {
+    return captureActionContinuation()
+  }
+
+  /** ResumeActionContinuation restores one generated segment's transaction before it runs. */
+  static ResumeActionContinuation(continuation: TaoActionContinuation): void {
+    resumeActionContinuation(continuation)
   }
 
   /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */

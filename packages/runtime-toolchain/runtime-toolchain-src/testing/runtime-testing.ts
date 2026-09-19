@@ -1,6 +1,8 @@
 import type { RuntimeApp } from './RuntimeApp'
+import { TestCaseName } from './test-case-name'
 import { TestCompiler as CoreTestCompiler } from './test-compiler/TestCompiler'
 import type * as TestCompilerTypes from './test-compiler/TestCompiler'
+import { type GeneratedEntrypoints, TestHarnessFiles } from './test-harness-files'
 import { TestRunId } from './test-run-id'
 import { TestRunRoot } from './test-run-root'
 
@@ -19,7 +21,7 @@ type CompileAppModule = {
 }
 
 type TestRunnerModule = {
-  runTestFile(file: TestCompilerTypes.File): Promise<void>
+  runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<void>
 }
 
 type TaoTestPlanModule = {
@@ -35,10 +37,12 @@ let taoTestPlanModule: TaoTestPlanModule | undefined
 export const RuntimeTesting = {
   compileAndRenderApp,
   runTaoTestPlan,
-  runTestFile,
+  runTestCheck,
   stopTestCompiler,
   TEST_MANIFEST_ENV,
+  TestCaseName,
   TestCompiler: CoreTestCompiler,
+  TestHarnessFiles,
   TestRunId,
   TestRunRoot,
 }
@@ -49,6 +53,11 @@ export namespace RuntimeTesting {
 
   /** Screen represents a rendered React Native Testing Library app screen. */
   export type Screen = RuntimeApp.Screen
+
+  /** TestHarnessFiles groups the generated Jest entrypoint types under RuntimeTesting. */
+  export namespace TestHarnessFiles {
+    export type Generated = GeneratedEntrypoints
+  }
 
   /** TestCompiler groups runtime test compiler types under RuntimeTesting. */
   export namespace TestCompiler {
@@ -87,9 +96,9 @@ async function compileAndRenderApp(
   return await module.compileAndRenderApp(appPath, options)
 }
 
-async function runTestFile(file: TestCompilerTypes.File): Promise<void> {
+async function runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<void> {
   const module = testRunnerModule ??= require(TEST_RUNNER_MODULE_PATH) as TestRunnerModule
-  await module.runTestFile(file)
+  await module.runTestCheck(suiteName, check)
 }
 
 async function runTaoTestPlan(testFilePath: string): Promise<void> {

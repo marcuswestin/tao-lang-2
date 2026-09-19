@@ -159,7 +159,15 @@ export const StudioRoutes = {
     if (!route.path.includes(':')) {
       return pathname === route.path ? {} : undefined
     }
-    return pathname.match(routePattern(route))?.groups ?? undefined
+    const groups = pathname.match(routePattern(route))?.groups
+    if (groups === undefined) {
+      return undefined
+    }
+    try {
+      return Object.fromEntries(Object.entries(groups).map(([name, value]) => [name, decodeURIComponent(value)]))
+    } catch {
+      return undefined
+    }
   },
   /** matchesRequest is `match` plus the method check the HTTP dispatcher applies. */
   matchesRequest(route: StudioRoute, method: string, pathname: string): boolean {
@@ -186,7 +194,7 @@ function routePattern(route: StudioRoute): RegExp {
       segment === ':sessionId'
         ? `(?<sessionId>${sessionIdGrammar})`
         : segment.startsWith(':')
-        ? `(?<${segment.slice(1)}>.+)`
+        ? `(?<${segment.slice(1)}>[^/]+)`
         : segment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
     )
     .join('/')
@@ -717,6 +725,7 @@ type StudioPreviewFixtureCapturedMessage = {
 type StudioPreviewFixtureCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
+  errorName: StudioRuntimeCaptureErrorName
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
@@ -771,9 +780,15 @@ type StudioPreviewRuntimeCapturedMessage = {
   type: 'preview-runtime-captured'
 }
 
+type StudioRuntimeCaptureErrorName =
+  | 'HostEnvironmentError'
+  | 'UnexpectedBehaviorError'
+  | 'UserInputError'
+
 type StudioPreviewRuntimeCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
+  errorName: StudioRuntimeCaptureErrorName
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
@@ -791,18 +806,25 @@ type StudioPreviewLogMessage = {
 }
 
 /** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
+type StudioDebugStep = {
+  action: string
+  declaration?: string
+  path: string
+  statement?: string
+}
+
 export type StudioDebugCommandMessage = {
   actions?: readonly string[]
   channel: typeof studioProtocolChannel
   command: 'break' | 'configure' | 'continue' | 'step-over' | 'step-into' | 'step-out'
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
-  steps?: ReadonlyArray<{ action: string; path: string }>
+  steps?: readonly StudioDebugStep[]
   type: 'debug-command'
 }
 
 /** StudioPreviewDebugMessage carries one debugger event: a journal entry, a pause, or a resume. */
-export type StudioPreviewDebugMessage = {
+type StudioPreviewDebugMessage = {
   channel: typeof studioProtocolChannel
   event: StudioJsonValue
   identity: StudioPreviewIdentity
@@ -836,6 +858,28 @@ export type StudioPreviewLayoutMeasurementsMessage = {
   measurements: readonly StudioPreviewLayoutMeasurement[]
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-layout-measurements'
+}
+
+/** Wheel gestures inside a cross-origin preview iframe are forwarded to the surrounding Design canvas. */
+export type StudioPreviewCanvasGestureMessage = {
+  channel: typeof studioProtocolChannel
+  clientX: number
+  clientY: number
+  deltaX: number
+  deltaY: number
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-canvas-gesture'
+  zoom: boolean
+}
+
+/** Parent-owned mode state tells a preview synchronously whether its wheel gestures belong to Canvas. */
+type StudioCanvasGestureOwnershipMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  owned: boolean
+  protocolVersion: typeof studioProtocolVersion
+  type: 'set-canvas-gestures'
 }
 
 type StudioRecordedJourneySelector = 'label' | 'placeholder' | 'tag' | 'text'
@@ -908,12 +952,14 @@ type StudioPreviewJourneyReplayFailedMessage = {
 
 export type StudioWindowMessage =
   | StudioHighlightSourceMessage
+  | StudioCanvasGestureOwnershipMessage
   | StudioJourneyRecordingControlMessage
   | StudioPreviewAppliedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
   | StudioPreviewDebugMessage
+  | StudioPreviewCanvasGestureMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewJourneyRecordingStateMessage
@@ -1032,6 +1078,12 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   }
   if (value['type'] === 'preview-layout-measurements') {
     return parsePreviewLayoutMeasurements(value)
+  }
+  if (value['type'] === 'preview-canvas-gesture') {
+    return parsePreviewCanvasGesture(value)
+  }
+  if (value['type'] === 'set-canvas-gestures') {
+    return parseCanvasGestureOwnership(value)
   }
   if (value['type'] === 'set-journey-recording') {
     return parseJourneyRecordingControl(value)
@@ -1244,6 +1296,42 @@ function parsePreviewLayoutMeasurements(
   }
 }
 
+function parsePreviewCanvasGesture(value: StudioJsonObject): StudioPreviewCanvasGestureMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const numbers = ['clientX', 'clientY', 'deltaX', 'deltaY'] as const
+  if (
+    identity === undefined
+    || numbers.some(name => typeof value[name] !== 'number' || !Number.isFinite(value[name]))
+    || typeof value['zoom'] !== 'boolean'
+  ) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    clientX: value['clientX'] as number,
+    clientY: value['clientY'] as number,
+    deltaX: value['deltaX'] as number,
+    deltaY: value['deltaY'] as number,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-canvas-gesture',
+    zoom: value['zoom'],
+  }
+}
+
+function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity === undefined || typeof value['owned'] !== 'boolean'
+    ? undefined
+    : {
+      channel: studioProtocolChannel,
+      identity,
+      owned: value['owned'],
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    }
+}
+
 function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
   const scheme = value['scheme']
@@ -1297,17 +1385,27 @@ function parsePreviewRuntimeCaptureFailed(
   value: StudioJsonObject,
 ): StudioPreviewRuntimeCaptureFailedMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
-  if (identity === undefined || !nonEmptyString(value['requestId']) || !nonEmptyString(value['error'])) {
+  if (
+    identity === undefined
+    || !nonEmptyString(value['requestId'])
+    || !nonEmptyString(value['error'])
+    || !runtimeCaptureErrorName(value['errorName'])
+  ) {
     return undefined
   }
   return {
     channel: studioProtocolChannel,
     error: value['error'],
+    errorName: value['errorName'],
     identity,
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-capture-failed',
   }
+}
+
+function runtimeCaptureErrorName(value: unknown): value is StudioRuntimeCaptureErrorName {
+  return value === 'HostEnvironmentError' || value === 'UnexpectedBehaviorError' || value === 'UserInputError'
 }
 
 const debugCommands = ['break', 'configure', 'continue', 'step-over', 'step-into', 'step-out'] as const
@@ -1332,13 +1430,19 @@ function parseDebugCommand(value: StudioJsonObject): StudioDebugCommandMessage |
     command,
     identity,
     protocolVersion: studioProtocolVersion,
-    ...(steps === undefined ? {} : { steps: steps as ReadonlyArray<{ action: string; path: string }> }),
+    ...(steps === undefined ? {} : { steps: steps as readonly StudioDebugStep[] }),
     type: 'debug-command',
   }
 }
 
-function isDebugStep(value: unknown): value is { action: string; path: string } {
-  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
+function isDebugStep(value: unknown): value is StudioDebugStep {
+  if (!isObject(value) || typeof value['action'] !== 'string' || typeof value['path'] !== 'string') {
+    return false
+  }
+  const declaration = value['declaration']
+  const statement = value['statement']
+  return (declaration === undefined && statement === undefined)
+    || (typeof declaration === 'string' && typeof statement === 'string')
 }
 
 function parsePreviewDebug(value: StudioJsonObject): StudioPreviewDebugMessage | undefined {
@@ -1528,6 +1632,9 @@ function parsePreviewFixtureCaptureFailed(
   return {
     channel: studioProtocolChannel,
     error: value['error'],
+    // A preview running older code sends no category. Defaulting keeps its failure readable instead
+    // of rejecting the whole message, and matches how such a failure was reported before.
+    errorName: runtimeCaptureErrorName(value['errorName']) ? value['errorName'] : 'HostEnvironmentError',
     identity,
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],

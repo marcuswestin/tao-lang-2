@@ -4,483 +4,142 @@ This is the one durable backlog for repository setup, automation, verification, 
 diagnostic, and host-environment improvements. Product defects belong in their product roadmap;
 an entry here may link one when the developer workflow is also affected.
 
+Every entry is its own file under [`Developer environment upgrades/`](<Developer environment upgrades/>),
+named `DEVENV-NNN-<slug>.md`. This page is the index: one line per entry, in its section, with the
+status the entry itself records. `_repo-lint` fails when an entry file is missing from this index,
+when the index names a file that does not exist, or when two files claim the same ID.
+
 ## Agent entry rules
 
 - Search by ID, symptom, command, and area before adding an entry. Update the existing entry instead
   of appending a duplicate.
 - The owning agent consolidates updates once after delegated findings return; subagents do not edit
-  this shared file independently. Keep evidence concise so concurrent branches have fewer shared
-  lines to reconcile.
-- Use the next `DEVENV-NNN` ID. Record only observed problems or credible improvements with concrete
-  evidence; ordinary product failures do not belong here.
+  this backlog independently. Keep evidence concise: an entry file is private to its branch, but this
+  index is shared, so every entry still costs exactly one shared line.
+- A new entry is a new file. Write `Developer environment upgrades/DEVENV-NNN-<slug>.md` with the
+  entry as its `# DEVENV-NNN — Title` heading and body, and add its one line to the section below.
+  Never renumber an existing entry: its ID is quoted from other documents and from commit messages.
+- Choose `NNN` as one past the highest ID that exists on `main`, not one past the highest in your own
+  worktree — a branch that has been open a while is behind. Two branches can still choose the same
+  number, and because each entry is its own file that collision merges silently; `_repo-lint` is what
+  catches it. Whoever resolves it renames the **later-merged** file and its index line, and fixes any
+  reference written in that same branch. Nothing else moves.
+- Record only observed problems or credible improvements with concrete evidence; ordinary product
+  failures do not belong here.
 - Record: **Status**, **Area**, **Impact**, **Evidence**, **Workaround**, **Proposed change**,
   **Dependencies**, **Acceptance**, and **Source**. Use `None` when there is genuinely no workaround
   or dependency.
 - Statuses are `Candidate`, `Planned`, `In progress`, `Incoming`, `Blocked`, `Resolved`, and `Closed`.
   `Incoming` means another unmerged branch owns the fix; re-verify it after that branch lands before
   changing the status to `Resolved`.
-- A task that adds or materially updates an entry links this file once in its handoff. A task that
+- Keep the index line's status in step with the entry's own `**Status:**` when you change it; that is
+  the one fact stated in two places, and `_repo-lint` does not read it for you.
+- A task that adds or materially updates an entry links this index once in its handoff. A task that
   changes nothing here says nothing about developer-environment feedback.
 
 ## Current verification-lanes slice
 
-### DEVENV-001 — Machine-wide lane admission
+- [DEVENV-001 — Machine-wide lane admission](<Developer environment upgrades/DEVENV-001-machine-wide-lane-admission.md>) — Resolved
+- [DEVENV-002 — Structured timeout and retry outcomes](<Developer environment upgrades/DEVENV-002-structured-timeout-and-retry-outcomes.md>) — Resolved
+- [DEVENV-003 — Exclusive contention confirmation](<Developer environment upgrades/DEVENV-003-exclusive-contention-confirmation.md>) — Resolved
+- [DEVENV-004 — Studio smoke port-block ownership](<Developer environment upgrades/DEVENV-004-studio-smoke-port-block-ownership.md>) — Resolved
+- [DEVENV-005 — Sandbox-compatible full verification](<Developer environment upgrades/DEVENV-005-sandbox-compatible-full-verification.md>) — Resolved
+- [DEVENV-006 — Honest focused-test selection](<Developer environment upgrades/DEVENV-006-honest-focused-test-selection.md>) — Resolved
+- [DEVENV-007 — Per-test retry ledger and reports](<Developer environment upgrades/DEVENV-007-per-test-retry-ledger-and-reports.md>) — Resolved
+- [DEVENV-008 — Collision-proof test artifacts](<Developer environment upgrades/DEVENV-008-collision-proof-test-artifacts.md>) — Resolved
+- [DEVENV-009 — Safe, repeatable feature landing](<Developer environment upgrades/DEVENV-009-safe-repeatable-feature-landing.md>) — Resolved
 
-- **Status:** Resolved
-- **Area:** Parallel verification
-- **Impact:** Independently computed lane widths can oversubscribe one machine and turn timing-sensitive
-  tests red.
-- **Evidence:** On an 18-CPU host, simultaneous lane acquisition can let both processes initially
-  reserve 18 slots; later sampling changes reporting but not capacity.
-- **Workaround:** Avoid overlapping repository lanes.
-- **Proposed change:** Use atomic, dynamic machine-wide slot admission with fair per-lane ceilings,
-  a one-slot logical floor, bounded polling backoff, and a mutex that never evicts a live owner.
-- **Dependencies:** `feat/parallel-workflow-test-compat-6fb06b`; implemented by
-  `feat/verification-lanes` commit `5512f785`.
-- **Acceptance:** A real two-process test observes at least two lanes while aggregate admitted slots
-  never exceed the injected CPU count; malformed records cannot poison accounting and an overfull
-  lane set remains able to make progress.
-- **Source:** 2026-09-03 parallel-workflow review.
+## Incoming fixes — do not duplicate
 
-### DEVENV-002 — Structured timeout and retry outcomes
-
-- **Status:** Resolved
-- **Area:** Verification diagnostics
-- **Impact:** Graph-enforced timeouts can miss retry selection, while a deterministic retry failure can
-  retain the original machine-contention label.
-- **Evidence:** Graph timeouts are stored in `state.reason`, retry selection inspects only output, and
-  retry output is appended to the original attempt before classification.
-- **Workaround:** Inspect the original and retry logs manually.
-- **Proposed change:** Record structured failure causes and a separate retry attempt; classify the final
-  attempt rather than concatenated output.
-- **Dependencies:** `feat/parallel-workflow-test-compat-6fb06b`; implemented by
-  `feat/verification-lanes` commit `5512f785`.
-- **Acceptance:** A graph timeout is selected for confirmation, and an assertion failure on retry is
-  reported as a repository failure. A successful exclusive retry is accepted as green but remains
-  visibly retried, while a failed retry appears once with no stale manual-retry advice.
-- **Source:** 2026-09-03 parallel-workflow review.
-
-### DEVENV-003 — Exclusive contention confirmation
-
-- **Status:** Resolved
-- **Area:** Parallel verification
-- **Impact:** `jobs: 1` serializes only the retry batch; sibling worktrees can keep contending, so the
-  result cannot establish whether load caused the original timeout.
-- **Evidence:** The current retry leaves the caller's machine lease and every peer lane active.
-- **Workaround:** Stop other worktrees and rerun the named gate manually.
-- **Proposed change:** Acquire a bounded machine-wide exclusive confirmation lease that pauses new
-  admissions and drains peer reservations before retrying.
-- **Dependencies:** DEVENV-001; implemented by `feat/verification-lanes` commit `5512f785`.
-- **Acceptance:** A multi-process test proves the retry waits for peer work and blocks new admissions;
-  failure to obtain exclusivity is reported as unconfirmed contention.
-- **Source:** 2026-09-03 parallel-workflow review.
-
-### DEVENV-004 — Studio smoke port-block ownership
-
-- **Status:** Resolved
-- **Area:** Studio verification
-- **Impact:** Worktrees whose hashes collide can both pass the free-port probe and then race to bind the
-  same server/preview pair.
-- **Evidence:** Socket reservations are released before the smoke child starts.
-- **Workaround:** Supply distinct shards manually or serialize Studio smoke runs.
-- **Proposed change:** Hold an atomic, stale-owner-aware cross-worktree block lease for the full smoke
-  process, including explicit shards, and fail closed when either the lease or port probe is unavailable.
-- **Dependencies:** Implemented by `feat/verification-lanes` commit `5512f785`; no Studio product
-  changes.
-- **Acceptance:** Two processes cannot own the same shard/worker block concurrently and the lease is
-  released after success, failure, or interruption.
-- **Source:** 2026-09-03 parallel-workflow review.
-
-### DEVENV-005 — Sandbox-compatible full verification
-
-- **Status:** Resolved
-- **Area:** Verification lanes
-- **Impact:** A managed shell cannot run the six browser and native UI host lanes, but duplicating gate lists would
-  drift and could overstate coverage.
-- **Evidence:** Browser/native Studio gates require host capabilities denied by the managed sandbox;
-  all other full-verification gates were measured as compatible.
-- **Workaround:** Run `just full-verify` from a normal terminal.
-- **Proposed change:** Add gate-owned unsandboxed metadata and one shared full-verification membership
-  used by both `full-verify` and `full-verify-sandbox`.
-- **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
-- **Acceptance:** The sandbox lane passes, names exactly six skips, omits dependency installation, and
-  never claims full verification passed.
-- **Source:** 2026-09-03 verification-lanes brief.
-
-### DEVENV-006 — Honest focused-test selection
-
-- **Status:** Resolved
-- **Area:** Test runner
-- **Impact:** A mistyped name pattern can execute zero tests and still report success; running one Jest
-  file requires an undiscoverable local command.
-- **Evidence:** Bun suites use `--pass-with-no-tests` so package-local zero matches do not fail the
-  aggregate, and no exact-file repository command exists.
-- **Workaround:** Read raw runner output and invoke package-local Jest with `--no-watchman` manually.
-- **Proposed change:** Count reporter test cases across suites, fail a filtered aggregate at zero, and
-  add exact-file routing for Bun and runtime Jest.
-- **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
-- **Acceptance:** A nonexistent name exits nonzero; Bun and Jest file paths run through the shared lane
-  with repository-local tools and Watchman disabled.
-- **Source:** 2026-09-03 semantic-agent and companion implementation notes.
-
-### DEVENV-007 — Per-test retry ledger and reports
-
-- **Status:** Resolved
-- **Area:** Test iteration
-- **Impact:** Developers must rerun the full suite after a red run and have no durable per-test flake or
-  duration evidence.
-- **Evidence:** Existing timing history is per suite and Bun has no last-failed selector.
-- **Workaround:** Rerun a remembered file or the complete test lane.
-- **Proposed change:** Record Bun JUnit, Jest JSON, and a synthetic Tao Apps unit in a per-checkout
-  ledger; add changed, retry, flake, and slow-test reports; never write an interrupted run; and bound
-  retained JSONL history without losing recent reversal evidence.
-- **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
-- **Acceptance:** Red/full/green fixture runs select the specified files, cold state runs everything,
-  missing reports fall back honestly to process summaries, interrupted runs add no durable outcomes,
-  and history compaction retains recent flake evidence.
-- **Source:** 2026-09-03 verification-lanes brief.
-
-### DEVENV-008 — Collision-proof test artifacts
-
-- **Status:** Resolved
-- **Area:** Test logging
-- **Impact:** Concurrent `./agent test` processes can target the same millisecond-named log directory.
-- **Evidence:** `RunArtifacts.runStamp` currently contains only an ISO timestamp.
-- **Workaround:** Start runs in different milliseconds.
-- **Proposed change:** Add PID and random entropy while retaining deterministic injected stamps in tests.
-- **Dependencies:** Implemented by `feat/verification-lanes` commit `5512f785`.
-- **Acceptance:** Concurrent location creation produces distinct run roots and both summaries survive.
-- **Source:** 2026-09-03 freehand implementation notes.
-
-### DEVENV-009 — Safe, repeatable feature landing
-
-- **Status:** Resolved
-- **Area:** Git workflow
-- **Impact:** Manually squashing before validation can strand `main` dirty, omit the full host proof, or
-  lose the repository's squash-message convention.
-- **Evidence:** `git merge --abort` cannot undo `git merge --squash`; landing spans two worktrees and
-  several ref-changing phases.
-- **Workaround:** Follow the Git skill manually and inspect every intermediate tree.
-- **Proposed change:** Add a human-only, dry-run-first `merge-with-main` command with snapshots, strict
-  phase ordering, tree equality, guarded abort, and explicit push authority.
-- **Dependencies:** Implemented by `feat/verification-lanes`; no Git hook.
-- **Acceptance:** Unit tests cover read-only preflight, complete-message validation, atomic snapshots,
-  concurrent-state refusal, the pre-push recovery boundary, and abort guards; a disposable bare
-  remote plus two real Git worktrees proves squash, tree equality, push, archive, local-branch
-  cleanup, and preservation of a clean detached invoking worktree until its task is archived.
-- **Source:** 2026-09-03 verification-lanes brief.
-
-## Landed fixes and follow-up verification
-
-### DEVENV-010 — Preview publication and per-session bundler cache
-
-- **Status:** In progress
-- **Area:** Studio preview startup
-- **Impact:** A bundler can crawl before the preview app exists, and shared file-map state can survive a
-  closed session.
-- **Evidence:** The former semantic-agent implementation is on `main`. A 2026-09-16 focused audit ran
-  the current Studio publication/cache tests through their behavior, but managed cleanup ended three
-  cases with generated-root `EFAULT`; DEVENV-061 owns that shared boundary.
-- **Workaround:** Restart the affected preview session.
-- **Proposed change:** Re-run the focused Studio lifecycle tests after DEVENV-061 can publish and remove
-  disposable roots reliably.
-- **Dependencies:** DEVENV-061.
-- **Acceptance:** Reproduction tests remain green on merged `main` with isolated session caches.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-011 — Preview and native-launch diagnosis
-
-- **Status:** In progress
-- **Area:** Studio diagnostics
-- **Impact:** Failed preview bundles and native launch hangs previously produced weak or unbounded
-  feedback.
-- **Evidence:** Diagnosis endpoint/message and host/preview fixes exist in commits `3c671497`,
-  `42218ab2`, and `a2dea067` on `poc/semantic-agent-implementation`. The native half of `d6dde832` --
-  clearing a stale Electrobun build lock and refusing to launch while another worktree held the shared
-  release -- was dropped when that branch merged `main`: an isolated per-worktree Hutch home removes the
-  contention those probes detected, and bounded native phases report a hang that survives it.
-- **Workaround:** Inspect Studio lifecycle logs and bind explicitly to `127.0.0.1`.
-- **Proposed change:** Re-run the focused diagnosis and bounded-launch tests after DEVENV-061.
-- **Dependencies:** DEVENV-061.
-- **Acceptance:** Preview failure names the bundler cause and native launch terminates within its bound.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-012 — Companion endpoint and harness correctness
-
-- **Status:** Resolved
-- **Area:** Companion development
-- **Impact:** Endpoint preference, generated instruction ownership, and fixture source setup previously
-  made device development and tests misleading.
-- **Evidence:** The companion implementation is on `main`; 2026-09-16 focused endpoint-precedence,
-  gateway-harness, and generated-agent coverage passed.
-- **Workaround:** Use the branch's explicit endpoint and fixture setup.
-- **Proposed change:** Preserve the landed behavior.
-- **Dependencies:** None.
-- **Acceptance:** Device selection tests and generated-agent checks pass on merged `main`.
-- **Source:** 2026-09-03 companion implementation briefing.
-
-### DEVENV-013 — Repository-owned Expo cache and fast smoke failure
-
-- **Status:** Resolved
-- **Area:** Expo and Studio smoke
-- **Impact:** Expo can fail writing its user cache in managed worktrees, and an early Studio exit used to
-  degrade into an ambiguous readiness timeout.
-- **Evidence:** Repository-owned Expo state and bounded early-exit reporting are on `main`; their
-  focused launch-manifest and Expo-loop coverage passed on 2026-09-16.
-- **Workaround:** Override Expo home to a repository-owned path and inspect the process log.
-- **Proposed change:** Preserve the landed cache and fast-failure behavior.
-- **Dependencies:** None.
-- **Acceptance:** Ordinary smoke launch uses the repository cache and reports an early child exit without
-  waiting for readiness timeout.
-- **Source:** 2026-09-03 freehand implementation summary.
-
-### DEVENV-014 — Interaction-test cleanup and durable manual QA
-
-- **Status:** Planned
-- **Area:** Studio test quality
-- **Impact:** Unawaited interaction updates produced React act warnings and weak cleanup, obscuring real
-  failures.
-- **Evidence:** The cleanup implementation is on `main`, but the 2026-09-16 focused audit still emitted
-  genuine unwrapped React `act` warnings in the direct Studio scenario tests.
-- **Workaround:** Treat warning-heavy runs as suspect and perform the documented manual journey.
-- **Proposed change:** Eliminate the remaining direct-scenario warnings and retain the manual QA record.
-- **Dependencies:** None.
-- **Acceptance:** Focused Studio tests finish without act warnings or leaked interaction state.
-- **Source:** 2026-09-03 freehand implementation summary.
+- [DEVENV-010 — Preview publication and per-session bundler cache](<Developer environment upgrades/DEVENV-010-preview-publication-and-per-session-bundler-cache.md>) — Incoming
+- [DEVENV-011 — Preview and native-launch diagnosis](<Developer environment upgrades/DEVENV-011-preview-and-native-launch-diagnosis.md>) — Incoming
+- [DEVENV-012 — Companion endpoint and harness correctness](<Developer environment upgrades/DEVENV-012-companion-endpoint-and-harness-correctness.md>) — Incoming
+- [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Incoming
+- [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Incoming
 
 ## Deferred project — begin after the large branches land
 
-### DEVENV-015 — Reliable host-browser verification
-
-- **Status:** Planned
-- **Area:** Studio browser smoke
-- **Impact:** The complete simulated-user journey cannot run in the managed host when Chrome aborts with
-  `SIGABRT` before exposing DevTools; ordinary `verify` intentionally omits this proof.
-- **Evidence:** The smoke's two non-browser checks passed, but the browser journey never began.
-- **Workaround:** From a normal terminal run
-  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
-  `just full-verify`.
-- **Proposed change:** After Studio branches land, evaluate headless Chromium and attach-to-existing-browser
-  modes, then add a reliable CI or pre-merge host lane without slowing ordinary `verify`.
-- **Dependencies:** Semantic-agent, companion, and freehand Studio changes must land first.
-- **Acceptance:** The full browser journey runs repeatably in its supported host and is required for
-  Studio-heavy landing evidence.
-- **Source:** 2026-09-03 freehand implementation summary.
-
-### DEVENV-016 — Studio process ownership and status
-
-- **Status:** Resolved
-- **Area:** Studio lifecycle
-- **Impact:** `studio-stop --all` can report success while a Browser-pane server survives, and
-  `studio-ps` can report `UNDETERMINED` when process inspection is denied.
-- **Evidence:** Current manifest tests cover owned-process discovery, refusal, graceful stop, escalation,
-  and cleanup; the focused 2026-09-16 run passed.
-- **Workaround:** Check lifecycle logs and ports from an unrestricted terminal before trusting a restart.
-- **Proposed change:** Preserve manifest-owned lifecycle behavior and denied-inspection diagnostics.
-- **Dependencies:** None.
-- **Acceptance:** Stop-all removes every owned server in browser and native modes; status never reports a
-  stale process as stopped.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-017 — Studio snapshot command consistency
-
-- **Status:** Closed
-- **Area:** Semantic Studio tooling
-- **Impact:** The CLI validates a snapshot differently from the server, diagnostic counts are not
-  comparable, and entry paths can fail as raw host `ENOENT`s.
-- **Evidence:** Snapshot CLI validates before parsing while the server parses directly; project-relative
-  entry resolution is unspecified in the current branch implementation.
-- **Workaround:** Use an absolute existing entry and compare raw diagnostics manually.
-- **Proposed change:** None; the former snapshot CLI/server parity surface was retired.
-- **Dependencies:** None; the former snapshot CLI/server surface was retired.
-- **Acceptance:** Closed because the compared public surfaces no longer exist.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-018 — Semantic facts and coverage commands
-
-- **Status:** Planned
-- **Area:** Semantic Studio tooling
-- **Impact:** Feature agents lack direct CLI access to the fact and coverage views they need for grounded
-  planning and review.
-- **Evidence:** No fact/coverage CLI exists on the semantic-agent branch.
-- **Workaround:** Call internal modules from temporary scripts or inspect Studio output.
-- **Proposed change:** Add stable read-only CLI commands over the merged semantic model.
-- **Dependencies:** None; the semantic model has landed, while a stable CLI remains unimplemented.
-- **Acceptance:** Commands produce versioned machine-readable output and focused tests exercise real
-  project facts and coverage.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-019 — Idempotent workspace opening
-
-- **Status:** Planned
-- **Area:** Language workspace
-- **Impact:** Opening the same root twice can misbehave or hang, which affects long-lived tools and
-  performance checks.
-- **Evidence:** Observed during semantic-agent development; not isolated from concurrent Workspace work.
-- **Workaround:** Reuse one open workspace per root or close it before reopening.
-- **Proposed change:** Reproduce on merged `main`, then define and enforce reuse or explicit duplicate-open
-  semantics.
-- **Dependencies:** None; remaining work is workspace-instance ownership.
-- **Acceptance:** A focused lifecycle test opens the same root twice without a hang or leaked service.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-020 — Companion lifecycle and diagnostics
-
-- **Status:** Resolved
-- **Area:** Companion development
-- **Impact:** Multiple-app selection omits the `--app` remedy, successful installation can print an
-  automation-permission stack, stale companions can remain blank after Metro changes, and simulator
-  failures do not clearly distinguish sandbox denial.
-- **Evidence:** Four open findings from the companion implementation review. The stale-companion case
-  has a cause: every Studio launch takes a fresh preview-Metro port and a fresh gateway port, and the
-  companion derives both from the bundle it loaded, so a phone left running against a dead Metro shows
-  a blank white screen, dials nothing, and logs nothing anywhere. Trust already survives restarts, so
-  this is discovery rather than pairing. `StudioSmoke.reserveResources` is prior art for holding a port
-  block. The multiple-app half is addressed on `feat/companion-app-implementation-85b689`, which reads
-  the project's `DefaultApp` instead of refusing until `--app` is passed.
-- **Workaround:** Pass `--app`, run device tooling from a normal terminal, and re-point a stale
-  development client with `xcrun simctl openurl booted "taostudiocompanion://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<metroPort>"` from an
-  unsandboxed shell, which is faster than reinstalling.
-- **Proposed change:** Preserve the landed app selection, post-install failure, reconnect, diagnostic,
-  and URL-routing behavior.
-- **Dependencies:** None; implemented by landed companion work and follow-ups.
-- **Acceptance:** Each failure mode has a focused test or physical-device proof and names the exact user
-  action.
-- **Source:** 2026-09-03 companion implementation briefing.
-
-### DEVENV-021 — Safe scratch scripts and concurrent staging
-
-- **Status:** Planned
-- **Area:** Repository hygiene
-- **Impact:** Package-aware diagnostic scripts have no ignored location with normal alias resolution;
-  source-tree scratch files can be accidentally committed by broad staging during concurrent work.
-- **Evidence:** Intermediate semantic-agent commits contained scratch files after a read-only reviewer
-  wrote into the tree and another process used broad directory staging.
-- **Workaround:** Put scripts under `.artifacts`, supply explicit resolver configuration, and stage exact
-  paths only.
-- **Proposed change:** After active `.gitignore` changes land, add a package-local ignored scratch
-  convention and durable exact-path staging guidance.
-- **Dependencies:** None; remaining work is the scratch-directory convention and staging guidance.
-- **Acceptance:** A package scratch script resolves aliases/dependencies, stays untracked, and the workflow
-  documentation forbids broad staging around concurrent writers.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-022 — Raw Error policy for failure mocks
-
-- **Status:** Resolved
-- **Area:** Repository lint and tests
-- **Impact:** The raw-`Error` ratchet treats realistic third-party rejection mocks like production errors,
-  encouraging less faithful tests or unexplained allowlist entries.
-- **Evidence:** Semantic-agent tests need to model third-party failures that genuinely reject with raw
-  JavaScript errors.
-- **Workaround:** Keep a narrow allowlist entry with a site-specific explanation.
-- **Proposed change:** Preserve the narrow test-only raw-error exemption and production ratchet.
-- **Dependencies:** None; implemented by the landed error-taxonomy work.
-- **Acceptance:** Representative failure mocks remain faithful while a mutation introducing a production
-  raw error still fails repo lint.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
-
-### DEVENV-023 — React Native test renderer convention
-
-- **Status:** Resolved
-- **Area:** Companion tests
-- **Impact:** Direct react-test-renderer use lacks local typings and tends to produce brittle interaction
-  tests.
-- **Evidence:** The companion review found no `@types/react-test-renderer`; the repository already favors
-  React Native Testing Library.
-- **Workaround:** Use React Native Testing Library for new tests.
-- **Proposed change:** Continue using React Native Testing Library for user-visible behavior.
-- **Dependencies:** None; migration is present in the current test corpus.
-- **Acceptance:** Tests compile without ambient gaps and assert through user-visible behavior where
-  possible.
-- **Source:** 2026-09-03 companion implementation briefing.
-
-### DEVENV-024 — Branch-local semantic cleanup
-
-- **Status:** Blocked
-- **Area:** Worktree hygiene
-- **Impact:** The semantic-agent worktree contains a modified WordFlower design file, and its intermediate
-  history included scratch artifacts that must not reach a squash.
-- **Evidence:** `Apps/WordFlower/1 - Current/Design.tao` was intentionally left modified; the briefing names
-  the intermediate scratch commits.
-- **Workaround:** Preserve the worktree and review its exact final squash diff.
-- **Proposed change:** The owning branch decides the design-file disposition and verifies the squash omits
-  scratch artifacts.
-- **Dependencies:** Owned exclusively by `poc/semantic-agent-implementation`; this project must not edit
-  that worktree.
-- **Acceptance:** The branch lands with an intentional Design change or a clean restoration, and no scratch
-  file appears in the squash.
-- **Source:** 2026-09-03 semantic-agent implementation briefing.
+- [DEVENV-015 — Reliable host-browser verification](<Developer environment upgrades/DEVENV-015-reliable-host-browser-verification.md>) — Planned
+- [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/DEVENV-016-studio-process-ownership-and-status.md>) — Planned
+- [DEVENV-017 — Studio snapshot command consistency](<Developer environment upgrades/DEVENV-017-studio-snapshot-command-consistency.md>) — Planned
+- [DEVENV-018 — Semantic facts and coverage commands](<Developer environment upgrades/DEVENV-018-semantic-facts-and-coverage-commands.md>) — Planned
+- [DEVENV-019 — Idempotent workspace opening](<Developer environment upgrades/DEVENV-019-idempotent-workspace-opening.md>) — Planned
+- [DEVENV-020 — Companion lifecycle and diagnostics](<Developer environment upgrades/DEVENV-020-companion-lifecycle-and-diagnostics.md>) — Planned
+- [DEVENV-021 — Safe scratch scripts and concurrent staging](<Developer environment upgrades/DEVENV-021-safe-scratch-scripts-and-concurrent-staging.md>) — Planned
+- [DEVENV-022 — Raw Error policy for failure mocks](<Developer environment upgrades/DEVENV-022-raw-error-policy-for-failure-mocks.md>) — Planned
+- [DEVENV-023 — React Native test renderer convention](<Developer environment upgrades/DEVENV-023-react-native-test-renderer-convention.md>) — Planned
+- [DEVENV-024 — Branch-local semantic cleanup](<Developer environment upgrades/DEVENV-024-branch-local-semantic-cleanup.md>) — Blocked
 
 ## Resolved or currently mitigated
 
-### DEVENV-025 — Worktree-safe CLI test roots
-
-- **Status:** Resolved
-- **Area:** CLI tests
-- **Impact:** Generated runtime roots beneath package directories could fail in restrictive worktrees.
-- **Evidence:** Main commit `1ac7edd8` routes the affected `tao test` CLI cases through temporary runtime
-  roots.
-- **Workaround:** None required.
-- **Proposed change:** Preserve the shared temporary-root helper in later test changes.
-- **Dependencies:** None.
-- **Acceptance:** The affected CLI tests pass from linked managed worktrees.
-- **Source:** 2026-09-03 main history and freehand review notes.
-
-### DEVENV-026 — Opt-in underlying error diagnostics
-
-- **Status:** Resolved
-- **Area:** CLI diagnostics
-- **Impact:** `Something went wrong.` previously hid permission and subprocess causes during workflow
-  diagnosis.
-- **Evidence:** Main commit `1ac7edd8` adds `TAO_DEBUG_ERRORS=1`, rendering name, details, cause, and stack.
-- **Workaround:** Run the failing command with `TAO_DEBUG_ERRORS=1`.
-- **Proposed change:** Preserve concise default errors and the opt-in diagnostic path.
-- **Dependencies:** None.
-- **Acceptance:** Existing shared error tests pin both renderings.
-- **Source:** 2026-09-03 main history and freehand review notes.
-
-### DEVENV-027 — Watchman-free package-local Jest
-
-- **Status:** Resolved
-- **Area:** Focused Jest execution
-- **Impact:** Global Jest selection and Watchman state can fail in managed environments.
-- **Evidence:** The repository runner already invokes its pinned local Jest through the materialized Node
-  profile with `--no-watchman`; DEVENV-006 makes the exact-file path discoverable.
-- **Workaround:** Use the repository test commands.
-- **Proposed change:** Keep local-tool and no-Watchman routing centralized in `TestRunner`.
-- **Dependencies:** DEVENV-006 for the public exact-file command.
-- **Acceptance:** Runtime Jest file selection never invokes a global binary or Watchman.
-- **Source:** 2026-09-03 repository inspection and companion notes.
-
-### DEVENV-028 — Non-incremental dprint in managed worktrees
-
-- **Status:** Resolved
-- **Area:** Formatting
-- **Impact:** dprint's incremental user cache may be unwritable under a managed policy.
-- **Evidence:** Every current Justfile dprint invocation passes `--incremental=false` and verification is
-  green under that mode.
-- **Workaround:** None required for repository commands.
-- **Proposed change:** Reopen only if a new command omits the flag; prefer repository-owned cache state if
-  incremental formatting is deliberately restored.
-- **Dependencies:** Preserve freehand formatting exclusions when that branch lands.
-- **Acceptance:** Repository formatting commands do not write the user dprint cache.
-- **Source:** 2026-09-03 repository inspection and freehand notes.
-
-### DEVENV-029 — Materialized development profile and writable caches
-
-- **Status:** Resolved
-- **Area:** Managed worktrees
-- **Impact:** Re-resolving devenv and writing Watchman or tool caches outside permitted roots can fail.
-- **Evidence:** Root instructions use the materialized `.devenv/profile`; repository runners disable
-  Watchman and use named writable cache roots. Expo's remaining cache move is incoming as DEVENV-013.
-- **Workaround:** Export the materialized profile path in a managed shell as documented in `AGENTS.md`.
-- **Proposed change:** Keep new tools inside the same cache/profile conventions.
-- **Dependencies:** DEVENV-013 for Expo.
-- **Acceptance:** Setup, focused tests, and formatting run without user-cache overrides.
-- **Source:** 2026-09-03 consolidated implementation notes.
+- [DEVENV-025 — Worktree-safe CLI test roots](<Developer environment upgrades/DEVENV-025-worktree-safe-cli-test-roots.md>) — Resolved
+- [DEVENV-026 — Opt-in underlying error diagnostics](<Developer environment upgrades/DEVENV-026-opt-in-underlying-error-diagnostics.md>) — Resolved
+- [DEVENV-027 — Watchman-free package-local Jest](<Developer environment upgrades/DEVENV-027-watchman-free-package-local-jest.md>) — Resolved
+- [DEVENV-028 — Non-incremental dprint in managed worktrees](<Developer environment upgrades/DEVENV-028-non-incremental-dprint-in-managed-worktrees.md>) — Resolved
+- [DEVENV-029 — Materialized development profile and writable caches](<Developer environment upgrades/DEVENV-029-materialized-development-profile-and-writable-caches.md>) — Resolved
 
 ## External and observational findings
+
+- [DEVENV-030 — Managed-shell command constraints](<Developer environment upgrades/DEVENV-030-managed-shell-command-constraints.md>) — Closed
+- [DEVENV-031 — Intermittent inspection-output anomalies](<Developer environment upgrades/DEVENV-031-intermittent-inspection-output-anomalies.md>) — Candidate
+- [DEVENV-032 — Hosted model and evolving mock-shape observations](<Developer environment upgrades/DEVENV-032-hosted-model-and-evolving-mock-shape-observations.md>) — Closed
+- [DEVENV-033 — Conflicting color-mode warning noise](<Developer environment upgrades/DEVENV-033-conflicting-color-mode-warning-noise.md>) — Candidate
+- [DEVENV-034 — Bun worker-pool test scheduling](<Developer environment upgrades/DEVENV-034-bun-worker-pool-test-scheduling.md>) — Candidate
+- [DEVENV-035 — Performance-contract timeout under the full graph](<Developer environment upgrades/DEVENV-035-performance-contract-timeout-under-the-full-graph.md>) — Resolved
+- [DEVENV-036 — Critical-path verification startup and host-wait concurrency](<Developer environment upgrades/DEVENV-036-critical-path-verification-startup-and-host-wait-concurrency.md>) — In progress
+- [DEVENV-037 — Native Studio host coordination and bounded Hutch phases](<Developer environment upgrades/DEVENV-037-native-studio-host-coordination-and-bounded-hutch-phases.md>) — Resolved
+- [DEVENV-038 — Machine-lane lease age uses mismatched clocks](<Developer environment upgrades/DEVENV-038-machine-lane-lease-age-uses-mismatched-clocks.md>) — Candidate
+- [DEVENV-039 — Native Studio launch resolves the generated app before it is written](<Developer environment upgrades/DEVENV-039-native-studio-launch-resolves-the-generated-app-before-it-is.md>) — Candidate
+- [DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures](<Developer environment upgrades/DEVENV-040-bun-dependency-recovery-conflicts-with-protected-package-fix.md>) — Resolved
+- [DEVENV-041 — Nested gate-runner tests inherit the live machine registry](<Developer environment upgrades/DEVENV-041-nested-gate-runner-tests-inherit-the-live-machine-registry.md>) — Resolved
+- [DEVENV-042 — Studio smoke observes persistence before browser reconciliation](<Developer environment upgrades/DEVENV-042-studio-smoke-observes-persistence-before-browser-reconciliat.md>) — In progress
+- [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
+- [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
+- [DEVENV-045 — Agent shell habits route routine commands through harness review](<Developer environment upgrades/DEVENV-045-agent-shell-habits-route-routine-commands-through-harness-re.md>) — In progress
+- [DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path](<Developer environment upgrades/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — In progress
+- [DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree](<Developer environment upgrades/DEVENV-047-release-bundle-proof-shares-metro-s-cache-with-every-other-w.md>) — Resolved
+- [DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated](<Developer environment upgrades/DEVENV-048-a-fresh-linked-worktree-cannot-launch-studio-until-the-parse.md>) — In progress
+- [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
+- [DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason](<Developer environment upgrades/DEVENV-050-tao-test-under-a-git-ignored-path-says-no-tao-tests-found-wi.md>) — Candidate
+- [DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox](<Developer environment upgrades/DEVENV-051-sips-exits-13-inside-the-claude-code-bash-sandbox.md>) — Candidate
+- [DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository](<Developer environment upgrades/DEVENV-052-bun-tsconfig-override-fails-for-scripts-outside-the-reposito.md>) — Candidate
+- [DEVENV-055 — No repository command compiles a native module](<Developer environment upgrades/DEVENV-055-no-repository-command-compiles-a-native-module.md>) — In progress
+- [DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands](<Developer environment upgrades/DEVENV-053-verifying-a-sibling-worktree-from-an-agent-shell-needs-unsan.md>) — Candidate
+- [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
+- [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
+- [DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink](<Developer environment upgrades/DEVENV-057-git-hash-object-stdin-paths-cannot-hash-a-directory-symlink.md>) — Candidate
+- [DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled](<Developer environment upgrades/DEVENV-058-the-cli-s-bundled-tao-module-directory-is-never-filled.md>) — Candidate
+- [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — Incoming
+- [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Incoming
+- [DEVENV-061 — `bun test` from the repository root loses subprocess output](<Developer environment upgrades/DEVENV-061-bun-test-from-the-repository-root-loses-subprocess-output.md>) — Candidate
+- [DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration](<Developer environment upgrades/DEVENV-062-the-default-codex-profile-cannot-refresh-its-generated-codex.md>) — Candidate
+- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Candidate
+- [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — In progress
+- [DEVENV-065 — The raw-`Error` allowlist is line-precise with no way to re-derive it](<Developer environment upgrades/DEVENV-065-the-raw-error-allowlist-is-line-precise-with-no-way-to-re-de.md>) — Candidate
+- [DEVENV-066 — Browser-harness gestures silently miss an occluded target](<Developer environment upgrades/DEVENV-066-browser-harness-gestures-silently-miss-an-occluded-target.md>) — Mitigated for offset gestures
+- [DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory](<Developer environment upgrades/DEVENV-067-a-failing-deep-equality-assertion-on-ast-nodes-can-exhaust-t.md>) — In progress
+- [DEVENV-068 — A child process cannot execute `ps` inside the Bash sandbox](<Developer environment upgrades/DEVENV-068-a-child-process-cannot-execute-ps-inside-the-bash-sandbox.md>) — Candidate
+- [DEVENV-069 — An in-flight edit to a shared package fails other agents' test runs and names the wrong file](<Developer environment upgrades/DEVENV-069-an-in-flight-edit-to-a-shared-package-fails-other-agents-tes.md>) — Candidate
+- [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Candidate
+- [DEVENV-071 — `rg`'s `-r` is a replacement string, not grep's recursion flag](<Developer environment upgrades/DEVENV-071-rg-s-r-is-a-replacement-string-not-grep-s-recursion-flag.md>) — Candidate
+- [DEVENV-072 — Shared devenv profile makes its coreutils vanish mid-command in every worktree](<Developer environment upgrades/DEVENV-072-shared-devenv-profile-makes-its-coreutils-vanish-mid-command.md>) — Candidate
+- [DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite](<Developer environment upgrades/DEVENV-073-gate-runner-tests-assume-an-idle-machine-so-contention-handl.md>) — Incoming
+- [DEVENV-074 — `./agent fix` cannot format the skills it is told to format](<Developer environment upgrades/DEVENV-074-agent-fix-cannot-format-the-skills-it-is-told-to-format.md>) — Candidate
+- [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
+- [DEVENV-076 — A documentation-only change selects no test suites](<Developer environment upgrades/DEVENV-076-a-documentation-only-change-selects-no-test-suites.md>) — Candidate
+- [DEVENV-077 — A busy machine could admit no lane at all](<Developer environment upgrades/DEVENV-077-a-busy-machine-could-admit-no-lane-at-all.md>) — Incoming
+- [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
+- [DEVENV-079 — A per-test timeout measured in wall time judges the machine, not the test](<Developer environment upgrades/DEVENV-079-a-per-test-timeout-measured-in-wall-time-judges-the-machine.md>) — Resolved
+- [DEVENV-080 — The prepare chain was re-paid on every lane at an unchanged tree](<Developer environment upgrades/DEVENV-080-the-prepare-chain-was-re-paid-on-every-lane-at-an-unchanged.md>) — Resolved
+- [DEVENV-081 — `tao test` discarded its compiled output on every passing run](<Developer environment upgrades/DEVENV-081-tao-test-discarded-its-compiled-output-on-every-passing-run.md>) — Resolved
+- [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
+- [DEVENV-083 — The WordFlower compile was re-paid on every test invocation](<Developer environment upgrades/DEVENV-083-the-wordflower-compile-was-re-paid-on-every-test-invocation.md>) — Resolved
+- [DEVENV-084 — `./agent`'s dependency repair could only ever damage the tree it repaired](<Developer environment upgrades/DEVENV-084-agent-setup-s-sandboxed-install-destroys-a-healthy-depend.md>) — Resolved
+- [DEVENV-085 — Jest crawled the compile cache, so the better the cache worked the slower every run got](<Developer environment upgrades/DEVENV-085-jest-crawled-the-compile-cache-on-every-run.md>) — Resolved
+- [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
+- [DEVENV-087 — A permission pattern matched only one of git's two argument orders](<Developer environment upgrades/DEVENV-087-a-permission-pattern-matched-only-one-of-git-s-two-orders.md>) — Resolved
+- [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — Candidate
+- [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 
 ### DEVENV-030 — Managed-shell command constraints
 
@@ -627,7 +286,8 @@ an entry here may link one when the developer workflow is also affected.
   mutable Hutch project registry backed by copy-on-write clones of the installed immutable store,
   and clear only the current generated project's transient locks after proving its process tree
   stopped.
-- **Also observed:** from a managed shell the canary wrote `.artifacts/tests/studio-canary/canary.json`
+- **Also observed:** from a managed shell the canary wrote an invocation-scoped
+  `.artifacts/tests/studio-canary/invocations/<id>/canary.json`
   with `"status": "blocked"` within seconds, recorded its own pid in `survivingPids`, and was still
   alive 40 minutes later on a surviving `hutch-engine electrobun prepare` child, holding the whole
   `just full-verify` run open. The owned-process-group stop above should close this; re-verify it when
@@ -677,7 +337,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures
 
-- **Status:** Resolved
+- **Status:** Candidate
 - **Area:** Dependency installation
 - **Impact:** A stale Bun link can block every verification command, while the documented clean-install
   recovery cannot remove a dependency tree containing a sandbox-protected fixture file.
@@ -686,11 +346,11 @@ an entry here may link one when the developer workflow is also affected.
   `e2e/fixtures/project_files/.env` with `Operation not permitted` even in the approved elevated command.
 - **Workaround:** Move the stale `node_modules` directory intact to a unique path under `/private/tmp`,
   without reading or deleting its contents, then run `bun install --frozen-lockfile`.
-- **Proposed change:** Implemented by `just repair-deps` and the automatic final fallback in `just deps`.
+- **Proposed change:** Make the dependency workflow repair stale links idempotently, and teach its recovery
+  diagnostic to recommend an atomic move when protected third-party fixture names prevent recursive removal.
 - **Dependencies:** None.
-- **Acceptance:** Eight focused tests cover protected-name whole-tree moves, forced recovery despite a
-  narrow green health probe, failed and interrupted restoration, initial move failure, idempotence,
-  locking, and the full `deps` fallback; the 2026-09-16 changed verification dependency phase was clean.
+- **Acceptance:** A fixture reproducing the protected-path link failure recovers through the documented
+  command without reading protected content, and a second `./agent verify` dependency check is clean.
 - **Source:** 2026-09-04 freehand/main merge verification.
 
 ### DEVENV-041 — Nested gate-runner tests inherit the live machine registry
@@ -716,23 +376,17 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Test reliability
 - **Impact:** The simulated Studio journey blocks otherwise green merge verification at synthetic
   sketch interactions, so it cannot yet serve as reliable merge evidence.
-- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 showed the failures were product
-  defects, not pointer nondeterminism. The board's absolutely positioned toolbar wrapped down over the
-  76-pixel drawing surface, so the first real pointer landed on the Unsnap button; drag-one-in relied on
-  an HTML5 drag that the move gesture's `preventDefault` suppressed, so it could never start; and a
-  catalog or manifest re-render could replace a board mid-gesture. With those fixed the lane passes
-  Draw, four further draws, Snap, and reload from a normal terminal, and stalls at drag-one-in: the
-  release reaches the board and requests the one-rectangle Snap, which the server refuses with
-  `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
-  rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
-  the element under the pointer, the gesture state, host errors, and a screenshot.
+- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 exposed real toolbar, gesture,
+  rerender, interleaved-Snap, editor-ownership, source-identity, geometry, and transaction defects.
+  Those product fixes now have focused coverage, including a real pointer-release drag-one-in target.
+  The lane has not yet supplied the required ten consecutive complete normal-terminal runs, so it
+  remains reliability evidence in progress rather than a green merge gate.
 - **Workaround:** The full-verification graph reports `studio-smoke-simulated-user` as explicitly skipped;
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
-- **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
-  route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
-  keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
-  single-shot rather than retrying requests that may already be live.
+- **Proposed change:** Run the complete journey ten consecutive times from a normal Terminal, retain
+  its hit-tested preconditions and single-shot mutations, investigate any remaining nondeterminism,
+  then remove the quarantine only when that acceptance is green.
 - **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
 - **Acceptance:** `studio-smoke-simulated-user` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
@@ -834,25 +488,24 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path
 
-- **Status:** In progress
+- **Status:** Candidate
 - **Area:** Test performance
-- **Impact:** Before this sweep, complete test wall time was 27.2s and `tao-apps` alone took 27.1s to
-  validate, compile, and run all 30 Tao behavior files in one Jest process.
-- **Evidence:** The 2026-09-16 baseline was 27.2s complete wall and 27.1s for `tao-apps`. Three direct
-  30-file runs after static three-way sharding took 15.03s, 8.87s, and 9.31s (median 9.31s), each with
-  30/30 tests. One uncontended complete lane took 20.686s with `tao-apps` at 14.736s; DEVENV-061 blocked
-  the remaining complete-lane samples. `tao-cli` became the 20.583s critical path (DEVENV-062).
+- **Impact:** `_test` wall time (29.5s) is set by `tao-apps`, a single Jest process that runs all 26 Tao
+  behavior test files after a serial validate and compile phase.
+- **Evidence:** 2026-09-04 verify lane: `tao-apps` 21.7s (Jest phase 15.1s, validate with 8 workers plus
+  compile about 6s); next longest suites `runtime-toolchain` 13.9s, `runtime-jest` 12.6s, `studio` 12.2s;
+  suite sum 104s on 18 CPUs.
 - **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
-- **Proposed change:** Implemented as three static Jest shard entries sharing one compiled manifest;
-  complete the three-run lane measurement after generated-tree publication is reliable.
-- **Dependencies:** DEVENV-061 blocks the remaining complete-lane samples; DEVENV-034 remains separate.
-- **Acceptance:** From the 27.1-second baseline, three uncontended runs preserve all 30 Tao test files,
-  show median `tao-apps` below 20 seconds, and improve complete test wall time by at least 15%.
+- **Proposed change:** Shard the Tao behavior tests across two or three Jest processes, or cache compiled
+  apps between runs so only changed apps recompile.
+- **Dependencies:** DEVENV-034 (Bun worker pool) is a separate question; revisit the `tao-apps` `cost: 8`
+  reservation after sharding.
+- **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
 - **Source:** 2026-09-04 development-speed review.
 
 ### DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree
 
-- **Status:** In progress
+- **Status:** Candidate
 - **Area:** Full verification
 - **Impact:** `_ship-bundle-proof` can fail a green branch's landing run when another worktree bundles
   at the same moment, because both Expo exports write the same Metro cache under the system temp dir.
@@ -862,16 +515,16 @@ an entry here may link one when the developer workflow is also affected.
   every other full-verify gate passed. DEVENV-013 moves Expo's user cache into `.artifacts/cache/expo`
   but not Metro's transformer cache, which `--clear` deletes from under a concurrent bundler.
 - **Workaround:** Re-run the landing once the other lane has finished.
-- **Proposed change:** Disposable copied hosts now install a Metro `FileStore` under their own
-  `.metro-cache` beside `.metro-file-map`; the stable runtime-toolchain keeps Metro's shared defaults.
-- **Dependencies:** DEVENV-061 currently prevents each proof's second `--clear` export from removing its
-  own isolated cache in the managed host.
+- **Proposed change:** Give each export a worktree-local Metro cache root (`cacheStores` in the host's
+  Metro config, or `TMPDIR` under `.artifacts/tmp` for the export child) so `--clear` only touches the
+  run's own directory.
+- **Dependencies:** DEVENV-013 owns the Expo cache move; this is the Metro half.
 - **Acceptance:** Two concurrent `just ship-bundle-proof` runs in different worktrees both pass.
 - **Source:** 2026-09-04 development-speed landing run.
 
 ### DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated
 
-- **Status:** In progress
+- **Status:** Candidate
 - **Area:** Worktree setup
 - **Impact:** The one setup entry leaves a new worktree unable to run the product; the first Studio launch
   fails with a module error that reads like a broken checkout rather than a missing step.
@@ -881,17 +534,16 @@ an entry here may link one when the developer workflow is also affected.
   `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
   lives under `~/.local/share/direnv`.
 - **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
-- **Proposed change:** Implemented by ordering setup as `deps`, `_parser-gen`, `_agent-config`.
-- **Dependencies:** Final ready-session acceptance is host-blocked: the disposable 2026-09-16 worktree
-  reached Studio and Metro without a parser error, then Watchman could not create its LaunchAgent and
-  Metro exhausted file watchers.
+- **Proposed change:** Make `setup` depend on `_parser-gen`, or have `./dev studio` generate the parser
+  when the generated tree is missing.
+- **Dependencies:** None.
 - **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
   `./dev studio Apps/HNReader` alone.
 - **Source:** 2026-09-04 Studio visual design work.
 
 ### DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated
 
-- **Status:** Resolved
+- **Status:** Candidate
 - **Area:** Worktree setup
 - **Impact:** `./agent setup` is the documented one setup entry, yet the CLI it prepares fails on first
   use, so an agent's first `./tao` command in a new worktree dies with a module error unrelated to its
@@ -905,11 +557,11 @@ an entry here may link one when the developer workflow is also affected.
   `TAO_DEBUG_ERRORS=1` revealed `undefined is not an object (evaluating 'AST.EntityCommandPolicy.$type')`
   at validator module load, and `just _parser-gen` fixed it.
 - **Workaround:** Run `just _parser-gen`, or any lane that includes it, before the first `./tao` command.
-- **Proposed change:** Implemented by content-stamped parser generation in the shared setup recipe.
+- **Proposed change:** Have `setup` run `_parser-gen` when `packages/parser/parser-src/_gen_tao-parser`
+  is missing or older than the grammar, or have `./tao` generate on demand with a one-line notice.
 - **Dependencies:** None.
-- **Acceptance:** A fresh detached worktree on 2026-09-16 ran `./agent setup` from no generated parser,
-  generated it during setup, and then completed `./tao check Apps/HNReader` without a manual generation
-  command (13 existing release warnings, zero check failures).
+- **Acceptance:** In a fresh linked worktree, `./agent setup && ./tao check Apps/HNReader` succeeds
+  without a manual generation step.
 - **Source:** 2026-09-04 `tao create` work.
 
 ### DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
@@ -965,7 +617,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-055 — No repository command compiles a native module
 
-- **Status:** In progress
+- **Status:** Candidate
 - **Area:** Native builds
 - **Impact:** The repository now carries native code (`packages/icloud-native`, an Expo module in
   Swift), and nothing short of a full `expo run:ios` proves it compiles. An agent has to hand-assemble
@@ -983,11 +635,11 @@ an entry here may link one when the developer workflow is also affected.
   (`ios/`), never at its root.
 - **Workaround:** The three commands above, with `pod install` in a subshell and `xcodebuild`
   unsandboxed.
-- **Proposed change:** `just native-module-check` now prepares an isolated host, bounds prebuild/pods/build
-  phases, discovers every direct package podspec, validates generated targets, and compiles them with
-  run-local products; failed roots are retained and successful roots removed.
-- **Dependencies:** The current managed command host blocked CocoaPods' Maven fetch after prebuild;
-  regenerate the committed Codex permission adapter and run the command from a true unsandboxed host.
+- **Proposed change:** A `just native-module-check` (or `./agent native-check`) recipe that prebuilds
+  the toolchain host, installs pods from the right directory, and compiles every workspace pod target
+  for the simulator with build products under `.artifacts/`; list it beside `just claude-native` as the
+  sanctioned unsandboxed native step.
+- **Dependencies:** None.
 - **Acceptance:** One documented command compiles `TaoICloudNative` for the simulator from a fresh
   worktree and fails loudly on a Swift error.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
@@ -1017,7 +669,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Package tests
 - **Impact:** Under the dev suite's `--concurrent` flag, a test that stops a `Bun.serve` with
   `stop(true)` while another test's same-process `WebSocket` client is mid-dial to a different
@@ -1026,16 +678,17 @@ an entry here may link one when the developer workflow is also affected.
   several server tests in one file.
 - **Evidence:** `bun test --concurrent packages/dev/dev-tests/dev-data.test.ts` on bun 1.3.13 hung the
   sync and conformance tests 12 of 12 runs until the client bounded its dials; a socket trace showed
-  the dial coinciding with another test's `close 1006 Connection ended`. Serial runs and a scratch
-  script with the same steps never reproduced it.
-- **Workaround:** Bound every in-process dial and redial when it neither opens nor fails, as the
-  `Dev` datasource client now does; or keep tests that stop a server with a live client in files
-  that do not also dial other servers.
-- **Proposed change:** A shared test helper for `Bun.serve`-backed tests that stops servers only
-  after their own clients closed, or a note in the test-quality skill naming this hazard.
+  the dial coinciding with another test's `close 1006 Connection ended`. The server-backed cases now
+  acquire a file-local serial turn through their completed teardown while retaining concurrency
+  inside the two-authority and independent-process assertions; ten consecutive ordinary
+  `--concurrent` runs passed, including an eight-cycle server/WebSocket ownership stress case.
+- **Workaround:** None required after the fix. Server-backed tests in this file register through the
+  local ownership helper so one case's forced stop cannot overlap another case's dial.
+- **Proposed change:** Implemented with an explicit serial registration queue around only the
+  in-process server/WebSocket cases; bootstrap-only cases remain ordinarily concurrent.
 - **Dependencies:** None.
-- **Acceptance:** A test file with several servers and clients passes under `--concurrent` without
-  each client needing its own dial bound.
+- **Acceptance:** Met: the normal `--concurrent` file command passes repeatedly without a test-host
+  dial timeout, while the independent-process CAS/auth coverage remains intact.
 - **Source:** 2026-09-05 Dev datasource implementation.
 
 ### DEVENV-056 — Visual review can lose its renderer context during preview reload
@@ -1097,7 +750,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-059 — Xcode 27 runtime installation can strand Apple device services
 
-- **Status:** In progress
+- **Status:** Incoming
 - **Area:** iOS simulator workflow
 - **Impact:** After installing the iOS 27 simulator runtime, Tao cannot discover, boot, install, or
   launch any simulator even though Xcode reports the iOS 27 SDK as installed.
@@ -1110,64 +763,582 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Support Device Hub anywhere Tao presents a simulator, keep the workspace on
   an Expo CLI with Xcode 27 support, and teach `./agent doctor` to distinguish an absent runtime
   from failed CoreSimulator/CoreDevice services with restart guidance.
-- **Dependencies:** Device Hub support and focused diagnostics are on `main`; the current host still
-  reports CoreSimulatorService unavailable, so restart/open-Device-Hub/live-HNReader proof remains.
+- **Dependencies:** Owned by unmerged branch `feat/macos-27-device-hub`; the host restart remains a
+  manual recovery step.
 - **Acceptance:** On macOS/Xcode 27, `tao dev` can present Device Hub and open HNReader on an iOS 27
   simulator; `./agent doctor` names a stuck Apple service and its recovery when discovery fails.
 - **Source:** 2026-09-15 HNReader simulator recovery.
 
 ### DEVENV-060 — One denied host probe crashes the capabilities report
 
-- **Status:** Resolved
+- **Status:** Incoming
 - **Area:** Agent diagnostics
 - **Impact:** `./agent capabilities` can crash before reporting CoreSimulator because a different
   probe is denied, hiding the distinction the command exists to make.
-- **Evidence:** On 2026-09-16 the live managed command reported the denied `ps` probe, continued through
-  process, Watchman, Nix, CoreSimulator, and Docker probes, and exited successfully; focused spawn-failure
-  coverage also passed.
-- **Workaround:** None.
-- **Proposed change:** Preserve per-probe failure isolation and authorized command spelling.
-- **Dependencies:** None.
+- **Evidence:** In the managed shell, the command stopped at `posix_spawn '/bin/ps': EPERM` even
+  though the authorized command shape is `ps -o pid=,ppid=,lstart=,command= -p <pid>`.
+- **Workaround:** Run the needed capability command directly and inspect its output.
+- **Proposed change:** Use the authorized `ps` executable spelling and classify a thrown probe as
+  denied or unavailable without abandoning the remaining probes.
+- **Dependencies:** Owned by unmerged branch `feat/macos-27-device-hub`.
 - **Acceptance:** A simulated spawn failure appears as one failed capability while every other
   probe is still reported; `./agent capabilities` completes in the managed shell.
 - **Source:** 2026-09-15 HNReader simulator recovery.
 
-### DEVENV-061 — Managed cleanup cannot replace generated trees reliably
+### DEVENV-061 — `bun test` from the repository root loses subprocess output
 
 - **Status:** Candidate
-- **Area:** Generated artifacts and managed filesystems
-- **Impact:** Parser generation, IDE generation, runtime tests, Studio scenarios, Metro cache clearing,
-  and final artifact cleanup can fail after otherwise-correct behavior because recursive removal of a
-  generated directory returns `EPERM` or `EFAULT`; the next command may then see an empty partial tree.
-- **Evidence:** On 2026-09-16 `_parser-gen` failed removing
-  `packages/parser/parser-src/_gen_tao-parser`, changed/full test lanes failed removing generated runtime
-  and Studio roots, and two isolated bundle proofs each completed their first export before their own
-  `.metro-cache/00` clear failed. Generating the parser under `/private/tmp` and copying exact outputs
-  back restored `parser generate: up to date`.
-- **Workaround:** For the parser, generate in a unique `/private/tmp/tao-parser-recovery.*` root, copy
-  only declared parser/TextMate outputs back, and verify the content stamp. For other generators, retain
-  focused evidence and rerun from an ordinary host rather than force-cleaning another worktree.
-- **Proposed change:** Design one cross-generator atomic-publication lifecycle: generate into a unique
-  sibling or host-safe staging root, validate it, atomically exchange or publish exact outputs, and
-  retire old trees without exposing an empty destination or making cleanup part of behavioral success.
-- **Dependencies:** Separate project spanning parser, IDE, runtime, Studio, and disposable Metro hosts.
-- **Acceptance:** Managed repeated and concurrent generation never exposes an absent/partial output;
-  interruption restores the last good tree; cleanup failures retain a named stale root without failing
-  already-completed product behavior; changed, sandbox-full, and host-full lanes finish cleanly.
-- **Source:** 2026-09-16 developer-environment impact sweep.
+- **Area:** Test execution
+- **Impact:** An agent debugging with a direct `bun test <path>` from the repository root sees tests
+  that assert on captured command output fail, while the same tests pass through the repository's own
+  lanes. The failures look like a red tree and invite a hunt for a regression that is not there.
+- **Evidence:** 2026-09-17, `bun test packages/dev/dev-tests` from the root reported 610 pass / 41
+  fail; `just verify --changed` ran the same suite through `./dev test` in the same checkout and
+  reported 651 pass / 0 fail, as did `sh -c 'cd packages/dev && bun test dev-tests/green-tree.test.ts'`
+  and `./dev test-file`. A probe inside a root-cwd `bun test` shows `spawn('git', …)` with a piped
+  stdout delivering no `data` event before `close`, so `CLI.run` returns an empty `stdout`; the same
+  probe under `bun run` captures normally. Sandboxed and unsandboxed runs behave identically, and no
+  `bunfig.toml` or `.env` file is involved. The claim is narrower than first written: it holds for tests
+  that assert on captured subprocess output, not for a root-cwd `bun test` generally. On 2026-09-17
+  `bun test packages/dev/dev-tests/merge-with-main.test.ts` from the root gave complete output including
+  subprocess stack traces, and was the only way to see a failure while `./dev` itself was mid-edit and
+  broken; `bun test --cwd packages/<name> <relative-path>` was reliable throughout.
+- **Workaround:** Prefer `./dev test-file <path>` or `just test <pattern>`. When those are unavailable —
+  a broken `./dev`, or a shared module mid-edit (DEVENV-068) — `bun test --cwd packages/<name>
+  <relative-test-path>` resolves `@shared/test` correctly and reports the real stack, and a root-cwd
+  `bun test <file>` is usable for a file that does not assert on captured subprocess output. Do not
+  trust a root-cwd `bun test` for the suites that do.
+- **Proposed change:** Find what the root working directory changes about Bun's test runtime, then
+  either fix the capture path in `Platform.spawn` or make a root-cwd `bun test` refuse and name the
+  supported entry points.
+- **Dependencies:** None.
+- **Acceptance:** `bun test packages/dev/dev-tests` from the repository root agrees with `./dev test`,
+  or says why it cannot and points at the command that does; the documented fallbacks stay usable when
+  `./dev` is broken.
+- **Source:** 2026-09-17 verification deduplication; 2026-09-17 branch-wide agent findings.
 
-### DEVENV-062 — Tao CLI suite becomes the complete-test critical path
+### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
 
 - **Status:** Candidate
-- **Area:** Test performance
-- **Impact:** After Tao behavior sharding, `tao-apps` no longer leads the lane; further work on it would
-  not reduce complete-test wall time while `tao-cli` occupies the critical path.
-- **Evidence:** The first uncontended post-sharding complete lane on 2026-09-16 measured `tao-cli` at
-  20.583s, Studio at 16.419s, and `tao-apps` at 14.736s; total lane wall was 20.686s.
-- **Workaround:** Use changed/exact-file selection during iteration.
-- **Proposed change:** Profile the Tao CLI suite's slowest files and child-process work, then reduce or
-  safely parallelize the dominant cost without changing selection, ledger, or failure semantics.
-- **Dependencies:** DEVENV-061 must permit repeatable complete-lane measurements before optimization.
-- **Acceptance:** Three uncontended complete runs identify and reduce the same dominant Tao CLI work;
-  median complete-test wall improves without losing any CLI tests or changing retry/reporting behavior.
-- **Source:** 2026-09-16 DEVENV-046 acceptance measurement.
+- **Area:** Agent configuration
+- **Impact:** Canonical `.rulesync` changes can leave `.codex/config.toml` or
+  `.codex/rules/tao.rules` stale even though `./agent setup` and `just _agent-config` otherwise
+  succeed, so generated-parity tests fail after the documented regeneration command.
+- **Evidence:** During the 2026-09-16 verification-foundation work, both commands reported the Codex
+  outputs as not writable under the default Codex workspace profile; an escalated retry retained the
+  same protection boundary.
+- **Workaround:** Regenerate from a host/profile allowed to update the generated `.codex` outputs,
+  then run `codex-config-generation.test.ts` to prove exact parity.
+- **Proposed change:** Provide a repository-owned regeneration path that can replace the generated
+  Codex files without granting general writes to mutable harness configuration, or document the
+  required host/profile transition in the canonical setup workflow.
+- **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/profiles.jsonc`, and
+  `packages/dev/dev-src/agent-config/CodexConfigGenerator.ts`.
+- **Acceptance:** Starting from deliberately stale generated Codex files, the documented setup command
+  refreshes them and the exact-parity test passes in the default supported Codex workflow.
+- **Source:** 2026-09-16 September remediation Wave 1.
+
+### DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells
+
+- **Status:** Candidate
+- **Area:** Studio preview host
+- **Impact:** Studio can reach Expo successfully and then fail before browser dispatch with
+  `EMFILE: too many open files, watch`, preventing the browser and native acceptance lanes from
+  distinguishing product behavior from host watcher exhaustion.
+- **Evidence:** During September-remediation acceptance, the task shell omitted the linked
+  `.devenv/profile/bin` from `PATH`, so Metro could not find Watchman and fell back to Node watching.
+  The shell reported a high `ulimit -n`, but `launchctl limit maxfiles` retained a 256 soft limit.
+  The pinned `.devenv/profile/bin/watchman --version` succeeded as `2026.01.19.00`.
+- **Workaround:** Run Studio acceptance from a shell that has loaded the materialized devenv profile;
+  in a managed task shell, prepend this checkout's `.devenv/profile/bin` once before launching the
+  lane.
+- **Proposed change:** Make the Studio launch preflight resolve the pinned Watchman executable or fail
+  early with the exact profile remediation before Metro falls back to the launchd-limited watcher.
+- **Dependencies:** DEVENV-015 remains the later Chrome/LaunchServices boundary once Metro starts.
+- **Acceptance:** A managed-shell Studio launch either uses the pinned Watchman and reaches browser
+  dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node
+  watcher's `EMFILE` fallback.
+- **Source:** 2026-09-16 September remediation acceptance.
+
+### DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance
+
+- **Status:** In progress
+- **Area:** Generated artifacts
+- **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
+  parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
+  resulting `EPERM` or `EFAULT` turns cleanup into broad, unrelated test failures.
+- **Evidence:** During the 2026-09-16 verification-foundation work, `verify --changed` and
+  `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
+  scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
+  `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
+  attempt had already emptied its live output before the same cleanup denial surfaced. A focused
+  probe then established the narrower host rule: file unlink and replacement work inside the
+  checkout, while directory rename and removal fail; host-temporary directories remain removable.
+  The same boundary left an old `.studio-device-trust.lock` directory undeletable, while a
+  monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
+  2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
+  a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
+  provenance alone.
+- **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
+  at the same source revision and verify that its generator reports `up to date`. Focused tests that
+  do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
+  and test roots in the host temporary directory; publish persistent generated output with
+  transactional file replacement instead of checkout-directory replacement.
+- **Proposed change:** The September remediation branch moves disposable runtime-test roots to host
+  temp and makes parser and IDE generated-file publication rollback-capable without renaming or
+  removing checkout directories. The Studio preview runtime is the exception and stays under
+  `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
+  root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
+  failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
+  task namespace prevents directory lifecycle operations.
+- **Dependencies:** None.
+- **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
+  and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
+  intact and reports one actionable failure.
+- **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+
+### DEVENV-065 — The raw-`Error` allowlist is line-precise with no way to re-derive it
+
+- **Status:** Candidate
+- **Area:** Repository lint
+- **Impact:** Every edit to a file that holds allowlisted raw `Error` constructions moves the
+  remaining entries, so `_repo-lint` fails with two paired errors per shifted line — one demanding a
+  new entry, one demanding the old entry be dropped. The failure has nothing to do with the change
+  under review, and an agent that edits such a file repeatedly pays it once per edit.
+- **Evidence:** During the September follow-up branch, four separate `verify --complete` runs failed
+  only on `RAW_ERROR_ALLOWLIST` drift after edits to `packages/dev/dev-src/studio/StudioCdp.ts` and
+  `packages/dev/studio-smoke/studio-simulated-user.test.ts`; one run reported forty paired errors.
+  Re-deriving by hand is error-prone because removing a file's entries first loses the grouping
+  comment that says which block a new entry belongs to.
+- **Workaround:** Re-derive the list from the lint output rather than editing it by hand: read every
+  `constructs` line as an addition and every `no longer constructs` line as a removal, decide each
+  new entry's comment group from the list's contents _before_ applying the removals, and rewrite the
+  array sorted by path then line.
+- **Proposed change:** Give `repo-lint` a `--fix` that applies exactly that re-derivation, or anchor
+  each exemption to something stable — the enclosing function's name, or a trailing pragma comment
+  on the construction itself — so ordinary edits above it do not invalidate it.
+- **Dependencies:** None.
+- **Acceptance:** Editing a file with allowlisted constructions, without adding or removing any,
+  leaves `_repo-lint` green; adding one has a single supported command that records it.
+- **Source:** 2026-09-17 September remediation follow-up.
+
+### DEVENV-066 — Browser-harness gestures silently miss an occluded target
+
+- **Status:** Mitigated for offset gestures
+- **Area:** Studio browser harness
+- **Impact:** `StudioCdp` dispatches real mouse input at a computed viewport point. When something
+  else is painted there — a floating panel, a sticky gutter, a divider's overhanging grab area — the
+  gesture reaches that instead, the step quietly does nothing, and the run fails many steps later at
+  an unrelated `waitFor`. Four separate journey failures diagnosed on the September follow-up branch
+  were this, each costing a full browser round trip to localise.
+- **Evidence:** The simulated-user journey's left-divider drag landed on the floating agent panel;
+  its folded-line click landed first on `.studio-divider-right`'s `::after` grab area and then on
+  `.cm-gutterElement`; the keyboard journey's pending-surface click landed on nothing because the
+  whole overlay inherited `pointer-events: none`. Every one presented as a timeout elsewhere.
+- **Workaround:** None needed for offset gestures: `clickAtOffset` and `dragBy(..., { offset })` now
+  scroll `nearest` rather than `center` and refuse a point that does not hit the target, naming what
+  covers it.
+- **Proposed change:** Extend the same hit check to centre-based `click`, `drag` and `wheel`. It was
+  left off there only because those have many more call sites than could be re-proved in one branch.
+- **Dependencies:** None.
+- **Acceptance:** Any harness gesture whose point lands outside its target fails immediately, naming
+  the covering element, instead of being absorbed by the page.
+- **Source:** 2026-09-17 September remediation follow-up.
+
+### DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory
+
+- **Status:** In progress
+- **Area:** Test execution
+- **Impact:** One failing `toEqual` whose operands are Langium AST nodes allocates without bound until
+  macOS runs out of application memory. Nothing bounds it: no repository test node carries a timeout, an
+  interrupt on the wrapper command leaves the allocating child alive, and the sandbox where this happens
+  denies the process inspection needed to find that child.
+- **Evidence:** On 2026-09-16 macOS reported `Your system has run out of application memory` on a 128 GB
+  machine; system-wide memory pressure ran 18:00:03–18:44:25 local and macOS force-quit 675 idle
+  background services. macOS skipped writing its own jetsam reports (`File limit set to 0`), so no OS
+  report names the culprit. The culprit was `bun test packages/parser/parser-tests/design.test.ts`,
+  started through `./agent test-file` by a Codex agent lane in `~/.codex/worktrees/e91a/tao-lang-2`.
+  Three runs hung the same way (17:55:57, 18:07:48, 18:25:54); two produced no log at all, their
+  directories under `.artifacts/logs/dev-test/`
+  (`2026-09-16T21-55-57-025Z-93582-b8a2aab4` and `2026-09-16T22-07-48-549Z-11273-444f813e`) holding only
+  an empty `test-results` directory. The trigger was a failing deep-equality assertion (`toEqual`) whose
+  operands were Langium AST nodes; the lane later replaced those assertions with `toHaveLength`/`toBe`,
+  which fixed the tests but not the processes already running. Reproduced locally on bun 1.3.13: a
+  failing `expect([nodeA]).toEqual([nodeB])` on two parsed design declarations went from 185 MB to 4.1 GB
+  in two seconds (killed at a 3 GB cap), and a stray instance of the same probe reached 12.4 GB in
+  fifteen seconds before it was killed. Upstream this is bun issue #34178 (`Runaway native recursion …
+  allocates unboundedly until the machine dies`, 210 GB in that report); its fix, bun PR #34179, adds a
+  shared-reference budget of 1 MiB per side in assertion diffs and 64 MiB in snapshots, and was still
+  open and unreleased as of 2026-09-12, so there is no bun version to upgrade to. Per that PR the
+  formatter prints `[Circular]` only for true cycles, so a value reachable by several paths is printed
+  once per path and expands exponentially; Langium nodes are exactly that shape (`$container`,
+  `$document`, `$cstNode`). bun #21277 records that a synchronous runaway is not interrupted by
+  `--timeout`, so a bun-level per-test timeout cannot bound this and the bound has to be enforced by the
+  parent process; bun PR #34884 records the same formatter overflowing on deeply nested values. The same
+  formatter backs `console.log`, so this can also occur outside tests when something prints an AST node.
+  Three repository-side reasons it ran 45 minutes instead of two:
+  `packages/dev/dev-src/repository-tests/WorkGraph.ts` supports a per-node timeout (`timeoutMs`) but only
+  the ship bundle proof and `studio-canary` set it in `GateCatalog.ts`, so ordinary test nodes had no
+  bound; `CLI.start` in `packages/shared/shared-src/CLI.ts` signalled only the direct child, so an
+  interrupt to the `./agent test-file` wrapper left the `bun test` child running; and the leftovers could
+  not be found because the Codex sandbox denies process inspection
+  (`zsh:1: operation not permitted: ps`). Nothing in the logs shows what finally ended it at 18:44.
+- **Workaround:** Do not assert deep equality on parsed Langium nodes; assert named fields with
+  `toHaveLength`/`toBe`. Stop a surviving `bun test` child directly from a shell that can inspect
+  processes, because interrupting the wrapper command does not.
+- **Proposed change:** Implemented on `feat/one-verification-graph`, pending that branch landing.
+  `CLI.start`'s teardown stops a child's whole tracked descendant tree deepest-first, filtered by OS
+  process-start identity so a reused PID cannot be signalled, escalating SIGTERM to SIGKILL after a
+  grace period; it is selected by a per-call `processPolicy` of `test`, `tool` or `server`, where
+  `server` signals the direct child only and `resolveProcessBounds` refuses a bound on any policy but
+  `test` rather than dropping it. No policy changes spawn detachment: an earlier version detached by
+  default, which would have stopped the terminal's Ctrl-C reaching `./agent` lanes, and that was
+  rejected as worse than the incident. Test nodes carry a parent-enforced wall-clock bound and an
+  idle-output bound, derived in `packages/dev/dev-src/repository-tests/TestNodes.ts` from each node's
+  recorded duration against a floor (and, for the wall bound, a ceiling) rather than a fixed five
+  minutes; the idle bound is the one that catches this class, because the runaway allocates without
+  printing and bun #21277 means `bun test --timeout` cannot interrupt it. `@shared/test`'s `Expect`
+  refuses `toEqual`, `toStrictEqual`, `toMatchObject`, `toContainEqual` and the snapshot matchers on a
+  Langium-shaped value, through `.not`, `.resolves` and `.rejects` too, with one named escape hatch
+  (`Expect.Unguarded`); the existing repo-lint rule requiring test files to import `@shared/test`
+  rather than `bun:test` backstops it, and the six assertions in
+  `packages/parser/parser-tests/design.test.ts` that triggered the incident were rewritten to
+  `toHaveLength` plus `toBe` on identity. Explicitly not adopted: a per-process RSS cap — macOS does
+  not enforce `ulimit -v`/`-d`, per-pid RSS needs `ps`, and `ps` is denied in exactly the sandbox where
+  this happened (DEVENV-068).
+- **Dependencies:** bun PR #34179 is unreleased, so no upgrade removes the underlying allocation.
+  DEVENV-016, DEVENV-030 and DEVENV-068 own host process visibility and cleanup constraints.
+- **Acceptance:** A test node that allocates without bound is stopped by its parent within a recorded
+  bound and its whole process group ends, including after an interrupt; a deep-equality assertion on a
+  Langium-shaped value fails immediately with a named remedy; server, Metro, simulator, and Studio
+  processes are unaffected by the test-shaped stop policy.
+- **Also seen:** 2026-09-17, on a machine running ten to fifteen concurrent lanes with the load
+  average peaking at 33.6 on 18 CPUs, one `./agent test-file` run on
+  `packages/dev/dev-tests/merge-with-main.test.ts` left the same signature — a log directory holding
+  nothing but an empty `test-results/`, with no `dev.log` and no `summary.json` — and a retry of the
+  same file passed cleanly. That file has no deep-equality assertion, so heavy load alone appears
+  able to end a lane before it opens its log. Whatever the cause, the missing evidence is the part an
+  agent hits first: the lane's own instructions say to read `summary.json` before diagnosing a red
+  lane, and there is nothing to read, which makes "the machine killed the run" indistinguishable from
+  "it never started". Writing the log and a provisional summary before the first child starts would
+  settle that independently of the allocation fix.
+- **Source:** 2026-09-16 runaway-process investigation; corroborated 2026-09-17 by the
+  merge-finalization performance work.
+
+### DEVENV-068 — A child process cannot execute `ps` inside the Bash sandbox
+
+- **Status:** Candidate
+- **Area:** Sandbox
+- **Impact:** Repository code that lists processes through a subprocess sees nothing in a sandboxed lane,
+  so a lane cannot find a leftover process it needs to stop, and the code path that would do it cannot
+  be exercised there. This was one of the three causes in DEVENV-067.
+- **Evidence:** `Platform.spawnSync('ps', { args: ['-axo', 'pid=,ppid=,lstart=,command='] })` returns
+  `status: undefined` with `error: EPERM: operation not permitted, posix_spawn 'ps'`, and the same for
+  `/bin/ps`, while the identical `ps` invocation typed into the sandboxed shell succeeds: the Seatbelt
+  policy denies the exec to the child, not the shape of the command. `AGENTS.md` already blesses that
+  exact fixed `ps` shape for an agent to run directly. Consequently `processTable()` in
+  `packages/shared/shared-src/ProcessTree.ts` returns an empty list in a sandboxed lane, which makes the
+  non-Darwin branch of `descendantProcesses` unusable and untestable there; on Darwin the libproc path
+  (`/usr/lib/libproc.dylib` through `bun:ffi`) supplies both child PIDs and process-start identity,
+  which is the stronger reason it is primary.
+- **Workaround:** Rely on the Darwin libproc path, and run a process-listing probe directly in the shell
+  rather than through repository code.
+- **Proposed change:** Either allow `/bin/ps` for child processes in `.rulesync/permissions.jsonc`'s
+  sandbox policy, or document `processTable` as a non-Darwin-only path so no lane depends on it here.
+- **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
+  the adjacent host process-visibility constraints.
+- **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
+  tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
+- **Source:** 2026-09-17 process-teardown implementation.
+
+### DEVENV-069 — An in-flight edit to a shared package fails other agents' test runs and names the wrong file
+
+- **Status:** Candidate
+- **Area:** Concurrent worktrees
+- **Impact:** While several workstreams share one checkout, a momentarily half-applied edit in a shared
+  package fails whatever suite another agent is running, reporting a bare `ReferenceError` from the
+  broken module with nothing to say the module is not the one under test. Two agents each spent time
+  debugging their own unrelated code.
+- **Evidence:** Half-applied edits in `packages/shared/shared-src/CLI.ts` and in
+  `packages/shared/shared-src/testing/Test.ts` each produced a bare `ReferenceError` naming a symbol in
+  that file, attributed to the suite being run. One agent saw
+  `ReferenceError: createSuiteState is not defined` pointing at
+  `packages/dev/dev-src/repository-tests/TestRunner.ts` while running a `packages/shared` test; the same
+  mid-migration state is still visible in this checkout, where `TestRunner.createSuiteState` is called by
+  `packages/dev/dev-tests/test-runner.test.ts` and defined nowhere.
+- **Workaround:** `bun test --cwd packages/<name> <relative-test-path>` resolves `@shared/test` correctly
+  and shows the real stack; otherwise wait for the shared module to load again, for example
+  `until bun test <file> 2>&1 | grep -q 'expect() calls'; do sleep 5; done`.
+- **Proposed change:** Have the test runner say when a failure came from a module outside the requested
+  suite — that a shared module failed to load and a worktree-mate may be mid-edit — and record the
+  `--cwd` idiom where agents will find it. Expect this routinely now that parallel workstreams share a
+  checkout.
+- **Dependencies:** DEVENV-061 owns the root-cwd `bun test` caveat that constrains the fallback.
+- **Acceptance:** A deliberately broken shared module produces a failure that names the module that
+  failed to load and distinguishes it from the suite under test.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-070 — This ledger no longer fits one agent read
+
+- **Status:** Candidate
+- **Area:** Repository documentation
+- **Impact:** The entry rules require searching this document by ID before adding an entry, but at about
+  1,240 lines and roughly 31k tokens it exceeds an agent harness's per-read limit, so every task that
+  touches it pays two paged reads and that context.
+- **Evidence:** A 2026-09-17 read of this file was truncated at its per-read cap and had to be continued
+  by offset; the file is the largest document under `Docs/Roadmap/`.
+- **Workaround:** Read it in pages, or grep for the one relevant ID and read the highest heading to find
+  the next free number.
+- **Proposed change:** Add an ID-to-title index at the top, or move `Resolved` and `Closed` entries into a
+  companion file, so an agent can find the next free ID and the one relevant entry without paging the
+  whole backlog.
+- **Dependencies:** None; the entry rules and section headings are part of the same change.
+- **Acceptance:** An agent can determine the next free ID and read any single entry without exceeding one
+  read.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-071 — `rg`'s `-r` is a replacement string, not grep's recursion flag
+
+- **Status:** Candidate
+- **Area:** Agent tooling
+- **Impact:** `rg -rn <pattern> <path>` prints every match with the matched text replaced by the literal
+  `n`, so the output reads as genuine source and can be quoted into a document or a review as fact.
+- **Evidence:** `rg -rn TAO_STUDIO_CHROME_PATH packages/` printed lines such as
+  `Platform.runtimeProcess.env['n']`, because `-r` consumed `n` as the replacement string rather than
+  combining with `-n` as `grep -rn` does.
+- **Workaround:** `rg` recurses by default; pass no `-r`, and use `-n` alone for line numbers.
+- **Proposed change:** One clause in the `AGENTS.md` search bullet noting that `rg` recurses by default
+  and that `-r` means replace.
+- **Dependencies:** None.
+- **Acceptance:** The search guidance names the `-r` difference where it tells agents to prefer `rg` over
+  `grep -r`.
+- **Source:** 2026-09-17 branch-wide agent findings.
+
+### DEVENV-072 — Shared devenv profile makes its coreutils vanish mid-command in every worktree
+
+- **Status:** Candidate
+- **Area:** Worktrees and shell environment
+- **Impact:** A tool shell resolves `dirname`, `basename`, and the other profile-provided coreutils
+  through `.devenv/profile`, which every linked worktree symlinks to the primary checkout's single
+  profile. While another worktree or the primary checkout re-resolves that profile, those binaries
+  stop resolving everywhere at once. In a shell pipeline the failure is per-invocation
+  `command not found` rather than a nonzero exit, so the surrounding loop keeps running and reports
+  a confidently wrong result instead of failing.
+- **Evidence:** On 2026-09-17, with `./agent verify --changed` running in this worktree, a
+  `while read` loop checking bridge paths emitted `(eval):2: command not found: dirname` once per
+  iteration and reported all 160 repository `from` bridges as missing. `sed` and `awk`, which
+  resolve from `/usr/bin`, were unaffected throughout. Re-running the identical pipeline after the
+  lane finished resolved `dirname` from
+  `.devenv/profile/bin/dirname` and reported 1 missing of 160. `ls -la .devenv/` shows
+  `profile -> /Users/ro/code/tao-lang-2/.devenv/profile`, so the profile is shared mutable state
+  rather than per-worktree.
+- **Workaround:** Do not build repository checks out of shell pipelines over profile coreutils while
+  a lane runs. Write the check as a `bun` script using `node:path` and `node:fs`, which depends only
+  on the already-resolved `bun` binary; that is how the bridge-path check was finally run.
+- **Proposed change:** Establish whether a linked worktree can hold its own profile symlink
+  generation, or whether profile re-resolution can publish atomically so the old generation stays
+  readable until the new one is complete. Failing both, have `./agent` expose the hazard: a
+  `command not found` for a profile-provided binary should be a named, actionable diagnostic rather
+  than an ordinary shell miss.
+- **Dependencies:** None.
+- **Acceptance:** A profile re-resolution in one worktree leaves every other worktree's tool shell
+  resolving profile coreutils continuously, or a shell that loses them says so with a diagnostic
+  naming the profile.
+- **Source:** 2026-09-17 bridged-sidecar file-reference validation.
+
+### DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite
+
+- **Status:** Candidate
+- **Area:** Verification diagnostics
+- **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
+  an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
+  the runner does the right thing — it adds a contention warning and declines to teach the timings store
+  from measurements taken under load — and those assertions fail. `verify --complete` therefore cannot go
+  green on a machine that several agents share, which is this repository's normal condition, so the merge
+  gate is unreachable for reasons unrelated to the branch under test.
+- **Evidence:** On 2026-09-18, `bun test packages/dev/dev-tests` failed four tests on a tree whose only
+  difference from `main` was one validator diagnostic and one ledger entry, neither under `packages/dev`
+  or `packages/shared`. `gate-runner.test.ts:157` received one extra warning,
+  `machine contention: no other Tao lane registered; load peaked at 75.0 on 18 CPUs`; `gate-runner.test.ts:299`
+  and `:326` and `verification-concurrency.test.ts:240` each failed `ENOENT ... /.artifacts/timings/durations.json`.
+  All four pass when the file is run alone on an idle machine. Across four `verify --complete` runs the
+  failure set tracked host load, shrinking from four to one as the load average fell from 86.5 to 18.8.
+- **Workaround:** Run the file alone to confirm the tests themselves are sound; treat a `dev` suite red
+  whose failures are all timings-store or warning-list assertions as a host-load artifact, and confirm by
+  re-reading the warning text for a contention line.
+- **Proposed change:** Let these tests state the contention precondition rather than assume it: inject the
+  load reading the runner samples so a test can pin an idle or a contended machine, and assert warnings by
+  subset against the injected condition instead of exact equality. A test that needs real timings should
+  force the teach-the-store path rather than depend on the host being quiet.
+- **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
+  about the tests' assumptions, not that behavior.
+- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass on a
+  host under sustained load from other worktrees, and a genuine timings-store regression still fails them.
+- **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch. Found
+  independently the same day on the subagent-delegation branch, which fixed the
+  `verification-concurrency.test.ts:240` quarter of it: two lanes at once is contention by
+  `MachineLanes.ts:285`'s own definition, so `GateRunner.ts:317` passes `recordTimings: false` and the
+  store the test demanded is exactly what the design withholds. That test now asserts what each outcome
+  requires — no store when a summary reports contention, a whole one when none does — and passed twenty
+  consecutive isolated runs where it had been failing about half. The three `gate-runner.test.ts`
+  assertions this entry names are untouched and still carry the issue.
+
+### DEVENV-074 — `./agent fix` cannot format the skills it is told to format
+
+- **Status:** Candidate
+- **Area:** Sandbox policy
+- **Impact:** Claude Code's Bash sandbox denies writes under `agents/skills/`, which is also where
+  every project skill lives. Editing a skill and running the repository's own formatter therefore
+  fails on the file the change is about, and the failure names an OS error rather than a policy, so
+  it reads as a broken formatter. Every instruction-editing task pays it.
+- **Evidence:** After adding `agents/skills/delegation/SKILL.md`, `./agent fix` exited 1 with
+  `Error writing file '…/agents/skills/delegation/SKILL.md': Operation not permitted (os error 1)`
+  and `Had 1 error formatting.`; the same command outside the sandbox formatted the file and
+  reported `Formatted 1 file. 0 fixed, 124 unchanged`.
+- **Workaround:** Run `./agent fix` unsandboxed after editing a skill. The harness's own edit tools
+  write these paths normally; only Bash is denied, so the restriction bites exactly one command.
+- **Proposed change:** Decide which the policy means. If skills are protected against shell writes
+  on purpose, `fix` should say so — detect the denial on a known-protected path and print the
+  unsandboxed retry — rather than surfacing `os error 1`. If the protection is incidental, exempt
+  the repository's own formatter, whose writes are reviewable in the diff either way.
+- **Dependencies:** None.
+- **Acceptance:** Editing a project skill and running `./agent fix` either succeeds, or fails with a
+  message naming the sandbox and the command to rerun.
+- **Source:** 2026-09-17 subagent delegation branch.
+
+### DEVENV-075 — Process-supervision survival assertions flake under load
+
+- **Status:** Candidate
+- **Area:** Test execution
+- **Impact:** Two tests in `packages/shared/shared-tests/process-supervision.test.ts` fail
+  intermittently on a loaded machine, and both are in `_test`, so they red `verify --complete` at
+  random. This is the `packages/shared` counterpart to DEVENV-073's `packages/dev` assertions: a
+  complete lane on a busy machine now needs several attempts for reasons unrelated to the branch.
+- **Evidence:** Eight isolated runs at load 17.85 on 18 CPUs gave one failure, and two later
+  `verify --complete` runs failed on it. The assertions are `isAlive(sibling.grandchild)`
+  (`process-supervision.test.ts:107`) and `isAlive(server.grandchild)` (`:123`); both assert that a
+  backgrounded `sleep 300` grandchild still runs just after its `/bin/sh` parent was signalled.
+  Over-signalling is ruled out: `descendantProcesses` walks parentage, on darwin through libproc, so
+  a sibling that merely shares the caller's process group is never in the owned tree. The PID parse
+  is ruled out: `startTree` waits for a complete `^(\d+)\n` line and for both PIDs to carry
+  identities before returning. That leaves the identity match, where `sameProcess` compares the
+  recorded `command` as well as `startedAt`. One attempt to exploit that — waiting for the
+  grandchild's identity to report an exec'd `sleep` before recording it — was disproved: the
+  predicate never became true and all twenty-five runs timed out in that wait, so whatever
+  `ProcessTree.identities` reports as that process's `command`, it does not contain `sleep`. That
+  change was reverted, not kept.
+- **Workaround:** Re-run the file; it passes alone most of the time. Do not treat it as a regression
+  from a branch that does not touch `packages/shared/`.
+- **Proposed change:** Establish what `ProcessTree.identities` actually records as `command` for a
+  forked-then-exec'd child, then make the recorded identity stable across that transition. The
+  survival checks are the point of both tests and must not simply be relaxed.
+- **Dependencies:** Shares a cause shape with DEVENV-073, but in `packages/shared` and about process
+  identity rather than the timings store.
+- **Acceptance:** Twenty consecutive isolated runs pass on a machine under comparable load.
+- **Source:** 2026-09-18 subagent delegation branch, after merging main.
+
+- **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch.
+
+### DEVENV-076 — Simultaneous worktree finalizations collapse verification throughput
+
+- **Status:** Candidate
+- **Area:** Parallel verification
+- **Impact:** Every agent finishing its task runs the repository's heaviest lane at the same moment,
+  so the fair share per lane falls to one or two slots and a lane that takes well under a minute
+  alone takes many minutes. This is the largest single component of "finalizing takes far longer
+  than expected", and it grows with the number of active worktrees rather than with the change.
+- **Evidence:** 260 recorded non-`dev-test` lane runs across every checkout, bucketed by how many
+  other lane runs overlapped them: one lane median 37.8s (p90 88.1s), two 54.7s (p90 207.5s), three
+  75.8s (p90 390.4s), four 691.3s, five 366.3s — superlinear, not proportional. On 2026-09-17 at
+  17:01 local, `ps` showed eight gate-runner processes plus a `full-verify` and a
+  `merge-with-main`, and `~/.cache/tao/machine-lanes` held 13 live lane records — none stale —
+  holding **two admitted slots between them** while 16 of 18 CPUs' worth of budget went unissued.
+  A control `verify --complete` started in this worktree at that moment took **721.5s against a
+  32.5s uncontended median, 22x**, reporting `13 Tao lanes ran at once; load peaked at 36.2 on 18
+  CPUs`; within it `_test` took 266.6s against ~34s, `_fix-tao` 107.5s against 3.3s, and
+  `_compile-word-flower-app` 18.1s against 0.65s. Two candidate causes to separate: the fair-share
+  floor gives each of 13 lanes a ceiling of one or two slots, and every admission decision takes
+  the single advisory registry lock, so 13 contenders may spend admission in lock contention rather
+  than in work.
+- **Workaround:** Verify when the machine is quiet, or read the `contention` block in
+  `summary.json` before treating a slow lane as a regression.
+- **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting
+  the machine between all of them at once, so two or three lanes run at full width and the rest
+  queue with a printed position; reconcile admitted slots with real CPU use, since 13 lanes holding
+  one slot each drove load to 28 on 18 CPUs, which means a slot does not describe what a suite
+  actually spawns.
+- **Dependencies:** `MachineLanes.ts` `fairAllocations` and the `WorkGraph` reservation path;
+  builds on DEVENV-001 rather than replacing it.
+- **Acceptance:** With ten lanes requested at once, the median completion time of the first three is
+  within 1.5x of the uncontended median, and total wall time for all ten beats today's fair-share
+  behavior.
+- **Source:** 2026-09-17 merge-finalization performance investigation.
+
+### DEVENV-077 — Merge finalization is a prose protocol with no command behind it
+
+- **Status:** Candidate
+- **Area:** Agent harness performance
+- **Impact:** "Finalize and prepare the merge" is a deterministic sequence — land commits, refresh
+  the affected roadmap documents, integrate `main`, verify, write `.artifacts/merge/<branch>.msg`,
+  report — but it exists only as prose in `AGENTS.md` and the `verification-lanes` skill, so an
+  agent interprets it one model turn at a time at the point in a session where its context, and
+  therefore its per-turn latency, is largest.
+- **Evidence:** Finalization is not a terminal step but a loop: across 16 worktrees the same branch
+  re-enters it a median of 5 and a mean of 7.4 times, driven by Ro's corrections, by retries after a
+  red lane, and by the agent's own re-entry after a background job reports — and every round replays
+  the whole protocol, because nothing persists what the previous round established. 119 such
+  stretches across this repository's Claude Code transcripts,
+  17.0h wall: 58.6% is model generation and 41.4% is command execution; a stretch that reaches
+  `merge-with-main` averages 39 assistant turns and 22 tool calls, and 45% of all turns issue no
+  tool call at all. Those 45 stretches ran 50 `full-verify` and 46 `verify` invocations on top of
+  the `full-verify` that `merge-with-main` runs itself, about three full passes each, with one
+  stretch running six. Median cached context re-read per turn is 357k tokens; in the top quartile
+  (630k) mean per-turn model time is 11.0s against 4.0–5.4s in the lower three. Waiting on
+  backgrounded gates with `until [ -s … ]; do sleep 15; done` accounted for 6.0% of the total,
+  and commands blocked in permission review for 11.3%, still 37% of finalization Bash calls
+  carrying the `cd`/`export`/`VAR=` prefixes DEVENV-045 asked agents to drop.
+- **Workaround:** Run the superset lane once and let `merge-with-main`'s own `full-verify` be the
+  evidence; edit tracked documents before verifying, never after, so the green-tree record survives.
+- **Proposed change:** Add `./agent finalize`, which asserts the branch and clean worktree,
+  integrates `origin/main`, runs one verification lane, drafts `.artifacts/merge/<branch>.msg` from
+  `git log <base>..HEAD` for the agent to edit, and prints the short list of judgments that remain
+  (which roadmap documents to refresh, what the message should say). Point `AGENTS.md` and the
+  `verification-lanes` skill at the command instead of restating the sequence.
+- **Dependencies:** `MergeWithMain.ts` already owns the landing half; this is the preparation half.
+  The green-tree records in `GreenTree.ts` already make a repeated lane free when the tree is
+  unchanged, so the redundant passes come from ordering, not from missing caching.
+- **Acceptance:** A finalization from a clean feature branch completes in under ten model turns and
+  one verification lane, and the written merge message passes `merge-with-main`'s own validation
+  unedited.
+- **Source:** 2026-09-17 merge-finalization performance investigation.
+
+### DEVENV-078 — Nothing serializes landing, so ready branches convoy into each other
+
+- **Status:** Candidate
+- **Area:** Human merge workflow
+- **Impact:** Several agents reach "ready to merge" together, each runs the full suite on its own
+  branch, one lands, and the rest must integrate the new `main` and verify again — by which time
+  another has landed. Landing K branches costs work that grows with K rather than with the change,
+  and it spends that work in exactly the window when every lane is slowest.
+- **Evidence:** `main`'s own history shows the convoy: of 92 inter-merge gaps under six hours, 25%
+  are under five minutes and 43% under fifteen, against a `merge-with-main` verified window of two
+  to five minutes uncontended and far longer under load. `inspectMergePreflight` requires exactly
+  one `main` worktree and requires it to equal `origin/main`, and `MergeWithMain.ts` takes no lock
+  of any kind, so two concurrent `--execute` runs stage a squash in the same shared `main` checkout
+  and are caught only afterwards by `Repository state changed unexpectedly while preparing the
+  staged squash` — after both have already paid a `full-verify`. `stabilizeAndVerify` restarts the
+  whole lane when `origin/main` moves and gives up after three passes.
+- **Workaround:** Land one branch at a time by agreement, and re-run `merge-with-main` after the
+  preflight rejects a stale `main`.
+- **Proposed change:** Take a machine-wide landing lease for the whole preflight-to-push window, so
+  a second landing queues with a printed position instead of racing. Inside the lease, verify the
+  integration tree — `main` plus the branch — once, and treat the branch-side lane as iteration
+  evidence rather than the gate, which removes both the pre-merge pass and the restart. Consider
+  landing several ready branches as one verified batch that commits as separate squashes, so K
+  branches cost one pass.
+- **Dependencies:** DEVENV-076 (the lanes a batch would run); `MergeWithMain.ts` preflight and
+  `stabilizeAndVerify`; the lease can reuse the registry in `MachineLanes.ts`.
+- **Acceptance:** Two `merge-with-main --execute` runs started together land one after the other
+  with one verification pass each and no `Repository state changed unexpectedly` failure; landing
+  three ready branches costs one full verification, not three.
+- **Source:** 2026-09-17 merge-finalization performance investigation.

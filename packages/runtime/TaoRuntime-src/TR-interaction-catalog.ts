@@ -16,6 +16,7 @@ import {
   useOutlineOccurrence,
   useOutlineParentIdentity,
 } from './TR-interaction-outline'
+import type { Evaluable } from './TR-navigation-presentables'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { type TaoProps, TaoPropsControls, type TaoVisualLayout } from './TR-TaoProps'
@@ -191,7 +192,8 @@ export class CommandCatalog {
     const inFocusedRegion = [...this.#surfaces.values()]
       .filter(surface => {
         const parent = nodes.find(node => node.identity === surface.parent)
-        return (!parent || isActive(parent, nodes)) && (focusRegion === undefined || (modal
+        const regionScoped = parent?.kind === 'region' || isWithinNavigationSiblingRegion(surface.parent, nodes)
+        return regionScoped && (!parent || isActive(parent, nodes)) && (focusRegion === undefined || (modal
           ? surface.parent === modal.identity || isAncestor(modal.identity, surface.parent ?? '', nodes)
           : surface.parent === focusRegion
             || isAncestor(focusRegion, surface.parent ?? '', nodes)
@@ -651,7 +653,7 @@ export const InteractionControls = {
   ActivateIdentity(identity: string | undefined, invoke: () => unknown): () => unknown {
     return () => identity === undefined ? invoke() : interactionAttention.targetAndActivate(identity, invoke)
   },
-  ChoosePendingSearchResult(value: { evaluate(): { jsValue: unknown } }): boolean {
+  ChoosePendingSearchResult(value: Evaluable): boolean {
     return interactionAttention.choosePendingSearchResult(value)
   },
   ChoosePendingTarget(identity: string): boolean {
@@ -707,7 +709,7 @@ export const InteractionControls = {
       interactionAttention.setPressed(occurrence.control, pressed)
     }
   },
-  ProvidePendingValue(value: { evaluate(): { jsValue: unknown } }): boolean {
+  ProvidePendingValue(value: Evaluable): boolean {
     return interactionAttention.providePendingValue(value)
   },
   Target(occurrence: TaoInteractionOccurrence | undefined): void {

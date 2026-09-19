@@ -53,7 +53,11 @@ async function discoverAppsInFile(appPath: string): Promise<TaoDevApp[]> {
     .toSorted((left, right) => right.file.path.length - left.file.path.length)[0]
   const project = projectFile?.project
   const declaredName = project?.block.statements.find(AST.isProjectName)?.value
-  const projectRoot = projectFile ? FS.dirname(projectFile.file.path) : FS.dirname(appPath)
+  // Studio resolves a project root through realpath before deriving the Dev datasource identity.
+  // Do the same here so launching through a symlink does not create a second app authority.
+  const projectRoot = await FS.realPath(
+    projectFile ? FS.dirname(projectFile.file.path) : FS.dirname(appPath),
+  )
   const projectName = declaredName ?? FS.basename(projectRoot)
   return appNames.map(appName => ({ appName, appPath, projectName, projectRoot }))
 }

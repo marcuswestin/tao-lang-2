@@ -380,8 +380,7 @@ function compileScenarioStep(step: AST.ScenarioStep): StudioPreviewScenarioStep 
       Assert.defined(nanoseconds, 'validated scenario advance step names a literal duration')
       return { kind: 'advance' as const, milliseconds: Units.baseToMilliseconds(nanoseconds) }
     },
-    FocusStep: step => ({ kind: 'focus' as const, tag: tagName(step.tag) }),
-    HoverStep: step => ({ kind: 'hover' as const, ...scenarioPointerTarget(step) }),
+    InteractionWordStep: compileScenarioInteractionWordStep,
     EnterTextStep: step => ({
       kind: 'enter' as const,
       selector: (step.selector ?? 'text') as StudioPreviewPointerTarget['selector'],
@@ -399,10 +398,13 @@ function compileScenarioStep(step: AST.ScenarioStep): StudioPreviewScenarioStep 
       selector: (step.selector ?? 'text') as StudioPreviewPointerTarget['selector'],
       target: step.text,
     }),
-    PressPhaseStep: step => ({
-      kind: step.phase === 'down' ? 'pressDown' as const : 'pressUp' as const,
-      ...scenarioPointerTarget(step),
-    }),
+    PressWordStep: step => {
+      Assert(step.subject === 'down' || step.subject === 'up', 'validated scenario press names down or up')
+      return {
+        kind: step.subject === 'down' ? 'pressDown' as const : 'pressUp' as const,
+        ...scenarioPointerTarget(step),
+      }
+    },
     SelectStep: step => ({
       index: step.index,
       kind: 'select' as const,
@@ -420,7 +422,7 @@ function compileScenarioStep(step: AST.ScenarioStep): StudioPreviewScenarioStep 
 }
 
 function scenarioPointerTarget(
-  step: AST.PressPhaseStep | AST.HoverStep,
+  step: AST.PressWordStep | AST.InteractionWordStep,
 ): Pick<Extract<StudioPreviewScenarioStep, { target: string }>, 'selector' | 'target'> {
   if (step.tag !== undefined) {
     return { selector: 'tag', target: tagName(step.tag) }
@@ -430,6 +432,15 @@ function scenarioPointerTarget(
     selector: (step.selector ?? 'text') as 'label' | 'placeholder' | 'text',
     target: step.target,
   }
+}
+
+function compileScenarioInteractionWordStep(step: AST.InteractionWordStep): StudioPreviewScenarioStep {
+  if (step.head === 'hover') {
+    return { kind: 'hover', ...scenarioPointerTarget(step) }
+  }
+  Assert(step.head === 'focus', 'validated scenario interaction word step names hover or focus')
+  Assert.defined(step.tag, 'validated focus step names a tag')
+  return { kind: 'focus', tag: tagName(step.tag) }
 }
 
 function tagName(tag: string): string {

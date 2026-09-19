@@ -1,6 +1,6 @@
 import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { StudioElectrobun } from '../dev-src/studio/StudioElectrobun'
+import { multiWindowProbeResult, StudioElectrobun } from '../dev-src/studio/StudioElectrobun'
 
 const options = {
   outputRoot: '/tmp/unused-by-source-tests',
@@ -156,11 +156,12 @@ Describe('Studio Electrobun project', () => {
   Test('routes native project opens and window closes through opaque Studio sessions', () => {
     const main = StudioElectrobun.sources(options).main
 
-    Expect(main).toContain("fetch(new URL('/api/sessions/open', studioUrl)")
+    Expect(main).toContain('fetch(new URL("/api/sessions/open", studioUrl)')
     Expect(main).toContain('projectSessionUrl(process.env.TAO_STUDIO_PROJECT_URL)')
     Expect(main).toContain("createStudioWindow('Project', projectSessionUrl(opened.url), openedPreviewUrl)")
     Expect(main).toContain('value.pathname.match(/^\\/sessions\\/([A-Za-z0-9_-]{1,128})')
-    Expect(main).toContain("'/api/sessions/' + encodeURIComponent(sessionId) + '/close'")
+    Expect(main).toContain('const closePath = "/api/sessions/:sessionId/close"')
+    Expect(main).toContain(".replace(':sessionId', encodeURIComponent(sessionId))")
     Expect(main).toContain("method: 'POST'")
     Expect(main).toContain('url.origin !== studioUrl.origin')
     Expect(main).toContain("searchParams.get('native-preview-url')")
@@ -196,7 +197,10 @@ Describe('Studio Electrobun project', () => {
     const main = StudioElectrobun.sources(options).main
 
     Expect(main).toContain("createStudioWindow('Welcome', studioUrl, undefined, true)")
-    Expect(main).toContain("results.set('multi-window', { passed: windows.size >= 2 })")
+    Expect(main).toContain("auxiliaryProbeWindow.webview.on('dom-ready'")
+    Expect(main).toContain("results.set('multi-window', multiWindowProbeResult('ready', windows.size))")
+    Expect(main).toContain("results.set('multi-window', multiWindowProbeResult('timeout', windows.size))")
+    Expect(main).toContain("&& results.has('multi-window')")
     Expect(main).toContain('auxiliaryProbeWindow?.close()')
     Expect(main.indexOf('let finished = false')).toBeLessThan(main.indexOf('runRuntimeProbe(projectWindow)'))
     const readyListener = main.indexOf("window.webview.on('dom-ready'")
@@ -211,6 +215,24 @@ Describe('Studio Electrobun project', () => {
     Expect(main).toContain("results.has('browser-runtime')")
     Expect(main).toContain('The browser probe could not be injected: ')
     Expect(main).not.toContain('const reportServer = Bun.serve')
+  })
+
+  Test('passes the multi-window canary only after an auxiliary window is ready and registered', () => {
+    Expect(multiWindowProbeResult('ready', 2)).toEqual({ passed: true })
+  })
+
+  Test('fails the multi-window canary when readiness leaves only one registered window', () => {
+    Expect(multiWindowProbeResult('ready', 1)).toEqual({
+      message: 'The auxiliary native window became ready, but only 1 native window was registered.',
+      passed: false,
+    })
+  })
+
+  Test('fails the multi-window canary when the auxiliary window times out', () => {
+    Expect(multiWindowProbeResult('timeout', 2)).toEqual({
+      message: 'The auxiliary native window never became ready.',
+      passed: false,
+    })
   })
 
   Test('executes the browser probe and reports each observable capability', () => {

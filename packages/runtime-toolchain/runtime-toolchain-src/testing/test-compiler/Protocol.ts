@@ -1,14 +1,46 @@
+import { Errors, Text } from '@shared'
 import type * as TestCompiler from './TestCompiler'
+
+const WORKER_MESSAGE_LIMIT = 800
 
 /** Protocol serializes JSONL messages for the Tao test compiler worker. */
 export const Protocol = {
   lines,
+  errorFromFailure,
+  failureFromError,
   parseRequest,
   parseResponse,
   pendingLine,
   requestLine,
   responseLine,
 } as const
+
+function failureFromError(error: unknown): TestCompiler.Worker.WorkerFailure {
+  if (!Errors.isTaoError(error)) {
+    return { category: 'unexpected', message: 'Something went wrong while compiling Tao tests.' }
+  }
+  const category = error instanceof Errors.UserInputError
+    ? 'user'
+    : error instanceof Errors.UnexpectedBehaviorError
+    ? 'unexpected'
+    : 'host'
+  return { category, message: safeWorkerMessage(Errors.messageOf(error)) }
+}
+
+function errorFromFailure(failure: TestCompiler.Worker.WorkerFailure): Errors.TaoError {
+  if (failure.category === 'user') {
+    return new Errors.UserInputError(failure.message)
+  }
+  if (failure.category === 'unexpected') {
+    return new Errors.UnexpectedBehaviorError(failure.message)
+  }
+  return new Errors.HostEnvironmentError(failure.message)
+}
+
+function safeWorkerMessage(message: string): string {
+  const safe = Text.stripAnsi(message).replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/gu, ' ').trim()
+  return safe.length <= WORKER_MESSAGE_LIMIT ? safe : `${safe.slice(0, WORKER_MESSAGE_LIMIT - 1)}…`
+}
 
 function requestLine(request: TestCompiler.Worker.Request): string {
   return `${JSON.stringify(request)}\n`

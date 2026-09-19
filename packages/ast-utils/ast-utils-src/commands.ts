@@ -15,6 +15,50 @@ export type CommandSlot = {
   typeName: string
 }
 
+export type ParsedShortcut =
+  | Readonly<{
+    canonical: string
+    key: string
+    modifiers: readonly string[]
+    ok: true
+  }>
+  | Readonly<{
+    duplicateModifier?: string
+    ok: false
+    reason: 'duplicate-modifier' | 'key' | 'missing-key'
+  }>
+
+const shortcutNamedKeys: Readonly<Record<string, string>> = Object.freeze({
+  arrowdown: 'ArrowDown',
+  arrowleft: 'ArrowLeft',
+  arrowright: 'ArrowRight',
+  arrowup: 'ArrowUp',
+  backspace: 'Backspace',
+  enter: 'Enter',
+  esc: 'Escape',
+  escape: 'Escape',
+  space: 'Space',
+  spacebar: 'Space',
+  tab: 'Tab',
+})
+
+/** Reducer-owned keys are valid physical keys but can never dispatch an authored command. */
+export const reservedCommandShortcuts: ReadonlySet<string> = new Set([
+  'arrowdown',
+  'arrowleft',
+  'arrowright',
+  'arrowup',
+  'backspace',
+  'enter',
+  'escape',
+  'space',
+  'tab',
+  '.',
+  '/',
+  '?',
+  'primary+k',
+])
+
 /** commandSlots returns the slots a command declares, in parameter order. */
 export function commandSlots(command: AST.CommandDeclaration): readonly CommandSlot[] {
   return AST.parametersOf(command).map(parameter => {
@@ -32,8 +76,40 @@ export function commandStaticMemberText(command: AST.CommandDeclaration, name: s
 /** commandStaticShortcut reads the normalized literal shortcut a static scope can compare. */
 export function commandStaticShortcut(command: AST.CommandDeclaration): string | undefined {
   const value = AST.commandFillsOf(command).find(fill => fill.name === 'Key')?.value
-  const text = value ? literalShortcutText(value) : undefined
-  return text?.split('+').map(segment => segment.trim().toLowerCase()).join('+')
+  const shortcut = value ? parseShortcut(value) : undefined
+  return shortcut?.ok ? shortcut.canonical : undefined
+}
+
+/** parseShortcut is the one static shortcut parser shared by validation and command indexing. */
+export function parseShortcut(value: AST.Expression): ParsedShortcut | undefined {
+  const text = literalShortcutText(value)
+  if (text === undefined) {
+    return undefined
+  }
+  if (text === ' ') {
+    return { canonical: 'space', key: 'Space', modifiers: [], ok: true }
+  }
+  const segments = text.split('+').map(segment => segment.trim())
+  const rawKey = segments.at(-1)
+  if (rawKey === undefined || rawKey.length === 0 || segments.slice(0, -1).some(segment => segment.length === 0)) {
+    return { ok: false, reason: 'missing-key' }
+  }
+  const modifiers = segments.slice(0, -1).map(modifier => modifier.toLowerCase())
+  const duplicateModifier = modifiers.find((modifier, index) => modifiers.indexOf(modifier) !== index)
+  if (duplicateModifier !== undefined) {
+    return { duplicateModifier, ok: false, reason: 'duplicate-modifier' }
+  }
+  const named = shortcutNamedKeys[rawKey.toLowerCase()]
+  const key = named ?? ([...rawKey].length === 1 ? rawKey.toLowerCase() : undefined)
+  if (key === undefined) {
+    return { ok: false, reason: 'key' }
+  }
+  return {
+    canonical: [...modifiers, key].join('+').toLowerCase(),
+    key,
+    modifiers: Object.freeze(modifiers),
+    ok: true,
+  }
 }
 
 /**

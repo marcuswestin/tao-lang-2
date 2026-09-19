@@ -13,6 +13,8 @@ export const projectValidationMessages = {
   duplicateName: () => `Project metadata can declare name only once.`,
   duplicateVersion: () => `Project metadata can declare version only once.`,
   invalidVersion: () => `Project version must be numeric SemVer core (for example, "1.2.3").`,
+  defaultAppSpelling: (actual: string) =>
+    `Unknown project metadata '${actual}'; write DefaultApp followed by the app name.`,
   duplicateDefaultApp: () => `Project metadata can declare DefaultApp only once.`,
   duplicateRemote: () => `Project metadata can declare remote only once.`,
   duplicateLicense: () => `Project metadata can declare license only once.`,
@@ -107,6 +109,11 @@ function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationCo
   }
   for (const defaultApp of defaultApps.slice(1)) {
     ctx.error(defaultApp, projectValidationMessages.duplicateDefaultApp())
+  }
+  for (const defaultApp of defaultApps) {
+    if (defaultApp.word !== 'DefaultApp') {
+      ctx.error(defaultApp, projectValidationMessages.defaultAppSpelling(defaultApp.word))
+    }
   }
   for (const remote of remotes.slice(1)) {
     ctx.error(remote, projectValidationMessages.duplicateRemote())

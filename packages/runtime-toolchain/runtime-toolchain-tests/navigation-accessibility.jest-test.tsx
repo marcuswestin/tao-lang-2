@@ -1,8 +1,11 @@
 import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
+import * as TaoAppShell from '@runtime/TR-app-shell'
 import { interactionOutline } from '@runtime/TR-interaction-outline'
 import { NavigationCommandButton } from '@runtime/TR-navigation-command-button'
+import { RuntimeHostReadChannel } from '@runtime/TR-navigation-host-slots'
 import { NativeToolbar } from '@runtime/TR-navigation-native-stack'
+import { overrideLiquidGlassForTest, SelectionToggleBar } from '@runtime/TR-navigation-toggle-bar'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, fireEventAsync, render } from '@testing-library/react-native'
@@ -15,6 +18,43 @@ type FocusEvent = Readonly<{ eventType: 'focus'; host: object }>
 registerRuntimeE2ELifecycle()
 
 Describe('navigation accessibility', () => {
+  Test('renders every native toggle surface through the available Liquid Glass adapter', () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue(
+      runtimeWithFocus([]),
+    )
+    const restoreInsets = jest.spyOn(TaoAppShell, 'requireSafeAreaContext').mockReturnValue({
+      SafeAreaProvider: RN.View,
+      useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+    })
+    const restoreGlass = overrideLiquidGlassForTest({
+      GlassView: props => createElement(RN.View, { ...props, testID: 'liquid-glass-surface' }),
+      isGlassEffectAPIAvailable: () => true,
+      isLiquidGlassAvailable: () => true,
+    })
+    try {
+      const screen = render(createElement(SelectionToggleBar, {
+        back: () => undefined,
+        canGoBack: true,
+        chrome: new RuntimeHostReadChannel(),
+        fallbackTitle: 'Home',
+        name: 'Glass selection',
+        native: true,
+        next: { key: 'settings', label: 'Settings' },
+        observable: true,
+        select: () => undefined,
+      }))
+
+      const surfaces = screen.getAllByTestId('liquid-glass-surface')
+      Expect(surfaces).toHaveLength(3)
+      Expect(surfaces.map(surface => surface.props.glassEffectStyle)).toEqual(['regular', 'regular', 'regular'])
+      Expect(surfaces.every(surface => surface.props.isInteractive === true)).toBe(true)
+    } finally {
+      restoreGlass()
+      restoreInsets.mockRestore()
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('exposes JS selection controls as one tablist with selected tab state', async () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home content') })
     const settings = TR.Navigation.View({
@@ -122,6 +162,104 @@ Describe('navigation accessibility', () => {
     }
   })
 
+  Test('hides toggle chrome while an item overlay is modal and restores it after dismissal', () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue(
+      runtimeWithFocus([]),
+    )
+    try {
+      const commands = ['First', 'Second', 'Third'].map(label => navigationCommand(label, () => undefined))
+      const home = TR.Navigation.View({
+        name: 'Toggle home',
+        render: (_arguments, _taoProps, host) => {
+          TR.Navigation.UseHostSlots(host, {
+            Title: () => TR.Value('Toggle home'),
+            Toolbar: () => commands,
+          })
+          return createElement(RN.Text, null, 'Toggle home content')
+        },
+      })
+      const notice = TR.Navigation.View({
+        name: 'Toggle notice',
+        render: () => createElement(RN.Text, null, 'Toggle notice content'),
+      })
+      const stack = TR.Navigation.Mount(TR.Navigation.Configure(
+        TR.Navigation.Declaration('Toggle item stack', TR.NavKind.Basic.Stack()),
+        { Initial: home },
+      ))
+      const selection = toggleSelection(stack)
+      const app = TR.Navigation.App({
+        auxiliaries: () => ({}),
+        name: 'Toggle modal app',
+        navigator: () => selection,
+      })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+      Expect(screen.getByLabelText('More')).toBeDefined()
+      act(() => stack.presentOverlay(notice, {}))
+      Expect(screen.queryByLabelText('More')).toBeNull()
+      Expect(screen.getByText('Toggle notice content')).toBeDefined()
+
+      act(() => stack.back())
+      Expect(screen.getByLabelText('More')).toBeDefined()
+    } finally {
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('restores toggle More focus only after its modal menu has closed', async () => {
+    const focusEvents: FocusEvent[] = []
+    const menuPresenceAtMoreFocus: boolean[] = []
+    let rendered: ReturnType<typeof render> | undefined
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue(
+      runtimeWithFocus(focusEvents, host => {
+        if ((host as { props?: { accessibilityLabel?: string } }).props?.accessibilityLabel === 'More') {
+          menuPresenceAtMoreFocus.push(rendered?.queryByRole('menu') !== null)
+        }
+      }),
+    )
+    try {
+      const commands = ['First', 'Second', 'Third'].map(label => navigationCommand(label, () => undefined))
+      const home = TR.Navigation.View({
+        name: 'Toggle focus home',
+        render: (_arguments, _taoProps, host) => {
+          TR.Navigation.UseHostSlots(host, {
+            Title: () => TR.Value('Toggle focus home'),
+            Toolbar: () => commands,
+          })
+          return createElement(RN.Text, null, 'Toggle focus content')
+        },
+      })
+      const stack = TR.Navigation.Mount(TR.Navigation.Configure(
+        TR.Navigation.Declaration('Toggle focus stack', TR.NavKind.Basic.Stack()),
+        { Initial: home },
+      ))
+      const selection = toggleSelection(stack)
+      const app = TR.Navigation.App({
+        auxiliaries: () => ({}),
+        name: 'Toggle focus app',
+        navigator: () => selection,
+      })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      rendered = screen
+
+      focusEvents.length = 0
+      await fireEventAsync.press(screen.getByLabelText('More'))
+      const menuHost = focusEvents.at(-1)?.host
+      Expect((menuHost as { props?: { accessibilityLabel?: string } } | undefined)?.props?.accessibilityLabel)
+        .toBe('Third')
+
+      focusEvents.length = 0
+      await fireEventAsync.press(screen.getByLabelText('Third'))
+      Expect(screen.getByLabelText('More').props.accessibilityState).toMatchObject({ expanded: false })
+      Expect(focusEvents).toHaveLength(1)
+      Expect((focusEvents[0]?.host as { props?: { accessibilityLabel?: string } }).props?.accessibilityLabel)
+        .toBe('More')
+      Expect(menuPresenceAtMoreFocus).toEqual([false])
+    } finally {
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('reports native More expansion and restores focus after menu dismissal', async () => {
     const focusEvents: FocusEvent[] = []
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue(
@@ -167,11 +305,33 @@ function navigationCommand(label: string, invoke: () => unknown): TR.Command {
   })
 }
 
-function runtimeWithFocus(events: FocusEvent[]): TaoReactNative.ReactNativeRuntime {
+function toggleSelection(content: TR.NavigationValue): TR.NavigationValue {
+  return TR.Navigation.Mount(TR.Navigation.Configure(
+    TR.Navigation.Declaration('Accessible toggle selection', TR.NavKind.Selection()),
+    {
+      '@home': { Content: content, Label: TR.Value('Home') },
+      '@settings': {
+        Content: TR.Navigation.View({
+          name: 'Settings',
+          render: () => createElement(RN.Text, null, 'Settings content'),
+        }),
+        Label: TR.Value('Settings'),
+      },
+      Display: TR.Value('toggle'),
+      Initial: TR.Value('@home'),
+    },
+  ))
+}
+
+function runtimeWithFocus(
+  events: FocusEvent[],
+  onFocus?: (host: object) => void,
+): TaoReactNative.ReactNativeRuntime {
   return {
     AccessibilityInfo: {
       sendAccessibilityEvent(host, eventType) {
         events.push({ eventType, host })
+        onFocus?.(host)
       },
     },
     ActivityIndicator: RN.ActivityIndicator,

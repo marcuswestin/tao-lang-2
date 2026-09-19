@@ -30,7 +30,6 @@ type LaneFetch = (input: string, init?: RequestInit) => Promise<Response>
 const APPLE_HELPER_SOURCE = 'packages/generation/generation-native/AppleFoundationModelsServer.swift'
 
 export type DetectCreationLanesOptions = {
-  allowWeb?: boolean
   arch?: string
   attachments?: readonly string[]
   commandOnPath?: (name: string) => Promise<string | undefined>
@@ -66,7 +65,6 @@ export async function detectCreationLanes(options: DetectCreationLanesOptions = 
         const cwd = await FS.mkTmpDir('tao-create-agent-')
         return {
           provider: new AgentCliGenerationProvider({
-            allowWeb: options.allowWeb ?? false,
             attachments: options.attachments ?? [],
             command,
             cwd,

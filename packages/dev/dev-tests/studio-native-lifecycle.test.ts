@@ -5,6 +5,33 @@ import { StudioNative } from '../dev-src/studio/StudioNative'
 import { startStudioProcessTree, type StudioProcessTree } from '../dev-src/studio/StudioProcessTree'
 
 Describe('Studio native bounded lifecycle', () => {
+  Test('uses a release-build timeout independent from the native smoke budget', () => {
+    Expect(StudioNative.testing.electrobunReleaseBuildTimeoutMs).toBe(30 * 60_000)
+    Expect(StudioNative.testing.electrobunReleaseBuildTimeoutMs).toBeGreaterThan(120_000)
+  })
+
+  Test('wires the release timeout into the production Electrobun build invocation', async () => {
+    const calls: unknown[] = []
+
+    await StudioNative.testing.runElectrobunReleaseBuild(
+      '/tools/hutch',
+      '/workspace/release',
+      'stable',
+      undefined,
+      async (hutchPath, args, projectRoot, options) => {
+        calls.push({ args, failureKind: options.failureKind, hutchPath, projectRoot, timeoutMs: options.timeoutMs })
+      },
+    )
+
+    Expect(calls).toEqual([{
+      args: ['electrobun', 'build', '--env=stable'],
+      failureKind: 'electrobun-build-timeout',
+      hutchPath: '/tools/hutch',
+      projectRoot: '/workspace/release',
+      timeoutMs: 30 * 60_000,
+    }])
+  })
+
   Test('reports each preparation phase start and elapsed completion', async () => {
     const lines: string[] = []
     let now = 100
@@ -37,6 +64,60 @@ Describe('Studio native bounded lifecycle', () => {
     Expect(error.message).toContain('in /workspace/native')
     Expect(error.details?.['failureKind']).toBe('hutch-install-timeout')
     Expect(fake.events).toEqual(['kill SIGTERM', 'close-output', 'dispose'])
+  })
+
+  Test('retains bounded Hutch output in a timeout diagnostic', async () => {
+    const fake = fakeProcessTree()
+    let stdio: unknown
+    let settleOnExit: boolean | undefined
+
+    const error = await rejectedError(StudioNative.testing.prepareElectrobun(
+      '/tools/hutch',
+      '/workspace/native',
+      {
+        installTimeoutMs: 5,
+        log: () => {},
+        startCommand: (_command, spec) => {
+          if (spec === undefined) {
+            return Errors.throwUnexpected('Expected: bounded Hutch startup supplies a command specification.')
+          }
+          stdio = spec.stdio
+          settleOnExit = spec.settleOnExit
+          spec.onOutput?.('stderr', Buffer.from('signing identity unavailable\n'))
+          return fake.command
+        },
+      },
+    ))
+
+    Expect(stdio).toEqual(['ignore', 'pipe', 'pipe'])
+    Expect(settleOnExit).toBe(true)
+    Expect(error.message).toContain('Relevant output:\nsigning identity unavailable')
+    Expect(error.details?.['output']).toBe('signing identity unavailable\n')
+  })
+
+  Test('releases the native-host lease when startup fails after acquisition', async () => {
+    const events: string[] = []
+    const removed: Platform.ProcessSignal[] = []
+
+    await Expect(StudioNative.start({
+      previewUrl: 'http://127.0.0.1:8081',
+      studioUrl: 'http://127.0.0.1:55101',
+    }, {
+      nativeHost: {
+        acquire: async () => ({
+          owner: {} as never,
+          release: async () => {
+            events.push('lease.release')
+          },
+        }),
+      },
+      onProcessSignal: (signal, _listener) => () => removed.push(signal),
+      resolveHutch: async () => '/tools/hutch',
+      startWithLease: async () => Errors.throwHostEnvironment('startup failed after lease acquisition'),
+    })).rejects.toThrow('startup failed after lease acquisition')
+
+    Expect(events).toEqual(['lease.release'])
+    Expect(removed).toEqual(['SIGHUP', 'SIGINT', 'SIGTERM'])
   })
 
   Test('bounds hung Electrobun preparation after install completed', async () => {
@@ -76,6 +157,19 @@ Describe('Studio native bounded lifecycle', () => {
       startCommand: () => failedInstall.command,
     })).rejects.toThrow('Command failed: /tools/hutch install')
     Expect(failedInstall.events).toEqual(['close-output', 'dispose'])
+  })
+
+  Test('retires a finite Hutch phase descendant after its launcher exits', async () => {
+    const install = fakeExitedProcessTreeWithDescendant()
+    const prepare = fakeProcessTree({ closed: true })
+
+    await StudioNative.testing.prepareElectrobun('/tools/hutch', '/workspace/descendant', {
+      log: () => {},
+      startCommand: commands([install.command, prepare.command]),
+    })
+
+    Expect(install.events).toEqual(['close-output', 'dispose', 'kill SIGTERM'])
+    Expect(install.command.isRunning()).toBe(false)
   })
 
   Test('an interrupted preparation cleans up and the same project root reruns', async () => {
@@ -184,6 +278,31 @@ function fakeProcessTree(options: { closed?: boolean; exitCode?: number } = {}):
 
 function commands(values: StudioProcessTree[]): () => StudioProcessTree {
   return () => values.shift()!
+}
+
+function fakeExitedProcessTreeWithDescendant(): { command: StudioProcessTree; events: string[] } {
+  const events: string[] = []
+  let descendantRunning = true
+  const command: StudioProcessTree = {
+    async closeOutput() {
+      events.push('close-output')
+    },
+    dispose() {
+      events.push('dispose')
+    },
+    exitCode: 0,
+    isRunning: () => descendantRunning,
+    kill(signal = 'SIGTERM') {
+      events.push(`kill ${signal}`)
+      descendantRunning = false
+      return true
+    },
+    onceClose() {},
+    onceError() {},
+    signalCode: null,
+    waitForClose: async () => ({ exitCode: 0, signal: null }),
+  }
+  return { command, events }
 }
 
 function commandResult(command: string, spec: CLI.CommandSpec, exitCode: number): CLI.CommandResult {

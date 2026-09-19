@@ -316,7 +316,7 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('names the denied path and an unsandboxed recovery for a denied destination', async () => {
+  Test('names the denied path and dependency repair for a denied destination', async () => {
     const testRoot = await mkTestDir('tao-agent-install-denied-')
     try {
       const outcome = await runAgentInstall(testRoot, [
@@ -331,7 +331,7 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
-      Expect(outcome.result.stderr).toContain('just claude-unsandboxed')
+      Expect(outcome.result.stderr).toContain('just repair-deps')
     } finally {
       await FS.remove(testRoot)
     }
@@ -374,19 +374,173 @@ Describe('agent worktree profile bootstrap', () => {
     )
   })
 
-  Test('setup makes the parser ready before it generates agent adapters', async () => {
-    const commands = await justCommands('setup')
-    const install = commands.indexOf('bun install --frozen-lockfile')
-    const parser = commands.indexOf('packages/dev/dev-src/repository-tests/ParserGenerate.ts')
-    const adapters = commands.indexOf('./dev agent-config')
+  Test('a healthy dependency install runs the health probe once', async () => {
+    const testRoot = await mkTestDir('tao-healthy-dependency-recipe-')
+    const fakeBin = FS.resolvePath('bin', testRoot)
+    const callLog = FS.resolvePath('calls.log', testRoot)
+    try {
+      await Promise.all([
+        FS.writeText(FS.resolvePath('bun', fakeBin), '#!/bin/zsh\nexit 0\n'),
+        FS.writeText(
+          FS.resolvePath('just', fakeBin),
+          '#!/bin/zsh\nprint -r -- "$*" >> "$TAO_TEST_CALL_LOG"\nexit 0\n',
+        ),
+      ])
+      for (const command of ['bun', 'just']) {
+        const outcome = await CLI.run('chmod', { args: ['+x', FS.resolvePath(command, fakeBin)] })
+        Expect(outcome.exitCode).toBe(0)
+      }
 
-    Expect(install).toBeGreaterThanOrEqual(0)
-    Expect(parser).toBeGreaterThan(install)
-    Expect(adapters).toBeGreaterThan(parser)
+      const result = await CLI.run('zsh', {
+        args: ['-c', await justCommands('deps')],
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_CALL_LOG: callLog,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.readText(callLog)).toBe('_dependency-health\n')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('repairs a damaged dependency graph before the agent CLI build can consume it', async () => {
+    const testRoot = await mkTestDir('tao-agent-health-repair-')
+    try {
+      const fakeBin = FS.resolvePath('bin', testRoot)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      const repaired = FS.resolvePath('repaired', testRoot)
+      await FS.writeText(
+        FS.resolvePath('bun', fakeBin),
+        [
+          '#!/bin/zsh',
+          'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
+          'if [[ "$1" == run ]]; then',
+          '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
+          '  print -r -- "dependency health: missing package output" >&2',
+          '  exit 1',
+          'fi',
+          'if [[ " $* " == *" --force "* ]]; then',
+          '  : > "$TAO_TEST_REPAIRED"',
+          '  exit 0',
+          'fi',
+          'exit 2',
+          '',
+        ].join('\n'),
+      )
+      await makeExecutable(FS.resolvePath('bun', fakeBin))
+
+      const script = [
+        `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
+        'DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"',
+        'AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"',
+        'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
+        'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
+        'INSTALL_LOCK="$SCRIPT_DIR/install.lock"',
+        'DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"',
+        'typeset -a BUN_INSTALL_ARGS',
+        'BUN_INSTALL_ARGS=(install --cwd "$SCRIPT_DIR")',
+        'INSTALL_ATTEMPTS=3',
+        `source ${JSON.stringify(PROFILE_SCRIPT)}`,
+        agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
+        'ensure_dev_dependency_health',
+      ].join('\n')
+      const result = await CLI.run('zsh', {
+        args: ['-c', script],
+        cwd: testRoot,
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_COMMAND_LOG: commandLog,
+          TAO_TEST_REPAIRED: repaired,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).trim().split('\n')).toEqual([
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        // The lock owner rechecks after waiting in case another bootstrap repaired the graph.
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        // A plain install is tried first: it writes what is missing without relinking what is
+        // healthy, which is what an unhealthy tree needs. This fixture's install fails, so the
+        // repair escalates; the test below covers the case where the plain install is enough.
+        `install --cwd ${testRoot} --frozen-lockfile`,
+        `install --cwd ${testRoot} --frozen-lockfile --force`,
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+      ])
+      Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('repairs without relinking healthy packages when a plain install is enough', async () => {
+    // `--force` relinks every package, including the few shipping `.idea/` or `.gitmodules` that an
+    // agent sandbox protects and no setting exempts. A forced repair therefore fails there on
+    // packages that were healthy, and fails partway, leaving a worse tree than the unhealthy one it
+    // was called to fix — a recovery path that could only ever damage what it repaired.
+    const testRoot = await mkTestDir('tao-agent-health-plain-')
+    try {
+      const fakeBin = FS.resolvePath('bin', testRoot)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      const repaired = FS.resolvePath('repaired', testRoot)
+      await FS.writeText(
+        FS.resolvePath('bun', fakeBin),
+        [
+          '#!/bin/zsh',
+          'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
+          'if [[ "$1" == run ]]; then',
+          '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
+          '  print -r -- "dependency health: missing package output" >&2',
+          '  exit 1',
+          'fi',
+          // The realistic case: what was missing installs, and nothing healthy is touched.
+          ': > "$TAO_TEST_REPAIRED"',
+          'exit 0',
+          '',
+        ].join('\n'),
+      )
+      await makeExecutable(FS.resolvePath('bun', fakeBin))
+
+      const script = [
+        `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
+        'DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"',
+        'AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"',
+        'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
+        'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
+        'INSTALL_LOCK="$SCRIPT_DIR/install.lock"',
+        'DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"',
+        'typeset -a BUN_INSTALL_ARGS',
+        'BUN_INSTALL_ARGS=(install --cwd "$SCRIPT_DIR")',
+        'INSTALL_ATTEMPTS=3',
+        `source ${JSON.stringify(PROFILE_SCRIPT)}`,
+        agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
+        'ensure_dev_dependency_health',
+      ].join('\n')
+      const result = await CLI.run('zsh', {
+        args: ['-c', script],
+        cwd: testRoot,
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_COMMAND_LOG: commandLog,
+          TAO_TEST_REPAIRED: repaired,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      const commands = (await FS.readText(commandLog)).trim().split('\n')
+      Expect(commands).toContain(`install --cwd ${testRoot} --frozen-lockfile`)
+      // The whole point: nothing escalated, so no healthy package was relinked.
+      Expect(commands.some(command => command.includes('--force'))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
   })
 
   Test('bootstraps dependencies before full verification runs its graph', async () => {
-    const commands = await justCommands('full-verify')
+    const commands = await justCommands('verify-full')
 
     // The graph generates the parser inside `./dev gates`, so the ordering visible to a dry run is
     // the install first and the one gates invocation that names `_parser-gen` after it.
@@ -398,7 +552,7 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('bootstraps dependencies before either verify scope runs its graph', async () => {
-    for (const scope of ['_verify-complete', '_verify-changed']) {
+    for (const scope of ['verify', 'verify-changed']) {
       const commands = await justCommands(scope)
 
       const install = commands.indexOf('bun install --frozen-lockfile')
@@ -409,50 +563,149 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('verify dispatches on its scope and refuses to run without one', async () => {
-    Expect((await justCommands('verify', '--complete')).trim()).toBe('just _verify-complete false')
-    Expect((await justCommands('verify', '--changed')).trim()).toBe('just _verify-changed false')
-    Expect((await justCommands('verify', '--changed', '--fresh')).trim()).toBe('just _verify-changed true')
-    Expect((await justCommands('verify')).trim()).toBe('just _verify-scope-menu')
-
-    const bare = await CLI.run('just', { args: ['verify'], cwd: Repo.getRoot(), stdio: 'pipe' })
-    Expect(bare.exitCode).not.toBe(0)
-    Expect(bare.stderr).toContain('just verify --changed')
-    Expect(bare.stderr).toContain('just verify --complete')
-
-    // The two scopes differ only in the test gate, and each records its green tree under its own
-    // lane while standing on the lanes that contain it.
-    const complete = await justCommands('_verify-complete')
-    const changed = await justCommands('_verify-changed')
+  Test('verify runs the complete pass, and a narrower scope is its own command', async () => {
+    // Verifying everything is what the word means, so it is what the bare command does. The
+    // narrowing a developer asks for while iterating is a name that completes under `just v<TAB>`,
+    // never a flag a merge gate could inherit by forgetting it.
+    const complete = await justCommands('verify')
+    const changed = await justCommands('verify-changed')
     Expect(complete).toContain(' _test ')
     Expect(changed).toContain(' _test-changed ')
     Expect(changed).not.toContain(' _test ')
-    Expect(complete).toContain('--green-tree verify full-verify-sandbox full-verify')
-    Expect(changed).toContain('--green-tree verify-changed verify full-verify-sandbox full-verify')
-    Expect(await justCommands('_verify-complete', 'true')).toContain('--fresh')
-    Expect(complete).not.toContain('--fresh')
-    Expect(await justCommands('full-verify')).toContain('--green-tree full-verify')
-    Expect(await justCommands('full-verify-sandbox')).toContain('--green-tree full-verify-sandbox full-verify')
+    Expect(complete).toContain('--lane verify ')
+    Expect(changed).toContain('--lane verify-changed ')
+
+    // Each lane records the tree it proved green under its own name and stands on a record from any
+    // lane whose gates contain its own.
+    Expect(complete).toContain('--green-tree verify verify-full-sandbox verify-full')
+    Expect(changed).toContain('--green-tree verify-changed verify verify-full-sandbox verify-full')
+    Expect(await justCommands('verify-full')).toContain('--green-tree verify-full ')
+    Expect(await justCommands('verify-full-sandbox')).toContain('--green-tree verify-full-sandbox verify-full')
+
+    // `--no-cache` is the one flag every scope takes, because it chooses whether recorded evidence
+    // is trusted at all rather than which gates run. It is named for the cache of verdicts it
+    // declines to read; it deletes nothing, which is what `clean` is for.
+    Expect(complete).not.toContain('--no-cache')
+    for (const scope of ['verify', 'verify-changed', 'verify-full', 'verify-full-sandbox', 'check']) {
+      Expect(await justCommands(scope, '--no-cache')).toContain('--no-cache')
+    }
+
+    // `--complete` stays accepted as the explicit spelling of what bare `verify` already does.
+    Expect(await justCommands('verify', '--complete')).toContain('--lane verify ')
+  })
+
+  Test('names every verification scope rather than hiding one behind a flag', async () => {
+    const names = await justRecipeNames()
+    for (const scope of ['verify', 'verify-changed', 'verify-full', 'verify-full-sandbox', 'test-all']) {
+      Expect(names).toContain(scope)
+    }
+    Expect(names).not.toContain('full-verify')
+    Expect(names).not.toContain('full-verify-sandbox')
+
+    // Only the sandbox scope skips the host lanes, and only the host scopes bootstrap dependencies.
+    const sandbox = await justCommands('verify-full-sandbox')
+    Expect(sandbox).toContain('--skip-unsandboxed')
+    Expect(await justCommands('verify-full')).not.toContain('--skip-unsandboxed')
+    Expect(sandbox).not.toContain('bun install --frozen-lockfile')
+  })
+
+  Test('check runs no test suite and takes the same --no-cache flag the gate lanes take', async () => {
+    const commands = await justCommands('check')
+    Expect(commands).toContain('--green-tree check')
+    Expect(commands).not.toContain('--no-cache')
+    Expect(commands).not.toContain(' _test ')
+    Expect(commands).not.toContain(' _test-changed ')
+    Expect(await justCommands('check', '--no-cache')).toContain('--no-cache')
+  })
+
+  Test('test defaults to the changed scope and resolves one target by existence', async () => {
+    // The default is the cheap scope, and `test-all` is the escape hatch the description names,
+    // because a changed-scope run can be green while a suite the change broke elsewhere never ran.
+    const body = await justCommands('test')
+    Expect(body).toContain('./dev test-changed')
+    Expect((await justCommands('test-all')).split('\n')).toContain('./dev test')
+
+    // Path or pattern is decided by whether the argument exists, never by how it is spelled, and the
+    // recipe prints the reading it chose so a wrong guess shows up in the first line of output.
+    Expect(body).toContain('./dev test-file')
+    Expect(body).toContain('Running tests in')
+    Expect(body).toContain('Filtering the changed suites to tests matching')
+    Expect(body).toContain('[ -e ')
+  })
+
+  Test('a test-name pattern narrows the default scope instead of replacing it', async () => {
+    // `just test "<name>"` means the suites this branch's diff reaches, filtered to that name. A
+    // pattern that reached `./dev test` instead would silently widen the fast default to every suite.
+    Expect(await justCommands('test')).toContain('./dev test-changed --name')
+
+    // The complete scope keeps its own meaning and composes with the same filter, so the two
+    // questions — which suites, which tests inside them — stay answerable independently.
+    Expect((await justCommands('test-all')).split('\n')).toContain('./dev test')
+    Expect((await justCommands('test-all', 'one package only')).split('\n')).toContain("./dev test 'one package only'")
+  })
+
+  Test('the exhaustive pass composes the recipes it is made of rather than restating their gates', async () => {
+    const commands = await justCommands('verify-repo')
+
+    // Clean first, then a verification that trusts no recorded evidence, then the checks a person
+    // performs. Composing the three means widening `verify-full` widens this too.
+    Expect(commands).toContain('./dev clean')
+    Expect(commands).toContain('--lane verify-full ')
+    Expect(commands).toContain('--no-cache')
+    Expect(commands).toContain('./dev studio-manual-checks')
+    Expect(commands.indexOf('./dev clean')).toBeLessThan(commands.indexOf('--lane verify-full '))
+    Expect(commands.indexOf('--lane verify-full ')).toBeLessThan(commands.indexOf('./dev studio-manual-checks'))
+    // It runs `verify-full`'s gate list because it runs `verify-full`, not because it holds a copy.
+    Expect(await justRecipeNames()).toContain('verify-repo')
+  })
+
+  Test('the ledger reports are one command over both implementations', async () => {
+    const commands = await justCommands('report-test-stats', '5')
+    const names = await justRecipeNames()
+
+    // Two names to remember for one question — which tests to distrust — is one name now. The
+    // underlying commands are unchanged, and one limit bounds both lists.
+    Expect(commands).toContain('./dev test-flakes --limit "5"')
+    Expect(commands).toContain('./dev test-slowest --limit "5"')
+    Expect(names).not.toContain('test-flakes')
+    Expect(names).not.toContain('test-slowest')
+    // The test family shares one prefix, so it completes together under `just test<TAB>`.
+    Expect(names).toContain('test-studio')
+    Expect(names).not.toContain('studio-test')
+  })
+
+  Test('retry is the short spelling of test-retry and runs the same command', async () => {
+    // Both names stay: `test-retry` keeps the family completing together, `retry` is the one the
+    // hand reaches for after a red run.
+    Expect(await justRecipeNames()).toContain('retry')
+    Expect(await justCommands('retry')).toContain('./dev test-retry')
+    Expect(await justCommands('test-retry')).toContain('./dev test-retry')
+  })
+
+  Test('the merge flags read in the widening order the scopes are named in', async () => {
+    // `--skip-verify-full` names the lane it skips, in the word order `verify-full` already uses.
+    Expect(await justCommands('merge-with-main', '--skip-verify-full')).toContain('--skip-verify-full')
+    Expect(await justCommands('merge-with-main', '--skip-verify')).toContain('--skip-verify')
+    Expect(await justCommands('merge-with-main')).not.toContain('--skip-')
   })
 
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
-    const commands = await justCommands('full-verify')
+    const commands = await justCommands('verify-full')
 
     // The lanes are named for the public recipes that run the same files by hand; the graph runs
     // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-smoke-native studio-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
-    Expect(commands).toContain('--lane full-verify')
+    Expect(commands).toContain('--lane verify-full')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-        + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
+      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary',
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
-    Expect(await justRecipeNames()).not.toContain('_full-verify-smoke-launch')
+    Expect(await justRecipeNames()).not.toContain('_verify-full-smoke-launch')
     Expect(await justCommands('ship-bundle-proof')).toContain(
       'bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts',
     )
@@ -464,6 +717,20 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justRecipeNames()).toContain('clean-scratch')
     Expect(await justCommands('clean-scratch')).toContain('tao_prune_bootstrap_scratch')
     Expect(await justCommands('clean')).toContain('tao_prune_bootstrap_scratch')
+    Expect(await justCommands('clean-all')).toContain('tao_prune_bootstrap_scratch')
+  })
+
+  Test('cleans through the step-reporting command rather than silent recipe shell', async () => {
+    // Reporting each removal and what it cost is more shell than a recipe should carry, so the
+    // recipes name a scope and `./dev clean` owns the steps — the same removals, in the same order.
+    Expect((await justCommands('clean')).split('\n').filter(line => line.startsWith('./dev')))
+      .toEqual(['./dev clean'])
+    Expect((await justCommands('clean-all')).split('\n').filter(line => line.startsWith('./dev')))
+      .toEqual(['./dev clean --all'])
+    for (const recipe of ['clean', 'clean-all']) {
+      Expect(await justCommands(recipe)).not.toContain('rm -rf .artifacts')
+      Expect(await justCommands(recipe)).not.toContain('find .')
+    }
   })
 
   Test('never runs dprint with the incremental cache that would live in a home directory', async () => {
@@ -498,20 +765,20 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('reports only work deliberately omitted from a lane as skipped', async () => {
-    const verify = await justCommands('_verify-complete')
-    const fullVerify = await justCommands('full-verify')
-    const sandbox = await justCommands('full-verify-sandbox')
+    const verify = await justCommands('verify')
+    const fullVerify = await justCommands('verify-full')
+    const sandbox = await justCommands('verify-full-sandbox')
 
-    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"')
+    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full"')
     for (const commands of [verify, fullVerify, sandbox]) {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
-      + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
-    Expect(fullVerify).toContain(quarantine)
+    // Nothing is deliberately omitted from the full lanes: the simulated-user journey is a gate
+    // again, and the sandbox lane names what it cannot run through `--skip-unsandboxed` instead.
+    Expect(fullVerify).not.toContain('--skipped')
     Expect(sandbox).toContain('--skip-unsandboxed')
-    Expect(sandbox).toContain(quarantine)
+    Expect(sandbox).not.toContain('--skipped')
   })
 })
 
@@ -595,10 +862,10 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   return { attempts: log.split('\n').filter(Boolean).length, result }
 }
 
-/** Extracts `./agent`'s installation functions so the test exercises the shipped implementation. */
+/** Extracts `./agent`'s dependency functions so the tests exercise the shipped implementation. */
 function agentFunctionSource(source: string): string {
   const start = source.indexOf('function report_install_failure()')
-  const end = source.indexOf('function install_dev_deps_if_needed()')
+  const end = source.indexOf('function needs_build()')
   Expect(start).toBeGreaterThan(0)
   Expect(end).toBeGreaterThan(start)
   return source.slice(start, end)

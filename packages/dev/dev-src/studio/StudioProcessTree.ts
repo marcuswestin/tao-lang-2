@@ -11,6 +11,8 @@ export type StudioProcessTree =
 
 export type StudioProcessTreeSpec = Pick<CLI.CommandSpec, 'args' | 'cwd' | 'env' | 'onOutput'> & {
   onError?: (error: Error) => void
+  /** Resolve when the process exits even if a descendant still holds its captured output pipes. */
+  settleOnExit?: boolean
   stdio?: Platform.SpawnOptions['stdio']
 }
 
@@ -31,7 +33,7 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
   child.stderr?.on('data', chunk => spec.onOutput?.('stderr', Buffer.from(chunk)))
   child.on('error', error => spec.onError?.(error))
   const close = new Promise<CLI.CommandCloseResult>(resolve => {
-    child.once('close', (exitCode, signal) => resolve({ exitCode, signal }))
+    child.once(spec.settleOnExit === true ? 'exit' : 'close', (exitCode, signal) => resolve({ exitCode, signal }))
   })
   return {
     async closeOutput() {

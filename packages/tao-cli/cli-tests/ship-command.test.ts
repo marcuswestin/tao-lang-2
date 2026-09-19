@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, fakeTerminal, Test, withTaoFiles } from '@shared/test'
 import { runShipCommand } from '../cli-src/ship-command'
 import { shipInputHash } from '../cli-src/ship-model'
@@ -26,7 +26,7 @@ Describe('tao ship command', () => {
       Expect(output).toContain('Ship Notes 1.2.3 (202609021405)')
       Expect(output).toContain('Create an Admin App Store Connect API team key')
       Expect(output).toContain('Prebuild the iOS project')
-      Expect(await FS.exists(FS.resolvePath('.tao-project/lock.jsonc', FS.dirname(paths['App.tao']!)))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao-project', FS.dirname(paths['App.tao']!)))).toBe(false)
     })
   })
 
@@ -77,8 +77,14 @@ Describe('tao ship command', () => {
       '.tao-project/lock.jsonc': JSON.stringify(lock),
       'App.tao': source,
     }, async paths => {
+      const root = FS.dirname(paths['App.tao']!)
+      await CLI.mustRun('git', { args: ['-C', root, 'init', '-q'] })
+      await CLI.mustRun('git', { args: ['-C', root, 'config', 'user.email', 'test@example.com'] })
+      await CLI.mustRun('git', { args: ['-C', root, 'config', 'user.name', 'Tao Test'] })
+      await CLI.mustRun('git', { args: ['-C', root, 'add', '.'] })
+      await CLI.mustRun('git', { args: ['-C', root, 'commit', '-qm', 'Initial'] })
       const terminal = fakeTerminal()
-      await runShipCommand(FS.dirname(paths['App.tao']!), {
+      await runShipCommand(root, {
         betaRecipients: ['friend@example.com'],
         dryRun: true,
         ...terminal,
@@ -86,6 +92,22 @@ Describe('tao ship command', () => {
 
       Expect(terminal.outputText()).toContain('Resume uploaded App Store Connect build 202609020901 without rebuilding')
       Expect(terminal.outputText()).not.toContain('Archive and sign')
+    })
+  })
+
+  Test('does not retry a terminally rejected Apple build', async () => {
+    await expectFreshBuildForIneligibleCheckpoint({ processingState: 'INVALID' })
+  })
+
+  Test('does not reuse an uploaded checkpoint outside Git', async () => {
+    await expectFreshBuildForIneligibleCheckpoint({})
+  })
+
+  Test('does not promote a dirty TestFlight artifact to the App Store', async () => {
+    await expectFreshBuildForIneligibleCheckpoint({
+      dirty: true,
+      dirtyFingerprint: 'artifact-dirty-tree',
+      distribution: 'testflight',
     })
   })
 
@@ -117,3 +139,63 @@ Describe('tao ship command', () => {
     })
   })
 })
+
+async function expectFreshBuildForIneligibleCheckpoint(
+  checkpoint: Partial<{
+    dirty: boolean
+    dirtyFingerprint: string
+    distribution: 'testflight'
+    processingState: 'INVALID'
+  }>,
+): Promise<void> {
+  const inputHash = shipInputHash({
+    appName: 'Notes',
+    defaultApp: 'Notes',
+    projectId: 'notes',
+    releaseDatasourceConfiguration: undefined,
+  })
+  const lock = {
+    schemaVersion: 1,
+    ship: {
+      apps: {
+        'notes/Notes': {
+          accepted: {
+            bundleIdentifier: 'dev.tao-lang.notes',
+            issuerId: 'issuer-id',
+            keyId: 'KEY123',
+            namespace: 'dev.tao-lang',
+          },
+          appStoreAppId: 'app-42',
+          identity: 'notes/Notes',
+          inputHash,
+          lastBuild: {
+            commit: 'unversioned',
+            number: '202609021405',
+            processed: false,
+            version: '1.2.3',
+            ...checkpoint,
+          },
+          provenance: { at: '2026-09-02T09:01:00.000Z', command: 'tao ship', version: 1 },
+          status: 'accepted',
+        },
+      },
+    },
+  }
+  await withTaoFiles('tao-ship-command-', {
+    '.tao-project/lock.jsonc': JSON.stringify(lock),
+    'App.tao': source,
+  }, async paths => {
+    const terminal = fakeTerminal()
+    await runShipCommand(FS.dirname(paths['App.tao']!), {
+      dryRun: true,
+      ...terminal,
+    }, {
+      inspectPreflight: async () => [],
+      now: () => new Date('2026-09-02T14:05:00Z'),
+    })
+
+    Expect(terminal.outputText()).toContain('Ship Notes 1.2.3 (202609021406)')
+    Expect(terminal.outputText()).toContain('Archive and sign')
+    Expect(terminal.outputText()).not.toContain('Resume uploaded')
+  })
+}

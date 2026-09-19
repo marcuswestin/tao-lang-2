@@ -109,9 +109,7 @@ Describe('tao fmt', () => {
     })
   })
 
-  // `tao create` writes no Project.tao, so the generated tree's owner is often undeclared while an
-  // ancestor checkout declares one. The ancestor's root must not make the nested @/ tree writable.
-  Test('protects a generated root whose own project has no Project.tao under an ancestor that does', async () => {
+  Test('formats an undeclared nested @ directory instead of treating it as the project-root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
       'Project.tao': 'project {\n   id "outer-fmt"\n   name "Outer fmt"\n}\n',
@@ -121,11 +119,13 @@ Describe('tao fmt', () => {
       const results = await runFmt(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({
-        'Apps/Created/@/studio/Generated.tao': 'error',
+        'Apps/Created/@/studio/Generated.tao': 'changed',
         'Apps/Created/Authored.tao': 'changed',
         'Project.tao': 'unchanged',
       })
-      Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(
+        'view Generated() { }\n',
+      )
       Expect(await FS.readText(FS.resolvePath('Apps/Created/Authored.tao', rootDir))).toBe('view Authored() { }\n')
     })
   })

@@ -1,5 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Json, Repo } from '@shared'
+import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
@@ -46,6 +47,7 @@ export type StudioServerDeviceGateway = Pick<
   | 'captureRuntime'
   | 'confirmPairing'
   | 'declinePairing'
+  | 'detachSession'
   | 'highlightSource'
   | 'openPairing'
   | 'requestReconnect'
@@ -56,6 +58,8 @@ export type StudioServerDeviceGateway = Pick<
 >
 
 export type StudioServerOptions = {
+  /** Injected only by deterministic hosts that must exercise the real agent HTTP and browser path without egress. */
+  agentProvider?: AgentChatProvider
   /**
    * Secrets the agent chat may use, handed over as a value rather than exported into the environment. Studio
    * spawns a bundler, a preview runtime and a Swift helper, and every one of them inherits an environment.
@@ -176,6 +180,7 @@ export async function startStudioSessionServer(
     deviceSubscriptions.delete(sessionId)
     dataSources.get(sessionId)?.close()
     dataSources.delete(sessionId)
+    deviceGateway?.detachSession(sessionId)
   }
   const unsubscribeManager = manager.subscribe(event => {
     if (event.type === 'opened') {
@@ -261,6 +266,7 @@ export async function startStudioSessionServer(
             ? undefined
             : response(request, url, requestOptions, { error: 'WebSocket upgrade failed.' }, 400)
         }
+        configureRequestLifetime(request, bunServer, route.pathname)
         const sessionUrl = new URL(`${route.pathname}${url.search}${url.hash}`, url.origin)
         return await handleRequest(
           resource.session,
@@ -349,6 +355,17 @@ export async function startStudioSessionServer(
       server.stop(true)
     },
     url,
+  }
+}
+
+/** Shipping can be quiet for minutes while Apple processes a build; Bun otherwise resets it after ten seconds. */
+function configureRequestLifetime(
+  request: Request,
+  server: Pick<Bun.Server<StudioSocketData>, 'timeout'>,
+  pathname: string,
+): void {
+  if (at(request, pathname, routes.shipBeta)) {
+    server.timeout(request, 0)
   }
 }
 
@@ -766,12 +783,12 @@ async function handleRequest(
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
+        options.agentProvider,
       ),
     )
   }
-  // The chat commands answer any method; the table's POST is the one the client sends.
   const chat = StudioRoutes.match(routes.agentChat, pathname)
-  if (chat !== undefined) {
+  if (request.method === routes.agentChat.method && chat !== undefined) {
     return response(
       request,
       url,
@@ -782,6 +799,7 @@ async function handleRequest(
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
+        options.agentProvider,
       ),
     )
   }
@@ -1174,6 +1192,7 @@ function forbiddenResponse(message: string): Response {
 
 export const StudioServerTesting = {
   betaShipArguments,
+  configureRequestLifetime,
   errorResponse,
   handleDeviceRequest,
   handleRequest: handleRequestForTesting,

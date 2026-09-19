@@ -204,7 +204,8 @@ type DatasourceClaim = {
  * or stub variant is. A store is named by the collections it holds, sorted, never by the datasources
  * that fill it: adding an alternative, renaming one, or reordering declarations leaves the store and
  * every storage key defaulted from it untouched, and only a change to what the store holds — which
- * changes the store anyway — gives it a new name.
+ * changes the store anyway — gives it a new name. Length-prefixed parts are structural: collection
+ * sets such as `A_B, C` and `A, B_C` cannot collapse onto the same generated identity.
  */
 function groupDatasourcesByClaim(
   datasources: readonly AST.DatasourceDeclaration[],
@@ -219,7 +220,12 @@ function groupDatasourcesByClaim(
     if (!claimed || claimed.length === 0) {
       continue
     }
-    const name = claimed.map(collection => collection.name).toSorted().join('_')
+    const collectionNames = claimed.map(collection => collection.name).toSorted()
+    // Keep the established one-collection public name. `$` cannot occur in a Tao identifier, so a
+    // multi-collection structural spelling cannot alias any authored single collection name.
+    const name = collectionNames.length === 1
+      ? collectionNames[0]!
+      : `$${collectionNames.map(collectionName => `${collectionName.length}_${collectionName}`).join('')}`
     const group = groups.get(name) ?? { collections: [...claimed], datasources: [] }
     group.datasources.push(datasource)
     groups.set(name, group)

@@ -30,6 +30,7 @@ export type StudioClientView = {
   searchInput: HTMLInputElement
   shipOverlay: HTMLElement
   status: HTMLElement
+  dispose: () => void
 }
 
 type PaneName = 'bottom' | 'left' | 'preview' | 'right'
@@ -41,13 +42,28 @@ const dividerWidth = 4
 const editorMinimum = 240
 
 /** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
-export type StudioPaneControls = Readonly<{
+type StudioPaneControls = Readonly<{
   designLayout: (active: boolean) => void
+  dispose: () => void
   showLeft: () => void
 }>
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
+/** Emitted after the shell has synchronously committed a new layout preset to its root dataset. */
+export const studioLayoutPresetChangedEvent = 'tao-studio-layout-preset-changed'
+
+/** Design alone lends the parent canvas ownership of wheel and pinch gestures inside previews. */
+export function studioLayoutOwnsCanvasGestures(preset: string | undefined): boolean {
+  return preset === 'design'
+}
+
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+
+/** Responsive Design split leaves the inspector and a usable editor ahead of the canvas. */
+export function studioDesignPreviewSize(available: number, right: number): number {
+  const room = available - right - dividerWidth * 2 - editorMinimum
+  return Math.max(StudioPaneMinimums.preview, Math.min(Math.round(available / 2), Math.round(room)))
+}
 
 /** One stroke weight on a 24-unit grid; the rail, toolbar, and tree all draw from this set. */
 export const studioIconPaths = {
@@ -333,6 +349,7 @@ export function createStudioShell(
     searchInput: requiredInput(root, '.studio-search-input'),
     shipOverlay: requiredElement(root, '.studio-ship-overlay'),
     status: requiredElement(root, '.studio-status'),
+    dispose: panes.dispose,
   }
 }
 
@@ -398,6 +415,15 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   const right = requiredElement(root, '.studio-pane-right')
   const preview = requiredElement(root, '.studio-preview')
   const bottom = requiredElement(root, '.studio-drawer')
+  /**
+   * What the layout looked like before Design mode borrowed the width, so leaving can give it back.
+   * `previewSized` records that the person moved the canvas divider themselves while in Design mode;
+   * from then on their width stands instead of being re-derived from the host on every measurement.
+   */
+  const designLayout: { active: boolean; left?: number; preview?: number; previewSized: boolean } = {
+    active: false,
+    previewSized: false,
+  }
   const apply = (): void => {
     left.hidden = sizes.left === 0
     right.hidden = sizes.right === 0
@@ -405,6 +431,9 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     bottom.hidden = sizes.bottom === 0
     shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
+    if (designLayout.active && !designLayout.previewSized) {
+      sizes.preview = studioDesignPreviewSize(center.getBoundingClientRect().width, sizes.right)
+    }
     center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
     for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
@@ -415,22 +444,38 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       divider.tabIndex = 0
     }
   }
-  /** What the layout looked like before Design mode borrowed the width, so leaving can give it back. */
-  const designLayout: { active: boolean; left?: number; preview?: number } = { active: false }
   const save = (): void => {
     if (store !== undefined) {
-      StudioPaneSizes.save(store, sizes)
+      StudioPaneSizes.save(
+        store,
+        designLayout.active
+          ? {
+            ...sizes,
+            left: designLayout.left ?? sizes.left,
+            preview: designLayout.preview ?? sizes.preview,
+          }
+          : sizes,
+      )
     }
+  }
+  /** resize records one pane size the person asked for, rather than one the layout derived. */
+  const resize = (pane: PaneName, value: number): void => {
+    if (pane === 'preview') {
+      designLayout.previewSized = true
+    }
+    sizes[pane] = value
+    apply()
   }
   const setSize = (pane: PaneName, value: number): void => {
     if (value > 0) {
       lastExpanded[pane] = value
     }
-    sizes[pane] = value
-    apply()
+    resize(pane, value)
     save()
   }
   const toggle = (pane: PaneName): void => setSize(pane, sizes[pane] === 0 ? lastExpanded[pane] : 0)
+  const onResize = (): void => apply()
+  window.addEventListener('resize', onResize)
   apply()
   requiredButton(root, '.studio-collapse-left').addEventListener('click', () => {
     toggle('left')
@@ -475,8 +520,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
           ? start - moveEvent.clientX
           : moveEvent.clientX - start
         const minimum = StudioPaneMinimums[pane]
-        sizes[pane] = Math.max(minimum, initial + delta)
-        apply()
+        resize(pane, Math.max(minimum, initial + delta))
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)
@@ -503,19 +547,17 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       if (active) {
         designLayout.left = sizes.left
         designLayout.preview = sizes.preview
+        designLayout.previewSized = false
         sizes.left = 0
-        // Collapse first, then measure: the canvas takes half of what the workbench actually has,
-        // and never more than the room left once the inspector, the dividers and a usable editor
-        // have taken theirs. A track sized past that would squeeze the editor out of the layout.
-        apply()
-        const available = center.getBoundingClientRect().width
-        const room = available - sizes.right - dividerWidth * 2 - editorMinimum
-        sizes.preview = Math.max(StudioPaneMinimums.preview, Math.min(Math.round(available / 2), Math.round(room)))
+        // `apply` measures every time the host width or rail visibility changes.
       } else {
         sizes.left = designLayout.left ?? sizes.left
         sizes.preview = designLayout.preview ?? sizes.preview
       }
       apply()
+    },
+    dispose() {
+      window.removeEventListener('resize', onResize)
     },
     showLeft() {
       if (sizes.left === 0) {
@@ -535,6 +577,7 @@ function configurePresets(root: HTMLElement, panes: StudioPaneControls, storage?
       root.dataset['layoutPreset'] = button.dataset['preset']
       const preset = button.dataset['preset'] as StudioLayoutPreset
       panes.designLayout(preset === 'design')
+      root.dispatchEvent(new CustomEvent(studioLayoutPresetChangedEvent))
       if (preset === 'code' || preset === 'design' || preset === 'draw' || preset === 'run') {
         StudioWorkbenchState.saveLayoutPreset(store, preset)
       }

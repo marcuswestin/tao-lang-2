@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { testDataConnection } from '@runtime/TR-data-provider'
 import {
   commandCatalog,
   resetInteractionRuntime,
@@ -11,7 +12,7 @@ import {
 } from '@runtime/TR-interaction-outline'
 import type { TaoProps } from '@runtime/TR-TaoProps'
 import { Describe, Expect, Test } from '@shared/test'
-import { act, render, within } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
 function region(identity: string, label: string, primary = false): TaoOutlineEntry {
@@ -203,6 +204,41 @@ Describe('TR.Interaction generated layers', () => {
     resetInteractionRuntime()
   })
 
+  Test('dispatches the identity-stable key the hint layer shows after candidates change', async () => {
+    resetInteractionRuntime()
+    const withdraw = [
+      interactionOutline.register(region('main', 'Main', true)),
+      interactionOutline.register(item('zebra', 'main', 'Alpha')),
+      interactionOutline.register(item('zulu', 'main', 'Alpha')),
+    ]
+    TR.Interaction.Attention.revalidateOutline()
+    const screen = render(React.createElement(InteractionLayersHost))
+    await act(async () => {
+      TR.Interaction.PressKey('?')
+    })
+    Expect(within(screen.getByTestId('tao-interaction-row:zebra')).getByText('A — Alpha')).toBeDefined()
+    Expect(within(screen.getByTestId('tao-interaction-row:zulu')).getByText('L — Alpha')).toBeDefined()
+
+    await act(async () => {
+      TR.Interaction.PressKey('?')
+    })
+    withdraw.push(interactionOutline.register(item('aardvark', 'main', 'Alpha')))
+    TR.Interaction.Attention.revalidateOutline()
+    await act(async () => {
+      TR.Interaction.PressKey('?')
+    })
+    Expect(within(screen.getByTestId('tao-interaction-row:aardvark')).getByText('P — Alpha')).toBeDefined()
+
+    await act(async () => {
+      TR.Interaction.PressKey('p')
+    })
+    Expect(TR.Interaction.Attention.read().target).toBe('aardvark')
+
+    screen.unmount()
+    withdraw.forEach(dispose => dispose())
+    resetInteractionRuntime()
+  })
+
   Test('renders disabled palette state and refuses to invoke that command', async () => {
     resetInteractionRuntime()
     let invoked = 0
@@ -235,6 +271,7 @@ Describe('TR.Interaction generated layers', () => {
 
     Expect(screen.getByTestId('tao-interaction-row:@test/Unavailable').props.accessibilityState).toEqual({
       disabled: true,
+      selected: true,
     })
     await act(async () => {
       TR.Interaction.PressKey('Enter')
@@ -292,6 +329,96 @@ Describe('TR.Interaction generated layers', () => {
     unregisterFinish()
     unregisterDuplicate()
     unregisterDelete()
+    resetInteractionRuntime()
+  })
+
+  Test('renders mounted targets, store fallback, and scalar input for required command slots', async () => {
+    resetInteractionRuntime()
+    const schema = TR.Data.Schema({
+      entities: {
+        InteractionLayerWorkspace: {
+          collection: 'InteractionLayerWorkspaces',
+          fields: { Name: { kind: 'text', title: true } },
+        },
+      },
+      name: 'InteractionLayerPicker',
+    }, testDataConnection())
+    TR.Data.Create(schema, 'InteractionLayerWorkspace', { Name: TR.Value('Archive') })
+    const invoked: string[] = []
+    const move = TR.Interaction.Command({
+      // Fills are evaluated the way the compiler emits them: once where the fill is read, and once
+      // more inside the runtime call that receives it.
+      action: fills =>
+        TR.Action(() => {
+          const workspace = fills['Workspace']?.evaluate().evaluate().jsValue
+          invoked.push(`${TR.Data.Read(workspace, 'Name')}:${fills['Name']?.evaluate().evaluate().jsValue}`)
+        }),
+      members: { Key: () => TR.Value('m'), Title: () => TR.Value('Move document') },
+      name: 'Move',
+      slots: ['Document', 'Workspace', 'Name'],
+    })
+    const unregister = commandCatalog.register({
+      commands: [{
+        command: () => move,
+        identity: '@test/Move',
+        name: 'Move',
+        scope: { kind: 'module' },
+        slots: [
+          { entity: true, name: 'Document', required: true, type: 'Document' },
+          { entity: true, name: 'Workspace', required: true, type: 'InteractionLayerWorkspace' },
+          { entity: false, name: 'Name', required: true, type: 'text' },
+        ],
+        static: { key: 'm', title: 'Move document' },
+      }],
+      module: '@test/Move',
+    })
+    const withdraw = [
+      interactionOutline.register(region('documents', 'Documents', true)),
+      interactionOutline.register({
+        ...item('document', 'documents', 'Draft'),
+        live: {
+          commandPolicy: { hidden: [], surfaced: ['@test/Move'] },
+          entityType: 'Document',
+          runtimeValue: TR.Value('draft'),
+        },
+      }),
+      interactionOutline.register({
+        ...item('home', 'documents', 'Home'),
+        live: { entityType: 'InteractionLayerWorkspace', runtimeValue: TR.Value('home') },
+      }),
+    ]
+    TR.Interaction.Attention.revalidateOutline()
+    TR.Interaction.Attention.target('document')
+    const screen = render(React.createElement(InteractionLayersHost))
+
+    await act(async () => {
+      TR.Interaction.PressKey('.')
+      TR.Interaction.PressKey('m')
+    })
+    Expect(screen.getByText('Choose Workspace for Move document')).toBeDefined()
+    Expect(screen.getByText('Home')).toBeDefined()
+    Expect(screen.getByTestId('tao-interaction-pending-search')).toBeDefined()
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('tao-interaction-pending-search'))
+    })
+    const archive = screen.getByLabelText('Archive')
+    await act(async () => {
+      fireEvent.press(archive)
+    })
+    const input = screen.getByTestId('tao-interaction-pending-input')
+    Expect(input.props.accessibilityLabel).toBe('Name for Move document')
+    await act(async () => {
+      fireEvent.changeText(input, 'Filed')
+    })
+    await act(async () => {
+      fireEvent(screen.getByTestId('tao-interaction-pending-input'), 'submitEditing')
+    })
+    Expect(invoked).toEqual(['Archive:Filed'])
+
+    screen.unmount()
+    withdraw.forEach(dispose => dispose())
+    unregister()
     resetInteractionRuntime()
   })
 

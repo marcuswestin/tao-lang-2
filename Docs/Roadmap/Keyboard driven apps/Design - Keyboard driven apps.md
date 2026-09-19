@@ -1,13 +1,11 @@
 # Keyboard driven apps — design
 
 The design record for the interaction system (`Roadmap.md`, Toward v1: "Implement the interaction
-system"). The **design summary** is the authoritative statement of what was decided; the discovery
-record beneath it — architecture findings, terminology, the question set, decisions with reasoning,
-the story sweep — preserves why. **These decisions are authoritative with respect to every markdown
-document in the repository** (Ro, 2026-09-02): a live document that disagrees —
-`Docs/Roadmap/Tao Revolution/Decisions.md` included — is updated to match, per tranche and in the
-plan's closing documentation sweep (`Plan - Keyboard driven apps.md`, T7); `Docs/Spec/` follows
-implementation; the archive stays frozen unless Ro asks.
+system"). `Docs/Roadmap/Tao Revolution/Decisions.md` is authoritative; the design summary records
+the rationale and the discovery record beneath it preserves the investigation, terminology, question
+set, and story sweep. A live contradiction is reconciled into `Decisions.md` and the executable
+specification rather than allowing this dated design record to outrank them. The archive stays frozen
+unless Ro asks.
 
 Status: **discovery closed** (KEY-D1–D14); **the T1–T5 core is implemented and absorbed, including
 T3½** (2026-09-03). The implementation plan owns a complete ledger of decided behavior still to
@@ -19,9 +17,10 @@ Note on evidence: the codebase investigation ran on 2026-09-01 against a working
 then-unmerged repository-simplification content, which has since landed on `main` (merged into
 this branch 2026-09-01), so cited paths — `Apps/Test Apps/` reorganization included — match `main`
 again. The simplification was re-reviewed after the merge: every seam file this ledger cites
-survives, intent `Title`/`Description`/`Summary` metadata was explicitly kept, the `do <command>`
-latent defect is still present, and `tests.langium` gained `RelaunchStep` — further evidence the
-test-step seam extends the way KEY-Q26 assumes. Line numbers still drift; symbols are the stable
+survives, intent `Title`/`Description`/`Summary` metadata was explicitly kept, and
+`tests.langium` gained `RelaunchStep` — further evidence the test-step seam extends the way KEY-Q26
+assumes. The formerly latent `do <command>` parsing defect is fixed; this paragraph records the
+historical investigation, not a current defect. Line numbers still drift; symbols are the stable
 reference.
 
 ---

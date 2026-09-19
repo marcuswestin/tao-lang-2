@@ -24,6 +24,7 @@ class FakeCdpTransport implements StudioCdpTransport {
   }
   readonly calls: CdpCall[] = []
   readonly evaluateResults: unknown[] = []
+  readonly isolatedWorldErrors: Error[] = []
   frameTree: {
     childFrames?: Array<{ frame: { id: string; url: string } }>
     frame: { id: string; url: string }
@@ -59,6 +60,10 @@ class FakeCdpTransport implements StudioCdpTransport {
       return { frameTree: this.frameTree } as Result
     }
     if (method === 'Page.createIsolatedWorld') {
+      const error = this.isolatedWorldErrors.shift()
+      if (error !== undefined) {
+        throw error
+      }
       return { executionContextId: 42 } as Result
     }
     if (method === 'Page.captureScreenshot') {
@@ -119,6 +124,36 @@ Describe('Studio browser CDP harness', () => {
         params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 200, y: 300 },
       },
     ])
+  })
+
+  Test('dispatches bounded offset clicks and physical primary-wheel gestures', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push({ x: 12, y: 34 }, { x: 200, y: 300 }, true)
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.clickAtOffset('.cm-line', { x: 2, y: 10 })
+    await browser.wheel('.studio-preview-cell iframe', { x: 4, y: -180 }, { primary: true })
+
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 1, clickCount: 1, type: 'mousePressed', x: 12, y: 34 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 12, y: 34 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { deltaX: 4, deltaY: -180, modifiers: 4, type: 'mouseWheel', x: 200, y: 300 },
+      },
+    ])
+    await Expect(browser.clickAtOffset('.cm-line', { x: Number.NaN, y: 0 })).rejects.toThrow(
+      'horizontal click offset must be finite',
+    )
+    await Expect(browser.wheel('.cm-scroller', { x: 0, y: Number.NaN })).rejects.toThrow(
+      'vertical wheel delta must be finite',
+    )
   })
 
   // Chrome never synthesizes HTML5 drag-and-drop from mouse events, so a palette drag has to go
@@ -343,6 +378,49 @@ Describe('Studio browser CDP harness', () => {
     })
     Expect(transport.calls.filter(call => call.method === 'Browser.getVersion')).toHaveLength(2)
     Expect(transport.calls.filter(call => call.method === 'Page.getFrameTree')).toHaveLength(2)
+  })
+
+  Test('retries waits only for recognized execution-context replacement', async () => {
+    const transient = new FakeCdpTransport()
+    transient.evaluateResults.push(
+      new Errors.HostEnvironmentError('Execution context was destroyed.'),
+      true,
+    )
+    const browser = StudioCdp.testing.create(transient)
+
+    await browser.waitFor('window.ready === true', { timeoutMs: 1_000 })
+    Expect(transient.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(2)
+
+    const productFailure = new FakeCdpTransport()
+    productFailure.evaluateResults.push(new Errors.HostEnvironmentError('Preview handler failed after dispatch.'))
+    await Expect(
+      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }),
+    ).rejects.toThrow('Preview handler failed after dispatch.')
+    Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+  })
+
+  Test('retries frame replacement only before dispatching the page action', async () => {
+    const transport = new FakeCdpTransport()
+    transport.frameTree = {
+      childFrames: [{ frame: { id: 'preview', url: 'http://127.0.0.1:55102/' } }],
+      frame: { id: 'root', url: 'http://127.0.0.1/studio' },
+    }
+    transport.isolatedWorldErrors.push(new Errors.HostEnvironmentError('Cannot find context with specified id'))
+    transport.evaluateResults.push(true)
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.clickInFrame('http://127.0.0.1:55102/', '#send-once')
+
+    Expect(transport.calls.filter(call => call.method === 'Page.createIsolatedWorld')).toHaveLength(2)
+    Expect(transport.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+
+    const afterDispatch = new FakeCdpTransport()
+    afterDispatch.frameTree = transport.frameTree
+    afterDispatch.evaluateResults.push(new Errors.HostEnvironmentError('Execution context was destroyed.'))
+    await Expect(
+      StudioCdp.testing.create(afterDispatch).clickInFrame('http://127.0.0.1:55102/', '#send-once'),
+    ).rejects.toThrow('Execution context was destroyed.')
+    Expect(afterDispatch.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })
 
   Test('dispatches physical keys with platform-primary and unmodified punctuation', async () => {

@@ -9,7 +9,11 @@ import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatSession } from '../studio-src/agent-chat/AgentChatSession'
 import type { AgentChatToolCall } from '../studio-src/agent-chat/AgentChatTools'
 
-type Turn = { text?: string; call?: { name: string; input: unknown } }
+type Turn = {
+  text?: string
+  call?: { name: string; input: unknown }
+  usage?: { inputTokens?: number; outputTokens?: number }
+}
 
 /** The provider-level stream parts this double emits, named locally so no extra dependency is declared. */
 type StreamPart =
@@ -34,9 +38,18 @@ function scripted(turns: readonly Turn[]): MockLanguageModelV3 {
         unified: turn.call === undefined ? ('stop' as const) : ('tool-calls' as const),
       }
       const usage = {
-        inputTokens: { cacheRead: undefined, cacheWrite: undefined, noCache: 1, total: 1 },
-        outputTokens: { reasoning: undefined, text: 1, total: 1 },
-        totalTokens: 2,
+        inputTokens: {
+          cacheRead: undefined,
+          cacheWrite: undefined,
+          noCache: turn.usage?.inputTokens ?? 1,
+          total: turn.usage?.inputTokens ?? 1,
+        },
+        outputTokens: {
+          reasoning: undefined,
+          text: turn.usage?.outputTokens ?? 1,
+          total: turn.usage?.outputTokens ?? 1,
+        },
+        totalTokens: (turn.usage?.inputTokens ?? 1) + (turn.usage?.outputTokens ?? 1),
       }
       const parts: StreamPart[] = turn.call === undefined
         ? [
@@ -243,6 +256,104 @@ Describe('Studio agent chat loop', () => {
     Expect(turn.message).toBe(
       'The step budget of 3 ran out before the model finished. Ask a narrower question, or raise the budget.',
     )
+  })
+
+  Test('fixed token exhaustion outranks approval and cannot dispatch a continuation', async () => {
+    const calls: string[] = []
+    const session = new AgentChatSession({
+      approvalRequired: ['renameStory'],
+      instructions: 'Do as asked.',
+      model: scripted([
+        {
+          call: { input: { title: 'Renamed' }, name: 'renameStory' },
+          usage: { inputTokens: 10, outputTokens: 8_000 },
+        },
+        { text: 'This continuation must never run.' },
+      ]),
+      tools: tools(calls),
+    })
+
+    const exhausted = await session.send('rename the story')
+    const continuation = await session.respond([])
+
+    Expect(exhausted.status).toBe('budget-exhausted')
+    Expect(exhausted.pendingApprovals).toEqual([])
+    Expect(exhausted.usage).toEqual({ inputTokens: 10, outputTokens: 8_000 })
+    Expect(continuation.message).toBe('Nothing is waiting for approval.')
+    Expect(calls).toEqual([])
+  })
+
+  Test('an input that cannot fit the fixed ceiling is rejected before provider dispatch', async () => {
+    let dispatched = false
+    const session = new AgentChatSession({
+      instructions: 'Answer.',
+      model: new MockLanguageModelV3({
+        doStream: async () => {
+          dispatched = true
+          Errors.throwUnexpected('the over-budget prompt reached the provider')
+        },
+      }),
+      tools: {},
+    })
+
+    const turn = await session.send('x'.repeat(64_001))
+
+    Expect(turn.status).toBe('budget-exhausted')
+    Expect(turn.usage).toEqual({ inputTokens: 0, outputTokens: 0 })
+    Expect(dispatched).toBe(false)
+  })
+
+  Test('a provider-reported overshoot is cumulative and explicitly budget-exhausted', async () => {
+    const session = new AgentChatSession({
+      instructions: 'Answer.',
+      model: scripted([{ text: 'too much', usage: { inputTokens: 65_000, outputTokens: 9_000 } }]),
+      tools: {},
+    })
+
+    const turn = await session.send('answer')
+
+    Expect(turn.status).toBe('budget-exhausted')
+    Expect(turn.usage).toEqual({ inputTokens: 65_000, outputTokens: 9_000 })
+    Expect(String(turn.message).includes('budget')).toBe(true)
+  })
+
+  Test('token usage is cumulative across tool-loop steps', async () => {
+    const session = new AgentChatSession({
+      instructions: 'Answer.',
+      model: scripted([
+        { call: { input: {}, name: 'countStories' }, usage: { inputTokens: 100, outputTokens: 4_000 } },
+        { call: { input: {}, name: 'countStories' }, usage: { inputTokens: 120, outputTokens: 4_000 } },
+      ]),
+      tools: tools([]),
+    })
+
+    const turn = await session.send('answer')
+
+    Expect(turn.status).toBe('budget-exhausted')
+    Expect(turn.steps).toBe(2)
+    Expect(turn.usage).toEqual({ inputTokens: 220, outputTokens: 8_000 })
+  })
+
+  Test('token usage stays cumulative across an approval continuation', async () => {
+    const session = new AgentChatSession({
+      approvalRequired: ['renameStory'],
+      instructions: 'Do as asked.',
+      model: scripted([
+        {
+          call: { input: { title: 'Renamed' }, name: 'renameStory' },
+          usage: { inputTokens: 100, outputTokens: 3_000 },
+        },
+        { text: 'Renamed it.', usage: { inputTokens: 120, outputTokens: 5_000 } },
+      ]),
+      tools: tools([]),
+    })
+    const asked = await session.send('rename the story')
+
+    const done = await session.respond([{ approvalId: asked.pendingApprovals[0]!.approvalId, approved: true }])
+
+    Expect(done.status).toBe('budget-exhausted')
+    Expect(done.steps).toBe(2)
+    Expect(done.usage).toEqual({ inputTokens: 220, outputTokens: 8_000 })
   })
 
   Test('a provider failure ends the turn without throwing into Studio', async () => {

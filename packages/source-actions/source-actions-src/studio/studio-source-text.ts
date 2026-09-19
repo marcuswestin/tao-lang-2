@@ -35,9 +35,9 @@ export function blockStatementSlices(source: string, block: AST.Block): BlockSta
   const contentStart = block.$cstNode!.offset + 1
   const starts = block.statements.map((statement, index) => {
     const statementStart = statement.$cstNode!.offset
-    const lineStart = lineStartAt(source, statementStart)
     const previousEnd = block.statements[index - 1]?.$cstNode?.end ?? contentStart
-    return lineStart < previousEnd ? statementStart : lineStart
+    const lineStart = lineStartAt(source, statementStart)
+    return lineStart < previousEnd ? statementStart : leadingCommentStart(source, lineStart, previousEnd)
   })
   const slices = block.statements.map((statement, index) => {
     const start = starts[index]!
@@ -70,6 +70,20 @@ export function blockStatementSlices(source: string, block: AST.Block): BlockSta
     }
   }
   return grouped
+}
+
+/** A contiguous comment block immediately before a statement documents that statement, not its predecessor. */
+function leadingCommentStart(source: string, statementLineStart: number, previousEnd: number): number {
+  let start = statementLineStart
+  while (start > previousEnd) {
+    const previousLineEnd = start - 1
+    const previousLineStart = lineStartAt(source, previousLineEnd)
+    if (previousLineStart < previousEnd || !source.slice(previousLineStart, previousLineEnd).trim().startsWith('//')) {
+      break
+    }
+    start = previousLineStart
+  }
+  return start
 }
 
 export function blockCloseBraceOffset(text: string, block: AST.Block): number {

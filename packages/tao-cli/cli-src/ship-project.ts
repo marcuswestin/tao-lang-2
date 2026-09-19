@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST, Langium, Parser } from '@parser'
-import { Errors, FS, Repo } from '@shared'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { Workspace } from '@workspace'
 import type { ShipVersion } from './ship-model'
 
@@ -19,10 +19,15 @@ export type ShipProjectApp = {
   usesDevDatasource: boolean
 }
 
-export type ShipICloudBinding = {
-  container?: string
-  /** services names the iCloud service the bound provider needs entitled. */
-  services: readonly ShipICloudService[]
+type ShipICloudBinding = {
+  /** serviceBindings preserves which containers each mounted Apple provider actually uses. */
+  serviceBindings: ReadonlyArray<{
+    /** containers lists every explicit container mounted for this service. */
+    containers: readonly string[]
+    service: ShipICloudService
+    /** usesDefaultContainer records a binding that defaults to the app bundle container. */
+    usesDefaultContainer: boolean
+  }>
 }
 
 type ShipICloudService = 'CloudDocuments' | 'CloudKit'
@@ -191,7 +196,7 @@ function hasLocalInstantEndpoint(datasource: ASTUtils.ResolvedDatasource): boole
 }
 
 /** deriveHostedDatasourceConfiguration keeps a local InstantDB declaration intact while deriving its ship patch. */
-export function deriveHostedDatasourceConfiguration(
+function deriveHostedDatasourceConfiguration(
   appName: string,
   datasources: readonly ASTUtils.ResolvedDatasource[],
 ): Readonly<Record<string, string>> | undefined {
@@ -222,18 +227,33 @@ export function deriveHostedDatasourceConfiguration(
  * `Container` that binding settles on and the iCloud service the provider needs. The ship pipeline
  * turns it into the binary's iCloud entitlements, defaulting the container to the bundle identifier.
  */
-export function deriveICloudBinding(
+function deriveICloudBinding(
   datasources: readonly ASTUtils.ResolvedDatasource[],
 ): ShipICloudBinding | undefined {
+  const serviceBindings: ShipICloudBinding['serviceBindings'][number][] = []
   for (const provider of appleDatasourceProviders) {
-    const bound = datasources.find(datasource => mountsProvider(datasource, provider.typeName))
-    if (!bound) {
-      continue
+    const containers = new Set<string>()
+    let usesDefaultContainer = false
+    const mounted = datasources.filter(datasource => mountsProvider(datasource, provider.typeName))
+    for (const bound of mounted) {
+      const container = bound.configuration.get('Container')
+      if (container === undefined) {
+        usesDefaultContainer = true
+      } else {
+        containers.add(container)
+      }
     }
-    const container = bound.configuration.get('Container')
-    return { ...container === undefined ? {} : { container }, services: [provider.service] }
+    if (mounted.length > 0) {
+      serviceBindings.push({
+        containers: [...containers].toSorted(),
+        service: provider.service,
+        usesDefaultContainer,
+      })
+    }
   }
-  return undefined
+  return serviceBindings.length === 0
+    ? undefined
+    : { serviceBindings: serviceBindings.toSorted((left, right) => left.service.localeCompare(right.service)) }
 }
 
 function oneProjectString(
@@ -279,5 +299,11 @@ export async function writeProjectVersion(project: ShipProject, version: ShipVer
     Errors.throwUnexpected(`Project version in ${project.projectSourcePath} has no source location.`)
   }
   const replaced = `${source.slice(0, cst.offset)}version ${JSON.stringify(version)}${source.slice(cst.end)}`
-  await FS.writeText(project.projectSourcePath, await Formatter.formatCode(replaced))
+  const temporary = `${project.projectSourcePath}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
+  try {
+    await FS.writeText(temporary, await Formatter.formatCode(replaced))
+    await FS.move(temporary, project.projectSourcePath)
+  } finally {
+    await FS.remove(temporary).catch(() => {})
+  }
 }

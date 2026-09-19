@@ -21,9 +21,9 @@ export function ICloudProvider(loadDocuments: () => ICloudDocuments = nativeDocu
       const container = optionalConfigurationText(providerName, context, 'Container')
       const documents = loadDocuments()
       const name = documentName(context.storageKey)
-      // The snapshot this connection most recently handed iCloud. The watch reports the document
-      // after our own write like any other change, and that echo must not re-enter the store as a
-      // remote snapshot.
+      // The snapshot this connection most recently handed iCloud. It suppresses only echoes while
+      // that remains the document's current history: once a different remote value arrives it is
+      // cleared, so another device can later legitimately restore the same bytes.
       let lastWritten: string | undefined
       // Writes in flight, and whether the watch fired during one. The watch may read the document
       // between two back-to-back writes and report the earlier one after the later has been
@@ -76,9 +76,13 @@ export function ICloudProvider(loadDocuments: () => ICloudDocuments = nativeDocu
             }
             // A missing document never reaches the store: nothing in this design deletes it, so an
             // absent item is iCloud's own bookkeeping mid-flight, never a request to drop rows.
-            if (contents === undefined || contents === lastWritten) {
+            if (contents === undefined) {
               return
             }
+            if (contents === lastWritten) {
+              return
+            }
+            lastWritten = undefined
             observer.snapshot(contents)
           }
           const stop = documents.watch(container, name, {

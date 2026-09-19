@@ -2,7 +2,7 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, stubView, Test } from '@shared/test'
 import { InteractionValidator } from '../validator-src/validators/interaction-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
-import { accepts, rejects, stubContainer, testValidateCode } from './test-validate'
+import { accepts, acceptsFiles, rejects, rejectsFiles, stubContainer, testValidateCode } from './test-validate'
 
 const leaf = stubView('Leaf')
 const messages = InteractionValidator.messages
@@ -32,30 +32,88 @@ Describe('validator: interaction attention', () => {
       command Finish(Document) { Title "Finish" Key "f" do Run() }
       command Duplicate(Document) { Title "Duplicate" Key "d" do Run() }
       command Delete(Document) { Title "Delete" Key "x" do Run() }
-      view Sidebar() { render Leaf() }
+      ${stubContainer('Panel')}
+      view Shell(Navigator nav) {
+        render Panel() {
+          Navigator()
+          Sidebar()
+        }
+      }
+      view Sidebar() { render Leaf() [rigid when Sidebar is active] }
       view Row(Document) {
         Commands { Finish, Duplicate }
         hide Delete
         render Leaf() [fill when pressed, hug when focused, compress when hovered,
-          rigid when Sidebar is active, centered when Scheme is Dark]
+          centered when Scheme is Dark]
       }
     `),
   )
 
   Test(
-    'accepts an active-region condition naming a #tag and rejects one naming nothing visible',
+    'accepts exact reachable region members and rejects tags, orphans, and private sibling identities',
     async () => {
-      await accepts(`
-        ${leaf}
-        ${stubContainer('Panel')}
-        view Home() {
-          render Panel() {
-            #Sidebar
-            Leaf()
-            Leaf() [rigid when Sidebar is active]
+      await acceptsFiles({
+        'Main.tao': `
+          ${stubContainer('Panel')}
+          view Shell(Navigator nav) {
+            render Panel() {
+              Navigator()
+              Sidebar()
+            }
           }
-        }
-      `)()
+        `,
+        'Sidebar.tao': `
+          ${leaf}
+          folder view Sidebar() { render Leaf() [rigid when Sidebar is active] }
+        `,
+      })()
+      await rejects(
+        `
+          ${leaf}
+          ${stubContainer('Panel')}
+          view Home() {
+            render Panel() {
+              #Sidebar
+              Leaf()
+              Leaf() [rigid when Sidebar is active]
+            }
+          }
+        `,
+        messages.unknownRegion('Sidebar'),
+      )()
+      await rejects(
+        `
+          ${leaf}
+          view Orphan() { render Leaf() [rigid when Orphan is active] }
+        `,
+        messages.unknownRegion('Orphan'),
+      )()
+      await rejectsFiles(
+        {
+          'Main.tao': `
+            ${leaf}
+            ${stubContainer('Panel')}
+            view Shell(Navigator nav) {
+              render Panel() {
+                Navigator()
+                FocusBar()
+              }
+            }
+            view FocusBar() { render Leaf() [rigid when Hidden is active] }
+          `,
+          'Hidden.tao': `
+            ${stubView('Hidden')}
+            ${stubContainer('PrivatePanel')}
+            view PrivateShell(Navigator nav) {
+              render PrivatePanel() {
+                Navigator()
+                Hidden()
+              }
+            }
+          `,
+        },
+        messages.unknownRegion('Hidden'),
+      )()
       await rejects(
         `
           ${leaf}
@@ -84,8 +142,8 @@ Describe('validator: interaction attention', () => {
         }
       `,
       messages.condition('when focusd'),
-      testValidationMessages.interactionVocabulary('key'),
-      testValidationMessages.interactionVocabulary('narrow'),
+      testValidationMessages.interactionVocabulary('key, down, or up'),
+      testValidationMessages.interactionVocabulary('hover, focus, or narrow'),
       testValidationMessages.interactionExpectation,
     ),
   )

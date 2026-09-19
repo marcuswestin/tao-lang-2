@@ -78,6 +78,8 @@ export {
   type StudioClientConfig,
 } from './StudioClientAssets'
 
+export { AgentChatProvider } from './agent-chat/AgentChatProvider'
+
 export {
   type StudioEditorSnippet,
   StudioInspector,
@@ -145,6 +147,8 @@ export {
   type StudioSourceActionUndoResult,
   StudioSourceConflictError,
 } from './StudioProjectSession'
+
+export { StudioRoutes, StudioSessionPath } from './StudioProtocol'
 
 export {
   type StudioSketch,

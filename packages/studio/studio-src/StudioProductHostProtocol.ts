@@ -68,6 +68,8 @@ export type StudioProductHostState = Readonly<{
   activeFile?: Readonly<{
     content: string
     path: string
+    revealRevision: number
+    saved: boolean
     selectionAnchor: number
     selectionHead: number
     sourceVersion: string

@@ -6,8 +6,9 @@ import { type AppStoreBuild, AppStoreConnectClient } from './app-store-connect-c
 import type { PreparedShip, ShipCommandOptions } from './ship-command'
 import { acceptedEntryWithRunState, preparedKeyPath } from './ship-command'
 import { dataSchemaFingerprint, runtimeFingerprint } from './ship-fingerprints'
-import { commitShipState, commitShipVersion, shipNotesSince, tagShipVersion } from './ship-git'
+import { inspectShipGit, shipNotesSince } from './ship-git'
 import { SHIP_LOCK_RELATIVE_PATH, type ShipLockEntry, writeProjectLock } from './ship-lock'
+import { nextBuildNumber } from './ship-model'
 import { planShipPipeline, runShipPipeline, type ShipCommandRunner } from './ship-pipeline'
 import { planShipProgress, shipCommandFailure, ShipProgress } from './ship-progress'
 import { writeProjectVersion } from './ship-project'
@@ -45,6 +46,9 @@ export async function executePreparedShip(
   options: ShipCommandOptions,
   dependencies: ShipExecutorDependencies = {},
 ): Promise<void> {
+  if (prepared.reuseBuild && prepared.git.root === undefined) {
+    Errors.throwUserInput('A build outside Git cannot be reused because Tao cannot prove its exact source provenance.')
+  }
   const phases = planShipProgress({
     beta: options.betaRecipients !== undefined,
     buildId: prepared.entry.lastBuild?.buildId,
@@ -84,12 +88,24 @@ async function executePreparedShipRun(
   }
   const runtimeRoot = dependencies.runtimeRoot ?? RuntimeToolchainPaths.packageRoot
   const runner = dependencies.commandRunner ?? CLI.mustRun
-  const lockPath = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, prepared.project.root)
-  let entry = prepared.entry
-  let lock = acceptedEntryWithRunState(prepared, entry)
+  let activePrepared = prepared
+  let entry = activePrepared.entry
+  const releaseNotesFromCommit = prepared.reuseBuild
+    ? entry.lastBuild?.releaseNotesFromCommit ?? entry.lastBuild?.commit
+    : entry.lastBuild?.commit
+  let lock = acceptedEntryWithRunState(activePrepared, entry)
 
   if (options.update) {
-    await executeUpdate(prepared, options, entry, runtimeRoot, runner, progress, logFile, dependencies.updateClient)
+    await executeUpdate(
+      activePrepared,
+      options,
+      entry,
+      runtimeRoot,
+      runner,
+      progress,
+      logFile,
+      dependencies.updateClient,
+    )
     return
   }
 
@@ -97,12 +113,13 @@ async function executePreparedShipRun(
     await writeProjectVersion(prepared.project, prepared.version)
   }
   await writeProjectLock(prepared.project.root, lock)
-  let sourceCommit = prepared.git.commit
-  if (prepared.git.root && (prepared.versionBumped || !await pathIsTrackedAndClean(lockPath, prepared.git.root))) {
-    sourceCommit = prepared.versionBumped
-      ? await commitShipVersion(prepared.git, [prepared.project.projectSourcePath, lockPath], prepared.version)
-      : await commitShipState(prepared.git, lockPath, `Accept ship metadata for ${prepared.app.name}`)
+  activePrepared = {
+    ...activePrepared,
+    git: await inspectShipGit(prepared.project.root, {
+      excludePaths: [FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, prepared.project.root)],
+    }),
   }
+  const sourceCommit = activePrepared.git.commit
 
   const apple = dependencies.appleClient ?? new AppStoreConnectClient({
     authorizationToken: async () =>
@@ -115,6 +132,14 @@ async function executePreparedShipRun(
   progress.step('app-store-connect')
   const { appId, teamId } = await ensureAppleProject(apple, prepared, options)
 
+  if (!prepared.reuseBuild) {
+    const remoteBuildNumbers = (await apple.builds(appId)).map(candidate => candidate.attributes.version)
+    activePrepared = {
+      ...activePrepared,
+      buildNumber: nextBuildNumber(prepared.buildNumber, remoteBuildNumbers),
+    }
+  }
+
   let build: AppStoreBuild | undefined
   let nativeFingerprint = entry.update?.runtimeFingerprint
   let schemaFingerprint = entry.update?.dataSchemaFingerprint
@@ -123,9 +148,9 @@ async function executePreparedShipRun(
     nativeFingerprint = await runtimeFingerprint(runtimeRoot, runner as typeof CLI.run)
     schemaFingerprint = await dataSchemaFingerprint(prepared.project.root)
     const updateServer = entry.update?.serverUrl ?? 'https://updates.tao-lang.dev'
-    const manifest = runtimeManifest(prepared, sourceCommit, nativeFingerprint, updateServer)
-    await Runtime.generateApp(prepared.app.sourcePath, {
-      appName: prepared.app.name,
+    const manifest = runtimeManifest(activePrepared, sourceCommit, nativeFingerprint, updateServer)
+    await Runtime.generateApp(activePrepared.app.sourcePath, {
+      appName: activePrepared.app.name,
       datasourceConfiguration: accepted.datasourceConfiguration,
       runtimePackageRoot: runtimeRoot,
       ship: manifest,
@@ -136,7 +161,7 @@ async function executePreparedShipRun(
     const artifacts = FS.resolvePath(`.artifacts/ship/${prepared.app.name}`, runtimeRoot)
     await runShipPipeline(
       planShipPipeline({
-        archivePath: FS.resolvePath(`${prepared.app.name}.xcarchive`, artifacts),
+        archivePath: FS.resolvePath(`${activePrepared.app.name}.xcarchive`, artifacts),
         exportPath: FS.resolvePath('export', artifacts),
         issuerId: accepted.issuerId,
         keyId: accepted.keyId,
@@ -156,8 +181,13 @@ async function executePreparedShipRun(
       appStoreAppId: appId,
       lastBuild: {
         commit: sourceCommit,
-        number: prepared.buildNumber,
+        number: activePrepared.buildNumber,
         processed: false,
+        processingState: 'PROCESSING',
+        releaseNotesFromCommit,
+        dirty: activePrepared.git.dirty,
+        dirtyFingerprint: activePrepared.git.dirtyFingerprint,
+        distribution: options.betaRecipients === undefined ? 'app-store' : 'testflight',
         version: prepared.version,
       },
       update: {
@@ -168,35 +198,61 @@ async function executePreparedShipRun(
         serverUrl: updateServer,
       },
     }
-    lock = acceptedEntryWithRunState(prepared, entry)
-    await writeProjectLock(prepared.project.root, lock)
+    lock = acceptedEntryWithRunState(activePrepared, entry)
+    await writeProjectLock(activePrepared.project.root, lock)
     if (options.noWait) {
       progress.step('checkpoint')
-      await persistShipCheckpoint(prepared, lockPath)
-      writeSummary(prepared, appId, sourceCommit, 'Uploaded; Apple is processing the build.')
+      writeSummary(activePrepared, appId, sourceCommit, 'Uploaded; Apple is processing the build.', options)
       return
     }
     progress.step('apple-processing')
-    build = await apple.waitForProcessedBuild({ appId, buildNumber: prepared.buildNumber })
+    build = await waitForProcessedBuild(apple, activePrepared, entry, appId)
   } else {
     const buildId = entry.lastBuild?.buildId
     if (!buildId) {
       progress.step('apple-processing')
-      build = await apple.waitForProcessedBuild({ appId, buildNumber: prepared.buildNumber })
+      build = await waitForProcessedBuild(apple, activePrepared, entry, appId)
     } else {
-      build = { attributes: { processingState: 'VALID', version: prepared.buildNumber }, id: buildId, type: 'builds' }
+      build = {
+        attributes: { processingState: 'VALID', version: activePrepared.buildNumber },
+        id: buildId,
+        type: 'builds',
+      }
     }
   }
   if (!build) {
-    Errors.throwHostEnvironment(`Apple did not return processed build ${prepared.buildNumber}.`)
+    Errors.throwHostEnvironment(`Apple did not return processed build ${activePrepared.buildNumber}.`)
+  }
+  entry = {
+    ...entry,
+    lastBuild: {
+      ...entry.lastBuild!,
+      buildId: build.id,
+      processed: true,
+      processingState: 'VALID',
+    },
+    ...(nativeFingerprint === undefined || schemaFingerprint === undefined
+      ? {}
+      : {
+        update: {
+          ...entry.update!,
+          supportedBinaries: mergeSupportedBinary(entry.update?.supportedBinaries ?? [], {
+            buildNumber: activePrepared.buildNumber,
+            dataSchemaFingerprint: schemaFingerprint,
+            platform: 'ios',
+            runtimeVersion: nativeFingerprint,
+            version: activePrepared.version,
+          }),
+        },
+      }),
   }
 
   if (options.betaRecipients !== undefined) {
     progress.step('testflight')
-    entry = await distributeBeta(apple, prepared, entry, build, appId, options)
+    entry = await distributeBeta(apple, activePrepared, entry, build, appId, releaseNotesFromCommit, options)
   } else {
     progress.step('app-review')
-    const version = await apple.ensureAppStoreVersion(appId, prepared.version)
+    const version = await apple.ensureAppStoreVersion(appId, activePrepared.version)
     await apple.attachBuildToVersion(version.id, build.id)
     await apple.submitVersionForReview(appId, version.id)
     entry = {
@@ -205,22 +261,54 @@ async function executePreparedShipRun(
         ...entry.lastBuild!,
         buildId: build.id,
         processed: true,
+        processingState: 'VALID',
         submittedForReview: true,
       },
     }
   }
   progress.step('checkpoint')
-  await writeProjectLock(prepared.project.root, acceptedEntryWithRunState(prepared, entry))
-  await persistShipCheckpoint(prepared, lockPath)
-  if (options.betaRecipients === undefined) {
-    await tagShipVersion(prepared.git, prepared.version)
-  }
+  await writeProjectLock(activePrepared.project.root, acceptedEntryWithRunState(activePrepared, entry))
   writeSummary(
-    prepared,
+    activePrepared,
     appId,
     entry.lastBuild?.commit ?? sourceCommit,
     options.betaRecipients === undefined ? 'Submitted for App Store review.' : 'Distributed through TestFlight.',
+    options,
   )
+}
+
+function mergeSupportedBinary(
+  current: NonNullable<NonNullable<ShipLockEntry['update']>['supportedBinaries']>,
+  binary: NonNullable<NonNullable<ShipLockEntry['update']>['supportedBinaries']>[number],
+): NonNullable<NonNullable<ShipLockEntry['update']>['supportedBinaries']> {
+  return [...current.filter(candidate => candidate.buildNumber !== binary.buildNumber), binary]
+    .toSorted((left, right) => left.buildNumber.localeCompare(right.buildNumber, undefined, { numeric: true }))
+}
+
+async function waitForProcessedBuild(
+  apple: ShipAppleClient,
+  prepared: PreparedShip,
+  entry: ShipLockEntry,
+  appId: string,
+): Promise<AppStoreBuild> {
+  return await apple.waitForProcessedBuild({
+    appId,
+    buildNumber: prepared.buildNumber,
+    onTerminalBuild: async terminal => {
+      await writeProjectLock(
+        prepared.project.root,
+        acceptedEntryWithRunState(prepared, {
+          ...entry,
+          lastBuild: {
+            ...entry.lastBuild!,
+            buildId: terminal.id,
+            processed: false,
+            processingState: terminal.attributes.processingState,
+          },
+        }),
+      )
+    },
+  })
 }
 
 async function ensureAppleProject(
@@ -275,9 +363,10 @@ async function distributeBeta(
   entry: ShipLockEntry,
   build: AppStoreBuild,
   appId: string,
+  previousBuildCommit: string | undefined,
   options: ShipCommandOptions,
 ): Promise<ShipLockEntry> {
-  const notes = options.notes ?? await shipNotesSince(prepared.git, entry.lastBuild?.commit)
+  const notes = options.notes ?? await shipNotesSince(prepared.git, previousBuildCommit)
   const groups = await configureBetaDistribution(apple, {
     appId,
     appName: prepared.app.displayName,
@@ -361,14 +450,19 @@ async function executeUpdate(
   }
   if (options.rollback) {
     progress.step('update-publish')
-    const previous = installed.previousPublicationId
-    if (!previous) {
-      Errors.throwUserInput('No earlier update publication is recorded for rollback.')
+    const current = installed.publicationId
+    const supportedBinaries = installed.supportedBinaries ?? []
+    if (!current) {
+      Errors.throwUserInput('No current update publication is recorded for rollback.')
     }
-    const published = await client.rollback({
+    if (supportedBinaries.length === 0) {
+      Errors.throwUserInput('No supported binary compatibility contracts are recorded for rollback.')
+    }
+    const published = await client.rollbackCompatible({
       applicationId: prepared.project.id,
       channel: prepared.channel,
-      toUpdateId: previous,
+      currentUpdateId: current,
+      supportedBinaries,
     })
     progress.step('checkpoint')
     await persistUpdate(prepared, entry, published.manifest.id)
@@ -377,10 +471,16 @@ async function executeUpdate(
   progress.step('compile')
   const currentRuntime = await runtimeFingerprint(runtimeRoot, runner as typeof CLI.run)
   const currentSchema = await dataSchemaFingerprint(prepared.project.root)
-  assertUpdateCompatibility({ dataSchemaFingerprint: currentSchema, runtimeVersion: currentRuntime }, {
+  const supportedBinaries = installed.supportedBinaries ?? [{
     dataSchemaFingerprint: installed.dataSchemaFingerprint,
+    platform: 'ios' as const,
     runtimeVersion: installed.runtimeFingerprint,
-  })
+  }]
+  assertUpdateCompatibility({
+    dataSchemaFingerprint: currentSchema,
+    metadata: { platform: 'ios' },
+    runtimeVersion: currentRuntime,
+  }, supportedBinaries)
   await Runtime.generateApp(prepared.app.sourcePath, {
     appName: prepared.app.name,
     datasourceConfiguration: entry.accepted?.datasourceConfiguration,
@@ -437,33 +537,21 @@ async function publicationFromExport(
   schemaFingerprint: string,
   message?: string,
 ): Promise<TaoUpdatePublication> {
-  const uploaded: ExpoUpdateAsset[] = []
-  let launchAsset: ExpoUpdateAsset | undefined
-  for await (const path of FS.walk(exportRoot)) {
-    if (!await FS.isFile(path)) {
-      continue
-    }
-    const bytes = await FS.readFile(path)
-    const relative = FS.relativePath(exportRoot, path)
+  const artifacts = await Runtime.expoUpdateArtifacts(exportRoot, 'ios')
+  const upload = async (descriptor: typeof artifacts.launchAsset): Promise<ExpoUpdateAsset> => {
+    const bytes = await FS.readFile(descriptor.path)
     const hash = createHash('sha256').update(bytes).digest('base64url')
-    const extension = FS.extname(path)
-    const asset = await client.uploadAsset({
+    return await client.uploadAsset({
       applicationId: prepared.project.id,
       bytes,
-      contentType: contentType(extension),
-      fileExtension: extension || undefined,
+      contentType: descriptor.contentType,
+      fileExtension: descriptor.fileExtension,
       hash,
-      key: relative,
+      key: descriptor.key,
     })
-    if (launchAsset === undefined && ['.bundle', '.hbc', '.js'].includes(extension)) {
-      launchAsset = asset
-    } else {
-      uploaded.push(asset)
-    }
   }
-  if (!launchAsset) {
-    Errors.throwUnexpected('Expected: the proved export has a launch bundle.')
-  }
+  const launchAsset = await upload(artifacts.launchAsset)
+  const uploaded = await Promise.all(artifacts.assets.map(upload))
   return {
     applicationId: prepared.project.id,
     assets: uploaded,
@@ -471,7 +559,7 @@ async function publicationFromExport(
     dataSchemaFingerprint: schemaFingerprint,
     launchAsset,
     message,
-    metadata: { buildNumber: prepared.buildNumber, version: prepared.version },
+    metadata: { buildNumber: prepared.buildNumber, platform: 'ios', version: prepared.version },
     runtimeVersion: nativeFingerprint,
   }
 }
@@ -483,6 +571,14 @@ function runtimeManifest(
   updateServer: string,
 ): RuntimeShipManifest {
   const base = new URL(updateServer)
+  const defaultContainer = `iCloud.${prepared.bundleIdentifier}`
+  const resolvedICloudServices = prepared.app.icloud?.serviceBindings.map(binding => ({
+    containers: [
+      ...(binding.usesDefaultContainer ? [defaultContainer] : []),
+      ...binding.containers,
+    ],
+    service: binding.service,
+  })) ?? []
   return {
     buildNumber: prepared.buildNumber,
     bundleIdentifier: prepared.bundleIdentifier,
@@ -492,18 +588,25 @@ function runtimeManifest(
       ? {}
       : {
         icloud: {
-          containers: [prepared.app.icloud.container ?? `iCloud.${prepared.bundleIdentifier}`],
-          services: [...prepared.app.icloud.services],
+          containers: [...new Set(resolvedICloudServices.flatMap(binding => binding.containers))].toSorted(),
+          documentContainers: [
+            ...new Set(
+              resolvedICloudServices
+                .filter(binding => binding.service === 'CloudDocuments')
+                .flatMap(binding => binding.containers),
+            ),
+          ].toSorted(),
+          services: resolvedICloudServices.map(binding => binding.service).toSorted(),
         },
       }),
-    ios: { usesNonExemptEncryption: false },
+    ios: {},
     name: prepared.app.displayName,
     schemaVersion: 1,
     slug: prepared.app.name.replace(/[^A-Za-z0-9]/gu, ''),
     updates: {
       channel: prepared.channel,
       runtimeFingerprint: nativeFingerprint,
-      runtimeVersion: { policy: 'fingerprint' },
+      runtimeVersion: nativeFingerprint,
       url: new URL(`/v1/apps/${encodeURIComponent(prepared.project.id)}/manifest`, base).href,
     },
     version: prepared.version,
@@ -515,46 +618,28 @@ async function persistUpdate(prepared: PreparedShip, entry: ShipLockEntry, publi
     ...entry,
     update: {
       ...entry.update!,
-      previousPublicationId: entry.update?.publicationId,
       publicationId,
     },
   }
   await writeProjectLock(prepared.project.root, acceptedEntryWithRunState(prepared, updated))
-  await persistShipCheckpoint(prepared, FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, prepared.project.root))
 }
 
-async function persistShipCheckpoint(prepared: PreparedShip, lockPath: string): Promise<void> {
-  await commitShipState(prepared.git, lockPath, `Record ${prepared.app.name} ship state`)
-}
-
-async function pathIsTrackedAndClean(path: string, gitRoot: string): Promise<boolean> {
-  const relative = FS.relativePath(gitRoot, await FS.realPath(path))
-  const result = await CLI.run('git', { args: ['-C', gitRoot, 'status', '--porcelain=v1', '--', relative] })
-  return result.exitCode === 0 && result.stdout.trim().length === 0
-}
-
-function contentType(extension: string): string {
-  if (extension === '.js' || extension === '.bundle') {
-    return 'application/javascript'
-  }
-  if (extension === '.json') {
-    return 'application/json'
-  }
-  if (extension === '.png') {
-    return 'image/png'
-  }
-  if (extension === '.jpg' || extension === '.jpeg') {
-    return 'image/jpeg'
-  }
-  return 'application/octet-stream'
-}
-
-function writeSummary(prepared: PreparedShip, appId: string, sourceCommit: string, outcome: string): void {
-  HCI.writeSuccess(`${outcome}\n`)
-  HCI.writeLine(`App: ${prepared.app.name}`)
-  HCI.writeLine(`Version: ${prepared.version} (${prepared.buildNumber})`)
+function writeSummary(
+  prepared: PreparedShip,
+  appId: string,
+  sourceCommit: string,
+  outcome: string,
+  options: ShipCommandOptions,
+): void {
+  HCI.writeSuccess(`${outcome}\n`, options)
+  HCI.writeLine(`App: ${prepared.app.name}`, options)
+  HCI.writeLine(`Version: ${prepared.version} (${prepared.buildNumber})`, options)
   HCI.writeLine(
     `Commit: ${sourceCommit}${sourceCommit === prepared.git.commit && prepared.git.dirty ? ' (dirty)' : ''}`,
+    options,
   )
-  HCI.writeLine(`App Store Connect: https://appstoreconnect.apple.com/apps/${appId}/testflight/ios`)
+  HCI.writeLine(`App Store Connect: https://appstoreconnect.apple.com/apps/${appId}/testflight/ios`, options)
 }
+
+/** Narrow test seam for release artifact wiring that otherwise sits behind Apple and Xcode. */
+export const ShipExecutorTesting = { publicationFromExport, runtimeManifest }

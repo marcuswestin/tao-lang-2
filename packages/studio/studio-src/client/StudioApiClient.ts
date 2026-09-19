@@ -258,8 +258,8 @@ export const StudioApiClient = {
   deviceDeclinePairing: async (devicePublicKey: string): Promise<{ declined: boolean }> =>
     await request(routes.devicePairingDecline, { devicePublicKey }),
   deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get(routes.deviceLaunch),
-  deviceLaunchOpen: async (hostId: string): Promise<StudioDeviceLaunchOpenResult> =>
-    await request(routes.deviceLaunchOpen, { hostId }),
+  deviceLaunchOpen: async (hostId: string, route: 'auto' | 'cable' = 'auto'): Promise<StudioDeviceLaunchOpenResult> =>
+    await request(routes.deviceLaunchOpen, { hostId, route }),
   deviceOpenPairing: async (): Promise<{ expiresAt: string }> => await request(routes.devicePairingOpen, {}),
   deviceReconnect: async (): Promise<{ requested: boolean }> => await request(routes.deviceReconnect, {}),
   deviceRevoke: async (devicePublicKey: string): Promise<{ revoked: boolean }> =>

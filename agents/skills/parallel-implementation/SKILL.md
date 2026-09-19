@@ -8,6 +8,11 @@ description: >-
 
 # Parallel Implementation
 
+The `delegation` skill owns whether to delegate at all, the model tier each agent runs at, what a
+brief contains, and how to check what comes back. This skill owns what those rules do not cover:
+dividing one outcome between agents that write at the same time, and putting the pieces back
+together.
+
 ## Build the execution graph
 
 1. Inspect live instructions, Git state, the affected architecture, and the requested validation
@@ -16,8 +21,10 @@ description: >-
    barriers. Parallelize substantial independent work; keep tightly coupled edits in one owner.
 3. Identify the critical path and the first integration checkpoint. Sequence only the dependencies
    that require sequencing.
-4. Assign each agent exclusive path or concept ownership. State forbidden paths and require a handoff
-   containing decisions, changed files, validation, and integration needs.
+4. Assign each agent exclusive path or concept ownership, and state its forbidden paths in the brief.
+   Ownership is the only thing that keeps concurrent writes safe; everything else is convention. The
+   `implementer` profile is the worker this skill spawns; a workstream that still needs exploring is
+   not ready for one.
 
 ## Run parallel work safely
 
@@ -38,7 +45,8 @@ description: >-
 
 ## Integrate at dependency barriers
 
-1. Review every handoff and diff; do not treat agent completion as proof of correctness.
+1. Read every handoff against its diff. A workstream is integrated on the evidence in the diff, not
+   on the agent's account of it.
 2. Integrate shared manifests, generated artifacts, dependency locks, exports, and documentation only
    after their upstream workstreams settle.
 3. Run focused validation for each integrated slice. Fix confirmed failures before unblocking dependent

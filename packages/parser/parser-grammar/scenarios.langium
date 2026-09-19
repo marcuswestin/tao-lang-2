@@ -72,12 +72,12 @@ ScenarioBlock:
     '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
         | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
         | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)*
-        steps+=(PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+        steps+=(PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
             | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep)* '}';
 
 // A scenario is a state reached by replaying the interaction prefix after its subject. Assertions,
 // app launch/relaunch, navigation Back, and host-only toolbar operations remain test-only.
-type ScenarioStep = PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+type ScenarioStep = PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
     | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep;
 
 type ScenarioClause = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause

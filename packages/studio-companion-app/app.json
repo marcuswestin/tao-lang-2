@@ -11,6 +11,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Tao Studio on your Mac renders the app you are editing. Tao Companion uses the local network to load that app from Studio and keep it in sync while you work.",
+        "NSBonjourServices": [
+          "_tao-studio._tcp"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }

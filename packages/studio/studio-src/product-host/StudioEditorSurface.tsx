@@ -20,15 +20,30 @@ import {
   subscribeStudioProductHostState,
 } from '../StudioProductHostProtocol'
 
-// The editor asks for colors and for the lens map in the same tick, so one request serves both.
-let lastAnalysis: { content: string; result: ReturnType<typeof StudioApiClient.highlight> } | undefined
-
-function analyzeTaoSource(content: string): ReturnType<typeof StudioApiClient.highlight> {
-  if (lastAnalysis?.content !== content) {
-    lastAnalysis = { content, result: StudioApiClient.highlight(content) }
+/**
+ * The editor asks for colors and for the lens map in the same tick, so one request serves both. A
+ * failed transport request is evicted, however: caching its rejected promise would make the lens and
+ * highlighting permanently fail for unchanged text after the language service recovered.
+ */
+export function createStudioSourceAnalyzer<Result>(
+  analyze: (content: string) => Promise<Result>,
+): (content: string) => Promise<Result> {
+  let last: { content: string; result: Promise<Result> } | undefined
+  return content => {
+    if (last?.content !== content) {
+      const result = analyze(content)
+      last = { content, result }
+      void result.catch(() => {
+        if (last?.result === result) {
+          last = undefined
+        }
+      })
+    }
+    return last.result
   }
-  return lastAnalysis.result
 }
+
+const analyzeTaoSource = createStudioSourceAnalyzer(StudioApiClient.highlight)
 
 async function highlightTaoSource(content: string) {
   return (await analyzeTaoSource(content)).tokens
@@ -210,6 +225,7 @@ export function StudioEditorSurface(): React.ReactElement {
         Layout={{ style: editorSurfaceStyle }}
         Lens={lensProps}
         Lsp={lsp}
+        RevealRevision={file.revealRevision}
         Selection={{ anchor: file.selectionAnchor, head: file.selectionHead }}
         SelectionChange={selection => requestStudioProductHostSelectActiveFile(selection.anchor, selection.head)}
         Tag="studio-active-editor"

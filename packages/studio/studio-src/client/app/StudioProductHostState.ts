@@ -38,6 +38,7 @@ export type StudioHostSnapshot = Readonly<{
   preview: StudioPreviewConnection | undefined
   project: string
   projectFiles: readonly StudioFile[]
+  revealRevision: number
   searchResults: readonly StudioSearchResult[]
   sourceActionBusy: boolean
   tests: StudioTestPanelSnapshot
@@ -88,6 +89,8 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
       : {
         content: editor.state.doc.toString(),
         path: activeFile.path,
+        revealRevision: snapshot.revealRevision,
+        saved: editor.state.doc.toString() === activeFile.content,
         selectionAnchor: selection?.anchor ?? 0,
         selectionHead: selection?.head ?? selection?.anchor ?? 0,
         sourceVersion: activeFile.sourceVersion,

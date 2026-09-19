@@ -1,8 +1,9 @@
-import { FS } from '@shared'
+import { FS, HCI } from '@shared'
 import { OutputText } from '../cli/OutputText'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import type { WorkState } from './WorkGraph'
+import { type ScheduleReport, type ScheduleWait, WorkSchedule } from './WorkSchedule'
 
 /**
  * The rollup a run ends with, and the JSON artifact it writes. Just's `[parallel]` interleaves
@@ -60,6 +61,15 @@ export type GateResult = {
   /** True when the node first failed under machine contention and was run again on its own. */
   retried?: boolean
   status: GateStatus
+  /** The suite a sharded test node reports under; absent for a node that is not a test shard. */
+  suite?: string
+  /**
+   * Test IDs this node failed on that the flake ledger accounted for. Present only on a node whose
+   * every failure was one of them, which is the node reported `passed` despite a non-zero exit.
+   */
+  tolerated?: readonly string[]
+  /** What held this node before it started, longest reason first; absent for one that never waited. */
+  waits?: readonly ScheduleWait[]
 }
 
 /** GateSummary is the versioned rollup a run ends with, and the JSON artifact it can write. */
@@ -71,13 +81,31 @@ export type GateSummary = {
   firstFailure?: { logPath?: string; name: string; output: string }
   gates: readonly GateResult[]
   /** The earlier green run this one stood on instead of running; every gate is then `skipped`. */
-  greenTree?: { at: string; lane: string; logRoot: string; treeHash: string }
+  greenTree?: { at: string; lane: string; logRoot: string; toolchain: string; treeHash: string }
   /** The lane this run belongs to, which is also its artifact directory. */
   lane: string
   logRoot: string
+  /** What the schedule achieved and where it lost time; absent for a run that did not schedule. */
+  schedule?: ScheduleReport
   status: 'failed' | 'passed'
+  /**
+   * Tests this run failed on and declined to fail the lane for, each with the recorded history that
+   * earned it. Absent when nothing was demoted; never empty, because an empty list would read as a
+   * finding rather than as its absence.
+   */
+  toleratedFlakes?: readonly ToleratedFlakeReport[]
   version: 2
   warnings: readonly string[]
+}
+
+/** ToleratedFlakeReport is one demoted test as the summary artifact publishes it. */
+export type ToleratedFlakeReport = {
+  /** The recorded history that demoted it, in one line. */
+  evidence: string
+  file: string
+  id: string
+  /** The node that failed on it. */
+  node: string
 }
 
 /** BuildSummaryOptions describes the finished run being rolled up. */
@@ -94,11 +122,24 @@ export type BuildSummaryOptions = {
   logRoot: string
   /** Node names in the order the caller declared them; the first failure is named from it. */
   order?: readonly string[]
+  /** This run's scheduling measurements, when the caller measured them. */
+  schedule?: ScheduleReport
   states: readonly WorkState[]
+  /** The suite each node reports under, for a lane whose nodes are test shards. */
+  suiteOf?: (name: string) => string | undefined
+  /**
+   * Tests the flake ledger accounted for, grouped by the node they failed in. A node listed here
+   * exited non-zero and is reported `passed` anyway — so it is reported with the tests that bought
+   * it that verdict, and the lane's verdict line says the lane leaned on them.
+   */
+  toleratedFlakes?: readonly ToleratedFlakeReport[]
 }
 
 const FAILURE_OUTPUT_LINES = 40
 const SUMMARY_VERSION = 2
+const CHROME_PRE_DEVTOOLS_HOST_ABORT =
+  /^HostEnvironmentError: Chrome exited before exposing DevTools \(exit none, signal SIGABRT\)$/m
+const ASSERTION_DETAIL = /AssertionError|expect\(received\)/i
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
@@ -107,13 +148,21 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   {
     kind: 'native-runtime-exit',
     pattern:
-      /(?:native runtime exited .* before (?:reporting|producing)|Electrobun exited before writing its runtime probe)/i,
+      /(?:native runtime exited .* before (?:reporting|producing)|Native Studio runtime (?:exited with code|terminated by signal) \d+|Electrobun exited before writing its runtime probe)/i,
   },
   { kind: 'native-probe-timeout', pattern: /Timed out waiting for the Electrobun runtime probe/i },
   { kind: 'user-interruption', pattern: /\b(?:user interruption|was interrupted|interrupted before completion)\b/i },
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
   { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
+  // macOS can reject recursive cleanup inside generated and artifact trees even though those paths
+  // are writable. Keep this narrower than EFAULT itself: a bad address from another syscall or a
+  // source path is still a repository failure that needs investigation.
+  {
+    kind: 'sandbox-restriction',
+    pattern:
+      /\b(?:EFAULT:\s*bad address in system call argument|EPERM:\s*operation not permitted),\s*(?:rm|rmdir)\s+['"][^'"\r\n]*(?:[/\\](?:_gen_[^/\\'"\r\n]+|\.artifacts)(?:[/\\]|['"]))/im,
+  },
   // Last, and anchored to a line of its own: `EPERM` inside a test's own assertion text is a
   // repository failure, not a host restriction, and it is far more common than the real thing.
   {
@@ -163,18 +212,42 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
   if (context.interrupted === true) {
     return 'user-interruption'
   }
-  const signature = FAILURE_SIGNATURES.find(candidate => candidate.pattern.test(output))
+  // Bun appends `(fail)` to every failed test, including one whose browser process was rejected by
+  // the host before CDP existed. Recognize that exact boundary without letting it outrank a real
+  // assertion reported elsewhere in the same browser run.
+  if (CHROME_PRE_DEVTOOLS_HOST_ABORT.test(output) && !ASSERTION_DETAIL.test(output)) {
+    return 'sandbox-restriction'
+  }
+  // A runner prints FAIL/(fail) for a timed-out test as well as for a wrong answer. Classify the
+  // specific host/native signatures first, then the timeout with measured contention, and only
+  // then fall back to the generic assertion banner.
+  const signature = FAILURE_SIGNATURES.find(candidate =>
+    candidate.kind !== 'test-assertion' && candidate.pattern.test(output)
+  )
   if (signature !== undefined) {
     return signature.kind
   }
-  return context.contention?.contended === true && describesTimeout(output) ? 'machine-contention' : 'repository'
+  if (describesTimeout(output)) {
+    return context.contention?.contended === true ? 'machine-contention' : 'repository'
+  }
+  return FAILURE_SIGNATURES.find(candidate => candidate.kind === 'test-assertion' && candidate.pattern.test(output))
+    ?.kind ?? 'repository'
 }
 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */
 export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const declaredSkips = options.declaredSkips ?? []
-  const results = new Map(
-    options.states.map(state => [state.name, nodeResult(state, options.expectedMs, options.contention)]),
+  const toleratedFlakes = options.toleratedFlakes ?? []
+  const toleratedByNode = new Map<string, string[]>()
+  for (const flake of toleratedFlakes) {
+    toleratedByNode.set(flake.node, [...toleratedByNode.get(flake.node) ?? [], flake.id])
+  }
+  const results = new Map<string, GateResult>(
+    options.states.map(state => {
+      const suite = options.suiteOf?.(state.name)
+      const result = tolerate(nodeResult(state, options.expectedMs, options.contention), toleratedByNode)
+      return [state.name, suite === undefined ? result : { ...result, suite }]
+    }),
   )
   const order = options.order ?? options.states.map(state => state.name)
   const ordered = [
@@ -195,10 +268,58 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
     gates: ordered,
     lane: options.lane,
     logRoot: options.logRoot,
+    schedule: options.schedule,
     status: options.interrupted === true || ordered.some(result => result.status === 'failed') ? 'failed' : 'passed',
+    toleratedFlakes: toleratedFlakes.length === 0 ? undefined : toleratedFlakes,
     version: SUMMARY_VERSION,
-    warnings: [...contentionWarnings(ordered, options.contention), ...collectWarnings(options.states)],
+    warnings: [
+      ...toleranceWarnings(toleratedFlakes),
+      ...contentionWarnings(ordered, options.contention),
+      ...collectWarnings(options.states),
+    ],
   }
+}
+
+/**
+ * tolerate turns a node whose every failure the ledger accounted for into a pass that still carries
+ * its non-zero exit code and names what it failed on. The exit code is deliberately kept: a reader
+ * who finds `passed` beside `exit 1` should be able to see immediately that a judgment was made.
+ */
+function tolerate(result: GateResult, toleratedByNode: ReadonlyMap<string, readonly string[]>): GateResult {
+  const tolerated = toleratedByNode.get(result.name)
+  if (tolerated === undefined || result.status !== 'failed') {
+    return result
+  }
+  return {
+    ...result,
+    failureKind: undefined,
+    reason: `failed only on ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}: ${
+      tolerated.join(', ')
+    }`,
+    status: 'passed',
+    tolerated,
+  }
+}
+
+/**
+ * The warning a demoted lane owes its reader, first in the list because it is the one that changes
+ * what the verdict above it means. Each test is named with the history that demoted it, so the
+ * judgment can be disagreed with rather than merely noticed.
+ *
+ * Exported because the test lane prints no gate rollup and therefore never reaches
+ * `formatGateSummary`, which is where every other lane's reader is handed these lines. It prints
+ * them itself, from here, so the two lanes owe their readers the same words.
+ */
+export function toleranceWarnings(tolerated: readonly ToleratedFlakeReport[]): string[] {
+  if (tolerated.length === 0) {
+    return []
+  }
+  return [
+    `${tolerated.length} recorded flake${tolerated.length === 1 ? '' : 's'} failed in this run and did not fail it:`,
+    ...tolerated.map(flake => `  ${flake.id} (in ${flake.node}) — ${flake.evidence}`),
+    '  see the full history with ./agent report-test-stats; editing the test file withdraws its tolerance,'
+    + ' and so does failing three runs in a row',
+  ]
 }
 
 /**
@@ -250,23 +371,62 @@ export function skippedResult(entry: string): GateResult {
   return { elapsedMs: 0, name: name!, reason, status: 'skipped' }
 }
 
-/** formatGateSummary renders the rollup a run ends with. */
-export function formatGateSummary(summary: GateSummary): string {
+/**
+ * VerdictOptions decides how the verdict line is rendered. Color is passed in rather than sensed
+ * here: the formatter returns a string its caller may write to a terminal, a pipe, or a log file,
+ * and only the caller knows which. `WorkReporter.colorizes` is the one place that decides.
+ */
+export type VerdictOptions = {
+  /** Paint the verdict green or red. Off by default, so nothing writes escape codes by accident. */
+  color?: boolean
+}
+
+/**
+ * formatVerdict states a lane's outcome in the one line it ends with, green or red, so the verdict
+ * is seen rather than counted out of the rollup above it. A failure names the node to go to first,
+ * because a bare FAILED sends a reader straight back to scrolling.
+ */
+export function formatVerdict(summary: GateSummary, options: VerdictOptions = {}): string {
+  const elapsed = OutputText.formatElapsed(summary.elapsedMs)
+  const failure = summary.firstFailure === undefined ? '' : ` — first failure: ${summary.firstFailure.name}`
+  // A pass that rested on a demoted flake says so here, in the one line a reader is guaranteed to
+  // read. Anywhere else it is a note beside a green lane, which is a note nobody reads.
+  const count = summary.toleratedFlakes?.length ?? 0
+  const tolerated = count === 0 ? '' : ` — tolerating ${count} known flake${count === 1 ? '' : 's'}`
+  const verdict = summary.status === 'passed'
+    ? `${summary.lane}: PASSED in ${elapsed}${tolerated}`
+    : `${summary.lane}: FAILED in ${elapsed}${failure}${tolerated}`
+  if (options.color !== true) {
+    return verdict
+  }
+  return summary.status === 'passed' ? HCI.green(verdict) : HCI.red(verdict)
+}
+
+/** formatGateSummary renders the rollup a run ends with, verdict last. */
+export function formatGateSummary(summary: GateSummary, options: VerdictOptions = {}): string {
   const lines = ['', 'Verification summary:']
-  for (const gate of summary.gates) {
+  const rolled = rollupSuites(summary.gates)
+  for (const gate of rolled) {
     const cost = gate.status === 'skipped' ? '' : ` ${OutputText.formatElapsed(gate.elapsedMs)}`
     const reason = gate.reason === undefined ? '' : ` — ${gate.reason}`
     lines.push(`- ${gate.name}: ${gate.status}${cost}${reason}`)
+    // A failing suite has to name the shard that failed, or its log cannot be found.
+    for (const shard of failingShardsOf(gate, summary.gates)) {
+      lines.push(`  - ${shard.name}: failed — ${shard.reason ?? 'see its log'}`)
+    }
   }
   for (const warning of summary.warnings) {
     lines.push(`! ${warning}`)
   }
   lines.push(
-    `${summary.gates.filter(gate => gate.status === 'passed').length} passed, `
-      + `${summary.gates.filter(gate => gate.status === 'failed').length} failed, `
-      + `${summary.gates.filter(gate => gate.status === 'skipped').length} skipped `
+    `${rolled.filter(gate => gate.status === 'passed').length} passed, `
+      + `${rolled.filter(gate => gate.status === 'failed').length} failed, `
+      + `${rolled.filter(gate => gate.status === 'skipped').length} skipped `
       + `in ${OutputText.formatElapsed(summary.elapsedMs)}`,
   )
+  if (summary.schedule !== undefined) {
+    lines.push(WorkSchedule.formatScheduleReport(summary.schedule))
+  }
   lines.push(`Logs: ${FS.displayPath(summary.logRoot)}`)
   lines.push(`Summary: ${FS.displayPath(FS.resolvePath(RunArtifacts.SUMMARY_FILE, summary.logRoot))}`)
   if (summary.firstFailure !== undefined) {
@@ -276,7 +436,76 @@ export function formatGateSummary(summary: GateSummary): string {
       lines.push(`Full log: ${FS.displayPath(summary.firstFailure.logPath)}`)
     }
   }
+  // Last, after the artifact paths and the failure excerpt, because a verdict a reader has to
+  // scroll back to is one the rollup already told them.
+  lines.push(formatVerdict(summary, options))
   return lines.join('\n')
+}
+
+/**
+ * rollupSuites reports a sharded suite as one line. A suite is a unit of reporting, not of
+ * scheduling: `studio: passed in 6.1s (4 shards, 22.4s of work)` is what a reader needs, and the
+ * individual shard names only matter when one of them failed.
+ */
+export function rollupSuites(gates: readonly GateResult[]): readonly GateResult[] {
+  const rolled: GateResult[] = []
+  const reported = new Set<string>()
+  for (const gate of gates) {
+    if (gate.suite === undefined || gate.suite === gate.name) {
+      rolled.push(gate)
+      continue
+    }
+    if (reported.has(gate.suite)) {
+      continue
+    }
+    reported.add(gate.suite)
+    rolled.push(mergeShards(gate.suite, gates.filter(candidate => candidate.suite === gate.suite)))
+  }
+  return rolled
+}
+
+/**
+ * mergeShards states one suite's outcome from its shards'. The suite's wall time is its longest
+ * shard, because the shards ran at once; the work is their sum, which is the number that says what
+ * sharding bought.
+ */
+function mergeShards(suite: string, shards: readonly GateResult[]): GateResult {
+  const workMs = shards.reduce((total, shard) => total + shard.elapsedMs, 0)
+  const longest = Math.max(0, ...shards.map(shard => shard.elapsedMs))
+  const failed = shards.filter(shard => shard.status === 'failed')
+  const status: GateStatus = failed.length > 0
+    ? 'failed'
+    : shards.every(shard => shard.status === 'skipped')
+    ? 'skipped'
+    : 'passed'
+  // A suite reported as one line must not lose the fact that one of its shards only passed because
+  // a flake was tolerated; that is the whole point of saying it out loud.
+  const tolerated = shards.flatMap(shard => shard.tolerated ?? [])
+  const shardReason = `${shards.length} shards, ${OutputText.formatElapsed(workMs)} of work`
+  return {
+    elapsedMs: longest,
+    failureKind: failed[0]?.failureKind,
+    logPath: failed[0]?.logPath ?? shards[0]?.logPath,
+    name: suite,
+    reason: status === 'skipped'
+      ? shards[0]?.reason
+      : tolerated.length === 0
+      ? shardReason
+      : `${shardReason}; tolerated ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}`,
+    retried: shards.some(shard => shard.retried === true),
+    status,
+    suite,
+    ...(tolerated.length === 0 ? {} : { tolerated }),
+  }
+}
+
+function failingShardsOf(gate: GateResult, gates: readonly GateResult[]): readonly GateResult[] {
+  if (gate.suite === undefined || gate.status !== 'failed') {
+    return []
+  }
+  return gates.filter(candidate =>
+    candidate.suite === gate.suite && candidate.name !== gate.suite && candidate.status === 'failed'
+  )
 }
 
 /** gateExitCode never hides the originating status: one failed node fails the wrapper. */
@@ -311,7 +540,18 @@ function nodeResult(
     resources: state.node.resources,
     retried: state.retried,
     status: state.status === 'passed' ? 'passed' : failed ? 'failed' : 'skipped',
+    waits: reportableWaits(state.waits),
   }
+}
+
+/**
+ * reportableWaits keeps only the waits worth acting on, and omits the field entirely when none are.
+ * An empty array would read as a finding — "this node was held, by nothing" — where absence reads
+ * as what it is.
+ */
+function reportableWaits(waits: WorkState['waits']): readonly ScheduleWait[] | undefined {
+  const reportable = (waits ?? []).filter(wait => wait.ms >= WorkSchedule.WAIT_NOISE_MS)
+  return reportable.length === 0 ? undefined : reportable
 }
 
 /** Warnings a node printed but did not fail on, so they are visible without scrolling. */

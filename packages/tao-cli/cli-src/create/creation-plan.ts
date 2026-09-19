@@ -243,7 +243,9 @@ function sampleValueFits(field: CreationField, value: CreationSampleValue): bool
   }
   return Switch<CreationFieldType, boolean>(field.type, {
     text: () => typeof value === 'string',
-    number: () => typeof value === 'number' && Number.isFinite(value),
+    // Tao NUMBER accepts unsigned decimal source, not signs or exponent notation. Validate the
+    // exact text lowering will write so a model answer cannot fail only after files exist.
+    number: () => typeof value === 'number' && /^[0-9]+(?:\.[0-9]+)?$/u.test(String(value)),
     yesno: () => typeof value === 'boolean',
     time: () => false,
   })
@@ -393,7 +395,9 @@ const fieldSchema: GenerationJsonSchema = {
     },
     title: { type: 'boolean', description: 'true on exactly one text field: the one that names a row.' },
   },
-  required: ['name', 'type'],
+  // Coding-agent CLIs require every object property in an output schema to be required. `false`
+  // still expresses an ordinary non-title field without making the schema structurally optional.
+  required: ['name', 'type', 'title'],
   additionalProperties: false,
 }
 
@@ -478,9 +482,7 @@ export function sampleRowsSchema(entity: CreationEntity): GenerationJsonSchema {
       : field.type === 'number'
       ? { type: 'number' }
       : { type: 'boolean' }
-    if (field.title) {
-      required.push(field.name)
-    }
+    required.push(field.name)
   }
   return {
     type: 'object',

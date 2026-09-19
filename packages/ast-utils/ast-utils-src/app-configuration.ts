@@ -160,7 +160,7 @@ export function listedEntryOf(entry: AST.ConfigurationEntry): ListedEntry | unde
     return undefined
   }
   const name = entry.name
-  const target = AST.visibleFileDeclarations(entry, AST.isDeclaration).find(declaration => declaration.name === name)
+  const target = AST.visibleValueDeclarations(entry, AST.isDeclaration).find(declaration => declaration.name === name)
   return { entry, name, patch: entry.value.block, target }
 }
 
@@ -216,7 +216,9 @@ export function appBoundDatasources(app: AST.AppValueDeclaration): readonly AppD
       const listed = listedEntryOf(entry)
       const target = listed?.target
       return target && AST.isDatasourceDeclaration(target)
-        ? [{ declaration: target, node: entry, patches: [...slot.patches, ...listed.patch ? [listed.patch] : []] }]
+        // A set-wide `Datasource with { ... }` has no single target. Validation diagnoses it and
+        // codegen deliberately applies only the patch attached to this named entry.
+        ? [{ declaration: target, node: entry, patches: [...listed.patch ? [listed.patch] : []] }]
         : []
     })
   }

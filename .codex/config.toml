@@ -1,8 +1,8 @@
 # Repo-local filesystem, network, and approval settings for Tao development.
 # Git metadata writes outside the worktree are routed through Auto-review.
 #
-# Generated with .codex/rules/tao.rules by `./agent setup` from .rulesync/permissions.jsonc.
-# Edit that canonical file, not either generated Codex output:
+# Generated with .codex/rules/tao.rules by `./agent setup` from .rulesync/permissions.jsonc
+# and .rulesync/profiles.jsonc. Edit those canonical files, not either generated Codex output:
 # rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a
 # curated domain allowlist, so this profile is rendered by
 # packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.
@@ -23,6 +23,14 @@ web_search = "live"
 # Required for the per-profile domain rules below to be enforced.
 [features]
 network_proxy = true
+
+# Delegation defaults. The model is the standard tier of the routing table in
+# agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
+[agents]
+enabled = true
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "medium"
+max_concurrent_threads_per_session = 5
 
 [permissions.tao-review]
 extends = ":read-only"
@@ -65,6 +73,7 @@ enabled = true
 "exp.host" = "allow"
 "gsa.apple.com" = "allow"
 "idmsa.apple.com" = "allow"
+"repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
 
@@ -125,6 +134,7 @@ allow_local_binding = true
 "exp.host" = "allow"
 "gsa.apple.com" = "allow"
 "idmsa.apple.com" = "allow"
+"repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
 
@@ -141,7 +151,6 @@ description = "Tao native host: add Simulator and Xcode working directories; hos
 extends = "tao-workspace"
 description = "Tao local services: opt in to the Docker daemon used by the local InstantDB stack."
 
-# Docker can control the host through mounts and networking, so it is not in the default profile.
 [permissions.tao-local-services.network.unix_sockets]
 "/var/run/docker.sock" = "allow"
 "/Users/ro/.docker/run/docker.sock" = "allow"
@@ -152,3 +161,7 @@ description = "Tao release: add the local Xcode archive destination; credentials
 
 [permissions.tao-release.filesystem]
 "~/Library/Developer/Xcode/Archives" = "write"
+
+[permissions.tao-unsandboxed]
+extends = ":danger-full-access"
+description = "Tao unsandboxed: run with the Bash sandbox off; a running session can switch with /sandbox."

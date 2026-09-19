@@ -78,13 +78,12 @@ Describe('tao fix', () => {
     })
   })
 
-  Test('checks generated root-package source at every inferred project root without rewriting it', async () => {
+  Test('protects only the project-root @ package and treats nested @ directories as authored', async () => {
     const generated = 'view   Generated() { }'
-    const nestedGenerated = 'view   Nested() { }'
     await withTaoFixture({
       '@/studio/Generated.tao': generated,
       'App.tao': 'view   AppView() { }',
-      'Apps/Foo/@/Nested.tao': nestedGenerated,
+      'Apps/Foo/@/Nested.tao': 'view   Nested() { }',
       'Packages/@cards/Card.tao': 'view   Card() { }',
     }, async rootDir => {
       const results = await runFix(rootDir)
@@ -92,12 +91,12 @@ Describe('tao fix', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         '@/studio/Generated.tao': 'error',
         'App.tao': 'changed',
-        'Apps/Foo/@/Nested.tao': 'error',
+        'Apps/Foo/@/Nested.tao': 'changed',
         'Packages/@cards/Card.tao': 'changed',
       })
       Expect(await FS.readText(FS.resolvePath('@/studio/Generated.tao', rootDir))).toBe(generated)
       Expect(await FS.readText(FS.resolvePath('App.tao', rootDir))).toBe('view AppView() { }\n')
-      Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe(nestedGenerated)
+      Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe('view Nested() { }\n')
       Expect(await FS.readText(FS.resolvePath('Packages/@cards/Card.tao', rootDir))).toBe('view Card() { }\n')
       Expect(results[0]?.error).toContain('regenerate it instead of rewriting it')
     })
@@ -142,9 +141,7 @@ Describe('tao fix', () => {
     })
   })
 
-  // `tao create` writes no Project.tao, so the generated tree's owner is often undeclared while an
-  // ancestor checkout declares one. The ancestor's root must not make the nested @/ tree writable.
-  Test('protects a generated root whose own project has no Project.tao under an ancestor that does', async () => {
+  Test('does not mistake an undeclared nested @ directory for the ancestor project root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
       'Project.tao': 'project {\n   id "outer-fix"\n   name "Outer fix"\n}\n',
@@ -154,16 +151,18 @@ Describe('tao fix', () => {
       const results = await runFix(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({
-        'Apps/Created/@/studio/Generated.tao': 'error',
+        'Apps/Created/@/studio/Generated.tao': 'changed',
         'Apps/Created/Authored.tao': 'changed',
         'Project.tao': 'unchanged',
       })
-      Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(
+        'view Generated() { }\n',
+      )
       Expect(await FS.readText(FS.resolvePath('Apps/Created/Authored.tao', rootDir))).toBe('view Authored() { }\n')
     })
   })
 
-  Test('protects an explicitly named generated file whose project has no Project.tao', async () => {
+  Test('formats an explicitly named nested @ file that is not the project-root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
       'Project.tao': 'project {\n   id "outer-fix-file"\n   name "Outer fix file"\n}\n',
@@ -172,12 +171,8 @@ Describe('tao fix', () => {
       const path = FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir)
       const results = await runFix(path)
 
-      Expect(results).toEqual([{
-        error: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.',
-        path,
-        status: 'error',
-      }])
-      Expect(await FS.readText(path)).toBe(generated)
+      Expect(results).toEqual([{ path, status: 'changed' }])
+      Expect(await FS.readText(path)).toBe('view Generated() { }\n')
     })
   })
 

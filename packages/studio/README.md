@@ -169,7 +169,7 @@ likely to belong to another worktree as to this one — check before killing it.
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
 | `.artifacts/reviews/<reviewId>/`                              | Immutable web scenario visual-review bundles         |
-| `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
+| `.artifacts/tests/studio-canary/invocations/<id>/canary.json` | One native-canary invocation's isolated report       |
 | `.artifacts/logs/<lane>/<timestamp>/`                         | One lane run's per-node logs plus `summary.json`     |
 | `.artifacts/logs/<lane>/latest`                               | Symlink to that lane's newest run                    |
 | `.artifacts/timings/`                                         | Measured node durations the scheduler orders by      |
@@ -425,9 +425,9 @@ overrides the choice. Every lane writes `.artifacts/logs/<lane>/<timestamp>/<nod
 `summary.json` and refreshes the lane's `latest` symlink; `verify` also writes the stable copy at
 `.artifacts/logs/verify/summary.json`.
 
-`just full-verify` bootstraps dependencies and then runs the same graph grown to everything: the
-verify membership plus the doctor (whose node log is the versioned `--json` report),
-`dead-exports`, and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
+`just verify-full` bootstraps dependencies and then runs the same graph grown to everything: the
+verify membership plus the doctor (whose node log is the versioned `--json` report)
+and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
 `keyboard-navigation-smoke`, `studio-smoke-native`), which the catalog runs through
 `./dev studio-smoke` on worker indices the graph assigns from the `studio-smoke` pool
 (`StudioSmoke.resources()` gives each index its own ports and artifact root); the native shell and
@@ -458,7 +458,7 @@ afterwards. The auxiliary-window check creates a hidden probe window; opening a 
 project remains a human check. A host without Hutch, or without a window server session, is reported
 as **blocked** — neither a pass nor a repository failure.
 
-Checks that require a person are deliberately excluded from `test`, `verify`, `full-verify`, and the
+Checks that require a person are deliberately excluded from `test`, `verify`, `verify-full`, and the
 canary. Run their separate interactive workflow with:
 
 ```bash
@@ -587,7 +587,7 @@ from an ordinary Terminal in the logged-in desktop session, or use `./dev studio
 Two failures look alike and need opposite responses: a denied _temporary directory_ is resumable —
 `just clean-scratch && direnv exec . ./agent setup` — while a denied _destination path_ repeats
 forever, because some npm packages ship files under paths an agent sandbox protects (`.gitmodules`,
-`.idea/`). Recover from a shell without that sandbox: `bun install`, or `just claude-unsandboxed`.
+`.idea/`). Recover from a shell without that sandbox: `bun install`, or `just session-unsandboxed`.
 
 **A failed install left gigabytes behind.** `just clean-scratch` reclaims it and reports how much. It
 only ever empties a repository `.artifacts` scratch root.

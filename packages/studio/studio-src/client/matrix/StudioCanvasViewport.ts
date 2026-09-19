@@ -6,7 +6,8 @@
  * person zooms or pans.
  */
 
-export type StudioCanvasViewportState = Readonly<{ x: number; y: number; z: number }>
+type StudioCanvasViewportState = Readonly<{ x: number; y: number; z: number }>
+type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: number }>
 
 const minimumScale = 0.1
 const maximumScale = 4
@@ -37,7 +38,10 @@ function grid(host: HTMLElement): HTMLElement | null {
 /** canvasScale reports the zoom a node is rendered under, so a pointer gesture can undo it. */
 export function canvasScale(node: Element | null | undefined): number {
   const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
-  return host === null ? 1 : states.get(host)?.z ?? 1
+  const surface = host === null ? null : grid(host)
+  return host === null || surface === null || node === undefined || !surface.contains(node)
+    ? 1
+    : states.get(host)?.z ?? 1
 }
 
 /** applyCanvasViewport writes the current pan and zoom onto the grid; the matrix calls it after each reconcile. */
@@ -55,20 +59,81 @@ export function applyCanvasViewport(host: HTMLElement): void {
   }
 }
 
+/** canvasRevealDelta is the geometry behind reveal; exported so clipped-host behavior is regression tested. */
+export function canvasRevealDelta(
+  host: CanvasRect,
+  node: CanvasRect,
+  padding = 24,
+): Readonly<{ x: number; y: number }> {
+  const x = node.left < host.left + padding
+    ? host.left + padding - node.left
+    : node.right > host.right - padding
+    ? host.right - padding - node.right
+    : 0
+  const y = node.top < host.top + padding
+    ? host.top + padding - node.top
+    : node.bottom > host.bottom - padding
+    ? host.bottom - padding - node.bottom
+    : 0
+  return { x, y }
+}
+
+/** revealCanvasNode pans the transformed preview plane; `scrollIntoView` would move the clipped host itself. */
+export function revealCanvasNode(node: Element | null | undefined): boolean {
+  const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
+  const surface = host === null ? null : grid(host)
+  if (host === null || surface === null || node === undefined || node === null || !surface.contains(node)) {
+    return false
+  }
+  const delta = canvasRevealDelta(host.getBoundingClientRect(), node.getBoundingClientRect())
+  const current = state(host)
+  current.x += delta.x
+  current.y += delta.y
+  applyCanvasViewport(host)
+  return true
+}
+
 export type StudioCanvasViewportControls = Readonly<{
+  dispose: () => void
   /** fit frames the whole surface inside the host, the way ⌘0 does in a drawing tool. */
   fit: () => void
   /** reset returns to 100 % with the surface's top left in the host's top left. */
   reset: () => void
   state: () => StudioCanvasViewportState
+  /** reveal moves the transformed surface rather than scrolling its clipped host. */
+  reveal: (node: Element) => void
+  /** iframeWheel forwards wheel/pinch gestures that cannot bubble across the iframe boundary. */
+  iframeWheel: (gesture: StudioCanvasWheelGesture, frame: Element) => void
   zoomTo: (scale: number, anchor?: Readonly<{ x: number; y: number }>) => void
 }>
 
 export type StudioCanvasViewportDeps = Readonly<{
+  /** Canvas shortcuts and forwarded iframe gestures are active only in the Design preset. */
+  enabled?: () => boolean
   host: HTMLElement
   /** Runs after every pan or zoom, so a caller can persist the viewport. */
   onChange?: (next: StudioCanvasViewportState) => void
 }>
+
+type StudioCanvasWheelGesture = Readonly<{
+  clientX: number
+  clientY: number
+  deltaX: number
+  deltaY: number
+  zoom: boolean
+}>
+
+/** Translates iframe-local wheel coordinates into the surrounding canvas host's coordinate space. */
+export function canvasIframeGestureAnchor(
+  host: Pick<DOMRect, 'left' | 'top'>,
+  iframe: Pick<DOMRect, 'left' | 'top'>,
+  gesture: Pick<StudioCanvasWheelGesture, 'clientX' | 'clientY'>,
+): Readonly<{ x: number; y: number }> {
+  return {
+    x: iframe.left - host.left + gesture.clientX,
+    y: iframe.top - host.top + gesture.clientY,
+  }
+}
 
 /**
  * mountCanvasViewport gives the host Figma's gestures: wheel or two-finger scroll pans, the same
@@ -79,6 +144,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   const { host } = deps
   const document = host.ownerDocument
   const current = state(host)
+  let disposed = false
 
   const publish = (): void => {
     applyCanvasViewport(host)
@@ -134,9 +200,24 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     publish()
   }
 
-  pill.addEventListener('click', () => (current.z === 1 ? fit() : reset()))
+  const onPillClick = (): void => (current.z === 1 ? fit() : reset())
+  pill.addEventListener('click', onPillClick)
+
+  const applyWheel = (gesture: StudioCanvasWheelGesture, anchor: Readonly<{ x: number; y: number }>): void => {
+    if (gesture.zoom) {
+      const notch = Math.max(-0.2, Math.min(0.2, -gesture.deltaY / 500))
+      zoomTo(current.z * Math.exp(notch), anchor)
+      return
+    }
+    current.x -= gesture.deltaX
+    current.y -= gesture.deltaY
+    publish()
+  }
 
   const onWheel = (event: WheelEvent): void => {
+    if (deps.enabled?.() === false) {
+      return
+    }
     const bounds = host.getBoundingClientRect()
     const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
     if (event.ctrlKey || event.metaKey) {
@@ -145,14 +226,23 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       // a mouse wheel reports a whole line or page at once, and an unbounded exponent would jump
       // several hundred percent on a single tick.
       event.preventDefault()
-      const notch = Math.max(-0.2, Math.min(0.2, -event.deltaY / 500))
-      zoomTo(current.z * Math.exp(notch), anchor)
+      applyWheel({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        zoom: true,
+      }, anchor)
       return
     }
     event.preventDefault()
-    current.x -= event.deltaX
-    current.y -= event.deltaY
-    publish()
+    applyWheel({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      zoom: false,
+    }, anchor)
   }
   host.addEventListener('wheel', onWheel, { passive: false })
 
@@ -194,6 +284,9 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   host.addEventListener('lostpointercapture', endPan)
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    if (deps.enabled?.() === false) {
+      return
+    }
     if (event.key === ' ' && !isTypingTarget(event.target)) {
       spaceHeld = true
       host.dataset['canvasPanReady'] = 'true'
@@ -225,8 +318,48 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   document.addEventListener('keydown', onKeyDown)
   document.addEventListener('keyup', onKeyUp)
 
+  const reveal = (node: Element): void => {
+    if (revealCanvasNode(node)) {
+      deps.onChange?.({ ...current })
+    }
+  }
+
+  const iframeWheel = (gesture: StudioCanvasWheelGesture, frame: Element): void => {
+    if (deps.enabled?.() === false || !host.contains(frame)) {
+      return
+    }
+    const hostRect = host.getBoundingClientRect()
+    const frameRect = frame.getBoundingClientRect()
+    applyWheel(gesture, canvasIframeGestureAnchor(hostRect, frameRect, gesture))
+  }
+
   applyCanvasViewport(host)
-  return { fit, reset, state: () => ({ ...current }), zoomTo }
+  return {
+    dispose() {
+      if (disposed) {
+        return
+      }
+      disposed = true
+      pill.removeEventListener('click', onPillClick)
+      host.removeEventListener('wheel', onWheel)
+      host.removeEventListener('pointerdown', onPointerDown)
+      host.removeEventListener('pointermove', onPointerMove)
+      host.removeEventListener('pointerup', endPan)
+      host.removeEventListener('pointercancel', endPan)
+      host.removeEventListener('lostpointercapture', endPan)
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keyup', onKeyUp)
+      pill.remove()
+      delete host.dataset['canvasPanReady']
+      delete host.dataset['canvasPanning']
+    },
+    fit,
+    iframeWheel,
+    reset,
+    reveal,
+    state: () => ({ ...current }),
+    zoomTo,
+  }
 }
 
 /** nextStop moves one notch along the zoom ladder, so ⌘+ and ⌘− land on round percentages. */

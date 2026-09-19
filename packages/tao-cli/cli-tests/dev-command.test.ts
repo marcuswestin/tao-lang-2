@@ -40,6 +40,7 @@ Describe('Tao dev app discovery and selection', () => {
       Expect(projects.map(project => project.name)).toEqual(['Data MVP', 'WordFlower'])
       Expect(projects[0]?.apps.map(app => app.appName)).toEqual(['DataMVP'])
       Expect(projects[1]?.apps.map(app => app.appName)).toEqual(['WordFlower', 'WordFlowerDemo'])
+      Expect(projects[1]?.root).toBe(await FS.realPath(FS.resolvePath('WordFlower/Current', root)))
     } finally {
       await FS.remove(root)
     }
@@ -65,7 +66,9 @@ Describe('Tao dev app discovery and selection', () => {
 
       Expect(projects).toHaveLength(1)
       Expect(projects[0]?.name).toBe('Split project')
-      Expect(projects[0]?.root).toBe(root)
+      // Discovery canonicalizes the project root so a symlinked path cannot become a second app
+      // authority, and the host temporary directory is itself reached through one.
+      Expect(projects[0]?.root).toBe(await FS.realPath(root))
       Expect(projects[0]?.apps.map(app => app.appName).toSorted()).toEqual(['Preview', 'Reader'])
     } finally {
       await FS.remove(root)

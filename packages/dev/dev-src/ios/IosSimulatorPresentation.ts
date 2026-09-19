@@ -24,8 +24,20 @@ export async function presentIosSimulator(
     return { host: 'Simulator', result: simulator }
   }
 
-  const deviceHubArgs = udid === undefined
-    ? ['-a', 'DeviceHub']
-    : [`devices://device/open?id=${encodeURIComponent(udid)}`]
-  return { host: 'Device Hub', result: await run('open', { args: deviceHubArgs, stdio: 'pipe' }) }
+  if (udid !== undefined) {
+    const selection = await run('open', {
+      args: [`devices://device/open?id=${encodeURIComponent(udid)}`],
+      stdio: 'pipe',
+    })
+    if (selection.exitCode === 0 && selection.error === undefined) {
+      return { host: 'Device Hub', result: selection }
+    }
+  }
+
+  // Some Xcode 27 installations register Device Hub without registering the devices:// URL
+  // handler. Opening the application still gives the person a usable simulator host.
+  return {
+    host: 'Device Hub',
+    result: await run('open', { args: ['-a', 'DeviceHub'], stdio: 'pipe' }),
+  }
 }

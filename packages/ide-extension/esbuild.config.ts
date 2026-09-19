@@ -17,6 +17,7 @@ const bundledDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/language/
 const bundledExtensionDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/extension/plugin.wasm', import.meta.dir)
 const stdlibSourceRoot = FS.resolvePath('../stdlib/@tao', import.meta.dir)
 const bundledStdlibRoot = FS.resolvePath('_gen_ide-extension/@tao', import.meta.dir)
+const repositoryRoot = FS.resolvePath('../..', import.meta.dir)
 
 const ctx = await context({
   entryPoints: [
@@ -45,8 +46,7 @@ const ctx = await context({
           await writeMergedTaoTextMateGrammar(generatedTaoTextMateGrammar, taoTextMateGrammarOverlay)
           await FS.copyFile(dprintTypescriptWasm, bundledDprintTypescriptWasm)
           await FS.copyFile(dprintTypescriptWasm, bundledExtensionDprintTypescriptWasm)
-          await FS.remove(bundledStdlibRoot)
-          await FS.copyDirectory(stdlibSourceRoot, bundledStdlibRoot)
+          await FS.synchronizeDirectoryFiles(stdlibSourceRoot, bundledStdlibRoot, { boundaryPath: repositoryRoot })
         }
       })
     },

@@ -5,8 +5,6 @@ const COCOAPODS_INSTALL_TIMEOUT_MS = 5 * 60_000
 const POD_INSPECTION_TIMEOUT_MS = 2 * 60_000
 const XCODE_TARGET_LIST_TIMEOUT_MS = 2 * 60_000
 const XCODE_TARGET_BUILD_TIMEOUT_MS = 10 * 60_000
-const COMMAND_STOP_TIMEOUT_MS = 2_000
-const COMMAND_KILL_TIMEOUT_MS = 2_000
 
 const HOST_FILES = [
   'app.json',
@@ -36,11 +34,6 @@ export type NativeModuleCommandResult = {
   stdout: string
   timedOut: boolean
 }
-
-type NativeModuleStartedCommand = Pick<
-  CLI.StartedCommand,
-  'closeOutput' | 'dispose' | 'error' | 'exitCode' | 'kill' | 'pid' | 'waitForClose'
->
 
 export type NativeModuleCheckDependencies = {
   createRunRoot: (artifactRoot: string) => Promise<string>
@@ -302,95 +295,26 @@ function requiredPodTargets(
 }
 
 async function runCommand(command: NativeModuleCommand): Promise<NativeModuleCommandResult> {
-  let stdout = ''
-  let stderr = ''
-  const child = CLI.start(command.command, {
+  const result = await CLI.run(command.command, {
     args: command.args,
     cwd: command.cwd,
-    detached: true,
     env: command.env,
-    onOutput(stream, chunk) {
-      if (stream === 'stdout') {
-        stdout += chunk.toString('utf8')
-      } else {
-        stderr += chunk.toString('utf8')
-      }
-    },
+    processPolicy: 'test',
     stdio: command.quiet === true ? 'pipe' : 'stream',
+    timeoutMs: command.timeoutMs,
   })
-  const outcome = await commandOutcome(child, command.timeoutMs)
   return {
-    error: child.error,
-    exitCode: outcome.exitCode,
-    stderr,
-    stdout,
-    timedOut: outcome.timedOut,
-  }
-}
-
-async function commandOutcome(
-  child: NativeModuleStartedCommand,
-  timeoutMs: number,
-  stopTimeoutMs = COMMAND_STOP_TIMEOUT_MS,
-  killTimeoutMs = COMMAND_KILL_TIMEOUT_MS,
-): Promise<{ exitCode: number | null; timedOut: boolean }> {
-  const close = child.waitForClose()
-  const outcome = await waitWithin(close, timeoutMs)
-  if (outcome.kind === 'closed') {
-    await child.closeOutput()
-    child.dispose()
-    return { exitCode: outcome.result.exitCode, timedOut: false }
-  }
-
-  signalCommandTree(child, 'SIGTERM')
-  const stopped = await waitWithin(close, stopTimeoutMs)
-  if (stopped.kind === 'closed') {
-    await child.closeOutput()
-    child.dispose()
-    return { exitCode: stopped.result.exitCode, timedOut: true }
-  }
-
-  signalCommandTree(child, 'SIGKILL')
-  const killed = await waitWithin(close, killTimeoutMs)
-  await child.closeOutput()
-  child.dispose()
-  return { exitCode: killed.kind === 'closed' ? killed.result.exitCode : child.exitCode, timedOut: true }
-}
-
-function signalCommandTree(child: NativeModuleStartedCommand, signal: 'SIGKILL' | 'SIGTERM'): boolean {
-  if (child.pid === undefined) {
-    return child.kill(signal)
-  }
-  const result = Platform.spawnSync('/bin/kill', {
-    args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${child.pid}`],
-    stdio: 'ignore',
-  })
-  return result.status === 0
-}
-
-async function waitWithin<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<{ kind: 'closed'; result: T } | { kind: 'timeout' }> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise.then(result => ({ kind: 'closed' as const, result })),
-      new Promise<{ kind: 'timeout' }>(resolve => {
-        timer = setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer)
-    }
+    error: result.error,
+    exitCode: result.exitCode,
+    stderr: result.stderr,
+    stdout: result.stdout,
+    timedOut: result.signal !== null && result.stderr.includes('timed out after'),
   }
 }
 
 export const NativeModuleCheck = {
   run,
   testing: {
-    commandOutcome,
     discoverPodspecs,
     podTargetName,
     podsProjectTargets,

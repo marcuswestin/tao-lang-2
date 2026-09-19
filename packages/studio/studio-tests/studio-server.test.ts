@@ -150,6 +150,21 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
+  Test('refuses the wrong method on parameterized agent-chat routes', async () => {
+    const session = { subscribe: () => () => {} } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/agent-chat/send')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, { method: 'GET' }),
+      url,
+      {},
+    )
+
+    Expect(response.status).toBe(404)
+    Expect(await response.json()).toEqual({ error: 'Studio endpoint not found.' })
+  })
+
   Test('beta ships the active app through the injected shipping boundary', async () => {
     const ships: unknown[] = []
     const session = {
@@ -177,6 +192,22 @@ Describe('Studio server request boundary', () => {
       entryPath: '/projects/Garden/Garden.tao',
       projectRoot: '/projects/Garden',
     }])
+  })
+
+  Test('disables Bun idle timeout only for the long-running beta ship request', () => {
+    const calls: Array<{ request: Request; seconds: number }> = []
+    const server = {
+      timeout(request: Request, seconds: number) {
+        calls.push({ request, seconds })
+      },
+    }
+    const ship = new Request('http://127.0.0.1:5678/api/ship/beta', { method: 'POST' })
+    const files = new Request('http://127.0.0.1:5678/api/files')
+
+    StudioServerTesting.configureRequestLifetime(ship, server as never, '/api/ship/beta')
+    StudioServerTesting.configureRequestLifetime(files, server as never, '/api/files')
+
+    Expect(calls).toEqual([{ request: ship, seconds: 0 }])
   })
 
   Test('the default beta ship ignores a dirty Git tree', () => {
@@ -588,8 +619,13 @@ Describe('Studio device routes', () => {
 
   Test('sends the device snapshot after the handshake and broadcasts every gateway change', async () => {
     const listeners = new Map<string, (status: StudioDeviceStatus) => void>()
+    const detached: string[] = []
     const gateway = {
       ...fakeGateway(status, []),
+      detachSession(sessionId: string) {
+        detached.push(sessionId)
+        return { detached: 0 }
+      },
       subscribe(sessionId: string, listener: (status: StudioDeviceStatus) => void) {
         listeners.set(sessionId, listener)
         return () => listeners.delete(sessionId)
@@ -635,6 +671,8 @@ Describe('Studio device routes', () => {
         status: connected,
         type: 'device-state',
       })
+      Expect(await manager.close('device_session')).toBe(true)
+      Expect(detached).toEqual(['device_session'])
       socket.close()
     } finally {
       server.stop()
@@ -656,6 +694,10 @@ function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServer
     declinePairing(sessionId, devicePublicKey) {
       calls.push(['declinePairing', sessionId, devicePublicKey])
       return { declined: true }
+    },
+    detachSession(sessionId) {
+      calls.push(['detachSession', sessionId])
+      return { detached: 0 }
     },
     highlightSource(sessionId, occurrence) {
       calls.push(['highlightSource', sessionId, occurrence])

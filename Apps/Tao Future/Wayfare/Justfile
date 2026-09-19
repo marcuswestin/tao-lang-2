@@ -58,6 +58,6 @@ words-check:
 ship:
     {{ TAO }} ship . --app Wayfare
 
-# Deliver a compiled build to the project's invited members through the Tao Studio companion app.
+# Deliver a compiled build to the app's TestFlight beta groups.
 ship-beta:
     {{ TAO }} ship . --app Wayfare --beta

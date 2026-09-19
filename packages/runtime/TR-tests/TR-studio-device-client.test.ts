@@ -467,6 +467,52 @@ Describe('Studio device client handshake and pairing', () => {
     run.timers.advance(1_000)
     Expect(run.studio.latest().url).toBe('ws://10.0.0.5:8790/device')
   })
+
+  Test(
+    'uses only Bonjour results authenticated by the pinned Studio key and keeps the launch URL as fallback',
+    async () => {
+      const studio = new StudioPeer()
+      const deviceIdentity = StudioDeviceTrust.generateIdentity()
+      const impostor = StudioDeviceTrust.generateIdentity()
+      const run = harness({
+        discover: async () => [
+          { studioPublicKey: impostor.publicKey, url: 'ws://impostor.local:7123/device' },
+          { studioPublicKey: studio.identity.publicKey, url: 'http://studio.local:7123/device' },
+          { studioPublicKey: studio.identity.publicKey, url: 'ws://studio.local:7123/device' },
+        ],
+        record: { identity: deviceIdentity, pinnedStudioKey: studio.identity.publicKey },
+        studio,
+      })
+
+      await run.client.start()
+      Expect(run.studio.latest().url).toBe('ws://studio.local:7123/device')
+      run.studio.latest().error(new Error('bonjour address moved'))
+      Expect(run.studio.latest().url).toBe('ws://192.168.1.20:8790/device')
+    },
+  )
+
+  Test('rediscovers after a failed round so a changed LAN address recovers without a new QR scan', async () => {
+    const studio = new StudioPeer()
+    const deviceIdentity = StudioDeviceTrust.generateIdentity()
+    let discoveryRound = 0
+    const run = harness({
+      backoff: { initialMs: 10, maxMs: 10 },
+      discover: async () => [{
+        studioPublicKey: studio.identity.publicKey,
+        url: `ws://studio-${++discoveryRound}.local:7123/device`,
+      }],
+      record: { identity: deviceIdentity, pinnedStudioKey: studio.identity.publicKey },
+      studio,
+    })
+
+    await run.client.start()
+    Expect(run.studio.latest().url).toBe('ws://studio-1.local:7123/device')
+    run.studio.latest().error(new Error('old address'))
+    run.studio.latest().error(new Error('launch URL is stale too'))
+    run.timers.advance(10)
+    await settle()
+    Expect(run.studio.latest().url).toBe('ws://studio-2.local:7123/device')
+  })
 })
 
 Describe('Studio device client sealed control plane', () => {
@@ -539,8 +585,39 @@ Describe('Studio device client sealed control plane', () => {
     const answers = hugeSession.received()
     Expect(answers).toHaveLength(1)
     Expect(answers[0]).toMatchObject({ requestId: 'req-3', type: 'device.runtimeCaptureFailed' })
-    Expect(String((answers[0] as { error: string }).error)).toContain('over the')
+    Expect(String((answers[0] as { error: string }).error)).toContain('does not fit')
     Expect(huge.client.state().phase).toBe('connected')
+  })
+
+  Test('accounts for sealed overhead and splits logs without killing the connection', async () => {
+    const limit = 1_024
+    const medium = { domains: [{ domain: 'data', value: 'é'.repeat(390) }], version: 1 }
+    const clearCapture = { capture: medium, requestId: 'req-overhead', type: 'device.runtimeCaptured' }
+    Expect(StudioDeviceProtocol.utf8ByteLength(JSON.stringify(clearCapture))).toBeLessThan(limit)
+    const run = harness({ captureRuntime: async () => medium, frameLimitBytes: limit })
+    const session = await connect(run)
+    session.received()
+
+    session.send({ requestId: 'req-overhead', type: 'studio.captureRuntime' })
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(session.received()).toEqual([{
+      error: Expect['stringContaining']('does not fit'),
+      requestId: 'req-overhead',
+      type: 'device.runtimeCaptureFailed',
+    }])
+
+    const entries = Array.from({ length: 5 }, (_, index) => ({
+      level: 'info' as const,
+      message: `${index}:${'é'.repeat(120)}`,
+      timestamp: index,
+    }))
+    run.client.log(entries)
+    const frames = session.connection.inbox.slice(2)
+    Expect(frames.every(text => StudioDeviceProtocol.utf8ByteLength(text) <= limit)).toBe(true)
+    const logged = session.received().flatMap(message => (message as { entries?: typeof entries }).entries ?? [])
+    Expect(logged).toEqual(entries)
+    Expect(run.client.state().phase).toBe('connected')
   })
 
   Test('rejects a tampered frame as unsealed', async () => {

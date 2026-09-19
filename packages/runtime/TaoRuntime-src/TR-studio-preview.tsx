@@ -1,7 +1,8 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
-import { Debug } from './TR-debug'
+import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
+import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
 import type { TaoSchemeSnapshot } from './TR-scheme'
@@ -72,8 +73,12 @@ type StudioPreviewMessageEvent = {
 type StudioPreviewPointerEvent = {
   clientX?: number
   clientY?: number
+  ctrlKey?: boolean
+  deltaX?: number
+  deltaY?: number
   isComposing?: boolean
   key?: string
+  metaKey?: boolean
   preventDefault?(): void
   repeat?: boolean
   stopImmediatePropagation?(): void
@@ -122,7 +127,8 @@ export type StudioPreviewHost = {
         | 'mousemove'
         | 'mouseover'
         | 'mouseout'
-        | 'mouseup',
+        | 'mouseup'
+        | 'wheel',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -143,7 +149,8 @@ export type StudioPreviewHost = {
         | 'mousemove'
         | 'mouseover'
         | 'mouseout'
-        | 'mouseup',
+        | 'mouseup'
+        | 'wheel',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -423,16 +430,20 @@ export async function replayStudioJourney(
       },
       async find(selector, target, scope) {
         checkAborted()
-        return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs)
+        return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs, options.signal)
       },
       async select(tag, index, scope) {
         checkAborted()
         let matchCount = 0
-        const selected = await waitForTaoJourneyTarget(() => {
-          const matches = findJourneyTargets(host, 'tag', tag, scope)
-          matchCount = matches.length
-          return matches[index - 1]
-        }, options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs)
+        const selected = await waitForTaoJourneyTarget(
+          () => {
+            const matches = findJourneyTargets(host, 'tag', tag, scope)
+            matchCount = matches.length
+            return matches[index - 1]
+          },
+          options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs,
+          options.signal,
+        )
         RuntimeAssert.input(
           selected !== undefined,
           `Tao Studio journey expected row ${index} for tag '#${tag}', found ${matchCount} after waiting ${
@@ -461,16 +472,21 @@ async function findJourneyTarget(
   target: string,
   scope?: StudioPreviewElement,
   timeoutMs = taoJourneyTargetTimeoutMs,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewElement> {
-  const match = await waitForTaoJourneyTarget(() => {
-    const matches = findJourneyTargets(host, selector, target, scope)
-    RuntimeAssert.input(
-      matches.length <= 1,
-      `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
-      { selector, target },
-    )
-    return matches[0]
-  }, timeoutMs)
+  const match = await waitForTaoJourneyTarget(
+    () => {
+      const matches = findJourneyTargets(host, selector, target, scope)
+      RuntimeAssert.input(
+        matches.length <= 1,
+        `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+        { selector, target },
+      )
+      return matches[0]
+    },
+    timeoutMs,
+    signal,
+  )
   RuntimeAssert.input(
     match !== undefined,
     `Tao Studio journey expected exactly one ${selector} target '${target}', found 0 after waiting ${timeoutMs}ms.`,
@@ -669,6 +685,7 @@ export function mountStudioPreviewBridge(
   let suppressNextClick = false
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
+  let canvasGesturesOwned = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -858,6 +875,31 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
     scheduleLayoutMeasurements()
   }
+  const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned
+      || event.clientX === undefined
+      || event.clientY === undefined
+      || event.deltaX === undefined
+      || event.deltaY === undefined
+    ) {
+      return
+    }
+    // Cancellation is synchronous and happens only after the parent has advertised that Design
+    // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
+    event.preventDefault?.()
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-gesture',
+      zoom: event.ctrlKey === true || event.metaKey === true,
+    }, config.parentOrigin)
+  }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
     if (event.taoStudioJourney === true) {
@@ -977,6 +1019,11 @@ export function mountStudioPreviewBridge(
     if (startOrStopRecording(event)) {
       return
     }
+    const requestedCanvasOwnership = canvasGestureOwnershipFromMessage(event, config, host.parent)
+    if (requestedCanvasOwnership !== undefined) {
+      canvasGesturesOwned = requestedCanvasOwnership
+      return
+    }
     const requestedMode = interactionModeFromMessage(event, config, host.parent)
     if (requestedMode !== undefined) {
       interactionMode = requestedMode
@@ -1030,6 +1077,7 @@ export function mountStudioPreviewBridge(
   host.document.addEventListener('mouseover', onMouseOver)
   host.document.addEventListener('mouseout', onMouseOut)
   host.document.addEventListener('mouseup', onMouseUp, true)
+  host.document.addEventListener('wheel', onCanvasWheel, true)
   host.window.addEventListener('blur', disarmDrag)
   host.window.addEventListener('message', onMessage)
   host.window.addEventListener('resize', onResize)
@@ -1058,6 +1106,10 @@ export function mountStudioPreviewBridge(
 
   return () => {
     stopped = true
+    // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
+    // both before a replacement instance starts, without letting the old pause publish a resumed
+    // event into the replacement's drawer.
+    Debug.Reset()
     if (recording !== undefined) {
       const invalidatedRecording = recording
       flushRecordedInput()
@@ -1078,6 +1130,7 @@ export function mountStudioPreviewBridge(
     host.document.removeEventListener('mouseover', onMouseOver)
     host.document.removeEventListener('mouseout', onMouseOut)
     host.document.removeEventListener('mouseup', onMouseUp, true)
+    host.document.removeEventListener('wheel', onCanvasWheel, true)
     host.window.removeEventListener('blur', disarmDrag)
     host.window.removeEventListener('message', onMessage)
     host.window.removeEventListener('resize', onResize)
@@ -1211,8 +1264,36 @@ function applyDebugCommand(
   return true
 }
 
-function isDebugStepValue(value: unknown): value is { action: string; path: string } {
-  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
+function isDebugStepValue(value: unknown): value is TaoDebugStep {
+  if (!isObject(value) || typeof value['action'] !== 'string' || typeof value['path'] !== 'string') {
+    return false
+  }
+  const declaration = value['declaration']
+  const statement = value['statement']
+  return (declaration === undefined && statement === undefined)
+    || (typeof declaration === 'string' && typeof statement === 'string')
+}
+
+function canvasGestureOwnershipFromMessage(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): boolean | undefined {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  return message['channel'] === studioProtocolChannel
+      && message['protocolVersion'] === studioProtocolVersion
+      && message['type'] === 'set-canvas-gestures'
+      && typeof message['owned'] === 'boolean'
+      && isObject(identity)
+      && identity['appName'] === config.appName
+      && identity['project'] === config.project
+      && identity['previewInstanceId'] === config.previewInstanceId
+    ? message['owned']
+    : undefined
 }
 
 function interactionModeFromMessage(
@@ -1437,11 +1518,24 @@ function postRuntimeCaptureFailure(
   host.parent.postMessage({
     channel: studioProtocolChannel,
     error: error instanceof Error ? error.message : String(error),
+    errorName: runtimeCaptureErrorName(error),
     identity: previewIdentity(config),
     protocolVersion: studioProtocolVersion,
     requestId,
     type: 'preview-runtime-capture-failed',
   }, config.parentOrigin)
+}
+
+function runtimeCaptureErrorName(
+  error: unknown,
+): 'HostEnvironmentError' | 'UnexpectedBehaviorError' | 'UserInputError' {
+  if (error instanceof HostEnvironmentError) {
+    return 'HostEnvironmentError'
+  }
+  if (error instanceof UserInputError) {
+    return 'UserInputError'
+  }
+  return error instanceof UnexpectedBehaviorError ? error.name : 'UnexpectedBehaviorError'
 }
 
 function postCapturedFixture(
@@ -1469,6 +1563,7 @@ function postCaptureFailure(
   host.parent.postMessage({
     channel: studioProtocolChannel,
     error: error instanceof Error ? error.message : String(error),
+    errorName: runtimeCaptureErrorName(error),
     identity: previewIdentity(config),
     protocolVersion: studioProtocolVersion,
     requestId,

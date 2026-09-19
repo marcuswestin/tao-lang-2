@@ -89,7 +89,9 @@ Describe('@tao/data providers', () => {
     connection.close?.()
 
     Expect(snapshots).toEqual(['missed', 'remote'])
-    Expect(errors).toEqual([remoteError])
+    Expect(errors).toHaveLength(1)
+    Expect(errors[0]).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(errors[0])).toBe('InstantDB subscription failed.')
     Expect(sdk.unsubscribeCalls).toBe(1)
     Expect(sdk.shutdownCalls).toBe(0)
     secondConnection.close?.()
@@ -97,7 +99,7 @@ Describe('@tao/data providers', () => {
     Expect(sdk.shutdownCalls).toBe(1)
   })
 
-  Test('rejects the load when the first subscription result is an error or a key collision', async () => {
+  Test('classifies InstantDB boundary failures while preserving Tao error categories', async () => {
     const sdk = fakeInstantSDK()
     const provider = InstantDBProvider(() => sdk.instantSDK as never)
     const connect = (storageKey: string): TR.DataConnection =>
@@ -109,11 +111,111 @@ Describe('@tao/data providers', () => {
 
     const failing = connect('Notes').load() as Promise<string | undefined>
     sdk.subscription?.({ error: { message: 'device is offline' } })
-    await Expect(failing).rejects.toThrow('device is offline')
+    await Expect(failing).rejects.toThrow('InstantDB load failed.')
+    await Expect(failing).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
 
     const colliding = connect('Notes').load() as Promise<string | undefined>
     sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'x', StorageKey: 'OtherKey' }] } })
     await Expect(colliding).rejects.toThrow('deterministic snapshot key collision')
+    await Expect(colliding).rejects.toBeInstanceOf(Errors.UnexpectedBehaviorError)
+
+    const categorized = new Errors.UserInputError('A categorized author failure.')
+    const categorizedLoad = connect('Notes').load() as Promise<string | undefined>
+    sdk.subscription?.({ error: categorized })
+    await Expect(categorizedLoad).rejects.toBe(categorized)
+
+    const saving = connect('Notes')
+    sdk.failTransactionsWith(`token=hidden\u001b[31m${'x'.repeat(400)}`)
+    let saveError: unknown
+    try {
+      await saving.save('snapshot')
+    } catch (error) {
+      saveError = error
+    }
+    Expect(saveError).toBeInstanceOf(Errors.HostEnvironmentError)
+    const message = Errors.messageOf(saveError)
+    Expect(message).toBe('InstantDB save failed.')
+    Expect(message.includes('hidden')).toBe(false)
+  })
+
+  Test('recovers repeated loads and completes close after unsubscribe failures', async () => {
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
+    const connection = provider.connect({
+      configuration: { AppId: 'app-id' },
+      schema: { entities: {}, name: 'InstantTest' },
+      storageKey: 'Notes',
+    })
+    const initial = connection.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [] } })
+    await initial
+
+    sdk.failNextUnsubscribeWith({ message: 'raw unsubscribe detail' })
+    await Expect(connection.load()).rejects.toThrow('InstantDB unsubscribe failed.')
+
+    const recovered = connection.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'recovered', StorageKey: 'Notes' }] } })
+    Expect(await recovered).toBe('recovered')
+
+    const categorized = new Errors.UserInputError('Categorized unsubscribe failure.')
+    sdk.failNextUnsubscribeWith(categorized)
+    let closeError: unknown
+    try {
+      connection.close?.()
+    } catch (error) {
+      closeError = error
+    }
+    Expect(closeError).toBe(categorized)
+    Expect(sdk.shutdownCalls).toBe(1)
+    connection.close?.()
+    Expect(sdk.shutdownCalls).toBe(1)
+  })
+
+  Test('aggregates unsubscribe and shutdown failures without stranding shared lifecycle state', async () => {
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
+    const connect = (): TR.DataConnection =>
+      provider.connect({
+        configuration: { AppId: 'app-id' },
+        schema: { entities: {}, name: 'InstantTest' },
+        storageKey: 'Notes',
+      })
+
+    const failing = connect()
+    const loading = failing.load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [] } })
+    await loading
+    sdk.failNextUnsubscribeWith(Errors.abortError('raw unsubscribe failure'))
+    sdk.failNextShutdownWith('raw shutdown failure')
+    let aggregate: unknown
+    try {
+      failing.close?.()
+    } catch (error) {
+      aggregate = error
+    }
+    Expect(aggregate).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(aggregate)).toBe('InstantDB cleanup failed during unsubscribe and shutdown.')
+    Expect(sdk.shutdownCalls).toBe(1)
+    failing.close?.()
+    Expect(sdk.shutdownCalls).toBe(1)
+
+    const rawShutdown = connect()
+    sdk.failNextShutdownWith(Errors.abortError('raw shutdown detail'))
+    Expect(() => rawShutdown.close?.()).toThrow('InstantDB shutdown failed.')
+
+    const categorizedShutdown = new Errors.UnexpectedBehaviorError('Categorized shutdown failure.')
+    const categorized = connect()
+    sdk.failNextShutdownWith(categorizedShutdown)
+    let categorizedError: unknown
+    try {
+      categorized.close?.()
+    } catch (error) {
+      categorizedError = error
+    }
+    Expect(categorizedError).toBe(categorizedShutdown)
+
+    connect().close?.()
+    Expect(sdk.shutdownCalls).toBe(4)
   })
 
   Test('counts core references across provider instances sharing one cached SDK core', () => {
@@ -196,12 +298,15 @@ Describe('@tao/data providers', () => {
     watch.observer.changed('local-1')
     watch.observer.changed(undefined)
     watch.observer.changed('remote-2')
+    // Another device can later restore bytes equal to our old write. Seeing remote-2 ended the
+    // echo window, so this is a real remote transition rather than a forever-suppressed echo.
+    watch.observer.changed('local-1')
     watch.observer.failed('iCloud is unavailable')
     stop()
     watch.observer.changed('after-stop')
     connection.close?.()
 
-    Expect(snapshots).toEqual(['remote-1', 'remote-2'])
+    Expect(snapshots).toEqual(['remote-1', 'remote-2', 'local-1'])
     Expect(errors).toHaveLength(1)
     Expect(errors[0]).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect(Errors.messageOf(errors[0])).toBe('iCloud is unavailable')
@@ -313,6 +418,66 @@ Describe('@tao/data providers', () => {
     Expect(deleted.deleted).toMatch(/^[0-9a-f]{16}[0-9a-f]{8}$/u)
   })
 
+  Test('delivers text and cleared cross-store reference values from CloudKit', async () => {
+    let zoneObserver: CloudKitZoneObserver | undefined
+    const connection = CloudKitSyncProvider(() => () => ({
+      close: () => undefined,
+      fetch: async () => undefined,
+      send: async () => undefined,
+      subscribe: observer => {
+        zoneObserver = observer
+        return () => undefined
+      },
+    })).connect({
+      configuration: {},
+      origin: 'aaaaaaaa',
+      schema: {
+        entities: {
+          Bookmark: {
+            collection: 'Bookmarks',
+            fields: {
+              Story: {
+                kind: 'reference',
+                referenceField: 'Slug',
+                relation: 'Story',
+                store: 'Stories',
+              },
+            },
+          },
+        },
+        name: 'Bookmarks',
+      },
+      storageKey: 'Bookmarks',
+    })
+    const received: TR.ChangeSet[] = []
+    connection.subscribe({
+      accepted: () => undefined,
+      failed: () => undefined,
+      online: () => undefined,
+      remote: changeSet => {
+        received.push(changeSet)
+      },
+    })
+    const stamp = TR.Sync.stampAt(1_000, 'cloudkit')
+    const record = (id: string, value: string | null): CloudKitRecord => ({
+      fields: {
+        payload: JSON.stringify({
+          entity: 'Bookmark',
+          fields: { Story: { stamp, value } },
+          row: { id, origin: 'bbbbbbbb' },
+        }),
+      },
+      name: `bbbbbbbb:Bookmark:${id}`,
+      type: 'TaoRow',
+    })
+    zoneObserver!.fetched([record('Bookmark-1', 'show-hn'), record('Bookmark-2', null)], [], async () => undefined)
+    await settle()
+
+    const values = received.flatMap(changeSet => changeSet.ops)
+      .flatMap(op => op.kind === 'upsert' ? [op.fields['Story']?.value] : [])
+    Expect(values).toEqual(['show-hn', null])
+  })
+
   Test('merges a CloudKit server conflict fieldwise and converges both devices', async () => {
     const cloud = fakeCloudKit()
     let clock = 5_000
@@ -360,6 +525,55 @@ Describe('@tao/data providers', () => {
     }])
   })
 
+  Test('keeps a change pending when CloudKit returns an unreadable conflict', async () => {
+    let zoneObserver: CloudKitZoneObserver | undefined
+    const sent: CloudKitRecord[][] = []
+    const connection = CloudKitSyncProvider(() => () => ({
+      close: () => undefined,
+      fetch: async () => undefined,
+      send: async records => {
+        sent.push([...records])
+      },
+      subscribe: observer => {
+        zoneObserver = observer
+        return () => undefined
+      },
+    })).connect({ configuration: {}, origin: 'aaaaaaaa', schema: syncSchema, storageKey: 'Notes' })
+    const accepted: string[] = []
+    const failures: unknown[] = []
+    connection.subscribe({
+      accepted: id => accepted.push(id),
+      failed: error => failures.push(error),
+      online: () => undefined,
+      remote: () => undefined,
+    })
+    const stamp = TR.Sync.stampAt(1_000, 'aaaaaaaa')
+    await connection.push({
+      id: stamp,
+      ops: [{
+        entity: 'Note',
+        fields: {
+          Pinned: { stamp, value: false },
+          Title: { stamp, value: 'Pending' },
+        },
+        kind: 'upsert',
+        row: { id: 'Note-1', origin: 'aaaaaaaa' },
+      }],
+      origin: 'aaaaaaaa',
+      stamp,
+    })
+    const name = sent[0]![0]!.name
+    zoneObserver!.sent([], [{
+      name,
+      server: { fields: { payload: 'not-json' }, name, type: 'TaoRow' },
+    }], [])
+
+    Expect(accepted).toEqual([])
+    Expect(failures).toHaveLength(1)
+    Expect(failures[0]).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(failures[0])).toContain('unreadable conflict')
+  })
+
   Test('validates CloudKit config before touching the native module', () => {
     let nativeLoads = 0
     const provider = CloudKitProvider(() => {
@@ -395,8 +609,8 @@ Describe('@tao/data providers', () => {
   })
 
   Test('names a Dev stream by server, app key, and storage key, and reads the bundle host a device loaded from', () => {
-    Expect(devDataSocketUrl('ws://192.168.1.20:4321/', 'Notes-0123abcd', 'My Notes'))
-      .toBe('ws://192.168.1.20:4321/data?app=Notes-0123abcd&key=My%20Notes')
+    Expect(devDataSocketUrl('ws://192.168.1.20:4321/', 'Notes-0123abcd', 'My Notes', 'secret'))
+      .toBe('ws://192.168.1.20:4321/data?app=Notes-0123abcd&key=My%20Notes&capability=secret')
     Expect(parseBundleHost('http://192.168.1.20:8081/index.bundle?platform=ios')).toBe('192.168.1.20')
     Expect(parseBundleHost('http://[fe80::1]:8081/index.bundle')).toBe('[fe80::1]')
     Expect(parseBundleHost(undefined)).toBeUndefined()
@@ -416,7 +630,10 @@ Describe('@tao/data providers', () => {
       const loading = connection.load() as Promise<string | undefined>
       await flushMicrotasks()
       Expect(wire.sockets).toHaveLength(1)
-      Expect(wire.sockets[0]!.url).toBe('ws://dev.test:4321/data?app=Notes-0123abcd&key=Notes')
+      Expect(wire.sockets[0]!.url).toBe(
+        'ws://dev.test:4321/data?app=Notes-0123abcd&key=Notes&capability='
+          + 'test_capability_0123456789abcdef0123456789abcdef',
+      )
       wire.sockets[0]!.open()
       wire.sockets[0]!.receive({ revision: 1, snapshot: '{"first":true}', type: 'snapshot' })
       Expect(await loading).toBe('{"first":true}')
@@ -434,7 +651,13 @@ Describe('@tao/data providers', () => {
 
       const saving = connection.save('{"mine":true}')
       await flushMicrotasks()
-      Expect(wire.sockets[0]!.sent).toEqual([{ seq: 1, snapshot: '{"mine":true}', type: 'save' }])
+      Expect(wire.sockets[0]!.sent).toEqual([{
+        expectedRevision: 3,
+        seq: 1,
+        snapshot: '{"mine":true}',
+        type: 'save',
+      }])
+      wire.sockets[0]!.receive({ revision: 4, snapshot: '{"mine":true}', type: 'snapshot' })
       wire.sockets[0]!.receive({ revision: 4, seq: 1, type: 'ack' })
       await saving
 
@@ -450,7 +673,7 @@ Describe('@tao/data providers', () => {
       wire.sockets[0]!.receive({ revision: 4, snapshot: '{"current":true}', type: 'snapshot' })
       wire.sockets[0]!.receive({ revision: 4, seq: 3, type: 'ack' })
       Expect(await reloading).toBe('{"current":true}')
-      Expect(snapshots).toEqual(['{"missed":true}', undefined])
+      Expect(snapshots).toEqual(['{"missed":true}', undefined, '{"mine":true}'])
 
       stop()
       connection.close?.()
@@ -531,7 +754,12 @@ Describe('@tao/data providers', () => {
       return { json: async () => body }
     }
 
-    const fact = { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' }
+    const fact = {
+      app: 'Notes-0123abcd',
+      capability: 'test_capability_0123456789abcdef0123456789abcdef',
+      port: 4_321,
+      protocol: 'tao-dev-data-v1',
+    }
     // The Expo dev server's updates-style manifest nests the app config under extra.expoClient.
     const updatesManifest = { extra: { eas: {}, expoClient: { extra: { taoDevData: fact }, name: 'Tao Runtime' } } }
     Expect(await fetchDevDataManifest('http://192.168.1.20:8081/', answer(updatesManifest))).toEqual(fact)
@@ -570,7 +798,12 @@ function scriptedDevDataHost(): {
   const scheduled = new Map<number, () => void>()
   let nextHandle = 0
   const host: DevDataHost = {
-    bootstrap: () => ({ app: 'Notes-0123abcd', kind: 'ready', serverUrl: 'ws://dev.test:4321' }),
+    bootstrap: () => ({
+      app: 'Notes-0123abcd',
+      capability: 'test_capability_0123456789abcdef0123456789abcdef',
+      kind: 'ready',
+      serverUrl: 'ws://dev.test:4321',
+    }),
     connect: url => {
       const socket: ScriptedSocket = {
         close: () => {
@@ -626,6 +859,9 @@ type InstantSubscriptionResult = {
 
 /** fakeInstantSDK emulates the SDK boundary, including its one cached core per init config. */
 function fakeInstantSDK(): {
+  failTransactionsWith: (error: unknown) => void
+  failNextShutdownWith: (error: unknown) => void
+  failNextUnsubscribeWith: (error: unknown) => void
   initConfig: Record<string, unknown> | undefined
   instantSDK: unknown
   shutdownCalls: number
@@ -636,18 +872,31 @@ function fakeInstantSDK(): {
   const state = {
     initConfig: undefined as Record<string, unknown> | undefined,
     shutdownCalls: 0,
+    shutdownFailure: undefined as { error: unknown } | undefined,
     subscription: undefined as ((result: InstantSubscriptionResult) => void) | undefined,
     transactions: [] as unknown[],
+    transactionFailure: undefined as unknown,
+    unsubscribeFailure: undefined as { error: unknown } | undefined,
     unsubscribeCalls: 0,
   }
   const core = {
     shutdown: () => {
       state.shutdownCalls += 1
+      const failure = state.shutdownFailure
+      state.shutdownFailure = undefined
+      if (failure !== undefined) {
+        throw failure.error
+      }
     },
     subscribeQuery: (_query: unknown, observer: (result: InstantSubscriptionResult) => void) => {
       state.subscription = observer
       return () => {
         state.unsubscribeCalls += 1
+        const failure = state.unsubscribeFailure
+        state.unsubscribeFailure = undefined
+        if (failure !== undefined) {
+          throw failure.error
+        }
       }
     },
   }
@@ -662,6 +911,9 @@ function fakeInstantSDK(): {
       return {
         core,
         transact: async (transaction: unknown) => {
+          if (state.transactionFailure !== undefined) {
+            throw state.transactionFailure
+          }
           state.transactions.push(transaction)
         },
         tx: {
@@ -675,6 +927,15 @@ function fakeInstantSDK(): {
     },
   }
   return {
+    failTransactionsWith(error: unknown) {
+      state.transactionFailure = error
+    },
+    failNextShutdownWith(error: unknown) {
+      state.shutdownFailure = { error }
+    },
+    failNextUnsubscribeWith(error: unknown) {
+      state.unsubscribeFailure = { error }
+    },
     get initConfig() {
       return state.initConfig
     },

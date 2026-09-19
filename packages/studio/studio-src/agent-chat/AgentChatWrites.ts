@@ -15,7 +15,7 @@ import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
 import { resolveTarget, type SnapshotNode } from './SemanticSnapshot'
 
-export type DeclarationEdit = { declaration: string; replacement: string }
+type DeclarationEdit = { declaration: string; replacement: string }
 
 /** A change that has been computed and shown, and is waiting to be approved. */
 export type StagedChange = {
@@ -31,7 +31,9 @@ export type AgentChatWriteWorld = AgentChatWorld & {
    * The verdict on a change that just landed, judged by the app's own tests against the last run taken
    * before it. Reported by the tool so the model must read it, and by the turn so the panel can show it.
    */
-  verdict?: () => Promise<{ heading: string; status: string; broke: readonly { name: string }[] } | undefined>
+  verdict?: (
+    change: StagedChange,
+  ) => Promise<{ heading: string; status: string; broke: readonly { name: string }[] } | undefined>
   /** Applies a staged change as one mutation: compiled once, rolled back whole if the compile fails. */
   apply: (change: StagedChange) => Promise<{ status: string; message: string; rolledBack: boolean }>
   undo: () => Promise<{ status: string; message: string; restored: readonly string[] }>
@@ -52,6 +54,7 @@ const diffOf = StudioProjectSession.testing.sourceActionProposalDiff
 export function stageChange(
   world: AgentChatWriteWorld,
   staged: Map<string, StagedChange>,
+  issueId?: () => string,
 ): (
   summary: string,
   edits: readonly { path: string; before: string; after: string; diff?: string }[],
@@ -59,13 +62,16 @@ export function stageChange(
   // Not `staged.size`: applying removes an entry, so the next proposal reused a live id and overwrote a
   // change the model still intended to apply, silently.
   let issued = 0
+  const nextId = issueId ?? (() => `change-${++issued}`)
   return async (summary, edits) => {
     const real = edits.filter(edit => edit.before !== edit.after)
     if (real.length === 0) {
       return refusal('That produces no change: the source already reads that way.')
     }
-    issued += 1
-    const id = `change-${issued}`
+    const id = nextId()
+    if (staged.has(id)) {
+      return refusal(`Studio refused duplicate change id "${id}".`)
+    }
     const uniquePaths = [...new Set(real.map(edit => edit.path))]
     staged.set(id, {
       edits: real.map(edit => ({ ...edit, diff: edit.diff ?? diffOf(edit.path, edit.before, edit.after) })),
@@ -98,6 +104,7 @@ export function writeTools(
    * was issued against turns that from a warning in a description into a refusal.
    */
   issued: Map<string, string> = new Map(),
+  issueChangeId?: () => string,
 ): ToolSet {
   const capture = (name: string, input: unknown, result: unknown): unknown => {
     record({
@@ -110,7 +117,7 @@ export function writeTools(
   }
 
   /** stage records a computed change and returns what the model (and the person) should see of it. */
-  const stage = stageChange(world, staged)
+  const stage = stageChange(world, staged, issueChangeId)
 
   return {
     applyChange: tool({
@@ -126,7 +133,7 @@ export function writeTools(
           staged.delete(changeId)
           // Text handles are positional, so a change that lands repoints them all.
           issued.clear()
-          const verdict = result.rolledBack ? undefined : await world.verdict?.()
+          const verdict = result.rolledBack ? undefined : await world.verdict?.(change)
           return capture('applyChange', { changeId }, {
             applied: !result.rolledBack,
             compile: result.status,

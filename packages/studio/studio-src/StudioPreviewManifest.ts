@@ -253,8 +253,8 @@ function validateJourneyStep(step: unknown, depth: number): void {
   const kind = step['kind']
   if (kind === 'advance') {
     requireOnlyKeys(step, ['kind', 'milliseconds'], 'Studio journey advance')
-    if (!Number.isSafeInteger(step['milliseconds']) || (step['milliseconds'] as number) < 0) {
-      Errors.throwUserInput('Studio journey advance must be a non-negative whole number of milliseconds.')
+    if (!Number.isFinite(step['milliseconds']) || (step['milliseconds'] as number) < 0) {
+      Errors.throwUserInput('Studio journey advance must be a non-negative number of milliseconds.')
     }
     return
   }

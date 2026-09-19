@@ -81,6 +81,19 @@ Describe('tao foreign binding exclusions', () => {
   Test('skips comments and prose that merely contain the word from', () => {
     Expect(names('// a view imported from ./Somewhere.tsx under a local name')).toEqual([])
     Expect(names('   Text("Shared from Skillet")')).toEqual([])
+    Expect(names('   Text("Fake from ./Somewhere.tsx")')).toEqual([])
+    Expect(names('/*\n view Fake() from ./Somewhere.tsx\n*/\nview Real() from ./Real.tsx')).toEqual(['Real'])
+  })
+
+  Test('does not treat injection fences inside strings or comments as syntax', () => {
+    const source = [
+      'Text("```")',
+      '// ```',
+      '/* ``` */',
+      'view Real() from ./Real.tsx',
+    ].join('\n')
+
+    Expect(names(source)).toEqual(['Real'])
   })
 
   Test('skips an inline TypeScript injection, which the compiler emits as its own module', () => {
@@ -240,6 +253,40 @@ Describe('namespace facade reachability', () => {
     Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
       .toEqual(['packages/shared/shared-src/FS.ts#readText'])
   })
+
+  // Naming a member in prose is not using it. Counting those mentions kept dead exports out of the
+  // report, which is the whole output of this tool.
+  Test('ignores a member named only in a comment or a quoted string', () => {
+    const local: SourceFile[] = [
+      ...files.slice(0, 2),
+      {
+        path: 'packages/dev/dev-src/Prose.ts',
+        source: "import * as Shared from '@shared'\n"
+          + '// Shared.FS.readText is what this used to call.\n'
+          + '/* See Shared.FS.writeText for the other half. */\n'
+          + "const message = 'call Shared.FS.remove when done'\n"
+          + 'await Shared.FS.exists(message)\n',
+      },
+    ]
+
+    Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
+      .toEqual(['packages/shared/shared-src/FS.ts#exists'])
+  })
+
+  // `${…}` holes hold real code, so masking a template literal would call a live export dead.
+  Test('counts a member reached inside a template literal hole', () => {
+    const local: SourceFile[] = [
+      ...files.slice(0, 2),
+      {
+        path: 'packages/dev/dev-src/Template.ts',
+        source: "import * as Shared from '@shared'\n"
+          + 'const label = `read ${await Shared.FS.readText(path)}`\n',
+      },
+    ]
+
+    Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
+      .toEqual(['packages/shared/shared-src/FS.ts#readText'])
+  })
 })
 
 Describe('module binding names', () => {
@@ -362,6 +409,48 @@ Describe('knip report parsing', () => {
   })
 })
 
+Describe('recorded kept exports', () => {
+  /**
+   * A record of exports kept on purpose is one named file per package per reason, declared an entry
+   * point by its own path rather than by a pattern. A path that no longer resolves is how such a
+   * record rots into a list nobody can account for: the file is renamed or deleted, the entry line
+   * stays, and the next symbol that lands under the old name is spared silently.
+   */
+  Test('names every entry point by a path that resolves in some package it covers', async () => {
+    const config = await FS.readJson<{ workspaces: Record<string, { entry?: readonly string[] }> }>(
+      Repo.resolvePath('config/knip.json'),
+    )
+
+    const packages = await FS.listDir(Repo.resolvePath('packages'))
+    const unresolved: string[] = []
+    for (const [workspace, { entry = [] }] of Object.entries(config.workspaces)) {
+      if (!workspace.startsWith('packages/')) {
+        continue
+      }
+      const covered = workspace === 'packages/*' ? packages : [workspace.slice('packages/'.length)]
+      for (const pattern of entry) {
+        if (/[*?{}[\]]/.test(pattern)) {
+          continue
+        }
+        const resolves = covered.some(name => FS.existsSync(Repo.resolvePath(`packages/${name}/${pattern}`)))
+        if (!resolves) {
+          unresolved.push(`${workspace} -> ${pattern}`)
+        }
+      }
+    }
+    Expect(unresolved).toEqual([])
+  })
+
+  Test('declares the one carve-out record this repository keeps', async () => {
+    const config = await FS.readJson<{ workspaces: Record<string, { entry?: readonly string[] }> }>(
+      Repo.resolvePath('config/knip.json'),
+    )
+
+    Expect(config.workspaces['packages/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
+    Expect(FS.existsSync(Repo.resolvePath('packages/tao-cli/cli-src/subprocess-test-api.ts'))).toBe(true)
+  })
+})
+
 Describe('dead export run', () => {
   /** repository builds a checkout with one Tao binding, one dead export, and one live namesake. */
   async function repository(): Promise<string> {
@@ -383,17 +472,33 @@ Describe('dead export run', () => {
     ],
   }
 
-  Test('hides the bound export and keeps its namesake in the unbound module', async () => {
+  Test('fails on the namesake in the unbound module while hiding the bound export', async () => {
     const root = await repository()
     try {
       const captured = await withCapturedOutput(async () =>
         await runDeadExports({ readKnipReport: async () => report, repositoryRoot: root })
       )
 
-      Expect(captured.result).toBe(0)
-      Expect(captured.stdout).toContain('packages/studio/studio-src/Host.tsx:1 SyncDraft')
-      Expect(captured.stdout).not.toContain('Actions.ts:1 SyncDraft')
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain('packages/studio/studio-src/Host.tsx:1 SyncDraft')
+      Expect(captured.stderr).not.toContain('Actions.ts:1 SyncDraft')
+      Expect(captured.stderr).toContain('config/knip.json')
       Expect(captured.stdout).toContain('1 unused, 1 bound from .tao sources')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('passes with nothing to report, and says so without a remedy nobody needs', async () => {
+    const root = await repository()
+    try {
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({ readKnipReport: async () => ({ issues: [] }), repositoryRoot: root })
+      )
+
+      Expect(captured.result).toBe(0)
+      Expect(captured.stderr).toBe('')
+      Expect(captured.stdout).toContain('0 unused, 0 bound from .tao sources')
     } finally {
       await FS.remove(root)
     }

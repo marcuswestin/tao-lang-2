@@ -4,6 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { authoringTools, type CodeChangeRequest } from '../studio-src/agent-chat/AgentChatAuthoring'
 import { parseChecks, viewCoverage } from '../studio-src/agent-chat/AgentChatCoverage'
 import { taoGuarantees } from '../studio-src/agent-chat/AgentChatGuarantees'
+import { requireOnly } from '../studio-src/agent-chat/AgentChatScope'
 import type { AgentChatWriteWorld } from '../studio-src/agent-chat/AgentChatWrites'
 import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
@@ -118,6 +119,28 @@ async function call(set: ReturnType<typeof tools>, name: string, input: unknown)
 }
 
 Describe('Studio agent chat authoring', () => {
+  Test('the scope gate sees every file declaration kind and duplicate occurrences', async () => {
+    const before = 'let Existing = 1\n'
+    const after = `${before}let Escaped = 2\nfunction Leaked() { return 3 }\n`
+
+    const escaped = await requireOnly(before, after, ['fixture'])
+
+    Expect(escaped).toBe(
+      'That would also alias Escaped, function Leaked. This mode may only add fixture declarations; check your arguments for a stray brace or quote.',
+    )
+
+    const duplicate = await requireOnly(
+      '',
+      'fixture State { }\nfixture State { }\n',
+      ['fixture'],
+      [],
+      ['fixture State'],
+    )
+    Expect(duplicate).toBe(
+      'That would also fixture State. This mode may only add fixture declarations; check your arguments for a stray brace or quote.',
+    )
+  })
+
   Test('this mode has no tool that changes app code', () => {
     const names = Object.keys(tools([]))
 

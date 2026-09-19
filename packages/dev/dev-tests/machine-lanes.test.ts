@@ -41,8 +41,8 @@ Describe('machine lanes', () => {
     Expect([...MachineLanes.fairAllocations(18, records(1)).values()]).toEqual([18])
     Expect([...MachineLanes.fairAllocations(18, records(2)).values()]).toEqual([9, 9])
     Expect([...MachineLanes.fairAllocations(18, records(4)).values()]).toEqual([5, 5, 4, 4])
-    // Logical shares may exceed the CPU count only in this edge case. Actual reservations remain
-    // bounded by the broker's machine-wide available-slot check.
+    // More lanes than CPUs is the case the one-slot floor exists for: every lane may still run
+    // something, and the machine is oversubscribed by the number of lanes above its CPU count.
     Expect([...MachineLanes.fairAllocations(2, records(8)).values()]).toEqual(Array(8).fill(1))
   })
 
@@ -236,6 +236,87 @@ Describe('machine lanes', () => {
     await second.release()
   })
 
+  Test('admits a lane that joins a machine whose slots are all reserved', async () => {
+    // The stall this prevents: lanes that registered while the machine was emptier hold every slot
+    // until their running nodes end, and a lane that joins after them must not wait on that.
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({ cpuCount: 2, lane: 'first', registryRoot, repositoryRoot: '/first' })
+    const firstWork = await first.tryAcquire(2, false)
+    Expect(firstWork?.slots).toBe(2)
+
+    const second = await MachineLanes.acquire({ cpuCount: 2, lane: 'second', registryRoot, repositoryRoot: '/second' })
+    const secondWork = await second.tryAcquire(1, false)
+
+    Expect(secondWork?.slots).toBe(1)
+    Expect(second.waitReason).toBeUndefined()
+    const records = await MachineLanes.activeLanes(registryRoot)
+    // Three slots on a two-CPU machine: the joining lane's floor, and nothing beyond it.
+    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(3)
+
+    // The floor is one slot per lane, not a way around the machine total: a lane that is already
+    // running something waits like any other.
+    Expect(await second.tryAcquire(1, true)).toBeUndefined()
+    Expect(second.waitReason).toBe('this lane holds 1 of its 1 slots; 2 lanes are registered')
+
+    await firstWork?.release()
+    await secondWork?.release()
+    await first.release()
+    await second.release()
+  })
+
+  Test('does not let a joining lane stack a whole share on top of a full machine', async () => {
+    // A lane that registered while the machine was emptier keeps the wider share it reserved under.
+    // The lane that joins gets its floor so it can start, and then waits with everyone else: the
+    // machine holds one extra slot, not a second full share on top of the first.
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const early = await MachineLanes.acquire({ cpuCount: 4, lane: 'early', registryRoot, repositoryRoot: '/early' })
+    const earlyWork = await early.tryAcquire(4, false)
+    Expect(earlyWork?.slots).toBe(4)
+
+    const late = await MachineLanes.acquire({ cpuCount: 4, lane: 'late', registryRoot, repositoryRoot: '/late' })
+    Expect(late.capacity).toBe(2)
+    const floor = await late.tryAcquire(2, true)
+
+    Expect(floor?.slots).toBe(1)
+    Expect(await late.tryAcquire(1, true)).toBeUndefined()
+    Expect(late.waitReason).toBe("every one of the machine's 4 slots is reserved; 2 lanes are registered")
+    const total = (await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)
+    Expect(total).toBe(5)
+
+    await floor?.release()
+    await earlyWork?.release()
+    await early.release()
+    await late.release()
+  })
+
+  Test('says what a declined admission is waiting for', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({ cpuCount: 4, lane: 'first', registryRoot, repositoryRoot: '/first' })
+    const second = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'second',
+      registryRoot,
+      repositoryRoot: '/second-worktree',
+    })
+
+    const held = await first.tryAcquire(2, false)
+    Expect(held?.slots).toBe(2)
+    Expect(await first.tryAcquire(1, false)).toBeUndefined()
+    Expect(first.waitReason).toBe('this lane holds 2 of its 2 slots; 2 lanes are registered')
+    Expect(await second.tryAcquire(3, false)).toBeUndefined()
+    Expect(second.waitReason).toBe('this node wants 3 slots, more than the 2 free to this lane; 2 lanes are registered')
+
+    // An exclusive holder outranks both, and is named so the waiting lane points somewhere.
+    await held?.release()
+    const exclusive = await second.acquireExclusive(1_000)
+    Expect(await first.tryAcquire(1, false)).toBeUndefined()
+    Expect(first.waitReason).toBe('another lane is confirming exclusively (second in second-worktree)')
+
+    await exclusive?.release()
+    await first.release()
+    await second.release()
+  })
+
   Test('exclusive confirmation blocks new admissions and waits for peer work to drain', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
     const first = await MachineLanes.acquire({ cpuCount: 4, lane: 'first', registryRoot, repositoryRoot: '/first' })
@@ -404,6 +485,164 @@ Describe('machine lanes', () => {
       Expect((await leaseFiles(registryRoot)).filter(name => name.endsWith('.lane.json'))).toEqual([])
     } finally {
       await FS.remove(registryRoot)
+    }
+  })
+
+  Test('does not reclaim an old mutex while its owning process is still alive', async () => {
+    const registryRoot = await mkTestDir('tao-machine-old-live-mutex-')
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('old-live.json', ownerRoot)
+    await FS.writeJson(ownerPath, {
+      pid: Platform.runtimeProcess.pid,
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
+    })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      await Expect(MachineLanes.acquire({
+        lane: 'verify',
+        lockTimeoutMs: 5,
+        registryRoot,
+        repositoryRoot: '/here',
+      })).rejects.toThrow('Timed out waiting for the machine-lane registry lock')
+    } finally {
+      await FS.remove(registryRoot)
+    }
+  })
+
+  Test('a failed slot release remains retryable and never strands its accounting', async () => {
+    const registryRoot = await mkTestDir('tao-machine-release-retry-')
+    const lane = await MachineLanes.acquire({
+      cpuCount: 2,
+      lane: 'verify',
+      lockTimeoutMs: 5,
+      registryRoot,
+      repositoryRoot: '/here',
+    })
+    const reservation = await lane.tryAcquire(1, false)
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('release-blocker.json', ownerRoot)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString() })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      await Expect(reservation?.release()).rejects.toThrow('Timed out waiting for the machine-lane registry lock')
+      Expect((await MachineLanes.activeLanes(registryRoot))[0]?.slots).toBe(1)
+
+      await FS.remove(FS.resolvePath('.mutex', registryRoot))
+      await FS.remove(ownerPath)
+      await reservation?.release()
+      Expect((await MachineLanes.activeLanes(registryRoot))[0]?.slots).toBe(0)
+    } finally {
+      await FS.remove(FS.resolvePath('.mutex', registryRoot)).catch(() => {})
+      await FS.remove(ownerPath).catch(() => {})
+      await lane.release()
+    }
+  })
+
+  Test('a failed exclusive release remains retryable and never strands exclusivity', async () => {
+    const registryRoot = await mkTestDir('tao-machine-exclusive-release-retry-')
+    const first = await MachineLanes.acquire({
+      cpuCount: 2,
+      lane: 'first',
+      lockTimeoutMs: 5,
+      registryRoot,
+      repositoryRoot: '/first',
+    })
+    const exclusive = await first.acquireExclusive(100)
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('exclusive-release-blocker.json', ownerRoot)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString() })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      await Expect(exclusive?.release()).rejects.toThrow('Timed out waiting for the machine-lane registry lock')
+
+      await FS.remove(FS.resolvePath('.mutex', registryRoot))
+      await FS.remove(ownerPath)
+      const second = await MachineLanes.acquire({
+        cpuCount: 2,
+        lane: 'second',
+        lockTimeoutMs: 5,
+        registryRoot,
+        repositoryRoot: '/second',
+      })
+      Expect(await second.tryAcquire(1, false)).toBeUndefined()
+
+      await exclusive?.release()
+      const reservation = await second.tryAcquire(1, false)
+      Expect(reservation?.slots).toBe(1)
+      await reservation?.release()
+      await second.release()
+    } finally {
+      await FS.remove(FS.resolvePath('.mutex', registryRoot)).catch(() => {})
+      await FS.remove(ownerPath).catch(() => {})
+      await first.release()
+    }
+  })
+
+  Test('a failed named-resource release remains retryable and never strands its lease', async () => {
+    const registryRoot = await mkTestDir('tao-machine-resource-release-retry-')
+    const lease = await MachineLanes.tryAcquireResource({
+      lockTimeoutMs: 5,
+      name: 'retryable-resource',
+      registryRoot,
+      repositoryRoot: '/first',
+    })
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('resource-release-blocker.json', ownerRoot)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString() })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      await Expect(lease?.release()).rejects.toThrow('Timed out waiting for the machine-lane registry lock')
+
+      await FS.remove(FS.resolvePath('.mutex', registryRoot))
+      await FS.remove(ownerPath)
+      Expect(
+        await MachineLanes.tryAcquireResource({
+          lockTimeoutMs: 5,
+          name: 'retryable-resource',
+          registryRoot,
+          repositoryRoot: '/second',
+        }),
+      ).toBeUndefined()
+
+      await lease?.release()
+      const next = await MachineLanes.tryAcquireResource({
+        lockTimeoutMs: 5,
+        name: 'retryable-resource',
+        registryRoot,
+        repositoryRoot: '/second',
+      })
+      Expect(next?.owner.repositoryRoot).toBe('/second')
+      await next?.release()
+    } finally {
+      await FS.remove(FS.resolvePath('.mutex', registryRoot)).catch(() => {})
+      await FS.remove(ownerPath).catch(() => {})
+      await lease?.release().catch(() => {})
+    }
+  })
+
+  Test('stale-mutex recovery admits only one contender against the same final slot', async () => {
+    const registryRoot = await mkTestDir('tao-machine-stale-mutex-race-')
+    const lane = await MachineLanes.acquire({
+      cpuCount: 1,
+      lane: 'verify',
+      registryRoot,
+      repositoryRoot: '/here',
+    })
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('dead-owner.json', ownerRoot)
+    await FS.writeJson(ownerPath, { pid: 2 ** 30, startedAt: new Date().toISOString() })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      const reservations = await Promise.all(
+        Array.from({ length: 12 }, () => lane.tryAcquire(1, false)),
+      )
+      const acquired = reservations.filter(reservation => reservation !== undefined)
+
+      Expect(acquired).toHaveLength(1)
+      Expect((await MachineLanes.activeLanes(registryRoot))[0]?.slots).toBe(1)
+      await acquired[0]?.release()
+    } finally {
+      await lane.release()
     }
   })
 

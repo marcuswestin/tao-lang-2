@@ -86,8 +86,8 @@ Describe('parser: interaction attention', () => {
     Expect.Is(check, AST.isTestDeclaration)
     Expect(check.block.statements.map(statement => statement.$type)).toEqual([
       AST.RunStep.$type,
-      AST.PressKeyStep.$type,
-      AST.NarrowStep.$type,
+      AST.PressWordStep.$type,
+      AST.InteractionWordStep.$type,
       AST.ExpectInteractionStep.$type,
       AST.ExpectInteractionStep.$type,
       AST.ExpectInteractionStep.$type,

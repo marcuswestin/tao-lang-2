@@ -145,9 +145,11 @@ Describe('validator: workspace structure', () => {
   for (
     const checkCase of [
       {
-        title: 'rejects a leaf test with no run step',
+        // A file-level test is a suite, so an empty one declares no checks rather than being a
+        // leaf journey that forgot its run step. A leaf that forgets one is `missing run` below.
+        title: 'rejects a file-level test that declares no checks',
         source: testSuite('', false),
-        message: testValidationMessages.missingRun('Smoke'),
+        message: testValidationMessages.emptySuite('Smoke'),
       },
       {
         title: 'rejects duplicate run statements in one check',
@@ -570,6 +572,11 @@ Describe('validator: workspace structure', () => {
         title: 'rejects duplicate default apps',
         source: `project { id "one" name "One" DefaultApp First DefaultApp Second }\napp First { }\napp Second { }`,
         message: projectValidationMessages.duplicateDefaultApp(),
+      },
+      {
+        title: 'rejects misspelled default app metadata through the identifier seam',
+        source: `project { id "one" name "One" PrimaryApp First }\napp First { }`,
+        message: projectValidationMessages.defaultAppSpelling('PrimaryApp'),
       },
       {
         title: 'rejects duplicate project remotes',

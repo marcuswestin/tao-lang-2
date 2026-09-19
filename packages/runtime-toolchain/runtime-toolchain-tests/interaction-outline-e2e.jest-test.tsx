@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
+import { interactionOutline } from '@runtime/TR-interaction-outline'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { SelectableRow } from '@runtime/TR-selectable-row'
 import { Describe, Expect, Test } from '@shared/test'
@@ -552,6 +553,12 @@ Describe('interaction outline runtime', () => {
         const [home] = nodes('region')
         Expect(nodes('input')[0]?.parent).toBe(home?.identity)
         const input = screen.getByLabelText('Draft title')
+        const inputIdentity = nodes('input')[0]?.identity
+        const liveInput = interactionOutline.liveNodes().find(node => node.identity === inputIdentity)
+        Expect(liveInput?.live?.focus).toBeUndefined()
+        Expect(liveInput?.live?.engage).toBeDefined()
+        TR.Interaction.Attention.target(inputIdentity!)
+        Expect(TR.Interaction.Attention.read().engaged).toBeUndefined()
         await act(async () => {
           fireEvent(input, 'focus')
         })

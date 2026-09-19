@@ -51,16 +51,18 @@ async function processFile(
   }
 }
 
-/** workspaceRootForPath returns the package-aware workspace root for an in-place command root. */
-async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
+/**
+ * workspaceRootForPath returns the package-aware workspace root for an in-place command root. Pass
+ * the `sweep` a caller resolving many paths at once opened, so they share one memo and one parser
+ * instead of each rediscovering the ancestors they have in common.
+ */
+async function workspaceRootForPath(
+  path: string,
+  options: InPlace.PathOptions = {},
+  sweep?: Packages.ProjectRootSweep,
+): Promise<string> {
   const root = FS.resolvePath(path, options.cwd)
-  // A generated root package owns its own tree even when no Project.tao declares it, so it must win
-  // over an ancestor project: otherwise an ancestor Project.tao makes a nested @/ tree look authored.
-  const generatedProjectRoot = rootPackageOwner(root)
-  if (generatedProjectRoot !== undefined) {
-    return generatedProjectRoot
-  }
-  const projectRoot = await Packages.containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
+  const projectRoot = await Packages.containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root, sweep)
   if (projectRoot !== undefined) {
     return projectRoot
   }
@@ -72,22 +74,11 @@ async function workspaceRootForPath(path: string, options: InPlace.PathOptions =
 }
 
 /**
- * generatedRootPackageFile reports whether a path itself sits under a reserved `@` root package.
- * It reads only the path's own segments so an inferred workspace root cannot mask a nested `@` tree.
+ * generatedRootPackageFile reports whether a path sits under the owning project's exact `@` root.
+ * Nested `@` directories are ordinary authored folders; only `<projectRoot>/@` is reserved.
  */
-function generatedRootPackageFile(path: string): boolean {
-  return rootPackageOwner(FS.resolvePath(path)) !== undefined
-}
-
-/** rootPackageOwner infers a project root from the nearest exact reserved root-package segment. */
-function rootPackageOwner(path: string): string | undefined {
-  const parts = FS.slashPath(path).split('/')
-  for (let index = parts.length - 1; index >= 0; index--) {
-    if (parts[index] === '@') {
-      return FS.resolvePath(parts.slice(0, index).join('/'))
-    }
-  }
-  return undefined
+function generatedRootPackageFile(path: string, projectRoot: string): boolean {
+  return FS.pathIsWithin(FS.resolvePath(path), FS.resolvePath('@', projectRoot))
 }
 
 /** compareOnly reports whether `after` differs from `before` without writing the file. */

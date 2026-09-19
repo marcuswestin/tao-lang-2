@@ -4,6 +4,7 @@ import type {
   ExpoUpdateManifest,
   ExpoUpdatePlatform,
   TaoPublishedUpdate,
+  TaoUpdateHistory,
 } from '@update-server/types'
 
 export type TaoUpdateFetch = (input: string, init?: RequestInit) => Promise<Response>
@@ -42,6 +43,7 @@ export type TaoUpdateClientOptions = {
 
 export type InstalledUpdateContract = {
   dataSchemaFingerprint: string
+  platform?: ExpoUpdatePlatform
   runtimeVersion: string
 }
 
@@ -113,6 +115,15 @@ export class TaoUpdateClient {
     )
   }
 
+  /** history returns immutable publications newest first. */
+  async history(applicationId: string, channel: string): Promise<readonly TaoPublishedUpdate[]> {
+    const value = await this.#authorizedRequest(channelUpdatesPath(applicationId, channel))
+    if (!isUpdateHistory(value)) {
+      Errors.throwHostEnvironment('The Tao update service returned an invalid publication history response.')
+    }
+    return value.updates
+  }
+
   /** rollback republishes an earlier bundle as a new update, so creation-time ordering stays monotonic. */
   async rollback(input: {
     applicationId: string
@@ -121,6 +132,52 @@ export class TaoUpdateClient {
     toUpdateId: string
   }): Promise<TaoPublishedUpdate> {
     const source = await this.update(input.applicationId, input.channel, input.toUpdateId)
+    return await this.publish({
+      applicationId: input.applicationId,
+      assets: source.manifest.assets,
+      channel: input.channel,
+      dataSchemaFingerprint: source.dataSchemaFingerprint,
+      extra: source.manifest.extra,
+      launchAsset: source.manifest.launchAsset,
+      message: input.message ?? `Rollback to ${source.manifest.id}`,
+      metadata: source.manifest.metadata,
+      runtimeVersion: source.manifest.runtimeVersion,
+      sourceUpdateId: source.manifest.id,
+    })
+  }
+
+  /**
+   * rollbackCompatible walks behind the current publication's immutable source. A rollback of a
+   * rollback therefore continues backward instead of toggling to the publication it just replaced.
+   */
+  async rollbackCompatible(input: {
+    applicationId: string
+    channel: string
+    currentUpdateId: string
+    message?: string
+    supportedBinaries: readonly InstalledUpdateContract[]
+  }): Promise<TaoPublishedUpdate> {
+    const history = await this.history(input.applicationId, input.channel)
+    const currentIndex = history.findIndex(update => update.manifest.id === input.currentUpdateId)
+    if (currentIndex < 0) {
+      Errors.throwUserInput(`Current update '${input.currentUpdateId}' is absent from publication history.`)
+    }
+    const current = history[currentIndex]!
+    const anchorId = current.sourceUpdateId ?? current.manifest.id
+    const anchorIndex = history.findIndex(update => update.manifest.id === anchorId)
+    if (anchorIndex < 0) {
+      Errors.throwUserInput(`Rollback source '${anchorId}' is absent from publication history.`)
+    }
+    const source = history.slice(anchorIndex + 1).find(candidate =>
+      updateCompatibilityProblem({
+        dataSchemaFingerprint: candidate.dataSchemaFingerprint,
+        metadata: candidate.manifest.metadata,
+        runtimeVersion: candidate.manifest.runtimeVersion,
+      }, input.supportedBinaries) === undefined
+    )
+    if (source === undefined) {
+      Errors.throwUserInput('No earlier publication is compatible with every supported build.')
+    }
     return await this.publish({
       applicationId: input.applicationId,
       assets: source.manifest.assets,
@@ -237,20 +294,38 @@ export function expoUpdateResponseHeaders(): Record<string, string> {
 
 /** assertUpdateCompatibility stops a publication that the installed binary cannot load safely. */
 export function assertUpdateCompatibility(
-  publication: Pick<TaoUpdatePublication, 'dataSchemaFingerprint' | 'runtimeVersion'>,
-  installed: InstalledUpdateContract,
+  publication: Pick<TaoUpdatePublication, 'dataSchemaFingerprint' | 'metadata' | 'runtimeVersion'>,
+  installed: InstalledUpdateContract | readonly InstalledUpdateContract[],
 ): void {
-  if (publication.runtimeVersion !== installed.runtimeVersion) {
+  const supported = Array.isArray(installed) ? installed : [installed]
+  const problem = updateCompatibilityProblem(publication, supported)
+  if (problem === 'runtime') {
     Errors.throwUserInput(
-      `This update needs native runtime '${publication.runtimeVersion}', but the installed build has `
-        + `'${installed.runtimeVersion}'. Ship a new binary instead.`,
+      `This update needs native runtime '${publication.runtimeVersion}', but no supported build has it. `
+        + 'Ship a new binary instead.',
     )
   }
-  if (publication.dataSchemaFingerprint !== installed.dataSchemaFingerprint) {
+  if (problem === 'schema') {
     Errors.throwUserInput(
-      'This update changes the Tao data schema, which the installed build cannot migrate. Ship a new binary instead.',
+      'This update changes the Tao data schema: at least one installed build cannot migrate, '
+        + 'and compatibility is required for every supported build. Ship a new binary instead.',
     )
   }
+}
+
+function updateCompatibilityProblem(
+  publication: Pick<TaoUpdatePublication, 'dataSchemaFingerprint' | 'metadata' | 'runtimeVersion'>,
+  supported: readonly InstalledUpdateContract[],
+): 'runtime' | 'schema' | undefined {
+  const platform = publication.metadata?.['platform'] === 'android' ? 'android' : 'ios'
+  const platformBinaries = supported.filter(binary => (binary.platform ?? 'ios') === platform)
+  if (!platformBinaries.some(binary => binary.runtimeVersion === publication.runtimeVersion)) {
+    return 'runtime'
+  }
+  if (platformBinaries.some(binary => binary.dataSchemaFingerprint !== publication.dataSchemaFingerprint)) {
+    return 'schema'
+  }
+  return undefined
 }
 
 function validatePublication(publication: TaoUpdatePublication): void {
@@ -304,6 +379,12 @@ function isPublishedUpdate(value: unknown): value is TaoPublishedUpdate {
     && typeof value['channel'] === 'string'
     && typeof value['dataSchemaFingerprint'] === 'string'
     && isExpoUpdateManifest(value['manifest'])
+    && (value['message'] === undefined || typeof value['message'] === 'string')
+    && (value['sourceUpdateId'] === undefined || typeof value['sourceUpdateId'] === 'string')
+}
+
+function isUpdateHistory(value: unknown): value is TaoUpdateHistory {
+  return Json.isRecord(value) && Array.isArray(value['updates']) && value['updates'].every(isPublishedUpdate)
 }
 
 function isExpoUpdateManifest(value: unknown): value is ExpoUpdateManifest {

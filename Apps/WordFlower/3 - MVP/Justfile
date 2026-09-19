@@ -91,8 +91,8 @@ dev-web:
 
 # [intended] Build and submit the app to the stores, automating as much as possible. Docs/Roadmap/Tao ship/
 ship:
-    {{ TAO }} ship WordFlower
+    {{ TAO }} ship . --app WordFlower
 
-# [intended] Deliver a compiled build to the project's invited members through the Tao Studio companion app.
+# [intended] Deliver a compiled build to the app's TestFlight beta groups.
 ship-beta:
-    {{ TAO }} ship WordFlower --beta
+    {{ TAO }} ship . --app WordFlower --beta

@@ -1,12 +1,13 @@
 # Exploration - Native device as a Studio canvas
 
-Status: feasible design, not implemented. This report is the final architecture exploration requested
-for Tao Studio v1; it does not close the required real-device spike or authorize a production
-implementation.
+Status: historical architecture exploration. Its companion protocol, trust, authenticated Bonjour
+rediscovery, and Studio/device lifecycle foundations have since landed in software, but this report
+does not close physical-device, cable, distribution, or App Store acceptance.
 
 Direction settled 2026-09-02: the first mode below ships as the **Tao Studio companion app**, a
-Tao-published phone app for the development experience and for pre-release testing by members
-invited to a project on the Tao Lang servers; `tao ship <App> --beta` delivers through it. The
+Tao-published phone app for the development experience and for pre-release collaboration by members
+invited to a project on the Tao Lang servers. The original proposal tied `--beta` to that shell;
+the settled ship contract instead makes `tao ship [path] --app <App> --beta` TestFlight. The
 decision, its App Store rules, and its design rules are in
 `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; the program is open work in
 `Roadmap.md`.

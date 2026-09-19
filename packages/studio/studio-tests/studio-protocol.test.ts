@@ -12,6 +12,68 @@ import {
 } from '../studio-src/StudioProtocol'
 
 Describe('Studio session paths and routes', () => {
+  Test('parses finite preview canvas gestures and rejects malformed geometry', () => {
+    const gesture = {
+      channel: studioProtocolChannel,
+      clientX: 12,
+      clientY: 24,
+      deltaX: 3,
+      deltaY: -8,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-gesture',
+      zoom: true,
+    }
+    Expect(StudioProtocol.parseMessage(gesture)).toEqual({
+      ...gesture,
+      identity: {
+        appName: identity.appName,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      },
+    })
+    Expect(StudioProtocol.parseMessage({ ...gesture, deltaY: Number.NaN })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...gesture, zoom: 'yes' })).toBeUndefined()
+  })
+
+  Test('parses explicit parent canvas-gesture ownership and rejects ambiguous state', () => {
+    const ownership = {
+      channel: studioProtocolChannel,
+      identity,
+      owned: true,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    }
+    Expect(StudioProtocol.parseMessage(ownership)).toEqual({
+      ...ownership,
+      identity: {
+        appName: identity.appName,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      },
+    })
+    Expect(StudioProtocol.parseMessage({ ...ownership, owned: 'design' })).toBeUndefined()
+  })
+
+  Test('preserves runtime-capture error taxonomy across the preview protocol', () => {
+    const failure = {
+      channel: studioProtocolChannel,
+      error: 'The captured row is invalid.',
+      errorName: 'UserInputError',
+      identity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'capture-1',
+      type: 'preview-runtime-capture-failed',
+    }
+    Expect(StudioProtocol.parseMessage(failure)).toMatchObject({
+      error: failure.error,
+      errorName: 'UserInputError',
+      type: failure.type,
+    })
+    Expect(StudioProtocol.parseMessage({ ...failure, errorName: 'Error' })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...failure, errorName: undefined })).toBeUndefined()
+  })
+
   Test('scopes every session endpoint under one opaque window id and refuses anything else', () => {
     Expect(StudioSessionPath.route('/sessions/first_session/api/protocol')).toEqual({
       pathname: '/api/protocol',
@@ -63,10 +125,21 @@ Describe('Studio session paths and routes', () => {
       command: 'configure',
       steps: [{ action: 'Bump', path: '0' }],
     })
+    const canonicalStep = {
+      action: 'Bump',
+      declaration: '["tao.declaration",1,"project","@workspace","Main","view","Root"]',
+      path: '0',
+      statement: 'block.statements[1].block.statements[0]',
+    }
+    Expect(StudioProtocol.parseMessage({ ...configure, steps: [canonicalStep] })).toMatchObject({
+      steps: [canonicalStep],
+    })
     Expect(StudioProtocol.parseMessage(step)).toMatchObject({ command: 'step-over' })
     Expect(StudioProtocol.parseMessage({ ...step, command: 'break' })).toMatchObject({ command: 'break' })
     Expect(StudioProtocol.parseMessage({ ...configure, command: 'evaluate' })).toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...configure, steps: [{ action: 'Bump' }] })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...configure, steps: [{ ...canonicalStep, statement: undefined }] }))
+      .toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...configure, identity: { appName: 'Garden' } })).toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...event, event: () => undefined })).toBeUndefined()
   })
@@ -79,6 +152,11 @@ Describe('Studio session paths and routes', () => {
     Expect(StudioRoutes.match(manager.closeSession, '/api/sessions/current_window/switch')).toBe(undefined)
     Expect(StudioRoutes.match(StudioRoutes.session.agentChatStream, '/api/agent-chat/stream/send'))
       .toEqual({ command: 'send' })
+    Expect(StudioRoutes.match(StudioRoutes.session.agentChat, '/api/agent-chat/send/another')).toBe(undefined)
+    Expect(StudioRoutes.match(StudioRoutes.session.agentChat, '/api/agent-chat/send%2Fanother'))
+      .toEqual({ command: 'send/another' })
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.agentChat, 'GET', '/api/agent-chat/send')).toBe(false)
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.agentChat, 'POST', '/api/agent-chat/send')).toBe(true)
     Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files')).toEqual({})
     Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files/')).toBe(undefined)
     Expect(StudioRoutes.matchesRequest(StudioRoutes.session.files, 'GET', '/api/files')).toBe(true)
