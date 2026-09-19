@@ -133,6 +133,7 @@ when the index names a file that does not exist, or when two files claim the sam
 - [DEVENV-080 — The prepare chain was re-paid on every lane at an unchanged tree](<Developer environment upgrades/DEVENV-080-the-prepare-chain-was-re-paid-on-every-lane-at-an-unchanged.md>) — Resolved
 - [DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself](<Developer environment upgrades/DEVENV-090-a-stale-generated-parser-fails-runtime-jest-without-naming-i.md>) — Candidate
 - [DEVENV-091 — A dependency tree can be unusable while every health check passes](<Developer environment upgrades/DEVENV-091-a-dependency-tree-can-be-unusable-while-every-health-check-p.md>) — Candidate
+- [DEVENV-098 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/DEVENV-098-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Candidate
 - [DEVENV-081 — `tao test` discarded its compiled output on every passing run](<Developer environment upgrades/DEVENV-081-tao-test-discarded-its-compiled-output-on-every-passing-run.md>) — Resolved
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-083 — The WordFlower compile was re-paid on every test invocation](<Developer environment upgrades/DEVENV-083-the-wordflower-compile-was-re-paid-on-every-test-invocation.md>) — Resolved
