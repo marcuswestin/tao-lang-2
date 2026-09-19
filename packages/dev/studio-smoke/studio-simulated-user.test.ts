@@ -644,7 +644,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
 
       const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
-      await browser.evaluate(`(() => {
+      const selectRetainedRectangle = `(() => {
         const select = document.querySelector(${
         JSON.stringify(
           `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
@@ -653,8 +653,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         if (!(select instanceof HTMLSelectElement)) throw new Error('Missing snapped rectangle selector')
         const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
         if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
-        option.selected = true
-      })()`)
+        for (const candidate of select.options) candidate.selected = candidate === option
+      })()`
       const unsnappedCatalog = await clickSketchWhenSettled(
         browser,
         persistedSketch.id,
@@ -664,6 +664,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           catalog.revision > incrementalUndoCatalog.revision
           && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
           && catalog.sketches[0]?.snapped.length === 3,
+        undefined,
+        selectRetainedRectangle,
       )
       Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
       Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
@@ -1331,6 +1333,7 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
  * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
  * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
  * and given a quiet moment instead, and pressed once when it is still the board that was marked.
+ * Prepare selection on that same settled board; a replacement would discard earlier DOM selection.
  */
 async function clickSketchWhenSettled(
   browser: StudioCdp,
@@ -1339,6 +1342,7 @@ async function clickSketchWhenSettled(
   path: string,
   predicate: (catalog: SmokeSketchCatalog) => boolean,
   diagnose?: () => Promise<unknown>,
+  prepareSettledBoard?: string,
 ): Promise<SmokeSketchCatalog> {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
@@ -1346,8 +1350,12 @@ async function clickSketchWhenSettled(
     await Time.sleep(300)
     const settled = await browser.evaluate<boolean>(`(() => {
       const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
-      return board instanceof HTMLElement
-        && board.dataset.taoStudioSmokeGeneration === ${JSON.stringify(generation)}
+      if (!(board instanceof HTMLElement)
+        || board.dataset.taoStudioSmokeGeneration !== ${JSON.stringify(generation)}) {
+        return false
+      }
+      ${prepareSettledBoard ?? ''}
+      return true
     })()`)
     if (settled) {
       await browser.click(selector)
