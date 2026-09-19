@@ -4,6 +4,12 @@ const SNAPSHOT_VERSION = 1
 const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
+/**
+ * Where a main worktree goes when the repository has none. Inside the invoking checkout's ignored
+ * artifacts, because a sandboxed shell may only write within its own worktree; stable rather than
+ * stamped, so a retry after a failed landing finds the staged squash its snapshot refers to.
+ */
+const TEMPORARY_MAIN_WORKTREE = '.artifacts/merge/main-worktree'
 const MERGE_PHASES: readonly MergePhase[] = [
   'prepared',
   'feature-integrated',
@@ -75,6 +81,8 @@ export type MergeSnapshot = {
   mainIndexTree: string
   mainRoot: string
   mainTree: string
+  /** Whether this command created `mainRoot` and must remove it once the landing is complete. */
+  mainWorktreeIsTemporary: boolean
   messageFile: string
   phase: MergePhase
   remoteFeatureHead?: string
@@ -88,6 +96,8 @@ export type MergeSnapshot = {
 export type MergePreflight = {
   branch: string
   branchHead: string
+  /** Whether `mainRoot` names a worktree execution must create, rather than one that already exists. */
+  createsMainWorktree: boolean
   featureRoot: string
   mainHead: string
   mainRoot: string
@@ -246,13 +256,48 @@ export async function inspectMergePreflight(
     Errors.throwUserInput(`Branch '${branch}' must be checked out only in the invoking worktree.`)
   }
   const mainWorktrees = worktrees.filter(worktree => worktree.branch === MAIN_BRANCH)
-  if (mainWorktrees.length !== 1) {
-    Errors.throwUserInput(`Expected exactly one main worktree, found ${mainWorktrees.length}.`)
+  if (mainWorktrees.length > 1) {
+    Errors.throwUserInput(
+      `Expected at most one main worktree, found ${mainWorktrees.length}: `
+        + `${mainWorktrees.map(worktree => worktree.path).join(', ')}.`,
+    )
   }
-  const mainRoot = mainWorktrees[0]!.path
-  const mainStatus = await status(dependencies, mainRoot)
-  assertClean('main', mainRoot, mainStatus)
-  const mainHead = (await git(dependencies, mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+  // A checkout on main is somewhere to stage the squash, not a precondition the developer owes this
+  // command. Working directly in the primary checkout on a feature branch leaves no worktree on
+  // main at all, which is an ordinary way to work and used to stop the landing outright. When there
+  // is none, execution makes one and removes it again; preflight only names where it would go, so a
+  // dry run still changes nothing.
+  const createsMainWorktree = mainWorktrees.length === 0
+  const mainRoot = mainWorktrees[0]?.path ?? FS.resolvePath(TEMPORARY_MAIN_WORKTREE, featureRoot)
+  if (!createsMainWorktree) {
+    assertClean('main', mainRoot, await status(dependencies, mainRoot))
+  }
+  // Read through the ref rather than through a checkout's HEAD, so both cases answer identically.
+  const localMain = await dependencies.run('git', {
+    args: ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`],
+    cwd: featureRoot,
+    stdio: 'pipe',
+  })
+  if (localMain.exitCode !== 0) {
+    Errors.throwUserInput(
+      `This checkout has no local '${MAIN_BRANCH}' branch to merge onto; `
+        + `create it from ${REMOTE}/${MAIN_BRANCH} before landing.`,
+    )
+  }
+  const mainHead = localMain.stdout.trim()
+  // The staged squash is verified in the main worktree only when the feature branch's own full
+  // verification was skipped. A worktree this command just created has no installed dependencies,
+  // so that lane could not run there — and silently skipping it would be the one thing this command
+  // must never do.
+  if (
+    createsMainWorktree && fullVerifySkippedBy(options) !== undefined && stagedVerifySkippedBy(options) === undefined
+  ) {
+    Errors.throwUserInput(
+      `${fullVerifySkippedBy(options)} moves verification onto the staged squash, which runs in a worktree on `
+        + 'main. There is none, and one created here would have no installed dependencies. Either drop that flag, '
+        + `or create a main worktree yourself: git worktree add <path> ${MAIN_BRANCH}.`,
+    )
+  }
 
   const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, `merged/${branch.slice(5)}`])
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
@@ -261,7 +306,7 @@ export async function inspectMergePreflight(
   }
   if (mainHead !== remoteMainHead) {
     Errors.throwUserInput(
-      `The main worktree is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
+      `Local ${MAIN_BRANCH} is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
     )
   }
   // A remote feature branch left behind by earlier commits is the ordinary case, not an obstacle:
@@ -306,6 +351,7 @@ export async function inspectMergePreflight(
   return {
     branch,
     branchHead,
+    createsMainWorktree,
     featureRoot,
     mainHead,
     mainRoot,
@@ -346,6 +392,9 @@ export const MergeWithMainCommand = {
     }
 
     await authorizeExecution(options, dependencies, preflight)
+    if (preflight.createsMainWorktree) {
+      await createMainWorktree(preflight, dependencies)
+    }
     const snapshot = await createSnapshot(preflight, dependencies)
     writeLines(dependencies, [
       ...preflight.warnings.map(warning => `WARN  ${warning}`),
@@ -384,11 +433,18 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
   return [
     `PASS  Feature branch: ${preflight.branch} at ${shortSha(preflight.branchHead)}`,
     `PASS  Feature worktree clean: ${preflight.featureRoot}`,
-    `PASS  Main worktree clean and current: ${preflight.mainRoot} at ${shortSha(preflight.mainHead)}`,
+    preflight.createsMainWorktree
+      ? `PASS  Local main is current at ${shortSha(preflight.mainHead)}; no worktree has it checked out.`
+      : `PASS  Main worktree clean and current: ${preflight.mainRoot} at ${shortSha(preflight.mainHead)}`,
     `PASS  ${REMOTE}/main is an ancestor of the feature branch.`,
     `PASS  Merge message: ${preflight.messageFile}`,
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
+    ...(preflight.createsMainWorktree
+      ? [
+        `PLAN  Create a temporary worktree on main at ${preflight.mainRoot}, and remove it when the landing completes.`,
+      ]
+      : []),
     'PLAN  Write a safety snapshot before moving any ref.',
     ...(preflight.remoteFeatureBehind
       ? [`PLAN  Keep the behind ${REMOTE}/${preflight.branch} unchanged until the verified archive replaces it.`]
@@ -466,13 +522,70 @@ function skipAllPrompt(branch: string): string {
     + 'so it cannot be fast-forwarded away afterwards. Really merge with nothing checked at all?'
 }
 
+/**
+ * createMainWorktree gives the landing somewhere to stage its squash when the repository has no
+ * checkout on main.
+ *
+ * It is a plain `git worktree add`, which writes only into a directory that did not exist — so it
+ * runs inside the agent sandbox, where checking a ref out over existing protected files does not.
+ * An earlier run that failed partway leaves its worktree behind on purpose, holding the staged
+ * squash its snapshot refers to; preflight then finds it as an ordinary main worktree and this is
+ * never reached.
+ */
+async function createMainWorktree(
+  preflight: MergePreflight,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (await dependencies.exists(preflight.mainRoot)) {
+    Errors.throwUserInput(
+      `Cannot create a main worktree at ${preflight.mainRoot}: something is already there, and Git did not `
+        + 'report it as a worktree. Remove it, or run `git worktree prune`, and try again.',
+    )
+  }
+  await runChecked(
+    dependencies,
+    'git',
+    ['worktree', 'add', preflight.mainRoot, MAIN_BRANCH],
+    preflight.featureRoot,
+    true,
+  )
+  writeLines(dependencies, [
+    `PASS  Created a temporary worktree on ${MAIN_BRANCH} at ${preflight.mainRoot}; it is removed when the `
+    + 'landing completes.',
+  ])
+}
+
+/**
+ * removeMainWorktree takes back what `createMainWorktree` made, once the landing is complete and
+ * nothing refers to it any more. A failed landing keeps it: its staged squash is what `--abort`
+ * restores from, and the snapshot that names it lives in the invoking worktree.
+ */
+async function removeMainWorktree(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (!snapshot.mainWorktreeIsTemporary) {
+    return
+  }
+  await runChecked(
+    dependencies,
+    'git',
+    ['worktree', 'remove', '--force', snapshot.mainRoot],
+    snapshot.featureRoot,
+    true,
+  )
+}
+
 async function createSnapshot(
   preflight: MergePreflight,
   dependencies: MergeWithMainDependencies,
 ): Promise<MergeSnapshot> {
   const createdAt = dependencies.now().toISOString()
   const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${Platform.randomUUID().slice(0, 8)}`
-  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, preflight.mainRoot)
+  // A snapshot is what `--abort` restores from, so it cannot live inside a checkout this command
+  // removes on its way out. The invoking worktree is preserved through success and failure alike.
+  const snapshotRoot = preflight.createsMainWorktree ? preflight.featureRoot : preflight.mainRoot
+  const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, snapshotRoot)
   const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
     git(dependencies, preflight.featureRoot, ['write-tree']).then(result => result.stdout.trim()),
@@ -496,6 +609,7 @@ async function createSnapshot(
     mainIndexTree,
     mainRoot: preflight.mainRoot,
     mainTree,
+    mainWorktreeIsTemporary: preflight.createsMainWorktree,
     messageFile: preflight.messageFile,
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
@@ -818,10 +932,12 @@ async function pushArchiveAndPreserve(
   await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.mainRoot, true)
   await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.mainRoot, true)
   snapshot.phase = 'complete'
-  // The snapshot lives in main's ignored artifacts, so it survives local feature-branch deletion.
+  // Read main one last time before the worktree that holds it may be taken away. The snapshot lives
+  // in ignored artifacts that outlast both the local feature branch and a temporary main worktree.
   snapshot.currentMainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   snapshot.currentMainStatus = await status(dependencies, snapshot.mainRoot)
   await persistSnapshot(snapshot, dependencies)
+  await removeMainWorktree(snapshot, dependencies)
 }
 
 async function abortMerge(

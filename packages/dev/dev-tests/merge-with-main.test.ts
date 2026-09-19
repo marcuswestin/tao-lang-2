@@ -20,6 +20,10 @@ type FakeRepository = {
   featureHead: string
   featureRoot: string
   featureStatus: string
+  /** Whether a worktree has main checked out; false models the primary checkout on a feature branch. */
+  hasMainWorktree?: boolean
+  /** Whether a local `main` ref exists at all. */
+  hasLocalMain?: boolean
   mainHead: string
   mainRoot: string
   mainStatus: string
@@ -118,10 +122,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
           `HEAD ${repository.featureHead}`,
           `branch refs/heads/${repository.branch}`,
           '',
-          `worktree ${repository.mainRoot}`,
-          `HEAD ${repository.mainHead}`,
-          'branch refs/heads/main',
-          '',
+          ...(repository.hasMainWorktree === false ? [] : [
+            `worktree ${repository.mainRoot}`,
+            `HEAD ${repository.mainHead}`,
+            'branch refs/heads/main',
+            '',
+          ]),
         ].join('\n'),
       )
     }
@@ -148,6 +154,13 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (joined === 'fetch --prune origin') {
       repository.remoteMainHead = advertisedRemoteMain
       return result(command, args, spec.cwd)
+    }
+    if (joined === 'rev-parse --verify --quiet refs/heads/main') {
+      // The ref, not a checkout's HEAD: preflight reads main this way so a repository with no
+      // worktree on main answers the same as one that has it checked out.
+      return repository.hasLocalMain === false
+        ? result(command, args, spec.cwd, '', 1)
+        : result(command, args, spec.cwd, `${repository.mainHead}\n`)
     }
     if (joined === 'rev-parse origin/main') {
       return result(command, args, spec.cwd, `${repository.remoteMainHead}\n`)
@@ -209,6 +222,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     }
     if (args[0] === 'push' && args.at(-1) === 'main:main' && repository.failMainPush === true) {
       return result(command, args, spec.cwd, '', 1)
+    }
+    if (joined.startsWith('worktree add ')) {
+      // The created worktree is main's checkout from here on, exactly as a pre-existing one is.
+      repository.mainRoot = args[2]!
+      repository.hasMainWorktree = true
+      return result(command, args, spec.cwd)
+    }
+    if (joined.startsWith('worktree remove ')) {
+      repository.hasMainWorktree = false
+      return result(command, args, spec.cwd)
     }
     if (
       args[0] === 'push'
@@ -321,6 +344,59 @@ Describe('merge-with-main', () => {
     ].join('\n'))).toEqual([{ branch: 'main', head: 'current', path: '/live' }])
   })
 
+  Test('plans a temporary main worktree when no checkout has main, and creates nothing to say so', async () => {
+    // Working directly in the primary checkout on a feature branch leaves no worktree on main. That
+    // is an ordinary way to work, and it used to stop the landing before it began.
+    const fake = fakeDependencies({ hasMainWorktree: false })
+    const result = await MergeWithMainCommand.run(
+      { dryRun: true, repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(result.mode).toBe('dry-run')
+    Expect(
+      fake.lines.some(line =>
+        line.startsWith('PASS  Local main is current at ') && line.endsWith('; no worktree has it checked out.')
+      ),
+    ).toBe(true)
+    Expect(fake.lines.some(line => line.startsWith('PLAN  Create a temporary worktree on main at '))).toBe(true)
+    // A dry run says what it would do and does none of it.
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'add')).toBe(false)
+  })
+
+  Test('creates a main worktree for the landing and removes it once the landing completes', async () => {
+    const fake = fakeDependencies({ hasMainWorktree: false })
+
+    const result = await MergeWithMainCommand.run(
+      { repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(result.mode).toBe('executed')
+    const worktreeCalls = fake.calls.filter(call => call.args[0] === 'worktree').map(call => call.args.slice(0, 2))
+    Expect(worktreeCalls).toContainEqual(['worktree', 'add'])
+    Expect(worktreeCalls).toContainEqual(['worktree', 'remove'])
+    // Removal is last: the squash is staged, verified, committed and pushed from that worktree.
+    Expect(fake.calls.at(-1)?.args.slice(0, 2)).toEqual(['worktree', 'remove'])
+    // The snapshot cannot live inside a checkout this command removes on its way out.
+    Expect(result.snapshotPath?.startsWith(fake.repository.featureRoot)).toBe(true)
+  })
+
+  Test('refuses to create a main worktree it would then have to verify in', async () => {
+    // `--skip-verify-full` moves verification onto the staged squash, which runs in the main
+    // worktree. One created here has no installed dependencies, and silently skipping the lane
+    // instead is the one thing this command must never do.
+    const fake = fakeDependencies({ hasMainWorktree: false })
+
+    await Expect(
+      MergeWithMainCommand.run(
+        { repositoryRoot: fake.repository.featureRoot, skipVerifyFull: true },
+        fake.dependencies,
+      ),
+    ).rejects.toThrow('would have no installed dependencies')
+    Expect(fake.calls.some(call => call.args[0] === 'worktree' && call.args[1] === 'add')).toBe(false)
+  })
+
   Test('--dry-run performs only read-only git operations and ends with the exact landing command', async () => {
     const fake = fakeDependencies()
     const result = await MergeWithMainCommand.run(
@@ -395,7 +471,7 @@ Describe('merge-with-main', () => {
     const stale = fakeDependencies({ remoteMainHead: 'new-main' })
     await Expect(
       MergeWithMainCommand.run({ repositoryRoot: stale.repository.featureRoot }, stale.dependencies),
-    ).rejects.toThrow('main worktree is not at origin/main')
+    ).rejects.toThrow('Local main is not at origin/main')
     Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     Expect(stale.snapshots.size).toBe(0)
   })
@@ -882,6 +958,7 @@ Describe('merge-with-main', () => {
       mainIndexTree: 'staged-tree',
       mainRoot: '/repo-main',
       mainTree: 'staged-tree',
+      mainWorktreeIsTemporary: false,
       messageFile: '/message',
       phase: 'squashed',
       remoteMainHead: 'main-before',
