@@ -69,7 +69,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === '@tao/runtime/core') {
     return {
       type: 'sourceFile',
-      filePath: nodePath.resolve(runtimeSourceRoot, 'core', 'Effects.ts'),
+      filePath: nodePath.resolve(runtimeSourceRoot, 'core', 'RuntimeCore.ts'),
     }
   }
   if (optionalHostModules.has(moduleName)) {

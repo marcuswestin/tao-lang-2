@@ -107,6 +107,7 @@ export async function runHostTesting(mode: string, options: HostTestingOptions):
       'packages/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
       'packages/runtime/TaoRuntime-src/host-testing/index.ts',
       'packages/runtime/TaoRuntime-src/core/Effects.ts',
+      'packages/runtime/TaoRuntime-src/core/RuntimeCore.ts',
     ]
     const issues = await lintHostTestSources(Repo.getRoot(), { files: paths })
     await FS.writeJson(FS.resolvePath('effect-boundary.json', artifactRoot), { paths, issues })

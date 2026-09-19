@@ -59,8 +59,9 @@ a physical-device UI driver has not been implemented. See [native details](nativ
 ## Time, randomness, and parallelism
 
 `Effects.createSession` is a pure session object with an injected clock and its own seeded random stream.
-The implementation ships inside the runtime at `@tao/runtime/core`; `@shared/core` and `@shared`
-re-export the same `Effects` namespace. It imports no platform modules. Keeping the implementation
+The `RuntimeCore.ts` entry point at `@tao/runtime/core` exports the `Effects` namespace;
+`@shared/core` and `@shared` re-export that same namespace. Its implementation remains in `Effects.ts`
+and imports no platform modules. Keeping the implementation
 in the shipped package avoids a new distribution dependency or copied implementations.
 Two instances can run concurrently in one process when they own different clock instances. No global
 `Date`, `Math.random`, or timer function is replaced. The clock port is deliberately small; the real-host

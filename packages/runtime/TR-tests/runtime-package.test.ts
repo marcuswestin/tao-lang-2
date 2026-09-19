@@ -39,7 +39,7 @@ Describe('tao-runtime package boundary', () => {
     Expect(manifest.exports).toEqual({
       '.': './TaoRuntime-src/TR.ts',
       './TR': './TaoRuntime-src/TR.ts',
-      './core': './TaoRuntime-src/core/Effects.ts',
+      './core': './TaoRuntime-src/core/RuntimeCore.ts',
     })
     const packagedDependencies = {
       ...manifest.dependencies,

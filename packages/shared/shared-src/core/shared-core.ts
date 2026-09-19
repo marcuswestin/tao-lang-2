@@ -1,4 +1,4 @@
-import * as Effects from '@tao/runtime/core'
+import { Effects } from '@tao/runtime/core'
 import { Assert } from './Assert'
 import { Diagnostic, Diagnostics } from './Diagnostics'
 import * as Errors from './Errors'

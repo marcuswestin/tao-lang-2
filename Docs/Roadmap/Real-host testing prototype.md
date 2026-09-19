@@ -29,8 +29,9 @@ The runtime adapter uses one controlled `TR.Clock` per JavaScript realm. The pur
 independent injected clocks in the same process. This establishes the prototype's isolation contract;
 it does not yet migrate the repository to a universal production effect API.
 
-The same implementation is exported by `@tao/runtime/core` and re-exported as `Effects` through
-`@shared/core` and `@shared`. It resides in the shipped runtime package and has no imports, so sharing
+The `RuntimeCore.ts` entry point at `@tao/runtime/core` exports the `Effects` namespace, re-exported
+through `@shared/core` and `@shared`. Its implementation stays in `core/Effects.ts` inside the shipped
+runtime package and has no imports, so sharing
 it introduces neither Node/React Native dependencies nor a new package to distribute.
 
 Native physical-device driving and broad lint enforcement remain open implementation work. No test

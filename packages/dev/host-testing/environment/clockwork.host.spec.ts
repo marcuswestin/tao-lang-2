@@ -7,7 +7,7 @@ import {
 import { installRuntimeHostTestControl } from '@runtime/host-testing/RuntimeHostTestControl'
 import { Clock } from '@runtime/TR-units'
 import { Effects } from '@shared'
-import * as RuntimeEffects from '@tao/runtime/core'
+import { Effects as RuntimeEffects } from '@tao/runtime/core'
 
 test('Clockwork host environments have independent same-process clocks and known random streams', () => {
   const firstClock = ownedClock()

@@ -81,7 +81,7 @@
         "./runtime/TaoRuntime-src/TR.ts"
       ],
       "@tao/runtime/core": [
-        "./runtime/TaoRuntime-src/core/Effects.ts"
+        "./runtime/TaoRuntime-src/core/RuntimeCore.ts"
       ],
       "@runtime/*": [
         "./runtime/TaoRuntime-src/*"
