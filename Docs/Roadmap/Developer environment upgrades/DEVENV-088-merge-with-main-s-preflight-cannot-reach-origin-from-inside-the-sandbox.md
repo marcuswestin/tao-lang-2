@@ -15,6 +15,11 @@
   `./dev merge-with-main --dry-run`, and the `ls-remote` runs as its grandchild, which inherits the
   sandbox and its egress allowlist. It is the same shape as DEVENV-068 — a child process denied what
   the shell is allowed — with the network rather than `exec` as the denied operation.
+  `./agent finalize` has the same denial and degrades rather than failing: it reports
+  `origin was unreachable; read the local main branch at <sha> instead` as a `PASS`, then decides
+  `main ... is already contained in this branch` from that local ref. That is a stale-`main`
+  judgment presented as a passing check — a landing finalize called ready can still be refused by
+  `merge-with-main`'s preflight, which does reach the remote.
 
   2026-09-19, the landing half: the unsandboxed retry that rescues the dry run does not rescue the
   landing. `just merge-with-main` with the sandbox off is refused by the Claude Code auto-mode
@@ -22,7 +27,8 @@
   `git ls-remote` as the dry run. So on a branch Ro has asked an agent to land, both routes are shut:
   the agent can prove the branch is landable and cannot land it. `./dev merge-with-main --dry-run`
   unsandboxed still passes its whole preflight, so what is denied is the mutation, not the query.
-- **Workaround:** Run the dry run unsandboxed to confirm the branch, then have Ro run
+- **Workaround:** Run the dry run unsandboxed to confirm the branch, and run `finalize` unsandboxed
+  too — or fetch `origin` first — so its containment check reads a current `main`. Then have Ro run
   `just merge-with-main` in their own terminal.
 - **Proposed change:** Either exclude `./dev merge-with-main *` from the sandbox, which is defensible
   because the plain command is already the landing command and pushing still stops for Ro, or have

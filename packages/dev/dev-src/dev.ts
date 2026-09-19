@@ -4,7 +4,9 @@ import { CleanCommand } from './clean/CleanCommand'
 import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
+import { BoardCommand } from './doctor/BoardCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
 import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
@@ -204,6 +206,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('finalize')
+    .description('Bring a feature branch to the state where merge-with-main can run; safe to re-run.')
+    .option('--check', 'Report without mutating anything: no merge, no verification lane, no file written.')
+    .option('--fresh', 'Ignore the recorded finalize state and redraft the merge message.')
+    .action(async (options: { check?: boolean; fresh?: boolean } = {}) => {
+      try {
+        const outcome = await FinalizeCommand.run({ check: options.check === true, fresh: options.fresh === true })
+        Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('capabilities')
     .description('Report which host capabilities this agent environment can use without changing anything.')
     .option('--json', 'Print a versioned structured report.')
@@ -225,6 +242,16 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report instead of PASS/WARN/FAIL lines.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await RepositoryDoctorCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('board')
+    .description(
+      'Show every worktree, the machine-wide lane and lease registry, and whether this machine is busy, without changing anything.',
+    )
+    .option('--json', 'Print a versioned structured report instead of the table.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await BoardCommand.run({ json: options.json === true }))
     })
 
   commands
