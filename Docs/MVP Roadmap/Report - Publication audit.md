@@ -19,7 +19,7 @@ shape and location are recorded.
   age-encrypted to a Secure Enclave recipient, and a scan of all 15,141 blobs in all 1,448 commits of
   history found no credential material. This was the single largest unknown going in, and it is clean.
 - **The real exposure is editorial, not cryptographic.** The agent instruction set, `Roadmap.md`, and
-  `Docs/Roadmap/` are candid internal working material — roughly 255,000 words of it — written on the
+  `Docs/Roadmap/` are candid internal working material — roughly 271,000 words of it — written on the
   assumption that only Ro and agents would read it. It is unflattering in places and sets
   expectations the product does not yet meet.
 - **Three concrete items should be fixed before any publication**, whichever shape `R2` picks: real
@@ -32,15 +32,15 @@ shape and location are recorded.
 
 ## A. Agent instruction set, subagent profiles, skills, and `.rulesync`
 
-The whole agent surface is tracked and would publish: `AGENTS.md` (104 lines), `packages/AGENTS.md`,
-`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 18 skills under `agents/skills/`, 7 subagent
+The whole agent surface is tracked and would publish: `AGENTS.md` (116 lines), `packages/AGENTS.md`,
+`Apps/Test Apps/AGENTS.md`, `.claude/CLAUDE.md`, 21 skills under `agents/skills/`, 7 subagent
 profiles under `agents/subagents/`, the 4 `.rulesync/` sources, and their generated adapters
 (`.claude/settings*.json`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/tao.rules`,
 `.cursor/*`, `.config/wt.toml`).
 
 ### P1 — The instruction set names Ro and encodes the working relationship — Medium
 
-`AGENTS.md` refers to Ro 17 times, and skills add 32 more references. It states that "Ro is the
+`AGENTS.md` refers to Ro 18 times, and skills add 46 more references. It states that "Ro is the
 project lead and language designer", that Ro decides language semantics, roadmap priority, and
 product behavior, and that pushing and merging always stop for Ro. A whole `Responses to Ro` section
 prescribes how an agent should talk to Ro: lead with the answer, at most three levels of nesting,
@@ -74,8 +74,8 @@ audience `A1`–`A16` are aiming at.
 
 ### P3 — The sandbox policy is a published map of what agents may do — Medium
 
-`.rulesync/permissions.jsonc` (211 lines) and the generated `.claude/settings.json` (164 lines) and
-`.codex/config.toml` (157 lines) spell out the full policy: which commands auto-approve, which are
+`.rulesync/permissions.jsonc` (230 lines) and the generated `.claude/settings.json` (199 lines) and
+`.codex/config.toml` (165 lines) spell out the full policy: which commands auto-approve, which are
 excluded, which paths are writable, and a network allowlist of 27 host patterns (Anthropic, OpenAI,
 Apple's developer, App Store Connect and software-update hosts, Expo, GitHub, npm, nixos/cachix).
 `.rulesync/profiles.jsonc` adds the opt-in escapes: `native` (Simulator and DerivedData writes),
@@ -97,14 +97,14 @@ learns exactly which commands execute without review.
 
 ### P4 — The skills document known weaknesses in the codebase — Low
 
-The 18 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
+The 21 skills are a candid description of where this codebase goes wrong. `test-quality` exists to
 catch "vacuous or self-fulfilling assertions" and "README claims a journey does not prove".
 `removing-code` exists because dead surfaces accumulate. `old-repo-porting` warns against the
 previous repository's "stale conventions and copied implementation cruft". `error-handling`,
 `langium-scoping`, `runtime-codegen`, and `studio-hybrid-client` each encode a seam that was gotten
 wrong before.
 
-A skill is a scar. Eighteen of them published together read as a list of the project's recurring
+A skill is a scar. Twenty-one of them published together read as a list of the project's recurring
 failure modes.
 
 - **Recommendation:** publish. This is the least of the exposures and arguably an asset — it is
@@ -161,12 +161,12 @@ at a glance and is not.
 
 ## B. `Roadmap.md` and `Docs/Roadmap/` as Ro's private working material
 
-`Roadmap.md` is 394 lines. `Docs/Roadmap/` is 103 tracked files and roughly 255,000 words, 70 of
+`Roadmap.md` is 396 lines. `Docs/Roadmap/` is 206 tracked files and roughly 271,000 words, 138 of
 them active and 33 archived.
 
 ### P7 — `Roadmap.md`'s `Ro STACK` section — High
 
-Lines 15–29 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
+Lines 15–31 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
 deep links, "Enable Codex to interact with studio on its own", work through the environment ledger.
 `R2` names this section specifically.
 
@@ -179,7 +179,7 @@ someone's notes-to-self, because it is.
 
 ### P8 — `Roadmap.md`'s `Ro's stack` section — High
 
-Lines 263–358 are the product and codebase backlog, "unordered", and they are frank in a way that
+Lines 265–360 are the product and codebase backlog, "unordered", and they are frank in a way that
 will be quoted. Specifics that publish as written: "Roughly two dozen raw `Error`s handed to a
 promise rejection", "66 already-typed `throw new Errors.*` guards across ten studio files", "Remove
 magical strings", "Review all tests: remove unnecessary surfaces and overlaps", 462 call sites
@@ -206,20 +206,27 @@ is a headline, and the fact that all 183 were then implemented is the part that 
   explicitly says it is the durable summary of an untracked checklist. Keep it private under any
   `R2` outcome.
 
-### P10 — `Docs/Roadmap/Developer environment upgrades.md` — Medium
+### P10 — The developer-environment ledger — Medium
 
-1,242 lines and 78 `DEVENV-` entries cataloguing setup, dependency, sandbox, and tooling defects.
-Checked for machine-specific content: it contains no absolute home paths, no device names, and no
-usernames, so it is clean in the `P16`/`P17` sense.
+Now three things rather than one file: `Docs/Roadmap/Developer environment upgrades.md` (120 lines,
+69 open `DEVENV-` entries), `Developer environment upgrades archive.md` (62 lines), and a
+`Developer environment upgrades/` folder of 67 per-issue files. **243 distinct `DEVENV-` identifiers**
+exist across the three.
 
-What it reveals is volume — 78 tracked environment problems is a lot of friction to show a developer
-you are asking to install your toolchain.
+Checked for machine-specific content: no absolute home paths, no device names, no usernames, so it is
+clean in the `P16`/`P17` sense.
 
-- **Recommendation:** do not publish at launch. It is the correct place for agents to keep recording
-  findings (`AGENTS.md` mandates it), so keep it tracked privately rather than deleting it. Revisit
-  after `A8`'s managed toolchain lands, when the list is shorter and the story is "we fixed these".
+What it reveals is volume. The split makes the open list look shorter while the full record is larger
+and still tracked — 243 catalogued environment defects is a lot of friction to show a developer you
+are asking to install your toolchain, and the archive says plainly how many there have been.
 
-### P11 — Twenty-two active roadmap programs for unshipped capability — Medium
+- **Recommendation:** do not publish at launch, and treat all three paths as one decision — publishing
+  the trimmed index while the folder and archive stay private would be worse than publishing none of
+  it, because the index links onward. It is the correct place for agents to keep recording findings
+  (`AGENTS.md` mandates it), so keep it tracked privately rather than deleting it. Revisit after
+  `A8`'s managed toolchain lands, when the story is "we fixed these".
+
+### P11 — Twenty-four active roadmap programs for unshipped capability — Medium
 
 `Docs/Roadmap/` holds active plans for Accessible Tao apps, a design system, navigation and routing,
 React Native and Expo bridging, a CloudKit provider, component kits, enforcement and diagnostics,
@@ -324,7 +331,7 @@ right with `device="<name>"`, which shows the fix.
 
 ### P17 — `ro-state` hardcoded in the permission source — Medium
 
-`.rulesync/permissions.jsonc:165` allows the Unix socket
+`.rulesync/permissions.jsonc:184` allows the Unix socket
 `~/.local/state/watchman/ro-state/sock`, and that value propagates into the generated
 `.claude/settings.json:100` and `.codex/config.toml:105`. Watchman names its state directory after
 `$USER`, so `ro-state` is literally "the user named `ro`".
@@ -501,6 +508,14 @@ What was not examined, and why:
 - **`Docs/MVP Roadmap/Agent MVP Roadmap.md` and `Ro MVP Roadmap.md`** were first read from commit
   `e72efab2` before they reached `main`; they now sit beside this report.
 
-Scan date: 2026-09-17; refreshed 2026-09-18 after merging `main` at `90df2153`, which added the
-subagent-delegation surface (`P25`) and moved the counts in section A and section B.
+Scan date: 2026-09-17. Refreshed twice against a moving `main`: on 2026-09-18 at `90df2153`, which
+added the subagent-delegation surface (`P25`), and on 2026-09-19 at `801865ac`, which restructured the
+developer-environment ledger (`P10`) and again moved the counts in sections A and B.
+
+Both refreshes re-checked the substantive findings rather than only the numbers. `P15` (App Store
+Connect identifiers in a tracked lock file), `P16` (`roPhone` on 76 lines across 12 files), `P17`
+(the `ro-state` socket, now at `.rulesync/permissions.jsonc:184`), and `P24` (the truncated,
+unattributed, undeclared license) all still hold exactly as written. Nothing `main` landed has fixed
+any of them, and no new credential material entered the tree.
+
 Repository state: `feat/publication-audit-report-d93f40`.
