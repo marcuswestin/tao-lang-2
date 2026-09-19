@@ -296,10 +296,10 @@ Never delete the shared registry while another worktree may be using it.
   exists to remove.
 - `just verify-full-sandbox` runs the same full gate membership in a managed shell while explicitly
   skipping the five active host-only browser and native UI gates. Only `just verify-full` from an
-  unsandboxed shell proves those five gates. The simulated editor journey remains individually
-  runnable as `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`, but its
-  gate, `studio-smoke-simulated-user`, is temporarily quarantined from both full-verification lanes
-  while DEVENV-042 tracks its unreliable synthetic sketch input.
+  unsandboxed shell proves those five gates. The simulated editor journey is an ordinary member of
+  both full-verification lanes again, and remains individually runnable as
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`; DEVENV-042 still
+  tracks the reliability evidence it owes.
 
 `./dev test` chooses suites from one registry in `TestRunner.ts`: a Bun suite per package with a
 `<name>-tests` directory, `performance-checks`, `runtime-jest`, and `tao-apps`. Each entry owns its
