@@ -620,9 +620,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           catalog.revision > reloadedSnapCatalog.revision
           && catalog.sketches[0]?.rects.length === 0
           && catalog.sketches[0]?.snapped.length === 5,
-        async () => {
-          await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
-          return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
+        {
+          diagnose: async () => {
+            await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
+            return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
+          },
         },
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
@@ -643,18 +645,24 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(incrementalUndoCatalog.sketches[0]?.rectOrder).toEqual(reloadedSnapCatalog.sketches[0]?.rectOrder)
       Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
 
+      // Unsnap one rectangle rather than the whole tree, which is what the same button does when
+      // nothing is selected. The selection is therefore made inside the settled moment that presses
+      // the button, never before it: an authoritative render replaces the board and its selector,
+      // and a selection made across one is silently an instruction to unsnap everything.
       const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
-      await browser.evaluate(`(() => {
+      const selectRetained = `(() => {
         const select = document.querySelector(${
         JSON.stringify(
           `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
         )
       })
-        if (!(select instanceof HTMLSelectElement)) throw new Error('Missing snapped rectangle selector')
+        if (!(select instanceof HTMLSelectElement)) return false
         const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
-        if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
-        option.selected = true
-      })()`)
+        if (!(option instanceof HTMLOptionElement)) return false
+        for (const candidate of select.options) candidate.selected = candidate === option
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+        return [...select.selectedOptions].map(entry => entry.value).join(',') === ${JSON.stringify(retained.id)}
+      })()`
       const unsnappedCatalog = await clickSketchWhenSettled(
         browser,
         persistedSketch.id,
@@ -664,6 +672,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           catalog.revision > incrementalUndoCatalog.revision
           && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
           && catalog.sketches[0]?.snapped.length === 3,
+        { prepare: selectRetained },
       )
       Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
       Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
@@ -1331,6 +1340,13 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
  * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
  * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
  * and given a quiet moment instead, and pressed once when it is still the board that was marked.
+ *
+ * `prepare` is for a press whose meaning depends on state the board carries rather than on the
+ * press alone, and it exists because an authoritative render replaces the whole board: a selection
+ * made before the quiet moment is gone by the end of it, and Unsnap with nothing selected unsnaps
+ * everything. It is a page expression returning whether the preparation holds, evaluated in the
+ * same round trip that confirms the board is still the marked one, so the press cannot follow a
+ * render that discarded what it was told to act on.
  */
 async function clickSketchWhenSettled(
   browser: StudioCdp,
@@ -1338,20 +1354,23 @@ async function clickSketchWhenSettled(
   selector: string,
   path: string,
   predicate: (catalog: SmokeSketchCatalog) => boolean,
-  diagnose?: () => Promise<unknown>,
+  options: { diagnose?: () => Promise<unknown>; prepare?: string } = {},
 ): Promise<SmokeSketchCatalog> {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
     const generation = await markSketchBoard(browser, sketchId)
     await Time.sleep(300)
-    const settled = await browser.evaluate<boolean>(`(() => {
+    const ready = await browser.evaluate<boolean>(`(() => {
       const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
-      return board instanceof HTMLElement
-        && board.dataset.taoStudioSmokeGeneration === ${JSON.stringify(generation)}
+      if (!(board instanceof HTMLElement)
+        || board.dataset.taoStudioSmokeGeneration !== ${JSON.stringify(generation)}) {
+        return false
+      }
+      return ${options.prepare ?? 'true'}
     })()`)
-    if (settled) {
+    if (ready) {
       await browser.click(selector)
-      return await waitForSketchCatalog(path, predicate, diagnose)
+      return await waitForSketchCatalog(path, predicate, options.diagnose)
     }
   }
   Errors.throwHostEnvironment(`The Studio sketch board never settled long enough to press ${selector}`)
