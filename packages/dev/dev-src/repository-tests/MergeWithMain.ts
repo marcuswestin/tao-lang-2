@@ -494,6 +494,16 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
   const repositoryRoot = options.repositoryRoot
   const hold = await LandingLock.acquire({
     label: options.command,
+    // Without this a landing blocked behind an abandoned lock says nothing for the whole six-hour
+    // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
+    // way the wait ever reaches a person.
+    onWaiting: (holder, waitedMs) => {
+      HCI.writeLine(
+        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
+          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
+          + 'no longer running, release it with `./dev land-unlock --force`.',
+      )
+    },
     repositoryRoot,
     ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
     ...(options.waitTimeoutMs === undefined ? {} : { waitTimeoutMs: options.waitTimeoutMs }),
@@ -519,13 +529,14 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
       repositoryRoot: hold.record.holder,
       startedAt: hold.record.acquiredAt,
     },
+    // Returns exactly this hold. A durable claim the agent made with `land-lock` has no token and
+    // is therefore left standing, which is what lets one agent verify, land, and then unlock.
     release: async () => {
-      if (hold.acquired) {
-        await LandingLock.release({
-          repositoryRoot,
-          ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
-        })
-      }
+      await LandingLock.release({
+        repositoryRoot,
+        ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
+        ...(hold.token === undefined ? {} : { token: hold.token }),
+      })
     },
   }
 }

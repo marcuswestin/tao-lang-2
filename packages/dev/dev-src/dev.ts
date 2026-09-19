@@ -134,6 +134,7 @@ await runWithCommands(commands => {
       await runExitCommand(async () => {
         const repositoryRoot = Repo.getRoot()
         const hold = await LandingLock.acquire({
+          durable: true,
           label: options.label ?? `landing from ${FS.basename(repositoryRoot)}`,
           onWaiting: (holder, waitedMs) => {
             HCI.writeErrorLine(
@@ -173,6 +174,8 @@ await runWithCommands(commands => {
         HCI.writeLine(
           outcome === 'released'
             ? 'PASS  Released the landing lock.'
+            : outcome === 'still-held'
+            ? "PASS  Ended this worktree's claim; the lock stays held until the commands still running under it finish."
             : 'PASS  This worktree did not hold the landing lock; nothing to release.',
         )
         return 0

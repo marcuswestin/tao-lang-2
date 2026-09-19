@@ -219,8 +219,12 @@ function computeVerdict(machine: BoardMachine, thisRoot: string): string {
   const laneMine = machine.lanes.filter(lane => lane.repositoryRoot === thisRoot)
   const resourceOthers = liveResources.filter(resource => resource.owner.repositoryRoot !== thisRoot)
   const resourceMine = liveResources.filter(resource => resource.owner.repositoryRoot === thisRoot)
-  const othersCount = laneOthers.length + resourceOthers.length
-  const mineCount = laneMine.length + resourceMine.length
+  // The landing lock blocks every broad command on the machine, so a headline that ignores it can
+  // report a quiet machine to an agent whose `verify` is about to sit and wait.
+  const lockOther = machine.landingLock !== undefined && machine.landingLock.holder !== thisRoot
+  const lockMine = machine.landingLock !== undefined && machine.landingLock.holder === thisRoot
+  const othersCount = laneOthers.length + resourceOthers.length + (lockOther ? 1 : 0)
+  const mineCount = laneMine.length + resourceMine.length + (lockMine ? 1 : 0)
   const loadHigh = machine.loadAverage > machine.cpuCount * MachineLanes.CONTENDED_LOAD_RATIO
 
   if (othersCount === 0 && !loadHigh) {
@@ -238,6 +242,9 @@ function computeVerdict(machine: BoardMachine, thisRoot: string): string {
         heldResources.map(resource => resource.owner.name).join(', ')
       })`
       : undefined,
+    machine.landingLock === undefined
+      ? undefined
+      : `landing lock held by ${lockMine ? 'this checkout' : FS.basename(machine.landingLock.holder)}`,
   ].filter((part): part is string => part !== undefined)
 
   const attribution = othersCount > 0

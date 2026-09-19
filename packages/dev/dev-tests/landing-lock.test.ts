@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { LandingLock, LandingLockBusyError } from '../dev-src/repository-tests/LandingLock'
+import { LandingLock, LandingLockBusyError, LandingLockUnreadableError } from '../dev-src/repository-tests/LandingLock'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 
 /**
@@ -47,10 +47,13 @@ Describe('landing lock', () => {
 
   Test('hands the lock to the waiting worktree once the holder releases it', async () => {
     const root = await mkTestDir('landing-lock-handover')
-    await acquire(root, ONE)
-    Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE })).toBe('released')
-    const hold = await acquire(root, TWO)
-    Expect(hold.acquired).toBe(true)
+    const hold = await acquire(root, ONE)
+    // A scoped hold is returned by its token; releasing without one ends a durable claim instead,
+    // which is why `land-unlock` and a finishing lane are not the same call.
+    Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: hold.token! }))
+      .toBe('released')
+    const next = await acquire(root, TWO)
+    Expect(next.acquired).toBe(true)
     Expect((await LandingLock.inspect(root))?.holder).toBe(TWO)
   })
 
@@ -94,17 +97,58 @@ Describe('landing lock', () => {
     },
   )
 
-  Test('an unreadable record reads as held rather than free, so a corrupt file cannot hand out two locks', async () => {
+  Test('refuses a second worktree when the record is unreadable, rather than treating it as free', async () => {
     const root = await mkTestDir('landing-lock-corrupt')
     await acquire(root, ONE)
     await FS.writeText(FS.resolvePath('.landing-lock.json', root), 'not json at all')
-    // It cannot be parsed, so it names no holder — but it must not read as free either.
+    // The bug this pins: a truncated record once read as `free`, so a second worktree acquired it
+    // while the first was still landing. Asserting `inspect()` alone did not catch that — only
+    // attempting the acquisition does.
+    const error = await acquire(root, TWO).then(() => undefined, (caught: unknown) => caught)
+    Expect(error).toBeInstanceOf(LandingLockUnreadableError)
+    Expect(await LandingLock.inspectState(root)).toMatchObject({ kind: 'unreadable' })
+  })
+
+  Test(
+    'force-release clears a record too corrupt to name its holder, which is why a person reaches for it',
+    async () => {
+      const root = await mkTestDir('landing-lock-corrupt-force')
+      await acquire(root, ONE)
+      await FS.writeText(FS.resolvePath('.landing-lock.json', root), '{ truncated')
+      Expect(await LandingLock.forceRelease(root)).toBeUndefined()
+      Expect(await LandingLock.inspectState(root)).toMatchObject({ kind: 'free' })
+      Expect((await acquire(root, TWO)).acquired).toBe(true)
+    },
+  )
+
+  Test('counts overlapping holds in one worktree, so the first to finish cannot unlock the others', async () => {
+    const root = await mkTestDir('landing-lock-refcount')
+    // Two broad lanes in one checkout is ordinary, not exotic.
+    const laneA = await acquire(root, ONE)
+    const laneB = await acquire(root, ONE)
+    Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: laneA.token! }))
+      .toBe('still-held')
+    // Lane B is still verifying, so no other worktree may take the machine.
+    const error = await acquire(root, TWO).then(() => undefined, (caught: unknown) => caught)
+    Expect(error).toBeInstanceOf(LandingLockBusyError)
+    Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: laneB.token! }))
+      .toBe('released')
+    Expect((await acquire(root, TWO)).acquired).toBe(true)
+  })
+
+  Test('a durable claim outlives the commands that run under it, and ends only when it is unlocked', async () => {
+    const root = await mkTestDir('landing-lock-durable')
+    await LandingLock.acquire({ durable: true, label: 'land-lock', registryRoot: root, repositoryRoot: ONE })
+    // A command-scoped lane runs and finishes; the agent's own claim must survive it.
+    await LandingLock.holding({ label: 'verify', registryRoot: root, repositoryRoot: ONE }, async () => undefined)
+    Expect((await LandingLock.inspect(root))?.durable).toBe(true)
+    Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE })).toBe('released')
     Expect(await LandingLock.inspect(root)).toBeUndefined()
   })
 
   Test('holding releases only what it acquired, leaving a lock the agent took deliberately in place', async () => {
     const root = await mkTestDir('landing-lock-holding')
-    await acquire(root, ONE, 'held by the agent')
+    await LandingLock.acquire({ durable: true, label: 'held by the agent', registryRoot: root, repositoryRoot: ONE })
     await LandingLock.holding({ label: 'verify', registryRoot: root, repositoryRoot: ONE }, async () => undefined)
     // The inner run was re-entrant, so the agent's own lock survives it.
     Expect((await LandingLock.inspect(root))?.label).toBe('held by the agent')

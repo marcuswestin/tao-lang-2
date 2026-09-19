@@ -19,6 +19,13 @@ import { MachineLanes } from './MachineLanes'
  * repository root, every later command from that same root is re-entrant, and the lock survives the
  * process that took it.
  *
+ * Ownership therefore comes in two kinds, and conflating them lets one command unlock another's
+ * protection. A **durable** claim is what `land-lock` takes: it belongs to the agent, outlives
+ * every command run under it, and ends only at `land-unlock`. A **scoped** hold is what a broad
+ * lane takes for its own duration, and it is handed back by the token it was given. The record
+ * survives until no durable claim and no scoped token remain, which is what makes two concurrent
+ * lanes in one checkout safe — the first to finish returns its own token and nothing else.
+ *
  * That choice has a hard consequence, and it is deliberate: **the lock is never reclaimed
  * automatically.** A dead PID does not mean a released lock here, because the acquiring process is
  * expected to exit while the lock is still held, so process liveness proves nothing in either
@@ -40,22 +47,45 @@ import { MachineLanes } from './MachineLanes'
 /** LandingLockRecord is the whole state of the lock: who holds it, from when, and doing what. */
 export type LandingLockRecord = {
   acquiredAt: string
-  /** The worktree that holds the lock; any process from this root is re-entrant. */
+  /**
+   * True when an agent claimed the lock explicitly with `land-lock`. A durable claim outlives every
+   * command and is ended only by `land-unlock`, which is what lets one agent hold the lock across
+   * verifying and then landing.
+   */
+  durable: boolean
+  /** The worktree that holds the lock. */
   holder: string
   /** What the holder said it was doing, printed to whoever waits and to the board. */
   label: string
   /** The process that took it. Informational only: the lock is designed to outlive it. */
   pid: number
+  /**
+   * One token per command-scoped hold still running in the holding worktree. Re-entrancy is
+   * counted rather than assumed, because two broad lanes routinely run in one checkout: if the
+   * first to finish deleted the record, the second would still be verifying while another worktree
+   * took the lock. The record survives until every token is returned and no durable claim remains.
+   */
+  scopedHolds: readonly string[]
 }
 
-/** LandingLockHold is what an acquisition returns: the record, and whether this call created it. */
+/** LandingLockHold is what an acquisition returns: the record, and what this call must give back. */
 export type LandingLockHold = {
-  /** True when this call took the lock, false when the caller's worktree already held it. */
+  /** True when this call created the record rather than joining a hold its worktree already had. */
   acquired: boolean
   record: LandingLockRecord
+  /** Present for a scoped hold: the token that `release` must be given to return exactly this one. */
+  token?: string
 }
 
+/** LandingLockState is the three answers a lock file can give, which are not two. */
+export type LandingLockState =
+  | { kind: 'free' }
+  | { kind: 'held'; record: LandingLockRecord }
+  | { kind: 'unreadable'; reason: string }
+
 export type AcquireLandingLockOptions = {
+  /** Claim it durably, as `land-lock` does, rather than for the length of one command. */
+  durable?: boolean
   /** What to say the holder is doing. */
   label: string
   /** Called each time the wait is still going, with the holder and how long this call has waited. */
@@ -69,10 +99,12 @@ export type AcquireLandingLockOptions = {
 export type ReleaseLandingLockOptions = {
   registryRoot?: string
   repositoryRoot: string
+  /** Return one scoped hold. Omitted, this ends the durable claim instead. */
+  token?: string
 }
 
-/** ReleaseOutcome distinguishes a release that did something from one that had nothing to do. */
-export type ReleaseOutcome = 'not-held' | 'released'
+/** ReleaseOutcome says what the release did: freed the lock, returned one of several holds, or found none. */
+export type ReleaseOutcome = 'not-held' | 'released' | 'still-held'
 
 /**
  * Dotted on purpose. The lane registry treats every non-dotted `*.json` in this directory as a lane
@@ -101,29 +133,64 @@ export class LandingLockBusyError extends Errors.HostEnvironmentError {
   }
 }
 
+/**
+ * A lock file that cannot be read is not a lock that is free. Treating it as free is the one bug
+ * that hands two worktrees the same lock, so acquisition refuses and asks for a person.
+ */
+export class LandingLockUnreadableError extends Errors.HostEnvironmentError {
+  constructor(reason: string) {
+    super(
+      `The landing lock record exists but cannot be read (${reason}), so this cannot tell whether a `
+        + 'landing is in progress. Refusing to take the lock rather than risk two agents holding it. '
+        + 'Confirm no landing is running, then clear it with `./dev land-unlock --force`.',
+    )
+  }
+}
+
 function lockPath(registryRoot: string): string {
   return FS.resolvePath(LOCK_FILE, registryRoot)
 }
 
-async function readLock(registryRoot: string): Promise<LandingLockRecord | undefined> {
-  try {
-    const record = await FS.readJson<LandingLockRecord>(lockPath(registryRoot))
-    return isLandingLockRecord(record) ? record : undefined
-  } catch {
-    // An unreadable or truncated record must not be treated as "free": that would hand the lock to
-    // a second agent while the first still believes it holds it. It reads as held by an unnamed
-    // owner, which a person can resolve and no automatic path can make worse.
-    return undefined
+/**
+ * Read the lock as one of three answers rather than two. "No file" and "a file I cannot parse" are
+ * opposite situations — the first means nobody holds it, the second means somebody may — and
+ * collapsing them into `undefined` is what let a truncated record hand the lock to a second
+ * worktree while the first was still landing.
+ */
+async function readLockState(registryRoot: string): Promise<LandingLockState> {
+  const path = lockPath(registryRoot)
+  if (!await FS.exists(path)) {
+    return { kind: 'free' }
   }
+  let parsed: unknown
+  try {
+    parsed = await FS.readJson<unknown>(path)
+  } catch (error) {
+    return { kind: 'unreadable', reason: error instanceof Error ? error.message : 'unparsable' }
+  }
+  const record = asLandingLockRecord(parsed)
+  return record === undefined ? { kind: 'unreadable', reason: 'unrecognized shape' } : { kind: 'held', record }
 }
 
-function isLandingLockRecord(value: unknown): value is LandingLockRecord {
+function asLandingLockRecord(value: unknown): LandingLockRecord | undefined {
   if (typeof value !== 'object' || value === null) {
-    return false
+    return undefined
   }
   const record = value as Partial<LandingLockRecord>
-  return typeof record.acquiredAt === 'string' && typeof record.holder === 'string'
-    && typeof record.label === 'string' && typeof record.pid === 'number'
+  if (
+    typeof record.acquiredAt !== 'string' || typeof record.holder !== 'string'
+    || typeof record.label !== 'string' || typeof record.pid !== 'number'
+  ) {
+    return undefined
+  }
+  return {
+    acquiredAt: record.acquiredAt,
+    durable: record.durable === true,
+    holder: record.holder,
+    label: record.label,
+    pid: record.pid,
+    scopedHolds: Array.isArray(record.scopedHolds) ? record.scopedHolds.filter(h => typeof h === 'string') : [],
+  }
 }
 
 async function writeLock(registryRoot: string, record: LandingLockRecord): Promise<void> {
@@ -137,9 +204,15 @@ async function writeLock(registryRoot: string, record: LandingLockRecord): Promi
   }
 }
 
-/** Report the current holder, or undefined when the lock is free. */
+/** Report the current holder, or undefined when the lock is free or unreadable. */
 async function inspect(registryRoot = MachineLanes.registryRoot()): Promise<LandingLockRecord | undefined> {
-  return await readLock(registryRoot)
+  const state = await readLockState(registryRoot)
+  return state.kind === 'held' ? state.record : undefined
+}
+
+/** Report the lock's full state, including the unreadable case a caller may need to act on. */
+async function inspectState(registryRoot = MachineLanes.registryRoot()): Promise<LandingLockState> {
+  return await readLockState(registryRoot)
 }
 
 /**
@@ -184,35 +257,61 @@ async function claim(
   options: AcquireLandingLockOptions,
 ): Promise<{ holder: LandingLockRecord; hold?: undefined } | { holder?: undefined; hold: LandingLockHold }> {
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
-    const existing = await readLock(registryRoot)
-    if (existing !== undefined) {
-      return existing.holder === options.repositoryRoot
-        ? { hold: { acquired: false, record: existing } }
-        : { holder: existing }
+    const state = await readLockState(registryRoot)
+    if (state.kind === 'unreadable') {
+      throw new LandingLockUnreadableError(state.reason)
+    }
+    const durable = options.durable === true
+    const token = durable ? undefined : Platform.randomUUID()
+    if (state.kind === 'held') {
+      const existing = state.record
+      if (existing.holder !== options.repositoryRoot) {
+        return { holder: existing }
+      }
+      // Same worktree: join the hold rather than queue behind ourselves, and record the join so
+      // whichever command finishes first cannot release protection the others still need.
+      const record: LandingLockRecord = {
+        ...existing,
+        durable: existing.durable || durable,
+        scopedHolds: token === undefined ? existing.scopedHolds : [...existing.scopedHolds, token],
+      }
+      await writeLock(registryRoot, record)
+      return { hold: { acquired: false, record, ...(token === undefined ? {} : { token }) } }
     }
     const record: LandingLockRecord = {
       acquiredAt: new Date().toISOString(),
+      durable,
       holder: options.repositoryRoot,
       label: options.label,
       pid: Platform.runtimeProcess.pid,
+      scopedHolds: token === undefined ? [] : [token],
     }
     await writeLock(registryRoot, record)
-    return { hold: { acquired: true, record } }
+    return { hold: { acquired: true, record, ...(token === undefined ? {} : { token }) } }
   })
 }
 
 /**
- * Release the lock held by this worktree. Releasing a lock nobody holds is a no-op rather than an
- * error, so a release in a cleanup path is always safe to run; releasing someone else's is refused,
- * because that is the takeover this design does not do implicitly.
+ * Give back one hold. A scoped hold returns its token; a durable claim returns none. The record is
+ * deleted only when nothing is left holding it, which is what keeps one command from releasing the
+ * protection another command in the same worktree is still relying on.
+ *
+ * Releasing a lock nobody holds is a no-op, so a cleanup path is always safe to run; releasing
+ * another worktree's is refused, because that is the takeover this design never does implicitly.
+ * A removal that fails is reported rather than swallowed: a lock that is still on disk after a
+ * `PASS` blocks the whole machine, and that is the last thing to find out about by guessing.
  */
 async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutcome> {
   const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
-    const existing = await readLock(registryRoot)
-    if (existing === undefined) {
+    const state = await readLockState(registryRoot)
+    if (state.kind === 'free') {
       return 'not-held'
     }
+    if (state.kind === 'unreadable') {
+      throw new LandingLockUnreadableError(state.reason)
+    }
+    const existing = state.record
     if (existing.holder !== options.repositoryRoot) {
       Errors.throwUserInput(
         `The landing lock is held by ${describe(existing)}, not by this worktree, so this cannot `
@@ -220,22 +319,37 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
           + 'confirmed that landing is no longer running.',
       )
     }
-    await FS.remove(lockPath(registryRoot)).catch(() => {})
+    const remaining: LandingLockRecord = {
+      ...existing,
+      durable: options.token === undefined ? false : existing.durable,
+      scopedHolds: options.token === undefined
+        ? existing.scopedHolds
+        : existing.scopedHolds.filter(held => held !== options.token),
+    }
+    if (remaining.durable || remaining.scopedHolds.length > 0) {
+      await writeLock(registryRoot, remaining)
+      return 'still-held'
+    }
+    await FS.remove(lockPath(registryRoot))
     return 'released'
   })
 }
 
 /**
- * Release whoever holds the lock. This is the person-shaped escape hatch the automatic paths refuse
- * to be, and it returns the record it removed so the caller can say whose lock it just ended.
+ * Release whoever holds the lock, including a record too corrupt to name one. This is the
+ * person-shaped escape hatch the automatic paths refuse to be, and it returns the record it removed
+ * so the caller can say whose lock it just ended.
  */
 async function forceRelease(registryRoot = MachineLanes.registryRoot()): Promise<LandingLockRecord | undefined> {
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
-    const existing = await readLock(registryRoot)
-    if (existing !== undefined) {
-      await FS.remove(lockPath(registryRoot)).catch(() => {})
+    const state = await readLockState(registryRoot)
+    if (state.kind === 'free') {
+      return undefined
     }
-    return existing
+    // An unreadable record is exactly the case a person reaches for this command to clear, so it
+    // must delete the file rather than read past it.
+    await FS.remove(lockPath(registryRoot))
+    return state.kind === 'held' ? state.record : undefined
   })
 }
 
@@ -245,12 +359,25 @@ async function forceRelease(registryRoot = MachineLanes.registryRoot()): Promise
  * took it deliberately and expects it to still be there for the landing that follows.
  */
 async function holding<T>(options: AcquireLandingLockOptions, work: (hold: LandingLockHold) => Promise<T>): Promise<T> {
-  const hold = await acquire(options)
+  const hold = await acquire({ ...options, durable: false })
+  let failed = false
   try {
     return await work(hold)
+  } catch (error) {
+    failed = true
+    throw error
   } finally {
-    if (hold.acquired) {
-      await release({ registryRoot: options.registryRoot, repositoryRoot: options.repositoryRoot }).catch(() => {})
+    const giveBack = release({
+      repositoryRoot: options.repositoryRoot,
+      ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
+      ...(hold.token === undefined ? {} : { token: hold.token }),
+    })
+    // A failed release matters — it leaves the machine blocked — so it is only swallowed when the
+    // work itself already threw, where rethrowing it would hide the error the caller came for.
+    if (failed) {
+      await giveBack.catch(() => {})
+    } else {
+      await giveBack
     }
   }
 }
@@ -313,6 +440,7 @@ export const LandingLock = {
   describeDuration,
   forceRelease,
   holding,
+  inspectState,
   holdingForLane,
   inspect,
   release,
