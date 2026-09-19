@@ -143,6 +143,7 @@ when the index names a file that does not exist, or when two files claim the sam
 - [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — In progress
 - [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 - [DEVENV-092 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/DEVENV-092-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Candidate
+- [DEVENV-093 — `finalize` cannot consume the green evidence that `verify` records](<Developer environment upgrades/DEVENV-093-finalize-cannot-consume-the-green-evidence-that-verify-records.md>) — Candidate
 
 ### DEVENV-030 — Managed-shell command constraints
 
