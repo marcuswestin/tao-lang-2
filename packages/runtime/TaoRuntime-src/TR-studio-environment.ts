@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
@@ -382,7 +383,9 @@ function providerOverlay(
     capture: () =>
       Object.freeze({
         snapshots: Object.freeze(
-          Object.fromEntries([...state.snapshots.entries()].sort(([left], [right]) => left.localeCompare(right))),
+          Object.fromEntries(
+            Arrays.sorted([...state.snapshots.entries()], ([left], [right]) => left.localeCompare(right)),
+          ),
         ),
         version: studioStateSeedVersion,
       }),
@@ -436,9 +439,9 @@ export function capturedFixture(
     if (envelope.rows === undefined || typeof envelope.rows !== 'object') {
       throw new UserInputError('Tao Studio cannot capture an invalid provider snapshot as a fixture.')
     }
-    const entityNames = Object.keys(envelope.rows).sort().join('\0')
+    const entityNames = Arrays.sorted(Object.keys(envelope.rows)).join('\0')
     const schema = schemas.find(candidate =>
-      Object.keys(candidate.definition.entities).sort().join('\0') === entityNames
+      Arrays.sorted(Object.keys(candidate.definition.entities)).join('\0') === entityNames
     )
     if (schema === undefined) {
       throw new UserInputError('Tao Studio cannot match a provider snapshot to its data schema.')

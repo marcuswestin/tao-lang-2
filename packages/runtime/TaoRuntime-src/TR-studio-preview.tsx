@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
@@ -1759,11 +1760,13 @@ function sourceHighlightTarget(
   sourcePath: string,
   range: StudioSourceRange,
 ): StudioRenderTarget | undefined {
-  return Array.from(host.document.querySelectorAll(studioRenderSelector))
-    .map(renderTargetFromElement)
-    .filter((target): target is StudioRenderTarget => target !== undefined)
-    .filter(target => sourceRangeMatches(sourcePath, range, target.identity))
-    .sort((left, right) => sourceSpan(left.identity) - sourceSpan(right.identity))[0]
+  return Arrays.sorted(
+    Array.from(host.document.querySelectorAll(studioRenderSelector))
+      .map(renderTargetFromElement)
+      .filter((target): target is StudioRenderTarget => target !== undefined)
+      .filter(target => sourceRangeMatches(sourcePath, range, target.identity)),
+    (left, right) => sourceSpan(left.identity) - sourceSpan(right.identity),
+  )[0]
 }
 
 function renderTargetFromEvent(event: StudioPreviewPointerEvent): StudioRenderTarget | undefined {
@@ -1947,9 +1950,11 @@ function bestRenderGap(
       continue
     }
     const horizontal = renderFlowIsHorizontal(candidates)
-    const sorted = [...candidates].sort((left, right) =>
-      renderCenter(left.element.getBoundingClientRect(), horizontal)
-      - renderCenter(right.element.getBoundingClientRect(), horizontal)
+    const sorted = Arrays.sorted(
+      candidates,
+      (left, right) =>
+        renderCenter(left.element.getBoundingClientRect(), horizontal)
+        - renderCenter(right.element.getBoundingClientRect(), horizontal),
     )
     const first = sorted[0]!
     best = nearerGap(best, {

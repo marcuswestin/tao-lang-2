@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { DataControls, type TaoEntityCommandPolicy } from './TR-data'
 import { labelCorpus, primaryLabel } from './TR-interaction-labels'
 import type { Evaluable } from './TR-navigation-presentables'
@@ -329,8 +330,9 @@ export function visualOrder(nodes: readonly TaoOutlineLiveNode[]): readonly TaoO
   }
   const rows: VisualRow[] = []
   for (
-    const entry of [...anchored].sort((left, right) =>
-      left.bounds.y - right.bounds.y || left.registration - right.registration
+    const entry of Arrays.sorted(
+      anchored,
+      (left, right) => left.bounds.y - right.bounds.y || left.registration - right.registration,
     )
   ) {
     const entryBottom = entry.bounds.y + entry.bounds.height
@@ -344,10 +346,12 @@ export function visualOrder(nodes: readonly TaoOutlineLiveNode[]): readonly TaoO
     row.bottom = Math.min(row.bottom, entryBottom)
     row.nodes.push(entry)
   }
-  return [...rows]
-    .sort((left, right) => left.top - right.top)
+  return Arrays.sorted(rows, (left, right) => left.top - right.top)
     .flatMap(row =>
-      [...row.nodes].sort((left, right) => left.bounds.x - right.bounds.x || left.registration - right.registration)
+      Arrays.sorted(
+        row.nodes,
+        (left, right) => left.bounds.x - right.bounds.x || left.registration - right.registration,
+      )
     )
     .map(entry => entry.node)
 }

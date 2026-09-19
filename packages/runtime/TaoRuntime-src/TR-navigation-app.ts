@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import type { TaoDesign } from './TR-design'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
@@ -397,7 +398,7 @@ export class RuntimeAppDefinition implements Subscription {
   }
 
   back(): boolean {
-    for (const auxiliary of Object.values(this.auxiliaries).reverse()) {
+    for (const auxiliary of Arrays.reversed(Object.values(this.auxiliaries))) {
       if (this.mutateNavigation(auxiliary, () => auxiliary.back())) {
         this.browserHistory.reducerBackCompleted({
           context: this.browserContext(auxiliary),
@@ -624,8 +625,7 @@ export class RuntimeAppDefinition implements Subscription {
       return undefined
     }
     return JSON.stringify(
-      [...contexts.values()]
-        .sort((left, right) => left.id - right.id)
+      Arrays.sorted([...contexts.values()], (left, right) => left.id - right.id)
         .map(context => [context.id, context.key]),
     )
   }
@@ -667,7 +667,7 @@ export class RuntimeAppDefinition implements Subscription {
       }))
     }
     return () => {
-      for (const dispose of [...disposers].reverse()) {
+      for (const dispose of Arrays.reversed(disposers)) {
         dispose()
       }
       for (const selection of selections) {
@@ -706,10 +706,10 @@ export function runtimeAppIsRegisteredForTest(app: RuntimeAppDefinition): boolea
  */
 function appCaptureKey(app: RuntimeAppDefinition): string {
   const declaration = app.declaration.canonicalIdentity?.canonical ?? app.definition.name
-  const lanes = [
+  const lanes = Arrays.sorted([
     ['', laneCaptureIdentity(app.navigator)] as const,
     ...Object.entries(app.auxiliaries).map(([key, navigation]) => [key, laneCaptureIdentity(navigation)] as const),
-  ].sort(([left], [right]) => left.localeCompare(right))
+  ], ([left], [right]) => left.localeCompare(right))
   // The declaration stays verbatim at the front rather than nested, so the key still reads as the
   // declaration it belongs to. Both halves are JSON, which cannot carry a raw newline, so the
   // separator cannot collide with either.

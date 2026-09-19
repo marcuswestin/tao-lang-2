@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { appProviderIdentity, type TaoKeyValueStorage } from './TR-data'
 import { entityHandle } from './TR-data-entity'
@@ -276,7 +277,7 @@ export class NavigationRestorationController {
   }
 
   private unsubscribe(): void {
-    for (const unsubscribe of this.subscriptions.splice(0).reverse()) {
+    for (const unsubscribe of Arrays.reversed(this.subscriptions.splice(0))) {
       unsubscribe()
     }
   }
@@ -369,8 +370,8 @@ export class NavigationRestorationController {
 
   private restore(envelope: RestorationEnvelope): void {
     const codec = this.codec()
-    const auxiliaryNames = Object.keys(this.app.auxiliaries).sort()
-    const restoredNames = Object.keys(envelope.payload.auxiliaries).sort()
+    const auxiliaryNames = Arrays.sorted(Object.keys(this.app.auxiliaries))
+    const restoredNames = Arrays.sorted(Object.keys(envelope.payload.auxiliaries))
     RuntimeAssert.input(
       JSON.stringify(auxiliaryNames) === JSON.stringify(restoredNames),
       'Restored app auxiliaries do not match the live app.',
@@ -521,8 +522,10 @@ function snapshotValue(value: unknown, seen: Set<object>): TaoPersistedValue {
     RuntimeAssert.input(Object.getPrototypeOf(value) === Object.prototype, 'opaque runtime values do not serialize')
     return [
       'item',
-      ...Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
+      ...Arrays.sorted(
+        Object.entries(value as Record<string, unknown>),
+        ([left], [right]) => left.localeCompare(right),
+      )
         .map(([name, item]) => [name, snapshotValue(item, seen)] as const),
     ]
   } finally {

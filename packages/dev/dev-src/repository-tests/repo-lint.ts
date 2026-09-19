@@ -1,5 +1,6 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
+import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -900,6 +901,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
+  issues.push(...runtimeArrayConventionIssues(packageFiles))
   return issues
 }
 
