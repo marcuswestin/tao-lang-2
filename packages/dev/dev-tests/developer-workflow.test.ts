@@ -12,6 +12,7 @@ type FakeState = {
   conflicts: string[]
   existingBranches: string[]
   identity: string
+  configuredBranch?: string
   mainHead: string
   mergeExitCode: number
   mirrorHead?: string
@@ -106,6 +107,10 @@ function fake(overrides: Partial<FakeState> = {}) {
       if (joined === 'config user.name') {
         return result(args, spec.cwd, `${state.identity}\n`)
       }
+      if (joined === 'config tao.devBranch') {
+        const configured = state.configuredBranch ?? ''
+        return result(args, spec.cwd, configured === '' ? '' : `${configured}\n`, configured === '' ? 1 : 0)
+      }
       if (args[0] === 'switch') {
         state.branch = args.at(-1) === 'main' ? args[args.length - 2]! : args.at(-1)!
         return result(args, spec.cwd)
@@ -164,6 +169,27 @@ Describe('developer workflow', () => {
     const prefixed = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('dev/keep-as-is', prefixed.dependencies)
     Expect(prefixed.calls.map(call => call.args.join(' '))).toContain('switch --create dev/keep-as-is main')
+  })
+
+  Test('prefers tao.devBranch in Git config over the Git identity', async () => {
+    const configured = fake({
+      branch: 'local/primary',
+      configuredBranch: 'dev/ro',
+      existingBranches: ['main'],
+      identity: 'Marcus Westin',
+      worktreeBranches: [],
+    })
+    await DeveloperBranchCommand.run('', configured.dependencies)
+    Expect(configured.calls.map(call => call.args.join(' '))).toContain('switch --create dev/ro main')
+
+    const identityOnly = fake({
+      branch: 'local/primary',
+      existingBranches: ['main'],
+      identity: 'Marcus Westin',
+      worktreeBranches: [],
+    })
+    await DeveloperBranchCommand.run('', identityOnly.dependencies)
+    Expect(identityOnly.calls.map(call => call.args.join(' '))).toContain('switch --create dev/marcus main')
   })
 
   Test('says so rather than switching when the branch lives in another worktree', async () => {
