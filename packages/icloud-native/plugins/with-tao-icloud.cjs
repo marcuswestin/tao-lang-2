@@ -99,6 +99,7 @@ function withTaoICloud(config, props = {}) {
 }
 
 module.exports = withTaoICloud
+module.exports.cloudKitContainersInfoKey = cloudKitContainersInfoKey
 module.exports.iCloudEntitlements = iCloudEntitlements
 module.exports.resolveContainers = resolveContainers
 module.exports.resolveServices = resolveServices

@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { Repo } from '@shared'
-import withTaoICloud, { type TaoICloudPluginProps } from '../../icloud-native/plugins/with-tao-icloud.cjs'
+import { FS, Repo } from '@shared'
+import withTaoICloud, {
+  cloudKitContainersInfoKey,
+  type TaoICloudPluginProps,
+} from '../../icloud-native/plugins/with-tao-icloud.cjs'
 
-const cloudKitContainersInfoKey = 'TaoCloudKitContainerIdentifiers'
 const { default: expoConfigPlugins } = await import(
   Repo.resolvePath('packages/runtime-toolchain/node_modules/expo/config-plugins.js')
 )
@@ -78,6 +80,22 @@ test('Documents-only config-plugin mods do not advertise CloudKit to the native 
     'com.apple.developer.ubiquity-container-identifiers': ['iCloud.lang.tao.documents'],
   })
   expect(compiled.ios?.infoPlist).toBeUndefined()
+})
+
+test('CloudKit plugin and native guard agree on the handoff key and protect the default container', async () => {
+  const compiled = await compileICloudMods({ services: ['CloudKit'] }, {}, {})
+  expect(compiled.ios?.infoPlist).toMatchObject({
+    [cloudKitContainersInfoKey]: ['iCloud.lang.tao.notes'],
+  })
+
+  const nativeSource = await FS.readText(Repo.resolvePath('packages/icloud-native/ios/TaoCloudKitModule.swift'))
+  const nativeKey = nativeSource.match(/cloudKitContainersInfoKey = "([^"]+)"/u)?.[1]
+  expect(nativeKey).toBe(cloudKitContainersInfoKey)
+  expect(nativeSource).toContain('let defaultContainer = "iCloud.\\(bundleIdentifier)"')
+  expect(nativeSource.indexOf('guard declared.contains(defaultContainer)')).toBeGreaterThan(-1)
+  expect(nativeSource.indexOf('guard declared.contains(defaultContainer)')).toBeLessThan(
+    nativeSource.indexOf('return CKContainer.default()'),
+  )
 })
 
 async function compileICloudMods(

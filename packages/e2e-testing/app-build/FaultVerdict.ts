@@ -17,6 +17,9 @@ type PlaywrightSpec = Readonly<{ tests?: unknown; title?: unknown }>
 type PlaywrightSuite = Readonly<{ specs?: unknown; suites?: unknown }>
 type PlaywrightReport = Readonly<{ errors?: unknown; stats?: unknown; suites: readonly unknown[] }>
 
+/** The post-relaunch assertion marker shared by the authored journey and fault receipt classifier. */
+export const HNREADER_AUTHORED_RELOAD_MARKER = 'HNReader authored journey reading history survives reload'
+
 /** Classifies a deliberately faulted browser run without treating an arbitrary nonzero exit as proof. */
 export function classifyApplicationFault(
   fault: HostApplicationFault,
@@ -112,7 +115,7 @@ export function classifyNativeApplicationFault(
     return inconclusive(fault, 'Maestro did not produce a complete journey command trace.')
   }
   if (
-    receipt.status === 'passed' && journey === 'passed' && junit.failure === undefined
+    receipt.status === 'passed' && journey === 'passed' && junit.status === 'SUCCESS' && junit.failure === undefined
     && commands.every(command => command.status === 'COMPLETED')
   ) {
     return { fault, reason: 'The complete native Maestro journey passed.', status: 'escaped' }
@@ -145,10 +148,16 @@ function expectationsFor(fault: HostApplicationFault): readonly FaultExpectation
         test: 'Clockwork does not advance a concurrent browser realm',
       },
     ]
-    : [{
-      marker: 'HNReader reading history survives reload',
-      test: 'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
-    }]
+    : [
+      {
+        marker: 'HNReader reading history survives reload',
+        test: 'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
+      },
+      {
+        marker: HNREADER_AUTHORED_RELOAD_MARKER,
+        test: 'executes the authored HNReader reading-history journey through browser-visible input and reload',
+      },
+    ]
 }
 
 function targetPathFor(fault: HostApplicationFault): string {
@@ -255,7 +264,7 @@ function failedNativeCommand(command: Readonly<{ error?: unknown; exitCode: unkn
     && command.signal === null
 }
 
-function parseJUnit(value: unknown): Readonly<{ failure?: string }> | undefined {
+function parseJUnit(value: unknown): Readonly<{ failure?: string; status?: 'SUCCESS' }> | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -263,12 +272,19 @@ function parseJUnit(value: unknown): Readonly<{ failure?: string }> | undefined 
   if (cases.length !== 1) {
     return undefined
   }
-  const body = cases[0]?.[1]
+  const testcase = cases[0]
+  const attributes = testcase?.[0].match(/^<testcase(?<attributes>(?:\s[^>]*)?)(?:\/>|>)/u)?.groups?.['attributes']
+  const status = /(?:^|\s)status\s*=\s*(["'])SUCCESS\1/u.test(attributes ?? '') ? 'SUCCESS' : undefined
+  const body = testcase?.[1]
   if (body === undefined) {
-    return {}
+    return status === undefined ? {} : { status }
   }
   const failures = [...body.matchAll(/<failure(?:\s[^>]*)?>([\s\S]*?)<\/failure>/gu)]
-  return failures.length === 1 && failures[0]?.[1] !== undefined ? { failure: failures[0][1] } : undefined
+  return failures.length === 1 && failures[0]?.[1] !== undefined
+    ? { failure: failures[0][1], ...(status === undefined ? {} : { status }) }
+    : status === undefined
+    ? {}
+    : { status }
 }
 
 function maestroCommands(value: unknown): readonly MaestroCommand[] | undefined {

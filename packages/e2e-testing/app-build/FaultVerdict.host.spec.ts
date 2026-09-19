@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import {
   classifyApplicationFault,
   classifyNativeApplicationFault,
+  HNREADER_AUTHORED_RELOAD_MARKER,
   validateApplicationFaultProvenance,
 } from './FaultVerdict'
 
@@ -24,7 +25,7 @@ test('classifies only the complete Clockwork countdown failure signature as dete
           "getByText('Countdown: 0:09', { exact: true })",
         ),
       ),
-    ]),
+    ], 2),
   )
 
   expect(verdict).toEqual({
@@ -39,7 +40,8 @@ test('classifies a fully healthy HNReader report as an escaped persistence fault
     'hnreader-reading-history-no-write',
     report([
       passed('opens a story, returns through browser-visible navigation, and keeps reading history after reload'),
-    ]),
+      passed('executes the authored HNReader reading-history journey through browser-visible input and reload'),
+    ], 0),
   )
 
   expect(verdict).toEqual({
@@ -49,7 +51,7 @@ test('classifies a fully healthy HNReader report as an escaped persistence fault
   })
 })
 
-test('detects the named HNReader reload assertion through nested Playwright suites', () => {
+test('detects both named HNReader reload assertions through nested Playwright suites', () => {
   const verdict = classifyApplicationFault(
     'hnreader-reading-history-no-write',
     nestedReport([
@@ -57,10 +59,38 @@ test('detects the named HNReader reload assertion through nested Playwright suit
         'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
         playwrightFailure('HNReader reading history survives reload', "getByText('2 opened', { exact: true })"),
       ),
-    ]),
+      failed(
+        'executes the authored HNReader reading-history journey through browser-visible input and reload',
+        playwrightFailure(HNREADER_AUTHORED_RELOAD_MARKER, "getByText('2 opened', { exact: true })"),
+      ),
+    ], 2),
   )
 
-  expect(verdict.status).toBe('detected')
+  expect(verdict).toEqual({
+    fault: 'hnreader-reading-history-no-write',
+    reason: 'Every named healthy assertion failed with its expected marker.',
+    status: 'detected',
+  })
+})
+
+test('rejects a partial HNReader fault signature when either legacy or authored reload coverage passes', () => {
+  const legacyFailure = failed(
+    'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
+    playwrightFailure('HNReader reading history survives reload', "getByText('2 opened', { exact: true })"),
+  )
+  const authoredFailure = failed(
+    'executes the authored HNReader reading-history journey through browser-visible input and reload',
+    playwrightFailure(HNREADER_AUTHORED_RELOAD_MARKER, "getByText('2 opened', { exact: true })"),
+  )
+
+  for (
+    const tests of [
+      [legacyFailure, passed(authoredFailure.title)],
+      [passed(legacyFailure.title), authoredFailure],
+    ]
+  ) {
+    expect(classifyApplicationFault('hnreader-reading-history-no-write', report(tests, 1)).status).toBe('inconclusive')
+  }
 })
 
 test('classifies unrelated failures and reporter errors as inconclusive', () => {
@@ -71,8 +101,12 @@ test('classifies unrelated failures and reporter errors as inconclusive', () => 
         'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
         playwrightFailure('HNReader reading history survives reload', "getByText('2 opened', { exact: true })"),
       ),
+      failed(
+        'executes the authored HNReader reading-history journey through browser-visible input and reload',
+        playwrightFailure(HNREADER_AUTHORED_RELOAD_MARKER, "getByText('2 opened', { exact: true })"),
+      ),
       failed('Clockwork remains healthy', 'Unexpected browser assertion'),
-    ]),
+    ], 3),
   )
   const global = classifyApplicationFault('hnreader-reading-history-no-write', {
     ...report([
@@ -80,12 +114,40 @@ test('classifies unrelated failures and reporter errors as inconclusive', () => 
         'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
         playwrightFailure('HNReader reading history survives reload', "getByText('2 opened', { exact: true })"),
       ),
-    ]),
+      failed(
+        'executes the authored HNReader reading-history journey through browser-visible input and reload',
+        playwrightFailure(HNREADER_AUTHORED_RELOAD_MARKER, "getByText('2 opened', { exact: true })"),
+      ),
+    ], 2),
     errors: [{ message: 'Browser launch failed' }],
   })
 
   expect(unrelated.status).toBe('inconclusive')
   expect(global.status).toBe('inconclusive')
+})
+
+test('requires a complete nonnegative Playwright unexpected count that matches the failed assertions', () => {
+  const failedReload = failed(
+    'opens a story, returns through browser-visible navigation, and keeps reading history after reload',
+    playwrightFailure('HNReader reading history survives reload', "getByText('2 opened', { exact: true })"),
+  )
+  const failedAuthoredReload = failed(
+    'executes the authored HNReader reading-history journey through browser-visible input and reload',
+    playwrightFailure(HNREADER_AUTHORED_RELOAD_MARKER, "getByText('2 opened', { exact: true })"),
+  )
+  const reports = [
+    {
+      errors: [],
+      suites: [{ specs: [failedReload, failedAuthoredReload].map(test => ({ tests: [test], title: test.title })) }],
+    },
+    reportWithStats([failedReload, failedAuthoredReload], { unexpected: '2' }),
+    reportWithStats([failedReload, failedAuthoredReload], { unexpected: -1 }),
+    reportWithStats([failedReload, failedAuthoredReload], { unexpected: 0 }),
+  ]
+
+  for (const browserReport of reports) {
+    expect(classifyApplicationFault('hnreader-reading-history-no-write', browserReport).status).toBe('inconclusive')
+  }
 })
 
 test('rejects a marker and locator that appear only in an adjacent Playwright codeframe', () => {
@@ -107,7 +169,7 @@ test('rejects a marker and locator that appear only in an adjacent Playwright co
           "getByText('Countdown: 0:09', { exact: true })",
         ),
       ),
-    ]),
+    ], 2),
   )
 
   expect(verdict.status).toBe('inconclusive')
@@ -129,13 +191,13 @@ test('rejects a failed Clockwork control receipt whose next line names the count
           "getByText('Countdown: 0:09', { exact: true })",
         ),
       ),
-    ]),
+    ], 2),
   )
 
   expect(verdict.status).toBe('inconclusive')
 })
 
-test('rejects fault provenance whose generated target does not match the requested mutation', () => {
+test('rejects browser fault provenance that names a different generated target', () => {
   const verdict = validateApplicationFaultProvenance('clockwork-countdown-frozen', {
     expectedVisibleAssertion: 'Countdown: 0:09',
     kind: 'clockwork-countdown-frozen',
@@ -146,6 +208,43 @@ test('rejects fault provenance whose generated target does not match the request
 
   expect(verdict).toEqual({
     reason: 'The isolated build fault target does not match the browser assertion contract.',
+    status: 'invalid',
+  })
+})
+
+test('rejects browser fault provenance whose kind or visible assertion does not match the requested mutation', () => {
+  const wrongKind = validateApplicationFaultProvenance('clockwork-countdown-frozen', {
+    ...provenance('clockwork-countdown-frozen'),
+    kind: 'hnreader-reading-history-no-write',
+  })
+  const wrongAssertion = validateApplicationFaultProvenance('clockwork-countdown-frozen', {
+    ...provenance('clockwork-countdown-frozen'),
+    expectedVisibleAssertion: '2 opened after reload',
+  })
+
+  expect(wrongKind).toEqual({ reason: 'The isolated build recorded a different fault kind.', status: 'invalid' })
+  expect(wrongAssertion).toEqual({
+    reason: 'The isolated build fault target does not match the browser assertion contract.',
+    status: 'invalid',
+  })
+})
+
+test('rejects browser fault provenance with malformed or unchanged artifact digests', () => {
+  const malformed = validateApplicationFaultProvenance('clockwork-countdown-frozen', {
+    ...provenance('clockwork-countdown-frozen'),
+    originalDigest: 'not-a-sha256',
+  })
+  const unchanged = validateApplicationFaultProvenance('clockwork-countdown-frozen', {
+    ...provenance('clockwork-countdown-frozen'),
+    replacementDigest: '0'.repeat(64),
+  })
+
+  expect(malformed).toEqual({
+    reason: 'The isolated build fault provenance has invalid content digests.',
+    status: 'invalid',
+  })
+  expect(unchanged).toEqual({
+    reason: 'The isolated build fault did not change its generated artifact digest.',
     status: 'invalid',
   })
 })
@@ -211,6 +310,29 @@ test('classifies a complete native Maestro pass as an escaped fault and missing 
   expect(missingProvenance.status).toBe('inconclusive')
 })
 
+test('requires an explicit Maestro JUnit SUCCESS status for an otherwise complete native pass', () => {
+  const receipt = nativeReceipt('clockwork-countdown-frozen', 'passed', undefined, [
+    command('expo', [], 0),
+    command('maestro', ['test', '/flows/clockwork.yaml'], 0),
+  ])
+  const evidence = {
+    commands: [assertVisible('COMPLETED', 'Countdown: 0:09')],
+    receipt,
+  }
+
+  for (
+    const junit of [
+      '<testsuite><testcase/></testsuite>',
+      '<testsuite><testcase status="FAILED"/></testsuite>',
+      '<testsuite><testcase status="success"/></testsuite>',
+      '<testsuite><testcase></testcase></testsuite>',
+    ]
+  ) {
+    expect(classifyNativeApplicationFault('clockwork-countdown-frozen', { ...evidence, junit }).status)
+      .toBe('inconclusive')
+  }
+})
+
 test('rejects an HNReader failure without the matching post-kill app launch', () => {
   const verdict = classifyNativeApplicationFault('hnreader-reading-history-no-write', {
     commands: [
@@ -257,18 +379,26 @@ test('rejects generic timeouts and command records that only resemble the expect
   expect(wrongShape.status).toBe('inconclusive')
 })
 
-function report(tests: readonly ReturnType<typeof passed>[]): object {
+function report(tests: readonly ReturnType<typeof passed>[], unexpected: number): object {
   return {
     errors: [],
-    stats: { unexpected: tests.filter(test => test.status === 'unexpected').length },
+    stats: { unexpected },
     suites: [{ specs: tests.map(test => ({ tests: [test], title: test.title })) }],
   }
 }
 
-function nestedReport(tests: readonly ReturnType<typeof passed>[]): object {
+function reportWithStats(tests: readonly ReturnType<typeof passed>[], stats: object): object {
   return {
     errors: [],
-    stats: { unexpected: tests.filter(test => test.status === 'unexpected').length },
+    stats,
+    suites: [{ specs: tests.map(test => ({ tests: [test], title: test.title })) }],
+  }
+}
+
+function nestedReport(tests: readonly ReturnType<typeof passed>[], unexpected: number): object {
+  return {
+    errors: [],
+    stats: { unexpected },
     suites: [{ suites: [{ specs: tests.map(test => ({ tests: [test], title: test.title })) }] }],
   }
 }

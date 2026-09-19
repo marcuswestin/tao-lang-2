@@ -109,6 +109,19 @@ public final class TaoCloudKitModule: Module {
       }
       return CKContainer(identifier: requested)
     }
+    guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+      throw Exception(
+        name: "CloudKitConfigurationMissing",
+        description: "CloudKit sync cannot derive this app's default iCloud container because the bundle has no identifier.",
+      )
+    }
+    let defaultContainer = "iCloud.\(bundleIdentifier)"
+    guard declared.contains(defaultContainer) else {
+      throw Exception(
+        name: "CloudKitConfigurationMissing",
+        description: "CloudKit sync needs the app's default iCloud container declared by tao-icloud-native before it can use CKContainer.default().",
+      )
+    }
     return CKContainer.default()
   }
 

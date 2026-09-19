@@ -45,10 +45,8 @@ export type Session = Readonly<{
   dispose: () => void
 }>
 
-/** A host-neutral invalid-session error that callers can classify without a platform dependency. */
-export class InputError extends Error {
-  override readonly name = 'EffectsInputError'
-}
+/** Invalid effect-control values use the platform's dependency-free range error. */
+export const InputError = RangeError
 
 /**
  * Creates a deterministic session against an injected clock. The caller may own several sessions

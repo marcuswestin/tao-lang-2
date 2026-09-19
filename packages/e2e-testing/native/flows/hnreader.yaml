@@ -14,6 +14,7 @@ appId: ${TAO_HOST_TEST_APP}
       visible: "Open"
     commands:
       - tapOn: "Open"
+- assertVisible: "Control received: advance 1000ms"
 - tapOn: "Why local-first sync wins"
 - assertVisible: "No comments yet"
 - tapOn: "Back"

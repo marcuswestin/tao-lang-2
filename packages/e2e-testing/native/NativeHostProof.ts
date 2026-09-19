@@ -10,6 +10,8 @@ type NativeHostDevice = {
   target: 'device' | 'simulator'
 }
 
+type NativeFlow = 'flows/clockwork.yaml' | 'flows/hnreader.yaml' | 'flows/reset.yaml'
+
 /** The browser/build owner supplies an isolated Expo project and its content identity. */
 type PreparedHostApp = {
   appId: string
@@ -58,7 +60,7 @@ export type NativeHostProofReceipt = {
   version: 1
 }
 
-const flowFor: Record<NativeHostSubject, string> = {
+const flowFor: Record<NativeHostSubject, NativeFlow> = {
   clockwork: 'flows/clockwork.yaml',
   hnreader: 'flows/hnreader.yaml',
 }
@@ -305,7 +307,7 @@ export async function runNativeHostProof(options: NativeHostProofOptions): Promi
       '--device',
       options.device.id,
       'test',
-      FS.resolvePath('flows/reset.yaml', moduleRoot()),
+      nativeFlowPath('flows/reset.yaml'),
       '--test-output-dir',
       FS.resolvePath('reset-artifacts', root),
       '--debug-output',
@@ -328,7 +330,7 @@ export async function runNativeHostProof(options: NativeHostProofOptions): Promi
       status: 'failed',
     })
   }
-  const flow = FS.resolvePath(flowFor[options.subject], moduleRoot())
+  const flow = nativeFlowPath(flowFor[options.subject])
   const run = await commandReceipt(
     'maestro',
     [
@@ -474,8 +476,12 @@ async function writeReceipt(
   return receipt
 }
 
-function moduleRoot(): string {
-  return FS.resolvePath('packages/e2e-testing/native')
+/** Resolves Maestro flow declarations from the worktree, independent of the isolated build cwd. */
+export function nativeFlowPath(
+  flow: NativeFlow,
+  cwd?: string,
+): string {
+  return Repo.resolvePath(`packages/e2e-testing/native/${flow}`, cwd)
 }
 
 async function canonicalDirectory(path: string): Promise<string | undefined> {

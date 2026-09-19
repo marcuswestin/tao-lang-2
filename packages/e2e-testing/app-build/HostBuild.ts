@@ -159,7 +159,7 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
     await FS.copyFile(FS.resolvePath(file, runtimeToolchainRoot), FS.resolvePath(file, root))
   }
 }
-function hostEntrypoint(repositoryRoot: string): string {
+export function hostEntrypoint(repositoryRoot: string): string {
   const nativeControl = FS.resolvePath(
     'packages/runtime/TaoRuntime-src/host-testing/NativeHostTestControl.ts',
     repositoryRoot,
@@ -168,11 +168,11 @@ function hostEntrypoint(repositoryRoot: string): string {
     'packages/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
     repositoryRoot,
   )
-  return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType } from 'react'\nimport { Platform, Text, View } from 'react-native'\nimport { installNativeHostTestControl } from ${
+  return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType, useEffect, useState } from 'react'\nimport { Platform, Text, View } from 'react-native'\nimport { installNativeHostTestControl } from ${
     JSON.stringify(nativeControl)
   }\nimport { installRuntimeHostTestControl } from ${
     JSON.stringify(runtimeControl)
-  }\nimport config from './HostTestConfig.json'\n\nconst environment = installRuntimeHostTestControl(config)\nif (Platform.OS !== 'web') {\n  void installNativeHostTestControl(environment).ready\n}\n\nconst generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }\nconst readiness = \`Host ready: run \${config.runId} · seed \${config.seed}\`\nconst HostApp: ComponentType = () => config.subject === 'hnreader'\n  ? createElement(View, { style: { flex: 1 } }, createElement(Text, { accessibilityLabel: readiness, testID: 'tao-host-ready' }, readiness), createElement(generatedApp.default))\n  : createElement(generatedApp.default)\n\nregisterRootComponent(HostApp)\n`
+  }\nimport config from './HostTestConfig.json'\n\nconst environment = installRuntimeHostTestControl(config)\nlet latestNativeControlReceipt: string | undefined\nlet publishNativeControlReceipt: ((receipt: string) => void) | undefined\nconst nativeControl = Platform.OS === 'web'\n  ? undefined\n  : installNativeHostTestControl(environment, {\n    onAdvance(snapshot) {\n      const advanceMs = snapshot.lastControlAdvanceMs\n      if (advanceMs === undefined) {\n        return\n      }\n      latestNativeControlReceipt = \`Control received: advance \${advanceMs}ms\`\n      publishNativeControlReceipt?.(latestNativeControlReceipt)\n    },\n  })\nif (nativeControl !== undefined) {\n  void nativeControl.ready\n}\n\nconst generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }\nconst readiness = \`Host ready: run \${config.runId} · seed \${config.seed}\`\nconst HostApp: ComponentType = () => {\n  const [nativeControlReceipt, setNativeControlReceipt] = useState(latestNativeControlReceipt)\n  useEffect(() => {\n    const publish = (receipt: string): void => setNativeControlReceipt(receipt)\n    publishNativeControlReceipt = publish\n    if (latestNativeControlReceipt !== undefined) {\n      publish(latestNativeControlReceipt)\n    }\n    return () => {\n      if (publishNativeControlReceipt === publish) {\n        publishNativeControlReceipt = undefined\n      }\n    }\n  }, [])\n  if (config.subject !== 'hnreader') {\n    return createElement(generatedApp.default)\n  }\n  return createElement(\n    View,\n    { style: { flex: 1 } },\n    createElement(Text, { accessibilityLabel: readiness, testID: 'tao-host-ready' }, readiness),\n    nativeControlReceipt === undefined\n      ? null\n      : createElement(\n        Text,\n        { accessibilityLabel: nativeControlReceipt, testID: 'tao-host-control-receipt' },\n        nativeControlReceipt,\n      ),\n    createElement(generatedApp.default),\n  )\n}\n\nregisterRootComponent(HostApp)\n`
 }
 function hostAppConfig(appId: string, runId: string): string {
   return `${

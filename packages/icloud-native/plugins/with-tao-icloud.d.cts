@@ -13,6 +13,9 @@ export type TaoICloudPluginProps = {
   services?: readonly TaoICloudService[]
 }
 
+/** Info.plist handoff consumed by the native CloudKit launch guard. */
+export const cloudKitContainersInfoKey: 'TaoCloudKitContainerIdentifiers'
+
 /** iCloudEntitlements merges the iCloud entitlements for the given services into a plist. */
 export function iCloudEntitlements(
   entitlements: Record<string, unknown>,
