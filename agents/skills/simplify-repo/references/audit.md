@@ -1,20 +1,24 @@
 # What `./agent simplify-audit` measures
 
-All counts exclude tests, generated `_gen_*` trees, `.artifacts/`, and `node_modules/`.
+`packages/dev/dev-src/simplify-audit/` owns it. Source counts cover tracked package TypeScript and
+exclude tests, declaration files, and generated `_gen_*` trees.
 
 1. Source lines per package, and every file over 800 lines.
-2. `Switch.*` uses, raw `switch` statements, and if/else-if chains over one `.kind`, `.type`, or
-   `.$type` discriminant, per package with `file:line` for each chain.
-3. `if` conditions holding two or more logical operators, per package. A review list, not a gate.
-4. `repo-lint` allowlist entries per rule.
-5. Identifiers declared at module scope in two or more files, and constants with identical values.
+2. `Switch` calls, native `switch` statements, and chains of three or more branches over one
+   `.kind`, `.type`, or `.$type`, with `file:line` for each chain. `repo-lint` gates the chains
+   through `KIND_CHAIN_ALLOWLIST`, which only shrinks.
+3. `if` conditions holding two or more logical operators on one line. A review list, not a gate.
+4. `repo-lint` allowlist entries per convention rule.
+5. Module-scope constants declared with one name and one literal in several files.
 6. Cross-package import counts, as a `from → to (n)` graph.
-7. Instruction lines: each `AGENTS.md`, each `SKILL.md` and reference file, each subagent profile,
-   against the budgets.
-8. `Docs/` Markdown lines and file counts per subtree, and live roadmap documents untouched for 60
-   days.
-9. Rules stated in more than one instruction file are not measurable by count; find them with a
-   read-only scout and list them in the plan.
+7. Lines per instruction file, marked where over budget.
+8. `Docs/` Markdown lines and file counts per subtree.
+
+What it cannot measure, so a read-only scout finds it and the plan lists it:
+
+- Rules stated in more than one instruction file, and prose restating an existing gate.
+- Near-duplicate functions under different names, and families that differ by one parameter.
+- Roadmap documents whose work has landed.
 
 Name-level duplication was largely spent by the first runs. Expect the remaining savings inside
 large files and across the Studio–runtime seam, which items 1, 2, and 6 point at.

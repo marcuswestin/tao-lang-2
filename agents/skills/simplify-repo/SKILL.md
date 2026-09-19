@@ -17,8 +17,8 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 ## Sequence
 
 1. Read the previous runs' plans and `git log -i --grep=simplif` so the pass builds on them.
-2. Run `./agent simplify-audit` for the baseline. Until it exists, building it is the first slice;
-   `references/audit.md` lists what it measures.
+2. Run `./agent simplify-audit` for the baseline; `--json` lists every row. `references/audit.md`
+   says what it measures and what it cannot.
 3. Find concurrent work with `./agent board`, read each branch's touched paths, and write them into
    the plan as fences. Files several branches edit belong to the orchestrator alone.
 4. Propose the top five projects from the audit, plus other focuses the numbers suggest, and settle

@@ -1,27 +1,26 @@
 # Plan - Repository simplification 2
 
-Status: planned, not started. Decisions settled with Ro on 2026-09-19. The `simplify-repo` skill
+Status: Wave 0 landed; Wave 1 not started. Decisions settled with Ro on 2026-09-19. The `simplify-repo` skill
 owns the repeatable method; this document owns this run: its baseline, fences, waves, and ledger.
 
 The first pass is archived at `Docs/Roadmap/Archive/Repository simplification/`. It and its three
 follow-ups took dead exports, name-level duplicate helpers, typed errors, the Studio wire contract,
 and the `repo-lint` convention table. Its Documentation and Command-surface parts never started.
 
-## Baseline (2026-09-19, non-test, non-generated)
+## Baseline
 
-| Measure                                              | Value                                  |
-| ---------------------------------------------------- | -------------------------------------- |
-| Source lines under `packages/`                       | ~157,000                               |
-| Largest packages                                     | studio 38.0k, dev 30.1k, runtime 28.5k |
-| Files over 1,000 lines                               | 25                                     |
-| `Switch.*` uses / raw `switch` / if-else-if chains   | 71 / 1 / 29 chains, 136 branches       |
-| `if` conditions with two or more logical operators   | 288                                    |
-| `repo-lint` allowlist entries                        | ~150                                   |
-| Instruction lines (`AGENTS.md` ×3, skills, profiles) | ~1,570                                 |
-| `Docs/` Markdown                                     | 32,800 lines, 219 files                |
-| Packages                                             | 20                                     |
+`./agent simplify-audit` on 2026-09-19, non-test and non-generated:
 
-Wave 0 replaces these hand measurements with `./agent simplify-audit` output.
+| Measure                                             | Value                                  |
+| --------------------------------------------------- | -------------------------------------- |
+| Source lines under `packages/`                      | 141,135 in 20 packages                 |
+| Largest packages                                    | studio 40.5k, runtime 30.8k, dev 18.3k |
+| Files over 800 lines                                | 29                                     |
+| `Switch` calls / native `switch` / chains           | 101 / 1 / 28 chains in 23 files        |
+| `if` conditions with two or more logical operators  | 377                                    |
+| `repo-lint` allowlist entries                       | 145, plus 23 chain files               |
+| Instruction lines (`AGENTS.md` files and `agents/`) | 1,761                                  |
+| `Docs/` Markdown                                    | 33,001 lines                           |
 
 ## Decisions
 
@@ -36,7 +35,7 @@ Wave 0 replaces these hand measurements with `./agent simplify-audit` output.
 3. Patterns
    - a. Dispatch on `.kind`, `.type`, `.$type`, or a literal union uses `Switch.*`. If/else-if chains
      over one discriminant are linted at zero tolerance with an allowlist. This settles the policy
-     `packages/AGENTS.md` deferred; `kind-chain-demo.ts` becomes the gate.
+     `packages/AGENTS.md` deferred; the measurer that was `kind-chain-demo.ts` is now the gate.
    - b. A condition gets a name when it mixes `&&` with `||`, negates a group, or appears twice:
      `Tasks.isOwnedOrRecent(task)` when a namespace owns the concept, `isOwnedOrRecentTask(task)`
      otherwise. Shape guards become shared guards such as `Json.isRecord`. Review-only, not linted.
@@ -127,4 +126,8 @@ Shared-edit files (`AGENTS.md`, `Justfile`, `dev.ts`, `agent-dev.ts`, `tsconfig.
 
 ## Ledger
 
-Record per wave: commit, non-test source lines, instruction lines, allowlist entries, defects fixed.
+Record per wave: non-test source lines, instruction lines, allowlist entries, defects fixed.
+
+| Wave | Source lines | Instruction lines | Allowlist entries | Chain files | Defects fixed |
+| ---- | ------------ | ----------------- | ----------------- | ----------- | ------------- |
+| 0    | 141,135      | 1,761             | 145               | 23          | none          |

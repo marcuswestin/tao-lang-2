@@ -347,6 +347,16 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('simplify-audit')
+    .description('Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs.')
+    .option('--json', 'Print the full structured report instead of the summary tables.')
+    .action(async (options: { json?: boolean } = {}) => {
+      // Loaded lazily: the audit counts `repo-lint`'s allowlists, and `repo-lint` reaches `@studio`.
+      const { SimplifyAuditCommand } = await import('./simplify-audit/SimplifyAuditCommand')
+      Platform.runtimeProcess.exit(await SimplifyAuditCommand.run({ json: options.json === true }))
+    })
+
+  commands
     .command('doctor')
     .description('Diagnose this checkout without changing it.')
     .option('--json', 'Print a versioned structured report instead of PASS/WARN/FAIL lines.')

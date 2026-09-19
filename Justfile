@@ -324,6 +324,11 @@ capabilities *ARGS:
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
 
+# Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
+[group('Report')]
+simplify-audit *ARGS:
+    ./dev simplify-audit {{ ARGS }}
+
 # Benchmark cold and steady-state language-service performance
 [group('Report')]
 bench iterations="10":
