@@ -237,6 +237,23 @@ Describe('ProcessTree', () => {
     Expect(signalled).toEqual([[4_001]])
   })
 
+  Test("signalTracked still signals a descendant that exec'd since the snapshot", () => {
+    // A shell backgrounding `sleep 300` reports the PID between the fork and the exec, so a tracked
+    // descendant is routinely captured under the shell's own name and reads back under the command
+    // it became. Treating that as a different process left the runaway alive — the exact failure
+    // this module exists to prevent, and it widened with load, which is when it mattered most.
+    const tracked: TrackedProcess[] = [{ command: 'bash', pid: 4_003, startedAt: '100:0' }]
+    const signalled: number[][] = []
+
+    ProcessTree.signalTracked(tracked, 'SIGTERM', {
+      // Same PID, same start time, the name it took at exec.
+      identities: () => new Map([[4_003, { command: 'coreutils', pid: 4_003, startedAt: '100:0' }]]),
+      signal: pids => signalled.push([...pids]),
+    })
+
+    Expect(signalled).toEqual([[4_003]])
+  })
+
   Test('signalTracked signals nothing when no tracked identity is still present', () => {
     const signalled: number[][] = []
 

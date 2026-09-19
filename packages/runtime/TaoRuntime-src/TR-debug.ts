@@ -21,7 +21,7 @@ import { Clock } from './TR-units'
  * the gate returns without awaiting, so an instrumented body runs as an uninstrumented one would.
  */
 
-export type { TaoDebugEvent, TaoDebugJournalEntry, TaoDebugPause, TaoDebugStep } from './TR-debug-journal'
+export type { TaoDebugEvent, TaoDebugPause, TaoDebugStep } from './TR-debug-journal'
 
 type StepMode = 'continue' | 'over' | 'into' | 'out'
 

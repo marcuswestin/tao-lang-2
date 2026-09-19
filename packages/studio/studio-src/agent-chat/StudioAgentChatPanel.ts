@@ -37,7 +37,7 @@ type TurnResult = {
   }[]
 }
 
-export type AgentChatHistoryItem =
+type AgentChatHistoryItem =
   | { role: 'user'; text: string }
   | {
     role: 'assistant'

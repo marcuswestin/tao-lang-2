@@ -25,12 +25,12 @@ import { createHash, randomUUID } from 'node:crypto'
  * unparsable record file loses its own skip and nothing else, and never fails a lane.
  *
  * A lane accepts its own record and the records of lanes whose gate membership is a superset of its
- * own: a green `full-verify` at this tree is also a green `verify`. It never accepts a subset, and
- * `--fresh` ignores every record.
+ * own: a green `verify-full` at this tree is also a green `verify`. It never accepts a subset, and
+ * `--no-cache` ignores every record.
  *
  * The same run also records each gate it proved, under its own name. A lane that no whole-lane
  * record covers still skips the gates another lane already proved at this exact tree, which is what
- * keeps `full-verify` from running the package gates a `verify --complete` has just run over the
+ * keeps `verify-full` from running the package gates a `verify --complete` has just run over the
  * same bytes. Two kinds of gate are never recorded, and this module does not decide which gates
  * those are — the caller declares them, because the gate table owns that fact:
  *

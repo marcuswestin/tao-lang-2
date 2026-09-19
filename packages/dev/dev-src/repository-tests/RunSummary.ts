@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, HCI } from '@shared'
 import { OutputText } from '../cli/OutputText'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
@@ -63,6 +63,11 @@ export type GateResult = {
   status: GateStatus
   /** The suite a sharded test node reports under; absent for a node that is not a test shard. */
   suite?: string
+  /**
+   * Test IDs this node failed on that the flake ledger accounted for. Present only on a node whose
+   * every failure was one of them, which is the node reported `passed` despite a non-zero exit.
+   */
+  tolerated?: readonly string[]
   /** What held this node before it started, longest reason first; absent for one that never waited. */
   waits?: readonly ScheduleWait[]
 }
@@ -83,8 +88,24 @@ export type GateSummary = {
   /** What the schedule achieved and where it lost time; absent for a run that did not schedule. */
   schedule?: ScheduleReport
   status: 'failed' | 'passed'
+  /**
+   * Tests this run failed on and declined to fail the lane for, each with the recorded history that
+   * earned it. Absent when nothing was demoted; never empty, because an empty list would read as a
+   * finding rather than as its absence.
+   */
+  toleratedFlakes?: readonly ToleratedFlakeReport[]
   version: 2
   warnings: readonly string[]
+}
+
+/** ToleratedFlakeReport is one demoted test as the summary artifact publishes it. */
+export type ToleratedFlakeReport = {
+  /** The recorded history that demoted it, in one line. */
+  evidence: string
+  file: string
+  id: string
+  /** The node that failed on it. */
+  node: string
 }
 
 /** BuildSummaryOptions describes the finished run being rolled up. */
@@ -106,6 +127,12 @@ export type BuildSummaryOptions = {
   states: readonly WorkState[]
   /** The suite each node reports under, for a lane whose nodes are test shards. */
   suiteOf?: (name: string) => string | undefined
+  /**
+   * Tests the flake ledger accounted for, grouped by the node they failed in. A node listed here
+   * exited non-zero and is reported `passed` anyway — so it is reported with the tests that bought
+   * it that verdict, and the lane's verdict line says the lane leaned on them.
+   */
+  toleratedFlakes?: readonly ToleratedFlakeReport[]
 }
 
 const FAILURE_OUTPUT_LINES = 40
@@ -210,10 +237,15 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */
 export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const declaredSkips = options.declaredSkips ?? []
+  const toleratedFlakes = options.toleratedFlakes ?? []
+  const toleratedByNode = new Map<string, string[]>()
+  for (const flake of toleratedFlakes) {
+    toleratedByNode.set(flake.node, [...toleratedByNode.get(flake.node) ?? [], flake.id])
+  }
   const results = new Map<string, GateResult>(
     options.states.map(state => {
       const suite = options.suiteOf?.(state.name)
-      const result = nodeResult(state, options.expectedMs, options.contention)
+      const result = tolerate(nodeResult(state, options.expectedMs, options.contention), toleratedByNode)
       return [state.name, suite === undefined ? result : { ...result, suite }]
     }),
   )
@@ -238,9 +270,56 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
     logRoot: options.logRoot,
     schedule: options.schedule,
     status: options.interrupted === true || ordered.some(result => result.status === 'failed') ? 'failed' : 'passed',
+    toleratedFlakes: toleratedFlakes.length === 0 ? undefined : toleratedFlakes,
     version: SUMMARY_VERSION,
-    warnings: [...contentionWarnings(ordered, options.contention), ...collectWarnings(options.states)],
+    warnings: [
+      ...toleranceWarnings(toleratedFlakes),
+      ...contentionWarnings(ordered, options.contention),
+      ...collectWarnings(options.states),
+    ],
   }
+}
+
+/**
+ * tolerate turns a node whose every failure the ledger accounted for into a pass that still carries
+ * its non-zero exit code and names what it failed on. The exit code is deliberately kept: a reader
+ * who finds `passed` beside `exit 1` should be able to see immediately that a judgment was made.
+ */
+function tolerate(result: GateResult, toleratedByNode: ReadonlyMap<string, readonly string[]>): GateResult {
+  const tolerated = toleratedByNode.get(result.name)
+  if (tolerated === undefined || result.status !== 'failed') {
+    return result
+  }
+  return {
+    ...result,
+    failureKind: undefined,
+    reason: `failed only on ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}: ${
+      tolerated.join(', ')
+    }`,
+    status: 'passed',
+    tolerated,
+  }
+}
+
+/**
+ * The warning a demoted lane owes its reader, first in the list because it is the one that changes
+ * what the verdict above it means. Each test is named with the history that demoted it, so the
+ * judgment can be disagreed with rather than merely noticed.
+ *
+ * Exported because the test lane prints no gate rollup and therefore never reaches
+ * `formatGateSummary`, which is where every other lane's reader is handed these lines. It prints
+ * them itself, from here, so the two lanes owe their readers the same words.
+ */
+export function toleranceWarnings(tolerated: readonly ToleratedFlakeReport[]): string[] {
+  if (tolerated.length === 0) {
+    return []
+  }
+  return [
+    `${tolerated.length} recorded flake${tolerated.length === 1 ? '' : 's'} failed in this run and did not fail it:`,
+    ...tolerated.map(flake => `  ${flake.id} (in ${flake.node}) — ${flake.evidence}`),
+    '  see the full history with ./agent report-test-stats; editing the test file withdraws its tolerance,'
+    + ' and so does failing three runs in a row',
+  ]
 }
 
 /**
@@ -292,8 +371,39 @@ export function skippedResult(entry: string): GateResult {
   return { elapsedMs: 0, name: name!, reason, status: 'skipped' }
 }
 
-/** formatGateSummary renders the rollup a run ends with. */
-export function formatGateSummary(summary: GateSummary): string {
+/**
+ * VerdictOptions decides how the verdict line is rendered. Color is passed in rather than sensed
+ * here: the formatter returns a string its caller may write to a terminal, a pipe, or a log file,
+ * and only the caller knows which. `WorkReporter.colorizes` is the one place that decides.
+ */
+export type VerdictOptions = {
+  /** Paint the verdict green or red. Off by default, so nothing writes escape codes by accident. */
+  color?: boolean
+}
+
+/**
+ * formatVerdict states a lane's outcome in the one line it ends with, green or red, so the verdict
+ * is seen rather than counted out of the rollup above it. A failure names the node to go to first,
+ * because a bare FAILED sends a reader straight back to scrolling.
+ */
+export function formatVerdict(summary: GateSummary, options: VerdictOptions = {}): string {
+  const elapsed = OutputText.formatElapsed(summary.elapsedMs)
+  const failure = summary.firstFailure === undefined ? '' : ` — first failure: ${summary.firstFailure.name}`
+  // A pass that rested on a demoted flake says so here, in the one line a reader is guaranteed to
+  // read. Anywhere else it is a note beside a green lane, which is a note nobody reads.
+  const count = summary.toleratedFlakes?.length ?? 0
+  const tolerated = count === 0 ? '' : ` — tolerating ${count} known flake${count === 1 ? '' : 's'}`
+  const verdict = summary.status === 'passed'
+    ? `${summary.lane}: PASSED in ${elapsed}${tolerated}`
+    : `${summary.lane}: FAILED in ${elapsed}${failure}${tolerated}`
+  if (options.color !== true) {
+    return verdict
+  }
+  return summary.status === 'passed' ? HCI.green(verdict) : HCI.red(verdict)
+}
+
+/** formatGateSummary renders the rollup a run ends with, verdict last. */
+export function formatGateSummary(summary: GateSummary, options: VerdictOptions = {}): string {
   const lines = ['', 'Verification summary:']
   const rolled = rollupSuites(summary.gates)
   for (const gate of rolled) {
@@ -326,6 +436,9 @@ export function formatGateSummary(summary: GateSummary): string {
       lines.push(`Full log: ${FS.displayPath(summary.firstFailure.logPath)}`)
     }
   }
+  // Last, after the artifact paths and the failure excerpt, because a verdict a reader has to
+  // scroll back to is one the rollup already told them.
+  lines.push(formatVerdict(summary, options))
   return lines.join('\n')
 }
 
@@ -365,6 +478,10 @@ function mergeShards(suite: string, shards: readonly GateResult[]): GateResult {
     : shards.every(shard => shard.status === 'skipped')
     ? 'skipped'
     : 'passed'
+  // A suite reported as one line must not lose the fact that one of its shards only passed because
+  // a flake was tolerated; that is the whole point of saying it out loud.
+  const tolerated = shards.flatMap(shard => shard.tolerated ?? [])
+  const shardReason = `${shards.length} shards, ${OutputText.formatElapsed(workMs)} of work`
   return {
     elapsedMs: longest,
     failureKind: failed[0]?.failureKind,
@@ -372,10 +489,13 @@ function mergeShards(suite: string, shards: readonly GateResult[]): GateResult {
     name: suite,
     reason: status === 'skipped'
       ? shards[0]?.reason
-      : `${shards.length} shards, ${OutputText.formatElapsed(workMs)} of work`,
+      : tolerated.length === 0
+      ? shardReason
+      : `${shardReason}; tolerated ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}`,
     retried: shards.some(shard => shard.retried === true),
     status,
     suite,
+    ...(tolerated.length === 0 ? {} : { tolerated }),
   }
 }
 

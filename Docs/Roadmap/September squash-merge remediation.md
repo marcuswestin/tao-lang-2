@@ -20,7 +20,7 @@ continues on `feat/september-remediation-continued`.
   1–23. Each row's implementation commit and covering tests are traced in this branch's own
   (untracked, `.gitignore`d) `.artifacts/september-finding-checklist.md`; that trace does not
   survive the worktree, so treat this document as the durable summary once it is gone.
-- `./agent verify --complete` (10/10) and `./agent full-verify-sandbox` (13/13 sandbox-compatible
+- `./agent verify --complete` (10/10) and `./agent verify-full-sandbox` (13/13 sandbox-compatible
   gates) are green, plus the intentional `studio-smoke-simulated-user` quarantine skip.
 - Independent review of the remediation's own uncommitted diff (host-temp scratch roots,
   transactional generated-file publication, a file-based Studio device-trust lock, per-invocation
@@ -30,10 +30,10 @@ continues on `feat/september-remediation-continued`.
   once-documented Chrome `SIGABRT`-before-DevTools abort and the generated-directory cleanup denial
   (DEVENV-015, DEVENV-064) are specific to a managed task namespace this machine also runs; they do
   not reproduce from a plain terminal.
-- `just full-verify`'s full chain (native canary, every browser gate in sequence) has **not** been
+- `just verify-full`'s full chain (native canary, every browser gate in sequence) has **not** been
   run to completion this session: the chain aborts at the first failing gate
   (`keyboard-navigation-smoke`, see below) rather than reporting every gate's status, so
-  `studio-smoke-native` and `studio-canary` remain unexercised since the last complete `full-verify`
+  `studio-smoke-native` and `studio-canary` remain unexercised since the last complete `verify-full`
   recorded in the ignored progress ledger.
 
 ## Follow-up branch: what landed, and what is still open
@@ -74,7 +74,7 @@ continues on `feat/september-remediation-continued`.
 ### Landed since (second branch, `feat/september-remediation-continued`)
 
 1. **The simulated-user journey is a gate again.** Ten consecutive runs are green,
-   `FULL_VERIFY_SKIPPED` is empty, and an empty skip list is now spelled by omission rather than by
+   `VERIFY_FULL_SKIPPED` is empty, and an empty skip list is now spelled by omission rather than by
    passing `--skipped ""`. Four more journey defects and one product defect were fixed to get there:
    a drag aimed at an element's own centre when that centre is off-screen; the floating agent panel
    covering the inspector and half of every divider; a free sketch rectangle drawn in the middle of
@@ -82,7 +82,7 @@ continues on `feat/september-remediation-continued`.
    while a compile replaces the board, where pressing again is not the remedy because each press
    consumes one unit of work; and canvas focus entered before the owning cell reported its
    rectangle, which left the cells at device size for good because nothing retried the reframe.
-2. **`just full-verify` is green end to end: 21 gates passed, 0 failed, 0 skipped.** That is the
+2. **`just verify-full` is green end to end: 21 gates passed, 0 failed, 0 skipped.** That is the
    first complete chain in this remediation. `studio-dialog-browser`, `studio-agent-browser`,
    `studio-smoke-native` and `studio-canary` had never run on this work and all pass.
 
@@ -126,7 +126,7 @@ continues on `feat/september-remediation-continued`.
 2. **Simulated-user journey remains quarantined**, now failing at the component drag rather than
    the left-pane divider; see **Follow-up branch** above.
 3. **Not run this session:** `studio-smoke-native`, `studio-canary`, `ship-bundle-proof` (this one
-   _did_ pass under `full-verify-sandbox`), and a complete `just full-verify` chain.
+   _did_ pass under `verify-full-sandbox`), and a complete `just verify-full` chain.
 4. **External/host-only acceptance remains separate and unproved,** as it has since Wave 1:
    physical device, Apple Device Hub GUI, real CloudKit, installed-binary OTA, signed/notarized
    Studio, and App Store Connect/TestFlight.
@@ -235,8 +235,8 @@ this worktree is removed.
 branch's landing, and should:
 
 1. Chase the simulated-user quarantine to ten consecutive green runs, starting from the component
-   drag described above, then remove its `FULL_VERIFY_SKIPPED` entry.
-2. Run `studio-smoke-native`, `studio-canary`, and a complete `just full-verify` chain to
+   drag described above, then remove its `VERIFY_FULL_SKIPPED` entry.
+2. Run `studio-smoke-native`, `studio-canary`, and a complete `just verify-full` chain to
    completion. The first two do not depend on item 1 and can run now.
 3. Triage the "cross-checked, partly unaddressed" list above: confirm each against current code,
    drop what is already fixed or was legitimately refuted, and carry the rest as new findings

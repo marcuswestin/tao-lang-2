@@ -9,14 +9,9 @@ import type { StudioMatrixGroup } from './matrix/StudioMatrixLayout'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 
 export {
-  canvasIframeGestureAnchor,
-  canvasRevealDelta,
-  canvasScale,
   mountCanvasViewport,
   revealCanvasNode,
   type StudioCanvasViewportControls,
-  type StudioCanvasViewportState,
-  type StudioCanvasWheelGesture,
 } from './matrix/StudioCanvasViewport'
 export {
   StudioDebugEvents,
