@@ -1,4 +1,4 @@
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, Json } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
 import { Android, type AndroidSession, EXPO_GO_SDK_VERSION } from './android'
 import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
@@ -149,15 +149,15 @@ export async function runDevicectlJson<T = unknown>(
 
 /** devicectlFailure reads the `error` block of a devicectl JSON report, when the report carries one. */
 export function devicectlFailure(payload: unknown): DevicectlFailure | undefined {
-  if (typeof payload !== 'object' || payload === null || !('error' in payload)) {
+  if (!Json.isRecord(payload) || !('error' in payload)) {
     return undefined
   }
-  const error = (payload as { error?: unknown }).error
-  if (typeof error !== 'object' || error === null) {
+  const error = payload['error']
+  if (!Json.isRecord(error)) {
     return undefined
   }
   const record = error as { code?: unknown; domain?: unknown; userInfo?: unknown }
-  const userInfo = typeof record.userInfo === 'object' && record.userInfo !== null
+  const userInfo = Json.isRecord(record.userInfo)
     ? record.userInfo as { NSLocalizedDescription?: { string?: unknown } }
     : undefined
   const description = userInfo?.NSLocalizedDescription?.string

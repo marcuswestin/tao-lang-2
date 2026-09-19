@@ -1,10 +1,12 @@
 import { Platform } from '@shared'
 import { StudioClientAssets } from '@studio'
 
-const previewUrlMarker = '__TAO_STUDIO_DEV_PREVIEW_URL__'
-const snapshot = {
-  bundle: await StudioClientAssets.bundle(),
-  html: StudioClientAssets.html({ previewUrl: previewUrlMarker }),
-}
+export const previewUrlMarker = '__TAO_STUDIO_DEV_PREVIEW_URL__'
 
-Platform.runtimeProcess.stdout.write(JSON.stringify(snapshot))
+if (import.meta.main) {
+  const snapshot = {
+    bundle: await StudioClientAssets.bundle(),
+    html: StudioClientAssets.html({ previewUrl: previewUrlMarker }),
+  }
+  Platform.runtimeProcess.stdout.write(JSON.stringify(snapshot))
+}
