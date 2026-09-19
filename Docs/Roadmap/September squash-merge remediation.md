@@ -148,8 +148,9 @@ live work only. Closed, with what was checked:
 
 ## Known open items
 
-Items 1 to 3 are closed; they are kept so a reader of this document's history can see what the two
-follow-up branches were for.
+Items 1 to 3 and 5 are closed; they are kept so a reader of this document's history can see what
+the follow-up branches were for. Item 4 is the only one still open, and it is open by nature: no
+gate in this repository can close it.
 
 1. ~~**Keyboard narrowing survives Enter-engage + Escape-disengage.**~~ Fixed on
    `merged/september-remediation-followup`.
@@ -162,11 +163,37 @@ follow-up branches were for.
 4. **External/host-only acceptance remains separate and unproved,** as it has since Wave 1:
    physical device, Apple Device Hub GUI, real CloudKit, installed-binary OTA, signed/notarized
    Studio, and App Store Connect/TestFlight.
-5. **Low-priority cleanup an independent review flagged but did not require before merge:**
-   duplicated cleanup-aggregation helpers across four test files; `ParserGenerate.ts`
-   re-implementing file-transaction helpers that now live in `packages/shared/shared-src/FS.ts`;
-   crash-orphaned `.tmp`/`.restore` files landing inside the packaged IDE-extension VSIX tree; the
-   native-canary orphan sweep not reaching an earlier invocation's build.
+5. ~~**Low-priority cleanup an independent review flagged but did not require before merge.**~~ All
+   four are done on `merged/september-cleanups`. Two were smaller or different than the review
+   described, and the difference is worth recording:
+   - **Duplicated cleanup-aggregation helpers.** Two of the four were near-identical: the smoke
+     journeys' `{ label, run }` aggregators, which ran every disposer and kept a cleanup failure
+     from replacing the journey's own failure. They are now one `runCleanups` in
+     `@shared/test`, tested beside it rather than twice in the journeys. The other two the review
+     counted are a bare array of paths drained in an `AfterEach`; folding those into the same
+     helper would have been a worse fit than the duplication, so they stay.
+   - **`ParserGenerate.ts` re-implementing file-transaction helpers.** It does not. Its
+     transactional moves and backups already delegate to `FS.ts`; what it duplicated was the
+     *hashing* — `generatedFileIdentity` was a verbatim copy of `FS.filesIdentity`, and
+     `hashContent` of `FS.contentIdentity`. Those now call `FS`, and the one genuinely local need
+     that remains — the digest of one file's bytes, which `FS.contentIdentity` cannot serve because
+     it identifies ordered strings — says so at its definition.
+   - **Crash-orphaned `.tmp`/`.restore` files in the VSIX.** Real, and fixed at the source rather
+     than at the package step. `FS.synchronizeDirectoryFiles` stages and rolls back through files
+     named for the destination and sitting *beside* it, so neither the destination's walk nor its
+     content identity can see them and a killed run leaves them in the parent directory for good.
+     The synchronization now sweeps its own orphans while it holds the destination's mutation lock,
+     which fixes every reader of that directory, not only the VSIX. Note for anyone revisiting
+     this: a `.vscodeignore` is **not** an option here. `vsce` exits with
+     `VSCE does not support combining both strategies` when a `.vscodeignore` and a `package.json`
+     `files` allowlist are both present, and its default ignore list contains no `*.tmp` entry.
+   - **Native-canary orphan sweep.** Real. Every scope in the canary — the surviving-process check
+     and the build prune — was the current run's own `launchId` and invocation directory, so a run
+     killed before it reported left its whole invocation behind and nothing ever looked at it
+     again. Each run now sweeps earlier invocations it can prove are finished: an invocation that
+     never reported is removed, a passed one keeps its report and loses its build, and a failed or
+     blocked one is left whole because its build is the evidence it exists to produce. Anything
+     touched within the hour is treated as live and skipped.
 
 ## A second, independent findings list — checked, and closed
 

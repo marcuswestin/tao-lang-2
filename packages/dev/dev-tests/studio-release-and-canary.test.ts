@@ -396,6 +396,35 @@ Describe('Studio native canary', () => {
       projectRoot: FS.resolvePath('Apps/Other', repositoryRoot),
     })
   })
+  Test('sweeps an earlier invocation that never reported and the build of one that passed', async () => {
+    const artifactBase = await mkTestDir('tao-studio-canary-sweep-')
+    const invocations = FS.resolvePath('invocations', artifactBase)
+    const stale = Date.now() - 4 * 60 * 60 * 1000
+
+    // Killed before it reported: evidence of nothing, so the whole invocation goes.
+    await FS.writeText(FS.resolvePath('unreported/electrobun/app', invocations), 'build')
+    // Reported passed, then killed before it pruned its own build.
+    await FS.writeJson(FS.resolvePath('passed/canary.json', invocations), { status: 'passed' })
+    await FS.writeText(FS.resolvePath('passed/electrobun/app', invocations), 'build')
+    // Failed: its build is the evidence the run exists to produce, so it stays.
+    await FS.writeJson(FS.resolvePath('failed/canary.json', invocations), { status: 'failed' })
+    await FS.writeText(FS.resolvePath('failed/electrobun/app', invocations), 'build')
+    // Untouched because it is this run, and untouched because it is too recent to be finished.
+    await FS.writeText(FS.resolvePath('current/electrobun/app', invocations), 'build')
+    await FS.writeText(FS.resolvePath('running/electrobun/app', invocations), 'build')
+    for (const name of ['unreported', 'passed', 'failed']) {
+      await FS.setModifiedTimeMs(FS.resolvePath(name, invocations), stale)
+    }
+
+    await StudioCanaryCommand.testing.sweepEarlierCanaryInvocations(artifactBase, 'current')
+
+    Expect(await FS.exists(FS.resolvePath('unreported', invocations))).toBe(false)
+    Expect(await FS.exists(FS.resolvePath('passed/electrobun', invocations))).toBe(false)
+    Expect(await FS.exists(FS.resolvePath('passed/canary.json', invocations))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('failed/electrobun/app', invocations))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('current/electrobun/app', invocations))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('running/electrobun/app', invocations))).toBe(true)
+  })
 })
 
 async function onlyCanaryInvocationRoot(artifactRoot: string): Promise<string> {

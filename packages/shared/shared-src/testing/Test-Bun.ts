@@ -24,6 +24,7 @@ export {
   withTaoFiles,
 } from './Test'
 export { Deferred, settle, until, type UntilOptions } from './TestAsync'
+export { runCleanups, type RunCleanupsOptions, type TestCleanup } from './TestCleanup'
 export { type TestOverrideSlot, testOverrideSlot } from './TestOverride'
 export { reactNativeStubs } from './TestReactNative'
 export { type CapturedOutput, type FakeTerminal, fakeTerminal, withCapturedOutput } from './TestTerminal'
