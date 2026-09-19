@@ -71,7 +71,7 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
   }
 }
 
-export type AgentChatHistoryEntry =
+type AgentChatHistoryEntry =
   | { role: 'user'; text: string }
   | {
     role: 'assistant'
@@ -87,7 +87,7 @@ export type AgentChatHistoryEntry =
     verdicts?: readonly BoundFeatureTestVerdict[]
   }
 
-export type BoundFeatureTestVerdict = FeatureTestVerdict & {
+type BoundFeatureTestVerdict = FeatureTestVerdict & {
   changeId: string
   beforeVersions: readonly { path: string; sourceVersion: string }[]
   afterVersions: readonly { path: string; sourceVersion: string }[]

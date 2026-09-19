@@ -779,7 +779,7 @@ type StudioPreviewRuntimeCapturedMessage = {
   type: 'preview-runtime-captured'
 }
 
-export type StudioRuntimeCaptureErrorName =
+type StudioRuntimeCaptureErrorName =
   | 'HostEnvironmentError'
   | 'UnexpectedBehaviorError'
   | 'UserInputError'
@@ -805,7 +805,7 @@ type StudioPreviewLogMessage = {
 }
 
 /** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
-export type StudioDebugStep = {
+type StudioDebugStep = {
   action: string
   declaration?: string
   path: string
@@ -823,7 +823,7 @@ export type StudioDebugCommandMessage = {
 }
 
 /** StudioPreviewDebugMessage carries one debugger event: a journal entry, a pause, or a resume. */
-export type StudioPreviewDebugMessage = {
+type StudioPreviewDebugMessage = {
   channel: typeof studioProtocolChannel
   event: StudioJsonValue
   identity: StudioPreviewIdentity
@@ -873,7 +873,7 @@ export type StudioPreviewCanvasGestureMessage = {
 }
 
 /** Parent-owned mode state tells a preview synchronously whether its wheel gestures belong to Canvas. */
-export type StudioCanvasGestureOwnershipMessage = {
+type StudioCanvasGestureOwnershipMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
   owned: boolean
