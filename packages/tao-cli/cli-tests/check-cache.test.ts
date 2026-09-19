@@ -196,6 +196,29 @@ Describe('tao check per-workspace stamp', () => {
         Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
       })
     })
+
+    // Every test above is about whether a stamp may be reused, and a `--no-cache` lane sets exactly
+    // this variable on every process in its graph. Inherited, it would answer all of them the same
+    // way and hide the whole contract — a failure mode that stays invisible until someone runs the
+    // one scope that passes the flag. The fixture therefore clears it, and this says so.
+    Test(`clears an inherited ${key} so the stamp is what these tests measure`, async () => {
+      const previous = Platform.runtimeProcess.env[key]
+      Platform.runtimeProcess.env[key] = 'true'
+      try {
+        await withTaoFixture(TWO_WORKSPACES, async rootDir => {
+          Expect(CheckCache.disabled()).toBe(false)
+          Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
+          Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+        })
+        Expect(Platform.runtimeProcess.env[key]).toBe('true')
+      } finally {
+        if (previous === undefined) {
+          delete Platform.runtimeProcess.env[key]
+        } else {
+          Platform.runtimeProcess.env[key] = previous
+        }
+      }
+    })
   }
 })
 

@@ -64,12 +64,42 @@ export const packageAwareCliPathCases: readonly PackageAwareCliPathCase[] = [
   },
 ]
 
+/**
+ * The cache opt-outs `tao check` and `tao test` read. A verification lane run with `--no-cache` sets
+ * `TAO_TEST_NO_CACHE` on every process in its graph, so these suites would inherit an answer to the
+ * very question they exist to ask. A fixture is a throwaway root that never reads or writes this
+ * checkout's stamps, so nothing the lane distrusts can reach one: the opt-out is cleared on the way
+ * in, and a test that wants it sets it for itself inside the fixture.
+ */
+const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO_CACHE']
+
 /** withTaoFixture writes the given files verbatim into a temp directory: the CLI sees exactly what the test wrote. */
 export async function withTaoFixture(
   files: Record<string, string>,
   testsFunction: (rootDir: string) => Promise<void>,
 ): Promise<void> {
-  await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), { verbatim: true })
+  await withoutInheritedNoCache(async () => {
+    await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), { verbatim: true })
+  })
+}
+
+/** withoutInheritedNoCache runs one fixture with the lane's cache opt-out out of the way, then restores it. */
+export async function withoutInheritedNoCache(run: () => Promise<void>): Promise<void> {
+  const previous = NO_CACHE_ENV_KEYS.map(key => [key, Platform.runtimeProcess.env[key]] as const)
+  for (const [key] of previous) {
+    delete Platform.runtimeProcess.env[key]
+  }
+  try {
+    await run()
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        delete Platform.runtimeProcess.env[key]
+      } else {
+        Platform.runtimeProcess.env[key] = value
+      }
+    }
+  }
 }
 
 /** statusByFile maps in-place results to root-relative paths for assertions. */
