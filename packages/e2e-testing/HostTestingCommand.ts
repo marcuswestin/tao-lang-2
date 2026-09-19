@@ -1,5 +1,6 @@
 import { FS, HCI, Platform, Repo, Switch } from '@shared'
 import { runBrowserHostProof } from './BrowserHostProof'
+import { runPlaywrightHostDriverProof } from './DriverHostProof'
 import { runHostTestingMaintenance } from './HostTestingMaintenance'
 import {
   type HostTestingContext,
@@ -39,6 +40,7 @@ async function createHostTestingContext(request: HostTestingRequest): Promise<Ho
 async function dispatchHostTestingRequest(request: HostTestingRequest, context: HostTestingContext): Promise<void> {
   await Switch.kind<HostTestingRequest, Promise<void>>(request, {
     browser: browserRequest => runBrowserHostProof(browserRequest, context),
+    driver: driverRequest => runPlaywrightHostDriverProof(driverRequest, context),
     maintenance: maintenanceRequest => runHostTestingMaintenance(maintenanceRequest, context),
     native: nativeRequest => runNativeHostProofCommand(nativeRequest, context),
   })

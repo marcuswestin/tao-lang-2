@@ -73,6 +73,24 @@
         "generation-live/**/*.{ts,tsx}"
       ]
     },
+    "packages/host-control": {
+      "entry": [
+        "host-control-src/host-control.ts",
+        "host-control-tests/**/*.test.ts"
+      ],
+      "project": [
+        "host-control-src/**/*.ts",
+        "host-control-tests/**/*.ts"
+      ]
+    },
+    "packages/host-control-playwright": {
+      "entry": [
+        "host-control-playwright-src/host-control-playwright.ts"
+      ],
+      "project": [
+        "host-control-playwright-src/**/*.ts"
+      ]
+    },
     "packages/ide-extension": {
       "entry": [
         "esbuild.config.ts",

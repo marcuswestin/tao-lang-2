@@ -15,6 +15,7 @@
     "ink": "^7.1.1",
     "react": "^19.2.8",
     "tao-generation": "workspace:*",
+    "tao-host-control": "workspace:*",
     "tao-e2e-testing": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-studio": "workspace:*",

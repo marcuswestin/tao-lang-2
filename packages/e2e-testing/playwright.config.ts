@@ -31,8 +31,17 @@ export default defineConfig({
         'controls/**/*.host.spec.ts',
         'enforcement/**/*.host.spec.ts',
         'environment/**/*.host.spec.ts',
+        'journey/**/*.host.spec.ts',
         'native/**/*.host.spec.ts',
       ],
+    },
+    {
+      // The driver suite launches an installed browser through the Playwright driver itself.
+      // It is deliberately separate from the host-free controls project, and the adapter owns
+      // each session trace rather than sharing Playwright Test's context instrumentation.
+      name: 'driver',
+      testMatch: ['driver/**/*.host.spec.ts'],
+      use: { trace: 'off' },
     },
     {
       name: 'browser',

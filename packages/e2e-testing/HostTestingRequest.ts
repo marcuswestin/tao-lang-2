@@ -26,6 +26,14 @@ export type BrowserHostTestingRequest = Readonly<{
   fault?: HostApplicationFault
 }>
 
+export type DriverHostTestingRequest = Readonly<{
+  kind: 'driver'
+  mode: 'driver'
+  subject: HostSubject
+  seed: number
+  browserChannel: string
+}>
+
 export type NativeHostTestingRequest = Readonly<{
   kind: 'native'
   mode: 'device' | 'ios'
@@ -39,6 +47,7 @@ export type NativeHostTestingRequest = Readonly<{
 export type HostTestingRequest =
   | MaintenanceHostTestingRequest
   | BrowserHostTestingRequest
+  | DriverHostTestingRequest
   | NativeHostTestingRequest
 
 export type HostTestingContext = Readonly<{
@@ -64,6 +73,12 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
     seed,
     subject: options.app,
   } as const
+  if (mode === 'driver') {
+    if (options.fault === true) {
+      Errors.throwUserInput('--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.')
+    }
+    return { ...common, kind: 'driver', mode }
+  }
   if (mode === 'check' || mode === 'format' || mode === 'lint' || mode === 'setup' || mode === 'typecheck') {
     if (mode === 'check' && options.fault === true) {
       Errors.throwUserInput('--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.')

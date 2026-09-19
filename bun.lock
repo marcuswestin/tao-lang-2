@@ -59,6 +59,7 @@
         "react": "^19.2.8",
         "tao-e2e-testing": "workspace:*",
         "tao-generation": "workspace:*",
+        "tao-host-control": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-studio": "workspace:*",
         "wrap-ansi": "^10.0.1",
@@ -73,10 +74,13 @@
       "name": "tao-e2e-testing",
       "dependencies": {
         "@playwright/test": "1.63.0",
+        "tao-host-control": "workspace:*",
+        "tao-host-control-playwright": "workspace:*",
         "tao-icloud-native": "workspace:*",
         "tao-runtime": "workspace:*",
         "tao-runtime-toolchain": "workspace:*",
         "tao-shared": "workspace:*",
+        "tao-workspace": "workspace:*",
         "typescript": "5.9.3",
       },
     },
@@ -92,6 +96,20 @@
     "packages/generation": {
       "name": "tao-generation",
       "dependencies": {
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/host-control": {
+      "name": "tao-host-control",
+      "dependencies": {
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/host-control-playwright": {
+      "name": "tao-host-control-playwright",
+      "dependencies": {
+        "playwright": "1.63.0",
+        "tao-host-control": "workspace:*",
         "tao-shared": "workspace:*",
       },
     },
@@ -2532,6 +2550,10 @@
     "tao-formatter": ["tao-formatter@workspace:packages/formatter"],
 
     "tao-generation": ["tao-generation@workspace:packages/generation"],
+
+    "tao-host-control": ["tao-host-control@workspace:packages/host-control"],
+
+    "tao-host-control-playwright": ["tao-host-control-playwright@workspace:packages/host-control-playwright"],
 
     "tao-icloud-native": ["tao-icloud-native@workspace:packages/icloud-native"],
 

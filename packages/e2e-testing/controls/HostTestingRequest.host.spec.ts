@@ -3,8 +3,9 @@ import { parseHostTestingRequest } from '../HostTestingRequest'
 
 const base = { app: 'clockwork', seed: '12345' }
 
-test('dispatches maintenance, browser-build, and native modes without widening their authority', () => {
+test('dispatches maintenance, driver, browser-build, and native modes without widening their authority', () => {
   expect(parseHostTestingRequest('lint', base)).toMatchObject({ kind: 'maintenance', mode: 'lint' })
+  expect(parseHostTestingRequest('driver', base)).toMatchObject({ kind: 'driver', mode: 'driver' })
   expect(parseHostTestingRequest('export', { ...base, fault: true })).toMatchObject({
     fault: 'clockwork-countdown-frozen',
     kind: 'browser',
@@ -22,6 +23,9 @@ test('requires explicit native targets and keeps application faults out of contr
     'Native proofs require --device with an explicit target identifier.',
   )
   expect(() => parseHostTestingRequest('check', { ...base, fault: true })).toThrow(
+    '--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.',
+  )
+  expect(() => parseHostTestingRequest('driver', { ...base, fault: true })).toThrow(
     '--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.',
   )
   expect(() => parseHostTestingRequest('unknown', base)).toThrow("Unknown host-testing mode 'unknown'.")

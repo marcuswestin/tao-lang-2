@@ -67,7 +67,11 @@ await runWithCommands(commands => {
   commands
     .command('test-host')
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
-    .argument('[mode]', 'check, lint, typecheck, format, prepare, export, browser, ios, device, or setup.', 'check')
+    .argument(
+      '[mode]',
+      'check, lint, typecheck, format, driver, prepare, export, browser, ios, device, or setup.',
+      'check',
+    )
     .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')

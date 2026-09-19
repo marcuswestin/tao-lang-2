@@ -10,9 +10,12 @@
   "dependencies": {
     "@playwright/test": "1.63.0",
     "tao-icloud-native": "workspace:*",
+    "tao-host-control": "workspace:*",
+    "tao-host-control-playwright": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-runtime-toolchain": "workspace:*",
     "tao-shared": "workspace:*",
+    "tao-workspace": "workspace:*",
     "typescript": "5.9.3"
   }
 }
