@@ -161,7 +161,7 @@ at a glance and is not.
 
 ## B. `Roadmap.md` and `Docs/Roadmap/` as Ro's private working material
 
-`Roadmap.md` is 396 lines. `Docs/Roadmap/` is 206 tracked files and roughly 271,000 words, 138 of
+`Roadmap.md` is 393 lines. `Docs/Roadmap/` is 206 tracked files and roughly 271,000 words, 138 of
 them active and 33 archived.
 
 ### P7 — `Roadmap.md`'s `Ro STACK` section — High
@@ -179,7 +179,7 @@ someone's notes-to-self, because it is.
 
 ### P8 — `Roadmap.md`'s `Ro's stack` section — High
 
-Lines 265–360 are the product and codebase backlog, "unordered", and they are frank in a way that
+Lines 262–357 are the product and codebase backlog, "unordered", and they are frank in a way that
 will be quoted. Specifics that publish as written: "Roughly two dozen raw `Error`s handed to a
 promise rejection", "66 already-typed `throw new Errors.*` guards across ten studio files", "Remove
 magical strings", "Review all tests: remove unnecessary surfaces and overlaps", 462 call sites
