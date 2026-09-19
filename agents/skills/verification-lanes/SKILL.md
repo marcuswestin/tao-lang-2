@@ -18,11 +18,18 @@ description: >-
   change runs the Tao behavior tests under that app, and a path no rule owns widens the run to
   everything and says which path did it. It prints what it selected, why, and what it skipped.
 - Every verification lane records the tree it proved green, keyed by the whole visible tree of this
-  checkout together with the resolved `.devenv/profile` toolchain. Running the same lane, or a lane
-  it contains, on a byte-identical tree with the same toolchain prints the earlier run's evidence and
-  stops instead of running; add `--no-cache` to run anyway. A red or interrupted run records nothing,
-  and neither does a run whose tree changed under it — that run fails and names the paths that
-  changed, because several agents may be editing one checkout.
+  checkout together with the resolved `.devenv/profile` toolchain. Re-running it on a byte-identical
+  tree with the same toolchain skips the gates the record covers, one gate at a time, printing the
+  earlier run's evidence for each; add `--no-cache` to run them anyway. A record written by one lane
+  is read by any lane whose gates it contains, which is why the `--green-tree` lists differ. A red or
+  interrupted run records nothing, and neither does a run whose tree changed under it — that run
+  fails and names the paths that changed, because several agents may be editing one checkout.
+- The saving is per gate, never a lane that declines to start. Every lane in the `Justfile` contains
+  `_parser-gen` and `_compile-word-flower-app`, which are generators and so never skippable, so no
+  lane a person runs is ever skipped wholesale — and that is the point rather than a shortfall. A
+  lane that stood on a record without running its generators would report PASSED over a tree whose
+  generated output it never made, which is exactly what `just verify && just clean && just verify`
+  would produce. A generator skipped gate-by-gate still costs only its stamp check.
 - Four kinds of node are deliberately never skipped on a record, each for something the tree hash
   cannot see: a generator, whose output tree is Git-ignored, so a fresh checkout hashes identically
   to one that has it; a node whose verdict depends on the host (the Studio smokes, the native shell,
