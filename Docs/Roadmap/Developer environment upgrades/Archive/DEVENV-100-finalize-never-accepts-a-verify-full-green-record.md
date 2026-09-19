@@ -1,6 +1,6 @@
 # DEVENV-100 — Finalize never accepts a `verify-full` green record
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Verification lanes, landing
 - **Impact:** `finalize` re-runs `just verify --complete` on a tree that `verify-full` has already
   proved, because the lane names it will accept are misspelled and therefore match nothing. The
@@ -26,4 +26,12 @@
 - **Acceptance:** A branch whose tree was last proved by `verify-full` runs no verification in
   `finalize`, and a test fails if any lane name in `Finalize.ts` or `LandingLock.ts` is not a
   recipe the `Justfile` defines.
+- **Resolution (2026-09-19):** Both names corrected, and the class closed rather than the instance.
+  `VerificationLanes.ts` now holds the lane names once; `Finalize` and `LandingLock` consult it
+  instead of spelling their own copies. `verification-lane-names.test.ts` pins every name against
+  the recipes the `Justfile` defines, and checks the other direction too — every `--lane` the
+  `Justfile` passes must be a name the code knows, which is how a locked lane would otherwise go
+  free by typo. Restoring the old `full-verify` spelling fails that suite, so it catches the
+  original bug rather than merely describing it.
 - **Source:** 2026-09-19 adversarial review of the landing-lock branch.
+- **Archived:** 2026-09-19
