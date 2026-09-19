@@ -192,7 +192,11 @@ export function parseDetachedWorktrees(source: string): Array<{ head: string; pa
   })
 }
 
-/** The branch name: what was asked for, then `TAO_DEV_BRANCH`, then the Git identity, then `dev/local`. */
+/**
+ * The branch name, in the order a person would expect to be obeyed: what they typed, then this
+ * shell's `TAO_DEV_BRANCH`, then `tao.devBranch` in Git config — the durable way to say it once per
+ * machine, `git config --local tao.devBranch dev/<name>` — then their Git identity, then `dev/local`.
+ */
 async function developerBranchName(
   name: string,
   root: string,
@@ -200,15 +204,24 @@ async function developerBranchName(
 ): Promise<string> {
   const asked = name.trim()
   if (asked !== '') {
-    return asked.startsWith(DEV_PREFIX) ? asked : `${DEV_PREFIX}${slug(asked)}`
+    return devBranch(asked)
   }
-  const configured = (Platform.runtimeProcess.env['TAO_DEV_BRANCH'] ?? '').trim()
+  const fromEnvironment = (Platform.runtimeProcess.env['TAO_DEV_BRANCH'] ?? '').trim()
+  if (fromEnvironment !== '') {
+    return devBranch(fromEnvironment)
+  }
+  const configured = (await run(dependencies, root, ['config', 'tao.devBranch'])).stdout.trim()
   if (configured !== '') {
-    return configured.startsWith(DEV_PREFIX) ? configured : `${DEV_PREFIX}${slug(configured)}`
+    return devBranch(configured)
   }
   const identity = (await run(dependencies, root, ['config', 'user.name'])).stdout.trim()
   const fromIdentity = slug(identity.split(/\s+/u)[0] ?? '')
   return `${DEV_PREFIX}${fromIdentity === '' ? 'local' : fromIdentity}`
+}
+
+/** A name already under `dev/` is taken as written; anything else becomes `dev/<slug>`. */
+function devBranch(name: string): string {
+  return name.startsWith(DEV_PREFIX) ? name : `${DEV_PREFIX}${slug(name)}`
 }
 
 function slug(value: string): string {
