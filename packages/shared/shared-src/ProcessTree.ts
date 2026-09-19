@@ -233,8 +233,20 @@ const systemProcessSignalSeams: ProcessSignalSeams = {
   },
 }
 
+/**
+ * Identity is the start time alone. `command` is descriptive and deliberately not compared: it is
+ * read from the kernel's process name, which changes at `exec`, while the start time is set at
+ * `fork` and never moves. A shell that backgrounds `sleep 300` reports the PID between the two, so
+ * a snapshot taken then records the shell's own name and every later reading disagrees with it.
+ *
+ * Comparing it was wrong in the direction that matters. `signalTrackedProcesses` skipped a
+ * descendant that exec'd between the snapshot and the signal — the runaway this module exists to
+ * stop — and `waitForTrackedProcessesExit` called such a tree gone while it was still running. The
+ * `'test'` policy caches its descendant list once and reuses it across the 250ms SIGKILL
+ * escalation, so that window was milliseconds wide rather than microseconds.
+ */
 function sameProcess(current: TrackedProcess | undefined, expected: TrackedProcess): boolean {
-  return current?.startedAt === expected.startedAt && current.command === expected.command
+  return current !== undefined && current.startedAt === expected.startedAt
 }
 
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
