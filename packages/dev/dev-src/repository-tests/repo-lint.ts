@@ -1,5 +1,7 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
+import { isAuditedSource } from '../simplify-audit/AuditedSource'
+import { kindChainsIn } from '../simplify-audit/KindChains'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -672,6 +674,59 @@ export function conventionRuleIssues(
     : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
 }
 
+/**
+ * KIND_CHAIN_ALLOWLIST names the files that still dispatch through an `if`/`else if` chain over one
+ * `.kind`, `.type`, or `.$type`. It only shrinks: `Docs/Roadmap/Repository simplification 2` converts
+ * each to a `Switch` helper, and an entry goes stale when its file no longer holds a chain.
+ */
+const KIND_CHAIN_ALLOWLIST = [
+  'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
+  'packages/compiler/compiler-src/codegen/app/StateCompiler.ts',
+  'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
+  'packages/runtime/TaoRuntime-src/TR-persisted-state.ts',
+  'packages/runtime/TaoRuntime-src/TR-studio-device-client.ts',
+  'packages/runtime/TaoRuntime-src/TR-studio-journey.ts',
+  'packages/source-actions/source-actions-src/studio/studio-design-styles.ts',
+  'packages/studio/studio-src/StudioInspector.ts',
+  'packages/studio/studio-src/StudioPreviewManifest.ts',
+  'packages/studio/studio-src/StudioPreviewSession.ts',
+  'packages/studio/studio-src/StudioServer.ts',
+  'packages/studio/studio-src/StudioSketchCatalog.ts',
+  'packages/studio/studio-src/agent-chat/AgentChatSession.ts',
+  'packages/studio/studio-src/agent-chat/FeaturePlan.ts',
+  'packages/studio/studio-src/agent-chat/SemanticSnapshot.ts',
+  'packages/studio/studio-src/client/StudioApiClient.ts',
+  'packages/studio/studio-src/client/app/StudioCommandPaletteWiring.ts',
+  'packages/studio/studio-src/client/app/StudioScenarioActions.ts',
+  'packages/studio/studio-src/device/StudioDeviceGateway.ts',
+  'packages/validator/validator-src/validators/FunctionalCoreValidator.ts',
+  'packages/validator/validator-src/validators/StateValidator.ts',
+  'packages/validator/validator-src/validators/types-validator.ts',
+  'packages/validator/validator-src/validators/use-package-validator.ts',
+]
+
+/** kindChainIssues reports discriminant chains in non-test package source, which `Switch` would check for exhaustiveness. */
+export function kindChainIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = KIND_CHAIN_ALLOWLIST,
+): string[] {
+  const scanned = files.filter(file => isAuditedSource(file.path))
+  const matches = scanned.flatMap(file =>
+    kindChainsIn(file.path, file.source).map(chain => ({
+      detail:
+        `dispatches ${chain.length} branches on \`${chain.discriminant}\`; use a \`Switch\` helper over the union instead.`,
+      line: chain.line,
+      path: chain.path,
+    }))
+  )
+  return conventionIssues(
+    scanned,
+    matches,
+    allowlist,
+    'no longer dispatches through a discriminant chain; drop its repo lint allowlist entry.',
+  )
+}
+
 /** langiumImportIssues reports Langium imports outside the parser package. */
 export function langiumImportIssues(files: readonly SourceFile[]): string[] {
   return conventionMatches(
@@ -895,6 +950,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
     const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
     issues.push(...conventionRuleIssues(rule, files))
   }
+  issues.push(...kindChainIssues(packageFiles))
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))

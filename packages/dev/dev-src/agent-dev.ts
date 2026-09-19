@@ -20,6 +20,7 @@ const JUST_COMMANDS = [
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
+  'simplify-audit',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only
   // as `just` recipes, which left the one instruction an agent follows split across two spellings.
