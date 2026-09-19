@@ -27,7 +27,7 @@ export type BoardDependencies = {
 }
 
 /** BoardWorktreeStatus distinguishes a fully-read worktree from one this run could not inspect. */
-export type BoardWorktreeStatus = 'ok' | 'unreadable'
+type BoardWorktreeStatus = 'ok' | 'unreadable'
 
 /**
  * BoardVerificationStatus compares a record against the worktree's current state honestly: a record
@@ -35,10 +35,10 @@ export type BoardWorktreeStatus = 'ok' | 'unreadable'
  * toolchain has since changed is not a match — it is its own distinct status, never folded into
  * either "current" or "tree has changed".
  */
-export type BoardVerificationStatus = 'current' | 'toolchain-changed' | 'tree-changed'
+type BoardVerificationStatus = 'current' | 'toolchain-changed' | 'tree-changed'
 
 /** BoardVerificationSummary names the most recently recorded verification lane for a worktree. */
-export type BoardVerificationSummary = {
+type BoardVerificationSummary = {
   at: string
   lane: string
   logRoot: string
@@ -51,14 +51,14 @@ export type BoardVerificationSummary = {
 
 /** BoardFinalizeSummary reports a `.artifacts/merge/<branch>.state.json` a concurrent `finalize`
  * command may have written, without depending on its exact shape. */
-export type BoardFinalizeSummary =
+type BoardFinalizeSummary =
   | { present: false }
   | { present: true; readable: false }
   | { present: true; readable: true; summary: string }
 
 /** BoardWorktree is one row of `git worktree list`, enriched with what an agent needs to know
  * before treating that checkout's slowness or state as a surprise. */
-export type BoardWorktree = {
+type BoardWorktree = {
   aheadOfMain?: number
   behindMain?: number
   branch?: string
@@ -74,13 +74,13 @@ export type BoardWorktree = {
 
 /** BoardResourceLease is one named host resource (such as a landing lease) from the machine-wide
  * registry, alongside whether the process that holds it is still alive. */
-export type BoardResourceLease = {
+type BoardResourceLease = {
   live: boolean
   owner: MachineResourceOwner
 }
 
 /** BoardMachine is what no single checkout can see on its own: the shared lane registry and load. */
-export type BoardMachine = {
+type BoardMachine = {
   cpuCount: number
   lanes: readonly LaneRecord[]
   loadAverage: number
@@ -520,4 +520,3 @@ async function canonicalPath(path: string): Promise<string> {
 }
 
 /** Board owns the whole-machine, read-only status report behind `./dev board`. */
-export const Board = { board, formatBoardReport, parseWorktreePorcelain } as const
