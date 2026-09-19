@@ -20,7 +20,9 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
 - [ ] Work through the durable developer-environment upgrade ledger.
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in
-    `Docs/Roadmap/Developer environment upgrades.md`.
+    `Docs/Roadmap/Developer environment upgrades.md`; addressed entries move to
+    `Docs/Roadmap/Developer environment upgrades archive.md`. The `devenv-upgrades` skill owns how
+    the next set is selected and archived.
 - [ ] Decide how parallel agents share one machine.
   - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
     wall time and starved suites past their hang guards. What to share, what to serialize, what is
