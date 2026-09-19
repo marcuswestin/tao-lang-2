@@ -64,7 +64,7 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
   Expect(sketchPersistenceObserved(before, after, 'generated source', 'rewritten source')).toBe(false)
 })
 
-// The browser branch is the full editor/preview journey in the `full-verify` graph. The native branch
+// The browser branch is the full editor/preview journey in the `verify-full` graph. The native branch
 // validates the unattended Electrobun capability probe; it does not repeat the browser journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()

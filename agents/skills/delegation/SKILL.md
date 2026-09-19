@@ -132,7 +132,8 @@ The agent sees the brief and nothing else. Every brief carries:
 
 Repository boilerplate, in every brief that touches this worktree: run from the worktree root
 without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit
-`Docs/Roadmap/Developer environment upgrades.md`, and return developer-environment findings to the
+`Docs/Roadmap/Developer environment upgrades.md` or anything under
+`Docs/Roadmap/Developer environment upgrades/`, and return developer-environment findings to the
 caller instead. Root `AGENTS.md` binds subagents too, including the rule against naming any agent
 identity in work products.
 

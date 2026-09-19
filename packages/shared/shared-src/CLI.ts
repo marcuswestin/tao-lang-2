@@ -40,7 +40,7 @@ export type CommandStdio = 'inherit' | 'pipe' | 'stream' | Platform.SpawnOptions
  * Teardown does not need detachment: the tracked-descendant signalling reaches a grandchild whether
  * or not the child leads a group.
  */
-export type CommandProcessPolicy = 'server' | 'test' | 'tool'
+type CommandProcessPolicy = 'server' | 'test' | 'tool'
 
 /** CommandSpec describes process invocation options for shared CLI helpers. */
 export type CommandSpec = {

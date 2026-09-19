@@ -15,7 +15,7 @@ import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
 import { resolveTarget, type SnapshotNode } from './SemanticSnapshot'
 
-export type DeclarationEdit = { declaration: string; replacement: string }
+type DeclarationEdit = { declaration: string; replacement: string }
 
 /** A change that has been computed and shown, and is waiting to be approved. */
 export type StagedChange = {

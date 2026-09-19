@@ -42,7 +42,7 @@ Describe('native host lease', () => {
     const processStartedAt = 'Thu Sep  4 12:00:00 2026'
     try {
       const lease = await MachineLanes.acquireResource({
-        command: 'full-verify-native',
+        command: 'verify-full-native',
         name: resourceName,
         processIdentity: aliveIdentity(processStartedAt),
         registryRoot,
@@ -52,7 +52,7 @@ Describe('native host lease', () => {
       const stored = await FS.readJson<MachineResourceOwner>(resourcePath(registryRoot))
 
       Expect(stored).toMatchObject({
-        command: 'full-verify-native',
+        command: 'verify-full-native',
         name: resourceName,
         pid: Platform.runtimeProcess.pid,
         processStartedAt,
@@ -151,7 +151,7 @@ Describe('native host lease', () => {
       await writeOwner(registryRoot, { processStartedAt: 'same-process' })
 
       await Expect(MachineLanes.acquireResource({
-        command: 'full-verify-native',
+        command: 'verify-full-native',
         name: resourceName,
         processIdentity: aliveIdentity('same-process'),
         registryRoot,

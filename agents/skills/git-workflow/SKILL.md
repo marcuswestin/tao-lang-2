@@ -78,6 +78,12 @@ Require a clean, validated feature branch with its merge message written or refr
 before the merge commit; afterwards the command's own tree-equality proof, not a second lane, is what
 says the squash is the verified tree. Archive completed roadmap task folders before it, never after.
 
+No worktree needs to be on `main` first. The command stages its squash in one, and makes a temporary
+one under `.artifacts/merge/main-worktree` when the repository has none — which is the ordinary state
+when the primary checkout is itself on the feature branch. It removes that worktree when the landing
+completes and keeps it when the landing fails, because the staged squash inside it is what `--abort`
+restores from.
+
 Refresh `main`, merge current `main` back into the feature branch, validate and push again, then
 squash onto freshly refreshed `main`. Push `main` before renaming the remote feature branch to
 `merged/<name>`. Finish on clean `main` with temporary worktrees and local feature branches removed.

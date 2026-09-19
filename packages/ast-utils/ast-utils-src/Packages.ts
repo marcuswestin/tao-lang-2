@@ -180,12 +180,35 @@ export namespace Packages {
     return (await Repo.filesUnder(path, { extensions: ['.tao'] })).length > 0
   }
 
-  /** containingProjectRoot finds the nearest ancestor directory that directly declares a project. */
-  export async function containingProjectRoot(start: string): Promise<string | undefined> {
-    const parserContext = Parser.createContext()
+  /**
+   * ProjectRootSweep memoizes the directories one sweep has already asked about, and carries the
+   * parser context those answers were produced with.
+   *
+   * Deciding whether a directory declares a project means reading and parsing every `.tao` file in
+   * it, and the walk from a file to its project root passes through the same ancestors as the walk
+   * from its neighbour — `Apps/` is asked about once per file beneath it. A sweep is scoped to one
+   * pass on purpose: a cached answer is only safe while nothing is adding or removing a project
+   * declaration underneath it, which a long-lived language server cannot assume.
+   */
+  export type ProjectRootSweep = {
+    readonly declarations: Map<string, Promise<boolean>>
+    readonly parserContext: Parser.Context
+  }
+
+  /** createProjectRootSweep opens a memo for one sweep of project-root lookups. */
+  export function createProjectRootSweep(): ProjectRootSweep {
+    return { declarations: new Map(), parserContext: Parser.createContext() }
+  }
+
+  /**
+   * containingProjectRoot finds the nearest ancestor directory that directly declares a project.
+   * Pass a `sweep` when resolving many paths at once so they share both the memo and one parser.
+   */
+  export async function containingProjectRoot(start: string, sweep?: ProjectRootSweep): Promise<string | undefined> {
+    const memo = sweep ?? createProjectRootSweep()
     let directory = start
     while (true) {
-      if (await directoryDeclaresProject(directory, parserContext)) {
+      if (await declaresProject(memo, directory)) {
         return directory
       }
       if (await FS.exists(FS.resolvePath('.git', directory))) {
@@ -197,6 +220,21 @@ export namespace Packages {
       }
       directory = parent
     }
+  }
+
+  /**
+   * declaresProject answers from the sweep's memo, storing the pending promise rather than its
+   * result so that concurrent walkers asking about one ancestor wait on a single read of it instead
+   * of each starting their own.
+   */
+  async function declaresProject(sweep: ProjectRootSweep, directory: string): Promise<boolean> {
+    const asked = sweep.declarations.get(directory)
+    if (asked !== undefined) {
+      return await asked
+    }
+    const pending = directoryDeclaresProject(directory, sweep.parserContext)
+    sweep.declarations.set(directory, pending)
+    return await pending
   }
 
   async function directoryDeclaresProject(directory: string, parserContext: Parser.Context): Promise<boolean> {

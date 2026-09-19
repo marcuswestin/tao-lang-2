@@ -1,43 +1,15 @@
-import { FS, Platform, Repo } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import Workspace from '@workspace'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
 import { type CreationPlan, validateCreationPlan } from '../cli-src/create/creation-plan'
-import { starterPlans } from '../cli-src/create/starter-plans'
 import { runFix } from '../cli-src/source-commands'
 
-/** Set TAO_UPDATE_STARTERS=1 to rewrite `Apps/Starters` from the reference plans instead of comparing. */
-const UPDATE_STARTERS = Platform.runtimeProcess.env['TAO_UPDATE_STARTERS'] === '1'
+// The byte-for-byte starter reproductions live in `creation-starter-<name>.test.ts`, one file per
+// starter, over the shared helper in `test-starter-lowering.ts`. A test file is the shard atom, so
+// keeping them here would pin them to this test's shard and run all three serially.
 
 Describe('tao create lowering', () => {
-  for (const starter of starterPlans) {
-    Test(`reproduces Apps/Starters/${starter.directory} byte for byte from its reference plan`, async () => {
-      Expect(validateCreationPlan(starter.plan)).toEqual([])
-      const root = await mkTestDir('tao-create-lowering-')
-      try {
-        const generated = FS.resolvePath(starter.directory, root)
-        await writeCreationFiles(generated, lowerCreationPlan(starter.plan, { description: starter.description }))
-        await runFix(generated, { cwd: root })
-
-        const checkedIn = Repo.resolvePath(`Apps/Starters/${starter.directory}`)
-        if (UPDATE_STARTERS) {
-          if (await FS.exists(checkedIn)) {
-            await FS.remove(checkedIn)
-          }
-          await FS.copyDirectory(generated, checkedIn)
-        }
-        Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
-        for (const relativePath of await projectFilesUnder(generated)) {
-          Expect(await FS.readText(FS.resolvePath(relativePath, generated))).toBe(
-            await FS.readText(FS.resolvePath(relativePath, checkedIn)),
-          )
-        }
-      } finally {
-        await FS.remove(root)
-      }
-    })
-  }
-
   Test('lowers a plan outside the starters to a project that validates from its entries', async () => {
     // Three entities, every field type, no time field on one entity (so it orders by its title), a
     // number-only detail, and sample titles that collide once handles are made from them.
@@ -124,14 +96,3 @@ Describe('tao create lowering', () => {
     // longer than the old bound before it gets the machine.
   }, 60_000)
 })
-
-async function projectFilesUnder(directory: string): Promise<string[]> {
-  const paths: string[] = []
-  for await (const path of FS.walk(directory, { extensions: ['.tao', '.json'] })) {
-    const relative = FS.relativePath(directory, path)
-    if (relative.endsWith('.tao') || relative === 'tsconfig.json') {
-      paths.push(relative)
-    }
-  }
-  return paths.sort()
-}

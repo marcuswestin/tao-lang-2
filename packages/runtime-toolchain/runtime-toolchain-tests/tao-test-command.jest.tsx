@@ -1,22 +1,6 @@
-import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
-import { Errors, FS, Platform } from '@shared'
-import { AfterEach, Describe, Test } from '@shared/test'
-import { cleanup } from '@testing-library/react-native'
+import { declareTaoJourneys } from './tao-journey-harness'
 
-AfterEach(() => cleanup())
-
-Describe('Tao test command', () => {
-  for (const file of requestedManifest().files) {
-    Test(FS.basename(file.sourcePath), async () => {
-      await RuntimeTesting.runTestFile(file)
-    })
-  }
-})
-
-function requestedManifest(): RuntimeTesting.TestCompiler.Manifest {
-  const manifestPath = Platform.runtimeProcess.env[RuntimeTesting.TEST_MANIFEST_ENV]
-  if (!manifestPath) {
-    Errors.throwHostEnvironment(`${RuntimeTesting.TEST_MANIFEST_ENV} is required`)
-  }
-  return JSON.parse(FS.readTextSync(manifestPath)) as RuntimeTesting.TestCompiler.Manifest
-}
+// The whole-manifest entrypoint, which a bare `jest --config jest.tao-test.config.cjs` run reaches.
+// `tao test` does not come this way: it generates one entrypoint per Tao test file into its run
+// root so Jest's worker pool has files to distribute, and those entrypoints name their own file.
+declareTaoJourneys()

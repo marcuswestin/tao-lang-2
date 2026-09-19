@@ -63,7 +63,7 @@ export type TaoStudioDeviceStorage = {
 }
 
 /** A Bonjour result is only a reconnect candidate after its Studio key matches the device's pin. */
-export type TaoStudioDeviceDiscoveredGateway = {
+type TaoStudioDeviceDiscoveredGateway = {
   studioPublicKey: string
   url: string
 }

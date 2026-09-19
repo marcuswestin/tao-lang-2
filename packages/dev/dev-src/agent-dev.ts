@@ -10,16 +10,25 @@ const JUST_COMMANDS = [
   'doctor',
   'fix',
   'fmt',
-  'full-verify',
-  'full-verify-sandbox',
+  // One report rather than two: flakes and slowest read the same ledger and are consulted together.
+  'report-test-stats',
   'setup',
+  // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
+  // requires them before a branch that touches Studio is called ready. They stayed reachable only
+  // as `just` recipes, which left the one instruction an agent follows split across two spellings.
+  'studio-proof-real-app',
+  'studio-smoke',
   'test',
+  'test-all',
   'test-changed',
   'test-file',
-  'test-flakes',
   'test-retry',
-  'test-slowest',
+  // Each verification scope is its own name rather than a flag on one name, so an agent reaches it
+  // the same way a developer does: by completing a prefix, not by recalling which flag it took.
   'verify',
+  'verify-changed',
+  'verify-full',
+  'verify-full-sandbox',
 ] as const
 
 /** Agent-facing CLI entrypoint: expose only the repository workflows intended for `./agent`. */

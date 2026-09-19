@@ -27,8 +27,6 @@ type ResultSummaryOptions = {
   contention?: ContentionReport
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
-  /** Registry sources that could not serve this run, each with the reason the registry gave. */
-  skippedSuites?: readonly { name: string; reason: string }[]
 }
 
 const FAILURE_OUTPUT_LINE_LIMIT = 100
@@ -50,15 +48,12 @@ function printResultSummary(
   printSuiteSummaries(states, failed.length > 0)
   printTotalSummary(states, elapsedMs, failed.length > 0)
 
-  // A suite the registry could not serve is named here so a filtered run never reads as full coverage.
-  for (const skipped of options.skippedSuites ?? []) {
-    Shared.HCI.writeLine(`Note: the ${skipped.name} suite was skipped; ${skipped.reason}.`)
-  }
-
   printContentionNote(states, options.contention)
 
   if (failed.length === 0) {
-    Shared.HCI.writeSuccess('test suites ok\n')
+    // Plain, not green: the lane's verdict line is the one coloured statement of the outcome, and a
+    // second green line above it both competes with it and writes escape codes into piped output.
+    Shared.HCI.writeLine('test suites ok')
     return
   }
 
