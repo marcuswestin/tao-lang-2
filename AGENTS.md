@@ -98,3 +98,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `Docs/Roadmap/Developer environment upgrades.md`, which owns the entry format, how an ID is
   chosen, and the lifecycle. Link the index once in the handoff. If nothing changed there, omit
   developer-environment commentary entirely.
+- Addressing an entry moves it: `Resolved` and `Closed` entries live in
+  `Docs/Roadmap/Developer environment upgrades archive.md` and `Developer environment upgrades/Archive/`,
+  moved there in the change that addressed them, which `_repo-lint` enforces. The `devenv-upgrades`
+  skill owns which entries to take next and how both halves are left.
