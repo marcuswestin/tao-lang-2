@@ -261,7 +261,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       // rewrites the tree while it is still being hashed, and the hash would then describe a tree
       // that never existed.
       snapshot = fingerprintOf(location.repositoryRoot)
-      void snapshot.finally(() => prepareLease?.release())
+      // Not `void snapshot.finally(...)`: that chain rejects with the snapshot and nothing is
+      // listening on it, which is an unhandled rejection rather than a release. The rejection
+      // itself is answered where the snapshot is awaited, below.
+      void snapshot.catch(() => undefined).then(async () => await prepareLease?.release())
     }
     const graphResult = await WorkGraph.run(states, {
       env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true),
@@ -296,7 +299,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       })
     }
     return graphResult
-  }, machineLane).finally(async () => await prepareLease?.release())
+  }, machineLane).finally(async () => {
+    // The lane body can return while the tree is still being hashed — the read-only phase runs on
+    // after the last writer finishes, and the contention retry can outlast it too. Releasing here
+    // without waiting hands a peer the prepare lock mid-hash, and its fixers then rewrite the tree
+    // into a hash describing a state that never existed. The early release above is what keeps the
+    // lock from being held for the whole read-only phase; this one is only the backstop.
+    await snapshot.catch(() => undefined)
+    await prepareLease?.release()
+  })
 
   verifiedTree = await snapshot
   // Reading a test node's structured report can still fail it — a node that exited zero without
@@ -362,6 +373,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const recordsLane = wholeLaneSkippable && unstable.size === 0
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
     await recordGreen({
+      canStandOnRecord,
       lane: recordsLane,
       key: startingKey,
       lanes: options.greenTree.lanes,
@@ -441,6 +453,14 @@ async function unstableSuites(
 
 /** recordGreen stores what this run proved, and only what a tree and a toolchain fully describe. */
 async function recordGreen(options: {
+  /**
+   * Whether a node's verdict is one a tree hash can speak for in this lane. It gates writing a
+   * record as well as reading one: a reader of a generated tree whose generator did not run here
+   * was judged against whatever that Git-ignored tree happened to hold, so recording it at this
+   * tree's hash would let a later lane skip it on evidence about bytes nothing attests to. Reading
+   * alone was guarded, which left `./dev gates <subset>` able to write exactly that record.
+   */
+  canStandOnRecord: (name: string) => boolean
   key?: GreenTreeKey
   /** False when this lane's own membership is not fully described by the key; its nodes still are. */
   lane: boolean
@@ -471,11 +491,12 @@ async function recordGreen(options: {
     .filter(state => preparePreservedTree || !GateCatalog.isPrepare(state.name))
     .map(state => state.name)
     .filter(name => options.suiteOf(name) === undefined)
+    .filter(options.canStandOnRecord)
   await GreenTree.record(
     location.repositoryRoot,
     options.lane ? options.lanes[0] ?? location.lane : undefined,
     { at: new Date().toISOString(), logRoot: location.logRoot, toolchain: key.toolchain, treeHash: verifiedTree.hash },
-    [...passedGates, ...provedSuites(options.states, options.suiteOf)],
+    [...passedGates, ...provedSuites(options.states, options.suiteOf).filter(options.canStandOnRecord)],
     {
       neverRecord: new Set(
         options.states.filter(state => !GateCatalog.isRecordable(state.name)).map(state => state.name),
