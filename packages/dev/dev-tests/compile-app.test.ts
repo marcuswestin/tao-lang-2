@@ -1,6 +1,12 @@
-import { CLI, FS, Repo, Time } from '@shared'
+import { CLI, FS, Platform, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { type CompileAppOptions, compileAppOutputHash, runCompileApp } from '../dev-src/repository-tests/CompileApp'
+import {
+  COMPILE_INPUT_FILES,
+  COMPILE_SOURCE_ROOTS,
+  type CompileAppOptions,
+  compileAppOutputHash,
+  runCompileApp,
+} from '../dev-src/repository-tests/CompileApp'
 
 const APP_PATH = 'Apps/Example/Example.tao'
 const OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
@@ -392,5 +398,65 @@ Describe('app compilation staleness stamp', () => {
       await second?.catch(() => undefined)
       await FS.remove(root)
     }
+  })
+
+  // `--no-cache` is the one flag every verification scope takes, and it means the same thing in all
+  // of them: run anyway rather than trust recorded evidence. This gate honoured its stamp whatever
+  // the lane said, so the flag a developer reaches for when they suspect a stale generated app was
+  // the one flag that could not rebuild it.
+  Test('rebuilds when the lane says not to trust recorded evidence', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const previous = Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
+    try {
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls).toHaveLength(1)
+
+      Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = 'true'
+      Expect(await run(root, tao.compile)).toBe(0)
+
+      Expect(tao.calls).toHaveLength(2)
+    } finally {
+      if (previous === undefined) {
+        delete Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
+      } else {
+        Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = previous
+      }
+      await FS.remove(root)
+    }
+  })
+
+  // Both lists are hand-maintained, and a path that stops existing is recorded `<absent>` rather
+  // than reported: a renamed or moved source tree would silently stop being covered, and the stamp
+  // would keep skipping compiles over sources it no longer reads. Nothing else notices, because a
+  // hash of nothing is a perfectly stable hash.
+  Test('names only inputs this checkout actually has', async () => {
+    const missing: string[] = []
+    for (const root of COMPILE_SOURCE_ROOTS) {
+      if (!await FS.isDirectory(Repo.resolvePath(root))) {
+        missing.push(root)
+      }
+    }
+    for (const file of COMPILE_INPUT_FILES) {
+      if (!await FS.isFile(Repo.resolvePath(file))) {
+        missing.push(file)
+      }
+    }
+
+    Expect(missing).toEqual([])
+  })
+
+  // The two lists describe one package each from different angles — its sources and its `exports`
+  // map — so a package named in one and not the other is a half-declared input.
+  Test("declares each package's sources and its manifest together", () => {
+    const packagesWithSources = new Set(
+      COMPILE_SOURCE_ROOTS.map(root => root.split('/')[1]).filter(name => name !== undefined),
+    )
+    const packagesWithManifests = new Set(
+      COMPILE_INPUT_FILES.filter(file => file.endsWith('/package.json')).map(file => file.split('/')[1]),
+    )
+
+    Expect([...packagesWithSources].toSorted()).toEqual([...packagesWithManifests].toSorted())
   })
 })

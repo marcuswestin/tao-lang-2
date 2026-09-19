@@ -49,7 +49,7 @@ const DEFAULT_OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
  *   them — and a new top-level asset directory there must be picked up without editing this list.
  * - The app's own project tree is not here; it is hashed from the app path the caller passes.
  */
-const COMPILE_SOURCE_ROOTS: readonly string[] = [
+export const COMPILE_SOURCE_ROOTS: readonly string[] = [
   'packages/ast-utils/ast-utils-src',
   'packages/compiler/compiler-src',
   'packages/generation/generation-src',
@@ -68,7 +68,7 @@ const COMPILE_SOURCE_ROOTS: readonly string[] = [
  * lock, so upgrading a package the compiler uses invalidates the stamp, and each participating
  * package's manifest, whose `exports` map decides which module a package import resolves to.
  */
-const COMPILE_INPUT_FILES: readonly string[] = [
+export const COMPILE_INPUT_FILES: readonly string[] = [
   'bun.lock',
   'packages/ast-utils/package.json',
   'packages/compiler/package.json',
@@ -95,6 +95,22 @@ const EXCLUDED_INPUT_SUFFIX = '.tsbuildinfo'
 
 /** How an absent declared input is recorded, so that its appearance or removal changes the hash. */
 const ABSENT = '<absent>'
+
+/**
+ * The environment a lane's `--no-cache` reaches this gate through. `--no-cache` is the one flag
+ * every verification scope takes, and it means the same thing everywhere: run anyway rather than
+ * trust recorded evidence. This gate honoured its own stamp regardless, so the one flag a developer
+ * reaches for when they suspect a stale generated app was the one flag that could not rebuild it.
+ *
+ * `TAO_CHECK_NO_CACHE` is honoured too, because `tao check` reads both and the two schemes cover
+ * the same compile.
+ */
+const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO_CACHE']
+
+/** cacheDisabled reports whether this run was told to ignore the stamp entirely. */
+function cacheDisabled(): boolean {
+  return NO_CACHE_ENV_KEYS.some(key => Platform.runtimeProcess.env[key] === 'true')
+}
 
 /** CompileAppStamp records what the last successful compile read and what it wrote. */
 type CompileAppStamp = {
@@ -125,8 +141,10 @@ export async function runCompileApp(options: CompileAppOptions): Promise<number>
     Errors.throwUserInput(`No Tao app file found at ${appPath}`)
   }
 
+  // Asked once, so the pre-lock and in-lock answers cannot disagree.
+  const honoursStamp = !cacheDisabled()
   const inputs = await compileAppInputHash(repositoryRoot, appPath, options)
-  if (await compileAppIsUpToDate(repositoryRoot, outputRoot, stampPath, inputs)) {
+  if (honoursStamp && await compileAppIsUpToDate(repositoryRoot, outputRoot, stampPath, inputs)) {
     HCI.writeLine('compile app: up to date')
     return 0
   }
@@ -136,7 +154,7 @@ export async function runCompileApp(options: CompileAppOptions): Promise<number>
     // have finished the compile while this one waited for the lock, so never trust the pre-lock
     // answer: re-read the inputs and re-ask inside the lock.
     const lockedInputs = await compileAppInputHash(repositoryRoot, appPath, options)
-    if (await compileAppIsUpToDate(repositoryRoot, outputRoot, stampPath, lockedInputs)) {
+    if (honoursStamp && await compileAppIsUpToDate(repositoryRoot, outputRoot, stampPath, lockedInputs)) {
       HCI.writeLine('compile app: up to date')
       return 0
     }
