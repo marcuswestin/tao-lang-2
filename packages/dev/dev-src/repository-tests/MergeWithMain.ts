@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { LandingLock, LandingLockBusyError } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 
 const SNAPSHOT_VERSION = 1
@@ -142,7 +143,9 @@ type Worktree = {
 }
 
 const defaultDependencies: MergeWithMainDependencies = {
-  acquireLease: MachineLanes.acquireResource,
+  // Forwarded rather than referenced, because the adapter is declared with the landing code it
+  // belongs beside rather than up here with the rest of the injected effects.
+  acquireLease: async options => await acquireLandingLock(options),
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
@@ -471,6 +474,79 @@ async function acquireLandingLease(
       'WARN  Waiting for it; this landing starts as soon as that one ends.',
     ])
     return await request(LEASE_WAIT_TIMEOUT_MS)
+  }
+}
+
+/**
+ * The landing takes the same lock the broad verification lanes take, and takes it through this
+ * adapter so the rest of this command keeps the lease shape its tests inject.
+ *
+ * Using one lock is not a tidiness preference. While `verify` took the landing lock and the landing
+ * took a separate resource lease, two agents could acquire the two in opposite orders — one holding
+ * the lock and waiting for the lease, the other holding the lease and waiting for the lock — and
+ * wedge each other with no timeout on either. One lock cannot deadlock against itself.
+ *
+ * Re-entrancy is the other half: an agent that claimed the lock with `land-lock` already owns this
+ * right, so it must not queue behind itself, and the release must leave that lock held because the
+ * agent took it deliberately and returns it itself.
+ */
+const acquireLandingLock: typeof MachineLanes.acquireResource = async options => {
+  const repositoryRoot = options.repositoryRoot
+  const hold = await LandingLock.acquire({
+    label: options.command,
+    // Without this a landing blocked behind an abandoned lock says nothing for the whole six-hour
+    // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
+    // way the wait ever reaches a person.
+    onWaiting: (holder, waitedMs) => {
+      HCI.writeLine(
+        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
+          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
+          + 'no longer running, release it with `./dev land-unlock --force`.',
+      )
+    },
+    repositoryRoot,
+    ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
+    ...(options.waitTimeoutMs === undefined ? {} : { waitTimeoutMs: options.waitTimeoutMs }),
+  }).catch((error: unknown) => {
+    if (error instanceof LandingLockBusyError) {
+      throw new MachineResourceBusyError({
+        command: error.holder.label,
+        id: `landing-lock-${error.holder.pid}`,
+        name: options.name,
+        pid: error.holder.pid,
+        repositoryRoot: error.holder.holder,
+        startedAt: error.holder.acquiredAt,
+      })
+    }
+    throw error
+  })
+  return {
+    owner: {
+      command: hold.record.label,
+      id: `landing-lock-${hold.record.pid}`,
+      name: options.name,
+      pid: hold.record.pid,
+      repositoryRoot: hold.record.holder,
+      startedAt: hold.record.acquiredAt,
+    },
+    // Returns exactly this hold. A durable claim the agent made with `land-lock` has no token and
+    // is therefore left standing, which is what lets one agent verify, land, and then unlock.
+    // Called from a `finally`, so it must not throw: a release that fails after the squash already
+    // moved `main` would replace the landing's own outcome with a lock error, or mask the error the
+    // caller actually needs. It warns instead, naming the lock that is still on disk.
+    release: async () => {
+      await LandingLock.release({
+        repositoryRoot,
+        ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
+        ...(hold.token === undefined ? {} : { token: hold.token }),
+      }).catch((error: unknown) => {
+        HCI.writeLine(
+          `WARN  Could not release the landing lock: ${
+            error instanceof Error ? error.message : String(error)
+          } Clear it with \`./dev land-unlock --force\` before the next landing.`,
+        )
+      })
+    },
   }
 }
 

@@ -1079,4 +1079,5 @@ export const MachineLanes = {
   ownerIsLive,
   registryRoot,
   tryAcquireResource,
+  withRegistryLock,
 } as const
