@@ -211,7 +211,10 @@ Describe('finalize', () => {
 
   Test('runs just verify --complete only when no accepted lane already covers this tree', async () => {
     const fake = fakeDependencies()
-    fake.greenTreeRecords.set('full-verify', {
+    // `verify-full`, the lane's real name. This test used to register `full-verify`, which is not
+    // a lane at all — it matched the misspelling in the accepted-lanes list, so the pair agreed
+    // with each other and with nothing else, and the re-verification bug stayed invisible.
+    fake.greenTreeRecords.set('verify-full', {
       at: '2026-09-17T09:00:00.000Z',
       logRoot: '/logs/full',
       toolchain: FAKE_TOOLCHAIN,
@@ -221,7 +224,7 @@ Describe('finalize', () => {
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
-    Expect(outcome.lines.some(line => line.includes('full-verify'))).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('verify-full'))).toBe(true)
   })
 
   Test(
