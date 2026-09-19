@@ -321,6 +321,15 @@ the host-dependent lanes, which are never recorded; and because preflight requir
 merged into the branch, the squash can only be the feature tree, so the bytes `verify-full` proved
 are the bytes that land.
 
+**A person works the same way, through the `Mine` recipes.** `just my-branch [name]` switches the
+checkout to `dev/<name>` — defaulting to `$TAO_DEV_BRANCH`, then the Git identity — creating it from
+`main` the first time and carrying uncommitted work across. `just my-sync` fast-forwards the local
+`main` ref to `origin/main`, moves every mirror that follows it, and merges `main` into the branch,
+naming the conflicted files if there are any. `just my-resolve` hands exactly those conflicts to an
+agent, which resolves them, runs `./agent verify`, and commits the merge. `just my-land` finalizes
+and lands. A `dev/*` branch lands through the same `merge-with-main` as a `feat/*` branch, with the
+same gates and the same archive.
+
 **The landing touches no checkout but the invoking one.** It builds the squash commit with
 `git commit-tree` from the verified feature tree and moves `refs/heads/main` with `git update-ref`
 and an expected old value, so nothing is ever staged anywhere and two landings on one machine cannot

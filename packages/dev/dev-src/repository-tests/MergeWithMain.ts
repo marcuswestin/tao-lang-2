@@ -9,6 +9,8 @@ const LEASE_WAIT_TIMEOUT_MS = 6 * 60 * 60 * 1_000
 const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
+/** Branches a landing accepts: `feat/` is an agent's, `dev/` a person's, and they land identically. */
+const LANDABLE_PREFIXES = ['feat/', 'dev/'] as const
 const MERGE_PHASES: readonly MergePhase[] = [
   'prepared',
   'feature-integrated',
@@ -155,6 +157,12 @@ const defaultDependencies: MergeWithMainDependencies = {
   writeText: FS.writeText,
 }
 
+/** archiveName is where a landed branch is preserved on the remote: `merged/<name>` without its prefix. */
+function archiveName(branch: string): string {
+  const prefix = LANDABLE_PREFIXES.find(candidate => branch.startsWith(candidate)) ?? ''
+  return `merged/${branch.slice(prefix.length)}`
+}
+
 /** Validate the human-authored part of a squash commit message. */
 export function validateMergeMessage(source: string): string {
   const message = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n').replace(/\n+$/u, '')
@@ -236,9 +244,10 @@ export async function inspectMergePreflight(
     assertCommandSucceeded(branchResult)
   }
   const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : ''
-  if (!branch.startsWith('feat/')) {
+  if (!LANDABLE_PREFIXES.some(prefix => branch.startsWith(prefix))) {
     Errors.throwUserInput(
-      `merge-with-main requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`,
+      `merge-with-main requires a ${LANDABLE_PREFIXES.map(prefix => `${prefix}*`).join(' or ')} branch; `
+        + `this worktree is on '${branch || 'detached HEAD'}'.`,
     )
   }
 
@@ -283,7 +292,7 @@ export async function inspectMergePreflight(
   const mainHead = localMain.stdout.trim()
   const mirrorRoots = await readMirrorRoots(dependencies, worktrees, mainHead)
 
-  const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, `merged/${branch.slice(5)}`])
+  const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
   if (!remoteMainHead) {
     Errors.throwHostEnvironment(`Remote '${REMOTE}' did not report refs/heads/main.`)
@@ -311,7 +320,7 @@ export async function inspectMergePreflight(
     }
     remoteFeatureBehind = true
   }
-  const remoteMergedHead = remoteRefs.get(`merged/${branch.slice(5)}`)
+  const remoteMergedHead = remoteRefs.get(archiveName(branch))
   if (remoteMergedHead !== undefined) {
     Errors.throwUserInput(`Remote archive branch 'merged/${branch.slice(5)}' already exists.`)
   }
@@ -413,7 +422,7 @@ export const MergeWithMainCommand = {
       await pushArchiveAndPreserve(snapshot, dependencies)
 
       const completed = [
-        `PASS  Merged '${preflight.branch}' into main and archived it as merged/${preflight.branch.slice(5)}.`,
+        `PASS  Merged '${preflight.branch}' into main and archived it as ${archiveName(preflight.branch)}.`,
         `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
@@ -928,7 +937,7 @@ async function pushArchiveAndPreserve(
     await advanceSnapshot(snapshot, 'pushed', dependencies)
   }
 
-  const archive = `merged/${snapshot.branch.slice(5)}`
+  const archive = archiveName(snapshot.branch)
   await runChecked(
     dependencies,
     'git',
