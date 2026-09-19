@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GreenTree, type GreenTreeRecord } from '../repository-tests/GreenTree'
+import { LandingLock, type LandingLockRecord } from '../repository-tests/LandingLock'
 import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
 
 /**
@@ -82,6 +83,8 @@ type BoardResourceLease = {
 /** BoardMachine is what no single checkout can see on its own: the shared lane registry and load. */
 type BoardMachine = {
   cpuCount: number
+  /** Who holds the machine-wide landing lock, when anyone does. */
+  landingLock?: LandingLockRecord
   lanes: readonly LaneRecord[]
   loadAverage: number
   registryAvailable: boolean
@@ -183,6 +186,11 @@ function formatMachineSection(machine: BoardMachine): string {
       `  lane ${lane.lane} in ${lane.repositoryRoot} (pid ${lane.pid}, ${lane.slots}/${lane.maxSlots} slots, since ${lane.startedAt})`,
     )
   }
+  lines.push(
+    machine.landingLock === undefined
+      ? '  landing lock: free'
+      : `  landing lock: held by ${LandingLock.describe(machine.landingLock)}`,
+  )
   if (machine.resources.length === 0) {
     lines.push('  no named resource lease is held')
   }
@@ -450,8 +458,10 @@ async function readBoardMachine(
     ),
     readResourceLeases(root),
   ])
+  const landingLock = await LandingLock.inspect(root).catch(() => undefined)
   return {
     cpuCount: cpuCount(),
+    ...(landingLock === undefined ? {} : { landingLock }),
     lanes,
     loadAverage: loadAverage(),
     registryAvailable: inspection.available,

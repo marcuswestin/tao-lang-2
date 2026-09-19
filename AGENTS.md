@@ -63,6 +63,14 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Validation
 
+- Claim the machine-wide landing lock before any broad lane, and release it when you are done:
+  `./agent land-lock` blocks until it is yours and exits holding it, `./agent land-unlock` gives it
+  back. `verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it for you if you have
+  not, and the landing reuses the one you already hold. Everything narrower needs no lock and never
+  waits — run `test-file`, a named test, `test-retry`, `check`, and `fix` freely while you wait, and
+  merge landed results in and resolve conflicts as they arrive so your turn is likely to pass.
+  Nothing takes the lock away on a timer: a wedged lock warns, naming its holder, and
+  `./agent land-unlock --force` is the deliberate way past one.
 - Run focused tests while working. Each verification scope is its own command, widening in the order
   the names sort: `./agent verify-changed` is the iteration gate, `./agent verify` is the gate before
   a commit that goes to review or merge, and `verify-full` and `verify-full-sandbox` add the host

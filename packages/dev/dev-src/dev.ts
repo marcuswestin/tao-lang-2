@@ -1,4 +1,4 @@
-import { Errors, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { CleanCommand } from './clean/CleanCommand'
 import { runWithCommands } from './cli/run-with-commands'
@@ -10,6 +10,7 @@ import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/Deve
 import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
+import { LandingLock } from './repository-tests/LandingLock'
 import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
@@ -72,7 +73,10 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (pattern = '', options: TestCommandOptions = {}) => {
-      await runExitCommand(() => TestRunner.runTests(pattern, testRunOptions(options)))
+      // Every suite in the repository, which is the breadth the landing lock exists to serialize.
+      await runExitCommand(async () =>
+        await holdingLandingLock('test-all', async () => await TestRunner.runTests(pattern, testRunOptions(options)))
+      )
     })
 
   commands
@@ -122,6 +126,60 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('land-lock')
+    .description('Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it.')
+    .option('--label <text>', 'What to tell other agents this lock is being held for.')
+    .option('--no-wait', 'Refuse immediately instead of waiting when another worktree holds it.')
+    .action(async (options: { label?: string; wait?: boolean } = {}) => {
+      await runExitCommand(async () => {
+        const repositoryRoot = Repo.getRoot()
+        const hold = await LandingLock.acquire({
+          label: options.label ?? `landing from ${FS.basename(repositoryRoot)}`,
+          onWaiting: (holder, waitedMs) => {
+            HCI.writeErrorLine(
+              `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
+                + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing `
+                + 'is no longer running, release it with `./dev land-unlock --force`.',
+            )
+          },
+          repositoryRoot,
+          ...(options.wait === false ? { waitTimeoutMs: 0 } : {}),
+        })
+        HCI.writeLine(
+          hold.acquired
+            ? `PASS  Landing lock held for ${repositoryRoot}. Release it with ./dev land-unlock.`
+            : `PASS  This worktree already held the landing lock, since ${hold.record.acquiredAt}.`,
+        )
+        return 0
+      })
+    })
+
+  commands
+    .command('land-unlock')
+    .description('Release the machine-wide landing lock this worktree holds.')
+    .option('--force', 'Release it even when another worktree holds it, after confirming that landing has stopped.')
+    .action(async (options: { force?: boolean } = {}) => {
+      await runExitCommand(async () => {
+        if (options.force === true) {
+          const previous = await LandingLock.forceRelease()
+          HCI.writeLine(
+            previous === undefined
+              ? 'PASS  The landing lock was already free; nothing to release.'
+              : `PASS  Force-released the landing lock held by ${LandingLock.describe(previous)}.`,
+          )
+          return 0
+        }
+        const outcome = await LandingLock.release({ repositoryRoot: Repo.getRoot() })
+        HCI.writeLine(
+          outcome === 'released'
+            ? 'PASS  Released the landing lock.'
+            : 'PASS  This worktree did not hold the landing lock; nothing to release.',
+        )
+        return 0
+      })
+    })
+
+  commands
     .command('gates')
     .description('Run repository gates in parallel and report one verification summary.')
     .argument('<gates...>', 'Just recipe names to run as gates.')
@@ -144,28 +202,30 @@ await runWithCommands(commands => {
       await runExitCommand(async () => {
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
         const verdict = { color: WorkReporter.colorizes(outputMode) }
-        const summary = await runGates({
-          gates,
-          greenTree: options.greenTree === undefined || options.greenTree.length === 0
-            ? undefined
-            : { lanes: options.greenTree, noCache: options.cache === false },
-          jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
-          jsonPath: options.json,
-          lane: options.lane,
-          needsMachine: options.needsMachine === true,
-          outputMode,
-          skipUnsandboxed: options.skipUnsandboxed === true,
-          skipped: options.skipped,
+        return await holdingLandingLock(options.lane ?? 'verify', async () => {
+          const summary = await runGates({
+            gates,
+            greenTree: options.greenTree === undefined || options.greenTree.length === 0
+              ? undefined
+              : { lanes: options.greenTree, noCache: options.cache === false },
+            jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+            jsonPath: options.json,
+            lane: options.lane,
+            needsMachine: options.needsMachine === true,
+            outputMode,
+            skipUnsandboxed: options.skipUnsandboxed === true,
+            skipped: options.skipped,
+          })
+          if (summary.greenTree !== undefined) {
+            // A lane that ran nothing still states its verdict, and states it the same way: the record
+            // it stood on is the explanation, the last line is the answer.
+            HCI.writeLine(GreenTree.describe(summary.lane, summary.greenTree))
+            HCI.writeLine(formatVerdict(summary, verdict))
+            return 0
+          }
+          HCI.writeLine(formatGateSummary(summary, verdict))
+          return gateExitCode(summary)
         })
-        if (summary.greenTree !== undefined) {
-          // A lane that ran nothing still states its verdict, and states it the same way: the record
-          // it stood on is the explanation, the last line is the answer.
-          HCI.writeLine(GreenTree.describe(summary.lane, summary.greenTree))
-          HCI.writeLine(formatVerdict(summary, verdict))
-          return 0
-        }
-        HCI.writeLine(formatGateSummary(summary, verdict))
-        return gateExitCode(summary)
       })
     })
 
@@ -612,6 +672,25 @@ function testRunOptions(options: TestCommandOptions) {
  * created a run directory. Two agents lost time to exactly that in one afternoon. The remedy is one
  * line naming the switch that turns the sentence back into a stack.
  */
+/**
+ * Run a lane under the landing lock when its breadth requires one. The wait is here rather than in
+ * the caller so no agent ever writes a sleep-poll loop around a lane, and the periodic warning is
+ * what escalates a lock that is stuck: nothing in this path ever takes one away.
+ */
+async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Promise<T> {
+  return await LandingLock.holdingForLane({
+    lane,
+    onWaiting: (holder, waitedMs) => {
+      HCI.writeErrorLine(
+        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
+          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
+          + 'no longer running, release it with `./dev land-unlock --force`.',
+      )
+    },
+    repositoryRoot: Repo.getRoot(),
+  }, work)
+}
+
 async function runExitCommand(run: () => Promise<number>): Promise<void> {
   try {
     Platform.runtimeProcess.exit(await run())

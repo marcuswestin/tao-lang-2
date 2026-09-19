@@ -89,8 +89,32 @@ a queue. Serializing verification across worktrees would idle the machine whenev
 | Local InstantDB         | One Docker stack machine-wide by design; stopping it stops it for everyone |
 | A native Studio session | Already leased, and the worked example the rest should follow              |
 
-`verify` is worth naming explicitly as _not_ an example of this, because it is the intuitive guess:
-it holds no device, it is pure CPU, and it is exactly the thing a broker can divide.
+`verify` was originally named here explicitly as _not_ an example of this, on the reasoning that it
+holds no device, is pure CPU, and is exactly the thing a broker can divide. **That call was
+reversed on 2026-09-19, and this section is kept rather than deleted because the reversal is
+instructive.**
+
+The argument for sharing was that serializing verification idles the machine whenever less than
+`cpuCount` of work exists. What it missed is that the measurements in this same document refute it:
+the identical unchanged run took 92.5s at three lanes, 207.3s at five, and 1798.2s at fifteen. Fair
+sharing does not make fifteen verifications cost one; it makes each of them cost twenty times its
+solo price, and they all finish later than they would have one after another. Sharing was never
+dividing the machine — it was thrashing it.
+
+The second miss is that a verification is not just CPU: it is _evidence about a tree_, and a
+neighbouring landing invalidates it. Two agents verifying at once are not merely slow, they are
+frequently proving trees that one of them is about to make stale.
+
+So the broad lanes — `verify`, `verify-full`, `verify-full-sandbox`, `test-all` — now take the
+machine-wide **landing lock** (`LandingLock.ts`), which is the same lock the landing itself takes,
+so claiming it once covers verifying and then moving refs. The narrow work stays free and
+unserialized, because an agent must always be able to check the change it just made: `test-file`,
+a named test, `test-retry`, `check`, `fix`, `fmt`. The diff-scoped lanes in between —
+`verify-changed`, `test-changed` — remain on ordinary slot admission.
+
+The cost of the reversal is real and worth stating: with exactly two active agents, one now waits
+where before both ran at half width. That is the trade, and the numbers above say it is the right
+one from three agents upward.
 
 ## What is duplicated fifteen times and need not be
 
