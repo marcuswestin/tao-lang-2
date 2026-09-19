@@ -1,9 +1,13 @@
-# Real-host testing prototype
+# E2E testing
 
-An additive experiment. Existing suites and merge gates are unchanged. New tests are named explicitly
-in `playwright.config.ts`; there is no discovery of the old test tree. HNReader is the only existing
-test subject admitted. Production compiler, runtime, Expo configuration, and shared utilities are reused;
-existing test runners, fixtures, mocks, and `@shared/test` are not.
+This private package owns Tao's additive real-host testing prototype, including command dispatch,
+Playwright controls and browser journeys, isolated host builds, native proof orchestration, receipts,
+and harness fixtures. `HostTestingCommand.ts` is its public package entry. Existing suites and merge
+gates are unchanged, and this package does not reuse their runners, fixtures, mocks, or `@shared/test`.
+
+`playwright.config.ts` discovers tests only through scoped control and subject-specific browser globs
+inside this package. HNReader is the only existing app admitted as a subject; Clockwork is a harness
+fixture. Production compiler, runtime, Expo configuration, and shared utilities are reused.
 
 ## Subjects and evidence
 
@@ -80,8 +84,10 @@ arrive through a run-scoped `taohostpoc-<run-id>` deep link and are confirmed th
 The canonical seed `12345` has literal visible-color assertions. Custom seeds retain validity and
 cross-browser consistency checks, without a claim of an independently pinned native color sequence.
 
-An AST linter checks explicitly registered prototype files for ambient clock, randomness, and timer
-calls, plus imports of legacy test infrastructure. Deterministic `new Date(value)`, `Date.UTC`, and
+An AST linter checks files expanded from registered package, runtime host-testing, and runtime core
+source globs for ambient clock, randomness, and timer calls, plus imports of legacy test infrastructure.
+Every pattern must match, generated and dependency trees are excluded, and `effect-boundary.json`
+records the sorted expanded paths. Deterministic `new Date(value)`, `Date.UTC`, and
 `Date.parse` remain legal. Exact, named adapter exceptions are supported; they do not waive import
 rules. This is a file-local prototype, not repository-wide enforcement or a security boundary:
 dynamic property names, cross-file aliases, transitive dependencies, and arbitrary reflective calls
@@ -92,7 +98,9 @@ need stronger analysis before claiming comprehensive enforcement.
 - Retain the green browser/simulator receipts and establish physical-device UI acceptance.
 - Replace the physical iOS driver stub with an actual device UI driver.
 - Retain the demonstrated browser and simulator fault checks as the host coverage grows.
-- Implement and evaluate the [host-control recommendation](../../../Docs/Roadmap/Tao%20host%20control%20architecture.md)
+- Implement the Tao-plan host executor in its next slice; this package currently dispatches only the
+  explicit host-testing modes documented above.
+- Implement and evaluate the [host-control recommendation](../../Docs/Roadmap/Tao%20host%20control%20architecture.md)
   before promotion. It recommends Playwright library behind the browser adapter, independently of
   the universal API and host-free runner choices; the current PoC still uses Playwright Test.
 - Decide the production-wide effect interfaces and migrate callers before broadening lint enforcement.

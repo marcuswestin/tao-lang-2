@@ -15,12 +15,12 @@
     "ink": "^7.1.1",
     "react": "^19.2.8",
     "tao-generation": "workspace:*",
+    "tao-e2e-testing": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-studio": "workspace:*",
     "wrap-ansi": "^10.0.1"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
     "@types/react": "^19.2.18",
     "tao-formatter": "workspace:*",
     "tao-workspace": "workspace:*"

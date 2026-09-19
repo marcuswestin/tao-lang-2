@@ -74,7 +74,7 @@ await runWithCommands(commands => {
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .action(async (mode, options) => {
-      const { runHostTesting } = await import('../host-testing/HostTestingCommand')
+      const { runHostTesting } = await import('@e2e-testing')
       await runHostTesting(mode, options)
     })
 

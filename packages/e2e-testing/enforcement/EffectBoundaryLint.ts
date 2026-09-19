@@ -2,7 +2,7 @@ import { FS } from '@shared'
 import ts from 'typescript'
 
 /**
- * The PoC checks only source files named by the host-testing command. It recognizes direct global
+ * The e2e package checks only source files expanded from its registered patterns. It recognizes direct global
  * members, literal globalThis members, and aliases/destructuring declared in the same source file.
  * Computed property names, values returned from functions, re-exports, and aliases that cross files
  * are deliberately outside this syntax-only scope.
@@ -66,7 +66,7 @@ const prohibitedImportSegments = new Set([
   'runtime-toolchain-tests',
 ])
 
-/** lintHostTestSources reads exactly the participating files; it does not discover or scan the repository. */
+/** lintHostTestSources reads exactly the registered participating files. */
 export async function lintHostTestSources(
   root: string,
   options: HostTestSourcesOptions,

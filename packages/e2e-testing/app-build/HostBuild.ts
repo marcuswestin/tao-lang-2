@@ -101,7 +101,7 @@ export async function exportHostWeb(build: HostBuild, options: { artifactRoot: s
 function subjectSource(subject: HostSubject): { appName: string; sourcePath: string } {
   return subject === 'hnreader'
     ? { appName: 'HNReaderStub', sourcePath: 'Apps/HNReader/HNReader.tao' }
-    : { appName: 'Clockwork', sourcePath: 'packages/dev/host-testing/fixtures/Clockwork/Clockwork.tao' }
+    : { appName: 'Clockwork', sourcePath: 'packages/e2e-testing/fixtures/Clockwork/Clockwork.tao' }
 }
 
 async function applyApplicationFault(

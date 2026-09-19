@@ -475,7 +475,7 @@ async function writeReceipt(
 }
 
 function moduleRoot(): string {
-  return FS.resolvePath('packages/dev/host-testing/native')
+  return FS.resolvePath('packages/e2e-testing/native')
 }
 
 async function canonicalDirectory(path: string): Promise<string | undefined> {

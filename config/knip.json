@@ -41,25 +41,25 @@
         "dev-src/studio/StudioClientSnapshotProcess.ts",
         "dev-src/studio/StudioPackagedService.ts",
         "dev-src/studio/StudioPackagedTestCommand.ts",
-        "host-testing/playwright.config.ts",
-        "host-testing/app-build/FaultVerdict.host.spec.ts",
-        "host-testing/browser/hnreader.host.spec.ts",
-        "host-testing/browser/clockwork.host.spec.ts",
-        "host-testing/environment/clockwork.host.spec.ts",
-        "host-testing/environment/clockwork-browser.host.spec.ts",
-        "host-testing/enforcement/EffectBoundaryLint.host.spec.ts",
-        "host-testing/native/cloudkit-config.host.spec.ts",
-        "host-testing/fixtures/Clockwork/Clockwork.ts",
         "dev-tests/**/*.test.{ts,tsx}",
         "performance-checks/**/*.test.{ts,tsx}",
         "studio-smoke/**/*.test.{ts,tsx}"
       ],
       "project": [
         "dev-src/**/*.{ts,tsx}",
-        "host-testing/**/*.{ts,tsx}",
         "dev-tests/**/*.{ts,tsx}",
         "performance-checks/**/*.{ts,tsx}",
         "studio-smoke/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/e2e-testing": {
+      "entry": [
+        "playwright.config.ts",
+        "**/*.host.spec.ts",
+        "fixtures/**/*.{ts,tsx}"
+      ],
+      "project": [
+        "**/*.{ts,tsx}"
       ]
     },
     "packages/generation": {

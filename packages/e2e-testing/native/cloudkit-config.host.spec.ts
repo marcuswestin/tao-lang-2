@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { Repo } from '@shared'
-import withTaoICloud, { type TaoICloudPluginProps } from '../../../icloud-native/plugins/with-tao-icloud.cjs'
+import withTaoICloud, { type TaoICloudPluginProps } from '../../icloud-native/plugins/with-tao-icloud.cjs'
 
 const cloudKitContainersInfoKey = 'TaoCloudKitContainerIdentifiers'
 const { default: expoConfigPlugins } = await import(

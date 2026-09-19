@@ -20,6 +20,9 @@
     "noPropertyAccessFromIndexSignature": true,
     "rootDir": ".",
     "paths": {
+      "@e2e-testing": [
+        "./e2e-testing/HostTestingCommand.ts"
+      ],
       "@shared": [
         "./shared/shared-src/shared.ts"
       ],

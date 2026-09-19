@@ -116,7 +116,7 @@ test('visits parameter and destructuring default initializers without leaking lo
   ])
 })
 
-test('rejects legacy testing imports while allowing the host-testing and Playwright boundary', () => {
+test('rejects legacy testing imports while allowing the e2e and Playwright boundary', () => {
   const issues = lintHostTestSource(
     `
     import { Test } from '@shared/test'
