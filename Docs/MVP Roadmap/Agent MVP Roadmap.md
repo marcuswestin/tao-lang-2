@@ -33,6 +33,8 @@ language sees.
 Today `tao` is a zsh wrapper around `bun` inside this checkout's devenv profile, and every package
 is `private`. Nobody outside the repository can install Tao.
 
+- Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
+  evidence and a nine-slice sequence, and leaves eight questions to Ro.
 - Shape: `bun build --compile` binaries for macOS, Linux, and Windows on both architectures; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -41,7 +43,8 @@ is `private`. Nobody outside the repository can install Tao.
   version pin so a project selects the Tao it was written against.
 - Context: `packages/tao-cli`, `packages/runtime-toolchain` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
-- Waits on: nothing to start; code signing certificates and the tap repository come from Ro (`R2`).
+- Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
+  code signing certificates from `R8`, which owns where signing happens.
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 

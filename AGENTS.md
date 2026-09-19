@@ -82,6 +82,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   everything again.
 - Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
   with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
+- A lane too long to wait out is the exception, and `finalize`'s verification is the usual one.
+  Background it, and then report about every 20 seconds until it reports: one line naming what
+  finished since the last note, what is running now, and anything that failed. "Nothing new" is a
+  report. Announcing that verification is running and going quiet until Ro asks is not.
 - The `verification-lanes` skill owns the lanes, the selection aids, the merge-message format, and
   how to read a run that the machine slowed down rather than the branch.
 
@@ -98,3 +102,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `Docs/Roadmap/Developer environment upgrades.md`, which owns the entry format, how an ID is
   chosen, and the lifecycle. Link the index once in the handoff. If nothing changed there, omit
   developer-environment commentary entirely.
+- Addressing an entry moves it: `Resolved` and `Closed` entries live in
+  `Docs/Roadmap/Developer environment upgrades archive.md` and `Developer environment upgrades/Archive/`,
+  moved there in the change that addressed them, which `_repo-lint` enforces. The `devenv-upgrades`
+  skill owns which entries to take next and how both halves are left.
