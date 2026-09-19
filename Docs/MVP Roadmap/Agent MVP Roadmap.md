@@ -213,6 +213,17 @@ WordFlower's `4 - Revolution` re-expressed in the decided dialect, with the `App
 as sibling references. Transcription against a settled decision record, with Ro reviewing the result.
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
+- Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
+  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single `guard default`,
+  §8's `check` as the action's early exit, §7's write-through `bind` and composed `draft`, §10's
+  `CollapseOrder`, `Width`, `Compact`, `reveal`, and `link`, §15's foreign action and view heads in
+  place of `unsafe ts`, and §16's `fixture`, devices, store-query assertions, and `prepare`.
+  `4 - Revolution/Open questions.md` carries the eleven things the decisions do not answer; the one
+  that costs most to defer is Q9, whether empty argument lists on containers are omitted, because
+  §9 and §10's own example disagree and `3 - MVP` inherits whichever wins. `Decisions.md` gained
+  three repairs of its own contradictions, and a fourth candidate turned out to be a decision argued
+  on merits rather than a repair, so it went to Q9 instead of being taken. `Coverage.md` rows stay
+  with `A12`, which owns that file.
 
 ### A12 — Process step 3: consolidate the Tao Future apps
 

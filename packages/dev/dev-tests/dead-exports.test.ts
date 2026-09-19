@@ -70,6 +70,53 @@ Describe('tao foreign binding forms', () => {
     Expect(scan.bindings.map(binding => binding.line)).toEqual([1, 3])
     Expect(scan.unreadable).toEqual([])
   })
+
+  Test('reads a head that wraps before its from, which is how several fails clauses are written', () => {
+    const scan = taoForeignBindings([
+      'action Publish(Value text) returns text',
+      '   fails Offline "Publishing is unavailable."',
+      '   fails Rejected "Publishing was rejected."',
+      '   from ./Api.ts',
+    ].join('\n'))
+
+    Expect(scan.bindings).toEqual([{ line: 4, name: 'Publish', path: './Api.ts' }])
+    Expect(scan.unreadable).toEqual([])
+  })
+
+  Test('does not complete a wrapped head across a blank line, since no declaration spans one', () => {
+    const scan = taoForeignBindings('action Publish(Value text)\n\n   from ./Api.ts')
+
+    Expect(scan.bindings).toEqual([])
+    Expect(scan.unreadable).toEqual([3])
+  })
+
+  Test('never completes a line that carries head text of its own from its neighbour', () => {
+    const scan = taoForeignBindings('action Publish(Value text)\n   retries Twice from ./Api.ts')
+
+    Expect(scan.bindings.map(binding => binding.name)).toEqual(['Twice'])
+  })
+
+  Test('refuses a wrapped head that does not reduce to a parameter list', () => {
+    // Each of these walks back past a clause it could not strip, so without the parameter-list
+    // requirement the last identifier on that line becomes the export name: the phrase a `fails`
+    // sentence names, the word after an unrecognized `runs`, or an unrelated neighbouring binding.
+    const cases = [
+      'action Publish(Value text)\n   fails Offline InviteUsed\n   from ./Api.ts',
+      'action Publish(Value text)\n   runs single\n   from ./Api.ts',
+      'let Other = Thing\n   from ./Api.ts',
+    ]
+
+    for (const source of cases) {
+      const scan = taoForeignBindings(source)
+
+      Expect(scan.bindings).toEqual([])
+      Expect(scan.unreadable.length).toBe(1)
+    }
+  })
+
+  Test('still reads a same-line binding that has no parameter list', () => {
+    Expect(names('nav Workspace from ./Workspace.ts')).toEqual(['Workspace'])
+  })
 })
 
 Describe('tao foreign binding exclusions', () => {
