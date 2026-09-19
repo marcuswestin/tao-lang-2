@@ -293,6 +293,23 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
+# The landing lock is the one turn-taking primitive: claiming it is what earns the right to run a
+# merge-evidence lane and then move refs. `land-lock` blocks until it is yours and exits holding it,
+# so no agent writes a sleep-poll loop of its own; `land-unlock` gives it back. Nothing reclaims a
+# lock on a timer, by design, so a wedged lock surfaces as a warning naming its holder rather than
+# as a takeover — `land-unlock --force` is the person-shaped way out.
+# `just` splits `*ARGS` on whitespace, so a multi-word `--label` has to go through `./dev land-lock`
+# directly; the default label names this worktree, which is what a waiting agent needs anyway.
+# Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it
+[group('Dev')]
+land-lock *ARGS:
+    ./dev land-lock {{ ARGS }}
+
+# Release the machine-wide landing lock this worktree holds
+[group('Dev')]
+land-unlock *ARGS:
+    ./dev land-unlock {{ ARGS }}
+
 # Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
 board *ARGS:
     ./dev board {{ ARGS }}

@@ -1,6 +1,6 @@
 # DEVENV-093 — Ready branches convoy behind each other, each re-verifying the whole tree
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Area:** Landing and merge workflow
 - **Impact:** A landing requires `main` to be an ancestor of the branch, so when several agents
   finish at once only the first lands. Every other branch must merge the new `main`, which changes
@@ -50,4 +50,16 @@
 - **Acceptance:** With three ready branches touching disjoint packages, landing all three costs one
   full verification plus the gates each branch's own inputs reach, and the order they land in is
   visible before they start rather than decided by a race.
+- **Progress (2026-09-19):** The serialization half landed as `LandingLock.ts`: one machine-wide
+  lock, claimed by worktree rather than by process so it spans an agent's several commands, taken by
+  the broad lanes and reused by the landing. It is a **pool, not a queue** — there is no position,
+  because the only decision anyone makes is whether they hold the lock, and having no order is what
+  removes head-of-line blocking when a holder-to-be is still resolving conflicts. `land-lock` blocks
+  and `land-unlock` releases, so no agent writes a sleep-poll loop. Nothing reclaims on a timer,
+  because expiry is indistinguishable from handing two agents the same lock.
+  Two of this entry's proposals were decided against rather than deferred: the **memo key scoped to
+  declared gate inputs** is rejected outright, because a stale declaration produces a green that is
+  wrong and `GreenTree.ts` deliberately keys on the whole tree for that reason; and a **documentation
+  fast path** was considered and dropped. **Batch integration remains open** and is now the only
+  proposed answer to N branches costing N full verifications.
 - **Source:** 2026-09-19 landing convoy, reported by Ro.

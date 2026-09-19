@@ -12,6 +12,11 @@ const JUST_COMMANDS = [
   'finalize',
   'fix',
   'fmt',
+  // The landing lock is the turn-taking primitive every broad lane and the landing itself go
+  // through, so an agent has to be able to claim and return it by the same spelling it reads in
+  // AGENTS.md rather than dropping to `just`.
+  'land-lock',
+  'land-unlock',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
