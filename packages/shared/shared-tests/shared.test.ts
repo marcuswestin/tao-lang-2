@@ -12,6 +12,7 @@ import {
   Platform,
   Repo,
   Switch,
+  TaoStdlib,
   Text,
   Time,
 } from '../shared-src/shared'
@@ -1088,6 +1089,88 @@ Describe('Text', () => {
     Expect(() => JSON.parse(Text.stripJsonc('{ "ready": true } /* unfinished'))).toThrow()
   })
 })
+
+/**
+ * The declared stdlib is the one compile input that need not live inside the repository, so every
+ * memoizing scheme in the toolchain reaches it through this identity. What it must do is notice a
+ * change to a tree nothing else hashes; what it must not do is answer the same for two different
+ * stdlibs.
+ */
+Describe('TaoStdlib', () => {
+  Test('identifies the built-in stdlib without naming a tree', async () => {
+    await withDeclaredStdlibRoot(undefined, async () => {
+      Expect(TaoStdlib.declaredRoot()).toBeUndefined()
+      Expect(await TaoStdlib.declaredRootIdentity()).toBe(await TaoStdlib.declaredRootIdentity())
+    })
+  })
+
+  Test('changes when a file inside the declared tree changes', async () => {
+    const payload = await tmpDir()
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edit\n')
+
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  // A scheme that only asked whether the declared root sits inside an already-hashed tree answers
+  // the same for both of these. They are different stdlibs, so the identity must differ.
+  Test('changes when the variable names a different tree with the same content', async () => {
+    const payload = await tmpDir()
+    const twin = await tmpDir()
+    for (const root of [payload, twin]) {
+      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', root), 'public view Text(Value text) { }\n')
+    }
+
+    const one = await withDeclaredStdlibRoot(payload, () => TaoStdlib.declaredRootIdentity())
+    const other = await withDeclaredStdlibRoot(twin, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(other).not.toBe(one)
+  })
+
+  // Declaring a tree that is not there is not the same as declaring nothing: the first is a broken
+  // configuration whose repair must invalidate the key, the second is the built-in stdlib.
+  Test('separates an absent declared tree from an unset variable', async () => {
+    const missing = FS.resolvePath('not-created', await tmpDir())
+    const declared = await withDeclaredStdlibRoot(missing, () => TaoStdlib.declaredRootIdentity())
+    const unset = await withDeclaredStdlibRoot(undefined, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(declared).not.toBe(unset)
+  })
+
+  // A relative value is resolved against the base the caller's other components are relative to,
+  // not against whatever directory the process happens to be sitting in.
+  Test('resolves a relative declared root against the base directory it is given', async () => {
+    const base = await tmpDir()
+    await FS.writeText(FS.resolvePath('payload/@tao/ui/Views.tao', base), 'public view Text(Value text) { }\n')
+    await withDeclaredStdlibRoot('payload', async () => {
+      const relative = await TaoStdlib.declaredRootIdentity(base)
+      const elsewhere = await TaoStdlib.declaredRootIdentity(await tmpDir())
+
+      Expect(relative).not.toBe(elsewhere)
+    })
+  })
+})
+
+async function withDeclaredStdlibRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
+  const previous = Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+  if (value === undefined) {
+    delete Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+  } else {
+    Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV] = value
+  }
+  try {
+    return await run()
+  } finally {
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]
+    } else {
+      Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV] = previous
+    }
+  }
+}
 
 async function tmpDir() {
   const dir = await mkTestDir('tao-shared-test-')

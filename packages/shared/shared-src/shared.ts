@@ -6,6 +6,7 @@ import * as Platform from './Platform'
 import { ProcessTree } from './ProcessTree'
 import * as Repo from './Repo'
 import { TaoFiles } from './TaoFiles'
+import { TaoStdlib } from './TaoStdlib'
 
 export type {
   DiagnosticRange,
@@ -30,6 +31,7 @@ export {
   Repo,
   Switch,
   TaoFiles,
+  TaoStdlib,
   Text,
   Time,
 }
