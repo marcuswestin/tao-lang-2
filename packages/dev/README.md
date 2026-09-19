@@ -1,6 +1,6 @@
 # Repository lanes
 
-How `check`, `verify`, `full-verify`, and `./agent test` behave when several worktrees of this
+How `check`, `verify`, `verify-full`, and `./agent test` behave when several worktrees of this
 repository are working at once. `packages/dev` owns the scheduler, the gate catalog, the artifacts
 every lane writes, and the doctor; this README owns the operational half — what is shared, what is
 not, and how a lane reports a failure it did not cause.
@@ -110,7 +110,7 @@ it, so nobody re-derives the conclusion from a duration recorded on a busy machi
 A suite is now a unit of reporting rather than of scheduling. Its shards run as separate nodes and
 every rollup groups them back under the suite's name, with the work its shards did together stated
 beside the wall time it occupied, because that difference is what sharding bought. The test ledger
-still records per-file outcomes, so `test-retry`, `test-flakes`, and `test-slowest` read the same
+still records per-file outcomes, so `test-retry` and both `report-test-stats` reports read the same
 evidence whether the suites ran under `./dev test` or inside a verification lane.
 
 ## Reading the schedule
@@ -194,7 +194,7 @@ it sizes itself to `cpuCount` unless `TAO_TEST_JOBS` is set. Inside `check`, `ve
 `./tao test` beside another worktree's lane. Pass `TAO_TEST_JOBS` yourself when that is what you are
 doing.
 
-The window-server row is the honest gap. `full-verify`'s native Studio and canary lanes hold a `gui` resource
+The window-server row is the honest gap. `verify-full`'s native Studio and canary lanes hold a `gui` resource
 so they never overlap **inside one run**, and across worktrees the machine-wide `studio-native-host`
 lease lets exactly one native Studio session run at a time. A second worktree's native lane does not
 wait or time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and
@@ -207,8 +207,20 @@ Never delete the shared registry while another worktree may be using it.
 
 ## Choosing a lane
 
-- `just test "name"` keeps the simple cross-runner name filter; a name matching zero tests fails.
-- `just test-file <path>` runs one exact package Bun or runtime Jest file with repository-local tools.
+- `just test [target]` is the fast default: with no target it is `test-changed`. One target resolves
+  by existence, not by shape — an existing file or directory runs as a path, anything else is a
+  cross-runner test-name filter, and a name matching zero tests fails. The recipe prints the reading
+  it chose, which is what makes one positional safe to overload.
+- A test-name pattern is a filter, not a scope: it narrows the suites a scope already chose. `just
+  test "<name>"` is therefore the changed set filtered to that name rather than every suite filtered
+  to it, and `just test-all "<name>"` is the same filter over every suite. `TestRunRequest` carries
+  the two as separate fields for that reason. `tao-apps` sits out any run carrying a pattern, because
+  `./tao test` takes app roots and has no name filter to give; the run says so in its summary. A
+  filtered run is never recorded as a complete one — it skipped most of the tests in the suites it
+  scheduled, so it can neither call a test green for the retry ledger nor time a suite for the
+  timings store.
+- `just test-file <path>` runs one package Bun or runtime Jest file, or every test file the registry
+  owns under a directory, with repository-local tools.
 - `just test-changed [ref]` selects whole suites from the workspace import graph (`PackageGraph`
   reads the `@alias` imports under each package and resolves them through
   `packages/tsconfig.base.json`; `TestSelection.planChangedSuites` maps changed paths onto it) and
@@ -218,16 +230,20 @@ Never delete the shared registry while another worktree may be using it.
   selects nothing; a path no rule owns widens the run to everything and names itself. Bun's own
   `--changed` and Jest's `--changedSince` are not used: the first stops at the package boundary and
   the second is ignored beside explicit paths.
-- `just test-retry` re-runs files not green since this checkout's latest complete test run. The
+- `just test-retry`, or `just retry` under its shorter name, re-runs files not green since this
+  checkout's latest complete test run. The
   ledger is under `.artifacts/testing`, so a new worktree starts cold and retries everything. Its
   JSONL history is compacted to a bounded recent window while retaining at least the newest two
   valid outcomes for every recorded test, so one test cannot crowd out another's flake evidence.
-- `just test` is the complete package and Tao app suite. Complete gates use this mode and never
-  consult the retry ledger.
-- `just verify` needs a scope and refuses without one. `--changed` runs the fix, typecheck, lint, and
-  build gates with `_test-changed` in place of `_test`, under the `verify-changed` lane; it is the
-  iteration gate. `--complete` is the same graph with `_test`, under the `verify` lane; it is the
+- `just test-all` is the complete package and Tao app suite. Complete gates use this mode and never
+  consult the retry ledger. Bare `just test` is a heuristic over the branch diff and can be green
+  while a suite the change broke elsewhere never ran, which is what `test-all` is for.
+- Each verification scope is its own recipe rather than a flag, so it completes under `just v<TAB>`
+  and sorts into the order it widens in. `verify-changed` runs the fix, typecheck, lint, and build
+  gates with `_test-changed` in place of `_test`, under the `verify-changed` lane; it is the
+  iteration gate. `just verify` is the same graph with `_test`, under the `verify` lane; it is the
   gate before a reviewed commit and before the merge, and `merge-with-main` runs it on the squash.
+  `verify-full` and `verify-full-sandbox` widen from there. `--no-cache` is the one flag they share.
 - Every lane that passes `--green-tree` to `./dev gates` records what it proved under
   `.artifacts/verify/green/`, one small file per record. A record is keyed by the **whole visible
   tree** of this checkout — never by a test file, a package, or any declared input set — together
@@ -237,25 +253,26 @@ Never delete the shared registry while another worktree may be using it.
   anyone having to declare that dependency. There is no time-to-live, because time is not what makes
   a verdict stale. A later run on the same key stands on the record and prints its evidence instead
   of running, when the record belongs to the lane itself or a lane whose gates contain it: `verify`
-  accepts `full-verify-sandbox` and `full-verify`, `verify-changed` accepts all three, `full-verify`
-  accepts only itself. `--fresh` ignores every record; a red or interrupted run writes none.
+  accepts the `verify-full-sandbox` and `verify-full` lane records, `verify-changed` accepts all
+  three, `verify-full` accepts only itself. `--no-cache` ignores every record; a red or interrupted run writes none.
 - Three kinds of node are never recorded, because the key does not describe their verdict:
   - a node that rewrites the tree or fills a generated directory, whose output is derived state;
   - a node whose verdict depends on the host — the Studio smokes, the native shell, the canary, the
     bundle proof — declared `hostDependent` in the gate table. This is the only gap in the design
     that can produce a **false green**, which is why it is a declared property of the node and why
     `GreenTree.record` refuses a name the caller listed as unrecordable;
-  - a test node covering a file the flake ledger has seen flip without changing (`just test-flakes`).
+  - a test node covering a file the flake ledger has seen flip without changing
+    (`just report-test-stats`).
     A tree hash cannot see instability, and a record would leave a flake unrun for as long as nobody
     touches its file — exactly when it most needs to run. The run says which nodes it refused to
     skip and why.
 - The backstop for everything a key cannot describe is a cold run on a schedule, not a shorter record
-  lifetime: `just full-verify --fresh` on `main`, nightly or weekly. It belongs wherever the hosted
+  lifetime: `just verify-full --no-cache` on `main`, nightly or weekly. It belongs wherever the hosted
   gate that reads `summary.json` lands; until that exists, it is a periodic human or scheduled-agent
   run, and making the merge lane cold instead would restore exactly the duplicate run this machinery
   exists to remove.
-- `just full-verify-sandbox` runs the same full gate membership in a managed shell while explicitly
-  skipping the five active host-only browser and native UI gates. Only `just full-verify` from an
+- `just verify-full-sandbox` runs the same full gate membership in a managed shell while explicitly
+  skipping the five active host-only browser and native UI gates. Only `just verify-full` from an
   unsandboxed shell proves those five gates. The simulated editor journey remains individually
   runnable as `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`, but its
   gate, `studio-smoke-simulated-user`, is temporarily quarantined from both full-verification lanes
@@ -265,23 +282,25 @@ Never delete the shared registry while another worktree may be using it.
 `<name>-tests` directory, `performance-checks`, `runtime-jest`, and `tao-apps`. Each entry owns its
 files and knows how to build a process for **any subset** of them, which is what lets `TestNodes`
 split it into shards without the registry knowing shards exist; its scheduling weights live in
-`GateCatalog` beside every other node's. Every lane above is a filter over that registry — a name
-pattern, an exact file, the changed plan's suites, the retry ledger's files — and a source that
-cannot serve a run kind says so in the entry, which is where the summary's "suite was skipped" note
-comes from. The gate lanes filter the same registry through the same seam, so the suites a
+`GateCatalog` beside every other node's. Every lane above is a filter over that registry — an exact
+file, the changed plan's suites, the retry ledger's files, and, composed with any of them, a
+test-name pattern — and a source that cannot serve a selection says so in the entry, which is where
+the summary's "suite was skipped" note comes from. The gate lanes filter the same registry through the same seam, so the suites a
 verification run schedules and the suites `./dev test` schedules cannot drift apart.
 
-`just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
-runs print one advisory when their change shape or full-run history makes a complete run worthwhile.
+`just report-test-stats` prints both ledger reports — suspected flakes, then the slowest tests — in
+one run, over the `./dev test-flakes` and `./dev test-slowest` implementations, and bounds both with
+one `limit`. It is evidence, not a gate. Changed and retry runs print one advisory when their change
+shape or full-run history makes a complete run worthwhile.
 
 Human `merge-with-main` execution hands both verification phases the real terminal, so their parallel
-gates use the same live dashboard as a direct `just full-verify` or `just verify`. A non-interactive
+gates use the same live dashboard as a direct `just verify-full` or `just verify`. A non-interactive
 merge keeps the durable report: it prints the local start time for each admitted gate before that
 gate's completion and log path.
 
 `just merge-with-main` runs only when Ro asks for it in the current request, never on an agent's own
 initiative. It takes no flag to do its job: the plain invocation performs the landing, and its flags
-only remove work. `--skip-full-verify` omits `just full-verify` on the feature branch, so the staged
+only remove work. `--skip-verify-full` omits `just verify-full` on the feature branch, so the staged
 squash gets `just verify --complete` instead; `--skip-verify` omits that staged-squash pass;
 `--skip-all` implies both after one confirmation that defaults to No and needs a terminal. The
 staged-squash **tree-equality assertion** runs under every combination, including `--skip-all`,
@@ -289,8 +308,8 @@ because it is a correctness check rather than an optimization: the squash must b
 verification proved, and a mismatch stops the landing.
 
 Nothing verifies the same bytes twice. When an agent has already run `verify --complete`, the
-`full-verify` the merge runs at that same tree skips every gate that run recorded and executes only
-the host-dependent lanes, which are never recorded; and when `full-verify` proved the feature head,
+`verify-full` the merge runs at that same tree skips every gate that run recorded and executes only
+the host-dependent lanes, which are never recorded; and when `verify-full` proved the feature head,
 Git's own tree comparison — not a second lane — is what proves the staged squash. Its strict
 preflight
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
