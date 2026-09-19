@@ -1,0 +1,16 @@
+# Two forms, both asking what somebody was trying to do rather than what broke. There is
+# deliberately no bug-report form: at this stage we learn more from an unfinished attempt than from
+# a reduced repro, and a bug-report form quietly teaches people to throw the intent away before
+# they file. Anything that does not fit either form belongs in a discussion, which is what the
+# links below are for, so blank issues stay off.
+blank_issues_enabled: false
+contact_links:
+  - name: I want to build something Tao cannot express yet
+    url: https://github.com/marcuswestin/tao-lang-2/discussions/new?category=ideas
+    about: Not stuck on a specific attempt — tell us about the app you have in mind and where Tao runs out.
+  - name: How would I say this in Tao?
+    url: https://github.com/marcuswestin/tao-lang-2/discussions/new?category=q-a
+    about: Ask before you are stuck. What you searched for and did not find is feedback too.
+  - name: Read the language spec
+    url: https://github.com/marcuswestin/tao-lang-2/tree/main/Docs/Spec
+    about: What Tao implements today. If it disagrees with what you saw, that is worth an issue.

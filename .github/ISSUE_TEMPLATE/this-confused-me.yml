@@ -1,0 +1,68 @@
+name: This confused me
+description: Something in Tao did not mean what you thought it meant. Tell us what you assumed.
+title: "Confusing: "
+labels: ["feedback", "confused"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A language that surprises you has a defect, whether or not it behaved as designed. This is
+        the right place for "I read this wrong", "I could not tell these two apart", "the error
+        told me nothing", and "I assumed it would do the other thing".
+
+        The most valuable line in this report is what you *expected*. We can read our own docs; we
+        cannot see what they led you to believe.
+
+  - type: textarea
+    id: what-you-met
+    attributes:
+      label: What confused you?
+      description: >
+        The Tao you were reading or writing, the error message, the Studio screen, or the piece of
+        documentation. Paste or quote it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-you-expected
+    attributes:
+      label: What did you think it meant?
+      description: >
+        What you took it to mean at the time, before you found out otherwise. An honest wrong
+        reading is exactly the thing we cannot get anywhere else.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-it-meant
+    attributes:
+      label: What did it actually mean?
+      description: >
+        If you worked it out, say how — and what finally told you. If you never worked it out, say
+        that instead; it is just as useful.
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-would-have-helped
+    attributes:
+      label: What would have made it obvious?
+      description: >
+        Different wording, a different keyword, a diagnostic that said something else, an example
+        in the docs. Guess freely.
+    validations:
+      required: false
+
+  - type: textarea
+    id: fingerprint
+    attributes:
+      label: Environment
+      description: >
+        Optional, and only if you are working in a checkout of this repository. Run
+        `./agent doctor --fingerprint` and paste the JSON. It reports your OS, architecture, Tao
+        commit, toolchain versions and lockfile hashes, and Xcode version if you have one. It
+        contains no file paths, no account or machine names, and nothing else about you — read it
+        before you paste it if you like.
+      render: json
+    validations:
+      required: false

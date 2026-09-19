@@ -1,4 +1,4 @@
-# DEVENV-098 — No command reclaims dead worktrees and merged branches
+# DEVENV-099 — No command reclaims dead worktrees and merged branches
 
 - **Status:** Candidate
 - **Area:** Worktrees, landing, diagnostics
