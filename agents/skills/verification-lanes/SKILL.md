@@ -69,10 +69,10 @@ description: >-
 - The runner detects when changed or retry work deserves a complete pass and prints the reason; do
   not maintain a second trigger list in instructions.
 - Run `./agent verify-full-sandbox` immediately before a merge when working in a managed shell. It
-  runs the full gate membership except the five explicitly host-only browser and native UI gates (the
-  simulated-user journey, `studio-smoke-simulated-user`, is a separate quarantine skip, not a
-  host-only gate; `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
-  reproduces it) and never proves those gates passed.
+  runs the full gate membership except the explicitly host-only browser and native UI gates, and
+  never proves those gates passed. `studio-smoke-simulated-user` is one of them: it is an ordinary
+  member of `VERIFY_FULL_GATES` again, no longer quarantined, and
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone.
 - Run `just verify-full` from an unsandboxed normal terminal whenever Studio is in scope and before
   landing through the human merge workflow.
 - Read `.artifacts/logs/<lane>/latest/summary.json` before diagnosing a red lane. A separately

@@ -253,6 +253,40 @@ Describe('namespace facade reachability', () => {
     Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
       .toEqual(['packages/shared/shared-src/FS.ts#readText'])
   })
+
+  // Naming a member in prose is not using it. Counting those mentions kept dead exports out of the
+  // report, which is the whole output of this tool.
+  Test('ignores a member named only in a comment or a quoted string', () => {
+    const local: SourceFile[] = [
+      ...files.slice(0, 2),
+      {
+        path: 'packages/dev/dev-src/Prose.ts',
+        source: "import * as Shared from '@shared'\n"
+          + '// Shared.FS.readText is what this used to call.\n'
+          + '/* See Shared.FS.writeText for the other half. */\n'
+          + "const message = 'call Shared.FS.remove when done'\n"
+          + 'await Shared.FS.exists(message)\n',
+      },
+    ]
+
+    Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
+      .toEqual(['packages/shared/shared-src/FS.ts#exists'])
+  })
+
+  // `${…}` holes hold real code, so masking a template literal would call a live export dead.
+  Test('counts a member reached inside a template literal hole', () => {
+    const local: SourceFile[] = [
+      ...files.slice(0, 2),
+      {
+        path: 'packages/dev/dev-src/Template.ts',
+        source: "import * as Shared from '@shared'\n"
+          + 'const label = `read ${await Shared.FS.readText(path)}`\n',
+      },
+    ]
+
+    Expect([...facadeReachedMembers(local, namespaceFacadeAliases(local))])
+      .toEqual(['packages/shared/shared-src/FS.ts#readText'])
+  })
 })
 
 Describe('module binding names', () => {
