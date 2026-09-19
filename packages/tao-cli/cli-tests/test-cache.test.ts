@@ -1,4 +1,4 @@
-import { FS, Platform, TaoStdlib } from '@shared'
+import { CLI, FS, Platform, TaoStdlib } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { TestCache } from '../cli-src/test-cache'
 import { withTaoFixture } from './test-cli-files'
@@ -171,6 +171,41 @@ Describe('tao test compiled-output fingerprint', () => {
 
       Expect(redirected).not.toBe(builtIn)
     })
+  })
+
+  // A project can live under a Git-ignored path — a scratch app under `.artifacts/tmp/` is the
+  // documented way to try something out — and the source walk asks Git what is there. Git answers
+  // with nothing, which is not "these sources are unchanged" but "I cannot see these sources", and
+  // hashing that answer hands every later run of an edited scratch app the first run's green.
+  Test('changes when a source under a Git-ignored path changes', async () => {
+    await withTaoFixture({ ...fixture, '.gitignore': 'Nested/\n' }, async rootDir => {
+      await CLI.run('git', { args: ['init', '--quiet'], cwd: rootDir, stdio: 'pipe' })
+      const before = await fingerprintOf(requestFor(rootDir))
+      await FS.writeText(
+        FS.resolvePath('Nested/App.tao', rootDir),
+        'app Fingerprinted { view Main }\nview Main() { }\n// edited under an ignored path\n',
+      )
+
+      Expect(await fingerprintOf(requestFor(rootDir))).not.toBe(before)
+    })
+  })
+
+  // The toolchain term is what ties a fingerprint to the compiler that produced the output. Without
+  // it a run reuses output built by a different build of the compiler over byte-identical sources —
+  // and every other term in the key is one this suite already varies, so its absence would show up
+  // nowhere.
+  Test('changes when the toolchain that compiled the output changes', async () => {
+    await withTaoFixture(
+      { ...fixture, 'toolchain/packages/parser/parser-src/Parse.ts': 'export const v = 1\n' },
+      async rootDir => {
+        const toolchainRoot = FS.resolvePath('toolchain', rootDir)
+        const request = { ...requestFor(rootDir), toolchainRoot }
+        const before = await fingerprintOf(request)
+        await FS.writeText(FS.resolvePath('packages/parser/parser-src/Parse.ts', toolchainRoot), 'export const v = 2\n')
+
+        Expect(await fingerprintOf(request)).not.toBe(before)
+      },
+    )
   })
 
   Test('reports reuse as switched off only for the documented value', async () => {

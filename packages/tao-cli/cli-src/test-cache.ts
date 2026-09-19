@@ -69,6 +69,13 @@ export type FingerprintRequest = {
   runtimeRoot: string
   /** The discovered test files, sorted. */
   testPaths: readonly string[]
+  /**
+   * The checkout whose compiler this is, defaulting to the one this module was loaded from. It is
+   * a field rather than a constant so a test can vary the toolchain term at all: every other term
+   * is reachable from a fixture, and this one would otherwise be assertable only by editing the
+   * running repository.
+   */
+  toolchainRoot?: string
 }
 
 /** TestCache owns the identity under which one `tao test` run may reuse another's compiled output. */
@@ -89,7 +96,7 @@ function disabled(): boolean {
  * identified honestly and the run must therefore compile for itself.
  */
 async function fingerprint(request: FingerprintRequest): Promise<string | undefined> {
-  const toolchainRoot = Repo.tryGetRoot(import.meta.dir)
+  const toolchainRoot = request.toolchainRoot ?? Repo.tryGetRoot(import.meta.dir)
   if (toolchainRoot === undefined) {
     // A CLI running from outside its own source tree — a packaged build — cannot say which compiler
     // it is. Without that half of the key, no amount of source hashing makes reuse safe.
@@ -158,6 +165,14 @@ async function sourceIdentity(request: FingerprintRequest): Promise<string> {
   }
   const sources = new Set<string>()
   for (const testPath of request.testPaths) {
+    // The named file goes in whatever the walk below finds. It is the one file this run is
+    // certainly about, and `minimalRoots` drops it as a search root as soon as its project root
+    // joins the set — so without this an explicitly named file under a directory the walk cannot
+    // see contributes nothing but its path.
+    const resolved = FS.resolvePath(testPath)
+    if (await FS.isFile(resolved)) {
+      sources.add(resolved)
+    }
     const projectRoot = await inPlace.workspaceRootForPath(testPath)
     searchRoots.add(projectRoot)
     for (const path of await ancestorProjectFiles(projectRoot)) {
@@ -166,13 +181,39 @@ async function sourceIdentity(request: FingerprintRequest): Promise<string> {
   }
   const runtimeRoot = FS.resolvePath(request.runtimeRoot)
   for (const searchRoot of minimalRoots(searchRoots)) {
-    for (const path of await Repo.filesUnder(searchRoot, { excludeDirectoryNames: SOURCE_EXCLUDED_DIRECTORIES })) {
+    for (const path of await visibleFilesUnder(searchRoot)) {
       if (isAuthored(FS.relativePath(searchRoot, path), path, runtimeRoot)) {
         sources.add(path)
       }
     }
   }
   return await identityOf('/', [...sources])
+}
+
+/**
+ * visibleFilesUnder lists a search root's files the way the compiler will read them, which is not
+ * always the way Git lists them. `Repo.filesUnder` answers with Git's tracked-and-unignored view
+ * inside a worktree, and a project living under an ignored path — a scratch app under
+ * `.artifacts/tmp/`, which is a documented way to try something out — has no such files at all.
+ * Hashing that answer produces a fingerprint covering none of the sources, so every later run of an
+ * edited scratch app matches it and replays the first run's green.
+ *
+ * An empty Git answer over a directory that does hold files is the whole of that case, and the
+ * filesystem walk is the honest reading of it. A root Git answers for is left alone, so the ordinary
+ * path costs nothing and `_gen_` trees inside a tracked project stay excluded by their ignore rules
+ * rather than by this walk — `isAuthored` is what excludes them once the walk is the one listing.
+ */
+async function visibleFilesUnder(searchRoot: string): Promise<readonly string[]> {
+  const listed = await Repo.filesUnder(searchRoot, { excludeDirectoryNames: SOURCE_EXCLUDED_DIRECTORIES })
+  if (listed.length > 0 || !await FS.isDirectory(searchRoot)) {
+    return listed
+  }
+  const walked: string[] = []
+  const excluded: ReadonlySet<string> = new Set<string>(SOURCE_EXCLUDED_DIRECTORIES)
+  for await (const path of FS.walk(searchRoot, { excludeDirectory: name => excluded.has(name) })) {
+    walked.push(path)
+  }
+  return walked
 }
 
 /**
