@@ -341,7 +341,7 @@ Describe('merge-with-main', () => {
       'log',
     ])
     Expect(fake.calls.some(call => ['fetch', 'merge', 'commit', 'push', 'reset'].includes(call.args[0]!))).toBe(false)
-    Expect(fake.lines).toContain('PLAN  Run just full-verify on the feature branch.')
+    Expect(fake.lines).toContain('PLAN  Run just verify-full on the feature branch.')
     Expect(fake.lines).toContain(
       "PLAN  Accept that tree equality as the staged squash's evidence; full verification proved the same bytes.",
     )
@@ -354,17 +354,17 @@ Describe('merge-with-main', () => {
   Test('--dry-run names the flag that will skip each verification phase', async () => {
     const skipFull = fakeDependencies()
     await MergeWithMainCommand.run(
-      { dryRun: true, repositoryRoot: skipFull.repository.featureRoot, skipFullVerify: true },
+      { dryRun: true, repositoryRoot: skipFull.repository.featureRoot, skipVerifyFull: true },
       skipFull.dependencies,
     )
     Expect(skipFull.lines).toContain(
-      'PLAN  Skip just full-verify on the feature branch because --skip-full-verify was passed.',
+      'PLAN  Skip just verify-full on the feature branch because --skip-verify-full was passed.',
     )
     Expect(skipFull.lines).toContain(
       'PLAN  Run just verify --complete on the staged squash, because nothing else verified this branch.',
     )
     Expect(skipFull.lines.at(-1)).toBe(
-      'DRY RUN  No refs or worktrees changed. Land it with: ./dev merge-with-main --skip-full-verify',
+      'DRY RUN  No refs or worktrees changed. Land it with: ./dev merge-with-main --skip-verify-full',
     )
 
     const skipAll = fakeDependencies()
@@ -373,7 +373,7 @@ Describe('merge-with-main', () => {
       skipAll.dependencies,
     )
     Expect(skipAll.lines).toContain(
-      'PLAN  Skip just full-verify on the feature branch because --skip-all was passed.',
+      'PLAN  Skip just verify-full on the feature branch because --skip-all was passed.',
     )
     Expect(skipAll.lines).toContain(
       'PLAN  Skip just verify --complete on the staged squash because --skip-all was passed; '
@@ -413,7 +413,7 @@ Describe('merge-with-main', () => {
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(outcome.mode).toBe('executed')
-    Expect(operations).toContain('just full-verify')
+    Expect(operations).toContain('just verify-full')
     Expect(operations.some(operation => operation.startsWith('git merge --squash'))).toBe(true)
     Expect(operations.some(operation => operation.startsWith('git commit -F'))).toBe(true)
     Expect(operations).toContain(
@@ -425,8 +425,8 @@ Describe('merge-with-main', () => {
     Expect(operations).toContain('git branch -D feat/example')
     Expect(fake.repository.mainHead).toBe('commit00000000000000000000000000000000000')
     Expect(([...fake.snapshots.values()][0] as MergeSnapshot).phase).toBe('complete')
-    // Exactly one lane, invoked without --fresh, so it may reuse a green record for this tree.
-    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([['full-verify']])
+    // Exactly one lane, invoked without --no-cache, so it may reuse a green record for this tree.
+    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([['verify-full']])
   })
 
   Test('executes verification and pushes before preserving the invoking worktree and cleaning refs', async () => {
@@ -436,7 +436,7 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    const fullVerify = operations.indexOf('just full-verify')
+    const fullVerify = operations.indexOf('just verify-full')
     const squash = operations.findIndex(operation => operation.startsWith('git merge --squash'))
     const treeProof = operations.findIndex((operation, index) => index > squash && operation === 'git write-tree')
     // The staged squash is the tree full verification just proved, so it is not verified again.
@@ -507,7 +507,7 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    const fullVerify = operations.indexOf('just full-verify')
+    const fullVerify = operations.indexOf('just verify-full')
     const deleteRemote = operations.indexOf(
       'git push origin --force-with-lease=refs/heads/feat/example:stale00000000000000000000000000000000000'
         + ' :refs/heads/feat/example',
@@ -539,7 +539,7 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const verificationCalls = fake.calls.filter(call =>
-      call.command === 'just' && (call.args[0] === 'full-verify' || call.args[0] === 'verify')
+      call.command === 'just' && (call.args[0] === 'verify-full' || call.args[0] === 'verify')
     )
     Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream'])
     Expect(outcome.mode).toBe('executed')
@@ -548,17 +548,17 @@ Describe('merge-with-main', () => {
     )
   })
 
-  Test('--skip-full-verify verifies the staged squash on main instead of the feature branch', async () => {
+  Test('--skip-verify-full verifies the staged squash on main instead of the feature branch', async () => {
     const fake = fakeDependencies()
 
     const outcome = await MergeWithMainCommand.run({
       repositoryRoot: fake.repository.featureRoot,
-      skipFullVerify: true,
+      skipVerifyFull: true,
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     // Nothing else verified this branch, so the staged squash is where verification happens.
-    Expect(operations).not.toContain('just full-verify')
+    Expect(operations).not.toContain('just verify-full')
     Expect(operations.indexOf('just verify --complete')).toBeGreaterThan(
       operations.findIndex(operation => operation.startsWith('git merge --squash')),
     )
@@ -566,11 +566,11 @@ Describe('merge-with-main', () => {
       operations.findIndex(operation => operation.startsWith('git commit -F')),
     )
     Expect(fake.lines).toContain(
-      "WARN  Skipped just full-verify on 'feat/example' because --skip-full-verify "
+      "WARN  Skipped just verify-full on 'feat/example' because --skip-verify-full "
         + 'was passed.',
     )
     Expect(outcome.mode).toBe('executed')
-    // Exactly one lane, invoked without --fresh, so it may reuse a green record for this tree.
+    // Exactly one lane, invoked without --no-cache, so it may reuse a green record for this tree.
     Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([[
       'verify',
       '--complete',
@@ -586,7 +586,7 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    Expect(operations).toContain('just full-verify')
+    Expect(operations).toContain('just verify-full')
     Expect(operations).not.toContain('just verify --complete')
     Expect(fake.lines.some(line => line.includes('equals the fully verified feature tree'))).toBe(true)
     Expect(outcome.mode).toBe('executed')
@@ -637,7 +637,7 @@ Describe('merge-with-main', () => {
 
     Expect(asked).toHaveLength(1)
     Expect(asked[0]).toContain('Really merge with nothing checked at all?')
-    Expect(asked[0]).toContain("no just full-verify on 'feat/example'")
+    Expect(asked[0]).toContain("no just verify-full on 'feat/example'")
     Expect(asked[0]).toContain('whose linear history is the product of squashing')
     Expect(refused.snapshots.size).toBe(0)
     Expect(refused.calls.some(call => ['commit', 'fetch', 'merge', 'push', 'reset'].includes(call.args[0]!)))
@@ -668,10 +668,10 @@ Describe('merge-with-main', () => {
     for (
       const options of [
         {},
-        { skipFullVerify: true },
+        { skipVerifyFull: true },
         { skipVerify: true },
         { skipAll: true },
-        { skipFullVerify: true, skipVerify: true },
+        { skipVerifyFull: true, skipVerify: true },
       ]
     ) {
       const fake = fakeDependencies({ stagedTree: 'different-tree' })
@@ -701,15 +701,15 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    Expect(operations.filter(operation => operation === 'just full-verify')).toHaveLength(2)
+    Expect(operations.filter(operation => operation === 'just verify-full')).toHaveLength(2)
     Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
-      operations.indexOf('just full-verify'),
+      operations.indexOf('just verify-full'),
     )
-    Expect(operations.findLastIndex(operation => operation === 'just full-verify')).toBeGreaterThan(
+    Expect(operations.findLastIndex(operation => operation === 'just verify-full')).toBeGreaterThan(
       operations.indexOf('git merge --no-edit origin/main'),
     )
     Expect(operations.indexOf('git merge --ff-only origin/main')).toBeGreaterThan(
-      operations.findLastIndex(operation => operation === 'just full-verify'),
+      operations.findLastIndex(operation => operation === 'just verify-full'),
     )
     Expect(fake.lines.some(line => line.includes('restarting full verification (pass 2/3)'))).toBe(true)
   })
@@ -727,7 +727,7 @@ Describe('merge-with-main', () => {
       repositoryRoot: fake.repository.featureRoot,
     }, fake.dependencies)).rejects.toThrow('moved during 3 consecutive verification passes')
 
-    Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'full-verify')).toHaveLength(3)
+    Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'verify-full')).toHaveLength(3)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(false)
     Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
   })
@@ -737,7 +737,7 @@ Describe('merge-with-main', () => {
     const run = fake.dependencies.run
     fake.dependencies.run = async (command, spec) => {
       const outcome = await run(command, spec)
-      if (command === 'just' && spec.args?.[0] === 'full-verify') {
+      if (command === 'just' && spec.args?.[0] === 'verify-full') {
         fake.repository.mainStatus = '?? someone-elses-file.ts\n'
       }
       return outcome
@@ -911,7 +911,7 @@ Describe('merge-with-main', () => {
         { dryRun: true },
         { messageFile: '/elsewhere.msg' },
         { skipAll: true },
-        { skipFullVerify: true },
+        { skipVerifyFull: true },
         { skipVerify: true },
       ]
     ) {
@@ -1002,7 +1002,7 @@ Describe('merge-with-main', () => {
       }
       const outcome = await MergeWithMainCommand.run({
         repositoryRoot: featureRoot,
-        skipFullVerify: true,
+        skipVerifyFull: true,
       }, dependencies)
 
       Expect(outcome.mode).toBe('executed')

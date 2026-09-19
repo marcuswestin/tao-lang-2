@@ -36,10 +36,10 @@ export type MergeWithMainOptions = {
   repositoryRoot?: string
   /** Imply both skip options after one interactive confirmation that defaults to No. */
   skipAll?: boolean
-  /** Skip the otherwise mandatory unsandboxed full verification of the feature branch. */
-  skipFullVerify?: boolean
   /** Skip the staged-squash `just verify --complete` pass. */
   skipVerify?: boolean
+  /** Skip the otherwise mandatory unsandboxed full verification of the feature branch. */
+  skipVerifyFull?: boolean
 }
 
 /** MergePhase names each durable recovery boundary in the landing workflow. */
@@ -329,7 +329,7 @@ export const MergeWithMainCommand = {
       if (
         options.dryRun === true
         || options.skipAll === true
-        || options.skipFullVerify === true
+        || options.skipVerifyFull === true
         || options.skipVerify === true
         || options.messageFile !== undefined
       ) {
@@ -367,9 +367,9 @@ export const MergeWithMainCommand = {
   },
 } as const
 
-/** Report whether the feature branch's `just full-verify` pass is skipped, and by which flag. */
+/** Report whether the feature branch's `just verify-full` pass is skipped, and by which flag. */
 function fullVerifySkippedBy(options: MergeWithMainOptions): string | undefined {
-  return options.skipFullVerify === true ? '--skip-full-verify' : options.skipAll === true ? '--skip-all' : undefined
+  return options.skipVerifyFull === true ? '--skip-verify-full' : options.skipAll === true ? '--skip-all' : undefined
 }
 
 /** Report whether the staged squash's `just verify --complete` pass is skipped, and by which flag. */
@@ -397,8 +397,8 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? ['PLAN  Ask once, defaulting to No, whether to merge with nothing verified at all.']
       : []),
     fullVerifySkip === undefined
-      ? 'PLAN  Run just full-verify on the feature branch.'
-      : `PLAN  Skip just full-verify on the feature branch because ${fullVerifySkip} was passed.`,
+      ? 'PLAN  Run just verify-full on the feature branch.'
+      : `PLAN  Skip just verify-full on the feature branch because ${fullVerifySkip} was passed.`,
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
     'PLAN  Squash onto main and prove the staged tree equals the feature tree.',
     fullVerifySkip === undefined
@@ -421,8 +421,8 @@ function executionCommand(options: MergeWithMainOptions): string {
   if (options.skipAll === true) {
     parts.push('--skip-all')
   }
-  if (options.skipFullVerify === true) {
-    parts.push('--skip-full-verify')
+  if (options.skipVerifyFull === true) {
+    parts.push('--skip-verify-full')
   }
   if (options.skipVerify === true) {
     parts.push('--skip-verify')
@@ -460,7 +460,7 @@ async function authorizeExecution(
 }
 
 function skipAllPrompt(branch: string): string {
-  return `--skip-all runs no fix, no typecheck, no lint, no tests, no just full-verify on '${branch}', `
+  return `--skip-all runs no fix, no typecheck, no lint, no tests, no just verify-full on '${branch}', `
     + 'and no just verify --complete on the staged squash. An unverified squash of '
     + `'${branch}' would then be pushed to main, whose linear history is the product of squashing, `
     + 'so it cannot be fast-forwarded away afterwards. Really merge with nothing checked at all?'
@@ -542,7 +542,7 @@ async function stabilizeAndVerify(
       await runAndSnapshot(
         snapshot,
         'just',
-        ['full-verify'],
+        ['verify-full'],
         snapshot.featureRoot,
         'feature-verified',
         dependencies,
@@ -556,7 +556,7 @@ async function stabilizeAndVerify(
       }
     } else {
       dependencies.writeLine(
-        `WARN  Skipped just full-verify on '${snapshot.branch}' because ${fullVerifySkip} `
+        `WARN  Skipped just verify-full on '${snapshot.branch}' because ${fullVerifySkip} `
           + 'was passed.',
       )
       await advanceSnapshot(snapshot, 'feature-verified', dependencies)
