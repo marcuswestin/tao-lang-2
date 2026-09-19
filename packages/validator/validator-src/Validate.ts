@@ -4,7 +4,7 @@ import type { ValidationContext } from './validation'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
-import { bridgeValidationChecks } from './validators/bridge-validator'
+import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import {
@@ -112,6 +112,7 @@ async function validateForeignImplementationFiles(file: AST.TaoFile, ctx: Valida
   await ActionsValidator.validateForeignFiles(file, ctx)
   await ViewsValidator.validateForeignFiles(file, ctx)
   await validateConfigurationSidecarFiles(file, ctx)
+  await validateBridgedSidecarFiles(file, ctx)
 }
 
 /** Validate exposes Tao AST validation passes. */

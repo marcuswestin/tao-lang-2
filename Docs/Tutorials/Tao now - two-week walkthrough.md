@@ -7,6 +7,13 @@ running Tao app during the walkthrough pass; later contract corrections are not 
 as live evidence. **Not verified here** means the implementation and tests exist, but this host lacked
 the required service, credential, device, or browser capability.
 
+This is a dated record, not a living contract: what it says was **verified** was verified on those
+dates and has not been re-run since. What it cannot be allowed to do is name things that no longer
+exist, so `packages/tao-cli/cli-tests/tutorials.test.ts` checks every repository path, `just` recipe,
+`--app` name, and `tao` subcommand it mentions against the repository on every run. A rename that
+leaves this walkthrough behind fails that test. For behavior that is current by construction, read
+`Your First Tao App.md`, whose every step the same suite compiles and runs.
+
 ## What landed
 
 - **A usable Studio workbench:** project/app sessions, Design/Code/Run/Draw layouts, semantic source
@@ -156,8 +163,8 @@ and live scenario switching were all verified. Use an ordinary terminal for a ph
 its CoreDevice connection is outside the agent sandbox.
 
 Open **Agent**, choose project chat or the current scenario, ask a question, then review any proposed
-source change before applying it. During this pass, Studio reached `claude-sonnet-5` and attempted an
-answer, but Anthropic rejected the configured API key as invalid. Correct the secret with
+source change before applying it. During this pass, Studio reached the configured model and attempted an
+answer, but the provider rejected the configured API key as invalid. Correct the secret with
 `just secrets`, restart Studio, and retry; do not print or expose the decrypted secret while
 diagnosing it.
 
@@ -213,7 +220,7 @@ they were not run because they change release state.
   representative native component, Device Kit, and navigation paths; Companion pairing, rendering,
   and scenario switching; `tao create --ai none`; `tao review`; `tao ship --dry-run`; and the slow
   Studio browser-smoke lane. This dated walkthrough is not final simulated-user acceptance: that
-  journey is currently quarantined from `full-verify` pending ten consecutive reliable browser runs.
+  journey is currently quarantined from `verify-full` pending ten consecutive reliable browser runs.
 - **Present but not end-to-end verified:** freehand persistence/snap, every native control interaction,
   sharing, chromeless navigation/restoration, a successful Studio agent answer, and Dev/iCloud/CloudKit
   native behavior.

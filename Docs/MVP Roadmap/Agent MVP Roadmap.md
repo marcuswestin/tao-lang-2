@@ -33,6 +33,8 @@ language sees.
 Today `tao` is a zsh wrapper around `bun` inside this checkout's devenv profile, and every package
 is `private`. Nobody outside the repository can install Tao.
 
+- Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
+  evidence and a nine-slice sequence, and leaves eight questions to Ro.
 - Shape: `bun build --compile` binaries for macOS, Linux, and Windows on both architectures; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -41,7 +43,8 @@ is `private`. Nobody outside the repository can install Tao.
   version pin so a project selects the Tao it was written against.
 - Context: `packages/tao-cli`, `packages/runtime-toolchain` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
-- Waits on: nothing to start; code signing certificates and the tap repository come from Ro (`R2`).
+- Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
+  code signing certificates from `R8`, which owns where signing happens.
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 
@@ -80,17 +83,22 @@ These decide whether the people who do install Tao enjoy the first hour.
 
 ### A5 — Tutorials and examples that cannot rot
 
-`Docs/Tutorials/Your First Tao App.md` is the main learning path and nothing proves it still
-compiles. The starters are proven byte-for-byte by their lowering test; the tutorial and the example
-apps are not.
+The tutorial half has landed: `packages/tao-cli/cli-tests/tutorials.test.ts` replays
+`Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
+step, reproduces the finished file from the steps, and runs its behavior test through the real
+`tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
+`just` recipes, `--app` names, and `tao` subcommands the same suite checks still exist.
 
-- Shape: run the tutorial's finished file — ideally each step — as a test, the way
-  `creation-lowering.test.ts` proves the starters; choose and polish the public example set
-  (starters, HNReader, WordFlower Current) and label everything else as design material.
+What remains is the example set. The starters are proven byte-for-byte by their lowering test, but
+nothing says which examples a visitor is pointed at, and the apps under `Apps/` mix public examples
+with design material and test fixtures.
+
+- Shape: choose the public example set (starters, HNReader, WordFlower Current), polish it, and label
+  everything else as design material or test fixture in the README that owns it.
 - Context: `Apps/Starters/README.md`, `Apps/HNReader/`, `Apps/WordFlower/README.md`,
-  `packages/tao-cli/cli-tests/creation-lowering.test.ts`.
-- Done: a tutorial change that stops working fails a test, and every example a visitor is pointed at
-  runs on a fresh install.
+  `Apps/Test Apps/README.md`, `packages/tao-cli/cli-tests/tutorials.test.ts`.
+- Done: every example a visitor is pointed at runs on a fresh install, and the documents that point
+  at examples name only those.
 
 ### A6 — Release the IDE extension
 
@@ -117,6 +125,17 @@ The point of the release is to learn what people want. Nothing collects that tod
   do not wait.
 - Done: a frustrated visitor has an obvious, low-effort place to say so, and what they send is
   enough to reproduce.
+- Landed: `.github/` carries both issue forms, a discussion form for the open-ended half of each
+  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/dev` reports OS,
+  architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, and Xcode where
+  present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
+  parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
+  word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
+- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
+  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
+  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
+  worth adding a command to. The discussion links point at the default `ideas` and `q-a` categories
+  pending `R10`.
 
 ## Environment reach
 
@@ -207,9 +226,9 @@ shell-completion tail. Each is a plan-and-execute task on its own.
 
 The editor-ownership, source-identity, canvas geometry, pointer-release, drag-in, and sketch
 transaction defects have landed. What remains is ten consecutive reliable runs in a normal terminal
-before the lane rejoins the `full-verify` graph — a reliability gate, not a product defect.
+before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
 
-- Context: the **Make `just full-verify` pass its simulated-user lane** entry in `Roadmap.md`, the
+- Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
   `studio-hybrid-client` skill.
 
 ### A16 — A reachable datasource for the public demo

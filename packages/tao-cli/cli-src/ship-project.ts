@@ -19,7 +19,7 @@ export type ShipProjectApp = {
   usesDevDatasource: boolean
 }
 
-export type ShipICloudBinding = {
+type ShipICloudBinding = {
   /** serviceBindings preserves which containers each mounted Apple provider actually uses. */
   serviceBindings: ReadonlyArray<{
     /** containers lists every explicit container mounted for this service. */
@@ -30,7 +30,7 @@ export type ShipICloudBinding = {
   }>
 }
 
-export type ShipICloudService = 'CloudDocuments' | 'CloudKit'
+type ShipICloudService = 'CloudDocuments' | 'CloudKit'
 
 /** The Apple datasource providers, each with the iCloud service its entitlement must name. */
 const appleDatasourceProviders: ReadonlyArray<{ importPath: string; service: ShipICloudService; typeName: string }> = [
@@ -196,7 +196,7 @@ function hasLocalInstantEndpoint(datasource: ASTUtils.ResolvedDatasource): boole
 }
 
 /** deriveHostedDatasourceConfiguration keeps a local InstantDB declaration intact while deriving its ship patch. */
-export function deriveHostedDatasourceConfiguration(
+function deriveHostedDatasourceConfiguration(
   appName: string,
   datasources: readonly ASTUtils.ResolvedDatasource[],
 ): Readonly<Record<string, string>> | undefined {
@@ -227,7 +227,7 @@ export function deriveHostedDatasourceConfiguration(
  * `Container` that binding settles on and the iCloud service the provider needs. The ship pipeline
  * turns it into the binary's iCloud entitlements, defaulting the container to the bundle identifier.
  */
-export function deriveICloudBinding(
+function deriveICloudBinding(
   datasources: readonly ASTUtils.ResolvedDatasource[],
 ): ShipICloudBinding | undefined {
   const serviceBindings: ShipICloudBinding['serviceBindings'][number][] = []

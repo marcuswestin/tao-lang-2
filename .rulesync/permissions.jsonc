@@ -48,10 +48,21 @@
       "git ls-files *": "allow",
       "git remote -v": "allow",
       "git tag --list *": "allow",
-      // The macOS sandbox denies process-table access. Only the exact, read-only whole-table shape
-      // is automatic: wildcard PID queries and termination prefixes accept trailing arguments that
-      // change their meaning, so those stay reviewed.
+      // The macOS sandbox denies process-table access outright, so every `ps` shape an agent may
+      // run has to be named here and excluded from the sandbox below; anything unlisted fails with
+      // "operation not permitted" rather than with a permission prompt.
+      //
+      // Prefer `ProcessTree` over any of these. On macOS it reads the same facts through libproc
+      // with no subprocess at all, which is why a `ps` denial cannot break it — and why a liveness
+      // check built on `ps` silently lost its start-time comparison in every sandboxed run.
+      //
+      // The whole-table read and the per-PID start time are both read-only. The residual hazard is
+      // the trailing wildcard: `ps -E` prints another same-user process's environment, which can
+      // hold tokens the `read` denies below exist to keep out. Nothing in this repository runs it,
+      // and there is no bash deny rule to forbid it, so it is recorded here as the boundary rather
+      // than hidden. Termination prefixes stay absent entirely.
       "ps -axo pid=,ppid=,lstart=,command=": "allow",
+      "ps -o lstart= -p *": "allow",
       "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
       // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
       // remain approval boundaries and belong to an explicitly selected native workflow.
@@ -59,14 +70,20 @@
       "adb get-state *": "allow",
       "emulator -list-avds": "allow",
       "xcrun simctl list *": "allow",
-      // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
-      // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
-      // outward-facing step and is deliberately absent from this list.
+      // Merging runs without a prompt. An agent decides which branch lands on main, and when, on
+      // its own judgment; `verification-lanes` owns where that judgment stops and hands the
+      // landing to Ro. A bare `git push` is the outward-facing step and is deliberately absent
+      // from this list — the landing command does its own pushing, under that same judgment.
       "git merge *": "allow",
       // Read-only remote queries, so agents can inspect origin. Pushing stays absent
       // above by design; the sandbox exclusion below is what lets its prompt succeed.
       "git fetch origin *": "allow",
+      // Both orders, because git accepts the flag on either side of the remote and a pattern that
+      // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
+      // preflight runs `git ls-remote --heads origin refs/heads/...`, which `git ls-remote origin *`
+      // cannot match, so the landing command failed inside the sandbox on its own remote query.
       "git ls-remote origin *": "allow",
+      "git ls-remote --heads origin *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
@@ -102,6 +119,7 @@
         // Every entry also has a matching allow rule above; the Codex generator derives the
         // project-local outside-sandbox rules from that intersection.
         "ps -axo pid=,ppid=,lstart=,command=",
+        "ps -o lstart= -p *",
         "adb devices *",
         "adb get-state *",
         "emulator -list-avds",
@@ -114,6 +132,7 @@
         // push, and ls-remote while the credential deny still binds every other command.
         "git fetch origin *",
         "git ls-remote origin *",
+        "git ls-remote --heads origin *",
         "git push *",
         // Removing a worktree writes outside this checkout. It still prompts, which is
         // correct for a command that deletes directories.
@@ -124,8 +143,8 @@
         // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
         // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
         // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
-        // main, and when, is still Ro's decision: an agent merges because Ro asked, not on its own
-        // initiative.
+        // main, and when, is the agent's own judgment; `verification-lanes` owns where that
+        // judgment stops.
         "git merge *",
         "git reset --merge",
         "git reset --hard HEAD",

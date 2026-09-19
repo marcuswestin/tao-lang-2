@@ -22,6 +22,7 @@
       "Bash(git fetch origin *)",
       "Bash(git log *)",
       "Bash(git ls-files *)",
+      "Bash(git ls-remote --heads origin *)",
       "Bash(git ls-remote origin *)",
       "Bash(git merge *)",
       "Bash(git remote -v)",
@@ -38,6 +39,7 @@
       "Bash(plutil -lint *)",
       "Bash(plutil -p *)",
       "Bash(ps -axo pid=,ppid=,lstart=,command=)",
+      "Bash(ps -o lstart= -p *)",
       "Bash(pwd)",
       "Bash(readlink *)",
       "Bash(realpath *)",
@@ -68,6 +70,7 @@
     "enabled": true,
     "excludedCommands": [
       "ps -axo pid=,ppid=,lstart=,command=",
+      "ps -o lstart= -p *",
       "adb devices *",
       "adb get-state *",
       "emulator -list-avds",
@@ -75,6 +78,7 @@
       "gh *",
       "git fetch origin *",
       "git ls-remote origin *",
+      "git ls-remote --heads origin *",
       "git push *",
       "git worktree *",
       "git merge *",
@@ -153,6 +157,37 @@
           {
             "type": "command",
             "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
           }
         ]
       }

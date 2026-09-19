@@ -2,6 +2,7 @@ import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../dev-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../dev-src/agent-config/CodexConfigGenerator'
+import { DELEGATION_SKILL_PATH, tierModels } from '../dev-src/delegation/DelegationProfiles'
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
@@ -242,11 +243,39 @@ Describe('Codex config generation', () => {
       .toEqual(rules.claudecode?.sandbox?.network?.allowedDomains ?? [])
   })
 
+  Test('takes the delegation defaults from the standard tier of the routing table', async () => {
+    const root = Repo.getRoot()
+    const skill = await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, root))
+    const rendered = CodexConfigGenerator.render(
+      CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
+      await readProfiles(root),
+      skill,
+    )
+
+    const standard = tierModels(skill, 'codex').get('standard')
+    Expect(standard).toBeDefined()
+    Expect(rendered).toContain('[agents]')
+    Expect(rendered).toContain(`default_subagent_model = "${standard}"`)
+    Expect(rendered).toContain('max_concurrent_threads_per_session = 5')
+  })
+
+  Test('leaves the delegation defaults out when the routing table is unreadable', async () => {
+    const root = Repo.getRoot()
+    const rendered = CodexConfigGenerator.render(
+      CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
+      await readProfiles(root),
+      '',
+    )
+
+    Expect(rendered).not.toContain('[agents]')
+  })
+
   Test('keeps the committed Codex profile identical to a fresh render', async () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
       await readProfiles(root),
+      await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, root)),
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)

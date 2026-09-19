@@ -167,9 +167,20 @@ export async function readFile(inputPath: string): Promise<Uint8Array> {
   return nodeFs.readFile(inputPath)
 }
 
+/** setModifiedTimeMs sets a path's last modified timestamp, leaving its access time alone. */
+export async function setModifiedTimeMs(inputPath: string, modifiedMs: number): Promise<void> {
+  const stats = await nodeFs.stat(inputPath)
+  await nodeFs.utimes(inputPath, stats.atime, new Date(modifiedMs))
+}
+
 /** modifiedTimeMs reads the last modified timestamp for a path. */
 export async function modifiedTimeMs(inputPath: string): Promise<number> {
   return (await nodeFs.stat(inputPath)).mtimeMs
+}
+
+/** byteSize reads how many bytes of content a file holds. */
+export async function byteSize(inputPath: string): Promise<number> {
+  return (await nodeFs.stat(inputPath)).size
 }
 
 /** fileMode reads the portable permission bits for a filesystem entry. */
@@ -243,7 +254,7 @@ export async function copyDirectory(fromPath: string, toPath: string): Promise<v
  * but reject directory removal or rename; generated assets still need exact file membership there.
  * Empty destination directories may remain, but no stale file survives.
  */
-export type SynchronizeDirectoryFilesOptions = {
+type SynchronizeDirectoryFilesOptions = {
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeCleanup?: () => Promise<void>
   /** beforeCommit is a test seam for mutations that race the final drift check. */
@@ -287,6 +298,7 @@ async function synchronizeDirectoryFilesLocked(
 ): Promise<void> {
   await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
   await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
+  await removeOrphanedSynchronizationFiles(toPath, boundaryPath, options)
   const sourceFiles = await walkedFiles(fromPath)
   const targetFiles = await isDirectory(toPath) ? await walkedFiles(toPath) : []
   const sourceByRelativePath = new Map(sourceFiles.map(path => [relativePath(fromPath, path), path]))
@@ -301,7 +313,7 @@ async function synchronizeDirectoryFilesLocked(
     for (const [relative, targetPath] of targetByRelativePath) {
       await copyFile(targetPath, resolvePath(relative, backupRoot))
     }
-    const targetSnapshot = await mappedFilesIdentity(
+    const targetSnapshot = await filesIdentity(
       [...targetByRelativePath].map(([relative]) => [relative, resolvePath(relative, backupRoot)]),
     )
     for (const [index, [relative, sourcePath]] of [...sourceByRelativePath].entries()) {
@@ -311,7 +323,7 @@ async function synchronizeDirectoryFilesLocked(
       stagedFiles.push({ path: stagedPath, relative, targetPath })
       temporaryFiles.push(stagedPath)
     }
-    const sourceSnapshot = await mappedFilesIdentity(stagedFiles.map(staged => [staged.relative, staged.path]))
+    const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.relative, staged.path]))
     await options.beforeCommit?.()
 
     // Recheck both trees immediately before the first worktree mutation. The content identities
@@ -593,20 +605,26 @@ function commonPathAncestor(leftPath: string, rightPath: string): string {
 
 async function treeFilesIdentity(root: string): Promise<string> {
   if (!await isDirectory(root)) {
-    return hashFileIdentity([])
+    return contentIdentity([])
   }
-  return mappedFilesIdentity((await walkedFiles(root)).map(path => [relativePath(root, path), path]))
+  return filesIdentity((await walkedFiles(root)).map(path => [relativePath(root, path), path]))
 }
 
-async function mappedFilesIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
+/**
+ * filesIdentity is the content identity of a labelled set of files: the label a caller gives each
+ * file, paired with the hash of its bytes, in label order. Callers that discover files in an
+ * unstable order therefore still agree, and a file that moves between two labels changes it.
+ */
+export async function filesIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
   const identities: string[] = []
   for (const [relative, path] of [...entries].sort(([left], [right]) => left.localeCompare(right))) {
     identities.push(`${relative}\n${createHash('sha256').update(await readFile(path)).digest('hex')}`)
   }
-  return hashFileIdentity(identities)
+  return contentIdentity(identities)
 }
 
-function hashFileIdentity(identities: readonly string[]): string {
+/** contentIdentity is the content identity of ordered parts; order is part of what it identifies. */
+export function contentIdentity(identities: readonly string[]): string {
   return createHash('sha256').update(identities.join('\n')).digest('hex')
 }
 
@@ -614,12 +632,12 @@ const FILE_MUTATION_LOCK_POLL_MS = 10
 const FILE_MUTATION_LOCK_TIMEOUT_MS = 120_000
 const FILE_MUTATION_RECLAIM_GRACE_MS = 2_000
 
-export type FileMutationProcessIdentity = {
+type FileMutationProcessIdentity = {
   evidence: 'alive' | 'gone' | 'unknown'
   startedAt?: string
 }
 
-export type FileMutationLockOptions = {
+type FileMutationLockOptions = {
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeRelease?: () => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
@@ -968,6 +986,45 @@ function randomFileSuffix(): string {
   return randomUUID()
 }
 
+/**
+ * A synchronization stages and rolls back through files named for the destination and sitting
+ * beside it, not inside it, so neither the walk of the destination nor its content identity can
+ * see them. A process killed mid-synchronization therefore leaves them in the destination's parent
+ * directory for good, where whatever reads that directory next picks them up — the packaged
+ * IDE-extension VSIX shipped them, because its file list names the parent directory as a whole.
+ *
+ * Sweeping them here is safe precisely because the caller holds the destination's mutation lock:
+ * no other synchronization into this destination can be staging, so every match is dead.
+ */
+async function removeOrphanedSynchronizationFiles(
+  toPath: string,
+  boundaryPath: string,
+  options: Partial<SynchronizeDirectoryFilesOptions>,
+): Promise<void> {
+  const parentPath = dirname(toPath)
+  if (!await isDirectory(parentPath)) {
+    return
+  }
+  const orphanPattern = new RegExp(
+    `^${escapeRegularExpression(basename(toPath))}\\.[0-9a-f-]{36}\\.\\d+\\.(tmp|restore)$`,
+  )
+  for (const entry of await listDir(parentPath)) {
+    if (!orphanPattern.test(entry)) {
+      continue
+    }
+    const orphanPath = resolvePath(entry, parentPath)
+    if (await isDirectory(orphanPath) || await isSymbolicLink(orphanPath)) {
+      continue
+    }
+    await removeFileWithinBoundary(orphanPath, boundaryPath, options)
+  }
+}
+
+/** escapeRegularExpression quotes a literal for use inside a pattern. */
+function escapeRegularExpression(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 async function walkedFiles(root: string): Promise<string[]> {
   const files: string[] = []
   for await (const path of walk(root, { includeHidden: true })) {
@@ -989,12 +1046,24 @@ export async function symlink(targetPath: string, linkPath: string): Promise<voi
 }
 
 /**
- * replaceSymlink points a symlink at `targetPath`, replacing whatever the link path held. Removing
- * a symlink never follows it, so an existing link is unlinked rather than its target deleted.
+ * replaceSymlink points a symlink at `targetPath`, replacing whatever the link path held, without
+ * ever leaving the link path empty.
+ *
+ * Unlinking and recreating would be simpler and is wrong: between the two calls the link does not
+ * exist, so a concurrent reader resolves nothing, and two writers racing make the loser's create
+ * fail outright. Creating the new link under a unique name in the same directory and renaming it
+ * over the old one is atomic — a reader sees the old target or the new one, never neither. Removing
+ * a symlink never follows it, so an existing link is replaced rather than its target deleted.
  */
 export async function replaceSymlink(targetPath: string, linkPath: string): Promise<void> {
-  await remove(linkPath)
-  await symlink(targetPath, linkPath)
+  const stagedPath = `${linkPath}.${randomUUID()}.tmp`
+  try {
+    await symlink(targetPath, stagedPath)
+    await move(stagedPath, linkPath)
+  } catch (error) {
+    await remove(stagedPath).catch(() => {})
+    throw error
+  }
 }
 
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */

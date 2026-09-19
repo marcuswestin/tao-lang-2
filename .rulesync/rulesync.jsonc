@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/config-schema.json",
-  "targets": ["codexcli", "claudecode"],
+  "targets": ["codexcli", "claudecode", "cursor"],
   // Features generated for every target. The permissions feature is opted into per target by
   // packages/dev/dev-src/agent-config/AgentConfigGenerator.ts, because Codex CLI keeps generated
   // permission profiles and command rules that rulesync's translator cannot express.

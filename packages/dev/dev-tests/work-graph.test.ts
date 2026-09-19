@@ -1,6 +1,12 @@
 import { Errors, FS, Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
-import { type WorkCommand, WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
+import {
+  type WorkCommand,
+  WorkGraph,
+  type WorkNode,
+  type WorkRunResult,
+  type WorkState,
+} from '../dev-src/repository-tests/WorkGraph'
 
 /**
  * Scheduling is observed through an injected runner: no real processes, and every node finishes
@@ -13,11 +19,12 @@ type NodeSpec = {
   exitCode?: number
   /** Whether the node waits for the test to release it before finishing. */
   held?: boolean
-  mutatesTree?: boolean
+  idleTimeoutMs?: number
   needs?: readonly string[]
   priority?: number
   resources?: readonly string[]
   run?: WorkNode['run']
+  serial?: boolean
   timeoutMs?: number
   workerPool?: string
 }
@@ -25,7 +32,7 @@ type NodeSpec = {
 type ScheduledRun = {
   commandOf: (name: string) => WorkCommand | undefined
   envOf: (name: string) => Record<string, string>
-  finished: Promise<{ interrupted: boolean; states: readonly WorkState[] }>
+  finished: Promise<WorkRunResult>
   interrupt: () => void
   release: (name: string) => void
   started: string[]
@@ -35,12 +42,13 @@ type ScheduledRun = {
 function workNode(spec: NodeSpec): WorkNode {
   return {
     cost: spec.cost,
-    mutatesTree: spec.mutatesTree,
+    idleTimeoutMs: spec.idleTimeoutMs,
     name: spec.name,
     needs: spec.needs,
     priority: spec.priority,
     resources: spec.resources,
     run: spec.run ?? { args: [spec.name], command: 'true' },
+    serial: spec.serial,
     timeoutMs: spec.timeoutMs,
     workerPool: spec.workerPool,
   }
@@ -132,7 +140,7 @@ Describe('work graph scheduling', () => {
 
   Test('rescans nodes whose dependency became skipped later in the same admission pass', async () => {
     const run = schedule([
-      { exitCode: 1, mutatesTree: true, name: 'compile' },
+      { exitCode: 1, name: 'compile' },
       { name: 'report', needs: ['test'], priority: 10 },
       { name: 'test', needs: ['compile'] },
     ], { jobs: 1 })
@@ -166,22 +174,139 @@ Describe('work graph scheduling', () => {
     Expect(run.started.toSorted()).toEqual(['browser', 'canary', 'native'])
   })
 
-  Test('runs every tree-mutating node before anything that reads the tree', async () => {
+  Test('runs every writer a node declared an edge to before that node reads the tree', async () => {
     const run = schedule([
-      { name: 'typecheck' },
-      { held: true, mutatesTree: true, name: 'fix-dprint' },
-      { held: true, mutatesTree: true, name: 'fix-tao' },
-      { name: 'repo-lint' },
+      { name: 'typecheck', needs: ['fix-dprint', 'fix-tao'] },
+      { held: true, name: 'fix-dprint' },
+      { held: true, name: 'fix-tao' },
+      { name: 'repo-lint', needs: ['fix-dprint', 'fix-tao'] },
     ], { jobs: 4 })
     await settle(2)
 
     Expect(run.started.toSorted()).toEqual(['fix-dprint', 'fix-tao'])
     run.release('fix-dprint')
+    await settle(2)
+    // One writer down is not enough: a reader that declared both edges waits for both.
+    Expect(run.started.toSorted()).toEqual(['fix-dprint', 'fix-tao'])
+
     run.release('fix-tao')
     await run.finished
 
     Expect(run.started.slice(0, 2).toSorted()).toEqual(['fix-dprint', 'fix-tao'])
     Expect(run.started.slice(2).toSorted()).toEqual(['repo-lint', 'typecheck'])
+  })
+
+  Test('starts a reader while a writer it declared no edge to is still running', async () => {
+    const run = schedule([
+      { held: true, name: 'fix-dprint' },
+      { held: true, name: 'fix-tao' },
+      { name: 'typecheck', needs: ['fix-dprint'] },
+      { name: 'tao-check', needs: ['fix-dprint', 'fix-tao'] },
+    ], { jobs: 4 })
+    await settle(2)
+
+    Expect(run.started.toSorted()).toEqual(['fix-dprint', 'fix-tao'])
+    run.release('fix-dprint')
+    await until(() => run.started.includes('typecheck'), {
+      description: 'the TypeScript reader to start while the Tao fixer is still running',
+    })
+
+    // This is the case the old whole-run barrier hid: the TypeScript gates have no relationship
+    // with `./tao fix` at all, and holding them behind it made the lane serial behind the slowest
+    // fixer. A reader that does declare the edge still waits.
+    Expect(run.stateOf('fix-tao').status).toBe('running')
+    Expect(run.started).not.toContain('tao-check')
+
+    run.release('fix-tao')
+    await run.finished
+
+    Expect(run.stateOf('typecheck').status).toBe('passed')
+    Expect(run.started.indexOf('tao-check')).toBeGreaterThan(run.started.indexOf('typecheck'))
+  })
+
+  Test('records what held each node that did not start at once, and nothing for one that never waited', async () => {
+    const run = schedule([
+      { held: true, name: 'fix-dprint' },
+      { held: true, name: 'fix-tao' },
+      { name: 'tao-check', needs: ['fix-tao'] },
+    ], { jobs: 4 })
+    await settle(2)
+
+    run.release('fix-dprint')
+    await until(() => run.stateOf('fix-dprint').status === 'passed', {
+      description: 'the first writer to finish, which is when the graph re-scans',
+    })
+    run.release('fix-tao')
+    await run.finished
+
+    const waits = run.stateOf('tao-check').waits ?? []
+    Expect(waits.some(wait => wait.kind === 'dependency' && wait.detail === 'fix-tao')).toBe(true)
+    Expect(waits.every(wait => wait.ms > 0)).toBe(true)
+    // Both writers were admitted in the first pass, so neither ever waited for anything.
+    Expect(run.stateOf('fix-dprint').waits).toBeUndefined()
+    Expect(run.stateOf('fix-tao').waits).toBeUndefined()
+  })
+
+  Test('holds one slot for a serial node however wide it declares itself, and starts it first', async () => {
+    const run = schedule([
+      { held: true, name: 'cheap' },
+      { cost: 8, held: true, name: 'unshardable-suite', serial: true },
+    ], {
+      // `cheap` is declared first and has the longer remaining path, so only the serial rule can
+      // put the unshardable suite ahead of it.
+      expectedMs: { cheap: 5_000, 'unshardable-suite': 100 },
+      jobs: 2,
+    })
+    await settle(2)
+
+    // A serial node cannot use more than one core however long it runs, so the run packs the rest
+    // around it rather than reserving eight slots it cannot occupy.
+    Expect(run.started).toEqual(['unshardable-suite', 'cheap'])
+    Expect(run.stateOf('unshardable-suite').slots).toBe(1)
+
+    run.release('unshardable-suite')
+    run.release('cheap')
+    const result = await run.finished
+
+    Expect(result.capacity).toBe(2)
+    Expect(result.finishedAt).toBeGreaterThanOrEqual(result.startedAt)
+  })
+
+  Test('holds the queue for a node too wide to fit rather than letting cheap ones jump it', async () => {
+    const run = schedule([
+      { held: true, name: 'blocker', priority: 1 },
+      { cost: 2, held: true, name: 'wide' },
+      { name: 'cheap' },
+    ], { jobs: 2 })
+    await settle(2)
+
+    Expect(run.started).toEqual(['blocker'])
+    run.release('blocker')
+    await until(() => run.started.includes('wide'), { description: 'the wide node to be admitted' })
+
+    // The whole point of the head-of-line hold: a wide node is not starved by cheap ones, so the
+    // cheap node is still waiting even though a slot for it exists nowhere in the run.
+    Expect(run.started).toEqual(['blocker', 'wide'])
+    run.release('wide')
+    await run.finished
+
+    Expect(run.started).toEqual(['blocker', 'wide', 'cheap'])
+  })
+
+  Test('starts a higher-priority node first, whatever the measured durations say', async () => {
+    const run = schedule([
+      { name: 'cheap' },
+      { name: 'jest', priority: 4 },
+      { name: 'tao-cli', priority: 2 },
+    ], {
+      // `cheap` has by far the longest remaining path and still goes last: priority is the pin a
+      // measurement is not allowed to overrule.
+      expectedMs: { cheap: 9_000, jest: 100, 'tao-cli': 100 },
+      jobs: 1,
+    })
+    await run.finished
+
+    Expect(run.started).toEqual(['jest', 'tao-cli', 'cheap'])
   })
 
   Test('starts the longest remaining path first, measured durations included', async () => {
@@ -199,18 +324,21 @@ Describe('work graph scheduling', () => {
     Expect(run.started).toEqual(['parser-gen', 'tao-check', 'quick'])
   })
 
-  Test('hands a nested runner the worker budget the graph reserved for it', async () => {
+  Test('hands the one nested runner the worker budget the graph reserved for it', async () => {
     const run = schedule([
-      { cost: 4, name: 'dev-test', run: { args: ['test'], command: './dev' } },
       { cost: 3, name: 'tao-apps', run: { args: ['test', 'Apps'], command: './tao' } },
       { name: 'repo-lint', run: { args: ['_repo-lint'], command: 'just' } },
+      { cost: 4, name: 'dev-test', run: { args: ['test'], command: './dev' } },
     ], { jobs: 8 })
     await run.finished
 
-    Expect(run.envOf('dev-test')[WorkGraph.BUDGET_ENV_KEYS.devTest]).toBe('4')
+    Expect(WorkGraph.BUDGET_ENV_KEYS.taoTest).toBe('TAO_TEST_JOBS')
     Expect(run.envOf('tao-apps')[WorkGraph.BUDGET_ENV_KEYS.taoTest]).toBe('3')
-    Expect(run.envOf('repo-lint')[WorkGraph.BUDGET_ENV_KEYS.devTest]).toBeUndefined()
     Expect(run.envOf('repo-lint')[WorkGraph.BUDGET_ENV_KEYS.taoTest]).toBeUndefined()
+    // `./dev test` is a top-level lane now — suites and shards are ordinary nodes of the one graph,
+    // so no gate starts a second scheduler and there is no second budget to divide the machine with.
+    Expect(run.envOf('dev-test')).toEqual({})
+    Expect(Object.keys(WorkGraph.BUDGET_ENV_KEYS)).toEqual(['taoTest'])
   })
 
   Test('numbers the members of a worker pool in admission order and builds their commands from it', async () => {
@@ -239,10 +367,13 @@ Describe('work graph scheduling', () => {
   })
 
   Test('exports the clamped width, never more slots than the run owns', async () => {
-    const run = schedule([{ cost: 12, name: 'dev-test', run: { args: ['test'], command: './dev' } }], { jobs: 2 })
+    const run = schedule([{ cost: 12, name: 'tao-apps', run: { args: ['test', 'Apps'], command: './tao' } }], {
+      jobs: 2,
+    })
     await run.finished
 
-    Expect(run.envOf('dev-test')[WorkGraph.BUDGET_ENV_KEYS.devTest]).toBe('2')
+    Expect(run.envOf('tao-apps')[WorkGraph.BUDGET_ENV_KEYS.taoTest]).toBe('2')
+    Expect(run.stateOf('tao-apps').slots).toBe(2)
   })
 
   Test('kills a node that outlives its timeout and keeps the rest of the run alive', async () => {
@@ -262,6 +393,26 @@ Describe('work graph scheduling', () => {
     Expect(run.stateOf('hung-canary').failure?.kind).toBe('timeout')
     Expect(run.stateOf('report').status).toBe('skipped')
     Expect(run.stateOf('report').reason).toBe('dependency failed: hung-canary')
+    Expect(run.stateOf('browser').status).toBe('passed')
+  })
+
+  Test('kills a node that goes quiet for longer than its idle bound', async () => {
+    const run = schedule([
+      { held: true, idleTimeoutMs: 20, name: 'silent-suite' },
+      { held: true, name: 'browser' },
+    ])
+    await until(() => run.stateOf('silent-suite').status === 'failed', {
+      description: 'the silent node to be killed by its idle bound',
+    })
+
+    run.release('browser')
+    const { interrupted } = await run.finished
+
+    // A runaway that allocates without printing produces no output at all, so the wall-clock bound
+    // — necessarily much larger — would be the only other thing that ever noticed it.
+    Expect(interrupted).toBe(false)
+    Expect(run.stateOf('silent-suite').reason).toBe('timed out after 20ms with no output')
+    Expect(run.stateOf('silent-suite').failure?.kind).toBe('timeout')
     Expect(run.stateOf('browser').status).toBe('passed')
   })
 
@@ -338,20 +489,9 @@ Describe('work graph scheduling', () => {
     Expect(state.failure?.kind).toBe('timeout')
   })
 
-  Test('does not signal a replacement with the same PID and whole-second start time', () => {
-    const signals: Array<{ pids: readonly number[]; signal: NodeJS.Signals }> = []
-    const original = { command: 'original command', pid: 42, startedAt: 'Tue Sep 16 12:34:56 2026' }
-
-    WorkGraph.signalTrackedProcesses([original], 'SIGKILL', {
-      identities: () =>
-        new Map([
-          [42, { command: 'replacement command', pid: 42, startedAt: original.startedAt }],
-        ]),
-      signal: (pids, signal) => signals.push({ pids, signal }),
-    })
-
-    Expect(signals).toEqual([])
-  })
+  // PID-reuse safety moved with the code: `ProcessTree.signalTracked` now owns it, and
+  // `packages/shared/shared-tests/process-supervision.test.ts` proves a stale identity is skipped
+  // while a still-matching one is signalled.
 
   Test('an interrupt stops the running children, skips the rest, and fails the run', async () => {
     const run = schedule([
@@ -495,6 +635,40 @@ Describe('work graph scheduling', () => {
     Expect(events.filter(kind => kind === 'waiting')).toEqual(['waiting'])
     Expect(state.status).toBe('passed')
     Expect(state.reason).toBeUndefined()
+  })
+
+  Test("carries the broker's explanation onto the node that is waiting for the machine", async () => {
+    const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
+    const reasons: string[] = []
+    let attempts = 0
+    const broker = {
+      tryAcquire: async () => ++attempts < 3 ? undefined : { release: async () => {}, slots: 1 },
+      waitForAvailability: async () => {},
+      // A lane that changes why it is blocked reports both, rather than the first one forever.
+      get waitReason() {
+        return attempts < 2
+          ? 'another lane is confirming exclusively (verify in other-worktree)'
+          : 'this lane holds 2 of its 2 slots; 9 lanes are registered'
+      },
+    }
+
+    await WorkGraph.run([state], {
+      jobs: 1,
+      onEvent: event => {
+        if (event.kind === 'waiting') {
+          reasons.push(event.reason)
+        }
+      },
+      runNode: async () => ({ exitCode: 0 }),
+      slotBroker: broker,
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(reasons).toEqual([
+      'waiting for machine capacity: another lane is confirming exclusively (verify in other-worktree)',
+      'waiting for machine capacity: this lane holds 2 of its 2 slots; 9 lanes are registered',
+    ])
+    Expect(state.status).toBe('passed')
   })
 
   Test('asks the broker again when external capacity returns before a local node finishes', async () => {

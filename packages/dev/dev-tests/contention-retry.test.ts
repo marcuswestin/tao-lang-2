@@ -104,6 +104,7 @@ Describe('contended failure confirmation', () => {
         slots: 1,
       }),
       waitForAvailability: async () => {},
+      waitReason: undefined,
     }
 
     await ContentionRetry.confirmContendedFailures({

@@ -1,0 +1,43 @@
+# Filed under the `q-a` category, whose slug this filename must match.
+title: "How would I say: "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The open-ended half of "this confused me". Ask here before you are stuck — while you are
+        still deciding what a thing means, still looking for the right word, or still unsure which
+        of two spellings Tao wants.
+
+        Questions are feedback. A question that had to be asked is a place the language or the
+        docs did not answer on their own, and we read this category that way.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to say in Tao?
+      description: >
+        The behavior you want to express, and the part you are unsure how to write.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-you-tried-reading
+    attributes:
+      label: What did you look at first?
+      description: >
+        The spec page, the tutorial, the example app, the error message, the search you ran. What
+        you expected to find there and did not is the most useful part of this answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: your-guess
+    attributes:
+      label: What do you think the answer is?
+      description: >
+        Your best guess at the Tao, even if you are fairly sure it is wrong. If your guess reads
+        better than the real answer, that is a finding.
+      render: text
+    validations:
+      required: false

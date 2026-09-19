@@ -55,13 +55,16 @@ Describe('agent config generation', () => {
         root,
       })
 
-      Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode']])
+      Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode'], ['cursor']])
       Expect(codexRoots).toEqual([root])
-      // Both harnesses take `hooks`, so the session-start bootstrap in .rulesync/hooks.jsonc reaches
-      // .claude/settings.json and .codex/hooks.json; Codex CLI's permissions stay hand-rendered.
+      // Both CLI harnesses take `hooks`, so the session-start bootstrap in .rulesync/hooks.jsonc
+      // reaches .claude/settings.json and .codex/hooks.json; Codex CLI's permissions stay
+      // hand-rendered, and Cursor takes the profiles alone because its own permission and worktree
+      // files are hand-maintained in a shape rulesync cannot express.
       Expect(calls.map(call => call.features)).toEqual([
         ['subagents', 'hooks'],
         ['subagents', 'permissions', 'hooks'],
+        ['subagents'],
       ])
       Expect(skipped).toEqual([
         `Skipped codexcli agent config: ${FS.resolvePath('.codex/agents', root)} is not writable.`,

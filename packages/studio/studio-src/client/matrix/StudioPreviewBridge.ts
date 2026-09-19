@@ -434,7 +434,7 @@ async function receiveFixtureCapture(
   clearTimeout(capture.timeout)
   preview.capture = undefined
   if (message.type === 'preview-fixture-capture-failed') {
-    capture.reject(new Errors.HostEnvironmentError(message.error))
+    capture.reject(studioPreviewCaptureError(message.errorName, message.error))
     return
   }
   const envelope = StudioInspector.singleAction({
