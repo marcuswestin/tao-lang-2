@@ -76,7 +76,7 @@ export async function runTestCommand(
     const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
     const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
       ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
-    if (!await reportSelectedJourneys(compiled, options, displayRoots)) {
+    if (!await reportSelectedJourneys(compiled, options, fingerprint, displayRoots)) {
       return
     }
     HCI.logProcessInfo('test', 'Running Tao tests')
@@ -161,12 +161,19 @@ async function keepOrDiscardRunRoot(compiled: CompiledTaoTests, fingerprint: str
  * that proves nothing. `--pass-with-no-tests` is how a caller says that an empty selection is an
  * expected answer rather than a mistake, which is what a scheduler handing one pattern to every
  * suite it knows about needs: a Tao journey will never be named like a Bun test, so without it one
- * filtered run turns the whole scheduled sweep red. Either way nothing ran, so the compiled output
- * this run made is discarded rather than kept.
+ * filtered run turns the whole scheduled sweep red.
+ *
+ * Nothing ran, but something was compiled, and the fingerprint is over the sources and the run's
+ * shape rather than over which journeys a pattern selected — so this output is exactly what the
+ * next run of the same shape would build. It is published like any other. Discarding it made every
+ * name-filtered `just test` recompile every app, which is the common case rather than a rare one:
+ * a scheduler hands its pattern to this suite on every filtered run precisely because the pattern
+ * usually matches no journey.
  */
 async function reportSelectedJourneys(
   compiled: CompiledTaoTests,
   options: TestCommandOptions,
+  fingerprint: string | undefined,
   displayRoots: string,
 ): Promise<boolean> {
   const pattern = options.name
@@ -177,7 +184,7 @@ async function reportSelectedJourneys(
   const matcher = journeyMatcher(pattern)
   const matched = journeys.filter(journey => matcher.test(journey))
   if (matched.length === 0) {
-    await keepOrDiscardRunRoot(compiled, undefined)
+    await keepOrDiscardRunRoot(compiled, fingerprint)
     const searched = `Searched ${journeys.length} ${
       journeys.length === 1 ? 'journey' : 'journeys'
     } under ${displayRoots}`

@@ -1,3 +1,4 @@
+import { throwUserInput } from './core/Errors'
 import * as FS from './FS'
 import * as Platform from './Platform'
 
@@ -45,16 +46,35 @@ export const TaoStdlib = {
   declaredRootIdentity,
 } as const
 
-/** declaredRoot returns the stdlib root the environment declares, or undefined for the built-in one. */
+/**
+ * declaredRoot returns the stdlib root the environment declares, or undefined for the built-in one.
+ *
+ * A relative value is refused rather than resolved, because the two halves of this variable's job
+ * could not agree on what to resolve it against. `declaredRootIdentity` resolves it against the
+ * root its caller's other components are relative to — the repository — while `Stdlib.rootPath`
+ * hands the raw value to whatever reads it, which resolves against the process's current directory.
+ * A relative value therefore hashed one tree and compiled against another, and only silently: every
+ * setter in this repository passes an absolute path, so nothing has ever exercised the divergence.
+ * Refusing it keeps that true, and says so where the mistake is made.
+ */
 function declaredRoot(): string | undefined {
-  return Platform.runtimeProcess.env[DECLARED_ROOT_ENV]
+  const declared = Platform.runtimeProcess.env[DECLARED_ROOT_ENV]
+  if (declared !== undefined && declared.length > 0 && !declared.startsWith('/')) {
+    throwUserInput(
+      `${DECLARED_ROOT_ENV} must be an absolute path; it was ${JSON.stringify(declared)}. `
+        + 'A relative value is hashed against the repository root and read against the current '
+        + 'directory, which are not the same tree.',
+    )
+  }
+  return declared
 }
 
 /**
  * declaredRootIdentity is the identity of the declared stdlib: the value the environment names and
  * the content of the tree it names, so that redirecting the stdlib and editing the stdlib it was
- * redirected to both change it. Relative values resolve against `baseDirectory`, which callers set
- * to the root their other components are relative to.
+ * redirected to both change it. The declared value is absolute — `declaredRoot` refuses anything
+ * else — so `baseDirectory` only names the root a caller's other components are relative to and
+ * never changes which tree is hashed.
  *
  * A tree that cannot be read throws rather than resolving to a value, because a stdlib that cannot
  * be hashed must not be memoized over. Callers that can carry on without memoizing catch it; callers

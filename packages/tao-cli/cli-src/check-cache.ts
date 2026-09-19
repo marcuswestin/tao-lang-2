@@ -1,4 +1,4 @@
-import { FS, Platform, Repo, TaoFiles } from '@shared'
+import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
 
 /**
  * `tao check` re-reads every `.tao` file of every workspace to learn about the one that moved. The
@@ -178,7 +178,7 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
           // The check just read these files. If any of them moved while it ran, the verdict does not
           // correspond to any single input state and must not be stamped as if it did.
           if (
-            await workspaceInputIdentity(repositoryRoot, toolchain, workspaceRoot, held.entryKey) !== held.inputs
+            await workspaceInputIdentity(repositoryRoot, toolchain, workspaceRoot) !== held.inputs
           ) {
             continue
           }
@@ -200,7 +200,7 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
       const entryKey = workspaceEntryKey(repositoryRoot, resolvedRoot, entryFiles)
       const held: PendingWorkspace = {
         entryKey,
-        inputs: await workspaceInputIdentity(repositoryRoot, toolchain, resolvedRoot, entryKey),
+        inputs: await workspaceInputIdentity(repositoryRoot, toolchain, resolvedRoot),
       }
       pending.set(resolvedRoot, held)
       const entry = (await readStamp(stampPath))?.entries[entryKey]
@@ -225,19 +225,23 @@ function workspaceEntryKey(
 
 /**
  * workspaceInputIdentity is everything that decides one workspace's check verdict: the composition
- * itself, the toolchain, which files were asked about, the whole tree they sit in, and the ancestor
- * directories whose `.tao` files decide where that tree starts.
+ * itself, the toolchain, the whole tree the checked files sit in, and the ancestor directories whose
+ * `.tao` files decide where that tree starts.
+ *
+ * Which files were asked about is not in here, because it is already the key this identity is stored
+ * under: a stamp entry is looked up by `workspaceEntryKey` and only then compared on inputs, so a
+ * check through a different set of entry files reads a different entry rather than a matching one.
+ * Repeating it inside the identity read as a second, independent guard and was neither — deleting
+ * the term changed no behaviour and no test.
  */
 async function workspaceInputIdentity(
   repositoryRoot: string,
   toolchain: string,
   workspaceRoot: string,
-  entryKey: string,
 ): Promise<string> {
   return FS.contentIdentity([
     `version\n${String(STAMP_VERSION)}`,
     `toolchain\n${toolchain}`,
-    `entries\n${entryKey}`,
     `tree\n${await treeIdentity(workspaceRoot)}`,
     `ancestors\n${await ancestorDeclarationIdentity(repositoryRoot, workspaceRoot)}`,
   ])
@@ -252,7 +256,9 @@ async function workspaceInputIdentity(
 async function toolchainIdentity(repositoryRoot: string): Promise<string | undefined> {
   const root = FS.resolvePath(repositoryRoot)
   const packagesRoot = FS.resolvePath('packages', root)
-  const declaredStdlibRoot = Platform.runtimeProcess.env['TAO_STDLIB_ROOT']
+  // Read through the owner rather than the environment, so this scheme refuses a relative value on
+  // the same terms as the one that hashes the declared tree instead of containing it.
+  const declaredStdlibRoot = TaoStdlib.declaredRoot()
   if (declaredStdlibRoot !== undefined && !await stdlibIsHashed(declaredStdlibRoot, packagesRoot)) {
     return undefined
   }
@@ -262,7 +268,7 @@ async function toolchainIdentity(repositoryRoot: string): Promise<string | undef
     `generated-parser\n${await generatedParserIdentity(root)}`,
     await fileEntry(root, FS.resolvePath('bun.lock', root)),
     await fileEntry(root, FS.resolvePath('package.json', root)),
-    `TAO_STDLIB_ROOT\n${declaredStdlibRoot ?? ABSENT}`,
+    `${TaoStdlib.DECLARED_ROOT_ENV}\n${declaredStdlibRoot ?? ABSENT}`,
   ])
 }
 

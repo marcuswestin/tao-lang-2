@@ -21,10 +21,19 @@ const TWO_WORKSPACES = {
   'AppTwo/Project.tao': 'project {\n   id "check-cache-two"\n   name "Check cache two"\n}\n',
 } as const
 
+const NESTED_WORKSPACE = {
+  'App/Main.tao': CANONICAL_VIEW,
+  'App/Project.tao': 'project {\n   id "check-cache-nested"\n   name "Check cache nested"\n}\n',
+  'App/Sub/Other.tao': CANONICAL_VIEW.replace('MainView', 'OtherView'),
+} as const
+
 /** checkedWorkspaces runs a check against a fixture-local stamp and names what it did to each workspace. */
-async function checkedWorkspaces(rootDir: string): Promise<Record<string, CheckWorkspaceOutcome['resolution']>> {
+async function checkedWorkspaces(
+  rootDir: string,
+  checkedPath = rootDir,
+): Promise<Record<string, CheckWorkspaceOutcome['resolution']>> {
   const outcomes: Record<string, CheckWorkspaceOutcome['resolution']> = {}
-  await runCheck(rootDir, {
+  await runCheck(checkedPath, {
     cache: { repositoryRoot: rootDir },
     onWorkspace: outcome => {
       outcomes[FS.relativePath(rootDir, outcome.workspaceRoot)] = outcome.resolution
@@ -209,6 +218,40 @@ Describe('tao check toolchain identity', () => {
       })
     })
   }
+
+  // One workspace checked through two different sets of entry files is two questions: a check of a
+  // subdirectory validates a smaller graph than a check of the whole workspace, so one verdict must
+  // never replay for the other. Without the entry set in the key, the narrower run would be handed
+  // the wider run's clean answer over files it never looked at.
+  Test('holds a separate verdict for each set of entry files a workspace is checked through', async () => {
+    await withTaoFixture(NESTED_WORKSPACE, async rootDir => {
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ App: 'checked' })
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ App: 'replayed' })
+
+      // The same workspace, reached through one of its subdirectories. The stamp already holds a
+      // clean verdict for it, and this must not be that verdict.
+      Expect(await checkedWorkspaces(rootDir, FS.resolvePath('App/Sub', rootDir))).toEqual({ App: 'checked' })
+      Expect(await checkedWorkspaces(rootDir, FS.resolvePath('App/Sub', rootDir))).toEqual({ App: 'replayed' })
+      // And the wider question still has its own answer, untouched by the narrower one.
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ App: 'replayed' })
+    })
+  })
+
+  Test('refuses a relative TAO_STDLIB_ROOT rather than resolving it against two different roots', async () => {
+    await withTaoFixture(TOOLCHAIN_FILES, async rootDir => {
+      const previous = Platform.runtimeProcess.env['TAO_STDLIB_ROOT']
+      Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = 'packages/stdlib'
+      try {
+        await Expect(CheckCache.toolchainIdentity(rootDir)).rejects.toThrow('must be an absolute path')
+      } finally {
+        if (previous === undefined) {
+          delete Platform.runtimeProcess.env['TAO_STDLIB_ROOT']
+        } else {
+          Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = previous
+        }
+      }
+    })
+  })
 
   Test('refuses an identity when TAO_STDLIB_ROOT names a stdlib it does not hash', async () => {
     await withTaoFixture(TOOLCHAIN_FILES, async rootDir => {
