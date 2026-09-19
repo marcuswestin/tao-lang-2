@@ -6,6 +6,7 @@ import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
 import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
@@ -191,6 +192,33 @@ await runWithCommands(commands => {
           skipVerifyFull: options.skipVerifyFull === true,
         })
         Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('my-branch')
+    .argument('[name]', 'Branch name or suffix; defaults to $TAO_DEV_BRANCH, then your Git identity.')
+    .description('Switch this checkout to your own dev/* branch, creating it from main the first time.')
+    .action(async (name = '') => {
+      try {
+        await DeveloperBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('sync-main')
+    .description('Fast-forward main, move the mirrors that follow it, and merge it into this branch.')
+    .action(async () => {
+      try {
+        const outcome = await SyncMainCommand.run()
+        Platform.runtimeProcess.exit(outcome.conflicted ? 1 : 0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

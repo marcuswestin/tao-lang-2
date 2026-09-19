@@ -78,6 +78,10 @@ Require a clean, validated feature branch with its merge message written or refr
 before the merge commit; afterwards the command's own tree-equality proof, not a second lane, is what
 says the squash is the verified tree. Archive completed roadmap task folders before it, never after.
 
+A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does; the `Mine` recipes in the
+`Justfile` (`my-branch`, `my-sync`, `my-resolve`, `my-land`) are that workflow. Leave those branches
+and the primary checkout alone unless Ro asks: a branch lives in one worktree at a time.
+
 No worktree may be on `main`, and the command refuses to land while one is. `main` is a ref the
 landing moves with `git update-ref`, and the commit it moves to is built with `git commit-tree`
 without a working tree, so nothing is ever staged in a checkout other agents share. A checkout that
