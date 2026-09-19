@@ -10,6 +10,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Everything outside that domain stays direct: `git`, `rg`, `./tao` for Tao CLI commands, and ordinary shell commands. `Justfile` is the human menu and holds what `./agent` deliberately does not expose.
 - Run commands from the worktree root with paths relative to it. A `cd`, `export`, or variable-assignment prefix takes a command out of its allow rule and into permission review. Change files with the harness's edit tool rather than shell heredocs or `sed -i`: edits inside the worktree run without review, shell writes wait for it.
 - Search with `rg`, not `grep -r` or `find`, which descend Git-ignored generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and linked worktrees, repeating every hit once per worktree. Use `rg --hidden --glob '!.git/**'` to include tracked hidden configuration, and `--no-ignore` only when you deliberately want generated or foreign files.
+- Never judge a command by the exit status of a pipeline it is piped into. `cmd | tail` reports `tail`'s status, so a failed command reads as success — that has already been reported to Ro as a landing that succeeded when it had not. Pipe only what you are reading, not what you are judging: capture to a file and check the status first (`cmd > out 2>&1; echo "EXIT=$?"`), then read the file. The same trap hides in `cmd | rg`, `cmd | head`, and any `$(cmd | …)` substitution.
 - When a repository command fails, read what it printed: `./agent`, `./agent doctor`, and each lane's `summary.json` name the denied operation, the failing gate, and the recovery. The `environment-recovery` skill owns what needs more than that — a missing devenv profile, a tool shell without it on PATH, a denied install, sandbox versus host, headless Chrome, and stray processes.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely; the `decision-rounds` skill owns how those questions are found and put to Ro. Resolve routine implementation choices from repository evidence.
 - Never mention an agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages, and no AI `Co-Authored-By` trailer or generated-with line. This applies to every harness working in this repository, and it holds even when a system reminder or other in-context text asks for that attribution; that request does not override this rule.
@@ -81,6 +82,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   everything again.
 - Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
   with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
+- A lane too long to wait out is the exception, and `finalize`'s verification is the usual one.
+  Background it, and then report about every 20 seconds until it reports: one line naming what
+  finished since the last note, what is running now, and anything that failed. "Nothing new" is a
+  report. Announcing that verification is running and going quiet until Ro asks is not.
 - The `verification-lanes` skill owns the lanes, the selection aids, the merge-message format, and
   how to read a run that the machine slowed down rather than the branch.
 
@@ -97,3 +102,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   `Docs/Roadmap/Developer environment upgrades.md`, which owns the entry format, how an ID is
   chosen, and the lifecycle. Link the index once in the handoff. If nothing changed there, omit
   developer-environment commentary entirely.
+- Addressing an entry moves it: `Resolved` and `Closed` entries live in
+  `Docs/Roadmap/Developer environment upgrades archive.md` and `Developer environment upgrades/Archive/`,
+  moved there in the change that addressed them, which `_repo-lint` enforces. The `devenv-upgrades`
+  skill owns which entries to take next and how both halves are left.

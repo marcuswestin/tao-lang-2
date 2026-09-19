@@ -215,5 +215,5 @@ machine is theirs by load average, not by lane count.
 - 2026-09-18 thirteen-lane reading and 2026-09-19 zero-lane-at-load-22.2 reading, taken during the
   second attempt at the acceptance measurements.
 - `packages/dev/README.md` for what is shared today and what is not.
-- `Developer environment upgrades.md`, DEVENV-015 (Chrome registration) and DEVENV-066 to DEVENV-070
+- `Developer environment upgrades.md`, DEVENV-015 (Chrome registration) and DEVENV-066 to DEVENV-069
   (the runaway-process class, sandboxed `ps`, cross-worktree edit interference).

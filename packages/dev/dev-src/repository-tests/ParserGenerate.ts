@@ -347,7 +347,7 @@ async function synchronizeGeneratedOutputs(
       await FS.copyFile(originalPath, backupPath)
       backups.set(originalPath, backupPath)
     }
-    const originalIdentity = await generatedFileIdentity(
+    const originalIdentity = await FS.filesIdentity(
       plan.originalFiles.map(originalPath => [
         FS.relativePath(repositoryRoot, originalPath),
         backups.get(originalPath)!,
@@ -461,7 +461,7 @@ async function validatePublicationPrecommit(
   for (const outputPath of await declaredOutputPaths(parserRoot)) {
     await collectOriginalOutput(outputPath, currentFiles)
   }
-  const currentIdentity = await generatedFileIdentity(
+  const currentIdentity = await FS.filesIdentity(
     [...currentFiles].map(path => [FS.relativePath(repositoryRoot, path), path]),
   )
   if (currentIdentity !== originalIdentity) {
@@ -469,14 +469,6 @@ async function validatePublicationPrecommit(
       'Parser generation outputs changed before publication; refusing to overwrite concurrent work.',
     )
   }
-}
-
-async function generatedFileIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
-  const identities: string[] = []
-  for (const [relative, path] of [...entries].sort(([left], [right]) => left.localeCompare(right))) {
-    identities.push(`${relative}\n${hashContent(await FS.readFile(path))}`)
-  }
-  return hashContent(identities.join('\n'))
 }
 
 /** generatedPublicationPlan rejects shape and symlink hazards before collecting any publication work. */
@@ -676,7 +668,7 @@ async function generatedPathIdentity(path: string): Promise<string> {
   if (await FS.isDirectory(path)) {
     return 'directory'
   }
-  return `file:${hashContent(await FS.readFile(path))}`
+  return `file:${fileBytesIdentity(await FS.readFile(path))}`
 }
 
 function combinedFailure(primary: unknown, detailName: string, secondary: unknown): Error {
@@ -692,11 +684,10 @@ function combinedFailure(primary: unknown, detailName: string, secondary: unknow
  * checkout, a worktree copy, or a reverted edit does not force a regeneration.
  */
 export async function parserGenerateInputHash(parserRoot: string): Promise<string> {
-  const entries: string[] = [`langium-cli@${await langiumGeneratorVersion(parserRoot)}`]
-  for (const path of await grammarInputPaths(parserRoot)) {
-    entries.push(`${FS.relativePath(parserRoot, path)}\n${hashContent(await FS.readFile(path))}`)
-  }
-  return hashContent(entries.join('\n'))
+  const grammars = await FS.filesIdentity(
+    (await grammarInputPaths(parserRoot)).map(path => [FS.relativePath(parserRoot, path), path]),
+  )
+  return FS.contentIdentity([`langium-cli@${await langiumGeneratorVersion(parserRoot)}`, grammars])
 }
 
 /**
@@ -734,11 +725,11 @@ async function parserGenerateIsUpToDate(
 
 /** parserGenerateOutputHash hashes the generated files themselves, in a stable order. */
 export async function parserGenerateOutputHash(parserRoot: string): Promise<string> {
-  const entries: string[] = []
-  for (const path of (await generatedFilePaths(parserRoot)).filter(path => FS.pathIsWithin(path, parserRoot))) {
-    entries.push(`${FS.relativePath(parserRoot, path)}\n${hashContent(await FS.readFile(path))}`)
-  }
-  return hashContent(entries.join('\n'))
+  return FS.filesIdentity(
+    (await generatedFilePaths(parserRoot))
+      .filter(path => FS.pathIsWithin(path, parserRoot))
+      .map(path => [FS.relativePath(parserRoot, path), path]),
+  )
 }
 
 /** grammarInputPaths lists the configuration and grammar files, in a stable order. */
@@ -862,8 +853,11 @@ async function langiumGeneratorVersion(parserRoot: string): Promise<string> {
   }
 }
 
-/** hashContent reduces file content to a digest the stamp can compare. */
-function hashContent(content: string | Uint8Array): string {
+/**
+ * fileBytesIdentity reduces one file's bytes to a digest. `FS.contentIdentity` cannot serve here
+ * because it identifies ordered strings, and what is being identified is the file's bytes.
+ */
+function fileBytesIdentity(content: Uint8Array): string {
   return createHash('sha256').update(content).digest('hex')
 }
 

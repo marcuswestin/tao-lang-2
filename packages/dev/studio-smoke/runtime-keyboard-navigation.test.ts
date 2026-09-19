@@ -1,5 +1,5 @@
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
-import { Expect, Test } from '@shared/test'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { Expect, runCleanups, Test } from '@shared/test'
 import { openStudioPreviewSession } from '@studio'
 import { StudioCdp } from '../dev-src/studio/StudioCdp'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
@@ -191,13 +191,13 @@ Test('generated keyboard navigation works in a real browser', async () => {
     primaryFailure = error
     throw error
   } finally {
-    await cleanupKeyboardJourney(primaryFailure, [
+    await runCleanups(primaryFailure, [
       { label: 'close browser', run: () => browser?.close() },
       { label: 'stop export server', run: () => server?.stop() },
       { label: 'close preview session', run: () => preview?.close() },
       { label: 'remove preview runtime', run: () => runtime?.close() },
       { label: 'remove web export', run: () => exportRoot === undefined ? undefined : FS.remove(exportRoot) },
-    ])
+    ], { channel: 'keyboard-journey-cleanup', subject: 'keyboard journey' })
   }
 }, 180_000)
 
@@ -316,80 +316,15 @@ Test('generated WordFlower keyboard navigation works in a real browser', async (
     primaryFailure = error
     throw error
   } finally {
-    await cleanupKeyboardJourney(primaryFailure, [
+    await runCleanups(primaryFailure, [
       { label: 'close browser', run: () => browser?.close() },
       { label: 'stop export server', run: () => server?.stop() },
       { label: 'close preview session', run: () => preview?.close() },
       { label: 'remove preview runtime', run: () => runtime?.close() },
       { label: 'remove web export', run: () => exportRoot === undefined ? undefined : FS.remove(exportRoot) },
-    ])
+    ], { channel: 'keyboard-journey-cleanup', subject: 'keyboard journey' })
   }
 }, 180_000)
-
-async function cleanupKeyboardJourney(
-  primaryFailure: unknown,
-  cleanups: ReadonlyArray<{ label: string; run: () => unknown | Promise<unknown> }>,
-  reportCleanupFailure: (error: unknown) => void = error =>
-    HCI.logProcessError(
-      'keyboard-journey-cleanup',
-      `Cleanup also failed after the primary journey failure: ${Errors.formatForLog(error)}`,
-    ),
-): Promise<void> {
-  const failures: Array<{ error: unknown; label: string }> = []
-  for (const cleanup of cleanups) {
-    try {
-      await cleanup.run()
-    } catch (error) {
-      failures.push({ error, label: cleanup.label })
-    }
-  }
-  if (failures.length === 0) {
-    return
-  }
-  const message = cleanupFailureMessage(failures)
-  const cause = failures.map(failure => ({
-    error: Errors.formatForLog(failure.error),
-    label: failure.label,
-  }))
-  if (primaryFailure === undefined) {
-    Errors.throwUnexpected(message, { cause })
-  }
-  reportCleanupFailure(new Errors.UnexpectedBehaviorError(message, { cause }))
-}
-
-function cleanupFailureMessage(failures: ReadonlyArray<{ error: unknown; label: string }>): string {
-  return `${failures.length} keyboard journey cleanup operations failed:\n${
-    failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
-  }`
-}
-
-Test('keyboard journey cleanup reports every failure and still runs later disposers', async () => {
-  const cleaned: string[] = []
-  const reported: unknown[] = []
-
-  await cleanupKeyboardJourney(new Errors.UnexpectedBehaviorError('primary journey failure'), [
-    {
-      label: 'close browser',
-      run: () => {
-        cleaned.push('browser')
-        Errors.throwHostEnvironment('browser cleanup failed')
-      },
-    },
-    {
-      label: 'remove preview runtime',
-      run: () => {
-        cleaned.push('runtime')
-        Errors.throwHostEnvironment('runtime cleanup failed')
-      },
-    },
-    { label: 'remove web export', run: () => cleaned.push('export') },
-  ], error => reported.push(error))
-
-  Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
-  Expect(reported).toHaveLength(1)
-  Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
-  Expect(Errors.messageOf(reported[0])).toContain('remove preview runtime: runtime cleanup failed')
-})
 
 async function createWorkspace(browser: StudioCdp, name: string): Promise<void> {
   await focusWorkspaceName(browser)
