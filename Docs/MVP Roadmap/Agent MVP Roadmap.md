@@ -125,6 +125,17 @@ The point of the release is to learn what people want. Nothing collects that tod
   do not wait.
 - Done: a frustrated visitor has an obvious, low-effort place to say so, and what they send is
   enough to reproduce.
+- Landed: `.github/` carries both issue forms, a discussion form for the open-ended half of each
+  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/dev` reports OS,
+  architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, and Xcode where
+  present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
+  parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
+  word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
+- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
+  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
+  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
+  worth adding a command to. The discussion links point at the default `ideas` and `q-a` categories
+  pending `R10`.
 
 ## Environment reach
 

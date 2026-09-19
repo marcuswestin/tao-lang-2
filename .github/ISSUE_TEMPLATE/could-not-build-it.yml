@@ -1,0 +1,82 @@
+name: I tried to build something and could not
+description: You sat down to build something in Tao, and you could not get there. Tell us what you were after.
+title: "Could not build: "
+labels: ["feedback", "could-not-build"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the report we most want. It does not matter whether the cause turns out to be a
+        missing language feature, a broken tool, a gap in the docs, or something you were holding
+        wrong — all four are our problem, and the only way we find out which it was is if you
+        describe the thing you were trying to make.
+
+        You do not need to reduce this to a minimal example. A half-finished attempt and a
+        sentence about what you wanted is more useful to us than a tidy report with the intent
+        edited out of it.
+
+  - type: textarea
+    id: what-you-wanted
+    attributes:
+      label: What were you trying to build?
+      description: >
+        In your own words, about the app — not about Tao. "A packing list where checking an item
+        moves it to the bottom" tells us more than "a list with a sort predicate".
+      placeholder: I wanted a screen where…
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-you-tried
+    attributes:
+      label: What did you try?
+      description: >
+        The Tao you wrote, or the steps you took, however incomplete. Paste it as it was when you
+        gave up — not cleaned up.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: where-it-stopped
+    attributes:
+      label: Where did it stop working?
+      description: >
+        What happened at the point you got stuck: an error, a diagnostic, a screen that rendered
+        wrong, or just not knowing what to write next. Paste any message verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-you-expected
+    attributes:
+      label: What did you expect to be able to say?
+      description: >
+        If you had a guess at the Tao that should have worked, write it, even if it is invented
+        syntax. Invented syntax that reads right is a design signal, not a mistake.
+    validations:
+      required: false
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Did you find a way around it?
+      description: >
+        If you got there another way, say how — and whether the result was something you would be
+        willing to keep in a real app.
+    validations:
+      required: false
+
+  - type: textarea
+    id: fingerprint
+    attributes:
+      label: Environment
+      description: >
+        Optional, and only if you are working in a checkout of this repository. Run
+        `./agent doctor --fingerprint` and paste the JSON. It reports your OS, architecture, Tao
+        commit, toolchain versions and lockfile hashes, and Xcode version if you have one. It
+        contains no file paths, no account or machine names, and nothing else about you — read it
+        before you paste it if you like.
+      render: json
+    validations:
+      required: false
