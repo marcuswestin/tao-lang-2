@@ -221,12 +221,16 @@ Describe('two lanes in one checkout', () => {
       // Both lane records survived, and neither lane lost a gate record to the other's rename.
       Expect(store.lanes['verify']?.treeHash).toBe('shared-tree')
       Expect(store.lanes['verify-full']?.treeHash).toBe('shared-tree')
-      Expect(gates.map(gate => store.gates[gate]?.treeHash)).toEqual(['shared-tree', 'shared-tree', 'shared-tree'])
+      // `_typecheck` reads the generated app and parser trees, and neither generator is in this
+      // lane, so its verdict is about bytes the tree hash cannot speak for and it is recorded by
+      // neither lane. That is the same rule the read side applies: a record written here would
+      // otherwise be read by a lane that *does* run the generators, and skip a typecheck that never
+      // ran against a regenerated tree.
+      Expect(gates.map(gate => store.gates[gate]?.treeHash)).toEqual(['shared-tree', undefined, 'shared-tree'])
       // Every file in the directory is a complete record, and no temporary file was orphaned.
       const files = await FS.listDir(FS.resolvePath(GreenTree.STORE_DIR, root))
       Expect(files.toSorted()).toEqual([
         'gate-_repo-lint.json',
-        'gate-_typecheck.json',
         'gate-dead-exports.json',
         'lane-verify-full.json',
         'lane-verify.json',
