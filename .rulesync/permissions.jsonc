@@ -70,9 +70,10 @@
       "adb get-state *": "allow",
       "emulator -list-avds": "allow",
       "xcrun simctl list *": "allow",
-      // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
-      // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
-      // outward-facing step and is deliberately absent from this list.
+      // Merging runs without a prompt. An agent decides which branch lands on main, and when, on
+      // its own judgment; `verification-lanes` owns where that judgment stops and hands the
+      // landing to Ro. A bare `git push` is the outward-facing step and is deliberately absent
+      // from this list — the landing command does its own pushing, under that same judgment.
       "git merge *": "allow",
       // Read-only remote queries, so agents can inspect origin. Pushing stays absent
       // above by design; the sandbox exclusion below is what lets its prompt succeed.
@@ -142,8 +143,8 @@
         // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
         // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
         // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
-        // main, and when, is still Ro's decision: an agent merges because Ro asked, not on its own
-        // initiative.
+        // main, and when, is the agent's own judgment; `verification-lanes` owns where that
+        // judgment stops.
         "git merge *",
         "git reset --merge",
         "git reset --hard HEAD",

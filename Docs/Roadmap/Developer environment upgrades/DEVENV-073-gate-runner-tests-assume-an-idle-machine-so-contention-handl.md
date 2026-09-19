@@ -5,9 +5,12 @@
 - **Impact:** `packages/dev/dev-tests/gate-runner.test.ts` and `verification-concurrency.test.ts` assert
   an exact warning list and the presence of `.artifacts/timings/durations.json`. When the host is busy,
   the runner does the right thing — it adds a contention warning and declines to teach the timings store
-  from measurements taken under load — and those assertions fail. `verify --complete` therefore cannot go
-  green on a machine that several agents share, which is this repository's normal condition, so the merge
-  gate is unreachable for reasons unrelated to the branch under test.
+  from measurements taken under load — and those assertions fail. `verify --complete` and `full-verify`
+  therefore go red at random for reasons unrelated to the branch under test, and a merge can need several
+  attempts to get through. It is intermittent rather than constant, and a run's peak load average does
+  not predict it: on 2026-09-18 the `dev` node failed at peaks of 86.5 and 75.0 on 18 CPUs but passed at
+  89.4. What decides it is what the runner samples while those few tests run, so waiting for a quiet
+  machine is a gamble rather than a fix.
 - **Evidence:** On 2026-09-18, `bun test packages/dev/dev-tests` failed four tests on a tree whose only
   difference from `main` was one validator diagnostic and one ledger entry, neither under `packages/dev`
   or `packages/shared`. `gate-runner.test.ts:157` received one extra warning,
@@ -29,8 +32,9 @@
   force the teach-the-store path rather than depend on the host being quiet.
 - **Dependencies:** DEVENV-001 and DEVENV-003 own the runner behavior these tests exercise; this entry is
   about the tests' assumptions, not that behavior.
-- **Acceptance:** `bun test packages/dev/dev-tests` and the `dev` node of `verify --complete` pass on a
-  host under sustained load from other worktrees, and a genuine timings-store regression still fails them.
+- **Acceptance:** The four assertions pass whether or not the runner samples contention while they run,
+  proved by pinning both conditions rather than by repeat runs on a busy host, and a genuine
+  timings-store regression still fails them.
 - **Source:** 2026-09-18 bridged-sidecar file-reference validation, found while gating that branch. Found
   independently the same day on the subagent-delegation branch, which fixed the
   `verification-concurrency.test.ts:240` quarter of it: two lanes at once is contention by

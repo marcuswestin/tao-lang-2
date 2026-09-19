@@ -15,7 +15,13 @@
   `./dev merge-with-main --dry-run`, and the `ls-remote` runs as its grandchild, which inherits the
   sandbox and its egress allowlist. It is the same shape as DEVENV-068 — a child process denied what
   the shell is allowed — with the network rather than `exec` as the denied operation.
-- **Workaround:** Run the dry run unsandboxed.
+  `./agent finalize` has the same denial and degrades rather than failing: it reports
+  `origin was unreachable; read the local main branch at <sha> instead` as a `PASS`, then decides
+  `main ... is already contained in this branch` from that local ref. That is a stale-`main`
+  judgment presented as a passing check — a landing finalize called ready can still be refused by
+  `merge-with-main`'s preflight, which does reach the remote.
+- **Workaround:** Run the dry run unsandboxed. Run `finalize` unsandboxed too, or fetch `origin`
+  first, so its containment check reads a current `main`.
 - **Proposed change:** Either exclude `./dev merge-with-main *` from the sandbox, which is defensible
   because the plain command is already the landing command and pushing still stops for Ro, or have
   the preflight report a failed remote query as an environment failure that names the sandbox and the

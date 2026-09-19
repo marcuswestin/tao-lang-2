@@ -41,7 +41,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. The `environment-recovery` skill owns what to do when the sandbox is the obstacle; never widen the policy to route around one.
-- Merge onto `main` only when Ro asks for it in the current request; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro.
+- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls. A direct `git push` still stops for Ro — the landing command does its own pushing.
 - Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds; it never covers secrets or a service this repository does not already use.
 - `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` the opt-in native, local-services, release, and unsandboxed profiles, `.rulesync/hooks.jsonc` the agent hooks, and `agents/subagents/` the subagent profiles; every generated harness settings file, config, and agent adapter comes from them. Never edit a generated harness file; change the source and run `./agent setup`. The `agent-instructions` skill owns which generator produces what.
 
@@ -66,13 +66,21 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   the names sort: `./agent verify-changed` is the iteration gate, `./agent verify` is the gate before
   a commit that goes to review or merge, and `verify-full` and `verify-full-sandbox` add the host
   lanes. `--no-cache` is the one flag they share.
-- Whenever the work looks complete, carry it all the way there without being asked: land every
-  change as commits on the feature branch, leave the worktree clean, run `verify` plus
-  the host lanes the change reaches, refresh the roadmap or ledger documents the work changed, and
-  write the branch's merge message at `.artifacts/merge/<branch>.msg`. Ro's next action is then
-  `just merge-with-main` and nothing else. Say plainly which evidence stands behind it and which
-  gates did not run, and repeat all of it after every round of Ro's corrections so a reviewed branch
-  never describes an earlier state.
+- Whenever the work looks complete, carry it all the way without being asked: land every change as
+  commits on the feature branch, leave the worktree clean, refresh the roadmap or ledger documents
+  the work changed, then run `./agent finalize`, which integrates `main`, verifies only what is not
+  already proved green, and drafts the merge message for you to edit. Then decide whether to land it.
+  Use `./agent board` to see what else this machine is doing first. An agent lands on its own
+  judgment when the gates can prove the change; it brings the branch to ready and hands the landing
+  to Ro when the change reaches what no gate can prove. The `verification-lanes` skill owns that
+  judgment. Either way, say plainly which evidence stands behind it and which gates did not run, and
+  repeat all of it after every round of Ro's corrections so a reviewed branch never describes an
+  earlier state.
+- Refresh the roadmap, ledger, and spec documents the work changed **before** verifying, not after.
+  A tracked edit made after a green lane changes the tree the lane proved, so the next lane runs
+  everything again.
+- Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
+  with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
 - The `verification-lanes` skill owns the lanes, the selection aids, the merge-message format, and
   how to read a run that the machine slowed down rather than the branch.
 
