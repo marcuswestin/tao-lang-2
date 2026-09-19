@@ -94,17 +94,27 @@ description: >-
   is withdrawn automatically when the test fails three runs in a row or its file changes, and a node
   that timed out, crashed, or reported nothing per-test is never tolerated at all.
 - `just merge-with-main` is the landing command, and it takes no flag to do its job: the plain
-  invocation verifies, squashes, commits, and pushes. Agents prepare the branch and message file and
-  never land on their own initiative, never automate the command, and never decide a merge is
-  warranted; they run it only when Ro asks for that merge in the current request, and say which
-  verification evidence stood behind it.
+  invocation verifies, squashes, commits, and pushes. An agent runs it on its own judgment once the
+  branch is ready, and says which verification evidence stood behind it and which gates did not run.
+  It is a judgment, never a rhythm: do not automate it, and do not land a branch Ro is still
+  reviewing. **Whether to land it yourself** below owns that judgment.
 - Write or update the message every time a branch becomes merge-ready, including when later commits
   change what the branch does. The command fails with `Merge message file does not exist` when the
   file is missing, so a branch handed over without it is not ready.
-- Completing the work means completing everything before that command: commits landed, worktree
-  clean, `verify --complete` and the reachable host lanes run, affected roadmap and ledger documents
-  refreshed, and the message written. Do this unprompted, and repeat it after every round of Ro's
-  corrections so the message never describes an earlier state of the branch.
+- `./agent finalize` does everything before that command: it asserts the branch and a clean tree,
+  integrates `main`, runs a verification lane **only** when no green record already covers this exact
+  tree, drafts the merge message from the branch's own commits, and prints what remains. It is cheap
+  and safe to re-run, because it records what it established at `.artifacts/merge/<branch>.state.json`
+  and redoes only what changed. Run it instead of performing the sequence by hand, and run it again
+  after every round of Ro's corrections. `--check` previews without touching anything.
+- Completing the work still means completing it: commits landed, worktree clean, affected roadmap and
+  ledger documents refreshed, the reachable host lanes run, and the message reviewed. `finalize`
+  drafts the message from commit subjects — it cannot know what the branch was _for_, so the draft is
+  a starting point you edit, never the message you hand over.
+- `./agent board` answers what no other command does: every worktree's branch, cleanliness, merge
+  message, finalize state and last proof, beside the machine-wide lane and lease registry, led by
+  whether this machine is busy and whether that is this checkout's own doing. Read it before
+  concluding that a slow lane is a regression, and before landing, to see who else is close.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets, each free to wrap onto indented continuation lines. Do not add Git's squash appendix or
@@ -132,3 +142,31 @@ description: >-
   Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
   rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery
   guidance.
+
+## Whether to land it yourself
+
+The question is not how substantial the change is. It is whether the gates can prove it.
+
+- **Land it yourself** when the gates that ran green cover the change: documentation, roadmap, agent
+  instructions, developer tooling, and test-only changes always; product code whose behavior the
+  suites actually exercise.
+- **Bring it to ready and hand the landing to Ro** when the change reaches what no gate proves —
+  Studio's or an app's visible behavior, a language surface Ro has not seen, native or device paths,
+  or anything covered only by the lanes a person runs: `./dev studio-manual-checks`, a device
+  install, and everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why
+  the gates do not settle it.
+- A green `full-verify` is not by itself an answer. A change can pass every gate and still be one Ro
+  wants to see first, because the thing it changed is the thing Ro is designing.
+- When the two pull against each other, ask. A landing Ro did not want costs more than a question.
+
+## Working inside a busy machine
+
+- Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
+  with a timeout. The poll costs a model turn per iteration and rounds the wait up to its sleep, and
+  the gate is no faster for being backgrounded.
+- Refresh the roadmap, ledger, and spec documents the work changed **before** verifying. A tracked
+  edit made after a green lane changes the tree that lane proved, so the next lane runs everything
+  again from nothing.
+- A lane that is slow is usually not a regression. Read the `contention` block in
+  `.artifacts/logs/<lane>/latest/summary.json` before diagnosing anything: it names how many lanes
+  shared the machine and what the load reached.
