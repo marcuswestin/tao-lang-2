@@ -81,6 +81,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
   everything again.
 - Never background a gate and then poll for its output in a sleep loop. Run it in the foreground
   with a timeout: the poll costs a model turn per iteration and rounds the wait up to its sleep.
+- A lane too long to wait out is the exception, and `finalize`'s verification is the usual one.
+  Background it, and then report about every 20 seconds until it reports: one line naming what
+  finished since the last note, what is running now, and anything that failed. "Nothing new" is a
+  report. Announcing that verification is running and going quiet until Ro asks is not.
 - The `verification-lanes` skill owns the lanes, the selection aids, the merge-message format, and
   how to read a run that the machine slowed down rather than the branch.
 
