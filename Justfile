@@ -200,10 +200,14 @@ test-retry: _compile-word-flower-app
 [group('Dev')]
 retry: test-retry
 
+# A bare `bun test` on a relative path is the thing `./dev test-file` exists to stop: Bun reads it as
+# a filter, walks the whole repository to resolve it, and leaves a file descriptor open per visited
+# entry, so children spawned by a test inherit an exhausted descriptor table and their piped output
+# never arrives. The runner resolves the path and routes it to its owning suite instead.
 # Run the focused Tao Studio package suite
 [group('Dev')]
 test-studio:
-    bun test packages/studio/studio-tests
+    ./dev test-file packages/studio/studio-tests
 
 # Both ledger reports read the same recorded outcomes and answer the same question — which tests to
 # distrust — so they are one command rather than two names to remember. One `limit` bounds both

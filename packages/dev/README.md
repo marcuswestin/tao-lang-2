@@ -217,8 +217,11 @@ Never delete the shared registry while another worktree may be using it.
 - A test-name pattern is a filter, not a scope: it narrows the suites a scope already chose. `just
   test "<name>"` is therefore the changed set filtered to that name rather than every suite filtered
   to it, and `just test-all "<name>"` is the same filter over every suite. `TestRunRequest` carries
-  the two as separate fields for that reason. `tao-apps` sits out any run carrying a pattern, because
-  `./tao test` takes app roots and has no name filter to give; the run says so in its summary. A
+  the two as separate fields for that reason. `tao-apps` takes the pattern like every other suite and
+  is told to pass on no match, because a name that selects plenty elsewhere normally selects no
+  journey — it used to sit such runs out, which silently dropped the Tao behavior coverage from every
+  filtered run. A run that matched no journey says so, and that is what the zero-match guard reads: a
+  suite reporting nothing per test cannot otherwise be told apart from one that ran and passed. A
   filtered run is never recorded as a complete one — it skipped most of the tests in the suites it
   scheduled, so it can neither call a test green for the retry ledger nor time a suite for the
   timings store.
@@ -315,8 +318,10 @@ Nothing verifies the same bytes twice. When an agent has already run `verify --c
 the host-dependent lanes, which are never recorded; and when `verify-full` proved the feature head,
 Git's own tree comparison — not a second lane — is what proves the staged squash. Its strict
 preflight
-requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
-deliberately first. A remote feature branch left behind by later local commits is pushed forward as
+requires the local `main` ref to equal `origin/main`, read through the ref rather than through a
+checkout, because no worktree has to be on `main` at all: the command makes one under
+`.artifacts/merge/main-worktree` when the repository has none, and removes it when the landing
+completes. A local-ahead `main` must be reconciled deliberately first. A remote feature branch left behind by later local commits is pushed forward as
 the first mutation instead of refusing the landing; a remote holding commits the worktree lacks still
 stops preflight, because the squash would drop them. Successful execution preserves the invoking
 feature worktree as a clean detached checkout of the archived feature tip, deletes the local feature
