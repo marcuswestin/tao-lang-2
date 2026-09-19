@@ -317,13 +317,23 @@ verification proved, and a mismatch stops the landing.
 
 Nothing verifies the same bytes twice. When an agent has already run `verify --complete`, the
 `verify-full` the merge runs at that same tree skips every gate that run recorded and executes only
-the host-dependent lanes, which are never recorded; and when `verify-full` proved the feature head,
-Git's own tree comparison — not a second lane — is what proves the staged squash. Its strict
-preflight
-requires the local `main` ref to equal `origin/main`, read through the ref rather than through a
-checkout, because no worktree has to be on `main` at all: the command makes one under
-`.artifacts/merge/main-worktree` when the repository has none, and removes it when the landing
-completes. A local-ahead `main` must be reconciled deliberately first. A remote feature branch left behind by later local commits is pushed forward as
+the host-dependent lanes, which are never recorded; and because preflight requires `main` to be
+merged into the branch, the squash can only be the feature tree, so the bytes `verify-full` proved
+are the bytes that land.
+
+**The landing touches no checkout but the invoking one.** It builds the squash commit with
+`git commit-tree` from the verified feature tree and moves `refs/heads/main` with `git update-ref`
+and an expected old value, so nothing is ever staged anywhere and two landings on one machine cannot
+interleave — the second is refused and told to merge main and retry. A landing that fails leaves no
+commit and no staged state behind, because the commit exists only from the moment the ref moves.
+For the same reason the command **refuses to land while any worktree has `main` checked out**: a
+checked-out branch promises that a worktree's files match it, and moving the ref underneath turns
+that worktree's `git status` into a wall of phantom deletions. A checkout that only exists to show
+what `main` holds is detached at main's tip instead (`git worktree add --detach <path> main`), and
+every landing moves such a mirror forward itself, as long as it is still clean and still where main
+was; a mirror someone has edited is left alone with a warning rather than overwritten. Its strict
+preflight requires the local `main` ref to equal `origin/main`, read through the ref rather than
+through a checkout. A local-ahead `main` must be reconciled deliberately first. A remote feature branch left behind by later local commits is pushed forward as
 the first mutation instead of refusing the landing; a remote holding commits the worktree lacks still
 stops preflight, because the squash would drop them. Successful execution preserves the invoking
 feature worktree as a clean detached checkout of the archived feature tip, deletes the local feature
