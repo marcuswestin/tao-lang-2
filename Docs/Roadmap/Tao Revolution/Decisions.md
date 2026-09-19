@@ -426,7 +426,7 @@ data Recipes / Recipe {
    validate Servings >= 1 "A recipe serves at least one"   // validate: the write is rejected outright
 }
 
-transaction LeaveKitchen(Membership is Membership) for Me {
+transaction LeaveKitchen(Membership) for Me {
    refuse when Membership.Role is Owner and Membership is last owner
       "Make someone else an owner first."             // refuse: a domain check inside a transaction
    delete Membership
@@ -1192,7 +1192,7 @@ action Delete() runs single {
   `if` is the one-sided test that gets it there:
 
 ```swift
-function FirstOwner(Household is Household) returns Account {
+function FirstOwner(Household) returns Account {
    if Household.Memberships is empty { return none }
    return Household.Memberships[0].Person
 }
@@ -1221,9 +1221,9 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 ```
 
 - **Presentation is a property of the call site, never the declaration.** A view composes inline in
-  a render tree, or `nav` presents it — `present X(…) as sheet | window | root | menu | toast`,
-  `reveal X(…) in @slot` (§10) — with the mode chosen where the presenting happens. No keyword
-  marks a view navigable, modal, or reusable.
+  a render tree, or `nav` presents it — `present X(…) as overlay | sheet | window | root | menu |
+  toast`, `reveal X(…) in @slot` (§10) — with the mode chosen where the presenting happens. No
+  keyword marks a view navigable, modal, or reusable.
 - **Capabilities are inferred from the declaration, never declared.** A view accepts caller content
   iff its body places `@@content`; it offers named render slots iff its body declares them; it
   returns a typed answer iff its head declares `responds T`. The `responds` clause survives the
@@ -1306,7 +1306,9 @@ navigator can describe itself when it is itself presented, without exposing its 
   text, Tone default Neutral)`, `view CookScreen(Recipe, Meal?)` (§2).
 - **Empty argument lists on _containers_ are omitted**: `Col [page]`, not `Col()`. The render tree is
   the primary shape of the code and the parentheses carry nothing there, so this is the one place the
-  mirroring rule yields.
+  mirroring rule yields. _(§10's shell example, the implementation, and
+  `Apps/WordFlower/4 - Revolution` all write `Col()` instead; that disagreement is an open question
+  in `Apps/WordFlower/4 - Revolution/Open questions.md`, not a decision an agent may take.)_
 - **`render` introduces the visual tree**, and the visible hierarchy is the primary shape of the code:
 
 ```swift
@@ -1490,13 +1492,20 @@ Map(Places) alternative { loop Places / Place { PlaceRow(Place) } }
 ## 10. Navigation
 
 - **Four container kinds**: a back-stack, a replaceable detail pane, an adaptive selection container,
-  and a multi-pane split — `StackNav`, `SlotNav`, `TabNav`, `SplitNav`.
+  and a multi-pane split — `StackNav`, `SlotNav`, `SelectionNav`, `SplitNav`. The selection container
+  was first written `TabNav`, which named one of its surfaces rather than what it is: the same
+  declaration is tabs when narrow and a sidebar when wide, as the bullet below already said, so the
+  kind is named for the selection it owns rather than for one of its shapes. `TabNav` is retired
+  without an alias, and the
+  host-read-set bullet below — which already said `SelectionNav` — is the spelling the rest of this
+  document and the implementation use. _(Amended while rewriting
+  `Apps/WordFlower/4 - Revolution`, Process step 2.)_
 - **Navigators are keywordized bindings**: `nav WelcomeNav = StackNav { Initial WelcomeScreen() }`.
 - **The selection container is tabs when narrow and a sidebar when wide**, declared once, with no
   device name anywhere:
 
 ```swift
-nav SkilletNav = TabNav {
+nav SkilletNav = SelectionNav {
    @library StackNav { Initial RecipeLibrary }
    @plan    StackNav { Initial WeekScreen }
 }
@@ -1565,12 +1574,20 @@ view SkilletShell(Navigator nav) {
 reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe focuses, not re-mounts
 ```
 
-- **Presentation modes with automatic fallbacks** — sheet, window, root, menu, toast. A window is a
-  window on a laptop and a full-screen sheet elsewhere, and carries a semantic key so reopening the
-  same subject focuses one window:
+- **Presentation modes with automatic fallbacks** — overlay, sheet, window, root, menu, toast. A
+  window is a window on a laptop and a full-screen sheet elsewhere, and carries a semantic key so
+  reopening the same subject focuses one window. **An overlay is Tao's own layer and a sheet is the
+  platform's**: an overlay stacks in the nav's own lane above its content, while a sheet is the card
+  the OS slides up and lets a person drag down. Both are dismissible modals; only the sheet hands
+  presentation to the host. This mode was implemented and specified from the start and was missing
+  from this list rather than from the language; `Docs/Spec/Tao Presentation and Navigation.md`
+  § _Presenting overlays and toasts_ owns its lane, stacking, and Back precedence, and this entry
+  records that rather than deciding it. _(Recorded while rewriting
+  `Apps/WordFlower/4 - Revolution`, Process step 2.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
+present WorkspaceNameNotice() as overlay
 present CookScreen(Recipe) as window (Key: Recipe)
 present SharedRecipeScreen(SharedRecipe) as root
 present ActionsMenu(Recipe) as menu

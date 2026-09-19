@@ -1,21 +1,42 @@
 use InstantDB from @tao/data/providers/instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
+use primary from @tao/keys
 use CountWords, Join from @tao/text
+use Interval from @tao/time
 use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
-use every, Interval from @tao/time
-
-// @tao/nav and @tao/data are self-hosted: public types carry their own identity rather than relying
-// on name tables. Generic property validation reads their config shape, and package-scope
-// A `nav`/`provider` sidecar binds them to the published TR.NavKind and TR.DataProvider protocols. Ordinary
-// configured navs and datasources use primitive value heads that preserve their precise types.
-// Configured `with` patches may add direct keyed entries when the declaration owns a keyed contract.
-// A strict `App@key` target may name a complete root or in-file variant. Variants retain their root
-// declaration identity, and the key must exist on every launch configuration of that root.
 
 // WordFlower/Revolution is the tier beyond the v1 release: functionality Tao eventually intends to
 // cover that the MVP deliberately does not ship. It contains everything in `../3 - MVP` plus the
-// additions below, and it stays in sync with every decision settled in `../2 - Next`.
+// additions below.
+//
+// This file is written in the decided dialect. `Docs/Roadmap/Tao Revolution/Decisions.md` is the
+// authority for every spelling here, and each section below cites the decision it rests on. Where
+// this tier and `1 - Current` still disagree, the disagreement is a migration the tranche loop owes
+// Current, not a bug in this file — `Process.md` principle 1 is subset by omission, never by
+// respelling, so `3 - MVP` is derived from these spellings rather than from today's implementation.
+//
+// `Open questions.md` beside this file records everything the rewrite needed that Decisions.md does
+// not answer. Nothing in this file invents a spelling to fill one of those gaps.
+//
+// What this tier expresses, by decision section:
+//
+//   §1  visibility — `file` narrows, no marker is folder-visible, `public` widens
+//   §2  typed slots, unit literals and duration arithmetic, entities, yes/no poles, relation traits,
+//       `validate` / `required` / `together`, `local only`, case types with text-literal cases
+//   §5  direct write verbs, the one `guard default` read net, `when do` effect outcomes
+//   §6  live `query … from <path>`, field selection, relation traversal
+//   §7  write-through `bind` and the draft flavours
+//   §8  commands with parameter-list slots, private actions, `check` early exit, `when` / `if`,
+//       `Key primary + "…"`, `runs single`
+//   §9  one renderable kind with `scene is view`, clause lists, conditional styling, `Interval`
+//   §10 the nav kinds, `Compact { Progression … }`, `Width` / `CollapseOrder`, `reveal` vs
+//       `present`, presentation modes, `link`, `Restore`
+//   §11 `project`, `app`, keywordized variants and provider bindings
+//   §13 the design system: `colors` / `sizes` / `text` / `screens` / `styles` / `rules`
+//   §14 `phrase`, inline source copy, the `words` file
+//   §15 `<expr> from <path>`, foreign views, foreign actions with declared failures
+//   §16 `fixture`, journeys, `scenarios` groups with `prepare`
 //
 // Keyboard attention follows the settled T4 contract: the runtime derives regions and targets
 // from the read-only interaction outline, narrowing is locale-aware word-prefix matching, and
@@ -30,15 +51,8 @@ use every, Interval from @tao/time
 // while hidden. Cached app-relative bounds anchor affordances without measuring when a surface
 // opens. Runtime allocation derives locale-aware keys deterministically by identity, preserves them
 // across reorders, and excludes reducer keys plus explicit shortcuts; affordances appear after the
-// first hardware-key dispatch.
-//
-// Beyond MVP, this file expresses: project identity and external dependencies; locally renamed
-// imports; the full design system (raw tokens, semantic tokens, recipes, rules, platform blocks —
-// `patterns` retired for content-accepting views, Decisions §13); closed unions with `match`; string-valued enums; longhand declaration-property blocks
-// and `default` properties; case-valued and unit-typed state; optional self-referential relations;
-// query field selection; time and lifecycle automation; presentation results and presentation
-// serialization with migration; platform-conditional declarations; the `unsafe ts` native
-// boundary; asset literals; richer stdlib primitives; and grouped `scenarios` declarations.
+// first hardware-key dispatch. `Hint` and `Overview` are ordinary element defaults in `styles { }`
+// (§13, KEY-D13), so an app restyles those runtime layers without owning them.
 //
 // TODO — intended functionality with no settled syntax yet. Add usage here as each is decided.
 //
@@ -57,16 +71,23 @@ use every, Interval from @tao/time
 //   - Transactions, `link`/`unlink`, conflict policies, provider-gated writes (LANG-009)
 //   - Query-attached state branches and general case matching in guards (LANG-008)
 //   - Query and list render elision; optional `render` keyword (LANG-008, LANG-012)
-//   - Local editable copies of entity fields (LANG-019)
 //   - Capability manifests and runtime-target-owned provider selection (LANG-010)
-//   - Authentication, accounts, permissions, collaboration, and sync (Autonomous MVP deferrals)
+//   - Authentication, accounts, permissions, collaboration, and sync (Autonomous MVP deferrals).
+//     The authority cluster — `access`, `audience`, `transaction`, `publish`, `presence` — is
+//     decided (§3, §4) but deliberately unused here: whether WordFlower is the app that forces it
+//     is an open product question (`Open questions.md` Q1), and inventing collaborative workspaces
+//     would answer it without Ro.
 //   - Schema migrations (Docs/Spec/Tao Data.md)
 // Events and control flow
 //   - Declared events with `does`/`did`/`on` and inferred event names (LANG-020)
 //   - Navigation lifecycle: appear/disappear/focus/blur and unsaved-change guards (DEF-NAV-006)
-//   - Concurrent event policy: queue, single-flight, cancel-previous, exclusive (DEF-NAV-011)
+//   - Concurrent event policy: queue, cancel-previous, exclusive (DEF-NAV-011). `runs single` and
+//     `runs latest` are settled (§8) and used below
 //   - Result values with try/catch/finally and exhaustive case matching (LANG-021)
 //   - `blur self`, field-bound inputs, and AI/package actions (LANG-016, LANG-019, LANG-020)
+//   - A periodic in-view effect. §9 retired the `every` clause and §12's `automation` is
+//     provider-owned scheduled work, so autosave-on-a-timer has no decided spelling
+//     (`Open questions.md` Q5)
 // Presentation
 //   - Authenticated and anonymous link authority (Decisions.md §10)
 //   - Addressing a specific window/toast/dynamic-selection occurrence by runtime key (DEF-NAV-016)
@@ -86,21 +107,29 @@ use every, Interval from @tao/time
 //   - Authored portals, popovers, and one Modal abstraction (LANG-018)
 //   - Which future spec modifiers, if any, must remain inline-only (LANG-013)
 //   - Motion policy and recipes, with reduced motion expressible (LANG-024)
-//   - Container-query adaptive variants; the condition syntax is unsettled (Docs/Spec/Tao Design - WIP.md)
+//   - Container-query adaptive variants; `[container]` and descendant-only `when Container …` are
+//     decided in outline (§13) but the condition syntax is unsettled
+//   - A declaration-level platform conditional. §13 decides the `Platform` environment value, which
+//     the navigation below uses; gating a whole declaration has no decided form
+//     (`Open questions.md` Q4)
 // Accessibility, localization, assets
-//   - Accessibility and localization policy and UI metadata (LANG-023)
+//   - Accessibility and localization policy and UI metadata beyond §13's `rules { }` (LANG-023)
 //   - Ambient `app.theme` / `app.data` / `app.strings` / `app.assets` capabilities (LANG-003)
 //   - Permission declarations and native bridge generation (LANG-025)
 // Testing
 //   - Bounded retrying, event-driven settling, count and uniqueness assertions (Docs/Spec/Tao Testing.md)
-//   - Row seeding, remote adapters, credentials, and cleanup policy (Docs/Spec/Tao Testing.md)
+//   - Row seeding beyond `fixture`, remote adapters, credentials, and cleanup policy
 //   - Package testing (Docs/Spec/Tao Testing.md)
 
+// §11. The product envelope. `targets` and `languages` are what make `Platform` and `Locale`
+// meaningful values, so a tier that reads either declares both.
 project {
    id "wordflower" // an opaque, immutable, developer-chosen identity that survives moves and forks
    name "WordFlower"
    version "1.0.0"
    DefaultApp WordFlower
+   targets phone, tablet, laptop
+   languages "en-US", "es"
    remote none
    license MIT
 
@@ -108,116 +137,112 @@ project {
    requires github:acme/prose @editor --version 1.0.1
 }
 
-// The full design system grows around the settled flat tokens and named clause bundles. Bundles and
-// inline clauses resolve left to right, with the last same-clause value winning; incompatible
-// surviving clause categories remain invalid. Semantic tokens, recipes, patterns, rules, and
-// platform adaptations below remain Revolution-only additions.
+// ---------------------------------------------------------------------------------------------
+// §13. The design system
+// ---------------------------------------------------------------------------------------------
+//
+// One `design` declaration, organized as typed value blocks plus styles, screens, and rules. The
+// block name types its members, so nothing is annotated. There is no token/meaning/dark stack and no
+// `platform { }` block: a semantic role is a derived entry whose value is conditional on the
+// environment, and both tiers — folded and reactive — are ordinary expressions.
 design WordFlowerDesign {
-   personality = calm
-   density = normal
-   platform = universal
+   colors {
+      // A family nests as a head value plus a block, addressed as a path.
+      paper #f6f7f3
+      night #101612
+      slate #121826 { 60 #5b6472 }
+      mist #edf3ee
+      accent #2f6b4f { 20 #e1ede4, 60 #28563d }
+      line #d9dcd4
+      lineDark #34453a
+      slateSoft #8a93a0
+      danger #a43d3d
+      onAccent #ffffff
 
-   // The settled flat-token layer remains valid as the later semantic system grows around it.
-   paper #f6f7f3
-   ink #121826
-   inkMuted #5b6472
-   accent #2f6b4f
-   line #d9dcd4
-
-   tokens {
-      color {
-         paper = oklch(97% 0.01 110)
-         ink = oklch(20% 0.02 265)
-         accent = oklch(55% 0.12 155)
-         red.600 = oklch(55% 0.20 25)
-      }
-      space { xs = 4  sm = 8  md = 12  lg = 16  xl = 24  screen = 20 }
-      radius { sm = 6  md = 10  lg = 16  pill = 999 }
+      // Derived, environment-conditional entries. These are the semantic roles; every product
+      // screen speaks in these names and never in a hex literal, which is what makes the contrast
+      // rule below decidable at build time.
+      canvas when Scheme is Dark night / not paper
+      ink when Scheme is Dark mist / not slate
+      muted when Scheme is Dark slateSoft / not slate.60
+      edge when Scheme is Dark lineDark / not line
    }
 
-   semantic {
-      bg.canvas = color.paper
-      fg.text = color.ink
-      fg.muted = color.ink / 60%
-      border.subtle = color.ink / 15%
-      intent.primary.bg = color.accent
-      intent.destructive.bg = color.red.600
+   sizes {
+      xs 4.px, sm 8.px, md 12.px, lg md + 4.px, xl 24.px // `lg` folds at build
+      gutter 20.px
+      touch 48.px
+      readable 1.rem // grows with the person's text setting
+      column 720.px
+      wideColumn 960.px
    }
 
-   // Named clause bundles that render sites apply exactly like layout clauses.
-   screen [fill, content top stretch, pad 16, bg paper]
-   title [size 28, weight 700, fg ink]
-   body [size 16, line 22, fg inkMuted]
-   panel [pad 12, radius 8, bg paper, border line]
-   FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
-   Hint [bg accent, fg paper, radius 8, pad 8, weight 700]
-   Overview [bg paper, fg ink, border line, radius 12, pad 12, gap 8]
-
-   recipes {
-      recipe Button {
-         // The settled interaction states are postfix conditions, including inside a future recipe;
-         // recipe-specific named states such as disabled remain Revolution-only.
-         base [centered, pad horizontal md vertical sm, radius md, type label, minTap 44, brightness -4% when pressed, scale .98 when pressed]
-
-         variant size {
-            sm [pad horizontal sm vertical xs, type label.sm]
-            md [pad horizontal md vertical sm, type label]
-            lg [pad horizontal lg vertical md, type label.lg]
-         }
-
-         variant intent {
-            primary [bg intent.primary.bg, fg white, border transparent]
-            secondary [bg bg.canvas, fg fg.text, border border.subtle]
-            destructive [bg intent.destructive.bg, fg white]
-         }
-
-         state disabled [opacity disabled]
-
-         default {
-            size = md
-            intent = primary
-         }
-      }
+   text {
+      title [size 28.px, weight 700, line 34.px]
+      body [size readable, line 1.4, ink muted] // a bare number is a ratio
+      label [size readable, weight 600]
    }
 
-   patterns {
-      pattern EmptyState {
-         layout [centered, gap lg, pad screen]
+   screens { narrow below 500.px, medium below 1000.px, wide }
 
-         slots {
-            icon [size xl, fg fg.muted]
-            title [type title, align center]
-            body [type body, fg fg.muted, align center]
-            action [primary, size lg]
-         }
-      }
+   styles {
+      // A lowercase entry is a bundle a site opts into.
+      screen [fill, content top stretch, pad gutter, background canvas]
+      panel [pad md, radius md, background canvas, border edge, gap sm]
+      destructive [ink danger]
+
+      // A Capitalized entry is an element default: every occurrence of that element starts here.
+      App [background canvas]
+      Text [ink ink]
+      TextInput [background canvas, border edge, ink ink, radius md, size readable]
+      FormButton [tap min touch, background accent, background accent.20 when pressed,
+                  border accent when focused, ink onAccent, ink accent.60 when hovered,
+                  radius md, weight 700]
+      Checkbox [ink ink]
+      Progress [background edge, ink accent, radius 999]
+
+      // The generated interaction layers are runtime renderings; an app restyles them here without
+      // declaring or owning them (KEY-D13).
+      Hint [background accent.60, ink onAccent, radius sm, pad sm, weight 700]
+      Overview [background canvas, ink ink, border edge, radius md, pad md, gap sm]
    }
 
    rules {
-      contrast minimum = wcag.aa
-      tapTarget minimum = 44
-      rawColor allowed = themeOnly
-      maxTypeStylesPerScreen = 5
-      requireSemanticRole interactive
-      preferTokensForSpacing = true
+      rule contrast at least wcag.aa
+      rule tap targets at least 44.px
+      rule meaning survives without color or motion
    }
-
-   platform ios { material = glass  radius.bias = +2 }
-   platform android { elevation = tonal  dynamicColor = true }
-   platform web { focusRing = visible  hover = true }
 }
 
-// Declarations may be selected by target platform; referencing one that a platform does not
-// declare is an unavailable-declaration error rather than a runtime failure.
-<platform is Desktop>
-   nav WorkspaceNav = SlotNav { Initial WorkspaceChooser }
-</platform>
+// ---------------------------------------------------------------------------------------------
+// §5. The one read net
+// ---------------------------------------------------------------------------------------------
+//
+// Declared once, anonymously, and covering the states of whatever subject a site reads. A site names
+// only the cases it treats specially, so `unauthorized` can never be accidentally skipped and no
+// screen below repeats a spinner. Emptiness is content, not failure, so it stays at the site.
+guard default {
+   loading -> Spinner(Label: "Opening WordFlower…")
+   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone")
+   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this")
+   rejected -> Problem { Text(Problem) [body, destructive] }
+   error -> Message { Text(Message) [body] }
+}
 
-<platform is iOS | Android>
-   nav WorkspaceNav = StackNav { Initial WorkspaceChooser }
-</platform>
+// ---------------------------------------------------------------------------------------------
+// §10. Navigation
+// ---------------------------------------------------------------------------------------------
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
+//
+// `Platform` is the §13 environment value — read-only, reactive, and Capitalized like every handle —
+// and `when` is §8's value-producing form, so the platform split needs no declaration-level
+// conditional. The cases are the project's own `targets`, never a device or OS name.
+nav WorkspaceNav = when Platform {
+   laptop -> SlotNav { Initial WorkspaceChooser }
+   otherwise -> StackNav { Initial WorkspaceChooser }
+}
+
 nav HomeStack = StackNav { Initial WorkspaceList }
 nav SettingsStack = StackNav { Initial Settings }
 nav SignedOutNav = StackNav { Initial SignedOut }
@@ -227,9 +252,8 @@ nav WordFlowerNavigator = SelectionNav {
    Display "automatic"
 
    // Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
-   // target-key namespace.
-   // Icon is part of the settled keyed-item contract. Badge remains a Revolution-only extension;
-   // shipped SelectionNav items declare Label, Icon, and Content.
+   // target-key namespace. `Label`, `Icon`, and `Content` are the shipped keyed-item contract;
+   // `Badge` remains a Revolution-only extension.
    @home {
       Label "Home"
       Icon "house"
@@ -238,7 +262,7 @@ nav WordFlowerNavigator = SelectionNav {
    @workspace {
       Label "Workspace"
       Icon "folder"
-      Badge "3"
+      Badge "3" // §9 defers `Badge` behind a forcing feature (`Open questions.md` Q10)
       Content WorkspaceNav
    }
    @settings {
@@ -247,6 +271,355 @@ nav WordFlowerNavigator = SelectionNav {
       Content SettingsStack
    }
 }
+
+// The preview variant hands the shell a differently configured navigator, so a preview still gets
+// the focus bar.
+nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
+   Display "drawer"
+}
+
+// Product code composes a nav value with an ordinary function. `Compact` declares the compact-width
+// progression as an ordered listing — the order of the names is the progression, so no arrow appears
+// — and `CollapseOrder N` names the Nth pane to fold away as width shrinks, so the inspector goes
+// first and the documents pane is the last thing left.
+function WorkspaceSplit(Workspace) returns nav {
+   return SplitNav {
+      Compact { Progression @files, @documents, @inspector; Back reverse }
+
+      // Direct keys bind to the panes. The nested DynamicSelectionNav starts its own key namespace.
+      @files {
+         // A view with bound arguments is a presentable value; it renders only when the nav mounts it.
+         Content SlotNav { Initial FileTree(Workspace) }
+         Title "Files" // a pane `Title` is in no decision (`Open questions.md` Q10)
+         Width 280
+         CollapseOrder 2
+      }
+      @documents {
+         // DynamicSelectionNav may begin empty and receive tabs at runtime, so it has no Initial or
+         // static keyed items. It is not one of §10's four decided kinds (`Open questions.md` Q3).
+         Content DynamicSelectionNav {
+            Display "tabs"
+         }
+         Title "Documents"
+         Width min 420
+         CollapseOrder 3
+      }
+      @inspector {
+         Content SlotNav { Initial EmptyInspector }
+         Title "Inspector"
+         Width 340
+         CollapseOrder 1
+      }
+   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// §11. Providers and apps
+// ---------------------------------------------------------------------------------------------
+
+datasource WordFlowerStore = InstantDB {
+   AppId "wordflower-mvp"
+}
+
+datasource WordFlowerStageStore = WordFlowerStore with {
+   AppId "wordflower-stage"
+}
+
+// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
+// content. Tao mounts a navigator around a view root, so nothing here names one. Every nav owns an
+// absolute overlay lane above its content, so no app declares an overlay host; overlays stack while
+// covered entries stay mounted but hidden, and Back/dismiss use the app reducer. Toasts are
+// app-level, transient, replace the same key rather than stacking, and neither consume Back nor
+// expose plain dismissal. Window presentation is universal and keeps its semantic key on the call
+// site.
+app WordFlower {
+   Name "WordFlower"
+   Design WordFlowerDesign
+   Datasource WordFlowerStore
+   view WordFlowerShell(WordFlowerNavigator)
+
+   // Restoration is default-on and host managed; `Restore` is written only to deviate. Toasts and
+   // asked occurrences never restore by language rule, so the subtraction here is the declared part.
+   Restore automatic { Exclude sheets, menus, toasts }
+}
+
+// `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are
+// unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
+// keeps the focus bar.
+app WordFlowerDrawer = WordFlower with {
+   Name "WordFlower - Drawer Preview"
+   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
+}
+
+app WordFlowerStage = WordFlower with {
+   Name "WordFlower - Stage"
+   Datasource WordFlowerStageStore
+}
+
+// Preview and journey variants swap providers rather than forking a product declaration, which is
+// what lets a test name the world it runs in instead of reconfiguring one inline.
+app WordFlowerPreview = WordFlower with {
+   Name "WordFlower Preview"
+   Datasource Memory
+   Restore fresh
+}
+
+// ---------------------------------------------------------------------------------------------
+// §10. Links — one declaration carries address, URL, and mounting policy
+// ---------------------------------------------------------------------------------------------
+//
+// Entity parameters name their entity type; the path is the author's explicit stability promise.
+// `reveal` focuses an equal mount rather than stacking a second copy, so opening the same document
+// from a link, the file tree, and a draft row all land in one place.
+link WorkspaceLink(Workspace) "/workspaces/{Workspace}" -> {
+   // Revealing into a pane also selects the selection item holding it, so nothing here activates
+   // the tab a second time.
+   reveal WorkspaceSplit(Workspace) in WordFlower@workspace
+}
+
+link DocumentLink(Document) "/documents/{Document}" -> {
+   reveal WorkspaceSplit(Document.Workspace) in WordFlower@workspace
+   // A link body has no enclosing render, so its targets are rooted rather than relative.
+   reveal DocumentScreen(Document) in WordFlower@workspace@documents
+   focus WordFlower@workspace@documents
+}
+
+// ---------------------------------------------------------------------------------------------
+// §2. Values, types, and copy
+// ---------------------------------------------------------------------------------------------
+
+let Tagline = "A quiet place for words that matter."
+
+let ParagraphGoal = 10
+
+number SessionGoal = 10
+
+// The focused writing session's length. A duration is a typed unit value, not a bare number, so the
+// arithmetic below is dimensional and `25.min` never silently means milliseconds.
+duration SessionLength = 25.min
+
+// §14. `phrase` names copy that needs more than a literal — typed holes or plural forms. A sentence
+// several rules share is a phrase too, which is why the missing-document copy lives here.
+phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count } paragraphs"
+phrase DocumentGone = "That document is gone."
+
+type PromptTitle is text
+
+type PromptMinutes is number
+
+type PromptTags is list of text
+
+type WritingPrompt is {
+   PromptTitle,
+   PromptMinutes,
+   PromptTags,
+   PromptSubtitle text?
+}
+
+// Conversion is a call on the type name; a bad literal is a compile error because the compiler
+// evaluates it.
+let StarterTags = PromptTags(["daily", "warmup"])
+
+let StarterPrompt = WritingPrompt {
+   PromptTitle: "Morning pages"
+   PromptMinutes: 10
+   StarterTags
+}
+
+// One-case case types are nominal; a dismissed responder answers `none`.
+type ConfirmResult is one of Confirmed
+
+// Cases may be text literals, spelled as the literal a person types.
+type ExportFormat is one of "markdown", "html", "pdf"
+
+// A union is matched with `when`, the one word for covering every case.
+type Measure is text | number
+
+function MeasureLabel(Value Measure) returns text {
+   return when Value {
+      text -> Value
+      number -> "{ Value } words"
+   }
+}
+
+// An item type extends another, and a property type stays owner-qualified.
+type DailyPrompt is WritingPrompt with { PromptStreak number }
+
+// Reading state is a case type rather than a pair of booleans, so the two states cannot both be on.
+type Reading is one of Focused, Unfocused
+
+// ---------------------------------------------------------------------------------------------
+// §2. Entities
+// ---------------------------------------------------------------------------------------------
+//
+// Relations are inferred from names: a plural field is a to-many, a singular one the reverse to-one,
+// and the `relation` trait carries the target only when the field is named otherwise. `required`
+// states completeness and never blocks a write; `validate` is the store invariant enforced on every
+// write path; `index`, `order by`, and `local only` trail the field list as a group.
+data Workspaces / Workspace {
+   Name text (required "Name this workspace", search, title)
+   CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
+   ChangedAt time (default now, touch on change)
+   Pinned yes / no
+   Documents (owned)
+
+   validate Name is not empty "A workspace needs a name"
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+data Documents / Document {
+   Title text (required "Name this document", search, title)
+   // `required` states completeness and never blocks a write; the invariant that rejects one is a
+   // `validate`, and it is what invalidates a draft that tries to save without a title.
+   Body text (default "", search)
+   Final yes / Draft no
+   Public yes / Private no (default Public)
+   CreatedAt time (default now)
+   ChangedAt time (default now, touch on change)
+   Workspace
+   Paragraphs (owned, ordered)
+
+   validate Title is not empty "A document needs a title"
+
+   index CreatedAt
+   order by CreatedAt
+   commands Finish, Duplicate
+   commands hide Delete
+}
+
+data Paragraphs / Paragraph {
+   Text text
+   Document
+   Parent? (relation Paragraphs) // relations may be optional and self-referential
+
+   // `Documents.Paragraphs (ordered)` keeps positions in the store, so nothing here maintains an
+   // ordering field by hand and the position reads back on the row.
+   validate Text is not empty "A paragraph needs words"
+}
+
+// A focused writing session. `local only` is an entity-level storage fact, a third trailing group
+// entry beside `index` and `order by`: this entity lives in the device store whatever datasource the
+// app configures, so the remote and staged variants never sync it. A stored relation may not cross
+// the boundary it draws. Holding the session as data rather than as view state is what lets it
+// survive navigation and relaunch, and lets each consumer query it locally.
+data FocusSessions / FocusSession {
+   EndsAt time // absolute, so a running session survives relaunch correctly
+   PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
+   Paused yes / Running no
+
+   // `together` makes two fields one fact, so a paused session never syncs without the moment it
+   // stopped.
+   together Paused, PausedAt
+
+   local only
+}
+
+// ---------------------------------------------------------------------------------------------
+// §8. Commands — the discoverable verbs
+// ---------------------------------------------------------------------------------------------
+//
+// A command is a standalone configured value: its slots are its parameters, its body holds member
+// fills and exactly one `do`, and the action behind it is a private procedure with no title metadata.
+// Juxtaposition in a command block always binds, because the slots live in the parameter list.
+//
+// These carry no visibility marker: §1 has two modifiers, `file` and `public`, and an unmarked
+// declaration is visible to the whole folder — which is what the test file beside this one imports
+// through. `public` below is reserved for the two declarations that genuinely cross the package
+// boundary.
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Key "f"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
+
+command Duplicate(Document) {
+   Title "Duplicate document"
+   Description "Makes a new draft beside this document."
+   Summary "Duplicate { Document.Title }"
+   Icon "doc.on.doc"
+   Key "d"
+   do -> { create Document {
+      Title: "{ Document.Title } copy"
+      Body: Document.Body
+      Document.Workspace
+   } }
+}
+
+command Export(Document) {
+   Title "Export document"
+   Description "Writes this document out in a chosen format."
+   Summary "Export { Document.Title }"
+   Icon "square.and.arrow.up"
+   Key primary + "e"
+   do -> { present ExportPanel(Document) as sheet }
+}
+
+command Delete(Document) {
+   Title "Delete document"
+   Description "Permanently removes this document."
+   Summary "Delete { Document.Title }"
+   Icon "trash"
+   Key "x"
+   do -> { delete Document }
+}
+
+// ---------------------------------------------------------------------------------------------
+// §15. The TypeScript boundary
+// ---------------------------------------------------------------------------------------------
+//
+// `<expression> from <path>` is an ordinary expression operator: the free names in the expression
+// resolve to named exports of that path, so no keyword announces the boundary and no declaration
+// form of its own exists. `implement inject` and the inline fence are retired.
+text BuildStamp = BuildStamp() from ./Shell.ts
+
+// A foreign action has no Tao body and declares its failure cases on the declaration head. A stub in
+// a journey picks a declared case, so renaming one breaks the test at compile time.
+action ExportDocument(Document, Format ExportFormat) returns text
+   fails Offline "Exporting needs a connection."
+   fails Rejected "The export service rejected this document."
+   from ./Export.ts
+
+// A foreign view declares its TypeScript implementation in its head. Tao owns the parameter,
+// response, caller-content, and named-slot contract; the component owns its native root and honors
+// Layout and Tag.
+view Scroller() accepts content from ./Shell.ts
+
+// `render inject` remains the occurrence-level native implementation form, beside the declaration
+// form above rather than replaced by it.
+view WordBadge(Total number) {
+   render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
+   ```
+}
+
+// ---------------------------------------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------------------------------------
+
+function DocumentLabel(Title text) returns text {
+   return "Document: { Title }"
+}
+
+// A function stops by returning, and `if` is the one-sided test that gets it there — it never takes
+// an `else`.
+function GoalFraction(Count number) returns number {
+   if Count == 0 {
+      return 0
+   }
+   return Count / ParagraphGoal
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared views
+// ---------------------------------------------------------------------------------------------
 
 // The shell: the navigator and the focus bar, laid out as ordinary content. A nav renders like any
 // other view — `nav is scene is view` — so persistent chrome around navigated content is a `Col`,
@@ -267,229 +640,35 @@ scene WordFlowerShell(Navigator nav) {
    }
 }
 
-// The preview variant hands the shell a differently configured navigator, so a preview still gets
-// the focus bar.
-nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
-   Display "drawer"
-}
+// A named arrangement with slots is an ordinary view placing `@@content`; §13 does not carry a
+// `patterns { }` block forward, and this is what replaces it.
+view EmptyState(Icon icon, Title text) {
+   @body = empty
 
-datasource WordFlowerStore = InstantDB {
-   AppId "wordflower-mvp"
-}
-
-datasource WordFlowerStageStore = WordFlowerStore with {
-   AppId "wordflower-stage"
-}
-
-// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
-// content. Tao mounts a navigator around a view root, so nothing here names one. Every nav owns an
-// absolute overlay lane above its content, so no app declares an overlay host; overlays stack while
-// covered entries stay mounted but hidden, and Back/dismiss use the app reducer. Toasts are
-// app-level, transient, replace the same key rather than stacking, and neither consume Back nor expose
-// plain dismissal. Window presentation is universal and keeps its semantic key on the call site.
-// A datasource value uses a primitive head, such as `datasource WordFlowerStore = InstantDB { ... }`;
-// Memory is keyless, while remote providers own their provider-specific configuration below.
-app WordFlower {
-   Name "WordFlower"
-   Design WordFlowerDesign
-   view WordFlowerShell(WordFlowerNavigator)
-
-   // Overlay, toast, and window hosting need no declaration; a presentation names the mode instead.
-   // Layout and Dismissible below are Revolution-only future overlay-presentation modifiers:
-   //   present X() as overlay (Layout: "sheet", Dismissible: true)
-   // Layout is one of "sheet" | "popover" | "full-screen" | "palette" | "inspector" | "floating".
-   Datasource WordFlowerStore
-}
-
-// `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are
-// unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
-// keeps the focus bar.
-app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
-   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
-}
-
-app WordFlowerStage = WordFlower with {
-   Name "WordFlower - Stage"
-   Datasource WordFlowerStageStore
-}
-
-let Tagline = "A quiet place for words that matter."
-
-let ParagraphGoal = 10
-
-let SessionGoal is number = 10
-
-// The focused writing session's length, in minutes.
-let SessionMinutes is number = 25
-
-type PromptTitle is text
-
-type PromptMinutes is number
-
-type PromptTags is list of text
-
-type WritingPrompt is {
-   PromptTitle,
-   PromptMinutes,
-   PromptTags,
-   PromptSubtitle text?
-}
-
-let StarterTags = PromptTags ["daily", "warmup"]
-
-let StarterPrompt = WritingPrompt {
-   PromptTitle: "Morning pages"
-   PromptMinutes: 10
-   StarterTags
-}
-
-// One-case enums are nominal types; a dismissed responder answers `none`.
-type ConfirmResult is one of Confirmed
-
-// A case set may carry text-literal cases, spelled as the literal a person types.
-type ExportFormat is one of "markdown", "html", "pdf"
-
-// A closed union is matched exhaustively; `match` also overloads declarations by argument shape.
-type Measure is text | number
-
-function MeasureLabel(Value Measure) returns text {
-   return match Value
-      when text -> Value
-      when number -> "{ Value } words"
-}
-
-// An item type extends another, and a property type stays owner-qualified.
-type DailyPrompt is WritingPrompt with { PromptStreak number }
-
-data Workspaces / Workspace {
-   Name text (title)
-   CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
-   Pinned yes / no // demonstrative; not yet used by the app
-   Documents (relation Documents, owned)
-
-   index CreatedAt
-   order by CreatedAt
-}
-
-data Documents / Document {
-   Title text (title)
-   Body text (default "")
-   Final yes / Draft no
-   Public yes / Private no (default Public) // demonstrative; not yet used by the app
-   CreatedAt time (default now)
-   Workspace (relation Workspace)
-   Paragraphs (owned)
-
-   index CreatedAt
-   order by CreatedAt
-   commands Finish, Duplicate
-   commands hide Delete
-}
-
-data Paragraphs / Paragraph {
-   Text text
-   Ordering number
-   Document
-   Parent Paragraph (optional) // relations may be optional and self-referential
-
-   index Ordering
-   order by Ordering
-}
-
-// A focused writing session. `local only` is an entity-level storage fact, a third trailing group
-// entry beside `index` and `order by`: this entity lives in the device store whatever datasource the
-// app configures, so the remote and staged variants never sync it. It is the narrow form of
-// per-entity datasource scoping, and a stored relation may not cross the boundary it draws. Holding
-// the session as data rather than as view state is what lets it survive navigation and relaunch, and
-// lets each consumer query it locally.
-data FocusSessions / FocusSession {
-   EndsAt time // absolute, so a running session survives relaunch correctly
-   PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
-   Paused yes / Running no
-
-   local only
-}
-
-// Entity command policy is independent of the view that happens to render a document. Finish and
-// Duplicate are the ordered defaults; destructive deletion is available only where a view
-// explicitly promotes it.
-workspace
-command Finish(Document) {
-   Title "Finish document"
-   Description "Moves a document out of drafts and into the archive."
-   Summary "Finish { Document.Title }"
-   Icon "checkmark.circle"
-   Key "f"
-   Enabled Document.Final is Draft
-   do -> { update Document {
-      Final
-   } }
-}
-
-workspace
-command Duplicate(Document) {
-   Title "Duplicate document"
-   Description "Makes a new draft beside this document."
-   Summary "Duplicate { Document.Title }"
-   Icon "doc.on.doc"
-   Key "d"
-   do -> { create Document {
-      Title: "{ Document.Title } copy"
-      Body: Document.Body
-      Document.Workspace
-   } }
-}
-
-workspace
-command Delete(Document) {
-   Title "Delete document"
-   Description "Permanently removes this document."
-   Summary "Delete { Document.Title }"
-   Icon "trash"
-   Key "x"
-   do -> { delete Document }
-}
-
-function DocumentLabel(Title text) returns text {
-   return "Document: { Title }"
-}
-
-function GoalFraction(Count number) {
-   if Count == 0 {
-      return 0
+   render Col() [content center center, gap lg, pad gutter] {
+      Icon(Icon) [size xl, ink muted]
+      Text(Title) [title, centered]
+      @body
+      Col() [gap sm] { @@content }
    }
-   return Count / ParagraphGoal
+}
+
+view Notice(Message text) {
+   render Text(Message) [body]
 }
 
 view Card(Title text) {
    @actions = empty
 
-   render Col() [gap 8, pad 12, panel] {
+   render Col() [panel] {
       Row() [content spread center] {
          Text(Title) [title]
          @actions
       }
-      Col() [gap 6] {
+      Col() [gap xs] {
          @@content
       }
    }
-}
-
-view Scroller() {
-   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
-      return TR.Views.View({
-        children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
-        layout: Layout,
-        tag: Tag,
-      })
-   ```
-}
-
-view WordBadge(Total number) {
-   render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
-      return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
-   ```
 }
 
 view WordCount(Value text) {
@@ -500,36 +679,36 @@ view TagSummary(Tags PromptTags) {
    render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
+// ---------------------------------------------------------------------------------------------
+// Workspaces
+// ---------------------------------------------------------------------------------------------
+
 // A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
 // composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
 // ever composed cannot declare chrome nothing reads.
 scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
-   query Workspaces { }
+   query Workspaces {
+      order by Pinned descending // what the Pin command is for; the entity's CreatedAt breaks ties
+   }
+   // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
+   // surfaced. `check` is the action's early exit — `guard` is the view-side construct and tests a
+   // data object's availability, never a boolean.
    action AddWorkspace() {
-      guard WorkspaceName empty -> {
+      if WorkspaceName is empty {
          present WorkspaceNameNotice() as overlay
       }
+      check WorkspaceName is not empty
       create Workspace {
          Name: WorkspaceName
       }
       set WorkspaceName = ""
    }
    render ScrollView() [screen] {
-      Col() [width max 720, centered, gap 10] {
+      Col() [width max column, centered, gap sm] {
          Text("WordFlower") [title]
          Text(Tagline) [body]
-         guard Workspaces {
-            loading -> {
-               #loadingSpinner
-               Spinner()
-            }
-            error -> Message {
-               Text("Could not load WordFlower")
-               Text(Message)
-            }
-         }
          #workspaceName
          TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
             on submit AddWorkspace
@@ -543,36 +722,47 @@ scene WorkspaceList() {
             // Target-only activation names a complete app value and reveals without new content.
             on press -> { present WordFlower@workspace }
          }
-         guard Workspaces empty -> {
-            #emptyState
-            Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
-            Text("No workspaces yet") [title]
-            Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
-            Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
-            TagSummary(StarterPrompt.PromptTags)
-         }
-         #workspaces
-         loop Workspaces / Workspace {
-            Col() [gap 6, pad 10] {
-               Text(Workspace.Name)
-               #openWorkspace
-               FormButton("Open workspace") {
-                  // Omitted target delegates to the nearest enclosing nav (HomeStack), pushing a new occurrence.
-                  on press -> { present WorkspaceDetails(Workspace) }
-               }
-               #deleteWorkspace
-               FormButton("Delete workspace", Icon: "trash") {
-                  on press -> { delete Workspace }
-               }
-               #openInSplit
-               FormButton("Open in workspace tab") {
-                  on press -> {
-                     // A configured nav value locates its one equal active mount. The next statement sees the update synchronously.
-                     present WorkspaceSplit(Workspace) in WorkspaceNav
-                     present WordFlower@workspace
-                  }
+         // Emptiness is content, not failure, so it is handled here rather than in the net above.
+         when Workspaces {
+            empty -> {
+               #emptyState
+               EmptyState(Icon: "doc.text", Title: "No workspaces yet") {
+                  Image("./images/empty-workspaces.png", Decorative: yes) [width 160, centered]
+                  Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
+                  Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
+                  TagSummary(StarterPrompt.PromptTags)
                }
             }
+            otherwise -> {
+               #workspaces
+               loop Workspaces / Workspace {
+                  WorkspaceRow(Workspace)
+               }
+            }
+         }
+      }
+   }
+}
+
+view WorkspaceRow(Workspace) {
+   render Col() [gap xs, pad sm] {
+      Text(Workspace.Name)
+      #openWorkspace
+      FormButton("Open workspace") {
+         // Omitted target delegates to the nearest enclosing nav (HomeStack), pushing a new occurrence.
+         on press -> { present WorkspaceDetails(Workspace) }
+      }
+      #deleteWorkspace
+      FormButton("Delete workspace", Icon: "trash") [destructive] {
+         on press -> { delete Workspace }
+      }
+      #openInSplit
+      FormButton("Open in workspace tab") {
+         on press -> {
+            // A configured nav value locates its one equal active mount. The next statement sees the
+            // update synchronously.
+            reveal WorkspaceSplit(Workspace) in WorkspaceNav
+            present WordFlower@workspace
          }
       }
    }
@@ -581,7 +771,7 @@ scene WorkspaceList() {
 // Presented above the nearest enclosing nav; `in <target>` would override that contextual scope.
 // Overlays stack above its content while covered entries stay mounted and hidden.
 view WorkspaceNameNotice() {
-   render Col() [gap 6, pad 10] {
+   render Col() [gap xs, pad sm] {
       Text("A workspace needs a name")
       #dismissNotice
       FormButton("Dismiss") {
@@ -590,10 +780,8 @@ view WorkspaceNameNotice() {
    }
 }
 
-workspace
 scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
-   state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
    query Drafts from Workspace.Documents {
@@ -602,26 +790,20 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    query FinishedDocuments from Workspace.Documents {
       where is Final
    }
-   // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
-   // surfaced. The command is the discoverable verb, so the words a person reads live there.
-   action SaveWorkspace() {
-      guard WorkspaceNameDraft empty
-      update Workspace {
-         Name: WorkspaceNameDraft
-      }
-   }
    // A command is a configured value: its slots are parameters, and its block holds metadata members
-   // and exactly one `do`. This one is declared in the scene because it reads that scene's own state,
-   // exactly as an `action` may.
-   command Save() {
-      Title "Save workspace"
-      Icon "checkmark"
-      Enabled WorkspaceNameDraft is not empty
-      do SaveWorkspace()
+   // and exactly one `do`. This one is declared in the scene because it closes over that scene's own
+   // parameter, exactly as an `action` may. `toggle` is a direct write verb and its own inverse, so
+   // the command is undoable without declaring anything.
+   command Pin() {
+      Title "Pin workspace"
+      Description "Keeps this workspace at the top of the list."
+      Summary "Pin { Workspace.Name }"
+      Icon "pin"
+      do -> { toggle Workspace.Pinned }
    }
-   Toolbar { Save }
+   Toolbar { Pin }
    action AddDocument() {
-      guard DocumentTitle empty
+      check DocumentTitle is not empty
       async {
          create Document { // don't wait for creation completion to update the text input
             Title: DocumentTitle
@@ -631,32 +813,22 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
       set DocumentTitle = ""
    }
    render ScrollView() [screen] {
-      Col() [width max 960, centered, gap 10] {
+      Col() [width max wideColumn, centered, gap sm] {
          Text("Workspace: { Workspace.Name }") [title]
+         // §7. One rule, two binding targets. A direct bind writes through on every keystroke, with
+         // validate, together, and access still holding, so a workspace rename needs no save button
+         // and no draft.
          #workspaceTitle
-         TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
-            on submit SaveWorkspace
-         }
-         #saveWorkspace
-         FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
-            on press SaveWorkspace
-         }
+         TextInput(Value: bind Workspace.Name, Label: "Workspace title", Placeholder: "Workspace title")
          Text("{ SectionLabel }: { Drafts.Count }")
          #pushTwice
          FormButton("Push this workspace twice") {
             on press -> {
-               // Presenting the same semantic value twice still creates two distinct occurrences.
+               // Presenting the same semantic value twice still creates two distinct occurrences;
+               // `reveal` is what focuses an equal mount instead.
                present WorkspaceDetails(Workspace)
                present WorkspaceDetails(Workspace)
             }
-         }
-         guard Drafts {
-            loading -> { Spinner() }
-            error -> Message { Text("Could not load documents: { Message }") }
-         }
-         guard FinishedDocuments {
-            loading -> { Spinner() }
-            error -> Message { Text("Could not load documents: { Message }") }
          }
          #newDocumentTitle
          TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
@@ -672,8 +844,8 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
          }
          // Panes uses a horizontal row only when, after gaps, every child can receive at least 320
          // logical pixels; otherwise it preserves source order in a vertical stack.
-         Panes() [gap 16] {
-            Col() [gap 6] {
+         Panes() [gap md] {
+            Col() [gap xs] {
                when Drafts {
                   empty -> { Text("No drafts") }
                   otherwise -> {
@@ -684,15 +856,17 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
                   }
                }
             }
-            Col() [gap 6] {
+            Col() [gap xs] {
                let SectionLabel = "Finished"
                Text(SectionLabel)
-               guard FinishedDocuments empty -> {
-                  Text("No finished documents")
-               }
-               #finishedDocuments
-               loop FinishedDocuments / Document {
-                  FinishedDocumentRow(Document)
+               when FinishedDocuments {
+                  empty -> { Text("No finished documents") }
+                  otherwise -> {
+                     #finishedDocuments
+                     loop FinishedDocuments / Document {
+                        FinishedDocumentRow(Document)
+                     }
+                  }
                }
             }
          }
@@ -700,28 +874,24 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    }
 }
 
-// These row views preserve the Revolution screen while applying the settled verb tiers at the
-// occurrence that owns each document target. A draft promotes Finish and excludes Duplicate;
-// a finished row does the inverse. Delete remains hidden by the entity unless a later surface
-// explicitly lists it.
+// These row views apply the settled verb tiers at the occurrence that owns each document target. A
+// draft promotes Finish and excludes Duplicate; a finished row does the inverse. Delete remains
+// hidden by the entity unless a later surface explicitly lists it.
 view DraftDocumentRow(Document) {
    Commands { Finish }
    hide Duplicate
-   render Col() [gap 6] {
+   render Col() [gap xs] {
       Text(Document.Title)
       #openDocument
       FormButton("Open document") {
-         on press -> {
-            present WorkspaceSplit(Document.Workspace) in WordFlower@workspace
-            present DocumentScreen(Document) in WordFlower@workspace@documents
-         }
+         on press -> { open DocumentLink(Document) } // one address, one mounting policy
       }
       #finish
       FormButton("Finish document") {
          on press -> { do Finish(Document) }
       }
       #delete
-      FormButton("Delete document", Icon: "trash") {
+      FormButton("Delete document", Icon: "trash") [destructive] {
          on press -> { delete Document }
       }
    }
@@ -730,14 +900,14 @@ view DraftDocumentRow(Document) {
 view FinishedDocumentRow(Document) {
    Commands { Duplicate }
    hide Finish
-   render Col() [gap 6] {
+   render Col() [gap xs] {
       Text(Document.Title)
       #reopen
       FormButton("Reopen document") {
          on press -> { update Document { Draft } }
       }
       #deleteFinished
-      FormButton("Delete finished document", Icon: "trash") {
+      FormButton("Delete finished document", Icon: "trash") [destructive] {
          on press -> { delete Document }
       }
    }
@@ -746,48 +916,14 @@ view FinishedDocumentRow(Document) {
 scene WorkspaceChooser() {
    Title "Choose a workspace"
    query Workspaces { }
-   render Col() [screen, gap 10] {
+   render Col() [screen, gap sm] {
       Text("Choose a workspace")
       #chooseWorkspace
       loop Workspaces / Workspace {
          Text(Workspace.Name) [body]
          on select -> {
-            present WorkspaceSplit(Workspace) in WordFlower@workspace
+            reveal WorkspaceSplit(Workspace) in WordFlower@workspace
          }
-      }
-   }
-}
-
-// Product code composes a nav value with an ordinary function. Primitive `nav` heads declare
-// configured values; reusable package contracts use `type T is nav with` and `nav <Export> from ./<File>.ts`.
-function WorkspaceSplit(Workspace) returns nav {
-   return SplitNav {
-      Axis "horizontal"
-
-      // Direct keys bind to Panes. The nested DynamicSelectionNav starts its own key namespace.
-      @files {
-         // A view with bound arguments is a presentable value; it renders only when the nav mounts it.
-         Content SlotNav { Initial FileTree(Workspace) }
-         Title "Files"
-         IdealSize 280
-         CollapsePriority 2
-      }
-      @documents {
-         // DynamicSelectionNav is an inherited MVP-target future declaration. Unlike shipped
-         // SelectionNav, it may begin empty and receive tabs at runtime, so it has no Initial or
-         // static keyed items.
-         Content DynamicSelectionNav {
-            Display "tabs"
-         }
-         Title "Documents"
-         Grow 1
-         CollapsePriority 3
-      }
-      @inspector {
-         Content SlotNav { Initial EmptyInspector }
-         Title "Inspector"
-         IdealSize 340
-         CollapsePriority 1
       }
    }
 }
@@ -796,31 +932,27 @@ view EmptyInspector() {
    render Text("Select a paragraph")
 }
 
-workspace
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
-   render Col() [gap 6, pad 10] {
+   render Col() [gap xs, pad sm] {
       Text(Workspace.Name)
-      guard Documents {
-         loading -> { Spinner() }
-         error -> Message { Text("Could not load files: { Message }") }
-      }
       #files
       loop Documents / Document {
-         Row() [gap 6] {
+         Row() [gap xs] {
             #open
             FormButton(Document.Title) {
-               // Relative @documents resolves to the nearest unique pane and reveals it.
-               on press -> { present DocumentScreen(Document) in @documents }
+               // Relative @documents resolves to the nearest unique pane; `reveal` focuses an equal
+               // mount rather than stacking a second copy of the same product state.
+               on press -> { reveal DocumentScreen(Document) in @documents }
             }
             #openRooted
             FormButton("Rooted") {
-               on press -> { present DocumentScreen(Document) in WordFlower@workspace@documents }
+               on press -> { reveal DocumentScreen(Document) in WordFlower@workspace@documents }
             }
             #openViaBinding
             FormButton("Via mounted binding") {
                // WorkspaceNav is mounted once; resolution follows its active WorkspaceSplit content.
-               on press -> { present DocumentScreen(Document) in WorkspaceNav@documents }
+               on press -> { reveal DocumentScreen(Document) in WorkspaceNav@documents }
             }
             #openComparison
             FormButton("Comparison tab") {
@@ -837,68 +969,71 @@ view FileTree(Workspace) {
    }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------------------------
+
 // The pane-level entry guards entity availability; the editor below assumes an available document.
-workspace
+// `guard` is about a data object's availability, and the app-wide net covers every case this site
+// does not name — here only `missing`, whose copy is a shared phrase.
 scene DocumentScreen(Document) {
    Title Document.Title
-   // The unfilled entity slot is supplied from this presented scene's Document parameter.
-   Toolbar { Finish }
+   // The unfilled entity slots are supplied from this presented scene's Document parameter, matched
+   // by type at invocation, which is what makes one declared verb usable from a row's button and
+   // from the scene's own chrome without either restating what it acts on.
+   Toolbar { Finish, Export }
    render Col() [fill] {
       guard Document {
-         loading -> { Spinner() }
-         missing -> { Text("Document { Document.Id } no longer exists.") } // a handle keeps its Id after the row is gone
-         unauthorized -> { Text("You no longer have access to this document.") }
-         error -> Message { Text("The document could not be loaded: { Message }") }
+         missing -> EmptyState(Icon: "doc", Title: DocumentGone) // a handle keeps its Id after the row is gone
       }
       DocumentEditor(Document)
    }
 }
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
-workspace
+//
+// §7's second binding target: a body this long is a composed edit rather than a keystroke write, so
+// the editor holds a draft of the row and saves it as one unit. The draft carries the entity's own
+// `validate` and `required` rather than restating them, and an unhandled rejection invalidates the
+// draft so the sentence shows beside the field.
 view DocumentEditor(Document) {
-   state TitleDraft = Document.Title
-   state BodyDraft = Document.Body
+   draft Edit = Document from Document
    state ParagraphText = ""
    state DetachedParagraphText = ""
    state SaveCount = 0
    state PreviousTitle = Document.Title
    state PreviousBody = Document.Body
    query Paragraphs from Document.Paragraphs { }
-   action SetBodyDraft(Value text) {
-      set BodyDraft = Value
-   }
-   action SetFinished(Value boolean) {
+   action SetFinished(Value yes / no) {
       update Document { Final: Value }
    }
-   action SaveDocument() {
-      guard TitleDraft empty
+   // `runs single` refuses a second in-flight call, and `SaveDocument.Running` is the live
+   // in-flight reading the button below renders as a busy state.
+   action SaveDocument() runs single {
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
-      update Document {
-         Title: TitleDraft
-         Body: BodyDraft
-      }
+      // An unhandled `save` rejection invalidates the draft, so the sentence shows beside the field
+      // rather than anywhere else — the one write outcome with a defined home. `check` then stops
+      // the action, so a refused save neither counts nor announces itself.
+      save Edit
+      check Edit.Invalid is no
       set SaveCount += 1
-      // A keyed toast replaces the same key instead of stacking. Duration is a number of seconds.
+      // A keyed toast replaces the same key instead of stacking.
       present SavedToast(Revert: -> {
          update Document {
             Title: PreviousTitle
             Body: PreviousBody
          }
-         set TitleDraft = PreviousTitle
-         set BodyDraft = PreviousBody
       }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
-      guard ParagraphText empty
+      check ParagraphText is not empty
       // `async` starts as a later root, so capture the submitted value before clearing the input.
       // A failed detached write enters the datasource error state.
       set DetachedParagraphText = ParagraphText
       async {
          create Paragraph {
             Text: DetachedParagraphText
-            Ordering: Paragraphs.Count + 1
             Document
          }
       }
@@ -910,18 +1045,20 @@ view DocumentEditor(Document) {
       // `when` is always exhaustive, so a one-sided test uses `if`, which never takes `else`.
       if Result is Confirmed { dismiss }
    }
-   render Col() [gap 10, pad 16] {
+   render Col() [gap sm, pad md] {
       Text(DocumentLabel(Document.Title)) [title, width fill]
       #documentTitle
-      TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
+      TextInput(Value: bind Edit.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
       #documentBody
-      TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
-         on change SetBodyDraft
+      TextInput(Value: bind Edit.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
       }
-      WordCount(BodyDraft)
+      // A field-by-field comparison component is generated from the entity, not authored here, so
+      // `DocumentConflict` has no declaration in this file.
+      if Edit.Conflicted { DocumentConflict(Edit) }
+      WordCount(Edit.Body)
       #focusSession
       FocusStarter()
       #markFinal
@@ -931,10 +1068,6 @@ view DocumentEditor(Document) {
       Text("Saves this session: { SaveCount }")
       Progress(Value: GoalFraction(Paragraphs.Count))
       Text("Goal: { ParagraphGoal } paragraphs") [body]
-      guard Paragraphs {
-         loading -> { Spinner() }
-         error -> Message { Text("Could not load paragraphs: { Message }") }
-      }
       #newParagraph
       TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
          on submit AddParagraph
@@ -943,22 +1076,24 @@ view DocumentEditor(Document) {
       loop Paragraphs / Paragraph {
          #inspect
          FormButton(Paragraph.Text) {
-            on press -> { present ParagraphInspector(Paragraph) in @inspector }
+            on press -> { reveal ParagraphInspector(Paragraph) in @inspector }
          }
       }
-      Row() [gap 6] {
+      Row() [gap xs] {
          #documentInfo
          FormButton("Document info") {
             on press -> { present DocumentInfo(Document) as overlay }
          }
          #save
-         FormButton("Save") {
+         FormButton("Save") [busy when SaveDocument.Running] {
             on press SaveDocument
          }
          #comparisonWindow
          FormButton("Comparison window") {
             on press -> {
-               present DocumentScreen(Document) as window (Key: "comparison-left")
+               // A window's `Key:` is the row itself, so reopening the same subject focuses the one
+               // window rather than opening a second.
+               present DocumentScreen(Document) as window (Key: Document)
             }
          }
          #snapshotDocument
@@ -982,9 +1117,9 @@ view ParagraphInspector(Paragraph) {
 }
 
 view DocumentInfo(Document) {
-   render Col() [gap 6, pad 10] {
+   render Col() [gap xs, pad sm] {
       Text(Document.Title)
-      Text("{ Document.Paragraphs.Count } paragraphs")
+      Text(ParagraphCount(Document.Paragraphs.Count))
       #dismissInfo
       FormButton("Dismiss") {
          on press -> { dismiss }
@@ -993,7 +1128,7 @@ view DocumentInfo(Document) {
 }
 
 view DocumentSnapshot(Snapshot Document.Snapshot) {
-   render Col() [gap 6, pad 10] {
+   render Col() [gap xs, pad sm] {
       Text("Captured version")
       Text(Snapshot.Title)
       #dismissSnapshot
@@ -1003,13 +1138,41 @@ view DocumentSnapshot(Snapshot Document.Snapshot) {
    }
 }
 
-// A focused writing session: pick a length, write until the clock runs out, pause and resume, or
-// stop early. The session is a row in the device-local store rather than state in one view, which is
-// what lets the editor start it and the shell count it down.
+view SavedToast(Revert action()) {
+   render Row() [gap sm] {
+      Placeholder("Saved status icon") [width 20, height 20]
+      Text("Saved") [body]
+      Spacer()
+      #revertSave
+      FormButton("Revert") { on press Revert }
+   }
+}
+
+// A view with `responds T` is presented for a typed answer; `ask` resumes with the response or none.
+view ConfirmCloseDialogue(Document) responds ConfirmResult {
+   render Col() [gap xs, pad sm] {
+      Text("Close { Document.Title }?")
+      #confirmClose
+      FormButton("Close") {
+         on press -> { respond Confirmed }
+      }
+      #cancelClose
+      FormButton("Cancel") {
+         on press -> { respond } // bare respond answers none
+      }
+   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The focused writing session
+// ---------------------------------------------------------------------------------------------
+
+// Pick a length, write until the clock runs out, pause and resume, or stop early. The session is a
+// row in the device-local store rather than state in one view, which is what lets the editor start
+// it and the shell count it down.
 //
 // Starting is an editor affordance — you choose a length where you are about to write — so this view
-// creates the row and nothing else. The length comes from the person's preference rather than a
-// fixed pair of buttons.
+// creates the row and nothing else.
 file view FocusStarter() {
    query FocusSessions as CurrentSession {
       limit 1
@@ -1018,37 +1181,40 @@ file view FocusStarter() {
       create FocusSession {
          EndsAt: now + Length
    }  }
-   render Col() [gap 6] {
+   render Col() [gap xs] {
       when CurrentSession {
          empty -> {
             #startFocus
-            FormButton("Focus for { SessionMinutes } min") {
-               on press -> { do Start(SessionMinutes.min) }
+            FormButton("Focus for { SessionLength }") {
+               on press -> { do Start(SessionLength) }
          }  }
          otherwise -> { Text("A session is running") [body] }
 }  }  }
 
 // The focus bar: the running session, wherever you are. The shell lays it out beside the navigator,
 // and it reads the session from the store rather than from a parent view, which is what lets it stay
-// visible while the writing happens several navigation levels deeper. The clock is a library value
-// and `Left` is an ordinary derivation that recomputes as it ticks. `EndsAt` is absolute, so a
-// running session survives relaunch; pausing freezes the reading by recording when it stopped, and
-// resuming re-anchors the deadline to the remainder, so paused time is not lost.
+// visible while the writing happens several navigation levels deeper.
+//
+// A ticking clock is a library value, not a language construct: there is no `clock` declaration, no
+// `live` binding, and no `every` clause. `Interval` is an ordinary imported value whose reading
+// changes, and `Left` is an ordinary derivation over it. `EndsAt` is absolute, so a running session
+// survives relaunch; pausing freezes the reading by recording when it stopped, and resuming
+// re-anchors the deadline to the remainder, so paused time is not lost.
 file view FocusBar() {
    query FocusSessions as CurrentSession {
       limit 1
    }
    state Tick = Interval(1.s)
-   render Row() [gap 6, panel, border accent when FocusBar is active] {
-      Text("Focus session") [body]
+   render Row() [gap xs, panel, border accent when FocusBar is active] {
+      Text("Focus session") [label]
       loop CurrentSession / FocusSession {
          let Left = when FocusSession.Paused {
-            true -> FocusSession.EndsAt - FocusSession.PausedAt
-            otherwise -> FocusSession.EndsAt - Tick.Value
+            yes -> FocusSession.EndsAt - FocusSession.PausedAt
+            no -> FocusSession.EndsAt - Tick.Value
          }
          Text(when Left > 0 Left.Clock / not "Time's up") [title]
          FocusSessionControls(FocusSession)
-}  }  }  }
+}  }  }
 
 // The child command closes over one mounted session. Its modifier shortcut therefore remains
 // available while attention is in the editor, without promoting the session to global state.
@@ -1063,9 +1229,11 @@ view FocusSessionControls(FocusSession) {
       } }
    }
    Commands { PauseFocus }
-   render Row() [gap 6] {
+   render Row() [gap xs] {
+      // The block form of a yes/no match names the poles. `Text(when Left > 0 Left.Clock / not
+      // "Time's up")` above is its compact sibling, for exactly the two-outcome value case.
       when FocusSession.Paused {
-         true -> {
+         yes -> {
             #resumeFocus
             FormButton("Resume") {
                on press -> { update FocusSession {
@@ -1073,7 +1241,7 @@ view FocusSessionControls(FocusSession) {
                   Running
                } }
          }  }
-         otherwise -> {
+         no -> {
             #pauseFocus
             FormButton("Pause") {
                on press -> { do PauseFocus() }
@@ -1084,54 +1252,20 @@ view FocusSessionControls(FocusSession) {
          on press -> { delete FocusSession }
 }  }  }
 
-view SavedToast(Revert action()) {
-   render Row() [gap sm] {
-      Placeholder("Saved status icon") [width 20, height 20]
-      Text("Saved") [type body]
-      Spacer()
-      #revertSave
-      FormButton("Revert") { on press Revert }
-   }
-}
-
-// Fixtureless focused scenarios begin from an empty store. Required actions may be omitted only
-// here; Studio supplies an isolated logging stand-in and replays these steps in order.
-scenarios SavedToast "interaction" {
-   device phone
-   scenario "held" {
-      render ()
-      press down #revertSave
-      advance 600.ms
-      press up #revertSave
-      hover #revertSave
-      focus #revertSave
-}  }
-
-// A view with `responds T` is presented for a typed answer; `ask` resumes with the response or none.
-view ConfirmCloseDialogue(Document) responds ConfirmResult {
-   render Col() [gap 6, pad 10] {
-      Text("Close { Document.Title }?")
-      #confirmClose
-      FormButton("Close") {
-         on press -> { respond Confirmed }
-      }
-      #cancelClose
-      FormButton("Cancel") {
-         on press -> { respond } // bare respond answers none
-      }
-   }
-}
+// ---------------------------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------------------------
 
 scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
-      Col() [width max 720, centered, gap 10] {
+      Col() [width max column, centered, gap sm] {
          Text("Settings") [title]
          Card(Title: "Writing session") {
             WordBadge(SessionGoal)
             Text("Build { BuildStamp }") [body]
+            #resetSignedOut
             @actions FormButton("Reset to signed out") {
-               #resetSignedOut
                // From a view declaration, `replace` is the only root operation an app host accepts.
                on press -> { replace SignedOutNav in WordFlower }
             }
@@ -1145,83 +1279,6 @@ scene SignedOut() {
    render Text("Signed out")
 }
 
-// Deterministic navigation-foundation harness: only StackNav and SlotNav, with no Design or
-// Datasource capability, so navigation foundations stay executable independently of them.
-workspace
-type FoundationHomeStack is StackNav with {
-   Initial is FoundationHome
-}
-
-workspace
-nav FoundationStack = FoundationHomeStack {}
-workspace
-nav FoundationStackWith = FoundationHomeStack with {}
-workspace
-let FoundationStackLet = FoundationHomeStack {}
-workspace
-let FoundationStackLetWith = FoundationHomeStack with {}
-workspace
-nav FoundationNavigator = SlotNav { Initial FoundationStack }
-
-app WordFlowerFoundationTest {
-   Name "WordFlower Navigation Foundation Test"
-   Navigator FoundationNavigator
-}
-
-app WordFlowerDeclarationHead {
-   Name "WordFlower Declaration Head"
-   Navigator FoundationStack
-}
-
-app WordFlowerDeclarationHeadWith = app with {
-   Name "WordFlower Declaration Head With"
-   Navigator FoundationStackWith
-}
-
-workspace
-let WordFlowerDeclarationLet = app {
-   Name "WordFlower Declaration Let"
-   Navigator FoundationStackLet
-}
-
-workspace
-let WordFlowerDeclarationLetWith = app with {
-   Name "WordFlower Declaration Let With"
-   Navigator FoundationStackLetWith
-}
-
-scene FoundationHome() {
-   Title "Navigation foundation"
-   render Col() {
-      Text("Foundation home marker")
-      FormButton("Open deterministic detail") {
-         on press -> { present FoundationDetail() }
-      }
-      FormButton("Open deterministic slot") {
-         on press -> { present FoundationSlot() in FoundationNavigator }
-      }
-   }
-}
-
-scene FoundationDetail() {
-   Title "Foundation detail"
-   render Col() {
-      Text("Foundation detail marker")
-      FormButton("Reset foundation app") {
-         on press -> { replace FoundationNavigator in WordFlowerFoundationTest }
-      }
-   }
-}
-
-view FoundationSlot() {
-   render Col() {
-      Text("Foundation slot marker")
-      FormButton("Restore initial stack") {
-         on press -> { dismiss }
-      }
-   }
-}
-
 // ---------------------------------------------------------------------------------------------
 // Capabilities beyond the MVP release
 // ---------------------------------------------------------------------------------------------
@@ -1232,9 +1289,9 @@ public
 view DocumentCard(Title text) {
    @actions = empty
 
-   render Col() [gap sm, pad md, bg bg.canvas, border subtle, radius md] {
+   render Col() [gap sm, pad md, background canvas, border edge, radius md] {
       Row() [content baseline left, gap sm] {
-         Text(Title) [type title]
+         Text(Title) [title]
          @actions [aligned right] { }
       }
       Col() [gap xs] {
@@ -1243,42 +1300,43 @@ view DocumentCard(Title text) {
    }
 }
 
-// Declaration properties may be written as a longhand block, with `optional` and `default`
-// properties that call sites omit.
-package
-view ParagraphLine() {
-   Paragraph Paragraph
-   Label text
-   Subtitle text?
-   Density number default 1
-
+// Every declaration's parameter list is parenthesized, and a parameter is a name, its type, and its
+// trailing traits — the same shape a field has. The only trait a parameter needs is a default, which
+// has a bare spelling that needs no parenthesis.
+public
+view ParagraphLine(Paragraph, Label text, Subtitle text?, Density number default 1) {
    render Col() [gap xs] {
-      Text("{ Label }: { Paragraph.Text }") [type body]
+      Text("{ Label }: { Paragraph.Text }") [body]
    }
 }
 
 // A reading surface: scrolling content, multiline text, collection selection, and progress.
 // TODO: windowing or virtualization for very large loop-owned collections remains Revolution work;
 // its syntax is deliberately unnamed until it can extend the settled language-owned `loop` surface.
-workspace
 view ReadingView(Document) {
-   state Focused/Unfocused // case-valued state shorthand needs no initializer
+   state Reading = Unfocused
    query Paragraphs from Document.Paragraphs { Text } // queries may select the fields they read
-   action SetReadingFinished(Value boolean) {
-      if Value {
-         update Document {
-            Final
-      }  }
-      if not Value {
-         update Document {
-            Draft
-   }  }  }
+   action SetReadingFinished(Value yes / no) {
+      update Document { Final: Value }
+   }
 
    render ScrollView() [screen] {
-      Image("./images/cover.png", Decorative: false, Label: "Document cover") [width fill]
-      Row() [content baseline left, gap sm] {
-         Icon("feather")
-         Text(Document.Title) [title]
+      // Distraction-free reading is a case, not a pair of booleans, so the two states cannot both be
+      // on and the render tree covers them exhaustively.
+      #toggleReading
+      FormButton(when Reading { Focused -> "Show everything", Unfocused -> "Focus the text" }) {
+         on press -> { set Reading = when Reading { Focused -> Unfocused, Unfocused -> Focused } }
+      }
+      when Reading {
+         Unfocused -> {
+            // A semantic label on non-text media, not decoration.
+            Image("./images/cover.png", Description: Document.Title) [width fill]
+            Row() [content baseline left, gap sm] {
+               Icon("feather")
+               Text(Document.Title) [title]
+            }
+         }
+         Focused -> { }
       }
       ProseEditor(Document.Body) // a view imported from an external project under a local name
       TextMultiline(Document.Body, Lines: 3)
@@ -1286,7 +1344,7 @@ view ReadingView(Document) {
       loop Paragraphs / Paragraph {
          Text(Paragraph.Text)
          on select -> {
-            present ParagraphInspector(Paragraph) in @inspector
+            reveal ParagraphInspector(Paragraph) in @inspector
          }
       }
       Checkbox(Value: Document.Final is Final, Label: "Final") {
@@ -1295,72 +1353,109 @@ view ReadingView(Document) {
    }
 }
 
-// Unit literals below are Revolution-only and remain deferred beyond the current tranche; toast
-// Duration above intentionally takes a plain number of seconds.
-// A publishing flow: string-valued enum arguments, and a presentation that answers with a result.
-workspace
+// A publishing flow: text-literal cases, a duration-typed state, a foreign action that declares its
+// own failure cases, and §5's outcome vocabulary at the calling site. There is no second, write-only
+// net, so a site that fires an effect names the outcomes it treats.
 view ExportPanel(Document) {
    state Format = ExportFormat."markdown"
-   state Countdown 30.seconds // typed state initialized without `=`
+   state Countdown = 30.s
 
-   action Export() {
-      let Status = present ExportProgress(Document, Format: Format)
-      when Status {
-         Presented -> { log "export started" }
-         Failed -> Error { present ExportFailure(Error) as overlay }
-         FellBack -> Fallback { log Fallback }
-         otherwise -> { log "export status unavailable" }
+   action RunExport() runs single {
+      when do ExportDocument(Document, Format: Format) {
+         saved -> { present Notice("Exported") as toast (Key: "export", Duration: 3.s) }
+         queued -> { present Notice("Saved — it will export when you are back online") as toast (Key: "export", Duration: 3.s) }
+         rejected -> Problem { present Notice(Problem) as toast (Key: "export", Duration: 5.s) }
       }
    }
 
    render Col() [screen, gap md] {
       Text("Export { Document.Title }") [title]
       Text(MeasureLabel(Document.Paragraphs.Count))
-      #export
-      FormButton("Export") {
-         on press Export
+      Text("This panel closes in { Countdown }") [body]
+      Row() [gap sm] {
+         #export
+         FormButton("Export") [busy when RunExport.Running] {
+            on press RunExport
+         }
+         #closeExport
+         FormButton("Close") {
+            // A sheet reads neither `Title` nor `Toolbar`, so its only exit is in its own content.
+            on press -> { dismiss }
+         }
       }
    }
 }
 
-view ExportProgress(Document, Format ExportFormat) {
-   render Text("Exporting { Document.Title } as { Format }…")
+// ---------------------------------------------------------------------------------------------
+// §14. Translations
+// ---------------------------------------------------------------------------------------------
+//
+// The words file holds translations only, keyed by the source literal or phrase name. There is no
+// key namespace anywhere in the language, so nothing here is addressed by a catalog path, and
+// `tao words check` reports the gap when a source sentence has no entry.
+words "es" {
+   "WordFlower" "WordFlower"
+   "A quiet place for words that matter." "Un lugar tranquilo para las palabras que importan."
+   "Add workspace" "Añadir espacio"
+   "Open workspace" "Abrir espacio"
+   "Save" "Guardar"
+   "Name this workspace" "Ponle nombre a este espacio"
+   "A workspace needs a name" "Un espacio necesita un nombre"
+   DocumentGone "Ese documento ya no existe."
 }
 
-view ExportFailure(Message text) {
-   render Text("Export failed: { Message }")
+// ---------------------------------------------------------------------------------------------
+// §16. Fixtures and scenarios
+// ---------------------------------------------------------------------------------------------
+
+// A fixture builds a named, reusable data graph. Its rows are handles that tests and scenarios point
+// at, so a journey and a review state start from the same world.
+fixture StarterWorkspace {
+   Novel = create Workspace { Name: "Novel" }
+   Opening = create Document { Workspace: Novel, Title: "Opening", Body: "The first line." }
 }
 
-// Automation: time, and app lifecycle. Autosave runs on a schedule rather than on every keystroke.
-workspace
-view AutosaveController(Document) {
-   state SecondsSinceSave = 0
+// A scenario pins a named, buildable app state for screenshots and review. Group clauses are
+// inherited defaults; an entry clause of the same kind replaces the group clause wholesale, and
+// `prepare` is the scenario-local data delta applied after the fixture and before the subject
+// mounts.
+scenarios ReadingView "content" {
+   fixture StarterWorkspace
+   render (Document: Opening)
+   device phone
 
-   on every 1.second -> {
-      set SecondsSinceSave += 1
-   }
-
-   on every 30.seconds -> {
-      update Document { Body: Document.Body }
-      set SecondsSinceSave = 0
-   }
-
-   render Text("Saved { SecondsSinceSave } seconds ago") [type body, fg fg.muted]
-}
-
-// `unsafe ts` declares a typed native boundary as a declaration, rather than inlining TS in a render.
-unsafe ts FormatNativeTitle Document -> text
-
-// `<expression> from <path>` reaches TypeScript from any expression position.
-let BuildStamp is text = BuildStamp() from ./Shell.ts
-
-// Scenario groups name the rows and states a design is reviewed and checked against.
-scenarios "ReadingView" {
    scenario "empty" {
-      Document.Body = ""
-      Document.Paragraphs = []
+      prepare { update Opening { Body: "" } }
    }
+
    scenario "longTitle" {
-      Document.Title = "A Complete History of the Semicolon, Volume Two"
+      prepare { update Opening { Title: "A Complete History of the Semicolon, Volume Two" } }
+   }
+
+   scenario "dark" {
+      appearance dark
+   }
+
+   // Pseudolocale is a review mode, exactly as the platform does it — never an entry in
+   // `project { languages }` — and it is paired with right-to-left so mirrored layout is reviewed in
+   // the same pass.
+   scenario "pseudolocale" {
+      locale pseudolocale
+      direction rightToLeft
+   }
+}
+
+// Fixtureless focused scenarios begin from an empty store. Required actions may be omitted only
+// here; Studio supplies an isolated logging stand-in and replays these steps in order.
+scenarios SavedToast "interaction" {
+   device phone
+
+   scenario "held" {
+      render ()
+      press down #revertSave
+      advance 600.ms
+      press up #revertSave
+      hover #revertSave
+      focus #revertSave
    }
 }
