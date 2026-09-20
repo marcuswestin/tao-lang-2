@@ -1,11 +1,11 @@
 // Studio agent chat: the endpoint, and the one conversation a project session holds.
 
 import { FS, Repo } from '@shared'
+import { declarationSource, resolveTarget, type SemanticSnapshot } from '@workspace'
 import type { ToolSet } from 'ai'
 import type { StudioProjectSession } from '../StudioProjectSession'
 import type { StudioTestRunner } from '../StudioTestRunner'
 import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
-import { declarationSource } from './AgentChatFacts'
 import { chatInstructions, scenarioInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
 import { type AgentChatApproval, type AgentChatEvent, AgentChatSession, type AgentChatTurn } from './AgentChatSession'
@@ -18,7 +18,6 @@ import {
   writeTools,
 } from './AgentChatWrites'
 import { type FeatureTestVerdict, featureTestVerdict, type TestRunSummary } from './FeatureVerdict'
-import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from './SemanticSnapshot'
 
 type Json = Record<string, unknown>
 
@@ -63,8 +62,7 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
     },
     snapshot: async () => {
       snapshot ??= (async () => {
-        const parsed = await session.agentParse()
-        return buildSemanticSnapshot(session.projectRoot, session.appName, parsed.files, parsed.diagnostics)
+        return await session.semanticSnapshot()
       })()
       return await snapshot
     },
@@ -553,12 +551,14 @@ export function conversationForTesting(
 ): {
   handle: (command: string, body: Json, tests?: StudioTestRunner) => Promise<unknown>
   send: (message: string, onEvent: (event: AgentChatEvent) => void) => Promise<unknown>
+  snapshot: () => Promise<SemanticSnapshot>
 } {
   const conversation = new AgentChatConversation(session, provider)
   conversations.set(session, conversation)
   return {
     handle: async (command, body, tests) => await AgentChat.handle(session, command, body, tests),
     send: async (message, onEvent) => await conversation.send(message, onEvent),
+    snapshot: async () => await conversation.world.snapshot(),
   }
 }
 

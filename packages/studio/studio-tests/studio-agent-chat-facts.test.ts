@@ -4,8 +4,14 @@
 // an action nothing invokes, a field written but never read. What is under test is what Tao is willing to
 // claim, not what a model says about it.
 import { Describe, Expect, Test } from '@shared/test'
-import { declarationSource, fileOutlines, improvementFacts } from '../studio-src/agent-chat/AgentChatFacts'
-import type { SemanticSnapshot, SnapshotEdge, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
+import {
+  declarationSource,
+  fileOutlines,
+  improvementFacts,
+  type SemanticSnapshot,
+  type SnapshotEdge,
+  type SnapshotNode,
+} from '@workspace'
 
 const PATH = 'App.tao'
 
