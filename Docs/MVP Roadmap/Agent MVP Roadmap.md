@@ -48,11 +48,16 @@ language sees.
   - Every lexer and parser syntax error is Tao's own sentence. Tao registers all six of Chevrotain's
     message builders in `taoLanguageModule`, which reaches the core parser, the language server, and
     every workspace or session built on either, so `tao check`, `tao fix`, the LSP, and Studio read
-    one set of sentences. The seventy-five-line list is now `Expected a view member here, but found
-    \`Text\`.`: past three deduplicated alternatives a diagnostic names the construct it was parsing
-    rather than listing what could start it. The two raw lexer messages are now `Expected a name
-    like \`Greeting\`, a value like \`"hello"\`, or a keyword like \`render\` here, but found \`§\`.`
-    and `Expected an open block for this \`}\` to close, but none is open here.`
+    one set of sentences. Past three deduplicated alternatives a diagnostic names the construct it
+    was parsing rather than listing what could start it, so the seventy-five-line list becomes one
+    sentence. The four shapes now read:
+
+    ```
+    Expected a view member here, but found `Text`.
+    Expected `(` or `=` here, but found `{`.
+    Expected a name like `Greeting`, a value like `"hello"`, or a keyword like `render` here, but found `§`.
+    Expected an open block for this `}` to close, but none is open here.
+    ```
   - A report is also easier to read: an excerpt leads with the line above the mistake, and a file
     reports the first error on each line — its lexer error first, since a character Tao cannot read
     explains the parse that follows — capped at three with the rest counted.
