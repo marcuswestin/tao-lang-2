@@ -1,6 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import type { TaoDesign } from './TR-design'
+import { runtimeRevisionStore } from './TR-listeners'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoAppDeclaration,
@@ -103,7 +104,7 @@ export class RuntimeAppDefinition implements Subscription {
   >()
   private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
   private designValue: TaoDesign | undefined
-  private listeners = new Set<() => void>()
+  private readonly changes = runtimeRevisionStore()
   private readonly navigationLanes = new WeakMap<TaoNavigationValue, TaoNavigationValue>()
   private readonly navigationLaneRecords = new Map<TaoNavigationValue, NavigationLaneRecord>()
   private nextBrowserEntryId = 1
@@ -113,7 +114,6 @@ export class RuntimeAppDefinition implements Subscription {
   private navigatorValue: TaoNavigationValue | undefined
   private replacement: TaoNavigationValue | undefined
   private toastEntries = new Map<string, ToastEntry>()
-  private version = 0
   private readonly browserHistory = new BrowserNavigationHistory(() => this.back())
   private readonly restoration = new NavigationRestorationController(this)
 
@@ -150,15 +150,12 @@ export class RuntimeAppDefinition implements Subscription {
     }
     runtimeApps.delete(this)
     unregisterNavigationApp(this)
-    this.listeners.clear()
+    this.changes.clear()
   }
 
-  readonly subscribe = (listener: () => void): () => void => {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
+  readonly subscribe = this.changes.subscribe
 
-  readonly snapshot = (): number => this.version
+  readonly snapshot = this.changes.snapshot
 
   get navigator(): TaoNavigationValue {
     return this.replacement ?? (this.navigatorValue ??= this.mount(this.definition.navigator()))
@@ -477,10 +474,7 @@ export class RuntimeAppDefinition implements Subscription {
   }
 
   private emit(): void {
-    this.version += 1
-    for (const listener of this.listeners) {
-      listener()
-    }
+    this.changes.changed()
   }
 
   private mutateNavigation<ResultT>(

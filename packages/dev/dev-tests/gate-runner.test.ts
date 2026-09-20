@@ -1,6 +1,7 @@
 import { FS } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
+import type { GeneratedEvidence, GeneratedOutput } from '../dev-src/repository-tests/GeneratedEvidence'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
@@ -163,6 +164,18 @@ Describe('repository gate runner', () => {
   Test('surfaces warnings a gate printed without failing on them', async () => {
     const { summary } = await run(['_ide-extension-build'], {
       '_ide-extension-build': { exitCode: 0, output: 'Warning: rule declared but never referenced' },
+    }, {
+      greenTree: {
+        captureGenerated: async () => ({
+          outputs: {
+            'ide-extension': { inputs: 'same-inputs', outputs: 'same-outputs' },
+            parser: { inputs: 'parser-inputs', outputs: 'parser-outputs' },
+          },
+          version: 1,
+        }),
+        hashTree: async () => 'tree-1',
+        lanes: ['verify'],
+      },
     })
 
     Expect(summary.warnings).toEqual(['_ide-extension-build: Warning: rule declared but never referenced'])
@@ -524,6 +537,17 @@ Describe('gate runner under a shared machine', () => {
 })
 
 Describe('gate runner green trees', () => {
+  const generatedEvidence = async (
+    _root: string,
+    outputs: readonly GeneratedOutput[],
+  ): Promise<GeneratedEvidence> => ({
+    outputs: Object.fromEntries(outputs.map(output => [
+      output,
+      { inputs: `inputs-${output}`, outputs: `outputs-${output}` },
+    ])),
+    version: 1,
+  })
+
   async function runOnce(
     root: string,
     options: {
@@ -539,7 +563,12 @@ Describe('gate runner green trees', () => {
       // Two recordable readers that read no generated class, so a record stands for them in a lane
       // holding no generator. `_typecheck` reads both generated trees and is the wrong default here.
       gates: options.gates ?? ['_dprint-check', '_repo-lint'],
-      greenTree: { hashTree: async () => options.hash, lanes: options.lanes, noCache: options.noCache },
+      greenTree: {
+        captureGenerated: generatedEvidence,
+        hashTree: async () => options.hash,
+        lanes: options.lanes,
+        noCache: options.noCache,
+      },
       jobs: 2,
       lane: options.lanes[0],
       logRoot: FS.resolvePath('logs', root),
@@ -682,13 +711,24 @@ Describe('gate runner green trees', () => {
       // `_typecheck` compiles `_gen_tao-app` and `_gen_tao-parser`. Both are Git-ignored, so the
       // tree hash its record is keyed by says nothing about whether they exist or are current — a
       // fresh checkout hashes identically to one that has them.
-      const both = ['_compile-word-flower-app', '_parser-gen', '_typecheck']
-      await runOnce(root, { gates: both, hash: 'tree-1', lanes: ['verify'] })
+      const allGenerated = ['_compile-word-flower-app', '_ide-extension-build', '_parser-gen', '_typecheck']
+      await runOnce(root, { gates: allGenerated, hash: 'tree-1', lanes: ['verify'] })
+      const recorded = (await GreenTree.load(root)).lanes['verify']
+      Expect(recorded?.generated?.version).toBe(1)
+      Expect(Object.keys(recorded?.generated?.outputs ?? {}).sort()).toEqual([
+        'compiled-app',
+        'ide-extension',
+        'parser',
+      ])
 
       // With both generators in the lane they regenerate whatever the record says, because a
       // generator is never recordable, so the record is safe to stand on.
-      const withGenerators = await runOnce(root, { gates: both, hash: 'tree-1', lanes: ['verify'] })
-      Expect(withGenerators.started.sort()).toEqual(['_compile-word-flower-app', '_parser-gen'])
+      const withGenerators = await runOnce(root, { gates: allGenerated, hash: 'tree-1', lanes: ['verify'] })
+      Expect(withGenerators.started.sort()).toEqual([
+        '_compile-word-flower-app',
+        '_ide-extension-build',
+        '_parser-gen',
+      ])
 
       // Drop the one that writes the generated app and the same record no longer covers it.
       const withoutAppGenerator = await runOnce(root, {
@@ -697,6 +737,53 @@ Describe('gate runner green trees', () => {
         lanes: ['verify'],
       })
       Expect(withoutAppGenerator.started.sort()).toEqual(['_parser-gen', '_typecheck'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('records no lane when generated output changes after its readers start', async () => {
+    const root = await mkTestDir('tao-gate-runner-generated-drift-')
+    let capture = 0
+    try {
+      const summary = await runGates({
+        gates: ['_parser-gen', '_repo-lint'],
+        greenTree: {
+          captureGenerated: async () => ({
+            outputs: { parser: { inputs: 'same-inputs', outputs: `output-${String(capture++)}` } },
+            version: 1,
+          }),
+          hashTree: async () => 'tree-1',
+          lanes: ['verify'],
+        },
+        logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+
+      Expect(summary.status).toBe('failed')
+      Expect(summary.warnings).toContain(
+        'generated output changed or became unreadable while verification was running; '
+          + 'this run is not green evidence',
+      )
+      Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('never records a whole lane that includes host-dependent evidence', async () => {
+    const root = await mkTestDir('tao-gate-runner-host-record-')
+    try {
+      const run = await runOnce(root, {
+        gates: ['_compile-word-flower-app', '_parser-gen', '_typecheck', 'ship-bundle-proof'],
+        hash: 'tree-1',
+        lanes: ['verify-full'],
+      })
+
+      Expect(run.summary.status).toBe('passed')
+      Expect((await GreenTree.load(root)).lanes['verify-full']).toBeUndefined()
     } finally {
       await FS.remove(root)
     }

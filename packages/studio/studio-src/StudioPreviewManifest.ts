@@ -1,5 +1,5 @@
 import type { GenerationDeclaration } from '@generation'
-import { Errors, Json } from '@shared'
+import { Errors, Json, Switch } from '@shared'
 import { cellIdentity, requireText, validateTaoSource, valueMatchesParameter } from './StudioPreviewCell'
 import {
   reactiveBrowserSchemeCapability,
@@ -344,22 +344,32 @@ function validateParameter(parameter: StudioParameterSchema): void {
   if (parameter.defaultValue !== undefined && !valueMatchesParameter(parameter.defaultValue, parameter)) {
     Errors.throwUserInput(`Studio parameter default does not match ${parameter.parameterId}.`)
   }
-  if (parameter.type.kind === 'choice' && parameter.type.values.length === 0) {
-    Errors.throwUserInput(`Studio choice parameter has no values: ${parameter.parameterId}`)
-  }
-  if (parameter.type.kind === 'json' && parameter.type.entity !== undefined) {
-    requireText(parameter.type.entity, `Studio entity parameter type for ${parameter.parameterId}`)
-  }
-  if (parameter.type.kind === 'number') {
-    for (const value of [parameter.type.minimum, parameter.type.maximum, parameter.type.step]) {
-      if (value !== undefined && !Number.isFinite(value)) {
-        Errors.throwUserInput(`Studio numeric parameter is not finite: ${parameter.parameterId}`)
+  Switch.kind<StudioParameterSchema['type'], void>(parameter.type, {
+    // A boolean, a free text, and a time carry nothing beyond their kind.
+    boolean: Switch.nothing,
+    choice: ({ values }) => {
+      if (values.length === 0) {
+        Errors.throwUserInput(`Studio choice parameter has no values: ${parameter.parameterId}`)
       }
-    }
-    if (parameter.type.step !== undefined && parameter.type.step <= 0) {
-      Errors.throwUserInput(`Studio numeric parameter step must be positive: ${parameter.parameterId}`)
-    }
-  }
+    },
+    json: ({ entity }) => {
+      if (entity !== undefined) {
+        requireText(entity, `Studio entity parameter type for ${parameter.parameterId}`)
+      }
+    },
+    number: numeric => {
+      for (const value of [numeric.minimum, numeric.maximum, numeric.step]) {
+        if (value !== undefined && !Number.isFinite(value)) {
+          Errors.throwUserInput(`Studio numeric parameter is not finite: ${parameter.parameterId}`)
+        }
+      }
+      if (numeric.step !== undefined && numeric.step <= 0) {
+        Errors.throwUserInput(`Studio numeric parameter step must be positive: ${parameter.parameterId}`)
+      }
+    },
+    text: Switch.nothing,
+    time: Switch.nothing,
+  })
 }
 
 function validateEnvironment(environment: StudioCellEnvironment): void {

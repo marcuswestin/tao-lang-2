@@ -1,5 +1,5 @@
 import Runtime from '@runtime-toolchain'
-import { Assert, Errors } from '@shared'
+import { Assert, Errors, Switch } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -182,21 +182,22 @@ function validatePreviewScenarios(
   }
 }
 
-function parameterType(
-  parameter: NonNullable<
-    Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
-  >['views'][number]['parameters'][number],
-): StudioParameterSchema['type'] {
-  if (parameter.kind === 'choice') {
-    return { kind: 'choice', values: parameter.choices ?? [] }
-  }
-  if (parameter.kind === 'entity') {
-    return { entity: parameter.entity ?? parameter.typeName, kind: 'json' }
-  }
-  if (parameter.kind === 'unsupported') {
-    return { kind: 'json' }
-  }
-  return { kind: parameter.kind }
+/** One parameter as the compiler publishes it, before Studio narrows it to its own schema. */
+type StudioCompilerParameter = NonNullable<
+  Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
+>['views'][number]['parameters'][number]
+
+function parameterType(parameter: StudioCompilerParameter): StudioParameterSchema['type'] {
+  return Switch.kind<StudioCompilerParameter, StudioParameterSchema['type']>(parameter, {
+    boolean: () => ({ kind: 'boolean' }),
+    choice: () => ({ kind: 'choice', values: parameter.choices ?? [] }),
+    entity: () => ({ entity: parameter.entity ?? parameter.typeName, kind: 'json' }),
+    number: () => ({ kind: 'number' }),
+    text: () => ({ kind: 'text' }),
+    time: () => ({ kind: 'time' }),
+    // A shape Studio has no editor for still renders; its value is carried as opaque JSON.
+    unsupported: () => ({ kind: 'json' }),
+  })
 }
 
 function taoSource(source: { end: number; path: string; start: number }): StudioTaoSource {

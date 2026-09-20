@@ -1,6 +1,6 @@
 # Tao Roadmap
 
-Open work only. Completed work is recorded under `Docs/Roadmap/Archive/`.
+Open work only. Completed work is recorded under `Docs/Archive/`.
 
 `Apps/WordFlower/README.md` owns the tranche mechanics language features are built through. The
 language target and the program that reaches it — first MVP, then Revolution — are owned by
@@ -138,14 +138,15 @@ tests written in Tao, green in Current, for every construct introduced.
   - The Studio v2 foundations replace Electron with Electrobun, split the browser client, add
     multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
     Remaining integration and native-validation gates are tracked in the living ledger:
-    `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`. The v1 plan is retained only as a historical
-    ledger. `packages/studio/README.md` owns how to run, inspect, and recover Studio.
+    `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`. The v1 plan is archived at
+    `Docs/Archive/Plans/Plan - Tao Studio v1.md`. `packages/studio/README.md` owns how to run,
+    inspect, and recover Studio.
   - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
     The authenticated gateway, cross-process trust/revocation, Bonjour rediscovery, QR/deep-link
     fallback, LAN/cable selection, and device host are implemented in software. Real-device and
     physical-cable acceptance remain required. Exploration:
-    `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
+    `Docs/Archive/Explorations/Exploration - Native device as Studio canvas.md`.
   - A `./dev studio` session reloads its browser client but not its server, so a page can be rebuilt from
     sources the running server has not loaded and then call an endpoint that does not exist yet. The rebuild
     now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
@@ -203,8 +204,8 @@ tests written in Tao, green in Current, for every construct introduced.
     project membership as the only remote access model, no public sharing surface, compiled bundles
     only, Studio/source as authority, and rare shell releases. Plan:
     `Docs/Roadmap/Tao Studio companion app/Plan - Tao Studio companion app.md`. Distribution context:
-    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`. Slice 1 implementation prompt:
-    `Docs/Roadmap/Tao Studio companion app/Prompt - Implement Slice 1.md`. Slice 1 (pair and render one
+    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`. Slice 1 implementation prompt
+    (archived, landed): `Docs/Archive/Plans/Prompt - Implement Slice 1.md`. Slice 1 (pair and render one
     real device) is implemented: `packages/studio-companion-app`, the `tao-studio-device-v1` gateway and
     trust store in `packages/studio`, `TR.Studio.DeviceHost`, the workbench Device popover, and
     `just studio-companion-install`; contract and proof record in
@@ -226,14 +227,14 @@ tests written in Tao, green in Current, for every construct introduced.
     IDE; finish the browser proof and capture workflow in the Studio workstream above.
 - [ ] Prove the iCloud datasource on devices
   - The snapshot-family `ICloud` provider landed with its native Expo module and ship
-    entitlements; see `Docs/Roadmap/iCloud datasource provider/Implementation - iCloud datasource
-    provider.md` for the boundary, its limits, and the two-device live acceptance still owed.
+    entitlements; see the "ICloud" section of `Docs/Roadmap/Multiple datasources/Plan - Multiple
+    datasources.md` for the boundary, its limits, and the two-device live acceptance still owed.
 - [ ] Settle the granular-write family's open questions and prove CloudKit on devices
   - The family's runtime machinery (change-sets, fold, bridge, conformance suite) and a `CloudKit`
-    provider over `CKSyncEngine` landed as a stab under three stated assumptions; see
-    `Docs/Roadmap/CloudKit granular datasource provider/Implementation - CloudKit granular
-    datasource provider.md`. Open questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md`
-    need Ro's answers before the fold is more than a working assumption.
+    provider over `CKSyncEngine` landed as a stab under three stated assumptions; see the
+    "CloudKit" section of `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`. Open
+    questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md` need Ro's answers before the fold
+    is more than a working assumption.
 - [ ] Finish the multiple-datasources follow-ups
   - Binding several datasources to one app landed: a datasource names the collections it stores, an
     app binds a set and derives a member where it is bound with `with`, and `reference` links rows across
@@ -243,11 +244,11 @@ tests written in Tao, green in Current, for every construct introduced.
     configuration slot rather than keyed by datasource, and whether `Data` should become an ordinary
     patchable slot is open.
 - [ ] Widen the HTTP datasource
-  - The query-driven `Http` datasource landed with `Apps/HNReader`; see
-    `Docs/Roadmap/HTTP Datasource/Overview - HTTP datasource.md` for the settled design and its
-    deferred list — offline persistence across launches, remote writes, a user-triggered refresh
-    spelling, cache eviction and retry, and per-feed row provenance. Per-entity datasource scoping
-    moved to the multiple-datasources plan above.
+  - The query-driven `Http` datasource landed with `Apps/HNReader`; see the "Http" section of
+    `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md` for the settled design and
+    its deferred list — offline persistence across launches, remote writes, a user-triggered
+    refresh spelling, cache eviction and retry, and per-feed row provenance. Per-entity datasource
+    scoping moved to the multiple-datasources plan above.
 - [ ] Bridge React Native and Expo APIs into Tao
   - Design how a native API becomes a Tao binding before building more of them: whether bindings can
     be generated from TypeScript type definitions or published documentation, driven by per-API
@@ -282,7 +283,7 @@ Product and codebase backlog, unordered.
 
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
-    `Docs/Roadmap/Archive/Repository simplification/Plan - Repository simplification.md`. Each item
+    `Docs/Archive/Plans/Repository simplification/Plan - Repository simplification.md`. Each item
     below was judged worth doing but not worth widening that plan's diff:
     - **No disabled state on the entry file in Studio's file tree.** The old `protectedPath` option
       went with the legacy DOM tree, where it only ever disabled buttons in a section that was never
@@ -379,13 +380,13 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Authority.md` — authority exploration with open dialogue: lowering the decided access/publish/secrets model into the provider's own rule language, remote authorization semantics for `through` grants, the remote-refusal contract, redaction, and the two-account proof app over InstantDB.
 - `Docs/Roadmap/Deterministic simulation.md` — deterministic whole-app simulation exploration: the determinism boundary, the scripted-world harness over the Studio cell pipeline, schema-derived property testing, journal-based replay and time-travel, and design rules across cells.
 - `Docs/Roadmap/Device capabilities.md` — device-capabilities exploration for the RN/Expo bridge item: the config-through-one-engine recommendation, permission case sets, outcome delivery into `when do`, scripted capability drivers, and the proving sequence.
-- `Docs/Roadmap/Tao ship.md` — the historical ship exploration plus its reconciled landed contract: filesystem-only local builds, App Store/TestFlight lifecycle, compatible OTA, variants, and the still-open hosted-runtime and commercial questions.
-- `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the implementation record for `tao ship [path] --app <App>`, local Xcode/App Store/TestFlight operation, resumable lifecycle, and compatible OTA; its EAS and Android material is retained only as dated research.
+- `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the implementation record for `tao ship [path] --app <App>`, local Xcode/App Store/TestFlight operation, resumable lifecycle, and compatible OTA (its EAS and Android material is retained only as dated research), plus the still-open hosted-runtime, schema-migration, and commercial design folded in from the retired `Tao ship.md` exploration.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
-- `Docs/Roadmap/Freehand UI sketching/` — FS-D1–FS-D20 design record, reconciled product stories and
-  hand-authored wireframes, requirement prompt, and ordered implementation plan for Studio-owned
-  free rectangles, generated `@/studio` views, snapping to Tao flow, data, variants, focus-in, and
-  the PencilKit-backed companion; its approved review-and-refinement follow-on covers interaction
+- `Docs/Roadmap/Freehand UI sketching/` — the FS-D1–FS-D20 design record folded into reconciled
+  product stories and hand-authored wireframes, and the ordered implementation plan (with the
+  Figma-at-home strides and canvas-first design mode work folded in) for Studio-owned free
+  rectangles, generated `@/studio` views, snapping to Tao flow, data, variants, focus-in, and the
+  PencilKit-backed companion; its approved review-and-refinement follow-on covers interaction
   recording, prompted scenario expansion, collaborative visual review, and design conformity.
 - `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14) and
   implementation record. The T1–T5 core ships the outline, attention reducer, `scene`, shell view
@@ -397,14 +398,14 @@ Product and codebase backlog, unordered.
   selectable-row focus-intake slice.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
-- `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
-- `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
+- `Docs/Archive/Plans/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Docs/Archive/Plans/Verification orchestration/` — the completed verification-orchestration program: one
   dependency-aware, duration-informed scheduler for every test and verification lane, the live dashboard
   for humans on `check`/`verify`/`verify-full`, the file-backed quiet output contract for agents, and
   `verify-full`'s Studio lanes parallelized on per-worker resources.
-- `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
-- `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
-- `Docs/Roadmap/September squash-merge remediation.md` — the September squash-merge audit's 183
+- `Docs/Archive/Plans/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
+- `Docs/Archive/Reports/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
+- `Docs/Archive/Reports/September squash-merge remediation.md` — the September squash-merge audit's 183
   tracked findings (implemented) and the follow-up branch's open items, including a second,
   independent findings list that is cross-checked but not yet triaged.
-- `Docs/Roadmap/Archive/` — frozen records of completed work.
+- `Docs/Archive/` — frozen records of completed work.

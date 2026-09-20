@@ -263,7 +263,7 @@ Describe('Studio Electrobun semantic host control', () => {
     Expect(main).toContain("hostname: '127.0.0.1'")
     Expect(main).toContain("url: 'http://127.0.0.1:' + hostControlServer.port + '/host-control'")
     Expect(main).toContain('type: "tao-studio-host-control"')
-    Expect(main).toContain('Appium Mac2 acceptance responsibilities')
+    Expect(main).toContain('Appium owns physical acceptance')
     Expect(main).toContain('await waitForHostControlDocument(window)')
     Expect(main).toContain('serializeHostControlOperation')
     Expect(main).toContain('hostControlOperationChain')

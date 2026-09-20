@@ -2,29 +2,24 @@
 
 - **Status:** Candidate
 - **Area:** Test performance
-- **Impact:** App-root sharding and compiled-run caching already exist. WordFlower's indivisible
-  workspace still leaves a long tail after sibling shards finish; increasing its reservation alone
-  cannot give its current compiler or Jest run more work to distribute.
-- **Evidence:** The 2026-09-20 baseline verify run
-  `.artifacts/logs/verify/2026-09-20T16-35-46-656Z-96541-45b684e1` scheduled ten Tao-app shards.
-  WordFlower started after 15.463s of dependencies and ran for 56.922s (53.702s expected), including
-  12.29s in Jest. Makespan was 72.389s, dependency/resource serial floor 72.369s, reservation idle
-  capacity 415.1 slot-seconds, and peak load 20.8 on 18 CPUs with one registered lane.
-  Uncached host probes with budgets 2, 4, and 8 took 24.93s, 29.17s, and 26.52s respectively; each
-  passed the same five files and 29 journeys with one compiler worker and one Jest entrypoint.
-  These are single observations with warm filesystem caches, and brief dashboard test runs overlapped
-  early probes, so they are not a controlled scaling benchmark. They provide no evidence for a
-  larger reservation. Raw logs and metric definitions live under `.artifacts/verification-scheduling/`.
-- **Workaround:** Use changed-scope tests for iteration and reuse compiled runs when fresh compilation
-  is not the purpose. Complete uncached verification remains required for scheduling comparisons.
-- **Proposed change:** First time validation, test-plan compilation, app generation, and Jest separately
-  inside `tao test`; the aggregate pre-Jest duration cannot identify the expensive stage. Then measure
-  a targeted improvement while preserving the shared workspace and per-run app deduplication.
-  Keep two slots per app shard until a measured change can use more. Do not split one app root across
-  independent compiler processes or add elastic reservations without proving safety and benefit.
-- **Dependencies:** `TestNodes` keeps app roots indivisible. `test-command.ts` groups files by directory,
-  and `TestHarnessFiles` gives 29 journeys one entrypoint at its 16-journey-per-shard floor.
-- **Acceptance:** The original target remains open: the complete test phase under 20s on an otherwise
-  idle machine with unchanged inventory. Reduced dependency waits or clearer reporting alone do not
-  meet it; the WordFlower tail has not been improved by this change.
-- **Source:** 2026-09-04 development-speed review; refreshed from 2026-09-20 scheduling measurements.
+- **Impact:** Tao app tests are sharded by app root, but WordFlower owns one indivisible root and remains
+  the tail. In verify run `2026-09-20T16-35-46-656Z-96541-45b684e1`, `tao-apps#1` started as soon as its
+  dependencies allowed, then ran for 56.9s against an expectation of 53.7s. The 18-slot lane finished
+  in 72.7s with 415.1 idle slot-seconds; WordFlower was on the 72.4s serial floor.
+- **Evidence:** WordFlower contains five Tao test files and the recorded run executed 29 journeys. Its
+  shard held the fixed two-slot reservation, validated with one worker, and could not use capacity
+  released by sibling shards. Isolated warm-filesystem observations were 24.93s at two slots, 29.17s
+  at four, and 26.52s at eight; each remained one compiler worker and one Jest entrypoint. These are
+  single observations rather than a statistical benchmark, but they show no reason to widen the
+  shard. A 2026-09-20 refresh in the managed host was blocked before test startup by Node CPU discovery
+  (`sysctl kern.clockrate: Operation not permitted`), so the earlier valid observations remain the
+  applicable width evidence.
+- **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
+- **Proposed change:** Keep the two-slot WordFlower reservation. Investigate reducing its serial
+  validation/Jest work or safely partitioning its shared workspace before considering elastic slots.
+  Tao app directories remain indivisible because journeys under one root share a workspace; splitting
+  files without changing that lifecycle would duplicate setup or permit inconsistent workspace state.
+- **Dependencies:** DEVENV-034 (Bun worker pool) is separate. Elastic allocation and finer workspace
+  splitting are not warranted by the present width measurements.
+- **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
+- **Source:** 2026-09-04 development-speed review; 2026-09-20 sharded scheduler follow-up.

@@ -20,23 +20,23 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
   `In progress` owned by another branch. `./agent board` and `git branch -a` say what is live before
   you claim one.
 - Score each remaining entry from its own fields:
-  - **Cost** — the size of its **Proposed change** and of the evidence its **Acceptance** demands. A
-    clause in one document, a flag, or a declared input is cheap; a new lease protocol, a host lane,
-    or a native toolchain is not.
-  - **Importance** — how often the **Impact** is paid and what it costs when paid. Highest are the
-    ones that produce a confidently wrong result: a gate that passes without testing anything, output
-    an agent would quote as fact, a memo that proves the wrong tree. Then the ones every agent pays
-    daily. Then the ones whose **Workaround** actually works.
-  - **Reach** — how many other entries the fix settles or unblocks. Entries sharing an **Area** are
+  - **Cost** — the size of its **Proposed change** and the evidence its **Acceptance** demands: a
+    clause, a flag, or a declared input is cheap; a new lease protocol, a host lane, or a native
+    toolchain is not.
+  - **Importance** — how often the **Impact** is paid and what it costs when paid: highest is a
+    confidently wrong result (an untested-but-green gate, output an agent would quote as fact, a
+    memo proving the wrong tree), then what every agent pays daily, then entries whose
+    **Workaround** actually works.
+  - **Reach** — how many other entries the fix settles or unblocks; entries sharing an **Area** are
     often one change, and an entry's **Dependencies** name the rest.
 - Take cheap, important, wide-reach entries first. An entry with a reliable workaround and a large
   proposed change is a poor trade however real it is; say so and leave it.
 - Prefer a batch that is genuinely parallel: group the selected entries so no two groups write the
-  same files. `packages/dev/` gate and runner internals, the `./tao` CLI, `.rulesync/` permission
-  sources, and `AGENTS.md` with the skills are four seams that rarely collide. Two entries touching
-  one gate file are one group, not two.
-- Hand each group a path list it owns exclusively, as `parallel-implementation` requires.
-  Documentation-only entries all touch the shared instruction files: one group, not several.
+  same files, and hand each group a path list it owns exclusively, as `delegation`'s
+  `references/parallel-implementation.md` requires. `packages/dev/` gate and runner internals, the
+  `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills are four seams that
+  rarely collide; two entries touching one gate file are one group, not two, and documentation-only
+  entries all touch the shared instruction files, so they too are one group.
 - Propose a batch of more than two entries to Ro before implementing — the ID, the one-line cost, and
   why it is in this batch.
 
@@ -58,14 +58,11 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
 - Setting an entry to `Resolved` or `Closed` is what moves it. In one change: set the status,
   `git mv` the file into `Developer environment upgrades/Archive/`, move its index line from the open
   index to the archive index, and append `- **Archived:** <YYYY-MM-DD>` as the entry's last field.
-- `_repo-lint` enforces the placement: an addressed entry left in the open half, an unaddressed one in
-  the archive, a file missing from its index, an index line with no file, and an ID claimed twice all
-  fail the gate. Do not work around it by leaving the status stale.
-- Name the branch or commit that settled the entry in its **Evidence** or **Dependencies**. A later
-  regression is diagnosed from that text.
-- Drop a section the move leaves empty; never leave an empty heading.
-- IDs are never reused, and a regressed entry returns to the open backlog under its original ID with
-  the new evidence appended rather than as a second entry.
+  `_repo-lint` enforces the placement and ID uniqueness; do not work around it by leaving the status
+  stale.
+- Name the branch or commit that settled the entry in its **Evidence** or **Dependencies**, drop a
+  section the move leaves empty, and never reuse an ID — a regressed entry returns to the open
+  backlog under its original ID with the new evidence appended, not as a second entry.
 - Sweep before finishing: archive any addressed entry another task left in the open index, and say in
   the handoff which IDs you moved that were not yours.
 

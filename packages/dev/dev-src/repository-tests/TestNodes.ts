@@ -169,6 +169,7 @@ function nodeState(
     timeoutMs: wallTimeoutMs(expectedMs),
   }
   const state = WorkGraph.createState(node) as TestNodeState
+  state.dashboardGroup = shardCount > 1 ? suite.name : undefined
   state.selectedTestFiles = process.files
   state.suite = suite.name
   state.testReport = process.testReport

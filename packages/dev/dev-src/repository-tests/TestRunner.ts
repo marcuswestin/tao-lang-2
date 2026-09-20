@@ -30,6 +30,8 @@ export type SuiteState = TestNodeState & {
 export type TestRunOptions = {
   jobs?: number
   outputMode?: OutputMode
+  /** Override the machine-wide registry, principally to isolate concurrent tests. */
+  registryRoot?: string
   repositoryRoot?: string
 }
 
@@ -348,6 +350,7 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
   // left to hand a divided budget to.
   const machineLane = await MachineLanes.acquire({
     lane: LANE,
+    registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
   })

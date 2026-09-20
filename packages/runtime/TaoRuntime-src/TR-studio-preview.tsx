@@ -19,6 +19,7 @@ import {
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
+import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 import { Clock } from './TR-units'
 
@@ -114,60 +115,51 @@ type StudioPreviewOverlay = StudioPreviewElement & {
   style: Record<string, string>
 }
 
+/** The document events this bridge listens for; registration and removal name the same set. */
+type StudioPreviewDocumentEvent =
+  | 'blur'
+  | 'click'
+  | 'input'
+  | 'keydown'
+  | 'mousedown'
+  | 'mouseleave'
+  | 'mousemove'
+  | 'mouseover'
+  | 'mouseout'
+  | 'mouseup'
+  | 'wheel'
+
+type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
+
+type StudioPreviewDocumentListener = (
+  type: StudioPreviewDocumentEvent,
+  listener: (event: StudioPreviewPointerEvent) => void,
+  capture?: boolean,
+) => void
+
+type StudioPreviewWindowListener = (
+  type: StudioPreviewWindowEvent,
+  listener: (event: StudioPreviewMessageEvent) => void,
+) => void
+
 export type StudioPreviewHost = {
   console?: Partial<Record<StudioPreviewLogLevel, (...arguments_: unknown[]) => void>>
   document: {
-    addEventListener(
-      type:
-        | 'blur'
-        | 'click'
-        | 'input'
-        | 'keydown'
-        | 'mousedown'
-        | 'mouseleave'
-        | 'mousemove'
-        | 'mouseover'
-        | 'mouseout'
-        | 'mouseup'
-        | 'wheel',
-      listener: (event: StudioPreviewPointerEvent) => void,
-      capture?: boolean,
-    ): void
+    addEventListener: StudioPreviewDocumentListener
     body?: {
       appendChild(element: StudioPreviewOverlay): void
       getBoundingClientRect?(): StudioPreviewRect
     }
     createElement(name: 'div'): StudioPreviewOverlay
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
-    removeEventListener(
-      type:
-        | 'blur'
-        | 'click'
-        | 'input'
-        | 'keydown'
-        | 'mousedown'
-        | 'mouseleave'
-        | 'mousemove'
-        | 'mouseover'
-        | 'mouseout'
-        | 'mouseup'
-        | 'wheel',
-      listener: (event: StudioPreviewPointerEvent) => void,
-      capture?: boolean,
-    ): void
+    removeEventListener: StudioPreviewDocumentListener
   }
   parent: {
     postMessage(message: unknown, targetOrigin: string): void
   }
   window: {
-    addEventListener(
-      type: 'blur' | 'message' | 'resize' | 'scroll',
-      listener: (event: StudioPreviewMessageEvent) => void,
-    ): void
-    removeEventListener(
-      type: 'blur' | 'message' | 'resize' | 'scroll',
-      listener: (event: StudioPreviewMessageEvent) => void,
-    ): void
+    addEventListener: StudioPreviewWindowListener
+    removeEventListener: StudioPreviewWindowListener
   }
 }
 
@@ -496,27 +488,25 @@ async function findJourneyTarget(
   return match
 }
 
+/** Every journey selector but `text` is one attribute on the element; `text` is its content. */
+const journeySelectorAttributes = {
+  label: 'aria-label',
+  placeholder: 'placeholder',
+  tag: 'data-testid',
+} as const
+
 function findJourneyTargets(
   host: StudioPreviewHost,
   selector: TaoJourneySelector,
   target: string,
   scope?: StudioPreviewElement,
 ): StudioPreviewElement[] {
-  const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element => {
-    if (scope !== undefined && element !== scope && !elementIsWithin(element, scope)) {
-      return false
-    }
-    if (selector === 'tag') {
-      return element.getAttribute('data-testid') === target
-    }
-    if (selector === 'label') {
-      return element.getAttribute('aria-label') === target
-    }
-    if (selector === 'placeholder') {
-      return element.getAttribute('placeholder') === target
-    }
-    return element.textContent?.trim() === target
-  })
+  const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element =>
+    (scope === undefined || element === scope || elementIsWithin(element, scope))
+    && (selector === 'text'
+      ? element.textContent?.trim() === target
+      : element.getAttribute(journeySelectorAttributes[selector]) === target)
+  )
   const matches = selector === 'text'
     ? candidates.filter(candidate =>
       !candidates.some(other => other !== candidate && elementIsWithin(other, candidate))
@@ -552,49 +542,45 @@ function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEve
     MouseEvent?: new(type: string, init?: unknown) => object
     PointerEvent?: new(type: string, init?: unknown) => object
   }
-  if (event === 'enter') {
-    RuntimeAssert.input(value !== undefined, 'A Tao Studio enter journey step must carry text.')
-    setJourneyInputValue(target, value)
-    dispatchBrowserEvent(target, 'input', browser.Event, { bubbles: true, cancelable: true })
-    return
-  }
-  if (event === 'submit') {
-    dispatchBrowserEvent(target, 'keydown', browser.KeyboardEvent ?? browser.Event, {
+  const mouse = (type: string, buttons: number): void =>
+    dispatchBrowserEvent(target, type, browser.MouseEvent ?? browser.Event, {
       bubbles: true,
+      button: 0,
+      buttons,
       cancelable: true,
-      code: 'Enter',
-      key: 'Enter',
     })
-    return
-  }
-  if (event === 'hover') {
-    const PointerConstructor = browser.PointerEvent ?? browser.MouseEvent ?? browser.Event
-    const pointer = browser.PointerEvent === undefined ? 'mouse' : 'pointer'
-    dispatchBrowserEvent(target, `${pointer}over`, PointerConstructor, {
-      bubbles: true,
-      cancelable: true,
-      pointerType: 'mouse',
-    })
-    // A text selector resolves to the innermost matching node, which for a pressable is its nested
-    // label, while react-native-web listens for `enter` on the pressable itself. A real pointer
-    // entering the label enters every ancestor too, so the synthetic event bubbles to reach them.
-    dispatchBrowserEvent(target, `${pointer}enter`, PointerConstructor, {
-      bubbles: true,
-      cancelable: true,
-      pointerType: 'mouse',
-    })
-    return
-  }
-  const type = event === 'pressDown'
-    ? 'mousedown'
-    : event === 'pressUp'
-    ? 'mouseup'
-    : 'click'
-  dispatchBrowserEvent(target, type, browser.MouseEvent ?? browser.Event, {
-    bubbles: true,
-    button: 0,
-    buttons: event === 'pressDown' ? 1 : 0,
-    cancelable: true,
+  const pointer = (suffix: 'enter' | 'over'): void =>
+    dispatchBrowserEvent(
+      target,
+      `${browser.PointerEvent === undefined ? 'mouse' : 'pointer'}${suffix}`,
+      browser.PointerEvent ?? browser.MouseEvent ?? browser.Event,
+      { bubbles: true, cancelable: true, pointerType: 'mouse' },
+    )
+  RuntimeSwitch<TaoJourneyEvent, void>(event, {
+    enter: () => {
+      RuntimeAssert.input(value !== undefined, 'A Tao Studio enter journey step must carry text.')
+      setJourneyInputValue(target, value)
+      dispatchBrowserEvent(target, 'input', browser.Event, { bubbles: true, cancelable: true })
+    },
+    // A target without `focus` is a plain element, which a click is the honest approximation of.
+    focus: () => mouse('click', 0),
+    hover: () => {
+      pointer('over')
+      // A text selector resolves to the innermost matching node, which for a pressable is its
+      // nested label, while react-native-web listens for `enter` on the pressable itself. A real
+      // pointer entering the label enters every ancestor too, so this one bubbles to reach them.
+      pointer('enter')
+    },
+    press: () => mouse('click', 0),
+    pressDown: () => mouse('mousedown', 1),
+    pressUp: () => mouse('mouseup', 0),
+    submit: () =>
+      dispatchBrowserEvent(target, 'keydown', browser.KeyboardEvent ?? browser.Event, {
+        bubbles: true,
+        cancelable: true,
+        code: 'Enter',
+        key: 'Enter',
+      }),
   })
 }
 
@@ -637,13 +623,12 @@ export function publishStudioJourneyReplayResult(
   ) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    ...(result === 'failed' ? { error: previewErrorMessage(error) } : {}),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    type: result === 'failed' ? 'preview-journey-replay-failed' : 'preview-journey-replay-settled',
-  }, config.parentOrigin)
+  postToStudio(
+    host,
+    config,
+    result === 'failed' ? 'preview-journey-replay-failed' : 'preview-journey-replay-settled',
+    result === 'failed' ? { error: previewErrorMessage(error) } : {},
+  )
 }
 
 /** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */
@@ -656,13 +641,7 @@ export function publishStudioScheme(
   if (host === undefined || !validPreviewConfig(config)) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    scheme,
-    type: 'preview-scheme-changed',
-  }, config.parentOrigin)
+  postToStudio(host, config, 'preview-scheme-changed', { scheme })
 }
 
 /** mountStudioPreviewBridge mounts one imperative browser bridge and returns its complete cleanup. */
@@ -696,16 +675,12 @@ export function mountStudioPreviewBridge(
     if (stopped || host.document.body?.getBoundingClientRect === undefined) {
       return
     }
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
+    postToStudio(host, config, 'preview-layout-measurements', {
       measurements: collectStudioPreviewLayoutMeasurements(
         host.document.querySelectorAll(studioRenderSelector),
         host.document.body.getBoundingClientRect(),
       ),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-layout-measurements',
-    }, config.parentOrigin)
+    })
   }
   const scheduleLayoutMeasurements = () => {
     if (measurementQueued) {
@@ -715,6 +690,13 @@ export function mountStudioPreviewBridge(
     queueMicrotask(postLayoutMeasurements)
   }
 
+  /**
+   * An edit gesture is a real pointer event arriving while the canvas is in edit mode. A synthetic
+   * journey event belongs to the app's own replay, and run mode belongs to the app entirely.
+   */
+  const editingGesture = (event: StudioPreviewPointerEvent): boolean =>
+    event.taoStudioJourney !== true && interactionMode !== 'run'
+
   const disarmDrag = () => {
     drag = undefined
     dragOverlay?.remove()
@@ -723,34 +705,36 @@ export function mountStudioPreviewBridge(
     dropOverlay = undefined
   }
 
+  /** Leaving edit mode — for run mode or for a recording — drops everything edit mode was showing. */
+  const clearEditSelection = () => {
+    hoverTarget = undefined
+    selectedTarget = undefined
+    sourceTarget = undefined
+    disarmDrag()
+    overlay?.remove()
+    overlay = undefined
+  }
+
   const postRecordingState = (
     activeRecording: StudioJourneyRecording,
     status: 'recording' | 'stopped' | 'invalidated',
   ) => {
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
+    postToStudio(host, config, 'preview-journey-recording-state', {
       recordingId: activeRecording.id,
       sequence: activeRecording.sequence,
       status,
-      type: 'preview-journey-recording-state',
-    }, config.parentOrigin)
+    })
   }
   const postRecordedStep = (
     activeRecording: StudioJourneyRecording,
     step: Readonly<Record<string, unknown>>,
   ) => {
     activeRecording.sequence += 1
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
+    postToStudio(host, config, 'preview-journey-step-recorded', {
       recordingId: activeRecording.id,
       sequence: activeRecording.sequence,
       step,
-      type: 'preview-journey-step-recorded',
-    }, config.parentOrigin)
+    })
   }
   const flushRecordedInput = (element?: StudioPreviewElement) => {
     const activeRecording = recording
@@ -773,10 +757,10 @@ export function mountStudioPreviewBridge(
         },
     )
   }
-  const startOrStopRecording = (event: StudioPreviewMessageEvent): boolean => {
-    const control = recordingControlFromMessage(event, config, host.parent)
+  const startOrStopRecording = (message: Record<string, unknown>) => {
+    const control = recordingControl(message, config)
     if (control === undefined) {
-      return false
+      return
     }
     if (control.active) {
       if (recording !== undefined) {
@@ -789,12 +773,7 @@ export function mountStudioPreviewBridge(
         sequence: 0,
       }
       interactionMode = 'run'
-      hoverTarget = undefined
-      selectedTarget = undefined
-      sourceTarget = undefined
-      disarmDrag()
-      overlay?.remove()
-      overlay = undefined
+      clearEditSelection()
       postRecordingState(recording, 'recording')
     } else if (recording?.id === control.recordingId) {
       const stoppedRecording = recording
@@ -802,7 +781,6 @@ export function mountStudioPreviewBridge(
       recording = undefined
       postRecordingState(stoppedRecording, 'stopped')
     }
-    return true
   }
   const onRecordedInput = (event: StudioPreviewPointerEvent) => {
     if (event.taoStudioJourney === true || recording === undefined) {
@@ -859,18 +837,11 @@ export function mountStudioPreviewBridge(
       return
     }
     overlay ??= createOverlay(host)
-    const rect = target.element.getBoundingClientRect()
     overlay.setAttribute(
       'data-tao-studio-overlay',
       sourceTarget !== undefined ? 'source' : hoverTarget !== undefined ? 'hover' : 'selection',
     )
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: `${Math.max(0, rect.height)}px`,
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${Math.max(0, rect.width)}px`,
-    })
+    positionOverlay(overlay, target.element.getBoundingClientRect())
   }
   const onResize = () => {
     redrawOverlay()
@@ -889,24 +860,17 @@ export function mountStudioPreviewBridge(
     // Cancellation is synchronous and happens only after the parent has advertised that Design
     // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
     event.preventDefault?.()
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
+    postToStudio(host, config, 'preview-canvas-gesture', {
       clientX: event.clientX,
       clientY: event.clientY,
       deltaX: event.deltaX,
       deltaY: event.deltaY,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-canvas-gesture',
       zoom: event.ctrlKey === true || event.metaKey === true,
-    }, config.parentOrigin)
+    })
   }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -925,10 +889,7 @@ export function mountStudioPreviewBridge(
     postSourceMessage(host, config, 'preview-select-source', target.identity)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -944,15 +905,7 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseMove = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (
-      interactionMode === 'run'
-      || drag === undefined
-      || event.clientX === undefined
-      || event.clientY === undefined
-    ) {
+    if (!editingGesture(event) || drag === undefined || event.clientX === undefined || event.clientY === undefined) {
       return
     }
     blockAppPointerEvent(event)
@@ -975,10 +928,7 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseUp = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -993,14 +943,11 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseOver = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     const target = renderTargetFromEvent(event)
-    const key = target === undefined ? undefined : renderIdentityKey(target.identity)
+    const key = target === undefined ? undefined : renderId(target.identity)
     hoverTarget = target
     redrawOverlay()
     if (target !== undefined && key !== postedHoverKey) {
@@ -1016,94 +963,104 @@ export function mountStudioPreviewBridge(
     postedHoverKey = undefined
     redrawOverlay()
   }
-  const onMessage = (event: StudioPreviewMessageEvent) => {
-    if (startOrStopRecording(event)) {
-      return
-    }
-    const requestedCanvasOwnership = canvasGestureOwnershipFromMessage(event, config, host.parent)
-    if (requestedCanvasOwnership !== undefined) {
-      canvasGesturesOwned = requestedCanvasOwnership
-      return
-    }
-    const requestedMode = interactionModeFromMessage(event, config, host.parent)
-    if (requestedMode !== undefined) {
-      interactionMode = requestedMode
-      if (interactionMode === 'run') {
-        hoverTarget = undefined
-        selectedTarget = undefined
-        sourceTarget = undefined
-        disarmDrag()
-        overlay?.remove()
-        overlay = undefined
+  /** Every frame this preview acts on, by the `type` the Studio wire addresses it with. */
+  const inboundMessages: Readonly<Record<string, (message: Record<string, unknown>) => void>> = {
+    'capture-fixture': message => {
+      const requestId = studioRequestId(message)
+      if (requestId === undefined || captureFixture === undefined) {
+        return
       }
-      return
-    }
-    if (applyDebugCommand(event, config, host.parent)) {
-      return
-    }
-    const captureRequestId = captureRequestFromMessage(event, config, host.parent)
-    if (captureRequestId !== undefined && captureFixture !== undefined) {
       void captureFixture().then(
-        fixture => postCapturedFixture(host, config, captureRequestId, fixture),
-        error => postCaptureFailure(host, config, captureRequestId, error),
+        fixture => postToStudio(host, config, 'preview-fixture-captured', { fixture, requestId }),
+        error => postCaptureFailure(host, config, 'preview-fixture-capture-failed', requestId, error),
       )
-      return
-    }
-    const runtimeCaptureRequestId = runtimeCaptureRequestFromMessage(event, config, host.parent)
-    if (runtimeCaptureRequestId !== undefined) {
+    },
+    'capture-runtime': message => {
+      const requestId = studioRequestId(message)
+      if (requestId === undefined) {
+        return
+      }
       void captureRuntime().then(
-        capture => postRuntimeCapture(host, config, runtimeCaptureRequestId, capture),
-        error => postRuntimeCaptureFailure(host, config, runtimeCaptureRequestId, error),
+        capture => postToStudio(host, config, 'preview-runtime-captured', { capture, requestId }),
+        error => postCaptureFailure(host, config, 'preview-runtime-capture-failed', requestId, error),
       )
-      return
+    },
+    'debug-command': applyDebugCommand,
+    'highlight-source': message => {
+      const selection = highlightSelection(message, config)
+      if (selection === undefined) {
+        return
+      }
+      sourceTarget = selection.range === undefined
+        ? undefined
+        : sourceHighlightTarget(host, selection.path, selection.range)
+      redrawOverlay()
+    },
+    'set-canvas-gestures': message => {
+      if (typeof message['owned'] === 'boolean') {
+        canvasGesturesOwned = message['owned']
+      }
+    },
+    'set-interaction-mode': message => {
+      const mode = message['mode']
+      if (mode !== 'edit' && mode !== 'run') {
+        return
+      }
+      interactionMode = mode
+      if (mode === 'run') {
+        clearEditSelection()
+      }
+    },
+    'set-journey-recording': startOrStopRecording,
+  }
+  const onMessage = (event: StudioPreviewMessageEvent) => {
+    // A frame this preview has no handler for is Studio talking to someone else, not an error, so
+    // the table is read for an own key rather than dispatched exhaustively.
+    const message = studioMessage(event, config, host.parent)
+    const type = message?.['type']
+    if (message !== undefined && typeof type === 'string' && Object.hasOwn(inboundMessages, type)) {
+      inboundMessages[type]!(message)
     }
-    const selection = highlightSelectionFromMessage(event, config, host.parent)
-    if (selection === undefined) {
-      return
-    }
-    sourceTarget = selection.range === undefined
-      ? undefined
-      : sourceHighlightTarget(host, selection.path, selection.range)
-    redrawOverlay()
   }
 
-  host.document.addEventListener('click', onClick, true)
-  host.document.addEventListener('click', onRecordedClick, true)
-  host.document.addEventListener('input', onRecordedInput, true)
-  host.document.addEventListener('blur', onRecordedBlur, true)
-  host.document.addEventListener('keydown', onRecordedKeyDown, true)
-  host.document.addEventListener('mousedown', onMouseDown, true)
-  host.document.addEventListener('mouseleave', disarmDrag)
-  host.document.addEventListener('mousemove', onMouseMove, true)
-  host.document.addEventListener('mouseover', onMouseOver)
-  host.document.addEventListener('mouseout', onMouseOut)
-  host.document.addEventListener('mouseup', onMouseUp, true)
-  host.document.addEventListener('wheel', onCanvasWheel, true)
-  host.window.addEventListener('blur', disarmDrag)
-  host.window.addEventListener('message', onMessage)
-  host.window.addEventListener('resize', onResize)
-  host.window.addEventListener('scroll', redrawOverlay)
-  postAppliedRevision(host, config)
+  // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
+  // was added, which two hand-written sequences could not promise.
+  const documentListeners: readonly Parameters<StudioPreviewHost['document']['addEventListener']>[] = [
+    ['click', onClick, true],
+    ['click', onRecordedClick, true],
+    ['input', onRecordedInput, true],
+    ['blur', onRecordedBlur, true],
+    ['keydown', onRecordedKeyDown, true],
+    ['mousedown', onMouseDown, true],
+    ['mouseleave', disarmDrag],
+    ['mousemove', onMouseMove, true],
+    ['mouseover', onMouseOver],
+    ['mouseout', onMouseOut],
+    ['mouseup', onMouseUp, true],
+    ['wheel', onCanvasWheel, true],
+  ]
+  const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
+    ['blur', disarmDrag],
+    ['message', onMessage],
+    ['resize', onResize],
+    ['scroll', redrawOverlay],
+  ]
+  for (const [type, listener, capture] of documentListeners) {
+    host.document.addEventListener(type, listener, capture)
+  }
+  for (const [type, listener] of windowListeners) {
+    host.window.addEventListener(type, listener)
+  }
+  postToStudio(host, config, 'preview-applied', {
+    appliedRevision: config.compileRevision,
+    compileRevision: config.compileRevision,
+  })
   scheduleLayoutMeasurements()
-  const stopFailures = onRuntimeFailure(capture => {
-    host.parent.postMessage({
-      capture,
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-runtime-failure',
-    }, config.parentOrigin)
-  })
+  const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
   const restoreConsole = forwardPreviewConsole(host, config)
-  const stopDebug = Debug.onEvent(event => {
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      event: captureArguments(event),
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-debug',
-    }, config.parentOrigin)
-  })
+  const stopDebug = Debug.onEvent(event =>
+    postToStudio(host, config, 'preview-debug', { event: captureArguments(event) })
+  )
 
   return () => {
     stopped = true
@@ -1120,22 +1077,12 @@ export function mountStudioPreviewBridge(
     restoreConsole()
     stopFailures()
     stopDebug()
-    host.document.removeEventListener('click', onClick, true)
-    host.document.removeEventListener('click', onRecordedClick, true)
-    host.document.removeEventListener('input', onRecordedInput, true)
-    host.document.removeEventListener('blur', onRecordedBlur, true)
-    host.document.removeEventListener('keydown', onRecordedKeyDown, true)
-    host.document.removeEventListener('mousedown', onMouseDown, true)
-    host.document.removeEventListener('mouseleave', disarmDrag)
-    host.document.removeEventListener('mousemove', onMouseMove, true)
-    host.document.removeEventListener('mouseover', onMouseOver)
-    host.document.removeEventListener('mouseout', onMouseOut)
-    host.document.removeEventListener('mouseup', onMouseUp, true)
-    host.document.removeEventListener('wheel', onCanvasWheel, true)
-    host.window.removeEventListener('blur', disarmDrag)
-    host.window.removeEventListener('message', onMessage)
-    host.window.removeEventListener('resize', onResize)
-    host.window.removeEventListener('scroll', redrawOverlay)
+    for (const [type, listener, capture] of documentListeners) {
+      host.document.removeEventListener(type, listener, capture)
+    }
+    for (const [type, listener] of windowListeners) {
+      host.window.removeEventListener(type, listener)
+    }
     overlay?.remove()
     disarmDrag()
   }
@@ -1191,15 +1138,11 @@ function forwardPreviewConsole(host: StudioPreviewHost, config: StudioPreviewCon
     const forwarded = (...arguments_: unknown[]): void => {
       original(...arguments_)
       const captured = captureArguments(arguments_)
-      host.parent.postMessage({
+      postToStudio(host, config, 'preview-console', {
         arguments: Array.isArray(captured) ? captured : [captured],
-        channel: studioProtocolChannel,
-        identity: previewIdentity(config),
         level,
-        protocolVersion: studioProtocolVersion,
         timestamp: Date.now(),
-        type: 'preview-console',
-      }, config.parentOrigin)
+      })
     }
     host.console[level] = forwarded
     restorers.push(() => {
@@ -1222,27 +1165,7 @@ function blockAppPointerEvent(event: StudioPreviewPointerEvent): void {
 }
 
 /** applyDebugCommand runs one Studio debugger command against this preview's controller. */
-function applyDebugCommand(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): boolean {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return false
-  }
-  const message = event.data
-  const identity = message['identity']
-  if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'debug-command'
-    || !isObject(identity)
-    || identity['appName'] !== config.appName
-    || identity['project'] !== config.project
-    || identity['previewInstanceId'] !== config.previewInstanceId
-  ) {
-    return false
-  }
+function applyDebugCommand(message: Record<string, unknown>): void {
   const steps = Array.isArray(message['steps']) ? message['steps'] : []
   const actions = Array.isArray(message['actions']) ? message['actions'] : []
   const commands: Record<string, () => void> = {
@@ -1257,12 +1180,10 @@ function applyDebugCommand(
     'step-out': () => Debug.Step('out'),
     'step-over': () => Debug.Step('over'),
   }
-  const run = commands[String(message['command'])]
-  if (run === undefined) {
-    return false
+  const command = String(message['command'])
+  if (Object.hasOwn(commands, command)) {
+    commands[command]!()
   }
-  run()
-  return true
 }
 
 function isDebugStepValue(value: unknown): value is TaoDebugStep {
@@ -1275,80 +1196,19 @@ function isDebugStepValue(value: unknown): value is TaoDebugStep {
     || (typeof declaration === 'string' && typeof statement === 'string')
 }
 
-function canvasGestureOwnershipFromMessage(
-  event: StudioPreviewMessageEvent,
+function recordingControl(
+  message: Record<string, unknown>,
   config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): boolean | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'set-canvas-gestures'
-      && typeof message['owned'] === 'boolean'
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['owned']
-    : undefined
-}
-
-function interactionModeFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): 'edit' | 'run' | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  const mode = message['mode']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'set-interaction-mode'
-      && (mode === 'edit' || mode === 'run')
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? mode
-    : undefined
-}
-
-function recordingControlFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
 ): Readonly<{ active: boolean; captureSensitiveText: boolean; recordingId: string }> | undefined {
-  if (
-    event.origin !== config.parentOrigin
-    || event.source !== parent
-    || config.cellId === undefined
-    || config.cellRevision === undefined
-    || config.manifestRevision === undefined
-    || !isObject(event.data)
-  ) {
+  if (config.cellId === undefined || config.cellRevision === undefined || config.manifestRevision === undefined) {
     return undefined
   }
-  const message = event.data
   const identity = message['identity']
   if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'set-journey-recording'
-    || typeof message['active'] !== 'boolean'
-    || typeof message['recordingId'] !== 'string'
-    || message['recordingId'].trim() === ''
+    typeof message['active'] !== 'boolean'
+    || !nonEmptyValue(message['recordingId'])
     || (message['captureSensitiveText'] !== undefined && typeof message['captureSensitiveText'] !== 'boolean')
     || !isObject(identity)
-    || identity['appName'] !== config.appName
-    || identity['project'] !== config.project
-    || identity['previewInstanceId'] !== config.previewInstanceId
     || identity['cellId'] !== config.cellId
     || identity['cellRevision'] !== config.cellRevision
     || identity['compileRevision'] !== config.compileRevision
@@ -1364,12 +1224,7 @@ function recordingControlFromMessage(
 }
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
-  const target = event.target
-  return isObject(target)
-      && typeof target['getAttribute'] === 'function'
-      && typeof target['getBoundingClientRect'] === 'function'
-    ? target as unknown as StudioPreviewElement
-    : undefined
+  return isStudioElement(event.target) ? event.target : undefined
 }
 
 function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {
@@ -1401,23 +1256,10 @@ function recordedJourneyTarget(
 ): StudioRecordedJourneyTarget | undefined {
   let element: StudioPreviewElement | null | undefined = startingElement
   while (element !== undefined && element !== null) {
-    const candidates: StudioRecordedJourneyTarget[] = []
-    const tag = element.getAttribute('data-testid')?.trim()
-    if (tag !== undefined && /^[A-Za-z0-9_]+$/.test(tag)) {
-      candidates.push({ selector: 'tag', target: tag })
-    }
-    const label = element.getAttribute('aria-label')?.trim()
-    if (label !== undefined && label !== '') {
-      candidates.push({ selector: 'label', target: label })
-    }
-    const placeholder = element.getAttribute('placeholder')?.trim()
-    if (placeholder !== undefined && placeholder !== '') {
-      candidates.push({ selector: 'placeholder', target: placeholder })
-    }
-    const text = element.textContent?.trim()
-    if (text !== undefined && text !== '') {
-      candidates.push({ selector: 'text', target: text })
-    }
+    const source = element
+    const candidates = (['tag', 'label', 'placeholder', 'text'] as const)
+      .map(selector => ({ selector, target: recordedSelectorValue(source, selector) }))
+      .filter((candidate): candidate is StudioRecordedJourneyTarget => candidate.target !== undefined)
     const unique = candidates.find(candidate =>
       findJourneyTargets(host, candidate.selector, candidate.target).length === 1
     )
@@ -1427,6 +1269,18 @@ function recordedJourneyTarget(
     element = element.parentElement
   }
   return undefined
+}
+
+/** A recorded selector has to be spellable in a Tao journey later: a tag is an identifier, and an
+ * empty value identifies nothing. */
+function recordedSelectorValue(element: StudioPreviewElement, selector: TaoJourneySelector): string | undefined {
+  const value = selector === 'text'
+    ? element.textContent?.trim()
+    : element.getAttribute(journeySelectorAttributes[selector])?.trim()
+  if (selector === 'tag') {
+    return value !== undefined && /^[A-Za-z0-9_]+$/.test(value) ? value : undefined
+  }
+  return value === undefined || value === '' ? undefined : value
 }
 
 function isSensitiveJourneyInput(element: StudioPreviewElement): boolean {
@@ -1450,81 +1304,24 @@ function unresolvedRecordedStep(action: 'enter' | 'press' | 'submit'): Readonly<
   }
 }
 
-function captureRequestFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): string | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'capture-fixture'
-      && nonEmptyValue(message['requestId'])
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['requestId']
-    : undefined
+/** Both capture requests are one addressed frame carrying one request id. */
+function studioRequestId(message: Record<string, unknown>): string | undefined {
+  return nonEmptyValue(message['requestId']) ? message['requestId'] : undefined
 }
 
-function runtimeCaptureRequestFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): string | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'capture-runtime'
-      && nonEmptyValue(message['requestId'])
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['requestId']
-    : undefined
-}
-
-function postRuntimeCapture(
+/** A runtime capture and a fixture capture fail the same way; only the type names which one. */
+function postCaptureFailure(
   host: StudioPreviewHost,
   config: StudioPreviewConfig,
-  requestId: string,
-  capture: TaoRuntimeCaptureArtifact,
-): void {
-  host.parent.postMessage({
-    capture,
-    channel: studioProtocolChannel,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-runtime-captured',
-  }, config.parentOrigin)
-}
-
-function postRuntimeCaptureFailure(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
+  type: 'preview-fixture-capture-failed' | 'preview-runtime-capture-failed',
   requestId: string,
   error: unknown,
 ): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
+  postToStudio(host, config, type, {
     error: error instanceof Error ? error.message : String(error),
     errorName: runtimeCaptureErrorName(error),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
     requestId,
-    type: 'preview-runtime-capture-failed',
-  }, config.parentOrigin)
+  })
 }
 
 function runtimeCaptureErrorName(
@@ -1537,39 +1334,6 @@ function runtimeCaptureErrorName(
     return 'UserInputError'
   }
   return error instanceof UnexpectedBehaviorError ? error.name : 'UnexpectedBehaviorError'
-}
-
-function postCapturedFixture(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  fixture: TaoStudioFixturePlan,
-): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    fixture,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-fixture-captured',
-  }, config.parentOrigin)
-}
-
-function postCaptureFailure(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  error: unknown,
-): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    error: error instanceof Error ? error.message : String(error),
-    errorName: runtimeCaptureErrorName(error),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-fixture-capture-failed',
-  }, config.parentOrigin)
 }
 
 function browserPreviewHost(): StudioPreviewHost | undefined {
@@ -1616,15 +1380,18 @@ function exactWebOrigin(value: string): boolean {
   }
 }
 
-function postAppliedRevision(host: StudioPreviewHost, config: StudioPreviewConfig): void {
-  host.parent.postMessage({
-    appliedRevision: config.compileRevision,
-    channel: studioProtocolChannel,
-    compileRevision: config.compileRevision,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    type: 'preview-applied',
-  }, config.parentOrigin)
+/** An occurrence-bearing frame names the render it is about on the preview identity itself. */
+function occurrenceIdentity(
+  config: StudioPreviewConfig,
+  occurrence: TaoStudioIdentity,
+  sourceVersion: string,
+): Record<string, unknown> {
+  return {
+    ...previewIdentity(config),
+    occurrence: sourceActionOccurrence(occurrence),
+    path: occurrence.sourcePath,
+    sourceVersion,
+  }
 }
 
 function postSourceMessage(
@@ -1637,18 +1404,10 @@ function postSourceMessage(
   if (sourceVersion === undefined) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    identity: {
-      ...previewIdentity(config),
-      occurrence: sourceActionOccurrence(occurrence),
-      path: occurrence.sourcePath,
-      sourceVersion,
-    },
-    protocolVersion: studioProtocolVersion,
+  postToStudio(host, config, type, {
+    identity: occurrenceIdentity(config, occurrence, sourceVersion),
     range: { end: occurrence.end, start: occurrence.start },
-    type,
-  }, config.parentOrigin)
+  })
 }
 
 function postMoveRenderAction(
@@ -1667,26 +1426,18 @@ function postMoveRenderAction(
     return
   }
   const requestId = `preview-${config.previewInstanceId}-${nextStudioSourceActionId++}`
-  host.parent.postMessage({
+  postToStudio(host, config, 'source-action', {
     action: {
       ...(gap.after === undefined ? {} : { afterId: renderId(gap.after.identity) }),
       ...(gap.before === undefined ? {} : { beforeId: renderId(gap.before.identity) }),
       draggedId: renderId(dragged),
       kind: 'move-render',
     },
-    channel: studioProtocolChannel,
     checkpoint: { id: requestId, phase: 'single' },
-    identity: {
-      ...previewIdentity(config),
-      occurrence: sourceActionOccurrence(dragged),
-      path: dragged.sourcePath,
-      sourceVersion,
-    },
-    protocolVersion: studioProtocolVersion,
+    identity: occurrenceIdentity(config, dragged, sourceVersion),
     requestId,
     sourceActionVersion: studioSourceActionVersion,
-    type: 'source-action',
-  }, config.parentOrigin)
+  })
 }
 
 function sourceActionOccurrence(identity: TaoStudioIdentity): {
@@ -1697,6 +1448,55 @@ function sourceActionOccurrence(identity: TaoStudioIdentity): {
     nodeKind: identity.kind,
     ...(identity.ownerName ? { renderOwner: identity.ownerName } : {}),
   }
+}
+
+/**
+ * postToStudio addresses one frame to the Studio window this preview belongs to. Every outgoing
+ * message spelled the channel, the protocol version, the preview identity and the parent origin
+ * out in full; each call site now names only its own `type` and the fields that type carries. A
+ * payload may override `identity` when it attaches an occurrence to it.
+ */
+function postToStudio(
+  host: StudioPreviewHost,
+  config: StudioPreviewConfig,
+  type: string,
+  payload: Readonly<Record<string, unknown>> = {},
+): void {
+  host.parent.postMessage({
+    channel: studioProtocolChannel,
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    ...payload,
+    type,
+  }, config.parentOrigin)
+}
+
+/**
+ * studioMessage answers the one question every inbound frame raises first: did the Studio window
+ * this preview belongs to send it, on this protocol, naming this preview? The handler table is then
+ * left with only the fields its own message carries.
+ */
+function studioMessage(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): Record<string, unknown> | undefined {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  if (
+    message['channel'] !== studioProtocolChannel
+    || message['protocolVersion'] !== studioProtocolVersion
+    || !isObject(identity)
+    || identity['appName'] !== config.appName
+    || identity['project'] !== config.project
+    || identity['previewInstanceId'] !== config.previewInstanceId
+  ) {
+    return undefined
+  }
+  return message
 }
 
 function previewIdentity(config: StudioPreviewConfig): {
@@ -1723,29 +1523,16 @@ function previewIdentity(config: StudioPreviewConfig): {
   }
 }
 
-function highlightSelectionFromMessage(
-  event: StudioPreviewMessageEvent,
+function highlightSelection(
+  message: Record<string, unknown>,
   config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
 ): { path: string; range: StudioSourceRange | undefined } | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'highlight-source'
-    || !isObject(message['identity'])
-  ) {
-    return undefined
-  }
   const identity = message['identity']
+  if (!isObject(identity)) {
+    return undefined
+  }
   if (
-    identity['appName'] !== config.appName
-    || identity['previewInstanceId'] !== config.previewInstanceId
-    || identity['project'] !== config.project
-    || !nonEmptyValue(identity['path'])
+    !nonEmptyValue(identity['path'])
     || !nonEmptyValue(identity['sourceVersion'])
     || sourceVersionFor(config, identity['path']) !== identity['sourceVersion']
   ) {
@@ -1830,15 +1617,21 @@ function sourceVersionFor(config: StudioPreviewConfig, sourcePath: string): stri
   return Object.entries(config.sourceVersions).find(([path]) => normalizePath(path) === normalized)?.[1]
 }
 
+/** Every preview overlay floats over the app without taking its pointer events. */
+const overlayBaseStyle = {
+  boxSizing: 'border-box',
+  pointerEvents: 'none',
+  position: 'fixed',
+  zIndex: '2147483647',
+} as const
+
+/** The drop indicator's thickness, and the smallest extent it is drawn along its other axis. */
+const dropIndicatorThickness = 3
+const dropIndicatorMinimumLength = { across: 16, along: 24 } as const
+
 function createOverlay(host: StudioPreviewHost): StudioPreviewOverlay {
   const overlay = host.document.createElement('div')
-  Object.assign(overlay.style, {
-    border: '2px solid #2563eb',
-    boxSizing: 'border-box',
-    pointerEvents: 'none',
-    position: 'fixed',
-    zIndex: '2147483647',
-  })
+  Object.assign(overlay.style, { ...overlayBaseStyle, border: '2px solid #2563eb' })
   host.document.body?.appendChild(overlay)
   return overlay
 }
@@ -1847,74 +1640,68 @@ function createDragOverlay(host: StudioPreviewHost, kind: 'drag' | 'drop'): Stud
   const overlay = host.document.createElement('div')
   overlay.setAttribute('data-tao-studio-drag-overlay', kind)
   Object.assign(overlay.style, {
+    ...overlayBaseStyle,
     background: kind === 'drag' ? 'rgba(37, 99, 235, 0.12)' : '#f3c969',
     border: kind === 'drag' ? '2px dashed #2563eb' : 'none',
-    boxSizing: 'border-box',
     opacity: kind === 'drag' ? '0.75' : '1',
-    pointerEvents: 'none',
-    position: 'fixed',
-    zIndex: '2147483647',
   })
   host.document.body?.appendChild(overlay)
   return overlay
 }
 
-function positionOverlay(overlay: StudioPreviewOverlay, rect: StudioPreviewRect): void {
+/** showOverlayBox is the one way an overlay is placed: revealing it and sizing it are one act. */
+function showOverlayBox(
+  overlay: StudioPreviewOverlay,
+  box: Readonly<{ height: number; left: number; top: number; width: number }>,
+): void {
   Object.assign(overlay.style, {
     display: 'block',
-    height: `${Math.max(0, rect.height)}px`,
-    left: `${rect.left}px`,
-    top: `${rect.top}px`,
-    width: `${Math.max(0, rect.width)}px`,
+    height: `${box.height}px`,
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
   })
 }
 
+function positionOverlay(overlay: StudioPreviewOverlay, rect: StudioPreviewRect): void {
+  showOverlayBox(overlay, {
+    height: Math.max(0, rect.height),
+    left: rect.left,
+    top: rect.top,
+    width: Math.max(0, rect.width),
+  })
+}
+
+/**
+ * The drop indicator is one thin line drawn across the flow: along the flow it sits between the
+ * anchors it is offered between — or at the open end when there is only one — and across the flow
+ * it spans the longer of them. Both axes are the same rule with `horizontal` naming which is which.
+ */
 function positionDropOverlay(overlay: StudioPreviewOverlay, gap: StudioRenderGap): void {
   const after = gap.after?.element.getBoundingClientRect()
   const before = gap.before?.element.getBoundingClientRect()
-  if (after === undefined || before === undefined) {
-    const reference = after ?? before
-    if (reference === undefined) {
-      overlay.style['display'] = 'none'
-      return
-    }
-    if (gap.horizontal) {
-      Object.assign(overlay.style, {
-        display: 'block',
-        height: `${Math.max(reference.height, 16)}px`,
-        left: `${after === undefined ? reference.left : reference.left + reference.width}px`,
-        top: `${reference.top}px`,
-        width: '3px',
-      })
-      return
-    }
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: '3px',
-      left: `${reference.left}px`,
-      top: `${after === undefined ? reference.top : reference.top + reference.height}px`,
-      width: `${Math.max(reference.width, 24)}px`,
-    })
+  const anchors = [after, before].filter((rect): rect is StudioPreviewRect => rect !== undefined)
+  const first = anchors[0]
+  if (first === undefined) {
+    overlay.style['display'] = 'none'
     return
   }
-  if (gap.horizontal) {
-    const left = after.left + after.width + (before.left - after.left - after.width) / 2
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: `${Math.max(after.height, before.height, 16)}px`,
-      left: `${left}px`,
-      top: `${Math.min(after.top, before.top)}px`,
-      width: '3px',
-    })
-    return
-  }
-  const top = after.top + after.height + (before.top - after.top - after.height) / 2
-  Object.assign(overlay.style, {
-    display: 'block',
-    height: '3px',
-    left: `${Math.min(after.left, before.left)}px`,
-    top: `${top}px`,
-    width: `${Math.max(after.width, before.width, 24)}px`,
+  const { horizontal } = gap
+  const along = after === undefined
+    ? renderStart(first, horizontal)
+    : before === undefined
+    ? renderEnd(after, horizontal)
+    : (renderEnd(after, horizontal) + renderStart(before, horizontal)) / 2
+  const acrossStart = Math.min(...anchors.map(rect => renderStart(rect, !horizontal)))
+  const acrossLength = Math.max(
+    ...anchors.map(rect => horizontal ? rect.height : rect.width),
+    horizontal ? dropIndicatorMinimumLength.across : dropIndicatorMinimumLength.along,
+  )
+  showOverlayBox(overlay, {
+    height: horizontal ? acrossLength : dropIndicatorThickness,
+    left: horizontal ? along : acrossStart,
+    top: horizontal ? acrossStart : along,
+    width: horizontal ? dropIndicatorThickness : acrossLength,
   })
 }
 
@@ -1928,21 +1715,19 @@ function bestRenderGap(
   for (const target of allRenderTargets(host)) {
     const parent = target.element.parentElement?.closest?.(studioRenderSelector)
     const parentTarget = renderTargetFromElement(parent)
-    const key = parentTarget === undefined ? 'root' : renderIdentityKey(parentTarget.identity)
+    const key = parentTarget === undefined ? 'root' : renderId(parentTarget.identity)
     groups.set(key, [...(groups.get(key) ?? []), target])
   }
+  /** A render is a drop anchor only if it is not the dragged render itself. */
+  const isOtherRender = (target: StudioRenderTarget): boolean =>
+    renderId(target.identity) !== renderId(dragged.identity)
   let best: StudioRenderGap | undefined
   for (const targets of groups.values()) {
-    if (
-      targets.some(target =>
-        renderIdentityKey(target.identity) !== renderIdentityKey(dragged.identity)
-        && dragged.element.contains?.(target.element)
-      )
-    ) {
+    if (targets.some(target => isOtherRender(target) && dragged.element.contains?.(target.element))) {
       continue
     }
     const candidates = targets.filter(target =>
-      renderIdentityKey(target.identity) !== renderIdentityKey(dragged.identity)
+      isOtherRender(target)
       && normalizePath(target.identity.sourcePath) === normalizePath(dragged.identity.sourcePath)
       && target.identity.ownerName === dragged.identity.ownerName
     )
@@ -1956,28 +1741,26 @@ function bestRenderGap(
         renderCenter(left.element.getBoundingClientRect(), horizontal)
         - renderCenter(right.element.getBoundingClientRect(), horizontal),
     )
-    const first = sorted[0]!
-    best = nearerGap(best, {
-      before: first,
-      distance: Math.abs((horizontal ? x : y) - renderStart(first.element.getBoundingClientRect(), horizontal)),
-      horizontal,
-    })
-    for (let index = 0; index < sorted.length - 1; index += 1) {
-      const after = sorted[index]!
-      const before = sorted[index + 1]!
-      const midpoint = (
-        renderCenter(after.element.getBoundingClientRect(), horizontal)
-        + renderCenter(before.element.getBoundingClientRect(), horizontal)
-      ) / 2
-      const distance = Math.abs((horizontal ? x : y) - midpoint)
-      best = nearerGap(best, { after, before, distance, horizontal })
+    // One gap for every boundary between the siblings, including the two open ends: the ends are
+    // measured to the edge they open onto, the inner ones to the midpoint between two centres.
+    for (let index = 0; index <= sorted.length; index += 1) {
+      const after = sorted[index - 1]
+      const before = sorted[index]
+      const edge = after === undefined
+        ? renderStart(before!.element.getBoundingClientRect(), horizontal)
+        : before === undefined
+        ? renderEnd(after.element.getBoundingClientRect(), horizontal)
+        : (
+          renderCenter(after.element.getBoundingClientRect(), horizontal)
+          + renderCenter(before.element.getBoundingClientRect(), horizontal)
+        ) / 2
+      best = nearerGap(best, {
+        ...(after === undefined ? {} : { after }),
+        ...(before === undefined ? {} : { before }),
+        distance: Math.abs((horizontal ? x : y) - edge),
+        horizontal,
+      })
     }
-    const last = sorted.at(-1)!
-    best = nearerGap(best, {
-      after: last,
-      distance: Math.abs((horizontal ? x : y) - renderEnd(last.element.getBoundingClientRect(), horizontal)),
-      horizontal,
-    })
   }
   return best
 }
@@ -2012,10 +1795,6 @@ function renderEnd(rect: StudioPreviewRect, horizontal: boolean): number {
 }
 
 function renderId(identity: TaoStudioIdentity): string {
-  return `${identity.sourcePath}:${identity.start}:${identity.end}`
-}
-
-function renderIdentityKey(identity: TaoStudioIdentity): string {
   return `${identity.sourcePath}:${identity.start}:${identity.end}`
 }
 

@@ -5,6 +5,7 @@ import { entityHandle } from './TR-data-entity'
 import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
 import { restoreEntityReference, serializeEntityReference } from './TR-data-registry'
 import { errorMessage, UnexpectedBehaviorError, UserInputError } from './TR-errors'
+import { runtimeListeners } from './TR-listeners'
 import type {
   TaoAppDeclaration,
   TaoAppDefinition,
@@ -55,7 +56,7 @@ export type NavigationRestorationDiagnostic = Readonly<{
   severity: 'warning'
 }>
 
-const diagnosticsListeners = new Set<(diagnostic: NavigationRestorationDiagnostic) => void>()
+const diagnosticsListeners = runtimeListeners<[diagnostic: NavigationRestorationDiagnostic]>()
 /**
  * controllers holds every restoration controller a generated module has declared. The compiler
  * emits an app definition once at generated-module scope, so a controller outlives every mount,
@@ -130,8 +131,7 @@ export async function beginNavigationRestorationLaunch(options: { fresh?: boolea
 export function subscribeNavigationRestorationDiagnostics(
   listener: (diagnostic: NavigationRestorationDiagnostic) => void,
 ): () => void {
-  diagnosticsListeners.add(listener)
-  return () => diagnosticsListeners.delete(listener)
+  return diagnosticsListeners.subscribe(listener)
 }
 
 /** setNavigationRestorationStorageForTests installs an isolated host store and returns a restore function. */
@@ -436,9 +436,7 @@ export class NavigationRestorationController {
       message,
       severity: 'warning',
     }
-    for (const listener of diagnosticsListeners) {
-      listener(diagnostic)
-    }
+    diagnosticsListeners.notify(diagnostic)
   }
 }
 

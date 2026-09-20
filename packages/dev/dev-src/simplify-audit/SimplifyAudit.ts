@@ -1,5 +1,6 @@
 import { CONVENTION_RULES } from '../repository-tests/repo-lint'
 import { isAuditedSource } from './AuditedSource'
+import { instructionBudget, instructionLineCount } from './InstructionBudgets'
 import { type KindChain, kindChainsIn } from './KindChains'
 
 /** AuditFile is one tracked repository file the audit reads. */
@@ -7,9 +8,6 @@ export type AuditFile = {
   path: string
   source: string
 }
-
-/** INSTRUCTION_BUDGETS are the line budgets the `simplify-repo` skill sets for instruction files. */
-const INSTRUCTION_BUDGETS = { rootAgents: 60, skill: 80 } as const
 
 const LARGE_FILE_LINES = 800
 const SWITCH_CALL_PATTERN = /\b(?:Runtime)?Switch(?:\.\w+)?(?:<[^\n()]*>)?\s*\(/g
@@ -39,10 +37,6 @@ export type SimplifyAuditReport = {
   packages: PackageAudit[]
 }
 
-function lineCount(source: string): number {
-  return source === '' ? 0 : source.trimEnd().split('\n').length
-}
-
 function matchCount(source: string, pattern: RegExp): number {
   return [...source.matchAll(pattern)].length
 }
@@ -66,7 +60,7 @@ function packageAudits(sources: readonly AuditFile[]): PackageAudit[] {
         switchCalls: 0,
       }
     const chains = kindChainsIn(file.path, file.source)
-    audit.lines += lineCount(file.source)
+    audit.lines += instructionLineCount(file.source)
     audit.switchCalls += matchCount(file.source, SWITCH_CALL_PATTERN)
     audit.nativeSwitches += matchCount(file.source, NATIVE_SWITCH_PATTERN)
     audit.compoundConditions += matchCount(file.source, COMPOUND_CONDITION_PATTERN)
@@ -113,13 +107,6 @@ function isInstructionPath(path: string): boolean {
   return path.endsWith('AGENTS.md') || (path.startsWith('agents/') && path.endsWith('.md'))
 }
 
-function instructionBudget(path: string): number | undefined {
-  if (path === 'AGENTS.md') {
-    return INSTRUCTION_BUDGETS.rootAgents
-  }
-  return path.endsWith('/SKILL.md') ? INSTRUCTION_BUDGETS.skill : undefined
-}
-
 function docsSubtrees(files: readonly AuditFile[]): SimplifyAuditReport['docs'] {
   const subtrees = new Map<string, { files: number; lines: number; subtree: string }>()
   for (const file of files.filter(candidate => candidate.path.startsWith('Docs/') && candidate.path.endsWith('.md'))) {
@@ -127,7 +114,7 @@ function docsSubtrees(files: readonly AuditFile[]): SimplifyAuditReport['docs'] 
     const subtree = segments.slice(0, segments[1] === 'Roadmap' && segments.length > 3 ? 3 : 2).join('/')
     const entry = subtrees.get(subtree) ?? { files: 0, lines: 0, subtree }
     entry.files += 1
-    entry.lines += lineCount(file.source)
+    entry.lines += instructionLineCount(file.source)
     subtrees.set(subtree, entry)
   }
   return [...subtrees.values()].sort((left, right) => right.lines - left.lines)
@@ -145,13 +132,17 @@ export function simplifyAudit(files: readonly AuditFile[]): SimplifyAuditReport 
     imports: importEdges(sources),
     instructions: files
       .filter(file => isInstructionPath(file.path))
-      .map(file => ({ budget: instructionBudget(file.path), lines: lineCount(file.source), path: file.path }))
+      .map(file => ({
+        budget: instructionBudget(file.path),
+        lines: instructionLineCount(file.source),
+        path: file.path,
+      }))
       .sort((left, right) => right.lines - left.lines),
     kindChains: sources
       .flatMap(file => kindChainsIn(file.path, file.source))
       .sort((left, right) => right.length - left.length || left.path.localeCompare(right.path)),
     largeFiles: sources
-      .map(file => ({ lines: lineCount(file.source), path: file.path }))
+      .map(file => ({ lines: instructionLineCount(file.source), path: file.path }))
       .filter(file => file.lines > LARGE_FILE_LINES)
       .sort((left, right) => right.lines - left.lines),
     packages: packageAudits(sources),

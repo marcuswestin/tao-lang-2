@@ -1,6 +1,5 @@
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
 import { Buffer } from 'node:buffer'
-import { createHash } from 'node:crypto'
 
 type CdpResponse = {
   error?: { message: string }
@@ -688,10 +687,10 @@ export class StudioCdp {
     }
     const fontFingerprint = frameFingerprints.length === 0
       ? page.fontFingerprint
-      : createHash('sha256').update(JSON.stringify([
+      : Platform.sha256Hex(JSON.stringify([
         page.fontFingerprint,
         ...frameFingerprints.sort(([left], [right]) => left.localeCompare(right)),
-      ])).digest('hex')
+      ]))
     return {
       colorGamut: page.colorGamut,
       deviceScaleFactor: page.deviceScaleFactor,
@@ -884,7 +883,7 @@ export class StudioCdp {
   }
 
   private collectConsoleEvent(params: unknown): void {
-    if (!isRecord(params)) {
+    if (!Json.isRecord(params)) {
       return
     }
     const args = Array.isArray(params['args']) ? params['args'] : []
@@ -896,11 +895,11 @@ export class StudioCdp {
   }
 
   private trackExecutionContext(params: unknown): void {
-    if (!isRecord(params) || !isRecord(params['context'])) {
+    if (!Json.isRecord(params) || !Json.isRecord(params['context'])) {
       return
     }
     const context = params['context']
-    const auxData = isRecord(context['auxData']) ? context['auxData'] : undefined
+    const auxData = Json.isRecord(context['auxData']) ? context['auxData'] : undefined
     const frameId = auxData?.['frameId']
     if (auxData?.['isDefault'] !== true || typeof frameId !== 'string' || typeof context['id'] !== 'number') {
       return
@@ -909,7 +908,7 @@ export class StudioCdp {
   }
 
   private forgetExecutionContext(params: unknown): void {
-    if (!isRecord(params) || typeof params['executionContextId'] !== 'number') {
+    if (!Json.isRecord(params) || typeof params['executionContextId'] !== 'number') {
       return
     }
     for (const [frameId, contextId] of this.frameWorlds) {
@@ -920,11 +919,11 @@ export class StudioCdp {
   }
 
   private collectExceptionEvent(params: unknown): void {
-    if (!isRecord(params) || !isRecord(params['exceptionDetails'])) {
+    if (!Json.isRecord(params) || !Json.isRecord(params['exceptionDetails'])) {
       return
     }
     const details = params['exceptionDetails']
-    const exception = isRecord(details['exception']) ? details['exception'] : undefined
+    const exception = Json.isRecord(details['exception']) ? details['exception'] : undefined
     const description = exception === undefined ? undefined : exception['description']
     const text = typeof description === 'string'
       ? description
@@ -1111,10 +1110,6 @@ function requireFiniteNumber(value: number, label: string): void {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
 function isTransientExecutionContextFailure(error: unknown): boolean {
   const message = Errors.messageOf(error)
   return message.includes('Execution context was destroyed')
@@ -1122,7 +1117,7 @@ function isTransientExecutionContextFailure(error: unknown): boolean {
 }
 
 function formatRemoteObject(value: unknown): string {
-  if (!isRecord(value)) {
+  if (!Json.isRecord(value)) {
     return String(value)
   }
   if ('value' in value) {

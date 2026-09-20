@@ -1,5 +1,6 @@
 import React from 'react'
 import { Arrays } from '../core/RuntimeCore'
+import { runtimeListeners } from '../TR-listeners'
 
 export type TaoDevModeOptions = {
   readonly enabled?: boolean
@@ -57,7 +58,7 @@ let devMode = defaultDevMode()
  * inspecting through the first — is two menus for one job.
  */
 let menuHidden = false
-const listeners = new Set<() => void>()
+const listeners = runtimeListeners()
 
 /** Dev configures Tao runtime development-only diagnostics. */
 export const Dev = {
@@ -91,7 +92,7 @@ function hideMenu(hidden: boolean): void {
     return
   }
   menuHidden = hidden
-  emit()
+  listeners.notify()
 }
 
 function isMenuHidden(): boolean {
@@ -121,16 +122,9 @@ function toggleLayoutBounds(): void {
   })
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
 function useMode(): TaoDevModeState {
   const [mode, setModeSnapshot] = React.useState(getMode)
-  React.useEffect(() => subscribe(() => setModeSnapshot(getMode())), [])
+  React.useEffect(() => listeners.subscribe(() => setModeSnapshot(getMode())), [])
   return mode
 }
 
@@ -167,13 +161,7 @@ function updateMode(nextMode: TaoDevModeState): void {
   if (!changed) {
     return
   }
-  emit()
-}
-
-function emit(): void {
-  for (const listener of listeners) {
-    listener()
-  }
+  listeners.notify()
 }
 
 function isLayoutBoundsEnabled(): boolean {

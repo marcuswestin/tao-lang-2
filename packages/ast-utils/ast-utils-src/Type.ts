@@ -109,21 +109,15 @@ export class Type {
 
   /** displayName renders a resolved Tao type to a human-facing name for diagnostics. */
   static displayName(type: TaoType): string {
+    const nominal = nominalOf(type)
+    if (nominal) {
+      return Type.definitionName(nominal)
+    }
     return Switch.kind(type, {
       unresolved: () => 'unresolved',
-      primitive: type => {
-        if (type.nominal) {
-          return Type.definitionName(type.nominal)
-        }
-        return type.primitive === 'action' ? actionDisplayName(type) : type.primitive
-      },
-      list: type =>
-        type.nominal
-          ? Type.definitionName(type.nominal)
-          : type.element
-          ? `list of ${Type.displayName(type.element)}`
-          : 'list',
-      item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
+      primitive: type => isActionType(type) ? actionDisplayName(type) : type.primitive,
+      list: type => type.element ? `list of ${Type.displayName(type.element)}` : 'list',
+      item: type => type.kind,
       entity: type => Type.dataEntityName(type.entity),
       enum: type => type.declaration.name,
       union: type => type.members.map(Type.displayName).join(' | '),
@@ -147,7 +141,7 @@ export class Type {
 
   /** ofConstructorReference resolves a typed constructor's type prefix. */
   static ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
-    return new TypeResolutionContext().ofConstructorReference(type)
+    return primitiveType(type.primitive)
   }
 
   /** ofParameter resolves a parameter declaration's accepted Tao type. */
@@ -182,9 +176,7 @@ export class Type {
     const declaration = value.type.ref
     const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
       const [member, ...remainingMembers] = value.members ?? []
-      const parameterType = member
-        ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === member)?.inlineType
-        : undefined
+      const parameterType = member ? parameterTypeDeclarationNamed(declaration, member) : undefined
       return parameterType
         ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
         : unresolvedType()
@@ -211,17 +203,13 @@ export class Type {
     value: AST.InferredConfigurationConstructor,
   ): AST.TypeDeclaration | undefined {
     const owner = value.$container
-    const name = AST.isAliasDeclaration(owner)
-      ? owner.name
-      : AST.isAppProperty(owner)
-      ? owner.name
-      : undefined
+    const name = AST.isAliasDeclaration(owner) || AST.isAppProperty(owner) ? owner.name : undefined
     return name ? visibleTypeDeclaration(value, name) : undefined
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
   static ofValue(value: AST.Expression | AST.ConfiguredValue): TaoType {
-    return AST.isConfiguredValue(value) ? Type.ofConfiguredValue(value) : Type.ofExpression(value)
+    return Type.ofExpression(value)
   }
 
   /** ofAction resolves the positional callback signature of a named Tao action. */
@@ -340,17 +328,14 @@ export class Type {
     if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
       return true
     }
-    // Both unions: every value the actual can be must be one the expected accepts. Checked before
-    // the single-sided rules below, which would otherwise ask whether the whole actual union fits
-    // one member of the expected and reject an optional against an optional.
-    if (actual.kind === 'union' && expected.kind === 'union') {
+    // Every value the actual can be must be one the expected accepts. Distributing the actual side
+    // first is what lets an optional satisfy an optional: asking instead whether the whole actual
+    // union fits one member of the expected union would reject it.
+    if (actual.kind === 'union') {
       return actual.members.every(member => Type.isAssignable(member, expected))
     }
     if (expected.kind === 'union') {
       return expected.members.some(member => Type.isAssignable(actual, member))
-    }
-    if (actual.kind === 'union') {
-      return actual.members.every(member => Type.isAssignable(member, expected))
     }
     if (!typesHaveCompatibleBase(actual, expected)) {
       return false
@@ -358,13 +343,7 @@ export class Type {
     if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected)) {
       return false
     }
-    if (isActionType(actual) && isActionType(expected) && !actionTypeIsAssignable(actual, expected)) {
-      return false
-    }
-    if (nominalOf(expected)) {
-      return actualSatisfiesExpectedNominal(actual, expected)
-    }
-    return true
+    return nominalOf(expected) ? actualSatisfiesExpectedNominal(actual, expected) : true
   }
 
   /** commonType returns a branch-safe type that every resolved input can satisfy. */
@@ -386,7 +365,7 @@ export class Type {
     // Absence unifies with any one value type, because that is what an optional already is: an
     // optional field reads as `union(declared, none)`. So a conditional whose branches are a value
     // and `none` produces the optional of that value rather than nothing at all.
-    const present = types.filter(type => !isNoneType(type))
+    const present = types.filter(type => !isPrimitiveNamed(type, 'none'))
     if (present.length === types.length || present.length === 0) {
       return undefined
     }
@@ -410,9 +389,6 @@ export class Type {
       return actual.members.every(member => Type.isCastCompatible(member, target))
     }
     if (!typesHaveCompatibleBase(actual, target)) {
-      return false
-    }
-    if (isActionType(actual) && isActionType(target) && !actionTypeIsAssignable(actual, target)) {
       return false
     }
     const actualNominal = nominalOf(actual)
@@ -476,20 +452,15 @@ export class Type {
   /** dataFieldOfMemberAccess returns the declaration reached by an entity member path. */
   static dataFieldOfMemberAccess(expression: AST.MemberAccessExpression): DataFieldDefinition | undefined {
     let current = Type.ofValueDeclaration(expression.target.ref)
-    for (const [index, member] of expression.members.entries()) {
-      if (current.kind !== 'entity') {
+    let reached: DataFieldDefinition | undefined
+    for (const member of expression.members) {
+      reached = current.kind === 'entity' ? dataFieldNamed(current.entity, member) : undefined
+      if (!reached) {
         return undefined
       }
-      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
-      if (!field) {
-        return undefined
-      }
-      if (index === expression.members.length - 1) {
-        return field
-      }
-      current = Type.dataFieldType(field)
+      current = Type.dataFieldType(reached)
     }
-    return undefined
+    return reached
   }
 
   /** queryEntity resolves the entity selected by one query declaration. */
@@ -505,11 +476,6 @@ export class Type {
   /** dataEntityName returns the durable singular name stored in provider envelopes. */
   static dataEntityName(entity: DataEntityDefinition): string {
     return entity.singularName
-  }
-
-  /** dataCollectionName returns the plural source name exposed to queries. */
-  static dataCollectionName(entity: DataEntityDefinition): string {
-    return entity.name
   }
 
   /** dataFields returns the stored and inferred field declarations of one entity. */
@@ -706,6 +672,8 @@ function slotShape(type: TaoType): ItemShape | undefined {
     : undefined
 }
 
+/** typesHaveCompatibleBase is the agreement on kind, declaration, and callback signature that both
+ * assignability and casting require before either applies its own rules. */
 function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
   const bothTypesAreResolved = !isUnresolvedType(actual) && !isUnresolvedType(expected)
   const typesShareKind = actual.kind === expected.kind
@@ -717,6 +685,9 @@ function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
   }
   if (actual.kind === 'enum' && expected.kind === 'enum') {
     return actual.declaration === expected.declaration
+  }
+  if (isActionType(actual) && isActionType(expected)) {
+    return actionTypeIsAssignable(actual, expected)
   }
   return true
 }
@@ -741,12 +712,11 @@ function commonTypeCandidateIsPreferred(candidate: TaoType, current: TaoType): b
     }
   }
 
-  const candidateIsMoreSpecific = Type.isAssignable(candidate, current)
-    && !Type.isAssignable(current, candidate)
-  const currentIsMoreSpecific = Type.isAssignable(current, candidate)
-    && !Type.isAssignable(candidate, current)
-  if (candidateIsMoreSpecific !== currentIsMoreSpecific) {
-    return candidateIsMoreSpecific
+  // One of them is the more specific exactly when assignability runs one way and not the other.
+  const currentAcceptsCandidate = Type.isAssignable(candidate, current)
+  const candidateAcceptsCurrent = Type.isAssignable(current, candidate)
+  if (currentAcceptsCandidate !== candidateAcceptsCurrent) {
+    return currentAcceptsCandidate
   }
 
   return commonTypeCandidateKey(candidate) < commonTypeCandidateKey(current)
@@ -801,20 +771,25 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
     nav: 'scene',
     scene: 'view',
   }
-  let current: string | undefined = actual.primitive
-  while (current) {
-    if (current === expected.primitive) {
-      return true
-    }
-    current = parents[current as keyof typeof parents]
+  return chainFrom(actual.primitive as string, current => parents[current as keyof typeof parents])
+    .includes(expected.primitive)
+}
+
+/** chainFrom walks a parent link from `start` upwards, stopping where the chain repeats itself. */
+function chainFrom<ValueT>(start: ValueT, parentOf: (value: ValueT) => ValueT | undefined): ValueT[] {
+  const chain: ValueT[] = []
+  for (
+    let current: ValueT | undefined = start;
+    current !== undefined && !chain.includes(current);
+    current = parentOf(current)
+  ) {
+    chain.push(current)
   }
-  return false
+  return chain
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'enum' || type.kind === 'union'
-    ? undefined
-    : type.nominal
+  return canCarryNominal(type) ? type.nominal : undefined
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -850,18 +825,57 @@ function isStructuralTypeReference(type: AST.TypeExpression): boolean {
 }
 
 function nominalsAreCastCompatible(from: AST.TypeDefinition, target: AST.TypeDefinition): boolean {
-  return nominalChainReaches(from, target) || nominalChainReaches(target, from)
+  return nominalChain(from).includes(target) || nominalChain(target).includes(from)
 }
 
 function propertyNamed(itemType: ItemShape, name: string): AST.TypeProperty | undefined {
   return itemType.properties.find(property => property.name === name)
 }
 
+function dataFieldNamed(entity: DataEntityDefinition, name: string): DataFieldDefinition | undefined {
+  return Type.dataFields(entity).find(field => field.name === name)
+}
+
+/**
+ * memberType resolves one member read on an already-resolved type, or nothing where the type has no
+ * such member: a count, a unit reading, an entity field, or an item property.
+ */
+function memberType(current: TaoType, member: string): TaoType | undefined {
+  if (member === 'Count' && (current.kind === 'list' || isPrimitiveNamed(current, 'text'))) {
+    return primitiveType('number')
+  }
+  const family = primitiveUnitFamily(current)
+  if (family) {
+    return Type.unitMemberType(family, member)
+  }
+  if (current.kind === 'entity') {
+    if (member === 'Id') {
+      return primitiveType('text')
+    }
+    const field = dataFieldNamed(current.entity, member)
+    return field && Type.dataFieldType(field)
+  }
+  const property = isItemKind(current) && current.item ? propertyNamed(current.item, member) : undefined
+  return property && Type.ofPropertyRead(property)
+}
+
 class TypeResolutionContext {
-  private readonly seenAliases = new Set<AST.AliasDeclaration>()
-  private readonly seenFunctions = new Set<AST.FunctionDeclaration>()
-  private readonly seenStates = new Set<AST.StateDeclaration>()
-  private readonly seenTypeDefinitions = new Set<AST.TypeDefinition>()
+  /** resolving holds what this context is already resolving, so a declaration that reaches itself
+   * resolves to unresolved instead of recursing forever. */
+  private readonly resolving = new Set<AST.Node>()
+
+  /** withoutCycles resolves one declaration, yielding unresolved when it is already being resolved. */
+  private withoutCycles(declaration: AST.Node, resolve: () => TaoType): TaoType {
+    if (this.resolving.has(declaration)) {
+      return unresolvedType()
+    }
+    this.resolving.add(declaration)
+    try {
+      return resolve()
+    } finally {
+      this.resolving.delete(declaration)
+    }
+  }
 
   ofReference(type: AST.TypeReference): TaoType {
     return Switch.type(type, {
@@ -880,10 +894,6 @@ class TypeResolutionContext {
       },
       PrimitiveTypeReference: reference => primitiveType(reference.primitive),
     })
-  }
-
-  ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
-    return primitiveType(type.primitive)
   }
 
   ofParameter(parameter: AST.ParameterDeclaration): TaoType {
@@ -925,7 +935,7 @@ class TypeResolutionContext {
       NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
       StringLiteral: () => primitiveType('text'),
-      TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
+      TypedConstructor: constructor => Type.ofConstructorReference(constructor.type),
       UnaryExpression: unary => this.unaryExpressionType(unary),
       ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
     })
@@ -1050,16 +1060,10 @@ class TypeResolutionContext {
     if (declaration.returnType) {
       return this.ofTypeExpression(declaration.returnType)
     }
-    if (this.seenFunctions.has(declaration)) {
-      return unresolvedType()
-    }
-    this.seenFunctions.add(declaration)
-    try {
+    return this.withoutCycles(declaration, () => {
       const returnTypes = AST.returnStatementsOf(declaration).map(statement => this.ofExpression(statement.value))
       return Type.commonType(returnTypes) ?? unresolvedType()
-    } finally {
-      this.seenFunctions.delete(declaration)
-    }
+    })
   }
 
   private queryDeclarationType(query: QueryDefinition): TaoType {
@@ -1076,93 +1080,34 @@ class TypeResolutionContext {
     if (alias.type) {
       return this.ofReference(alias.type)
     }
-    if (this.aliasAlreadySeen(alias)) {
-      return unresolvedType()
-    }
-    this.seenAliases.add(alias)
-    try {
-      return AST.isConfiguredValue(alias.value)
+    return this.withoutCycles(alias, () =>
+      AST.isConfiguredValue(alias.value)
         ? Type.ofConfiguredValue(alias.value)
-        : this.ofExpression(alias.value)
-    } finally {
-      this.seenAliases.delete(alias)
-    }
+        : this.ofExpression(alias.value))
   }
 
   private stateDeclarationType(state: AST.StateDeclaration): TaoType {
     if (state.type) {
       return this.ofReference(state.type)
     }
-    if (this.stateAlreadySeen(state)) {
-      return unresolvedType()
-    }
-    this.seenStates.add(state)
-    try {
-      return this.ofExpression(state.value)
-    } finally {
-      this.seenStates.delete(state)
-    }
-  }
-
-  private aliasAlreadySeen(declaration: AST.AliasDeclaration): boolean {
-    return this.seenAliases.has(declaration)
-  }
-
-  private stateAlreadySeen(declaration: AST.StateDeclaration): boolean {
-    return this.seenStates.has(declaration)
+    return this.withoutCycles(state, () => this.ofExpression(state.value))
   }
 
   atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
-      if (
-        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
-        && member === 'Count'
-      ) {
-        current = primitiveType('number')
-        continue
-      }
-      const family = primitiveUnitFamily(current)
-      if (family) {
-        const memberType = Type.unitMemberType(family, member)
-        if (!memberType) {
-          return unresolvedType()
-        }
-        current = memberType
-        continue
-      }
-      if (current.kind === 'entity') {
-        if (member === 'Id') {
-          current = primitiveType('text')
-          continue
-        }
-        const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
-        if (!field) {
-          return unresolvedType()
-        }
-        current = Type.dataFieldType(field)
-        continue
-      }
-      const itemType = isItemKind(current) ? current.item : undefined
-      if (!itemType) {
+      const next = memberType(current, member)
+      if (!next) {
         return unresolvedType()
       }
-      const property = propertyNamed(itemType, member)
-      if (!property) {
-        return unresolvedType()
-      }
-      current = Type.ofPropertyRead(property)
+      current = next
     }
     return current
   }
 
   ofDefinition(definition: AST.TypeDefinition): TaoType {
-    if (this.definitionAlreadySeen(definition)) {
-      return unresolvedType()
-    }
-    this.seenTypeDefinitions.add(definition)
-    try {
-      return Switch.type(definition, {
+    return this.withoutCycles(definition, () =>
+      Switch.type(definition, {
         ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
         TypeDeclaration: declaration => {
           const target = declaration.aliasTarget?.member.ref
@@ -1174,10 +1119,7 @@ class TypeResolutionContext {
             : unresolvedType()
         },
         TypeProperty: property => this.typePropertyType(property),
-      })
-    } finally {
-      this.seenTypeDefinitions.delete(definition)
-    }
+      }))
   }
 
   private typePropertyType(property: AST.TypeProperty): TaoType {
@@ -1195,20 +1137,15 @@ class TypeResolutionContext {
     return shorthandType ? this.ofDefinition(shorthandType) : unresolvedType()
   }
 
-  private definitionAlreadySeen(definition: AST.TypeDefinition): boolean {
-    return this.seenTypeDefinitions.has(definition)
-  }
-
   ofTypeExpression(type: AST.TypeExpression): TaoType {
+    if (AST.isTypeReference(type)) {
+      return this.ofReference(type)
+    }
     return Switch.type(type, {
-      ActionTypeReference: reference => this.ofReference(reference),
       DerivedTypeExpression: derived => this.derivedType(derived),
       CaseSetTypeExpression: caseSet => ({ kind: 'enum', declaration: caseSet.$container as AST.TypeDeclaration }),
       ItemTypeExpression: item => ({ kind: 'item', item }),
-      ListTypeReference: reference => this.ofReference(reference),
       YesNoTypeExpression: () => primitiveType('boolean'),
-      NamedTypeReference: reference => this.ofReference(reference),
-      PrimitiveTypeReference: reference => this.ofReference(reference),
       UnionTypeExpression: union => ({
         kind: 'union',
         members: union.members.map(member => this.ofReference(member)),
@@ -1240,31 +1177,18 @@ class TypeResolutionContext {
   }
 }
 
-function isNoneType(type: TaoType): boolean {
-  return type.kind === 'primitive' && type.primitive === 'none'
-}
-
+/**
+ * Three primitive names denote a shape rather than a leaf value: `action` carries its parameters,
+ * and `list` and `item` are kinds of their own. Every other name is its own primitive type.
+ */
 function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
-  return Switch(primitive, {
-    text: () => ({ kind: 'primitive', primitive: 'text' }),
-    number: () => ({ kind: 'primitive', primitive: 'number' }),
-    boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
-    time: () => ({ kind: 'primitive', primitive: 'time' }),
-    duration: () => ({ kind: 'primitive', primitive: 'duration' }),
-    action: () => actionType([]),
-    none: () => ({ kind: 'primitive', primitive: 'none' }),
-    list: () => ({ kind: 'list' }),
-    item: () => ({ kind: 'item' }),
-    shortcut: () => ({ kind: 'primitive', primitive: 'shortcut' }),
-    command: () => ({ kind: 'primitive', primitive: 'command' }),
-    design: () => ({ kind: 'primitive', primitive: 'design' }),
-    view: () => ({ kind: 'primitive', primitive: 'view' }),
-    scene: () => ({ kind: 'primitive', primitive: 'scene' }),
-    nav: () => ({ kind: 'primitive', primitive: 'nav' }),
-    datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
-    data: () => ({ kind: 'primitive', primitive: 'data' }),
-    app: () => ({ kind: 'primitive', primitive: 'app' }),
-  })
+  if (primitive === 'action') {
+    return actionType([])
+  }
+  if (primitive === 'list' || primitive === 'item') {
+    return { kind: primitive }
+  }
+  return { kind: 'primitive', primitive }
 }
 
 function actionType(parameters: readonly TaoActionParameter[]): TaoType {
@@ -1297,41 +1221,13 @@ function canCarryNominal(
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 
-function itemTypeOfDefinition(definition: AST.TypeDefinition): ItemShape | undefined {
-  return itemShape(new TypeResolutionContext().ofDefinition(definition))
-}
-
-function nominalChainReaches(
-  from: AST.TypeDefinition,
-  target: AST.TypeDefinition,
-  seen: Set<AST.TypeDefinition> = new Set(),
-): boolean {
-  if (from === target) {
-    return true
-  }
-  if (seen.has(from)) {
-    return false
-  }
-  seen.add(from)
-  const parent = parentTypeDefinition(from)
-  return parent ? nominalChainReaches(parent, target, seen) : false
-}
-
 function nominalChainsIntersect(left: AST.TypeDefinition, right: AST.TypeDefinition): boolean {
   const rightChain = new Set(nominalChain(right))
   return nominalChain(left).some(definition => rightChain.has(definition))
 }
 
-function nominalChain(
-  definition: AST.TypeDefinition,
-  seen: Set<AST.TypeDefinition> = new Set(),
-): AST.TypeDefinition[] {
-  if (seen.has(definition)) {
-    return []
-  }
-  seen.add(definition)
-  const parent = parentTypeDefinition(definition)
-  return parent ? [definition, ...nominalChain(parent, seen)] : [definition]
+function nominalChain(definition: AST.TypeDefinition): AST.TypeDefinition[] {
+  return chainFrom(definition, parentTypeDefinition)
 }
 
 function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinition | undefined {
@@ -1393,7 +1289,7 @@ function definitionAtMemberPath(
 ): AST.TypeDefinition | undefined {
   let current: AST.TypeDefinition | undefined = root
   for (const member of members) {
-    const itemType = itemTypeOfDefinition(current)
+    const itemType = itemShape(Type.ofDefinition(current))
     if (!itemType) {
       return undefined
     }

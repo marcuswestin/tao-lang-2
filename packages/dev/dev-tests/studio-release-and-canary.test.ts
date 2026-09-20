@@ -434,16 +434,11 @@ async function onlyCanaryInvocationRoot(artifactRoot: string): Promise<string> {
 }
 
 Describe('Studio native manual checks', () => {
-  Test('launches a visible non-probe workflow and records every human result separately', async () => {
+  Test('launches a visible non-probe workflow and names every check the person is to judge', async () => {
     const artifactRoot = await mkTestDir('tao-studio-manual-checks-')
     const launches: unknown[] = []
-    const prompts: string[] = []
     const output: string[] = []
     const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      askConfirm: async options => {
-        prompts.push(options.message)
-        return true
-      },
       isInteractive: () => true,
       runStudio: async options => {
         launches.push(options)
@@ -456,18 +451,20 @@ Describe('Studio native manual checks', () => {
     Expect(launches).toHaveLength(1)
     Expect(launches[0]).toMatchObject({ browser: true, native: true })
     Expect(launches[0]).not.toHaveProperty('nativeProbe')
-    Expect(prompts).toEqual(STUDIO_MANUAL_CHECKS.map(check => `Passed: ${check}`))
     Expect(output.join('\n')).toContain('Tao Studio will open for these manual checks:')
+    for (const check of STUDIO_MANUAL_CHECKS) {
+      Expect(output.join('\n')).toContain(check)
+    }
     Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      status: 'passed',
-      version: 1,
+      checks: STUDIO_MANUAL_CHECKS,
+      status: 'launched',
+      version: 2,
     })
   })
 
   Test('refuses to enter a human workflow from a non-interactive gate', async () => {
     let launches = 0
     await Expect(StudioManualChecks.run({}, {
-      askConfirm: async () => true,
       isInteractive: () => false,
       runStudio: async () => {
         launches += 1
@@ -478,19 +475,24 @@ Describe('Studio native manual checks', () => {
     Expect(launches).toBe(0)
   })
 
-  Test('fails its separate report when a person rejects a manual result', async () => {
-    const artifactRoot = await mkTestDir('tao-studio-manual-failure-')
+  // The only way out of this workflow is Ctrl-C, because the dev server outlives the last window.
+  // `StudioDev` turns that signal into exit 130, which this workflow once read as a failed launch —
+  // so completing every check by hand still ended `verify-repo` in a failure. The interrupt is the
+  // expected ending until the run can detect that ending for itself.
+  Test('ends successfully when the person interrupts the launch, recording what it was', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-manual-interrupt-')
+    const output: string[] = []
     const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      askConfirm: async options => !options.message.includes('Command-W'),
       isInteractive: () => true,
-      runStudio: async () => 0,
-      writeLine() {},
+      runStudio: async () => 130,
+      writeLine: line => output.push(line),
     })
 
-    Expect(exitCode).toBe(1)
+    Expect(exitCode).toBe(0)
+    Expect(output.join('\n')).toContain('press Ctrl-C')
     Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      checks: [{ status: 'passed' }, { status: 'failed' }, { status: 'passed' }],
-      status: 'failed',
+      launchExitCode: 130,
+      status: 'launched',
     })
   })
 })

@@ -1,5 +1,4 @@
-import { Errors, FS, Repo } from '@shared'
-import { createHash, randomUUID } from 'node:crypto'
+import { Errors, FS, Platform, Repo } from '@shared'
 import {
   StudioCdp,
   type StudioCdpRendererFingerprint,
@@ -122,7 +121,7 @@ type StudioReviewDependencies = {
 const defaultDependencies: StudioReviewDependencies = {
   launchBrowser: async artifactRoot => await StudioCdp.launchChrome({ artifactRoot }),
   now: () => new Date(),
-  randomId: randomUUID,
+  randomId: Platform.randomUUID,
   startStudio: startStudioSmokeLaunch,
 }
 
@@ -207,7 +206,7 @@ async function captureReviewCell(
   artifactRoot: string,
   expectedManifest: ReviewSurfaceManifest,
 ): Promise<StudioReviewCell> {
-  const marker = `review-${randomUUID()}`
+  const marker = `review-${Platform.randomUUID()}`
   const key = JSON.stringify(initialCell.key)
   try {
     const marked = await browser.evaluate<boolean>(`(() => {
@@ -616,7 +615,7 @@ function reviewScreenshotName(cell: Pick<ReviewSurfaceCell, 'group' | 'key' | 'l
 }
 
 function hash(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex')
+  return Platform.sha256Hex(bytes)
 }
 
 function canonicalJson(value: unknown): string {

@@ -122,6 +122,8 @@ export type WorkWait = {
 export type WorkState = {
   /** Original and confirmation results, present when a node was retried. */
   attempts?: readonly WorkAttempt[]
+  /** Presentation-only group for dashboards; scheduling and reporting still treat this node independently. */
+  dashboardGroup?: string
   elapsedMs: number
   exitCode?: number | null
   failure?: WorkFailure

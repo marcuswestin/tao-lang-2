@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { isSandboxDenial } from '../doctor/AgentCapabilities'
 import { LandingLock, LandingLockBusyError } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 
@@ -498,11 +499,7 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
     // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
     // way the wait ever reaches a person.
     onWaiting: (holder, waitedMs) => {
-      HCI.writeLine(
-        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
-          + 'no longer running, release it with `./dev land-unlock --force`.',
-      )
+      HCI.writeLine(LandingLock.describeWaiting(holder, waitedMs))
     },
     repositoryRoot,
     ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
@@ -1292,6 +1289,16 @@ async function remoteHeads(
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
   })
+  if (isSandboxDenial(result)) {
+    Errors.throwHostEnvironment(
+      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
+        + 'Retry the merge-with-main command from an unsandboxed shell.',
+      {
+        cause: new Errors.CommandExecutionError(result),
+        details: { command: result.command, stderr: result.stderr },
+      },
+    )
+  }
   assertCommandSucceeded(result)
   const refs = new Map<string, string>()
   for (const line of result.stdout.trim().split('\n').filter(Boolean)) {

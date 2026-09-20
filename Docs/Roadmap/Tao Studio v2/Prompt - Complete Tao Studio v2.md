@@ -56,7 +56,8 @@ Ro has already ruled on the following; do not reopen them, and record them for a
    - `Apps/WordFlower/README.md`
    - `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` (the landed-foundations ledger and its
      “Next integration gates”)
-   - `Docs/Roadmap/Tao Studio v1/Plan - Tao Studio v1.md` (protocol identity lineage and open items)
+   - `Docs/Archive/Plans/Plan - Tao Studio v1.md` (protocol identity lineage and open items, now
+     archived — v2 superseded its architecture)
    - `Docs/Spec/Tao Studio.md` (especially “Editing, identity, and trust” and “Current boundary”)
    - `Docs/Spec/Tao Testing.md`
    - `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md`, and `Coverage.md`
@@ -72,7 +73,7 @@ Ro has already ruled on the following; do not reopen them, and record them for a
    - `parallel-implementation` if independent workstreams genuinely warrant it
 5. Work on a named `feat/<name>` branch.
 6. Preserve unrelated and concurrent changes.
-7. Never edit `Docs/Roadmap/Archive/`.
+7. Never edit `Docs/Archive/`.
 8. Do not edit authoritative Tao Revolution decisions without Ro’s approval.
 9. Language changes must proceed through the normal vertical slice:
    - decision/specification;

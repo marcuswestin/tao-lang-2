@@ -17,6 +17,7 @@ import {
   useOutlineOccurrence,
   useOutlineParentIdentity,
 } from './TR-interaction-outline'
+import { runtimeRevisionStore } from './TR-listeners'
 import type { Evaluable } from './TR-navigation-presentables'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
@@ -74,8 +75,7 @@ export type TaoInteractionVerb = Readonly<{
 
 /** CommandCatalog owns generated declarations and occurrence-local command surfaces. */
 export class CommandCatalog {
-  #listeners = new Set<() => void>()
-  #revision = 0
+  readonly #changes = runtimeRevisionStore()
   #sequence = 0
   #surfaces = new Map<number, MountedCommandSurface>()
   #tables = new Map<string, MountedCommandTable>()
@@ -111,11 +111,8 @@ export class CommandCatalog {
     }
   }
 
-  readonly snapshot = (): number => this.#revision
-  readonly subscribe = (listener: () => void): () => void => {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
+  readonly snapshot = this.#changes.snapshot
+  readonly subscribe = this.#changes.subscribe
 
   entries(): readonly TaoCommandTableEntry[] {
     return [...this.#tables.values()].flatMap(table => table.commands)
@@ -302,10 +299,7 @@ export class CommandCatalog {
   }
 
   private changed(): void {
-    this.#revision += 1
-    for (const listener of [...this.#listeners]) {
-      listener()
-    }
+    this.#changes.changed()
   }
 
   private scopedTables(

@@ -1,6 +1,8 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { AgentConfigFreshness } from '../agent-config/AgentConfigFreshness'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
+import { instructionBudget, instructionLineCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 
@@ -278,9 +280,7 @@ export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): stri
  */
 
 /** Studio kind dispatches that predate the shared `Switch` helper; convert them to close this list. */
-const NATIVE_SWITCH_ALLOWLIST = [
-  'packages/studio/studio-src/StudioProductHostProtocol.ts',
-]
+const NATIVE_SWITCH_ALLOWLIST: readonly string[] = []
 
 /**
  * `Test-Bun.ts` is the sanctioned home for `bun:test`. The two runtime tests close with the shared
@@ -323,6 +323,7 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
 const RAW_THROW_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts',
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
   'packages/studio/studio-src/StudioWelcome.ts',
@@ -358,39 +359,38 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  */
 const RAW_ERROR_ALLOWLIST = [
   // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts:232',
-  'packages/dev/dev-src/studio/StudioCdp.ts:283',
-  'packages/dev/dev-src/studio/StudioCdp.ts:293',
-  'packages/dev/dev-src/studio/StudioCdp.ts:330',
-  'packages/dev/dev-src/studio/StudioCdp.ts:341',
-  'packages/dev/dev-src/studio/StudioCdp.ts:373',
-  'packages/dev/dev-src/studio/StudioCdp.ts:533',
-  'packages/dev/dev-src/studio/StudioCdp.ts:561',
-  'packages/dev/dev-src/studio/StudioCdp.ts:730',
-  'packages/dev/dev-src/studio/StudioCdp.ts:880',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:114',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:408',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:556',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:575',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:688',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:690',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:706',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:717',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:734',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:754',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:788',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:803',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:814',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:817',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:820',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:821',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:828',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:966',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:988',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:995',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:1001',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:1022',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:1025',
+  'packages/dev/dev-src/studio/StudioCdp.ts:231',
+  'packages/dev/dev-src/studio/StudioCdp.ts:282',
+  'packages/dev/dev-src/studio/StudioCdp.ts:292',
+  'packages/dev/dev-src/studio/StudioCdp.ts:329',
+  'packages/dev/dev-src/studio/StudioCdp.ts:340',
+  'packages/dev/dev-src/studio/StudioCdp.ts:372',
+  'packages/dev/dev-src/studio/StudioCdp.ts:532',
+  'packages/dev/dev-src/studio/StudioCdp.ts:560',
+  'packages/dev/dev-src/studio/StudioCdp.ts:729',
+  'packages/dev/dev-src/studio/StudioCdp.ts:879',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:102',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:248',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:396',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:415',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:523',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:525',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:538',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:549',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:576',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:613',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:622',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:630',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:633',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:636',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:637',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:644',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:782',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:804',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:811',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:817',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:838',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:841',
   'packages/dev/studio-smoke/studio-real-app.test.ts:128',
   'packages/dev/studio-smoke/studio-real-app.test.ts:264',
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
@@ -459,42 +459,33 @@ const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must e
  *
  * An entry that survives a sweep is one of two things, and says which: emitted text — a script body
  * rendered into a string, a bundler `define` key, a test asserting on generated source, a jest test
- * silencing the global it captures — or a seam no wrapper covers yet. `node:crypto` hashing and
- * signing, `node:net` sockets, and the stream classes a test constructs are the open seams; a new
- * use of one goes behind `Platform` rather than onto the list. A type-only `node:` import names a
+ * silencing the global it captures — or a seam no wrapper covers yet. `node:net` sockets and the
+ * stream classes a test constructs are the open seams; a new use of one goes behind `Platform`
+ * rather than onto the list. Hashing, signing, and random ids have their `Platform` functions. A type-only `node:` import names a
  * shape, not a behavior, and is outside the import rule.
  */
 const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 
 const NODE_IMPORT_ALLOWLIST = [
-  // `node:crypto` hashing, until a `Platform` digest seam exists.
-  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts:1',
+  // `node:crypto` in the fenced verification runner, which moves to `Platform.sha256Hex` with it,
+  // and other `node:` imports that follow them in the same files.
   'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
   'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
   'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
   'packages/dev/dev-src/studio/StudioCdp.ts:2',
-  'packages/dev/dev-src/studio/StudioCdp.ts:3',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:633',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:635',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:943',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:945',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:469',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:471',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:759',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:761',
   'packages/dev/dev-src/studio/StudioNative.ts:6',
-  'packages/dev/dev-src/studio/StudioNative.ts:7',
-  'packages/dev/dev-src/studio/StudioReview.ts:2',
   'packages/dev/dev-tests/studio-review.test.ts:3',
-  'packages/tao-cli/cli-src/ship-executor.ts:3',
-  'packages/tao-cli/cli-src/ship-model.ts:2',
-  'packages/update-server/update-server-src/main.ts:3',
-  'packages/update-server/update-server-src/update-service.ts:2',
   'packages/update-server/update-server-tests/update-server.test.ts:3',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-src/app-store-connect-auth.ts:2',
   'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
   // `node:net` port probes and socket connections.
   'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
-  'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/dev/dev-tests/repo-lint.test.ts:545',
   'packages/dev/dev-tests/repo-lint.test.ts:546',
@@ -527,7 +518,7 @@ const CONSOLE_CALL_ALLOWLIST = [
   // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
   'packages/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioWatchHealth.ts',
   'packages/runtime-toolchain/runtime-toolchain-tests/release-bundle-proof.test.ts',
   'packages/update-server/update-server-tests/update-server.test.ts',
@@ -540,7 +531,7 @@ const CONSOLE_CALL_ALLOWLIST = [
 const PROCESS_ACCESS_ALLOWLIST = [
   // Emitted text: the Electrobun main, a bundler `define` key, child scripts a test renders, and
   // tests asserting on generated source.
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioNative.ts',
   'packages/dev/dev-tests/machine-lanes.test.ts',
   'packages/dev/dev-tests/native-host-lease.test.ts',
@@ -558,7 +549,7 @@ const PROCESS_ACCESS_ALLOWLIST = [
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
 const BUN_CONVENIENCE_ALLOWLIST = [
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
 ]
 
 const NODE_IMPORT_DETAIL = 'imports a `node:` module directly; reach for `FS`, `CLI`, `Platform`, or `HCI`'
@@ -697,29 +688,20 @@ export function conventionRuleIssues(
  */
 const KIND_CHAIN_ALLOWLIST = [
   'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
-  'packages/compiler/compiler-src/codegen/app/StateCompiler.ts',
   'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
-  'packages/runtime/TaoRuntime-src/TR-persisted-state.ts',
-  'packages/runtime/TaoRuntime-src/TR-studio-device-client.ts',
-  'packages/runtime/TaoRuntime-src/TR-studio-journey.ts',
-  'packages/source-actions/source-actions-src/studio/studio-design-styles.ts',
-  'packages/studio/studio-src/StudioInspector.ts',
-  'packages/studio/studio-src/StudioPreviewManifest.ts',
-  'packages/studio/studio-src/StudioPreviewSession.ts',
-  'packages/studio/studio-src/StudioServer.ts',
-  'packages/studio/studio-src/StudioSketchCatalog.ts',
-  'packages/studio/studio-src/agent-chat/AgentChatSession.ts',
-  'packages/studio/studio-src/agent-chat/FeaturePlan.ts',
-  'packages/studio/studio-src/agent-chat/SemanticSnapshot.ts',
-  'packages/studio/studio-src/client/StudioApiClient.ts',
-  'packages/studio/studio-src/client/app/StudioCommandPaletteWiring.ts',
-  'packages/studio/studio-src/client/app/StudioScenarioActions.ts',
-  'packages/studio/studio-src/device/StudioDeviceGateway.ts',
-  'packages/validator/validator-src/validators/FunctionalCoreValidator.ts',
-  'packages/validator/validator-src/validators/StateValidator.ts',
   'packages/validator/validator-src/validators/types-validator.ts',
-  'packages/validator/validator-src/validators/use-package-validator.ts',
 ]
+
+/** instructionBudgetIssues reports instruction files over their line budget; detail belongs in a skill's `references/`. */
+export function instructionBudgetIssues(files: readonly SourceFile[]): string[] {
+  return files.flatMap(file => {
+    const budget = instructionBudget(file.path)
+    const lines = instructionLineCount(file.source)
+    return budget !== undefined && lines > budget
+      ? [`${file.path} is ${lines} lines, over its ${budget}-line budget; move detail into a reference file or a gate.`]
+      : []
+  }).sort()
+}
 
 /** kindChainIssues reports discriminant chains in non-test package source, which `Switch` would check for exhaustiveness. */
 export function kindChainIssues(
@@ -938,6 +920,10 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
   issues.push(...await readDelegationIssues(repoRoot))
+  issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
+  if (await FS.isFile(FS.resolvePath('.rulesync/rulesync.jsonc', repoRoot))) {
+    issues.push(...await AgentConfigFreshness.staleIssues(repoRoot))
+  }
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
@@ -972,6 +958,24 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...devLazyStudioImportIssues(packageFiles))
   issues.push(...runtimeArrayConventionIssues(packageFiles))
   return issues
+}
+
+async function readInstructionFiles(repoRoot: string): Promise<SourceFile[]> {
+  const paths = ['AGENTS.md']
+  const skillsPath = FS.resolvePath('agents/skills', repoRoot)
+  if (await FS.isDirectory(skillsPath)) {
+    for (const name of await FS.listDir(skillsPath)) {
+      paths.push(`agents/skills/${name}/SKILL.md`)
+    }
+  }
+  const files: SourceFile[] = []
+  for (const path of paths) {
+    const absolutePath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(absolutePath)) {
+      files.push({ path, source: await FS.readText(absolutePath) })
+    }
+  }
+  return files
 }
 
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']

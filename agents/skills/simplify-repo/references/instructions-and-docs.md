@@ -7,22 +7,16 @@
 
 ## Removing
 
-- One owner per rule. A rule found in two files keeps the copy in its owner and loses the rest,
-  pointer sentences included when the skill description already routes there.
 - Delete prose that restates what `repo-lint`, a hook, or `./agent` output already enforces or says.
 - Cut anecdotes, incident history, and calibration-period framing. A rule keeps at most a
   one-clause reason.
 
 ## Placing
 
-- Universal constraints and routing: root `AGENTS.md`.
-- Knowledge about a body of code: a nested `AGENTS.md` beside that code, so it loads by path.
-  Domain skills belong there, not in `agents/skills/`.
-- Conditional workflows: a skill. Workflows that share a verb become reference files of one skill
-  (`git-workflow` holds committing in chunks and merging progress; `delegation` holds parallel
-  implementation and review fan-out).
-- Thin skills merge into their nearest owner; a skill earns its folder by having a trigger no other
-  skill covers.
+`agent-instructions` owns where a rule goes. Workflows that share a verb become reference files of
+one skill (`git-workflow` holds committing in chunks and merging progress; `delegation` holds
+parallel implementation and review fan-out); a thin skill merges into its nearest owner only when a
+trigger no other skill covers survives the merge.
 
 ## Rules into code
 

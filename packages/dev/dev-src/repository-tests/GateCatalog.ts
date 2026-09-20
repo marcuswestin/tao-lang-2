@@ -18,7 +18,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * ones it `reads`, and `node` turns that into edges: a reader waits for exactly the writers of the
  * classes it reads, and for nothing else. That is the whole of the old `mutatesTree` barrier, which
  * made every reader in a lane wait for every fixer in it — including the 5s `./tao fix`, which the
- * TypeScript gates have no relationship with at all. Five class names, no globs, and a graph that
+ * TypeScript gates have no relationship with at all. Six class names, no globs, and a graph that
  * still fits on a screen.
  *
  * Every recipe-backed node implicitly reads `just`, because it starts by parsing the Justfile, which
@@ -32,12 +32,14 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  */
 
 /**
- * SourceClass names one class of files, coarse enough that five names cover the repository. A class
+ * SourceClass names one class of files, coarse enough that six names cover the repository. A class
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
   /** `packages/runtime-toolchain/_gen_tao-app*`, filled by the WordFlower compile. */
   | 'gen-app'
+  /** The extension bundles and syntax tree filled by the IDE extension build. */
+  | 'gen-ide'
   /** The generated Langium parser under `packages/parser/parser-src`. */
   | 'gen-parser'
   /** The Justfile itself, which every recipe-backed node parses on its way up. */
@@ -104,7 +106,7 @@ export type GateMetadata =
   }
 
 /** A gate nobody has tuned occupies one slot, reads the whole tree, and waits for every writer. */
-const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-parser', 'tao', 'ts'] }
+const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 'gen-parser', 'tao', 'ts'] }
 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
@@ -137,7 +139,7 @@ export type SuiteTuning = {
  * cannot affect you is wasted time, but reading a `.tao` file while `./tao fix` rewrites it is a
  * torn read, so the default is the safe one and each narrowing is an assertion about that suite.
  */
-const DEFAULT_SUITE_READS: readonly SourceClass[] = ['gen-app', 'gen-parser', 'tao', 'ts']
+const DEFAULT_SUITE_READS: readonly SourceClass[] = ['gen-app', 'gen-ide', 'gen-parser', 'tao', 'ts']
 /** Bun's own startup plus this repository's module graph, measured on a warm cache. */
 const BUN_SUITE_FIXED_MS = 600
 /** The published `./tao test` sizes itself to the machine unless a lane hands it a width. */
@@ -149,13 +151,7 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * the timings store, because a hand-written count goes stale the first time a suite grows.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  // Language suites load repository standard-library Tao, but return generated plans in memory
-  // or write isolated fixtures; none consumes the shared WordFlower generated-app tree.
   ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
-  ['formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['parser', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['workspace', { reads: ['gen-parser', 'tao', 'ts'] }],
   // Developer tests deliberately run concurrently and many of them spawn child processes. During
   // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
   // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
@@ -168,11 +164,14 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
   // written `--timeout=60000` that used to sit here said only what the flag already implies.
   ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
-  ['ide-extension', { args: ['--concurrent'] }],
+  ['ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
   // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
   // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
   // empty output.
-  ['runtime-toolchain', { args: ['--timeout=60000'], cost: 2, shardCost: 2 }],
+  [
+    'runtime-toolchain',
+    { args: ['--timeout=60000'], cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 },
+  ],
   // Its tests lower and validate whole starter projects, which is seconds of real work per test.
   // Bun's five-second default was calibrated when this suite was one process beside a handful of
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
@@ -184,7 +183,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
   // measure 19.7s, and the same files as three processes at one worker each measure 21.3s. It is
   // handed a reservation and the matching `--maxWorkers`, and left whole.
-  ['runtime-jest', { cost: 3, priority: 4, shardable: false }],
+  [
+    'runtime-jest',
+    { cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
+  ],
   // The Tao behavior tests are a `./tao test` process that loads the language services, validates
   // and compiles the apps it was given across its own compiler worker pool, and runs one Jest pass.
   // Unlike Jest's, that pool parallelizes the compile and not the run, so the suite does shard, and
@@ -200,26 +202,34 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       cost: 8,
       fixedMs: 6_000,
       priority: 5,
+      reads: ['gen-parser', 'tao', 'ts'],
       serial: false,
       // One shard still spawns a compiler worker beside its own Jest pass.
       shardCost: 2,
     },
   ],
 
-  // These suites reference no `.tao` source, no app, and no generated tree, and so wait
-  // for dprint alone. Verified by search; a suite that starts reading one belongs off this list.
+  // These suites reference no `.tao` source, app, or generated tree, and so wait for dprint alone.
+  // Verified by search; a suite that starts reading one belongs off this list.
   ['code-editor', { reads: ['ts'] }],
   ['generation', { reads: ['ts'] }],
   ['host-control', { reads: ['ts'] }],
   ['icloud-native', { reads: ['ts'] }],
+  ['performance-checks', { reads: ['gen-parser', 'ts'] }],
   ['runtime', { reads: ['ts'] }],
   ['shared', { reads: ['ts'] }],
   ['stdlib', { reads: ['ts'] }],
   ['update-server', { reads: ['ts'] }],
-  // The statistics tests import the language-service module but never run its WordFlower benchmark.
-  ['performance-checks', { reads: ['gen-parser', 'ts'] }],
-  // Standalone parser contexts use an empty package resolver; package fixtures live in temporary roots.
+
+  // AST utilities import generated parser types but never load Tao source or app output.
   ['ast-utils', { reads: ['gen-parser', 'ts'] }],
+
+  // These language-service suites load generated parser code and repository Tao source, including
+  // the standard library, but never consume the shared generated-app directory.
+  ['formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['parser', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['workspace', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])
 
 const TAO_CHECK_COST = 2
@@ -329,7 +339,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // a bridged export out of its report; reading one mid-rewrite would report live code as dead.
     ['dead-exports', { reads: ['tao', 'ts'] }],
     ['_doctor-json', { reads: ['ts'] }],
-    ['_ide-extension-build', { reads: ['gen-parser', 'ts'] }],
+    [
+      '_ide-extension-build',
+      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
+    ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
     // `packages/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
     // `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
@@ -434,7 +447,7 @@ function isRecordable(name: string): boolean {
  * the tree hash a green record is keyed by says nothing about whether they exist or are current — a
  * fresh checkout hashes identically to one that has them.
  */
-const GENERATED_CLASSES: readonly SourceClass[] = ['gen-app', 'gen-parser']
+const GENERATED_CLASSES: readonly SourceClass[] = ['gen-app', 'gen-ide', 'gen-parser']
 
 /**
  * unrunGeneratedReads names the generated classes a node reads whose writer this lane does not run.

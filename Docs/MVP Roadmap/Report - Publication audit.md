@@ -244,7 +244,7 @@ design sketch, and `R3` has not yet settled what stability is promised.
   wants. Hold the per-program plan folders back until `R3` fixes the stability promise, then publish
   them behind a clear "planned, not built" banner.
 
-### P12 — `Docs/Roadmap/Archive/` — Low
+### P12 — `Docs/Archive/` — Low
 
 33 archived files, including spike patches, prompt documents, and a `dialect-spike.test.ts.txt`.
 Frozen by `AGENTS.md`; historical rather than forward-looking, so it sets no expectations.
@@ -263,7 +263,7 @@ separately by `P16`.
   convention" as open work — so a reader knows whether WIP means unfinished prose or unfinished
   behavior.
 
-### P14 — `Docs/Roadmap/Tao ship.md` names an unowned credential problem — Medium
+### P14 — `Docs/Archive/Explorations/Tao ship.md` names an unowned credential problem — Medium
 
 Line 240 states that deploy credentials — App Store Connect keys, Play service-account keys,
 InstantDB admin tokens — have "**No owner today**", and that `AppId` values are hardcoded in `.tao`

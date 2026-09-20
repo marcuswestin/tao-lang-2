@@ -7,7 +7,7 @@ forces it.
 
 > **Status: complete.** Every item from the four-design analysis is resolved and recorded here. The
 > analysis records — what all four designs agreed on, and each design's position on every contested
-> point — are frozen in `Docs/Roadmap/Archive/Tao Revolution analysis/`. The drag-and-drop worked example
+> point — are frozen in `Docs/Archive/Explorations/Tao Revolution analysis/`. The drag-and-drop worked example
 > is a roadmap item (an example app to implement), not a decision.
 >
 > **These decisions are made on their own merits.** The target is the best possible Tao for the MVP
@@ -812,8 +812,9 @@ query AisleTotals from MyKitchen.Groceries {
 presence Viewers on Recipe   // Viewers.Others lists the other accounts with this Recipe open now
 ```
 
-**Amended by the HTTP datasource work** (implemented; `Docs/Roadmap/HTTP Datasource/`, forced by
-`Apps/HNReader`). Remote read-only feeds enter through the datasource seam, never through
+**Amended by the HTTP datasource work** (implemented; `Docs/Roadmap/Multiple datasources/Plan -
+Multiple datasources.md`'s "Http" section, forced by `Apps/HNReader`). Remote read-only feeds enter
+through the datasource seam, never through
 imperative fetch actions:
 
 - **`Http` in `@tao/data` is a query-driven datasource.** Entities stay ordinary `data`
