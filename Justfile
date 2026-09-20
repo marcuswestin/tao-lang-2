@@ -15,7 +15,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config
+_setup: _deps _parser-gen _agent-config
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -108,6 +108,11 @@ studio-canary project="Apps/HNReader" app="HNReader":
 [group('Host proofs')]
 ship-bundle-proof:
     bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
+
+# Compile every repository native module for the iOS simulator; intentionally outside routine verification
+[group('Host proofs')]
+native-module-check:
+    ./dev native-module-check
 
 # Run the native Studio checks that require a person; never part of test or verify
 [group('Host proofs')]

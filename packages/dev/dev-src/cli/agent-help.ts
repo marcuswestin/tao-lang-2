@@ -36,7 +36,7 @@ function justHelpLines(output: string, commands: readonly string[]): string[] {
       return [line]
     }
     if (command === 'setup') {
-      return ['    setup                                   # Install dependencies and generate agent adapters']
+      return ['    setup                                   # Install dependencies and generate parser and agent adapters']
     }
     return []
   })

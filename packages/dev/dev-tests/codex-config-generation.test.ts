@@ -298,5 +298,6 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["/bin/kill"')
     Expect(rules).not.toContain('studio-smoke')
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
+    Expect(rules).not.toContain('native-module-check')
   })
 })

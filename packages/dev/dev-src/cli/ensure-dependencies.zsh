@@ -12,11 +12,14 @@ TAO_DEPENDENCY_MODE="${2:-}"
 TAO_DEPENDENCY_DEV="$TAO_DEPENDENCY_ROOT/packages/dev"
 TAO_DEPENDENCY_BUILD="$TAO_DEPENDENCY_ROOT/.artifacts/build/agent-dev"
 TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"
+TAO_DEPENDENCY_CACHE_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/cache/bun"
 TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_BUILD/dev-deps.stamp"
 TAO_DEPENDENCY_LOCK="$TAO_DEPENDENCY_BUILD/dev-deps.lock"
 TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_DEV/dev-src/doctor/DependencyHealth.ts"
+TAO_DEPENDENCY_REPAIR="$TAO_DEPENDENCY_DEV/dev-src/cli/repair-dependencies.zsh"
 TAO_DEPENDENCY_PROFILE="$TAO_DEPENDENCY_ROOT/.devenv/profile"
 TAO_DEPENDENCY_ATTEMPTS=3
+TAO_DEPENDENCY_INSTALL_OUTPUT=""
 
 source "$TAO_DEPENDENCY_DEV/dev-src/cli/agent-worktree-profile.zsh"
 
@@ -83,7 +86,7 @@ function tao_report_install_failure() {
   echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
 }
 
-function tao_run_bun_install() {
+function tao_try_bun_install() {
   local install_output
   local attempt
   typeset -a extra_args
@@ -91,31 +94,53 @@ function tao_run_bun_install() {
   for (( attempt = 1; attempt <= TAO_DEPENDENCY_ATTEMPTS; attempt++ )); do
     if install_output="$(TMPDIR="$TAO_DEPENDENCY_TEMP" bun "${TAO_DEPENDENCY_INSTALL_ARGS[@]}" "${extra_args[@]}" 2>&1)"; then
       touch "$TAO_DEPENDENCY_STAMP"
+      TAO_DEPENDENCY_INSTALL_OUTPUT=""
       return 0
     fi
     [[ "$install_output" == *"unable to write files to tempdir"* ]] || break
     tao_prune_bootstrap_scratch "$TAO_DEPENDENCY_TEMP_ROOT"
   done
 
-  echo "$install_output" >&2
-  tao_report_install_failure "$install_output"
+  TAO_DEPENDENCY_INSTALL_OUTPUT="$install_output"
+  return 1
+}
+
+function tao_run_bun_install() {
+  tao_try_bun_install "$@" && return 0
+  echo "$TAO_DEPENDENCY_INSTALL_OUTPUT" >&2
+  tao_report_install_failure "$TAO_DEPENDENCY_INSTALL_OUTPUT"
+  return 1
+}
+
+function tao_replace_dependency_tree() {
+  if TAO_DEPENDENCY_REPAIR_FORCE=1 zsh "$TAO_DEPENDENCY_REPAIR" \
+    "$TAO_DEPENDENCY_ROOT" "$TAO_DEPENDENCY_TEMP_ROOT/bun" "$TAO_DEPENDENCY_CACHE_ROOT"
+  then
+    touch "$TAO_DEPENDENCY_STAMP"
+    return 0
+  fi
   return 1
 }
 
 function tao_repair_dependencies() {
   local health_output
-  tao_run_bun_install || return 1
-  if health_output="$(tao_dependency_health 2>&1)"; then
+  if tao_try_bun_install && health_output="$(tao_dependency_health 2>&1)"; then
     return 0
   fi
 
-  tao_run_bun_install --force || return 1
-  if health_output="$(tao_dependency_health 2>&1)"; then
+  # Never force-relink packages in place. If a normal frozen install cannot make the graph healthy,
+  # replace node_modules atomically so protected package paths cannot leave the old tree half-mutated.
+  if tao_replace_dependency_tree; then
     return 0
   fi
 
-  echo "$health_output" >&2
-  echo "Bun repaired dependencies, but the repository dependency probe still fails." >&2
+  if [[ -n "$TAO_DEPENDENCY_INSTALL_OUTPUT" ]]; then
+    echo "$TAO_DEPENDENCY_INSTALL_OUTPUT" >&2
+    tao_report_install_failure "$TAO_DEPENDENCY_INSTALL_OUTPUT"
+  else
+    [[ -z "$health_output" ]] || echo "$health_output" >&2
+    echo "The repository dependency probe still fails after dependency replacement." >&2
+  fi
   return 1
 }
 
