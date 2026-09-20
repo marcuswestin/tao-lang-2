@@ -4,7 +4,8 @@ description: >-
   Decide whether to hand work to a subagent, which model tier and effort it runs at, what its brief
   must contain, and how to check what it returns. Use when a task involves broad search, codebase
   exploration, web research, long command output, independent review, or two workstreams that could
-  run at once, and whenever choosing between doing work yourself and spawning an agent.
+  run at once, whenever choosing between doing work yourself and spawning an agent, and whenever Ro
+  asks you to write, print, or hand over a prompt for another agent to run.
 ---
 
 # Delegation
@@ -130,12 +131,39 @@ The agent sees the brief and nothing else. Every brief carries:
 5. **Return format** and the length you want.
 6. **Stop condition** — what "done" is, and what to do when the answer is not there.
 
-Repository boilerplate, in every brief that touches this worktree: run from the worktree root
-without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit
+Root `AGENTS.md` binds every agent that reads the brief, including the rule against naming any agent
+identity in work products. Everything else depends on where the brief is going.
+
+### A brief you launch yourself
+
+It runs in this worktree, on this branch, over your uncommitted work, so tell it so: run from the
+worktree root without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit
 `Docs/Roadmap/Developer environment upgrades.md`, its archive index, or anything under
 `Docs/Roadmap/Developer environment upgrades/`, and return developer-environment findings to the
-caller instead. Root `AGENTS.md` binds subagents too, including the rule against naming any agent
-identity in work products.
+caller instead.
+
+### A brief Ro asks you to print
+
+Ro pastes a printed brief into a fresh agent that gets a worktree of its own. That agent shares
+nothing with this session — not this worktree's path, not its branch, not its uncommitted edits, not
+its `.artifacts/`. A request to print, paste, or hand over a prompt is always this kind; only an
+agent you launch through the harness yourself is the other. Write it for a cold start:
+
+- Never name this worktree's path, and never tell it where to run. It has its own root and knows it.
+  "Run everything from `…/.claude/worktrees/<name>`" points it at a tree that belongs to somebody
+  else, and the instruction not to `cd` is what makes that stick.
+- Say what it starts from — `main`, or a named commit — instead of assuming the state you are
+  sitting on. Findings you have not landed are not there: put each one in the brief, with the
+  `file:line` that survives a fresh checkout, or land them first.
+- Make every reproduction runnable from a clean checkout. A scratch fixture, a path under
+  `.artifacts/`, or a generated tree you built in this session does not exist for it.
+- Exclusive path ownership still belongs in the brief, but it buys something different: separate
+  worktrees cannot corrupt each other's writes, so the hazard is the merge rather than the edit.
+  Keep two printed briefs off the same files anyway, and off any shared ledger that allocates IDs —
+  two branches that both take the next `DEVENV` number collide silently, and `_repo-lint` is what
+  catches it.
+- Everything a landing needs is the printed agent's own: its branch, its gates, its merge message.
+  Say which of those you expect it to reach, because no integration owner is watching it.
 
 ## The return contract
 

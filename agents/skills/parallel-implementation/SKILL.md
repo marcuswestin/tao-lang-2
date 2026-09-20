@@ -13,6 +13,11 @@ brief contains, and how to check what comes back. This skill owns what those rul
 dividing one outcome between agents that write at the same time, and putting the pieces back
 together.
 
+Everything here assumes the agents write into your worktree, which is what makes ownership the thing
+keeping them safe. A fan-out Ro will run from printed briefs is the other case: each agent takes a
+worktree of its own, so the briefs carry no worktree path and no integration owner, and `delegation`
+says what changes.
+
 ## Build the execution graph
 
 1. Inspect live instructions, Git state, the affected architecture, and the requested validation
