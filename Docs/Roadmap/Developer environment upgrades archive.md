@@ -56,6 +56,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
+- [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/Archive/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
 - [DEVENV-079 — A per-test timeout measured in wall time judges the machine, not the test](<Developer environment upgrades/Archive/DEVENV-079-a-per-test-timeout-measured-in-wall-time-judges-the-machine.md>) — Resolved
@@ -69,3 +70,5 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
+- [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/Archive/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Resolved
+- [DEVENV-105 — `finalize` cannot consume the green evidence that `verify` records](<Developer environment upgrades/Archive/DEVENV-105-finalize-cannot-consume-the-green-evidence-that-verify-records.md>) — Resolved

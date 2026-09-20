@@ -34,6 +34,8 @@
   A fresh `feat/devenv-landing-followups` checkout on 2026-09-20 again completed prebuild, discovered
   the native packages, and reached CocoaPods. The active managed shell then denied SSH host-key access;
   Hermes fell back to source and CocoaPods reported missing `cmake`. The exact failed build is retained
-  at `.artifacts/native-module-check/run-nK3ugj`; no simulator compilation occurred.
+  at `.artifacts/native-module-check/run-nK3ugj`; no simulator compilation occurred. The final fresh
+  checkout reproduced the same CocoaPods boundary and retained the complete isolated host at
+  `/private/tmp/tao-devenv104-after/.artifacts/native-module-check/run-4Y6F8O`.
   Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
