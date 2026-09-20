@@ -68,7 +68,9 @@
     "ask": [
       "Bash(./agent land-unlock --force*)",
       "Bash(./dev land-unlock --force*)",
-      "Bash(just land-unlock --force*)"
+      "Bash(just land-unlock --force*)",
+      "SendMessage",
+      "mcp__ccd_session_mgmt__send_message"
     ]
   },
   "sandbox": {
