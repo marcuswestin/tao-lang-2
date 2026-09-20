@@ -22,13 +22,15 @@ one.
 
 It brings a branch to ready: asserts the branch and a clean tree, integrates `main`, runs a
 verification lane only when no green record already covers this exact tree, drafts the merge message
-from the branch's own commits, and prints what remains. Cheap and safe to re-run — it records what it
-established and redoes only what changed — so run it instead of the sequence by hand, and again after
-every round of Ro's corrections. `--check` previews without touching anything. Completing the work
-still means commits landed, worktree clean, affected documents refreshed, the reachable host lanes
-run, and the message reviewed and edited, never handed over as drafted. `./agent board` reports every
-worktree's branch, cleanliness, finalize state, and last proof, beside the lane and lease registry —
-read it before calling a slow lane a regression, and before landing, to see who else is close.
+from the branch's own commits when none exists, and prints what remains. An existing merge message is
+kept; `--redraft` is the explicit request that replaces it with a fresh mechanical draft. Cheap and
+safe to re-run — it records what it established and redoes only what changed — so run it instead of
+the sequence by hand, and again after every round of Ro's corrections. `--check` previews without
+touching anything. Completing the work still means commits landed, worktree clean, affected documents
+refreshed, the reachable host lanes run, and the message reviewed and edited, never handed over as
+drafted. `./agent board` reports every worktree's branch, cleanliness, finalize state, and last proof,
+beside the lane and lease registry — read it before calling a slow lane a regression, and before
+landing, to see who else is close.
 
 ## Whether to land it yourself
 
