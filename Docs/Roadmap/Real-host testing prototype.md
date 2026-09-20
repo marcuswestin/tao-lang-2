@@ -7,7 +7,7 @@ or native OS host; a build or runtime-renderer test is a different kind of evide
 and a new focused Clockwork fixture. Register new coverage with scoped patterns and import no existing testing
 infrastructure other than the HNReader subject. Keep existing suites and merge gates intact. Do not
 commit until requested. Ro subsequently authorized completing review and committing this milestone
-in chunks on 2026-09-19; merging and pushing remain outside this task.
+in chunks on 2026-09-19, then authorized landing it on `main` on 2026-09-20.
 
 Implementation and commands: [E2E testing README](../../packages/e2e-testing/README.md).
 
@@ -21,8 +21,8 @@ on an empty registration. Command dispatch, build preparation, host execution an
 have separate named responsibilities.
 
 Tao is the authored language for product journeys. The source-linked compiled journey plan now runs
-through Playwright, Appium XCUITest, and Appium UiAutomator2. The old Maestro YAML is no longer reached
-by current simulator commands and is not an intended second authoring language. Physical
+through Playwright, Appium XCUITest, and Appium UiAutomator2. Appium is the sole native journey
+execution path; the superseded Maestro runner and YAML authoring layer have been removed. Physical
 termination/relaunch remains distinct from an in-process renderer remount, and unsupported host steps
 fail explicitly.
 

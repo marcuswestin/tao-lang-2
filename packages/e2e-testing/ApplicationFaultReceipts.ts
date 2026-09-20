@@ -1,38 +1,6 @@
 import { CLI, Errors, FS, HCI, Json } from '@shared'
 import type { HostApplicationFault } from './app-build/HostBuild'
 
-export async function recordedApplicationFaultNativeReceipt(
-  artifacts: string,
-  fault: HostApplicationFault,
-  receipt: Readonly<{ artifacts: { maestroJunit: string; receipt: string }; preparation?: { fault?: unknown } }>,
-): Promise<void> {
-  const { classifyNativeApplicationFault } = await import('./app-build/FaultVerdict')
-  const evidence = {
-    commands: await readNativeJourneyCommands(artifacts, fault),
-    junit: await readOptionalText(receipt.artifacts.maestroJunit),
-    receipt: await readOptionalJson(receipt.artifacts.receipt),
-  }
-  const verdict = classifyNativeApplicationFault(fault, evidence)
-  await FS.writeJson(FS.resolvePath('application-fault.json', artifacts), {
-    ...verdict,
-    ...(receipt.preparation?.fault === undefined ? {} : { provenance: receipt.preparation.fault }),
-  })
-  if (verdict.status === 'detected') {
-    HCI.writeLine(`DETECTED application fault '${fault}': ${verdict.reason}`)
-    Errors.throwUserInput(
-      `Application fault '${fault}' was detected; this intentionally red run wrote ${artifacts}/application-fault.json`,
-    )
-  }
-  if (verdict.status === 'escaped') {
-    Errors.throwUnexpected(
-      `Application fault '${fault}' escaped the healthy native assertions; see ${artifacts}/application-fault.json`,
-    )
-  }
-  Errors.throwUnexpected(
-    `Application fault '${fault}' was inconclusive: ${verdict.reason} See ${artifacts}/application-fault.json`,
-  )
-}
-
 export async function recordedApplicationFaultBrowserCommand(
   spec: CLI.CommandSpec,
   artifacts: string,
@@ -84,24 +52,7 @@ export async function writeInconclusiveApplicationFaultVerdict(
   })
 }
 
-async function readNativeJourneyCommands(artifacts: string, fault: HostApplicationFault): Promise<unknown> {
-  const subject = fault === 'clockwork-countdown-frozen' ? 'clockwork' : 'hnreader'
-  const root = FS.resolvePath('native/journey-artifacts', artifacts)
-  const candidates: string[] = []
-  for (const run of await FS.listDir(root).catch((): string[] => [])) {
-    const commands = FS.resolvePath(`${run}/${subject}/commands.json`, root)
-    if (await FS.isFile(commands)) {
-      candidates.push(commands)
-    }
-  }
-  return candidates.length === 1 ? await readOptionalJson(candidates[0]!) : undefined
-}
-
-async function readOptionalText(path: string): Promise<string | undefined> {
-  return await FS.readText(path).catch((): undefined => undefined)
-}
-
 async function readOptionalJson(path: string): Promise<unknown> {
-  const text = await readOptionalText(path)
+  const text = await FS.readText(path).catch((): undefined => undefined)
   return text === undefined ? undefined : Json.tryParse(text)
 }

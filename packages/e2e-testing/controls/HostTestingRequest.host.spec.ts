@@ -28,10 +28,13 @@ test('requires explicit native targets and keeps application faults out of contr
     'Native proofs require --device with an explicit target identifier.',
   )
   expect(() => parseHostTestingRequest('check', { ...base, fault: true })).toThrow(
-    '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+    '--fault changes an isolated compiled app; use prepare, export, browser, android, or ios.',
   )
   expect(() => parseHostTestingRequest('driver', { ...base, fault: true })).toThrow(
-    '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+    '--fault changes an isolated compiled app; use prepare, export, browser, android, or ios.',
+  )
+  expect(() => parseHostTestingRequest('device', { ...base, device: 'physical-id', fault: true })).toThrow(
+    'Physical-device installation cannot classify an application fault; use ios or android with --fault.',
   )
   expect(() => parseHostTestingRequest('unknown', base)).toThrow("Unknown host-testing mode 'unknown'.")
 })

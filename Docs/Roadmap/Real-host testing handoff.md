@@ -20,17 +20,17 @@ observations; macOS physical input is serialized behind its own machine-wide lea
 
 Current evidence under `.artifacts/host-testing/`:
 
-| Run                                    | Result                                                                                    |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `e2f1572a-a8b1-464a-bf20-5faa57e386b1` | All 96 registered host-free controls passed                                               |
-| `99098101-81a9-46ad-8644-30f0816f964d` | Independent E2E package typecheck passed                                                  |
-| `2905042f-2de0-486a-abee-579e3a180a3b` | Five owned real-Chrome driver proofs passed                                               |
-| `04741792-5a1e-45ff-b537-9753c51dd8f6` | HNReader real-Chrome journey passed                                                       |
-| `71314794-b650-432f-83ec-8be6158e7476` | Deliberate browser persistence fault was detected at the authored assertion               |
-| `8bbd8767-e792-4655-8218-e743767711ac` | HNReader iOS simulator journey passed through XCUITest                                    |
-| `db1cd6b3-6b2f-41ed-bd12-7223b9ca858c` | Deliberate iOS persistence fault was detected at the authored post-relaunch assertion     |
-| `213e1c43-ba31-4651-8407-6428c80e25a4` | HNReader Android emulator journey passed through UiAutomator2                             |
-| `131d04ff-f9bf-4b95-8191-a14791e42d8f` | Deliberate Android persistence fault was detected at the authored post-relaunch assertion |
+| Run                                    | Result                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `df393732-c70f-4d86-9566-acc11f920d8a` | All 93 registered host-free controls passed after removing the legacy Maestro surface      |
+| `fac67546-b109-4adf-9599-0399471bb814` | Independent E2E package typecheck passed after the physical-install boundary was separated |
+| `2905042f-2de0-486a-abee-579e3a180a3b` | Five owned real-Chrome driver proofs passed                                                |
+| `04741792-5a1e-45ff-b537-9753c51dd8f6` | HNReader real-Chrome journey passed                                                        |
+| `71314794-b650-432f-83ec-8be6158e7476` | Deliberate browser persistence fault was detected at the authored assertion                |
+| `8bbd8767-e792-4655-8218-e743767711ac` | HNReader iOS simulator journey passed through XCUITest                                     |
+| `db1cd6b3-6b2f-41ed-bd12-7223b9ca858c` | Deliberate iOS persistence fault was detected at the authored post-relaunch assertion      |
+| `213e1c43-ba31-4651-8407-6428c80e25a4` | HNReader Android emulator journey passed through UiAutomator2                              |
+| `131d04ff-f9bf-4b95-8191-a14791e42d8f` | Deliberate Android persistence fault was detected at the authored post-relaunch assertion  |
 
 The real Studio semantic smoke passed against an owned Electrobun shell. The Mac2 smoke starts its
 owned Appium server and reaches healthy WebDriverAgent status, then this host stalls on `POST
@@ -40,7 +40,8 @@ service boundary, not a passing native acceptance result.
 Physical iOS remains install-only and distinct from UI acceptance. Real simultaneous multi-simulator
 execution is also incomplete even though allocation and conflict behavior have host-free coverage.
 The next slice set is physical iOS/Android UI acceptance and making Studio a Tao app built and
-developed through the Tao CLI. The legacy Maestro path is dormant; its deletion awaits approval.
+developed through the Tao CLI. The legacy Maestro runner, classifier, and YAML flows have been
+removed; Appium is the sole native journey path.
 
 ### Agreed cleanup after prototype review
 
@@ -73,11 +74,11 @@ target and port isolation, signing inputs, exact tag occurrence, serialized inpu
 inspection, retryable receipt-first cleanup and revision fencing, but had not started Appium,
 WebDriverAgent or a simulator session. Physical-device UI acceptance remains incomplete.
 
-Review follow-up also closes the remaining CloudKit default-container hole, requires explicit JUnit
-success evidence, writes inconclusive verdicts for faulted prepare/export-only runs, resolves Maestro
-flows from the worktree rather than process cwd, and makes the HNReader native clock-control receipt
-visible before its countdown-dependent actions. Existing suites, Playwright proofs and Maestro flows
-remain registered and intact.
+Review follow-up also closed the remaining CloudKit default-container hole, required explicit native
+success evidence, wrote inconclusive verdicts for faulted prepare/export-only runs, and made the
+HNReader native clock-control receipt visible before its countdown-dependent actions. At that
+milestone the Maestro flows remained registered; the current removal supersedes that state while
+leaving the existing product suites intact.
 
 The records below retain the prototype's earlier paths/counts as historical evidence. Follow-up
 validation under `.artifacts/host-testing/`:
@@ -292,7 +293,11 @@ This failed lane is retained separately from the final commit-time verification 
 
 ## Previous session handoff (historical)
 
-## Resume here
+The remainder of this section preserves the instructions and evidence available at the first
+prototype handoff. Its commands and next actions are superseded by the current continuation section
+at the top of this document and must not be followed as current setup guidance.
+
+## Historical resume instructions (superseded)
 
 Use the existing worktree `/Users/ro/.codex/worktrees/40f2/tao-lang-2`. All changes are uncommitted;
 the index and branch refs were not changed. Preserve them. Do not commit, stage, merge, or replace
@@ -322,7 +327,7 @@ the accepted scope above does not need reconfirmation. Read delegation/parallel-
 guidance before assigning bounded implementation ownership. Coordinate expensive host runs so
 multiple workers do not contend for the same simulator. Treat returned reports as claims to verify.
 
-## Implemented
+## Initial prototype implementation (historical)
 
 - One host-neutral `Effects` core exported by `@tao/runtime/core` and re-exported through `@shared`
   and `@shared/core`. It ships inside the runtime package, has no imports, and supports independent
@@ -340,7 +345,7 @@ multiple workers do not contend for the same simulator. Treat returned reports a
   native build environment/target/isolation checks, run/seed readiness, and consistent elapsed time
   observed by synchronous clock subscribers.
 
-## Evidence obtained
+## Initial prototype evidence (historical)
 
 - `just test-host check`: 8 passed; final functional core regression included.
   Receipt: `.artifacts/host-testing/3b62e57c-0018-4b65-8bd3-1f7a17359c4a/controls.log`.
@@ -359,7 +364,7 @@ multiple workers do not contend for the same simulator. Treat returned reports a
 No browser UI journey, native build, simulator UI journey, physical-device UI journey, or full
 repository verification has passed in this session. Build/export success is not UI proof.
 
-## Host blockers and next actions
+## Initial host blockers and next actions (historical and superseded)
 
 Initially the macOS app showed Full access selected, but the running task still received a
 `workspace-write` permission policy with limited writable roots and approvals disabled. Its `simctl`

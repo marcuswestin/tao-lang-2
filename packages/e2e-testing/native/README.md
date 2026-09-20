@@ -25,9 +25,9 @@ session deletion is ambiguous, the target lease is retained so another process c
 possibly live simulator or emulator. Worktree deletion is not a substitute for this runtime cleanup.
 
 The physical `device` mode remains distinct. It discovers the explicit iOS device, builds and installs
-the isolated Release app, records that milestone, and reports `physical-ios-ui-driver-unsupported`.
-No physical-device UI assertion is inferred from installation. Physical iOS and Android Appium
-acceptance are planned in the next slice set.
-
-The old Maestro runner and YAML flows are not reached by the current `ios` or `android` commands.
-They remain in the repository only until their removal is approved.
+the isolated Release app and records an installation receipt. It does not execute or classify a Tao
+journey, and `device --fault` is rejected because installation cannot determine whether an application
+fault escaped. No physical-device UI assertion is inferred from installation. Physical iOS and Android
+Appium acceptance are planned in the next slice set. Discovery, build, and installation hold the shared
+physical-device lease; completion releases the lease but leaves the installed app in place because that
+installation is the command's explicit result.

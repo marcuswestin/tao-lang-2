@@ -1,7 +1,7 @@
 # E2E testing
 
 This private package owns Tao's additive real-host testing prototype, including command dispatch,
-Playwright controls and browser journeys, isolated host builds, native proof orchestration, receipts,
+Playwright controls and browser journeys, isolated host builds, native journey orchestration, receipts,
 and harness fixtures. `HostTestingCommand.ts` is its public package entry. Existing suites and merge
 gates are unchanged, and this package does not reuse their runners, fixtures, mocks, or `@shared/test`.
 
@@ -68,8 +68,8 @@ temporary profiles. To use Playwright's downloaded Chromium, run `setup`, then p
 Native runs require an explicit target and a unique test application identifier. iOS simulators use
 Appium XCUITest and Android emulators use Appium UiAutomator2. Both current routes execute the compiled
 Tao journey and preserve screenshots, driver receipts, server logs, and cleanup evidence. Physical iOS
-currently reaches only the Release build/install milestone and reports blocked because physical-device
-UI acceptance has not been implemented. See [native details](native/README.md).
+currently provides a separate Release build/install receipt. It does not report a journey verdict or
+imply physical-device UI acceptance. See [native details](native/README.md).
 
 ## Time, randomness, and parallelism
 
@@ -122,8 +122,6 @@ need stronger analysis before claiming comprehensive enforcement.
 - Resolve the Appium Mac2 WDA session-creation stall, then exercise external Studio accessibility and
   physical input. The semantic Studio development path is already a distinct real-shell proof.
 - Make Studio a Tao app that is built and developed through the Tao CLI toolchain.
-- Remove the dormant Maestro implementation after deletion is approved; current simulator commands do
-  not call it.
 - Decide the production-wide effect interfaces and migrate callers before broadening lint enforcement.
 - Map required behavior to independently asserted journeys and lower-level exceptions; prove parity
   before retiring any old suite. Measure the new suite's cost and diagnostic usefulness.

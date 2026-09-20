@@ -34,15 +34,27 @@ export type DriverHostTestingRequest = Readonly<{
   browserChannel: string
 }>
 
-export type NativeHostTestingRequest = Readonly<{
+export type SimulatorNativeHostTestingRequest = Readonly<{
   kind: 'native'
-  mode: 'android' | 'device' | 'ios'
+  mode: 'android' | 'ios'
   subject: HostSubject
   seed: number
   browserChannel: string
   device: string
   fault?: HostApplicationFault
 }>
+
+/** Physical-device installation is intentionally a separate non-UI acceptance boundary. */
+type PhysicalIosInstallRequest = Readonly<{
+  kind: 'native'
+  mode: 'device'
+  subject: HostSubject
+  seed: number
+  browserChannel: string
+  device: string
+}>
+
+export type NativeHostTestingRequest = SimulatorNativeHostTestingRequest | PhysicalIosInstallRequest
 
 export type HostTestingRequest =
   | MaintenanceHostTestingRequest
@@ -76,7 +88,7 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   if (mode === 'driver') {
     if (options.fault === true) {
       Errors.throwUserInput(
-        '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+        '--fault changes an isolated compiled app; use prepare, export, browser, android, or ios.',
       )
     }
     return { ...common, kind: 'driver', mode }
@@ -84,7 +96,7 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   if (mode === 'check' || mode === 'format' || mode === 'lint' || mode === 'setup' || mode === 'typecheck') {
     if (mode === 'check' && options.fault === true) {
       Errors.throwUserInput(
-        '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+        '--fault changes an isolated compiled app; use prepare, export, browser, android, or ios.',
       )
     }
     return { ...common, kind: 'maintenance', mode }
@@ -96,6 +108,14 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   if (mode === 'android' || mode === 'ios' || mode === 'device') {
     if (options.device === undefined) {
       Errors.throwUserInput('Native proofs require --device with an explicit target identifier.')
+    }
+    if (mode === 'device' && fault !== undefined) {
+      Errors.throwUserInput(
+        'Physical-device installation cannot classify an application fault; use ios or android with --fault.',
+      )
+    }
+    if (mode === 'device') {
+      return { ...common, device: options.device, kind: 'native', mode }
     }
     return { ...common, device: options.device, ...(fault === undefined ? {} : { fault }), kind: 'native', mode }
   }

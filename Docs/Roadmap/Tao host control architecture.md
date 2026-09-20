@@ -16,7 +16,7 @@ Use Playwright's library for browser sessions and Appium for native sessions: XC
 UiAutomator2 on Android, and Mac2 for external Studio acceptance. Studio development uses a Tao
 semantic RPC inside its owned Electrobun shell. Real simulator and emulator journeys established the
 mobile drivers; physical-device UI acceptance remains separate and incomplete. Maestro no longer
-drives the current simulator routes and is not part of the lasting architecture.
+drives any repository route and is not part of the lasting architecture.
 
 ## Separate four responsibilities
 
@@ -45,7 +45,6 @@ in the shipped runtime and gains no browser, device, process, or runner dependen
 | Appium UiAutomator2        | Android emulator now; physical Android next                 | The same compiled Tao journey passed on a real emulator, with isolated ports, artifacts, cleanup, and fault detection.                           |
 | Studio semantic RPC        | Fast native Studio development                              | Source-aware observation and revision publication stay inside the owned shell and do not claim external accessibility acceptance.                |
 | Appium Mac2                | Serialized external Studio acceptance                       | It owns the macOS physical-input lease. This host reaches WDA but currently stalls while creating the Mac2 session.                              |
-| Maestro                    | Dormant legacy implementation pending removal               | Its batch flow surface does not satisfy persistent interactive development and would duplicate the Appium acceptance surface.                    |
 
 Playwright separates its library from its test runner. The library can serve an interactive session
 without test callbacks; its caller must close contexts and arrange tracing and waits. Keep Playwright
@@ -56,14 +55,6 @@ Prefer a browser launched under the adapter's ownership. Attaching over CDP is C
 documented as lower fidelity than a Playwright-protocol connection. Report reduced capabilities
 instead of pretending an attached human browser has a fresh isolated context.
 [Connection documentation](https://playwright.dev/docs/api/class-browsertype).
-
-Maestro's CLI executes flows but does not provide the persistent interactive session required for
-parallel development. Its web support documents Chromium-only beta behavior and preset
-viewport/locale restrictions. The legacy flow files are no longer reached by the current iOS and
-Android commands and remain only until their deletion is approved.
-[CLI](https://docs.maestro.dev/maestro-cli),
-[web support](https://docs.maestro.dev/get-started/supported-platform/web-browser),
-[iOS support](https://docs.maestro.dev/get-started/supported-platform/ios).
 
 Appium XCUITest supports real iOS devices. The simulator proof now covers startup, hierarchy queries,
 touch input, screenshot, application relaunch, cleanup, and an authored fault. Parallel sessions use

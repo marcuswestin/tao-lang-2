@@ -9,7 +9,7 @@ import {
 } from '@host-control/appium'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo } from '@shared'
 import type { HostBuild, PrepareHostAppOptions } from './app-build/HostBuild'
-import type { HostTestingContext, NativeHostTestingRequest } from './HostTestingRequest'
+import type { HostTestingContext, SimulatorNativeHostTestingRequest } from './HostTestingRequest'
 import { compileHostJourney, type HostJourney } from './journey/HostJourney'
 import {
   androidTargetLeaseName,
@@ -27,13 +27,10 @@ type AppiumProof =
 
 /** Runs the authored Tao journey through a real Appium mobile driver and preserves its evidence. */
 export async function runAppiumNativeHostProofCommand(
-  request: NativeHostTestingRequest,
+  request: SimulatorNativeHostTestingRequest,
   context: HostTestingContext,
   build: (input: PrepareHostAppOptions) => Promise<HostBuild>,
 ): Promise<void> {
-  if (request.mode === 'device') {
-    return Errors.throwUnexpected('The Appium simulator proof cannot drive the physical-device install mode.')
-  }
   const platform = request.mode
   const preparation = await build({
     artifactRoot: context.artifactRoot,
@@ -201,7 +198,7 @@ function cleanupFailureDetails(failures: readonly AppiumCleanupFailure[]): Reado
 }
 
 async function reportProof(
-  request: NativeHostTestingRequest,
+  request: SimulatorNativeHostTestingRequest,
   context: HostTestingContext,
   preparation: HostBuild,
   proof: AppiumProof,
@@ -237,7 +234,7 @@ async function reportProof(
   )
 }
 
-async function journeyFor(subject: NativeHostTestingRequest['subject']) {
+async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject']) {
   return subject === 'clockwork'
     ? await compileHostJourney(Repo.resolvePath('packages/e2e-testing/fixtures/Clockwork/Clockwork.test.tao'), {
       check: 'counts down after a controlled second',

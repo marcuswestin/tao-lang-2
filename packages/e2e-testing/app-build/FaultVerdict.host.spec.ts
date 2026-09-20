@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
   classifyApplicationFault,
-  classifyNativeApplicationFault,
   HNREADER_AUTHORED_RELOAD_MARKER,
   validateApplicationFaultProvenance,
 } from './FaultVerdict'
@@ -249,136 +248,6 @@ test('rejects browser fault provenance with malformed or unchanged artifact dige
   })
 })
 
-test('classifies only the Clockwork Maestro countdown assertion after its control receipt as detected', () => {
-  const verdict = classifyNativeApplicationFault('clockwork-countdown-frozen', {
-    commands: [
-      assertVisible('COMPLETED', 'Control received: advance 1000ms'),
-      assertVisible('FAILED', 'Countdown: 0:09'),
-    ],
-    junit:
-      '<testsuite><testcase><failure>Assertion is false: "Countdown: 0:09" is visible</failure></testcase></testsuite>',
-    receipt: nativeReceipt('clockwork-countdown-frozen', 'failed', 'native-ui-flow-failed', [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/clockwork.yaml'], 1),
-    ]),
-  })
-
-  expect(verdict.status).toBe('detected')
-})
-
-test('classifies only the HNReader post-relaunch reading history assertion as detected', () => {
-  const verdict = classifyNativeApplicationFault('hnreader-reading-history-no-write', {
-    commands: [
-      assertVisible('COMPLETED', '2 opened'),
-      appCommand('COMPLETED', 'killAppCommand'),
-      appCommand('COMPLETED', 'launchAppCommand'),
-      assertVisible('FAILED', '2 opened'),
-    ],
-    junit: '<testsuite><testcase><failure>Assertion is false: "2 opened" is visible</failure></testcase></testsuite>',
-    receipt: nativeReceipt('hnreader-reading-history-no-write', 'failed', 'native-ui-flow-failed', [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/hnreader.yaml'], 1),
-    ]),
-  })
-
-  expect(verdict.status).toBe('detected')
-})
-
-test('classifies a complete native Maestro pass as an escaped fault and missing provenance as inconclusive', () => {
-  const escaped = classifyNativeApplicationFault('clockwork-countdown-frozen', {
-    commands: [assertVisible('COMPLETED', 'Countdown: 0:09')],
-    junit: '<testsuite><testcase status="SUCCESS"/></testsuite>',
-    receipt: nativeReceipt('clockwork-countdown-frozen', 'passed', undefined, [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/clockwork.yaml'], 0),
-    ]),
-  })
-  const missingProvenance = classifyNativeApplicationFault('clockwork-countdown-frozen', {
-    commands: [assertVisible('FAILED', 'Countdown: 0:09')],
-    junit:
-      '<testsuite><testcase><failure>Assertion is false: "Countdown: 0:09" is visible</failure></testcase></testsuite>',
-    receipt: {
-      ...nativeReceipt('clockwork-countdown-frozen', 'failed', 'native-ui-flow-failed', [
-        command('expo', [], 0),
-        command('maestro', ['test', '/flows/clockwork.yaml'], 1),
-      ]),
-      preparation: {},
-    },
-  })
-
-  expect(escaped.status).toBe('escaped')
-  expect(missingProvenance.status).toBe('inconclusive')
-})
-
-test('requires an explicit Maestro JUnit SUCCESS status for an otherwise complete native pass', () => {
-  const receipt = nativeReceipt('clockwork-countdown-frozen', 'passed', undefined, [
-    command('expo', [], 0),
-    command('maestro', ['test', '/flows/clockwork.yaml'], 0),
-  ])
-  const evidence = {
-    commands: [assertVisible('COMPLETED', 'Countdown: 0:09')],
-    receipt,
-  }
-
-  for (
-    const junit of [
-      '<testsuite><testcase/></testsuite>',
-      '<testsuite><testcase status="FAILED"/></testsuite>',
-      '<testsuite><testcase status="success"/></testsuite>',
-      '<testsuite><testcase></testcase></testsuite>',
-    ]
-  ) {
-    expect(classifyNativeApplicationFault('clockwork-countdown-frozen', { ...evidence, junit }).status)
-      .toBe('inconclusive')
-  }
-})
-
-test('rejects an HNReader failure without the matching post-kill app launch', () => {
-  const verdict = classifyNativeApplicationFault('hnreader-reading-history-no-write', {
-    commands: [
-      assertVisible('COMPLETED', '2 opened'),
-      appCommand('COMPLETED', 'killAppCommand'),
-      assertVisible('FAILED', '2 opened'),
-    ],
-    junit: '<testsuite><testcase><failure>Assertion is false: "2 opened" is visible</failure></testcase></testsuite>',
-    receipt: nativeReceipt('hnreader-reading-history-no-write', 'failed', 'native-ui-flow-failed', [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/hnreader.yaml'], 1),
-    ]),
-  })
-
-  expect(verdict.status).toBe('inconclusive')
-})
-
-test('rejects generic timeouts and command records that only resemble the expected assertion', () => {
-  const timeout = classifyNativeApplicationFault('clockwork-countdown-frozen', {
-    commands: [
-      assertVisible('COMPLETED', 'Control received: advance 1000ms'),
-      assertVisible('FAILED', 'Countdown: 0:09'),
-    ],
-    junit: '<testsuite><testcase><failure>Timed out waiting for the app</failure></testcase></testsuite>',
-    receipt: nativeReceipt('clockwork-countdown-frozen', 'failed', 'native-ui-flow-failed', [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/clockwork.yaml'], 1),
-    ]),
-  })
-  const wrongShape = classifyNativeApplicationFault('clockwork-countdown-frozen', {
-    commands: [
-      { metadata: { evaluatedCommand: { text: 'Control received: advance 1000ms' }, status: 'COMPLETED' } },
-      { metadata: { evaluatedCommand: { text: 'Countdown: 0:09' }, status: 'FAILED' } },
-    ],
-    junit:
-      '<testsuite><testcase><failure>Assertion is false: "Countdown: 0:09" is visible</failure></testcase></testsuite>',
-    receipt: nativeReceipt('clockwork-countdown-frozen', 'failed', 'native-ui-flow-failed', [
-      command('expo', [], 0),
-      command('maestro', ['test', '/flows/clockwork.yaml'], 1),
-    ]),
-  })
-
-  expect(timeout.status).toBe('inconclusive')
-  expect(wrongShape.status).toBe('inconclusive')
-})
-
 function report(tests: readonly ReturnType<typeof passed>[], unexpected: number): object {
   return {
     errors: [],
@@ -423,20 +292,6 @@ function adjacentCodeframe(marker: string, locator: string): string {
   return `Error: unrelated browser assertion\n\n  12 | await expect(page.${locator}, '${marker}').toBeVisible()\n> 13 | expect(actual, 'unrelated browser assertion').toBe(expected)`
 }
 
-function nativeReceipt(
-  fault: 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write',
-  status: 'failed' | 'passed',
-  failureCode: string | undefined,
-  commands: readonly object[],
-): object {
-  return {
-    commands,
-    ...(failureCode === undefined ? {} : { failure: { code: failureCode } }),
-    preparation: { appId: appIdFor(fault), fault: provenance(fault) },
-    status,
-  }
-}
-
 function provenance(fault: 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'): object {
   return {
     expectedVisibleAssertion: fault === 'clockwork-countdown-frozen' ? 'Countdown: 0:09' : '2 opened after reload',
@@ -447,29 +302,4 @@ function provenance(fault: 'clockwork-countdown-frozen' | 'hnreader-reading-hist
       ? '_gen_tao-app/App.tsx'
       : '_gen_tao-app/modules/external/Local.ts',
   }
-}
-
-function command(command: string, args: readonly string[], exitCode: number): object {
-  return { args, command, exitCode, signal: null }
-}
-
-function assertVisible(status: 'COMPLETED' | 'FAILED', textRegex: string): object {
-  return {
-    command: { assertConditionCommand: { condition: { visible: { textRegex } } } },
-    metadata: { evaluatedCommand: { assertConditionCommand: { condition: { visible: { textRegex } } } }, status },
-  }
-}
-
-function appCommand(status: 'COMPLETED' | 'FAILED', kind: 'killAppCommand' | 'launchAppCommand'): object {
-  const appId = appIdFor('hnreader-reading-history-no-write')
-  return {
-    command: { [kind]: { appId } },
-    metadata: { evaluatedCommand: { [kind]: { appId } }, status },
-  }
-}
-
-function appIdFor(fault: 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'): string {
-  return fault === 'clockwork-countdown-frozen'
-    ? 'dev.tao.taohostclockworktest'
-    : 'dev.tao.taohosthnreadertest'
 }
