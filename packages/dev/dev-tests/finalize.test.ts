@@ -17,7 +17,11 @@ const FAKE_TOOLCHAIN = 'fake-toolchain-abc'
 type FakeRepository = {
   branch: string
   conflictOnMerge?: boolean
+  /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
+  deniedMergeStderr?: string
   diffPaths?: string[]
+  /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
+  mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
   headSha: string
   localMainSha?: string
@@ -27,8 +31,8 @@ type FakeRepository = {
   verifyExitCode?: number
 }
 
-function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0) {
-  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr: '', stdout }
+function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0, stderr = '') {
+  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr, stdout }
 }
 
 function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
@@ -76,7 +80,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       const mainShaUsed = repository.remoteReachable ? repository.mainSha : repository.localMainSha
       return result(args, spec.cwd, '', mainShaUsed === headAfterMerge || mainShaUsed === repository.headSha ? 0 : 1)
     }
+    if (args[0] === 'merge-tree' && args[1] === '--write-tree') {
+      const conflicts = repository.mergeTreeConflicts ?? []
+      return conflicts.length === 0
+        ? result(args, spec.cwd, 'treeoid0000000000000000000000000000000000\n')
+        : result(args, spec.cwd, `treeoid0000000000000000000000000000000000\n${conflicts.join('\n')}\n\nCONFLICT\n`, 1)
+    }
     if (args[0] === 'merge' && args[1] === '--no-edit') {
+      if (repository.deniedMergeStderr !== undefined) {
+        return result(args, spec.cwd, '', 1, repository.deniedMergeStderr)
+      }
       if (repository.conflictOnMerge === true) {
         return result(args, spec.cwd, '', 1)
       }
@@ -84,7 +97,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       return result(args, spec.cwd)
     }
     if (joined === 'diff --name-only --diff-filter=U') {
-      return result(args, spec.cwd, 'conflicted.ts\n')
+      return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
       return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
@@ -207,6 +220,40 @@ Describe('finalize', () => {
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
       .rejects.toThrow('conflicted.ts')
     Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
+  })
+
+  Test('calls a denied integration what it is, rather than a conflict with nothing to resolve', async () => {
+    const fake = fakeDependencies({
+      deniedMergeStderr: "error: unable to unlink old 'agents/skills/delegation/SKILL.md': Operation not permitted",
+      mergeTreeConflicts: ['agents/skills/delegation/SKILL.md'],
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    const message = String(failure)
+    Expect(message.includes('did not complete, and it is not a conflict')).toBe(true)
+    Expect(message.includes('Operation not permitted')).toBe(true)
+    Expect(message.includes('agents/skills/delegation/SKILL.md')).toBe(true)
+    Expect(message.includes('DEVENV-111')).toBe(true)
+    Expect(message.includes('resolve it by hand and finalize again')).toBe(false)
+  })
+
+  Test('names what would conflict even when the merge recorded nothing to resolve', async () => {
+    const fake = fakeDependencies({ deniedMergeStderr: 'denied', mergeTreeConflicts: [] })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    Expect(String(failure).includes('Nothing would have conflicted.')).toBe(true)
+  })
+
+  Test('asks what would conflict before attempting the merge, not after it has failed', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true, mergeTreeConflicts: ['conflicted.ts'] })
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
+
+    const preview = fake.calls.findIndex(call => call.args[0] === 'merge-tree')
+    const merge = fake.calls.findIndex(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')
+    Expect(preview).toBeGreaterThanOrEqual(0)
+    Expect(preview < merge).toBe(true)
   })
 
   Test('runs just verify --complete only when no accepted lane already covers this tree', async () => {

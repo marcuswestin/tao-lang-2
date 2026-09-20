@@ -1,6 +1,15 @@
 # DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path
 
-- **Status:** Candidate
+- **Status:** In progress
+- **Partly addressed, 2026-09-20:** `Finalize.ts` now asks `git merge-tree --write-tree --name-only`
+  what would conflict _before_ attempting the merge, and separates the two failures. A merge that
+  recorded unmerged entries still says to resolve it by hand and names them. A merge that failed
+  without recording any says so in those words, quotes Git's stderr, names what `merge-tree` says
+  would conflict — it answers read-only, so it works where the merge itself could not — and points at
+  running `git merge main` as a top-level command. The empty conflict list is gone. **What remains**
+  is the half-written tree itself: the merge is still attempted inside the sandbox, so it can still
+  stop partway and leave modifications the reader did not make. That needs the sandbox-inheritance
+  fix under Dependencies, not another change here.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox

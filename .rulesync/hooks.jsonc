@@ -49,6 +49,13 @@
       // agents read through Bash in a week, and `OutputDiscipline.ts` refuses exactly those,
       // naming the pipe, the redirect, or the summary flag that makes the command acceptable. It
       // owns no habit the shell-habits hook already warns about.
+      //
+      // The refusal travels as `hookSpecificOutput.permissionDecision: "deny"`, which both harnesses
+      // document as the way to deny a tool call, neither requiring a particular exit code for it:
+      // code.claude.com/docs/en/hooks and learn.chatgpt.com/docs/hooks ("To deny a supported tool
+      // call, return this hook-specific shape"). Exiting 0 regardless therefore denies where a rule
+      // matched and costs nothing where none did, and the `|| true` cannot swallow a decision that
+      // travels on stdout.
       {
         "type": "command",
         "matcher": "Bash",
