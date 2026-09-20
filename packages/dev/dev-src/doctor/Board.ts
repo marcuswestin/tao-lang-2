@@ -2,6 +2,7 @@ import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GreenTree, type GreenTreeRecord } from '../repository-tests/GreenTree'
 import { LandingLock, type LandingLockRecord } from '../repository-tests/LandingLock'
 import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
+import { formatReminders, readDueReminders, type Reminder } from './Reminders'
 
 /**
  * `board` answers the question no other command answers: who else is touching this machine right
@@ -25,6 +26,8 @@ export type BoardDependencies = {
   loadAverage?: () => number
   registryRoot?: string
   run?: typeof CLI.run
+  /** Injected by tests so a due reminder does not depend on the day the suite runs. */
+  today?: string
 }
 
 /** BoardWorktreeStatus distinguishes a fully-read worktree from one this run could not inspect. */
@@ -94,6 +97,7 @@ type BoardMachine = {
 /** BoardReport is the versioned `--json` shape of `board`. */
 export type BoardReport = {
   machine: BoardMachine
+  reminders: readonly Reminder[]
   verdict: string
   version: 1
   worktrees: readonly BoardWorktree[]
@@ -116,13 +120,22 @@ export async function board(dependencies: BoardDependencies = {}): Promise<Board
     readBoardMachine(dependencies.registryRoot, dependencies.cpuCount, dependencies.loadAverage),
   ])
   const thisRoot = await canonicalPath(Repo.getRoot())
-  return { machine, verdict: computeVerdict(machine, thisRoot), version: 1, worktrees: rows }
+  const today = (dependencies.today ?? new Date().toISOString()).slice(0, 10)
+  return {
+    machine,
+    reminders: await readDueReminders(Repo.getRoot(), today),
+    verdict: computeVerdict(machine, thisRoot),
+    version: 1,
+    worktrees: rows,
+  }
 }
 
 /** formatBoardReport renders the report as the screen `board` prints without `--json`. */
 export function formatBoardReport(report: BoardReport): string {
+  const reminders = formatReminders(report.reminders)
   const sections = [
     report.verdict,
+    ...(reminders === '' ? [] : ['', reminders]),
     '',
     'Worktrees:',
     report.worktrees.length === 0 ? '  (none found)' : report.worktrees.map(formatWorktreeRow).join('\n'),

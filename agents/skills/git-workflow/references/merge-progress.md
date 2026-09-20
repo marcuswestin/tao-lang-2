@@ -1,13 +1,36 @@
 # Merge Progress
 
-Land the finished part of a long task on `main` mid-flight and carry the rest on a fresh branch. Use
-when Ro asks to merge what is done so far and keep going, says to bring the work to a good state and
-merge now, or invokes `/merge-progress`.
+Land the finished part of a long task on `main` mid-flight and carry the rest on a fresh branch.
+Reach for this whenever a long task crosses a slice boundary, not only when Ro asks to merge what is
+done so far, says to bring the work to a good state and merge now, or invokes `/merge-progress`.
+
+A branch that sits un-integrated gets more expensive every hour: `main` moves several times a day
+here, and the files a long task most often touches — root `AGENTS.md`, the skills, the developer
+environment ledger — are exactly the ones every other branch also edits, so they conflict and
+renumber on every round. Landing the finished half early is what keeps that bill small.
 
 The finished part lands on `main` now; the remainder continues on a new branch from that `main`.
 Nothing half-done ships: the cut is chosen so every commit that lands is complete on its own terms.
 The rest of `git-workflow` owns squashing, merging, and syncing `main`, and `verification-lanes` owns
 the evidence and message format; this reference owns only the mid-task cut.
+
+## When a slice is worth proposing
+
+The landing lock is machine-wide and a landing queues behind every other lane on the machine — waits
+of twenty minutes and more are ordinary — so a slice has to be worth one. Propose a landing only when
+all four hold, and it is then Ro's to accept or defer:
+
+- The finished side is independently complete by the cut rule below.
+- It is at least two commits, or one that touches a surface other branches also edit: root
+  `AGENTS.md`, a skill, `.rulesync/`, a generated harness file, or the developer environment ledger.
+- At least half an hour of work has gone into it, or `main` has moved since this branch last matched
+  it. Both are reasons the merge gets dearer by waiting.
+- You have not proposed a landing in the last half hour. One proposal per boundary, not per commit.
+
+Say in the proposal which of these made it worth asking, and check `./agent board` first: when a
+landing already holds the lock, say so and name the wait, because that is the fact Ro is trading
+against. Never land on the strength of this section alone — root `AGENTS.md` requires Ro's explicit
+yes, which may have been given in advance for a named slice.
 
 ## Choosing the cut
 
@@ -40,8 +63,24 @@ Sync `main` as any landing does (`git-workflow`'s fetch/fast-forward/merge-if-bo
 then, without waiting to be asked: create the follow-up branch from the `main` that now holds the
 merge, in a fresh worktree; carry the in-progress work onto it, preferring to re-apply it from the
 landed base over cherry-picking a commit whose context has moved; and continue — the follow-up branch
-is an ordinary feature branch from here. Do not merge it under this workflow again out of habit; a
-second mid-task cut is Ro's call, not a rhythm.
+is an ordinary feature branch from here. A later cut is proposed the same way, against the same four
+conditions — the rhythm is Ro's to set by answering, not yours to set by cutting.
+
+## The checkpoint
+
+`.artifacts/checkpoint/<branch>.md` is what a slice boundary leaves behind, refreshed at every one of
+them whether or not a landing is proposed. It exists because the two ways a long task continues —
+Ro compacting the thread, or a fresh thread taking the branch — both destroy conversation and keep
+the repository. A model-written summary drops the constraint that mattered; a file does not.
+
+It is ignored by Git and lives only in this worktree, which is the right scope: it carries a branch
+across a context boundary, while work that has to survive the branch goes in the roadmap document
+under "Handing over the rest". Keep it short enough to stay true: the goal in a sentence; decisions taken and what they rule out;
+the evidence already green, with the lane and its timestamp, so the next thread does not re-run it;
+paths this branch owns; what is open, each with its next concrete step; and what has been proposed to
+Ro and not yet answered. Replace it rather than appending — a checkpoint is the current state, not a
+log — and write it before saying that this is a good point to compact, because after the compaction
+it is the only thing that remembers.
 
 ## Handing over the rest
 

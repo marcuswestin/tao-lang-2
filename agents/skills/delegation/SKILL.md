@@ -11,7 +11,7 @@ Optimize wall-clock time to finish the whole task you own, not tokens, not your 
 ## Delegate when
 
 - **The work compresses**: large input, small conclusion — sweeping many files for a pattern, reading a long log down to the failures, a page of vendor docs for one fact. Holds even when you could do it quickly yourself, because what you'd carry afterwards is worse than what you'd carry now.
-- **It is big enough to amortize**: roughly ten or more tool calls, or 15k+ tokens pulled through context for a conclusion you could state in a paragraph.
+- **It is big enough to amortize**: roughly ten or more tool calls, or 15k+ tokens pulled through context for a conclusion you could state in a paragraph. That threshold is only recognisable once crossed, so apply it forward: before opening the third file to answer one question, hand the question over. Delegating raises total tokens, since the agent re-reads what you already know, and lowers what you carry for the rest of the session — the second is what the session is paid on.
 - **It can run while you work**: anything your next two or three steps do not depend on goes to a background agent, launched before your own step rather than after.
 - **It wants a different model than yours**: mechanical breadth deserves a cheaper model, a hard judgment call a stronger one — see routing below.
 - **It should not be able to write**: review, audit, and second opinions are more trustworthy from an agent that cannot quietly fix what it finds and report success.
@@ -68,6 +68,6 @@ A brief Ro asks you to print takes none of that worktree boilerplate. Ro pastes 
 
 ## The return contract and what you do with it
 
-Ask for, and hold agents to, one to two thousand dense tokens: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Agent-to-agent text is exempt from the response shape Ro reads.
+Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Agent-to-agent text is exempt from the response shape Ro reads.
 
 Completion is not correctness, and a confident summary is not evidence. Before building on a report, check one thing the agent could not have produced without doing the work — a cited `file:line`, the one command, the diff. A report that cites nothing checkable is a prompt to redo the work, not a result. Watch for two quiet failures: an agent that stopped early and reported as though it finished, and a summary that dropped the decision or open question that mattered.

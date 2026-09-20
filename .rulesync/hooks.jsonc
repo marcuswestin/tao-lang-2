@@ -41,6 +41,26 @@
     // above its stdout must reach the harness rather than /dev/null. It warns; it never blocks,
     // and `|| true` keeps a missing worktree from being reported as a hook error.
     "preToolUse": [
+      // The output-discipline hook is the one hook here that refuses rather than warns, and the
+      // reason is structural rather than a preference for strictness. A warning travels in
+      // `additionalContext`, which both harnesses place beside the tool result — so a warning about
+      // an eight-thousand-character dump arrives underneath the dump, having prevented nothing.
+      // Shell file reads and unbounded Git patches were 42% of every character this repository's
+      // agents read through Bash in a week, and `OutputDiscipline.ts` refuses exactly those,
+      // naming the pipe, the redirect, or the summary flag that makes the command acceptable. It
+      // owns no habit the shell-habits hook already warns about.
+      //
+      // The refusal travels as `hookSpecificOutput.permissionDecision: "deny"`, which both harnesses
+      // document as the way to deny a tool call, neither requiring a particular exit code for it:
+      // code.claude.com/docs/en/hooks and learn.chatgpt.com/docs/hooks ("To deny a supported tool
+      // call, return this hook-specific shape"). Exiting 0 regardless therefore denies where a rule
+      // matched and costs nothing where none did, and the `|| true` cannot swallow a decision that
+      // travels on stdout.
+      {
+        "type": "command",
+        "matcher": "Bash",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-output-discipline.zsh\" || true",
+      },
       {
         "type": "command",
         "matcher": "Agent",

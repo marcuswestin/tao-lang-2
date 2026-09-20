@@ -32,21 +32,21 @@ drafted. `./agent board` reports every worktree's branch, cleanliness, finalize 
 beside the lane and lease registry — read it before calling a slow lane a regression, and before
 landing, to see who else is close.
 
-## Whether to land it yourself
+## Whether to propose the landing or hold it back
 
-The question is not how substantial the change is. It is whether the gates can prove it.
+Ro's explicit yes lands a branch, given in the moment or ahead of time for a named slice; absent one a
+ready branch waits. What you ask for turns on whether the gates prove the change, not on its size.
 
-- **Land it yourself** when the gates that ran green cover the change: documentation, roadmap, agent
-  instructions, developer tooling, and test-only changes always; product code whose behavior the
-  suites actually exercise.
-- **Bring it to ready and hand the landing to Ro** when the change reaches what no gate proves —
-  Studio's or an app's visible behavior, a language surface Ro has not seen, native or device paths,
-  or anything covered only by the lanes a person runs: `./dev studio-manual-checks`, a device
-  install, and everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why
-  the gates do not settle it.
-- A green `full-verify` is not by itself an answer. A change can pass every gate and still be one Ro
-  wants to see first, because the thing it changed is the thing Ro is designing.
-- When the two pull against each other, ask. A landing Ro did not want costs more than a question.
+- **Propose it as ready to land** when the gates that ran green cover the change: documentation,
+  roadmap, agent instructions, developer tooling, and test-only changes always; product code whose
+  behavior the suites actually exercise.
+- **Propose it as needing Ro's eyes first** when the change reaches what no gate proves — Studio's or
+  an app's visible behavior, a language surface Ro has not seen, native or device paths, or anything
+  covered only by the lanes a person runs: `./dev studio-manual-checks`, a device install, and
+  everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why.
+- A green `full-verify` is not by itself an answer: a change can pass every gate and still be one Ro
+  wants to see first, because the thing it changed is the thing Ro is designing. When the two pull
+  against each other, say so in the proposal.
 
 ## Working inside a busy machine
 
