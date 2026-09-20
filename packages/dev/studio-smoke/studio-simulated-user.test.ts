@@ -1,5 +1,5 @@
-import { Errors, FS, HCI, Platform, Time } from '@shared'
-import { Expect, mkTestDir, Test } from '@shared/test'
+import { Errors, FS, Platform, Time } from '@shared'
+import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
@@ -620,9 +620,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           catalog.revision > reloadedSnapCatalog.revision
           && catalog.sketches[0]?.rects.length === 0
           && catalog.sketches[0]?.snapped.length === 5,
-        async () => {
-          await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
-          return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
+        {
+          diagnose: async () => {
+            await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
+            return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
+          },
         },
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
@@ -643,17 +645,23 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(incrementalUndoCatalog.sketches[0]?.rectOrder).toEqual(reloadedSnapCatalog.sketches[0]?.rectOrder)
       Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
 
+      // Unsnap one rectangle rather than the whole tree, which is what the same button does when
+      // nothing is selected. The selection is therefore made inside the settled moment that presses
+      // the button, never before it: an authoritative render replaces the board and its selector,
+      // and a selection made across one is silently an instruction to unsnap everything.
       const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
-      const selectRetainedRectangle = `(() => {
+      const selectRetained = `(() => {
         const select = document.querySelector(${
         JSON.stringify(
           `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
         )
       })
-        if (!(select instanceof HTMLSelectElement)) throw new Error('Missing snapped rectangle selector')
+        if (!(select instanceof HTMLSelectElement)) return false
         const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
-        if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
+        if (!(option instanceof HTMLOptionElement)) return false
         for (const candidate of select.options) candidate.selected = candidate === option
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+        return [...select.selectedOptions].map(entry => entry.value).join(',') === ${JSON.stringify(retained.id)}
       })()`
       const unsnappedCatalog = await clickSketchWhenSettled(
         browser,
@@ -664,8 +672,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           catalog.revision > incrementalUndoCatalog.revision
           && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
           && catalog.sketches[0]?.snapped.length === 3,
-        undefined,
-        selectRetainedRectangle,
+        { prepare: selectRetained },
       )
       Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
       Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
@@ -797,7 +804,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     primaryFailure = error
     throw error
   } finally {
-    await cleanupSmokeResources(primaryFailure, [
+    await runCleanups(primaryFailure, [
       { label: 'close browser', run: () => browser?.close() },
       { label: 'stop native Studio', run: () => native?.stop() },
       { label: 'stop Studio server', run: () => studio?.stop() },
@@ -809,7 +816,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         label: 'remove preview runtime',
         run: () => previewRuntimeRoot === undefined ? undefined : FS.remove(previewRuntimeRoot),
       },
-    ])
+    ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
   }
   if (projectRoot !== undefined) {
     Expect(await FS.exists(projectRoot)).toBe(false)
@@ -1333,7 +1340,13 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
  * and is lost. Pressing again is not a remedy: each of these controls consumes one unit of work, so
  * a second press after a merely slow first one snaps or unsnaps something else. The board is marked
  * and given a quiet moment instead, and pressed once when it is still the board that was marked.
- * Prepare selection on that same settled board; a replacement would discard earlier DOM selection.
+ *
+ * `prepare` is for a press whose meaning depends on state the board carries rather than on the
+ * press alone, and it exists because an authoritative render replaces the whole board: a selection
+ * made before the quiet moment is gone by the end of it, and Unsnap with nothing selected unsnaps
+ * everything. It is a page expression returning whether the preparation holds, evaluated in the
+ * same round trip that confirms the board is still the marked one, so the press cannot follow a
+ * render that discarded what it was told to act on.
  */
 async function clickSketchWhenSettled(
   browser: StudioCdp,
@@ -1341,25 +1354,23 @@ async function clickSketchWhenSettled(
   selector: string,
   path: string,
   predicate: (catalog: SmokeSketchCatalog) => boolean,
-  diagnose?: () => Promise<unknown>,
-  prepareSettledBoard?: string,
+  options: { diagnose?: () => Promise<unknown>; prepare?: string } = {},
 ): Promise<SmokeSketchCatalog> {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
     const generation = await markSketchBoard(browser, sketchId)
     await Time.sleep(300)
-    const settled = await browser.evaluate<boolean>(`(() => {
+    const ready = await browser.evaluate<boolean>(`(() => {
       const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
       if (!(board instanceof HTMLElement)
         || board.dataset.taoStudioSmokeGeneration !== ${JSON.stringify(generation)}) {
         return false
       }
-      ${prepareSettledBoard ?? ''}
-      return true
+      return ${options.prepare ?? 'true'}
     })()`)
-    if (settled) {
+    if (ready) {
       await browser.click(selector)
-      return await waitForSketchCatalog(path, predicate, diagnose)
+      return await waitForSketchCatalog(path, predicate, options.diagnose)
     }
   }
   Errors.throwHostEnvironment(`The Studio sketch board never settled long enough to press ${selector}`)
@@ -1665,70 +1676,3 @@ function ordered(source: string, labels: readonly string[]): boolean {
   return offsets.every(offset => offset >= 0)
     && offsets.every((offset, index) => index === 0 || offsets[index - 1]! < offset)
 }
-
-async function cleanupSmokeResources(
-  primaryFailure: unknown,
-  cleanups: ReadonlyArray<{ label: string; run: () => unknown | Promise<unknown> }>,
-  reportCleanupFailure: (error: unknown) => void = error =>
-    HCI.logProcessError(
-      'studio-smoke-cleanup',
-      `Cleanup also failed after the primary journey failure: ${Errors.formatForLog(error)}`,
-    ),
-): Promise<void> {
-  const failures: Array<{ error: unknown; label: string }> = []
-  for (const cleanup of cleanups) {
-    try {
-      await cleanup.run()
-    } catch (error) {
-      failures.push({ error, label: cleanup.label })
-    }
-  }
-  if (failures.length === 0) {
-    return
-  }
-  const message = `${failures.length} Studio smoke cleanup operations failed:\n${
-    failures.map(failure => `- ${failure.label}: ${Errors.messageOf(failure.error)}`).join('\n')
-  }`
-  const cause = failures.map(failure => ({
-    error: Errors.formatForLog(failure.error),
-    label: failure.label,
-  }))
-  if (primaryFailure === undefined) {
-    Errors.throwUnexpected(message, { cause })
-  }
-  reportCleanupFailure(new Errors.UnexpectedBehaviorError(message, { cause }))
-}
-
-Test('smoke cleanup attempts every disposer without replacing the primary failure', async () => {
-  const primaryFailure = new Errors.UnexpectedBehaviorError('primary journey failure')
-  const cleaned: string[] = []
-  const reported: unknown[] = []
-
-  await cleanupSmokeResources(primaryFailure, [
-    {
-      label: 'close browser',
-      run: () => {
-        cleaned.push('browser')
-        Errors.throwHostEnvironment('browser cleanup failed')
-      },
-    },
-    {
-      label: 'remove runtime',
-      run: () => {
-        cleaned.push('runtime')
-        Errors.throwHostEnvironment('runtime cleanup failed')
-      },
-    },
-    { label: 'remove export', run: () => cleaned.push('export') },
-  ], error => reported.push(error))
-
-  Expect(cleaned).toEqual(['browser', 'runtime', 'export'])
-  Expect(reported).toHaveLength(1)
-  Expect(Errors.messageOf(reported[0])).toContain('close browser: browser cleanup failed')
-  Expect(Errors.messageOf(reported[0])).toContain('remove runtime: runtime cleanup failed')
-  Expect(primaryFailure.message).toBe('primary journey failure')
-
-  await Expect(cleanupSmokeResources(undefined, [
-    { label: 'standalone cleanup', run: () => Errors.throwHostEnvironment('standalone cleanup failed') },
-  ], error => reported.push(error))).rejects.toThrow('standalone cleanup failed')
-})

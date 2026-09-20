@@ -62,13 +62,25 @@ function regionSubjectKnown(subject: string, condition: AST.LayoutCondition, ctx
   if (!declaration) {
     return false
   }
+  // Which view a region renders belongs to the project, not to what this entry imports: the view
+  // declaring the condition is commonly rendered by a sibling file it does not import itself. The
+  // members are keyed by file and name rather than by node identity, because a project batch parses
+  // several entry graphs and the same declaration is a different node object in each of them; the
+  // key still separates the same-spelled private siblings identity was there to separate.
   const members = ctx.memo('interaction-validator.regionMembers', () =>
     new Set(
-      ctx.workspaceFiles.flatMap(file =>
-        file.statements.filter(AST.isViewDeclaration).flatMap(ASTUtils.outlineSiblingRegionMemberDeclarations)
+      (ctx.projectFiles ?? ctx.workspaceFiles).flatMap(file =>
+        file.statements.filter(AST.isViewDeclaration)
+          .flatMap(ASTUtils.outlineSiblingRegionMemberDeclarations)
+          .map(viewDeclarationKey)
       ),
     ))
-  return members.has(declaration)
+  return members.has(viewDeclarationKey(declaration))
+}
+
+/** viewDeclarationKey identifies one view declaration across the separately parsed graphs of a batch. */
+function viewDeclarationKey(view: AST.ViewDeclaration): string {
+  return `${AST.getDocument(view).uri.path}#${view.name}`
 }
 
 function isPlainWord(word: AST.LayoutWord): boolean {

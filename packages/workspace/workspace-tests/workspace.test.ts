@@ -126,10 +126,10 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           'Published',
         ])
         Expect(Diagnostics.errorMessages(parsed.diagnostics).join('\n')).toContain(
-          "Could not resolve reference to Declaration named 'Hidden'",
+          "No declaration named 'Hidden'",
         )
         Expect(Diagnostics.errorMessages(parsed.diagnostics).join('\n')).toContain(
-          "Could not resolve reference to Declaration named 'PackageOnly'",
+          "No declaration named 'PackageOnly'",
         )
       },
     )
@@ -268,6 +268,83 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(batched.files.map(file => file.path)).toEqual(
           Expect['arrayContaining']([paths['Main.tao'], paths['@/studio/View1.tao']]),
         )
+      },
+    )
+  })
+
+  // The app selects the design, so a package file that imports no app used to see every tagged
+  // render as one with no design mounted at all. `tao check` surfaced 321 of these on this
+  // repository's own sources the moment validation errors started reaching the command.
+  Test('reads the selected design across the batch so an unimported package file keeps its tags', async () => {
+    await withTaoFiles(
+      'tao-workspace-batch-design-',
+      {
+        'Main.tao': `
+          project { id "batch-design" name "Batch design" remote none }
+          app Shell { view PanelView Design ShellDesign }
+          use PanelView from @ui
+          design ShellDesign { styles { panel [gap 4] } }
+        `,
+        '@ui/Panel.tao': `
+          use Col from @tao/ui
+          public view PanelView() { render Col() [panel] { } }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const alone = await workspace.validate(paths['@ui/Panel.tao']!)
+        const batched = await workspace.validateFiles([paths['Main.tao'], paths['@ui/Panel.tao']])
+
+        Expect(errorMessages(alone)).toContain("Design entry 'panel' requires an app Design selection.")
+        Expect(errorMessages(batched)).toEqual([])
+      },
+    )
+  })
+
+  // Region membership is decided by whichever file renders the view, which is routinely a sibling
+  // the view's own file does not import. The batch parses each entry into its own AST, so the
+  // member check has to identify a declaration by file and name rather than by node identity.
+  Test('reads interaction region members across the batch, matching declarations across entry graphs', async () => {
+    await withTaoFiles(
+      'tao-workspace-batch-regions-',
+      {
+        'Main.tao': `
+          project { id "batch-regions" name "Batch regions" remote none }
+          use BarView from @ui
+          use Col from @tao/ui
+          use StackNav from @tao/nav
+          design ShellDesign { colors { accent #123456 } }
+          nav ShellNav = StackNav { Initial HomeView }
+          view HomeView() { render inject ${tsFence} return null ${fence} }
+          scene ShellView(Navigator nav) {
+             render Col() {
+                Navigator()
+                BarView()
+             }
+          }
+          app Shell {
+             Name "Shell"
+             Design ShellDesign
+             view ShellView(ShellNav)
+          }
+        `,
+        // The bar states its own focus condition, but the shell that renders it into a region is a
+        // sibling this file does not import.
+        '@ui/Bar.tao': `
+          use Row from @tao/ui
+          public view BarView() { render Row() [border accent when BarView is active] { } }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const alone = await workspace.validate(paths['@ui/Bar.tao']!)
+        const batched = await workspace.validateFiles([paths['Main.tao'], paths['@ui/Bar.tao']])
+
+        Expect(errorMessages(alone)).toContain(
+          "'when BarView is active' names no visible view in a generated interaction region; "
+            + 'the condition can never become true.',
+        )
+        Expect(errorMessages(batched)).toEqual([])
       },
     )
   })

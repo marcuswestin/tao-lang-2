@@ -136,6 +136,21 @@ hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `
 average beside it — the one reading that also counts work no lane registered, such as an Xcode build
 or another repository entirely.
 
+## What the doctor will let you send somebody
+
+`./agent doctor` names this checkout: its root, its branch, the ports it found held and by whom. That
+diagnosis is for the person running it. The part meant to travel is the environment fingerprint —
+OS, architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, Xcode where there is
+one — which `./agent doctor` prints as two lines at the end of its report, `--json` carries as the
+report's `fingerprint`, and `./agent doctor --fingerprint` prints alone, always exiting 0 because
+somebody collecting an attachment for a report is not asking for a verdict.
+
+`EnvironmentFingerprint` builds it by parsing each value out of what a tool printed and keeping it
+only when it already reads as a version, a hash, or a plain word, so a path, a home directory, an
+account name, or a machine name cannot reach it whatever a probe emits. The `.github/` feedback forms
+ask reporters for it on that basis, and `environment-fingerprint.test.ts` holds it to that on hostile
+probe output and again on the real host.
+
 ## What a contended lane reports
 
 A busy machine breaks timing-sensitive work first, and an anonymous timeout looks exactly like a
@@ -281,10 +296,10 @@ Never delete the shared registry while another worktree may be using it.
   exists to remove.
 - `just verify-full-sandbox` runs the same full gate membership in a managed shell while explicitly
   skipping the five active host-only browser and native UI gates. Only `just verify-full` from an
-  unsandboxed shell proves those five gates. The simulated editor journey remains individually
-  runnable as `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`, but its
-  gate, `studio-smoke-simulated-user`, is temporarily quarantined from both full-verification lanes
-  while DEVENV-042 tracks its unreliable synthetic sketch input.
+  unsandboxed shell proves those five gates. The simulated editor journey is an ordinary member of
+  both full-verification lanes again, and remains individually runnable as
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`; DEVENV-042 still
+  tracks the reliability evidence it owes.
 
 `./dev test` chooses suites from one registry in `TestRunner.ts`: a Bun suite per package with a
 `<name>-tests` directory, `performance-checks`, `runtime-jest`, and `tao-apps`. Each entry owns its
@@ -317,13 +332,33 @@ verification proved, and a mismatch stops the landing.
 
 Nothing verifies the same bytes twice. When an agent has already run `verify --complete`, the
 `verify-full` the merge runs at that same tree skips every gate that run recorded and executes only
-the host-dependent lanes, which are never recorded; and when `verify-full` proved the feature head,
-Git's own tree comparison — not a second lane — is what proves the staged squash. Its strict
-preflight
-requires the local `main` ref to equal `origin/main`, read through the ref rather than through a
-checkout, because no worktree has to be on `main` at all: the command makes one under
-`.artifacts/merge/main-worktree` when the repository has none, and removes it when the landing
-completes. A local-ahead `main` must be reconciled deliberately first. A remote feature branch left behind by later local commits is pushed forward as
+the host-dependent lanes, which are never recorded; and because preflight requires `main` to be
+merged into the branch, the squash can only be the feature tree, so the bytes `verify-full` proved
+are the bytes that land.
+
+**A person works the same way, through the `Mine` recipes.** `just my-branch [name]` switches the
+checkout to `dev/<name>` — defaulting to `$TAO_DEV_BRANCH`, then `tao.devBranch` in Git config
+(`git config --local tao.devBranch dev/<name>` says it once per machine), then the Git identity —
+creating it from `main` the first time and carrying uncommitted work across. `just my-sync` fast-forwards the local
+`main` ref to `origin/main`, moves every mirror that follows it, and merges `main` into the branch,
+naming the conflicted files if there are any. `just my-resolve` hands exactly those conflicts to an
+agent, which resolves them, runs `./agent verify`, and commits the merge. `just my-land` finalizes
+and lands. A `dev/*` branch lands through the same `merge-with-main` as a `feat/*` branch, with the
+same gates and the same archive.
+
+**The landing touches no checkout but the invoking one.** It builds the squash commit with
+`git commit-tree` from the verified feature tree and moves `refs/heads/main` with `git update-ref`
+and an expected old value, so nothing is ever staged anywhere and two landings on one machine cannot
+interleave — the second is refused and told to merge main and retry. A landing that fails leaves no
+commit and no staged state behind, because the commit exists only from the moment the ref moves.
+For the same reason the command **refuses to land while any worktree has `main` checked out**: a
+checked-out branch promises that a worktree's files match it, and moving the ref underneath turns
+that worktree's `git status` into a wall of phantom deletions. A checkout that only exists to show
+what `main` holds is detached at main's tip instead (`git worktree add --detach <path> main`), and
+every landing moves such a mirror forward itself, as long as it is still clean and still where main
+was; a mirror someone has edited is left alone with a warning rather than overwritten. Its strict
+preflight requires the local `main` ref to equal `origin/main`, read through the ref rather than
+through a checkout. A local-ahead `main` must be reconciled deliberately first. A remote feature branch left behind by later local commits is pushed forward as
 the first mutation instead of refusing the landing; a remote holding commits the worktree lacks still
 stops preflight, because the squash would drop them. Successful execution preserves the invoking
 feature worktree as a clean detached checkout of the archived feature tip, deletes the local feature

@@ -188,7 +188,7 @@ Describe('validator: workspace structure', () => {
     `)
     const messages = validationErrorMessages(result)
 
-    Expect(messages.some(message => message.includes('AppValueDeclaration') && message.includes('MainView'))).toBe(true)
+    Expect(messages).toContain("No app or alias named 'MainView' is in scope.")
     Expect(messages).not.toContain(testValidationMessages.runTarget('MainView'))
   })
 

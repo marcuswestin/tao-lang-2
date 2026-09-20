@@ -12,9 +12,15 @@ const JUST_COMMANDS = [
   'finalize',
   'fix',
   'fmt',
+  // The landing lock is the turn-taking primitive every broad lane and the landing itself go
+  // through, so an agent has to be able to claim and return it by the same spelling it reads in
+  // AGENTS.md rather than dropping to `just`.
+  'land-lock',
+  'land-unlock',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
+  'simplify-audit',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only
   // as `just` recipes, which left the one instruction an agent follows split across two spellings.

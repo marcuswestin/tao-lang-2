@@ -230,6 +230,28 @@ report-test-stats limit="20":
 finalize check='false' fresh='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
 
+# Switch this checkout to your own dev/* branch, creating it from main the first time
+[group('Mine')]
+my-branch name='':
+    ./dev my-branch {{ quote(name) }}
+
+# Fast-forward main, move the mirrors that follow it, and merge it into your branch
+[group('Mine')]
+my-sync:
+    ./dev sync-main
+
+# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+[group('Mine')]
+my-resolve *ARGS:
+    if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
+    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+
+# Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
+[group('Mine')]
+my-land *ARGS:
+    ./dev finalize
+    ./dev merge-with-main {{ ARGS }}
+
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
 [arg('message_file', long='message-file')]
@@ -276,6 +298,23 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
+# The landing lock is the one turn-taking primitive: claiming it is what earns the right to run a
+# merge-evidence lane and then move refs. `land-lock` blocks until it is yours and exits holding it,
+# so no agent writes a sleep-poll loop of its own; `land-unlock` gives it back. Nothing reclaims a
+# lock on a timer, by design, so a wedged lock surfaces as a warning naming its holder rather than
+# as a takeover — `land-unlock --force` is the person-shaped way out.
+# `just` splits `*ARGS` on whitespace, so a multi-word `--label` has to go through `./dev land-lock`
+# directly; the default label names this worktree, which is what a waiting agent needs anyway.
+# Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it
+[group('Dev')]
+land-lock *ARGS:
+    ./dev land-lock {{ ARGS }}
+
+# Release the machine-wide landing lock this worktree holds
+[group('Dev')]
+land-unlock *ARGS:
+    ./dev land-unlock {{ ARGS }}
+
 # Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
 board *ARGS:
     ./dev board {{ ARGS }}
@@ -289,6 +328,11 @@ capabilities *ARGS:
 [group('Report')]
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
+
+# Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
+[group('Report')]
+simplify-audit *ARGS:
+    ./dev simplify-audit {{ ARGS }}
 
 # Benchmark cold and steady-state language-service performance
 [group('Report')]

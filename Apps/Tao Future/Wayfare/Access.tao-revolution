@@ -52,7 +52,7 @@ access Document {
 // the fields below; `Notes`, `Reservation`, `Visited`, documents, and the whole member list cannot reach
 // it, because they are not in the list.
 
-public publish Trip when Trip is Shared as SharedTrip by capability Trip.ShareCode {
+publish Trip when Trip is Shared as SharedTrip by capability Trip.ShareCode {
    Name
    Summary
    Begins
@@ -63,7 +63,7 @@ public publish Trip when Trip is Shared as SharedTrip by capability Trip.ShareCo
 }
 
 // An invitation shows the trip's name and dates before you belong to it, and nothing else.
-public publish Trip as InvitedTrip by capability Member.InviteCode {
+publish Trip as InvitedTrip by capability Member.InviteCode {
    Name
    Begins
    Ends

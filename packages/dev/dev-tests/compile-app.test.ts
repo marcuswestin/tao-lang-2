@@ -48,7 +48,15 @@ function compiler(exitCode = 0) {
   return { calls, compile }
 }
 
-/** run invokes the stamp against the fixture roots rather than the repository's real ones. */
+/**
+ * run invokes the stamp against the fixture roots rather than the repository's real ones.
+ *
+ * `noCache` is pinned rather than left to the environment, because these tests are about the stamp
+ * and a lane that ran them under `--no-cache` would set `TAO_TEST_NO_CACHE` on every process in its
+ * graph, including this one. Each test then asks the question it means to ask: a test that wants the
+ * opt-out passes it, and every other test reads the stamp whatever the lane around it was told.
+ * `--concurrent` rules out the alternative of mutating the environment, which every sibling reads.
+ */
 async function run(
   root: string,
   compile: CompileAppOptions['compile'],
@@ -60,6 +68,7 @@ async function run(
     appPath: APP_PATH,
     compile,
     inputFiles: INPUT_FILES,
+    noCache: false,
     outputRoot: OUTPUT_ROOT,
     repositoryRoot: root,
     sourceRoots: SOURCE_ROOTS,
@@ -363,6 +372,10 @@ Describe('app compilation staleness stamp', () => {
         appName: 'Example',
         appPath: ${JSON.stringify(APP_PATH)},
         inputFiles: ${JSON.stringify(INPUT_FILES)},
+        // Pinned for the same reason the in-process helper pins it, and separately: a child process
+        // inherits this lane's environment, so a \`--no-cache\` run would have both workers compile
+        // and the lock's in-lock staleness recheck would have nothing to decide.
+        noCache: false,
         outputRoot: ${JSON.stringify(OUTPUT_ROOT)},
         repositoryRoot: root,
         sourceRoots: ${JSON.stringify(SOURCE_ROOTS)},

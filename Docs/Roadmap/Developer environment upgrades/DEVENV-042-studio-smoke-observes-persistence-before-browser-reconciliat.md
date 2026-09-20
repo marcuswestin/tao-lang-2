@@ -3,7 +3,8 @@
 - **Status:** In progress
 - **Area:** Test reliability
 - **Impact:** The simulated Studio journey blocks otherwise green merge verification at synthetic
-  sketch interactions, so it cannot yet serve as reliable merge evidence.
+  sketch interactions, so it cannot yet serve as reliable merge evidence. It has rejoined both
+  full-verification lanes, so the same nondeterminism now reds those lanes rather than being skipped.
 - **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 exposed real toolbar, gesture,
   rerender, interleaved-Snap, editor-ownership, source-identity, geometry, and transaction defects.
   Those product fixes now have focused coverage, including a real pointer-release drag-one-in target.
@@ -21,17 +22,18 @@
   at 92.9. Both full receipts remain failed evidence; the standalone pass did not settle the cause.
   Inspection found that the test selected an option before its settle helper waited through board
   replacement. The new select could lose that selection, and the product correctly interprets empty
-  selection as unsnap-all. The test now prepares its selection in the same browser turn as the
-  successful board-generation check, before the existing single real click. Assertions are unchanged.
-  The corrected focused journey passed all four tests in 14.38 seconds.
+  selection as unsnap-all. The test now prepares and verifies its selection in the same browser turn
+  as the successful board-generation check, before the existing single real click. Assertions are
+  unchanged. The corrected focused journey passed all four tests in 14.38 seconds.
   The final `.artifacts/logs/verify-full/latest/summary.json` records validation of this narrow fix;
   this does not establish the broader ten-run reliability acceptance below.
   Full run `2026-09-19T21-27-48-281Z-47873-ffe742c3` passed this journey in 46.1 seconds and all other
   host/test gates. Its sole failure was stale raw-error allowlist lines, subsequently refreshed and
   validated by the complete commit gate recorded at `.artifacts/logs/verify/latest/summary.json`.
 - **Workaround:** Retain the failed run and retry this journey alone with
-  `./agent studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` before deciding
-  whether it is a persistent product regression. A passing retry does not erase the original failure.
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` before deciding whether
+  it is a persistent product regression. A passing retry does not erase the original failure; the
+  deterministic catalog tests in the same file plus the native and canary lanes remain active.
 - **Proposed change:** Run the complete journey ten consecutive times from a normal Terminal, retain
   its hit-tested preconditions and single-shot mutations, investigate any remaining nondeterminism,
   then remove the quarantine only when that acceptance is green.

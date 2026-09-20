@@ -64,10 +64,24 @@ export function pathIsWithin(path: string, directoryPath: string): boolean {
   const relative = relativePath(directoryPath, path)
   return relative === '' || (!relative.startsWith('..') && relative !== '..')
 }
-/** displayPath returns a path relative to the current working directory for human-readable output. */
+/**
+ * displayPath returns the shortest readable spelling of a path: relative to the current working
+ * directory, or absolute with the home directory written as `~`. A path outside the cwd otherwise
+ * renders as a run of `../` segments longer than the location it names, which no reader can follow.
+ */
 export function displayPath(inputPath: string): string {
   const relative = relativePath(resolvePath('.'), inputPath)
-  return relative === '' ? '.' : relative
+  if (relative === '') {
+    return '.'
+  }
+  const absolute = homeShortenedPath(resolvePath(inputPath))
+  return absolute.length < relative.length ? absolute : relative
+}
+
+/** homeShortenedPath writes an absolute path under the home directory as `~/…`. */
+function homeShortenedPath(absolutePath: string): string {
+  const fromHome = relativePath(homeDir(), absolutePath)
+  return fromHome !== '' && !fromHome.startsWith('..') ? `~/${fromHome}` : slashPath(absolutePath)
 }
 /** slashPath returns a path with host separators normalized to slashes. */
 export const slashPath = (inputPath: string) =>
@@ -168,6 +182,12 @@ export function readTextSync(inputPath: string): string {
 /** readFile reads a file as bytes. */
 export async function readFile(inputPath: string): Promise<Uint8Array> {
   return nodeFs.readFile(inputPath)
+}
+
+/** setModifiedTimeMs sets a path's last modified timestamp, leaving its access time alone. */
+export async function setModifiedTimeMs(inputPath: string, modifiedMs: number): Promise<void> {
+  const stats = await nodeFs.stat(inputPath)
+  await nodeFs.utimes(inputPath, stats.atime, new Date(modifiedMs))
 }
 
 /** modifiedTimeMs reads the last modified timestamp for a path. */
@@ -295,6 +315,7 @@ async function synchronizeDirectoryFilesLocked(
 ): Promise<void> {
   await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
   await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
+  await removeOrphanedSynchronizationFiles(toPath, boundaryPath, options)
   const sourceFiles = await walkedFiles(fromPath)
   const targetFiles = await isDirectory(toPath) ? await walkedFiles(toPath) : []
   const sourceByRelativePath = new Map(sourceFiles.map(path => [relativePath(fromPath, path), path]))
@@ -980,6 +1001,45 @@ function throwCombinedFailure(primary: unknown, detailName: string, secondary: u
 
 function randomFileSuffix(): string {
   return randomUUID()
+}
+
+/**
+ * A synchronization stages and rolls back through files named for the destination and sitting
+ * beside it, not inside it, so neither the walk of the destination nor its content identity can
+ * see them. A process killed mid-synchronization therefore leaves them in the destination's parent
+ * directory for good, where whatever reads that directory next picks them up — the packaged
+ * IDE-extension VSIX shipped them, because its file list names the parent directory as a whole.
+ *
+ * Sweeping them here is safe precisely because the caller holds the destination's mutation lock:
+ * no other synchronization into this destination can be staging, so every match is dead.
+ */
+async function removeOrphanedSynchronizationFiles(
+  toPath: string,
+  boundaryPath: string,
+  options: Partial<SynchronizeDirectoryFilesOptions>,
+): Promise<void> {
+  const parentPath = dirname(toPath)
+  if (!await isDirectory(parentPath)) {
+    return
+  }
+  const orphanPattern = new RegExp(
+    `^${escapeRegularExpression(basename(toPath))}\\.[0-9a-f-]{36}\\.\\d+\\.(tmp|restore)$`,
+  )
+  for (const entry of await listDir(parentPath)) {
+    if (!orphanPattern.test(entry)) {
+      continue
+    }
+    const orphanPath = resolvePath(entry, parentPath)
+    if (await isDirectory(orphanPath) || await isSymbolicLink(orphanPath)) {
+      continue
+    }
+    await removeFileWithinBoundary(orphanPath, boundaryPath, options)
+  }
+}
+
+/** escapeRegularExpression quotes a literal for use inside a pattern. */
+function escapeRegularExpression(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function walkedFiles(root: string): Promise<string[]> {

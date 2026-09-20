@@ -2,8 +2,8 @@
 
 transaction CreateTrip(Name text, Summary text, Begins date, Ends date) for Me returns Trip {
    let Trip = create Trip { Name, Summary, Begins, Ends }
-   create Member in Trip.Members { Person: Me, Email: Me.Email, Name: Me.Name, Owner, Joined }
-   create Day in Trip.Days { Date: Begins }
+   create Member { Trip, Person: Me, Email: Me.Email, Name: Me.Name, Role: Owner, Joined }
+   create Day { Trip, Date: Begins }
    update Me { CurrentTrip: Trip } // the Today tab follows this write
    return Trip
 }
@@ -11,8 +11,8 @@ transaction CreateTrip(Name text, Summary text, Begins date, Ends date) for Me r
 transaction InviteTraveler(Trip, Address text, Role) for Me returns Member {
    refuse when cannot create Member in Trip.Members { Role } "Only an owner or editor can invite travelers."
    // `unique Trip, Email` would refuse this anyway; saying it here turns a store rejection into a sentence.
-   refuse when Trip.Members has any where Email is Address "This person is already on the trip."
-   return create Member in Trip.Members { Email: Address, Role }
+   refuse when Trip.Members[Email is Address] is not empty "This person is already on the trip."
+   return create Member { Trip, Email: Address, Role }
 }
 
 transaction JoinWithInvite(Secret secret) for Me returns Trip {
@@ -59,7 +59,7 @@ transaction DeleteMyAccount() for Me {
 automation StopSoon for Stop {
    schedule when Stop.Starts {
       none -> never
-      otherwise -> at (Stop.Day.Date at Stop.Starts in Stop.Day.Trip.HomeZone) - 30 minutes
+      otherwise -> at (Stop.Day.Date at Stop.Starts in Stop.Day.Trip.HomeZone) - 30.minutes
    }
    while Stop is Planned
    once per Stop.Starts

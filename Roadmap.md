@@ -77,9 +77,18 @@ active workstream ledgers (`Docs/Roadmap/Tao Revolution/Decisions.md`); the step
 now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
 tests written in Tao, green in Current, for every construct introduced.
 
-- [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
+- [x] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
+  - `Apps/WordFlower/4 - Revolution/Open questions.md` carries the eleven questions the rewrite could
+    not answer from `Decisions.md` — chiefly whether empty argument lists on containers are omitted
+    (§9 says yes, §10's own example and the implementation say no, and `3 - MVP` inherits whichever
+    wins), whether the visibility ladder is §1's two words or the implemented five, and whether
+    `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority cluster, is `R5` in
+    `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
+    `Decisions.md` were amended in the same change: `TabNav` → `SelectionNav`, the missing `overlay`
+    presentation mode, and two parameter lists still written `Name is Type`.
+  - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
 - [ ] Consolidate the `Apps/Tao Future/` apps to the decided dialect (Process step 3)
   - The three demos are design D's dialect today; align them to `Decisions.md` and complete
     `Coverage.md`'s rows during the port.
@@ -142,21 +151,18 @@ tests written in Tao, green in Current, for every construct introduced.
     now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
     -- the preview runtime, the session, and one revision both halves agree on -- is in
     `Docs/Roadmap/Tao Studio v2/Exploration - Studio server hot reload.md`.
-- [ ] Make `just verify-full` pass its simulated-user lane
+- [x] Make `just verify-full` pass its simulated-user lane
+  - Closed by `34132956`: the journey ran ten consecutive green normal-terminal runs and
+    `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again, with
+    `VERIFY_FULL_SKIPPED` now empty. `just studio-smoke
+    packages/dev/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
-    transaction defects found through this journey have landed with focused coverage. That does not
-    promote the lane to final evidence: the complete simulated-user journey still needs ten
-    consecutive reliable normal-terminal runs before it rejoins `verify-full`.
-  - Do not widen `previewOriginPath` to make the lane pass. The stub preview builds its identity by
-    fetching `/api/protocol` and `/api/file`, which that six-endpoint allowlist deliberately keeps
-    away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
-    `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
-    stub onto that contract instead.
-  - The lane remains quarantined from the `verify-full` graph with its stated reliability reason;
-    `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it directly for
-    acceptance evidence, and re-adding it to the graph is one catalog edit after the ten-run gate.
-  - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
-    `agents/skills/studio-hybrid-client/SKILL.md`.
+    transaction defects it found landed with focused coverage along the way.
+  - Standing rule for whoever touches the stub preview next: do not widen `previewOriginPath`. The
+    stub builds its identity by fetching `/api/protocol` and `/api/file`, which that six-endpoint
+    allowlist deliberately keeps away from a preview origin; a real preview receives `path` and
+    `sourceVersion` from Studio's own `postEditorSelection` message and knows its source ranges from
+    the bundle it runs.
 - [ ] Implement a drag-and-drop example app
   - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
     (loop vs cell vs scroll container), drag previews, declarable drop targets (including
@@ -260,10 +266,13 @@ tests written in Tao, green in Current, for every construct introduced.
     `@bomb.sh/tab`. Remaining: PowerShell installation, which the library generates but the installer
     does not place, and per-argument completions for app names, paths, and test patterns.
 - [ ] Build the enforcement and diagnostics surface
-  - A hosted gate that runs `verify` on pushed work, and a real diagnostic rendering for `tao check`,
-    which today only reports canonicalization. Brief:
-    `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were verified against a
-    much older commit, so re-check them before planning.
+  - A hosted gate that runs `verify` on pushed work. The diagnostics half has landed: `tao check`
+    reports syntax, linker, and validator diagnostics with file, line, column, severity, and the
+    underlined source line, and fails the command on any error. Remaining there: `tao fmt` still
+    reports a file it cannot parse through the formatter's assertion rather than a positioned
+    diagnostic, and Chevrotain's own parser wording ("Expecting token of type …") is passed through
+    unchanged. Brief: `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were
+    verified against a much older commit, so re-check them before planning.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
 
