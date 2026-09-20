@@ -14,22 +14,19 @@
 
 ## House patterns
 
-1. Dispatch on `.kind`, `.type`, `.$type`, or a literal union uses `Switch.*`
-   (`packages/shared/shared-src/core/Switch_TypeSafe.ts`). Native `switch` and if/else-if chains
-   over one discriminant are linted at zero tolerance.
-2. A condition gets a name when it mixes `&&` with `||`, negates a group, or appears twice.
+`packages/AGENTS.md` owns the dispatch, error, and platform-access patterns and their gates.
+
+1. A condition gets a name when it mixes `&&` with `||`, negates a group, or appears twice.
    - `if (!task.done && (task.owned || task.recent))` becomes `if (Tasks.isOwnedOrRecent(task))`
      when a namespace owns the concept, `if (isOwnedOrRecentTask(task))` otherwise.
    - Shape checks (`typeof x === 'object' && x !== null …`) become shared guards such as
      `Json.isRecord`.
    - Review-only: no lint can judge "non-trivial".
-3. Errors go through `Assert` and `Errors.throw*`, or `TR-errors` in the runtime. Already gated.
-4. Platform access goes through `Platform`, `FS`, `CLI`, `Time`. Shrink the allowlists by adding
+2. Errors go through `Assert` and `Errors.throw*`, or `TR-errors` in the runtime. Already gated.
+3. Platform access goes through `Platform`, `FS`, `CLI`, `Time`. Shrink the allowlists by adding
    the missing wrapper (as `Platform.sha256Hex` and `Platform.signES256` did for `node:crypto`), not
    by adding entries. Entries for emitted script text stay.
-   - Dispatch on a plain property of a wire union uses `Switch.on(message, 'type', handlers)`, and a
-     deliberately ignored branch uses `Switch.nothing`. Every `Switch` form reads own keys only.
-5. Utilities live in namespaced modules named for their concept, not as loose functions.
+4. Utilities live in namespaced modules named for their concept, not as loose functions.
 
 ## Structure
 

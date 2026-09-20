@@ -8,12 +8,9 @@ consumes what it exports.
 - `ScopeComputation` indexes symbols after parsing; `ScopeProvider` resolves references during
   linking. Never resolve `.ref` while computing scopes — that belongs in `ScopeProvider.getScope`,
   and reading it earlier can trigger cyclic linking.
-- Separate local-symbol, file/global-symbol, and future module/import concerns, and keep visibility
-  rules in the existing parser or workspace scoping owners.
-- Cross-referenced grammar rules must expose their key as `name`. Ignore incomplete recovery nodes
-  without real names.
-- Build scope chains nearest-to-farthest: pass the outer scope into `createScopeForNodes` so closer
-  declarations shadow it.
+- Cross-referenced grammar rules must expose their key as `name`; ignore incomplete recovery nodes
+  without real names. Build scope chains nearest-to-farthest: pass the outer scope into
+  `createScopeForNodes` so closer declarations shadow it.
 - Owners: local value scopes in `parser-src/value-scope.ts`, parser service installation in
   `parser-src/parser.ts`, workspace/package-aware scopes in
   `packages/workspace/workspace-src/langium-services.ts`, consumer-facing exports in
