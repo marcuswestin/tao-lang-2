@@ -139,12 +139,7 @@ await runWithCommands(commands => {
           durable: true,
           label: options.label ?? `landing from ${FS.basename(repositoryRoot)}`,
           onWaiting: (holder, waitedMs) => {
-            HCI.writeErrorLine(
-              `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-                + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and `
-                + "waiting this long is normal. Forcing it is Ro's call — bring the output of "
-                + '`./agent board` to Ro rather than clearing it yourself.',
-            )
+            HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
           },
           repositoryRoot,
           ...(options.wait === false ? { waitTimeoutMs: 0 } : {}),
@@ -712,12 +707,7 @@ async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Prom
   return await LandingLock.holdingForLane({
     lane,
     onWaiting: (holder, waitedMs) => {
-      HCI.writeErrorLine(
-        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and waiting `
-          + "this long is normal. Forcing it is Ro's call — bring the output of `./agent board` to Ro "
-          + 'rather than clearing it yourself.',
-      )
+      HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
     },
     repositoryRoot: Repo.getRoot(),
   }, work)
