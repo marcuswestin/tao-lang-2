@@ -1,6 +1,5 @@
 import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
 import { Buffer } from 'node:buffer'
-import { createHash } from 'node:crypto'
 
 type CdpResponse = {
   error?: { message: string }
@@ -688,10 +687,10 @@ export class StudioCdp {
     }
     const fontFingerprint = frameFingerprints.length === 0
       ? page.fontFingerprint
-      : createHash('sha256').update(JSON.stringify([
+      : Platform.sha256Hex(JSON.stringify([
         page.fontFingerprint,
         ...frameFingerprints.sort(([left], [right]) => left.localeCompare(right)),
-      ])).digest('hex')
+      ]))
     return {
       colorGamut: page.colorGamut,
       deviceScaleFactor: page.deviceScaleFactor,

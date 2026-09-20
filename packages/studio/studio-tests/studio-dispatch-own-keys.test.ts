@@ -1,6 +1,5 @@
 import { Switch } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { StudioMessages } from '../studio-src/StudioMessages'
 import { StudioProtocol, studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
 
 const inheritedKeys = ['constructor', 'toString', '__proto__', 'hasOwnProperty']
@@ -15,8 +14,8 @@ Describe('dispatch tables read their own keys only', () => {
 
   Test('a socket message typed as an inherited Object member is rejected as unknown', () => {
     for (const type of inheritedKeys) {
-      Expect(() => StudioMessages.dispatch({ type } as { type: 'known' }, { known: () => 'handled' }))
-        .toThrow('Studio received an unknown message')
+      Expect(() => Switch.on({ type } as { type: 'known' }, 'type', { known: () => 'handled' }))
+        .toThrow('Unhandled property value')
     }
   })
 
