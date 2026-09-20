@@ -568,7 +568,7 @@ export async function openStudioProjectResource(
 }
 
 /** studioWatchmanEnvironment makes Metro use the repository-pinned Watchman even when the task shell misses it. */
-export async function studioWatchmanEnvironment(
+async function studioWatchmanEnvironment(
   options: {
     environment?: Platform.ProcessEnv
     isFile?: (path: string) => Promise<boolean>
