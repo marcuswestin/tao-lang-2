@@ -8,9 +8,9 @@
 import { Errors, FS, Repo } from '@shared'
 
 /** Written by `just secrets`; absent until someone has run it. */
-const ENV_PATH = '.env.secrets'
+export const ENV_PATH = '.env.secrets'
 /** Written by hand, never by tooling, and read second so it wins. */
-const LOCAL_PATH = '.env.local'
+export const LOCAL_PATH = '.env.local'
 
 const GENERATED_FORMAT = '# tao-secret-format: json-v1'
 

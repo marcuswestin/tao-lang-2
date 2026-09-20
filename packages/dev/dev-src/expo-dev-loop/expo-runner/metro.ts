@@ -1,4 +1,4 @@
-import { Errors, Time } from '@shared'
+import { Errors, Json, Time } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
 import { ExpoConfig, type ExpoPlatform, type ExpoSessionConfig } from './expo-config'
 import { Ports } from './Ports'
@@ -188,5 +188,5 @@ function parseResponseJson(contentType: string | null, text: string): unknown {
 }
 
 function isOpenEndpointResponse(body: unknown): body is OpenEndpointResponse {
-  return typeof body === 'object' && body !== null && 'url' in body
+  return Json.isRecord(body) && 'url' in body
 }

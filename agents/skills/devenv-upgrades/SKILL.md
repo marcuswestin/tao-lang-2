@@ -35,7 +35,7 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
   same files. `packages/dev/` gate and runner internals, the `./tao` CLI, `.rulesync/` permission
   sources, and `AGENTS.md` with the skills are four seams that rarely collide. Two entries touching
   one gate file are one group, not two.
-- Hand each group a path list it owns exclusively, as `parallel-implementation` requires.
+- Hand each group a path list it owns exclusively, as `delegation`'s `references/parallel-implementation.md` requires.
   Documentation-only entries all touch the shared instruction files: one group, not several.
 - Propose a batch of more than two entries to Ro before implementing — the ID, the one-line cost, and
   why it is in this batch.

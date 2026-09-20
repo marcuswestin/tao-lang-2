@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import { StudioInspector, type studioPaletteComponents } from '../../StudioInspector'
 import type { StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import type { StudioFile } from '../StudioApiClient'
@@ -7,6 +8,7 @@ import {
   renderCommandResults,
   type StudioCommandItem,
   StudioCommandPalette,
+  type StudioCommandTarget,
   type StudioDrawerTab,
 } from '../StudioProductPanels'
 import type { StudioClientView } from '../StudioShell'
@@ -32,6 +34,11 @@ export type StudioCommandPaletteHandle = Readonly<{
   render: () => void
   toggle: () => void
 }>
+
+/** ⌘K on a Mac, Ctrl+K elsewhere: the one chord that opens and closes the palette. */
+export function isStudioCommandPaletteShortcut(event: Pick<KeyboardEvent, 'ctrlKey' | 'key' | 'metaKey'>): boolean {
+  return (event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k'
+}
 
 /** The ⌘K palette: files, views, scenarios, insertions, and the toolbar commands by name. */
 export function mountStudioCommandPalette(deps: StudioCommandPaletteDeps): StudioCommandPaletteHandle {
@@ -60,33 +67,34 @@ export function mountStudioCommandPalette(deps: StudioCommandPaletteDeps): Studi
 
   function execute(item: StudioCommandItem): void {
     close()
-    const target = item.target
-    if (target.kind === 'file') {
-      void deps.openFile(target.path)
-    } else if (target.kind === 'view') {
-      const path = projectRelativePath(deps.project, target.path)
-      if (path !== undefined) {
-        void deps.openFile(path)
-      }
-    } else if (target.kind === 'scenario') {
-      const preview = deps.previews.find(candidate => candidate.cell?.scenarioId === target.scenarioId)
-      if (preview !== undefined) {
-        deps.activePreview.activate(preview)
-        deps.onScenarioActivated()
-        revealCanvasNode(preview.frame)
-        preview.iframe.focus()
-      }
-    } else if (target.kind === 'insert-component') {
-      deps.insertComponent(target.component)
-    } else if (target.kind === 'insert-view') {
-      deps.insertProjectView(target.view)
-    } else if (target.command === 'reload') {
-      view.reload.click()
-    } else if (target.command === 'toggle-mode') {
-      view.interactionMode.click()
-    } else {
-      deps.selectDrawer(target.command === 'compile' ? 'Compile' : target.command === 'data' ? 'Data' : 'Problems')
-    }
+    Switch.kind<StudioCommandTarget, void>(item.target, {
+      command: ({ command }) =>
+        Switch(command, {
+          compile: () => deps.selectDrawer('Compile'),
+          data: () => deps.selectDrawer('Data'),
+          problems: () => deps.selectDrawer('Problems'),
+          reload: () => view.reload.click(),
+          'toggle-mode': () => view.interactionMode.click(),
+        }),
+      file: ({ path }) => void deps.openFile(path),
+      'insert-component': ({ component }) => deps.insertComponent(component),
+      'insert-view': inserted => deps.insertProjectView(inserted.view),
+      scenario: ({ scenarioId }) => {
+        const preview = deps.previews.find(candidate => candidate.cell?.scenarioId === scenarioId)
+        if (preview !== undefined) {
+          deps.activePreview.activate(preview)
+          deps.onScenarioActivated()
+          revealCanvasNode(preview.frame)
+          preview.iframe.focus()
+        }
+      },
+      view: viewed => {
+        const path = projectRelativePath(deps.project, viewed.path)
+        if (path !== undefined) {
+          void deps.openFile(path)
+        }
+      },
+    })
   }
 
   function toggle(): void {

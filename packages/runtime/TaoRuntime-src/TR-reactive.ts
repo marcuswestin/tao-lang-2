@@ -1,3 +1,5 @@
+import { runtimeListeners } from './TR-listeners'
+
 const reactiveValueBrand = Symbol('TaoReactiveValue')
 
 /** TaoReactiveValue is a runtime-owned library value that can notify a mounted holder when it changes. */
@@ -13,23 +15,15 @@ export type TaoReactiveSource = TaoReactiveValue & {
 
 /** createReactiveSource creates independent, mutation-safe subscriptions for a reactive value. */
 export function createReactiveSource(): TaoReactiveSource {
-  const listeners = new Set<() => void>()
+  const listeners = runtimeListeners()
 
   return markReactiveValue({
     get listenerCount() {
-      return listeners.size
+      return listeners.count()
     },
-    notify() {
-      for (const listener of [...listeners]) {
-        listener()
-      }
-    },
-    subscribe(listener) {
-      // Store a distinct subscription so subscribing the same callback twice remains independent.
-      const subscription = () => listener()
-      listeners.add(subscription)
-      return () => listeners.delete(subscription)
-    },
+    notify: listeners.notify,
+    // Wrap in a distinct subscription so subscribing the same callback twice remains independent.
+    subscribe: listener => listeners.subscribe(() => listener()),
   })
 }
 

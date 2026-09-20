@@ -1289,7 +1289,7 @@ should be checked at each decision.
 > a presented scene is a region, so the outline's region set is fully declared-or-structural; the
 > per-view `Commands { … }` slot stays on `view`. Word: **`scene`** (Ro); reword DEF-NAV-003's
 > reserved "scene" to "windows and spaces". This also supersedes the archived ruling in
-> `Docs/Roadmap/Archive/Repository simplification/Plan - Repository simplification.md` (item 13,
+> `Docs/Archive/Plans/Repository simplification/Plan - Repository simplification.md` (item 13,
 > "Rename UI to Scene — dropped; do not introduce `scene`"), which concerned renaming the `@tao/ui`
 > package path, not a presented-view kind; the archive stays frozen, so this entry is the pointer. A §9
 > amendment via the tranche process, reversing part

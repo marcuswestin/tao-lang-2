@@ -2,7 +2,7 @@
 
 This is the live record of navigation work that is still unimplemented. The implemented contract
 lives in `Docs/Spec/Tao Presentation and Navigation.md`; the research record and its ledgers are archived
-under `Docs/Roadmap/Archive/Add navigation and routing MVP/`. Rationale for the families below survives
+under `Docs/Archive/Plans/Add navigation and routing MVP/`. Rationale for the families below survives
 there, but this file owns what remains to be decided or built.
 
 **Presentation modes replaced overlay and toast hosts.** The research record settled on targeting a

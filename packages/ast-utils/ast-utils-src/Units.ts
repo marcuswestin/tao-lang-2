@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Time } from '@shared'
 
 /**
  * Unit values (Decisions §2). A unit family has a canonical base and fixed ratios, so `.unit` on a
@@ -15,19 +16,17 @@ export type UnitFamily = 'duration'
 /** UnitReading names a non-numeric reading a family exposes as a member. */
 export type UnitReading = 'Clock'
 
-const NANOSECONDS_PER_MILLISECOND = 1e6
-
 /**
  * Ratios convert one unit to the family base. `min`, not `m`, spells minutes: `m` is meters, and
  * months and years are calendar arithmetic rather than durations, so neither is a unit here.
  */
 const durationRatios = ratiosWithAliases({
-  ms: NANOSECONDS_PER_MILLISECOND,
-  s: 1e3 * NANOSECONDS_PER_MILLISECOND,
-  min: 60 * 1e3 * NANOSECONDS_PER_MILLISECOND,
-  h: 60 * 60 * 1e3 * NANOSECONDS_PER_MILLISECOND,
-  d: 24 * 60 * 60 * 1e3 * NANOSECONDS_PER_MILLISECOND,
-  wk: 7 * 24 * 60 * 60 * 1e3 * NANOSECONDS_PER_MILLISECOND,
+  ms: Time.NANOSECONDS_PER_MILLISECOND,
+  s: 1e3 * Time.NANOSECONDS_PER_MILLISECOND,
+  min: 60 * 1e3 * Time.NANOSECONDS_PER_MILLISECOND,
+  h: 60 * 60 * 1e3 * Time.NANOSECONDS_PER_MILLISECOND,
+  d: 24 * 60 * 60 * 1e3 * Time.NANOSECONDS_PER_MILLISECOND,
+  wk: 7 * 24 * 60 * 60 * 1e3 * Time.NANOSECONDS_PER_MILLISECOND,
 }, {
   ms: ['millisecond'],
   s: ['second'],
@@ -65,7 +64,7 @@ export const Units = {
 
   /** baseToMilliseconds converts a duration in its base unit to whole and fractional milliseconds. */
   baseToMilliseconds(nanoseconds: number): number {
-    return nanoseconds / NANOSECONDS_PER_MILLISECOND
+    return nanoseconds / Time.NANOSECONDS_PER_MILLISECOND
   },
 } as const
 

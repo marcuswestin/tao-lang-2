@@ -1,4 +1,5 @@
 import type { TaoDebugPendingWrite } from './TR-action-transactions'
+import { runtimeListeners } from './TR-listeners'
 
 /**
  * TR-debug-journal.ts is the debugger's record of what ran and the one place its events are
@@ -38,21 +39,20 @@ export type TaoDebugEvent =
   | Readonly<{ kind: 'resumed' }>
   | Readonly<{ kind: 'reset' }>
 
+/** Mirrored by `journalLimit` in `packages/studio/studio-src/client/matrix/StudioDebugEvents.ts`;
+ * the runtime imports nothing, so the two are kept in step by hand. */
 const journalLimit = 200
 
-const listeners = new Set<(event: TaoDebugEvent) => void>()
+const listeners = runtimeListeners<[event: TaoDebugEvent]>()
 const journal: TaoDebugJournalEntry[] = []
 let nextRootId = 0
 
 export function emitDebugEvent(event: TaoDebugEvent): void {
-  for (const listener of listeners) {
-    listener(event)
-  }
+  listeners.notify(event)
 }
 
 export function onDebugEvent(listener: (event: TaoDebugEvent) => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
+  return listeners.subscribe(listener)
 }
 
 export function debugJournal(): readonly TaoDebugJournalEntry[] {
@@ -67,7 +67,7 @@ export function clearDebugJournal(): void {
 export function journalStart(action: string, frames: readonly string[]): TaoDebugJournalEntry | undefined {
   // Release and ordinary development builds have no debugger bridge. Do not retain action roots or
   // their values unless tooling is actively listening for the journal.
-  if (listeners.size === 0) {
+  if (listeners.count() === 0) {
     return undefined
   }
   const entry: TaoDebugJournalEntry = {

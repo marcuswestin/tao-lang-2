@@ -5,7 +5,7 @@
 // applies (documented in `via`). Nothing here is a production graph, identity, or query design.
 import { ASTUtils } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
-import { type Diagnostic, FS } from '@shared'
+import { type Diagnostic, FS, Switch } from '@shared'
 
 type SnapshotOrigin = 'compiler' | 'poc-derived'
 
@@ -639,67 +639,85 @@ export function inspect(snapshot: SemanticSnapshot, target: string, budget = 150
   }
   const out = edgesFrom(snapshot, node.id)
   const inn = edgesTo(snapshot, node.id)
+  const outgoing = (rel: SnapshotEdge['rel']): string[] => fact(out.filter(e => e.rel === rel))
+  const incoming = (rel: SnapshotEdge['rel']): string[] => fact(inn.filter(e => e.rel === rel))
   const result: Json = {
     id: node.id,
     kind: node.kind,
     ...(node.path === undefined ? {} : { source: `src:${node.path}:${node.start}-${node.end}` }),
     ...(node.detail ?? {}),
   }
-  if (node.kind === 'view') {
-    result['renders'] = [...snapshot.nodes.values()].filter(n =>
-      n.kind === 'render' && (n.detail as Json)['owner'] === node.name
-    ).map(n =>
-      `${n.id} ${String((n.detail as Json)['target'])}${
-        (n.detail as Json)['tag'] === undefined ? '' : ` ${String((n.detail as Json)['tag'])}`
-      } [${((n.detail as Json)['layout'] as string[]).join(', ')}]`
-    )
-    result['stylesUsed'] = uniq(
-      snapshot.edges.filter(e =>
-        e.rel === 'styled-by' && e.from.startsWith('render:')
-        && (snapshot.nodes.get(e.from)?.detail as Json)['owner'] === node.name
-      ).map(e => e.to),
-    )
-      .map(id =>
-        `${id} [${((snapshot.nodes.get(id)?.detail as Json)['entries'] as string[]).join(', ')}] (poc-derived)`
-      )
-    result['reads'] = fact(out.filter(e => e.rel === 'reads'))
-    result['rendersViews'] = fact(out.filter(e => e.rel === 'renders'))
-    result['renderedBy'] = fact(inn.filter(e => e.rel === 'renders'))
-    result['coveredByScenarios'] = fact(inn.filter(e => e.rel === 'covers'))
-    result['diagnostics'] = snapshot.diagnostics.filter(d =>
-      d.filePath !== undefined && node.path !== undefined && d.filePath.endsWith(node.path)
-    )
-      .slice(0, 5).map(d => `${d.severity}: ${d.message}`)
-  } else if (node.kind === 'entity') {
-    result['writtenBy'] = fact(
-      snapshot.edges.filter(e =>
-        e.rel === 'writes' && e.to.startsWith(`field:${String((node.detail as Json)['singular'])}.`)
-      ),
-    )
-    result['readBy'] = fact(
-      snapshot.edges.filter(e =>
-        e.rel === 'reads' && e.to.startsWith(`field:${String((node.detail as Json)['singular'])}.`)
-      ),
-    )
-  } else if (node.kind === 'field') {
-    result['writtenBy'] = fact(inn.filter(e => e.rel === 'writes'))
-    result['readBy'] = fact(inn.filter(e => e.rel === 'reads'))
-  } else if (node.kind === 'action') {
-    result['writes'] = fact(out.filter(e => e.rel === 'writes'))
-    result['reads'] = fact(out.filter(e => e.rel === 'reads'))
-    result['invokedBy'] = fact(inn.filter(e => e.rel === 'invokes'))
-  } else if (node.kind === 'bundle' || node.kind === 'token') {
+  /** A design bundle and a design token are inspected the same way: by who styles with them. */
+  const styledBy = (): void => {
     const users = inn.filter(e => e.rel === 'styled-by')
     result['usedByRenders'] = fact(users)
     result['blastRadius'] = users.length
-    result['usedInViews'] = uniq(users.map(e => String((snapshot.nodes.get(e.from)?.detail as Json)['owner'])))
-  } else if (node.kind === 'scenario') {
-    result['covers'] = fact(out.filter(e => e.rel === 'covers'))
-  } else if (node.kind === 'app') {
-    result['design'] = fact(out.filter(e => e.rel === 'uses-design'))
-    result['scenarios'] = fact(inn.filter(e => e.rel === 'covers'))
+    result['usedInViews'] = uniq(users.map(e => String(detailOf(snapshot, e.from)['owner'])))
   }
+  /** A kind with no facts of its own beyond the id, source, and detail every node carries. */
+  const noFacts = (): void => {}
+  Switch.kind<SnapshotNode, void>(node, {
+    action: () => {
+      result['writes'] = outgoing('writes')
+      result['reads'] = outgoing('reads')
+      result['invokedBy'] = incoming('invokes')
+    },
+    app: () => {
+      result['design'] = outgoing('uses-design')
+      result['scenarios'] = incoming('covers')
+    },
+    bundle: styledBy,
+    design: noFacts,
+    element: noFacts,
+    entity: () => {
+      const fieldPrefix = `field:${String((node.detail as Json)['singular'])}.`
+      const onFields = (rel: SnapshotEdge['rel']): string[] =>
+        fact(snapshot.edges.filter(e => e.rel === rel && e.to.startsWith(fieldPrefix)))
+      result['writtenBy'] = onFields('writes')
+      result['readBy'] = onFields('reads')
+    },
+    field: () => {
+      result['writtenBy'] = incoming('writes')
+      result['readBy'] = incoming('reads')
+    },
+    fixture: noFacts,
+    query: noFacts,
+    render: noFacts,
+    scenario: () => {
+      result['covers'] = outgoing('covers')
+    },
+    state: noFacts,
+    token: styledBy,
+    view: () => {
+      result['renders'] = [...snapshot.nodes.values()].filter(n =>
+        n.kind === 'render' && (n.detail as Json)['owner'] === node.name
+      ).map(n =>
+        `${n.id} ${String((n.detail as Json)['target'])}${
+          (n.detail as Json)['tag'] === undefined ? '' : ` ${String((n.detail as Json)['tag'])}`
+        } [${((n.detail as Json)['layout'] as string[]).join(', ')}]`
+      )
+      result['stylesUsed'] = uniq(
+        snapshot.edges.filter(e =>
+          e.rel === 'styled-by' && e.from.startsWith('render:')
+          && detailOf(snapshot, e.from)['owner'] === node.name
+        ).map(e => e.to),
+      )
+        .map(id => `${id} [${(detailOf(snapshot, id)['entries'] as string[]).join(', ')}] (poc-derived)`)
+      result['reads'] = outgoing('reads')
+      result['rendersViews'] = outgoing('renders')
+      result['renderedBy'] = incoming('renders')
+      result['coveredByScenarios'] = incoming('covers')
+      result['diagnostics'] = snapshot.diagnostics.filter(d =>
+        d.filePath !== undefined && node.path !== undefined && d.filePath.endsWith(node.path)
+      )
+        .slice(0, 5).map(d => `${d.severity}: ${d.message}`)
+    },
+  })
   return truncate(result, budget)
+}
+
+function detailOf(snapshot: SemanticSnapshot, id: string): Json {
+  return snapshot.nodes.get(id)?.detail as Json
 }
 
 export function trace(snapshot: SemanticSnapshot, target: string, relationship: string, budget = 1500): Json {

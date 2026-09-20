@@ -108,12 +108,12 @@ against the current runtime; do not import unrelated safe-area, keyboard, or nat
   name in each participating parser, validator, formatter, source-actions, compiler, and runtime file.
   Expected semantic and source-shape diagnostics belong in the validator; codegen assumes validated
   input and uses assertions only for local type contraction.
-- `Docs/Roadmap/Archive/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
+- `Docs/Archive/Reports/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
 - `./agent verify` before every commit. The baseline was 14 suites, 782 tests, 9.0s suite wall time at
   `6cfd88be`; re-measure on current `main` before you start, since preceding work will have moved it.
 - Branch `feat/<name>`; never commit from detached HEAD. Fifteen-plus worktrees share this repo and
   other agents work concurrently — preserve changes you did not make.
-- `Docs/Roadmap/Archive/` is frozen.
+- `Docs/Archive/` is frozen.
 - Ask Ro on language semantics, roadmap priority, and ambiguous product behavior. Resolve routine
   implementation choices from repository evidence.
 

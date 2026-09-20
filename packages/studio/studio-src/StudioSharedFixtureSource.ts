@@ -75,7 +75,7 @@ function canonicalImports(
       Errors.throwUserInput(`Studio shared fixture import must be project-relative: ${entry.source}`)
     }
     const previous = byCollection.get(entry.collection)
-    if (previous !== undefined && (previous.entity !== entry.entity || previous.source !== entry.source)) {
+    if (previous !== undefined && !sameEntityImport(previous, entry)) {
       Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.collection}.`)
     }
     byCollection.set(entry.collection, entry)
@@ -83,6 +83,14 @@ function canonicalImports(
   return [...byCollection.values()].toSorted((left, right) =>
     left.source.localeCompare(right.source) || left.collection.localeCompare(right.collection)
   )
+}
+
+/** One collection may be imported twice only when both imports name the same entity from the same file. */
+function sameEntityImport(
+  left: StudioSharedFixtureEntityImport,
+  right: StudioSharedFixtureEntityImport,
+): boolean {
+  return left.entity === right.entity && left.source === right.source
 }
 
 function canonicalPromotions(

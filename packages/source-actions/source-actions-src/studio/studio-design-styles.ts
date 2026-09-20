@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST } from '@parser'
-import { Errors } from '@shared'
+import { Errors, Switch } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
   StudioLayoutTermValue,
@@ -90,34 +90,32 @@ export async function setStyleEntry(
   requireLocalRenderId(document, request.renderId, 'edit styles for renders')
   const render = requireRenderById(document.parseResult.value, request.renderId)
   const files = context.files ?? [document.parseResult.value]
-  const entry = request.landing.kind === 'element-inline'
-    ? formatStyleEntry(request.entry)
-    : formatDesignEntry(request.entry)
-  if (request.landing.kind === 'element-inline') {
+  const landing = request.landing
+  if (landing.kind === 'element-inline') {
+    const entry = formatStyleEntry(request.entry)
     return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
   }
+  const entry = formatDesignEntry(request.entry)
   const design = requireEditableSelectedDesign(document, files)
-  if (request.landing.kind === 'size-token') {
-    return await setSizeToken(document, design, render, request.entry, request.landing.tokenName)
-  }
-  if (request.landing.kind === 'style-bundle' && request.landing.mode === 'edit') {
-    const bundleName = request.landing.bundleName
-    requireIdentifier(bundleName, 'style bundle')
-    const bundles = designSpecMembers(design).filter(bundle => bundle.name === bundleName)
-    if (bundles.length !== 1) {
-      Errors.throwUserInput(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
-    }
-    return await Formatter.formatCode(
-      setLayoutClauseEntrySource(document.textDocument.getText(), bundles[0]!.spec, entry),
-    )
-  }
-  if (request.landing.kind === 'style-bundle') {
-    return await forkStyleBundle(document, design, render, request.landing, entry)
-  }
-  if (request.landing.kind === 'element-default') {
-    return await setElementDefault(document, design, render, request.landing.elementName, entry)
-  }
-  return await setColorToken(document, design, render, request.entry, request.landing.tokenName)
+  return Switch.kind(landing, {
+    'size-token': async landing => await setSizeToken(document, design, render, request.entry, landing.tokenName),
+    'style-bundle': async landing => {
+      if (landing.mode === 'edit') {
+        const bundleName = landing.bundleName
+        requireIdentifier(bundleName, 'style bundle')
+        const bundles = designSpecMembers(design).filter(bundle => bundle.name === bundleName)
+        if (bundles.length !== 1) {
+          Errors.throwUserInput(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
+        }
+        return await Formatter.formatCode(
+          setLayoutClauseEntrySource(document.textDocument.getText(), bundles[0]!.spec, entry),
+        )
+      }
+      return await forkStyleBundle(document, design, render, landing, entry)
+    },
+    'element-default': async landing => await setElementDefault(document, design, render, landing.elementName, entry),
+    token: async landing => await setColorToken(document, design, render, request.entry, landing.tokenName),
+  })
 }
 
 /** setDesignEntry (semantic agent PoC) edits one named bundle/style/text member of a named design in this document. */
