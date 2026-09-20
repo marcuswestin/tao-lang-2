@@ -296,7 +296,7 @@ export async function startStudioSessionServer(
       message(socket, message) {
         Switch.kind<StudioSocketData, void>(socket.data, {
           // An event socket is one-way: Studio publishes, the browser never writes back.
-          events: () => {},
+          events: Switch.nothing,
           lsp: lsp => lsp.session?.accept(message),
         })
       },

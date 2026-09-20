@@ -1,5 +1,4 @@
-import { Errors } from '@shared'
-import { createHash } from 'node:crypto'
+import { Errors, Platform } from '@shared'
 
 /** ShipVersion is the numeric SemVer core Apple accepts as a marketing version. */
 export type ShipVersion = `${number}.${number}.${number}`
@@ -88,16 +87,12 @@ export function deriveShipIdentity(input: ShipIdentityInput): {
 
 /** shipInputHash records only declaration-derived inputs, never credential material. */
 export function shipInputHash(input: unknown): string {
-  return createHash('sha256').update(stableJson(input)).digest('hex')
+  return Platform.sha256Hex(stableJson(input))
 }
 
 /** shipContentHash derives a stable SHA-256 identity without exposing Node crypto across CLI modules. */
 export function shipContentHash(parts: readonly (string | Uint8Array)[]): string {
-  const hash = createHash('sha256')
-  for (const part of parts) {
-    hash.update(part)
-  }
-  return hash.digest('hex')
+  return Platform.sha256Hex(parts)
 }
 
 function bundleSegment(value: string): string {

@@ -1,5 +1,4 @@
-import { Errors, Http, Json } from '@shared'
-import { createHash, randomUUID } from 'node:crypto'
+import { Errors, Http, Json, Platform } from '@shared'
 import { InMemoryUpdateStore, type UpdateStore, UpdateStoreConflictError } from './update-store'
 import type {
   ExpoUpdateAsset,
@@ -36,7 +35,7 @@ class UpdateRequestError extends Errors.UserInputError {
 export function createUpdateService(options: UpdateServiceOptions): UpdateService {
   const baseUrl = validatedPublicBaseUrl(options.publicBaseUrl)
   const clock = options.clock ?? (() => new Date())
-  const createUpdateId = options.createUpdateId ?? randomUUID
+  const createUpdateId = options.createUpdateId ?? Platform.randomUUID
   const store = options.store ?? new InMemoryUpdateStore()
 
   return {
@@ -130,7 +129,7 @@ async function uploadAsset(
     requestError(400, 'An asset upload needs a base64url SHA-256 hash.')
   }
   const bytes = new Uint8Array(await request.arrayBuffer())
-  const actualHash = createHash('sha256').update(bytes).digest('base64url')
+  const actualHash = Platform.sha256Base64Url(bytes)
   if (actualHash !== hash) {
     requestError(400, `Asset content does not match its SHA-256 hash.`)
   }

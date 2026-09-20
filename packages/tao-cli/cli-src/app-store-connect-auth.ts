@@ -1,5 +1,4 @@
-import { Errors, FS } from '@shared'
-import { createPrivateKey, sign } from 'node:crypto'
+import { Errors, FS, Platform } from '@shared'
 
 export type AppStoreConnectAuth = {
   issuerId: string
@@ -29,10 +28,7 @@ export async function createAppStoreConnectToken(
   const signingInput = `${header}.${payload}`
   let signature: Buffer
   try {
-    signature = sign('sha256', Buffer.from(signingInput), {
-      dsaEncoding: 'ieee-p1363',
-      key: createPrivateKey(keySource),
-    })
+    signature = Platform.signES256(keySource, Buffer.from(signingInput))
   } catch (error) {
     Errors.throwUserInput(`The App Store Connect key at ${auth.keyPath} is not a valid ES256 private key.`, {
       cause: error,
