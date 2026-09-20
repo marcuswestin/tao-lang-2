@@ -1,4 +1,4 @@
-import { FS, Platform, Repo, TaoTestProtocol } from '@shared'
+import { FS, Repo, TaoTestProtocol } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { FlakeTolerance } from '../dev-src/repository-tests/FlakeTolerance'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
@@ -464,11 +464,8 @@ Describe('test runner suite registry', () => {
     const file = 'packages/example/example-tests/example.test.ts'
     // This starts a real top-level lane, which would otherwise register in the machine-wide
     // registry and wait on whatever the other worktrees on this host are doing — including a peer's
-    // exclusive confirmation, which blocks every admission for as long as it is held. The registry
-    // root is derived from `XDG_CACHE_HOME`, so pointing that at this test's own directory gives
-    // the lane a machine to itself and makes the run depend on nothing outside the test.
-    const cacheHome = Platform.runtimeProcess.env['XDG_CACHE_HOME']
-    Platform.runtimeProcess.env['XDG_CACHE_HOME'] = FS.resolvePath('cache', root)
+    // exclusive confirmation. Give it a test-owned registry instead of changing the process
+    // environment shared by concurrent tests.
     try {
       await FS.writeText(
         FS.resolvePath(file, root),
@@ -478,6 +475,7 @@ Describe('test runner suite registry', () => {
         TestRunner.runTestRequest({ kind: 'file', path: file }, {
           jobs: 1,
           outputMode: 'quiet',
+          registryRoot: FS.resolvePath('machine-lanes', root),
           repositoryRoot: root,
         })
       )
@@ -485,11 +483,6 @@ Describe('test runner suite registry', () => {
       Expect(captured.result).toBe(0)
       Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
     } finally {
-      if (cacheHome === undefined) {
-        delete Platform.runtimeProcess.env['XDG_CACHE_HOME']
-      } else {
-        Platform.runtimeProcess.env['XDG_CACHE_HOME'] = cacheHome
-      }
       await FS.remove(root)
     }
   })
