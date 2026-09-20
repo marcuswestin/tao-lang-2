@@ -45,7 +45,7 @@
   wholesale outside the sandbox for the same reason.
 - **Change made:** `merge-with-main` reports the sandbox denial with its recovery. `just github-setup`
   now standardizes the global URL rewrites, GitHub CLI protocol and credential helper, this checkout's
-  stored origin, and a live remote probe. It also installs a compiled per-user LaunchAgent outside
+  stored origin, and a live remote probe. It also installs a bundled per-user LaunchAgent outside
   repository-writable paths. The service is registered for this repository's canonical Git object
   store and fixed HTTPS remote; it disables hooks and global/system Git configuration, fetches remote
   objects into the registered store, validates the proposed squash parent and finalized tree, and

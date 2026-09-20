@@ -1,4 +1,4 @@
-import { CLI, FS } from '@shared'
+import { CLI, FS, Repo } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   archiveBranch,
@@ -13,6 +13,29 @@ import {
 } from '../dev-src/landing-broker/LandingBrokerServer'
 
 const SHA = 'a'.repeat(40)
+
+Test('landing broker entry bundles into a script the pinned Bun can launch', async () => {
+  const root = Repo.getRoot()
+  const outputRoot = await mkTestDir('tao-landing-broker-bundle-')
+  const output = FS.resolvePath('tao-landing-broker', outputRoot)
+  try {
+    await CLI.mustRun('bun', {
+      args: [
+        'build',
+        FS.resolvePath('packages/dev/dev-src/landing-broker/LandingBrokerServer.ts', root),
+        '--target=bun',
+        '--outfile',
+        output,
+      ],
+      cwd: root,
+    })
+    const launched = await CLI.run('bun', { args: [output], cwd: root })
+    Expect(launched.exitCode).toBe(2)
+    Expect(launched.stderr).toContain('Usage: tao-landing-broker serve <config-path>')
+  } finally {
+    await FS.remove(outputRoot)
+  }
+})
 
 Test('landing broker policy accepts only Tao landing refs and commit-shaped inputs', () => {
   Expect(isLandableBranch('feat/example')).toBe(true)

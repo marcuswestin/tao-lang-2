@@ -15,12 +15,13 @@ import {
 const START_TIMEOUT_MS = 5_000
 
 export const LandingBrokerInstaller = {
-  /** Install a compiled, immutable-to-the-sandbox broker and register this repository with it. */
+  /** Install a bundled, immutable-to-the-sandbox broker and register this repository with it. */
   async install(repositoryRoot = Repo.getRoot()): Promise<void> {
     const root = FS.resolvePath(repositoryRoot)
-    const [gitCommonDir, remoteUrl, gitPath, ghPath, uid] = await Promise.all([
+    const [gitCommonDir, remoteUrl, bunPath, gitPath, ghPath, uid] = await Promise.all([
       commandLine('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], root),
       commandLine('git', ['remote', 'get-url', 'origin'], root),
+      commandLine('which', ['bun'], root),
       commandLine('which', ['git'], root),
       commandLine('which', ['gh'], root),
       commandLine('id', ['-u'], root),
@@ -61,25 +62,26 @@ export const LandingBrokerInstaller = {
       version: LANDING_BROKER_VERSION,
     }
 
-    const buildOutput = FS.resolvePath('.artifacts/build/tao-landing-broker', root)
+    const buildOutput = FS.resolvePath('.artifacts/build/tao-landing-broker.js', root)
     const entry = FS.resolvePath('packages/dev/dev-src/landing-broker/LandingBrokerServer.ts', root)
     await FS.mkdir(FS.dirname(buildOutput))
     await FS.remove(buildOutput)
-    await CLI.mustRun('bun', {
-      args: ['build', entry, '--compile', '--outfile', buildOutput],
+    const canonicalBunPath = await FS.realPath(bunPath)
+    await CLI.mustRun(canonicalBunPath, {
+      args: ['build', entry, '--target=bun', '--outfile', buildOutput],
       cwd: root,
       stdio: 'stream',
     })
     const nextBinary = `${landingBrokerBinaryPath()}.next`
     await FS.copyFile(buildOutput, nextBinary)
-    await FS.chmod(nextBinary, 0o700)
+    await FS.chmod(nextBinary, 0o600)
     await FS.move(nextBinary, landingBrokerBinaryPath())
     await FS.writeJson(landingBrokerConfigPath(), config, { mode: 0o600 })
     await FS.chmod(landingBrokerConfigPath(), 0o600)
 
     const logRoot = FS.resolvePath('Library/Logs/Tao', FS.homeDir())
     await FS.mkdir(logRoot)
-    await FS.writeText(landingBrokerLaunchAgentPath(), launchAgentPlist(logRoot), { mode: 0o600 })
+    await FS.writeText(landingBrokerLaunchAgentPath(), launchAgentPlist(logRoot, canonicalBunPath), { mode: 0o600 })
     await FS.chmod(landingBrokerLaunchAgentPath(), 0o600)
     const domain = `gui/${uid}`
     await CLI.run('launchctl', { args: ['bootout', `${domain}/${LANDING_BROKER_LABEL}`], cwd: root })
@@ -122,9 +124,10 @@ async function waitUntilReady(): Promise<void> {
   )
 }
 
-function launchAgentPlist(logRoot: string): string {
+function launchAgentPlist(logRoot: string, bunPath: string): string {
   const values = {
     binary: xmlEscape(landingBrokerBinaryPath()),
+    bun: xmlEscape(bunPath),
     config: xmlEscape(landingBrokerConfigPath()),
     errorLog: xmlEscape(FS.resolvePath('landing-broker.err.log', logRoot)),
     label: xmlEscape(LANDING_BROKER_LABEL),
@@ -136,7 +139,7 @@ function launchAgentPlist(logRoot: string): string {
 <dict>
   <key>Label</key><string>${values.label}</string>
   <key>ProgramArguments</key>
-  <array><string>${values.binary}</string><string>serve</string><string>${values.config}</string></array>
+  <array><string>${values.bun}</string><string>${values.binary}</string><string>serve</string><string>${values.config}</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ProcessType</key><string>Background</string>

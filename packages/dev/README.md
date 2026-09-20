@@ -331,7 +331,7 @@ because it is a correctness check rather than an optimization: the squash must b
 verification proved, and a mismatch stops the landing.
 
 Remote reads and the final push prefer the host-owned Tao landing broker installed by
-`just landing-setup` (also installed by `just github-setup`). The compiled LaunchAgent owns the
+`just landing-setup` (also installed by `just github-setup`). The bundled LaunchAgent owns the
 GitHub CLI credential boundary; its socket accepts only fixed-repository ref inspection and one
 atomic, lease-checked main/archive landing. It disables Git hooks and user/system Git config, never
 executes repository source, and never returns a credential. Without the broker, a normal terminal
