@@ -26,19 +26,19 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Lead with the answer or outcome and stop there; leave elaboration for the reply that asks for it rather than advertising that it is available.
 - Shape a response as a numbered list, with bulleted sub-items where needed, at most three levels deep, lettered so a reply like "elaborate 2.b" lands. One point per item, on one line where it fits. Error text and command output go verbatim in code blocks.
 - This is a default, not a rule — depart from it when a root-cause walkthrough or a design argument serves Ro better. It covers what Ro reads; subagent and agent-to-agent text is exempt.
+- Close a turn that finished a meaningful chunk with two one-line recommendations, last: that this is a good point to run `/compact`, and the next slice you propose to land and would land it on. Refresh `.artifacts/checkpoint/<branch>.md` before saying so, so a compaction costs nothing; `git-workflow` owns when a slice is worth proposing.
 
 ## Safety
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
-- Branch before committing: create or switch to a named `feat/<name>` branch and never commit from detached HEAD, including for instruction and one-off commits.
-- The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
+- Branch before committing: create or switch to a named `feat/<name>` branch, never from detached HEAD, including for instruction and one-off commits. The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 
 ## Permissions
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. The `environment-recovery` skill owns what to do when the sandbox is the obstacle; never widen the policy to route around one.
-- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls and the machine-wide landing lock. A direct `git push` still stops for Ro.
+- Propose a merge; do not make one. Bring the branch to ready, say which evidence stands behind it, and land only on Ro's explicit yes in the current request — a yes that may be given ahead of time for a named slice, to land as soon as it is done. The `verification-lanes` skill owns the evidence line and the machine-wide landing lock; a direct `git push` still stops for Ro.
 - Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds.
 - `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` the opt-in profiles, `.rulesync/hooks.jsonc` the agent hooks, and `agents/subagents/` the subagent profiles; every generated harness file comes from them. Never edit a generated harness file; change the source and run `./agent setup`. The `agent-instructions` skill owns which generator produces what.
 
@@ -51,7 +51,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Validation
 
 - Run focused tests while working, widening in the order the names sort: `verify-changed` is the iteration gate, `verify` is the gate before a commit that goes to review or merge, and `verify-full`/`verify-full-sandbox` add the host lanes. `--no-cache` is the one flag they share. The `verification-lanes` skill owns the lock, the lanes, `finalize`, and the merge-message format.
-- Whenever the work looks complete, carry it all the way without being asked: land every change as commits, leave the worktree clean, refresh the roadmap or ledger documents the work changed **before** verifying (a tracked edit after a green lane invalidates it), then run `./agent finalize` and decide whether to land it. Say plainly which evidence stands behind it and which gates did not run, and repeat that after every round of Ro's corrections.
+- Whenever the work looks complete, carry it all the way without being asked: land every change as commits, leave the worktree clean, refresh the roadmap or ledger documents the work changed **before** verifying (a tracked edit after a green lane invalidates it), then run `./agent finalize` and propose the landing. Say plainly which evidence stands behind it and which gates did not run, and repeat that after every round of Ro's corrections.
 - Never background a gate and then poll for its output in a sleep loop; a lane too long to wait out is the one exception, covered in `verification-lanes`.
 
 ## Developer environment feedback
