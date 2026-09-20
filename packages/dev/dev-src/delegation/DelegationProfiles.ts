@@ -140,6 +140,7 @@ export function delegationIssues(sources: DelegationSources): string[] {
     issues.push(...modelIssues(profile, 'claudecode', 'Claude Code', claudeModels))
     issues.push(...modelIssues(profile, 'cursor', 'Cursor', cursorModels))
     issues.push(...readOnlyDriftIssues(profile))
+    issues.push(...toolAllowlistIssues(profile))
   }
 
   for (const skill of sources.skills) {
@@ -169,6 +170,38 @@ function modelIssues(
     return []
   }
   return [`${profile.path} names ${harness} model '${model}', which no tier in ${DELEGATION_SKILL_PATH} offers.`]
+}
+
+/** The Claude Code tools that let a subagent change the worktree. */
+const MUTATING_TOOLS = ['Edit', 'Write', 'NotebookEdit']
+
+/**
+ * A subagent that names no tools inherits every tool schema its caller was given, which is the
+ * largest fixed cost in its context and is paid again on every one of its requests — measured at
+ * roughly 44k tokens of schema against the 8k a repository profile actually uses. The allowlist is
+ * also the only per-harness expression of what a read-only profile may do, since Claude Code's
+ * `permissionMode: plan` governs approval rather than availability.
+ */
+function toolAllowlistIssues(profile: AgentDocument): string[] {
+  const declared = profile.sections['claudecode']?.['tools']
+  if (declared === undefined) {
+    return [
+      `${profile.path} must name the Claude Code tools it needs; a profile that names none loads `
+      + 'every tool schema into every request it makes.',
+    ]
+  }
+  const tools = declared.split(',').map(tool => tool.trim()).filter(tool => tool !== '')
+  if (tools.length === 0) {
+    return [`${profile.path} declares an empty Claude Code tool list; it would have nothing to work with.`]
+  }
+  if (profile.sections['claudecode']?.['permissionMode'] !== 'plan') {
+    return []
+  }
+  const mutating = tools.filter(tool => MUTATING_TOOLS.includes(tool))
+  if (mutating.length === 0) {
+    return []
+  }
+  return [`${profile.path} is read-only but lists ${mutating.join(' and ')}; drop them from its tool list.`]
 }
 
 /** A profile that cannot write under one harness must not be able to write under another. */
