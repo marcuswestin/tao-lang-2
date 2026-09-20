@@ -50,6 +50,13 @@ const FAILED_CORE_SIMULATOR_SERVICE =
  */
 const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
 
+/** isSandboxDenial recognizes the policy-denial evidence shared by capability and command diagnostics. */
+export function isSandboxDenial(result: Pick<ProbeResult, 'error' | 'stderr' | 'stdout'>): boolean {
+  const output = `${result.stderr}\n${result.stdout}`.trim()
+  const fallback = result.error instanceof Error ? result.error.message : ''
+  return DENIED.test(output || fallback)
+}
+
 const PROBES: readonly CapabilityProbe[] = [
   {
     args: ['-axo', 'pid=,ppid=,lstart=,command='],
@@ -112,7 +119,7 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
   const fallback = result.error instanceof Error ? result.error.message : `exit ${result.exitCode ?? 'unknown'}`
   const failedCoreSimulatorService = probe.name === 'CoreSimulator service'
     && FAILED_CORE_SIMULATOR_SERVICE.test(output)
-  const status: CapabilityStatus = !failedCoreSimulatorService && DENIED.test(output || fallback)
+  const status: CapabilityStatus = !failedCoreSimulatorService && isSandboxDenial(result)
     ? 'denied'
     : 'unavailable'
   return {

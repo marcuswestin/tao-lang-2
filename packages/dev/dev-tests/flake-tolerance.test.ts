@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { FlakeTolerance, type ToleranceNode } from '../dev-src/repository-tests/FlakeTolerance'
 import { buildSummary, formatGateSummary, formatVerdict } from '../dev-src/repository-tests/RunSummary'
@@ -294,35 +294,26 @@ Describe('proven flakes stop failing the test lane too', () => {
       Expect((await TestLedger.tolerated(root)).map(flake => flake.id)).toEqual([ID])
 
       // A real top-level lane would register on this machine and wait on every other worktree's
-      // work. The registry root comes from `XDG_CACHE_HOME`, so pointing it inside this test gives
-      // the lane a machine to itself.
-      const cacheHome = Platform.runtimeProcess.env['XDG_CACHE_HOME']
-      Platform.runtimeProcess.env['XDG_CACHE_HOME'] = FS.resolvePath('cache', root)
-      try {
-        const captured = await withCapturedOutput(() =>
-          TestRunner.runTestRequest({ kind: 'file', path: FILE }, {
-            jobs: 1,
-            outputMode: 'quiet',
-            repositoryRoot: root,
-          })
-        )
-        const output = `${captured.stdout}${captured.stderr}`
+      // work. Give this run a test-owned registry so it has a machine to itself without changing
+      // the process environment shared by concurrent tests.
+      const captured = await withCapturedOutput(() =>
+        TestRunner.runTestRequest({ kind: 'file', path: FILE }, {
+          jobs: 1,
+          outputMode: 'quiet',
+          registryRoot: FS.resolvePath('machine-lanes', root),
+          repositoryRoot: root,
+        })
+      )
+      const output = `${captured.stdout}${captured.stderr}`
 
-        // The suite really did fail: this is a demotion, not a green run.
-        Expect(output).toContain('1 fail')
-        // And the lane does not fail on it — which the node states alone would never have said.
-        Expect(captured.result).toBe(0)
-        Expect(output).toContain('tolerating 1 known flake')
-        // The evidence reaches the terminal, not only `summary.json`.
-        Expect(output).toContain(ID)
-        Expect(output).toContain('outcome reversals in the last')
-      } finally {
-        if (cacheHome === undefined) {
-          delete Platform.runtimeProcess.env['XDG_CACHE_HOME']
-        } else {
-          Platform.runtimeProcess.env['XDG_CACHE_HOME'] = cacheHome
-        }
-      }
+      // The suite really did fail: this is a demotion, not a green run.
+      Expect(output).toContain('1 fail')
+      // And the lane does not fail on it — which the node states alone would never have said.
+      Expect(captured.result).toBe(0)
+      Expect(output).toContain('tolerating 1 known flake')
+      // The evidence reaches the terminal, not only `summary.json`.
+      Expect(output).toContain(ID)
+      Expect(output).toContain('outcome reversals in the last')
     })
   })
 })

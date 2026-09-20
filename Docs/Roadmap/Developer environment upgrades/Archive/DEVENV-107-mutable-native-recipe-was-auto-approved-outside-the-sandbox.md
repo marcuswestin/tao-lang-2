@@ -1,4 +1,4 @@
-# DEVENV-105 — A mutable native recipe was auto-approved outside the sandbox
+# DEVENV-107 — A mutable native recipe was auto-approved outside the sandbox
 
 - **Status:** Resolved
 - **Area:** Sandbox

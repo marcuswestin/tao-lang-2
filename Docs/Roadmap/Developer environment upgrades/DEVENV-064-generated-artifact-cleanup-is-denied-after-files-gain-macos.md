@@ -31,6 +31,9 @@
   root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
   failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
   task namespace prevents directory lifecycle operations.
+- **Change made:** The Studio preview-runtime tests now pass test-owned host-temporary artifact roots,
+  so their disposable copies can be removed in the managed task namespace without moving Studio's
+  production preview root out of the repository.
 - **Dependencies:** None.
 - **Acceptance:** `verify-changed` and `verify --complete` can recursively clean the IDE, runtime,
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
