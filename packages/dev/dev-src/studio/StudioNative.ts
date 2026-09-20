@@ -10,6 +10,8 @@ import {
   type MachineResourceOwner,
 } from '../repository-tests/MachineLanes'
 import {
+  defaultStudioAppName,
+  defaultStudioBundleIdentifier,
   StudioElectrobun,
   type StudioElectrobunProject,
 } from './StudioElectrobun'
@@ -34,8 +36,6 @@ const electrobunPrepareTimeoutMs = 45_000
 const electrobunReleaseBuildTimeoutMs = 30 * 60_000
 const hutchShutdownTimeoutMs = 5_000
 const hutchDiagnosticOutputLimit = 8_000
-const defaultAppName = 'Tao Studio'
-const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultHutchCommand = 'hutch'
 const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 const nativeHostResourceName = 'studio-native-host'
@@ -230,8 +230,8 @@ async function startWithInterruption(
     'materialize Electrobun project',
     async () =>
       await StudioElectrobun.create({
-        appName: defaultAppName,
-        bundleIdentifier: defaultBundleIdentifier,
+        appName: defaultStudioAppName,
+        bundleIdentifier: defaultStudioBundleIdentifier,
         outputRoot: artifactRoot,
         previewUrl: options.previewUrl,
         projectUrl: options.projectUrl,
@@ -622,8 +622,8 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   )
   await validatePackagedTestRuntime(servicePayloadRoot)
   const project = await StudioElectrobun.create({
-    appName: options.appName ?? defaultAppName,
-    bundleIdentifier: options.bundleIdentifier ?? defaultBundleIdentifier,
+    appName: options.appName ?? defaultStudioAppName,
+    bundleIdentifier: options.bundleIdentifier ?? defaultStudioBundleIdentifier,
     outputRoot: projectRoot,
     packagedService: true,
     previewUrl: 'http://127.0.0.1:8081',

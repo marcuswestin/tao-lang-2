@@ -65,7 +65,7 @@ path. The language-level `Assistant` design remains future contract, not impleme
   `Docs/Roadmap/Tao Revolution/`; the four-design analysis archived; the future apps seeded in
   `Apps/Tao Future/` from design D's demos, pre-consolidation.
 - **Step 1 — the dialect-migration tranche.** Closed 2026-09-04
-  (`Docs/Roadmap/Archive/Dialect migration tranche/`). The _Migrations from what ships today_
+  (`Docs/Archive/Explorations/Dialect migration tranche/`). The _Migrations from what ships today_
   section of `Decisions.md` was the checklist: `enum` → `type … is one of`, leading `optional` →
   postfix `?`, `Name is Type` → juxtaposition in parameter lists, `implement inject …` → `provider X
   from ./X.ts`, named exports only, text-or-`#tag` test selectors. Mechanical but broad: it touched
@@ -86,7 +86,7 @@ path. The language-level `Assistant` design remains future contract, not impleme
 - **Step 5 — the tranche loop.** Cut tranches from the Current ↔ MVP gap, one at a time, until
   Current ≡ MVP. Then expand to the Tao Future apps and continue toward Revolution the same way.
   The focused writing tranche is the first of these and is closed
-  (`Docs/Roadmap/Archive/Focused writing tranche/`); it ran ahead of steps 2–4 because its forcing
+  (`Docs/Archive/Plans/Focused writing tranche/`); it ran ahead of steps 2–4 because its forcing
   feature was already named in MVP scope, and its reconcile pass folded the session into both later
   tiers.
 

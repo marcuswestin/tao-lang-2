@@ -7,7 +7,7 @@ forces it.
 
 > **Status: complete.** Every item from the four-design analysis is resolved and recorded here. The
 > analysis records — what all four designs agreed on, and each design's position on every contested
-> point — are frozen in `Docs/Roadmap/Archive/Tao Revolution analysis/`. The drag-and-drop worked example
+> point — are frozen in `Docs/Archive/Explorations/Tao Revolution analysis/`. The drag-and-drop worked example
 > is a roadmap item (an example app to implement), not a decision.
 >
 > **These decisions are made on their own merits.** The target is the best possible Tao for the MVP

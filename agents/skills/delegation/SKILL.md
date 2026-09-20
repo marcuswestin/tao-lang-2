@@ -1,68 +1,32 @@
 ---
 name: delegation
 description: >-
-  Decide whether to hand work to a subagent, which model tier and effort it runs at, what its brief
-  must contain, and how to check what it returns. Use when a task involves broad search, codebase
-  exploration, web research, long command output, independent review, or two workstreams that could
-  run at once, whenever choosing between doing work yourself and spawning an agent, and whenever Ro
-  asks you to write, print, or hand over a prompt for another agent to run.
+  Decide whether to hand work to a subagent, which model tier and effort it runs at, what its brief must contain, and how to check what it returns. Use when a task involves broad search, codebase exploration, web research, long command output, independent review, or two workstreams that could run at once, whenever choosing between doing work yourself and spawning an agent, and whenever Ro asks you to write, print, or hand over a prompt for another agent to run. Also covers dividing significant multi-piece work across concurrent writers with exclusive path ownership (`references/parallel-implementation.md`, used when two or more substantial workstreams can proceed concurrently without sharing mutable seams) and fanning a large read-only review out across many units (`references/review-fanout.md`, used to audit every merge on main, review a tranche, or review every commit).
 ---
 
 # Delegation
 
-Optimize wall-clock time to finish the whole task you own. Not tokens, not your own context, and not
-the elegance of the split. A subagent starts with no memory of this session, pays a fixed startup
-cost before its first useful tool call, and sees only the brief you write. Spend that when it buys
-back more than it costs.
-
-`parallel-implementation` owns coordinating concurrent writes once you have decided to run several
-agents. This skill owns whether to delegate at all, which tier to give the agent, what the brief
-says, and what you do with what comes back.
+Optimize wall-clock time to finish the whole task you own, not tokens, not your own context, and not the elegance of the split. A subagent starts with no memory of this session, pays a fixed startup cost before its first useful tool call, and sees only the brief you write; spend that when it buys back more than it costs. This skill owns whether to delegate, which tier, what the brief says, and what to do with the report; `references/parallel-implementation.md` owns coordinating concurrent writers, `references/review-fanout.md` owns dividing a review too large for one context.
 
 ## Delegate when
 
-- **The work compresses.** Its input is large and its conclusion is small: sweeping many files for a
-  pattern, reading a long log or verify summary down to the failures, checking how five call sites
-  differ, reading a page of vendor documentation for one fact. This is the strongest signal, and it
-  holds even for work you could do quickly yourself, because what you would carry afterwards is
-  worse than what you would carry now.
-- **It is big enough to amortize.** Roughly ten or more tool calls, or fifteen thousand or more
-  tokens pulled through context for a conclusion you could state in a paragraph.
-- **It can run while you work.** Anything your next two or three steps do not depend on goes to a
-  background agent, launched before you start your own step rather than after.
-- **It wants a different model than yours.** Mechanical breadth deserves a cheaper model than the
-  one reasoning about the task; a hard judgment call deserves a stronger one. Routing, below.
-- **It should not be able to write.** Review, audit, and second opinions are more trustworthy from an
-  agent that cannot quietly fix what it finds and then report success.
+- **The work compresses**: large input, small conclusion — sweeping many files for a pattern, reading a long log down to the failures, a page of vendor docs for one fact. Holds even when you could do it quickly yourself, because what you'd carry afterwards is worse than what you'd carry now.
+- **It is big enough to amortize**: roughly ten or more tool calls, or 15k+ tokens pulled through context for a conclusion you could state in a paragraph.
+- **It can run while you work**: anything your next two or three steps do not depend on goes to a background agent, launched before your own step rather than after.
+- **It wants a different model than yours**: mechanical breadth deserves a cheaper model, a hard judgment call a stronger one — see routing below.
+- **It should not be able to write**: review, audit, and second opinions are more trustworthy from an agent that cannot quietly fix what it finds and report success.
 
 ## Do not delegate when
 
-- You know the file and roughly the line. Read it.
-- The brief would take longer to write than the work takes to do, or would have to reproduce the
-  conversation to make sense. If you cannot state the task without "as we discussed", do it
-  yourself.
-- The edits are coupled. Two agents editing one seam cost more than one agent editing both sides.
-- The judgment is the point and the context is the input: naming, product semantics, deciding what
-  Ro meant. Delegate the evidence-gathering, keep the decision.
-- You are already at the answer and delegating is procrastination.
+You know the file and line (read it); the brief would take longer to write than the work takes to do, or needs "as we discussed" to make sense; the edits are coupled, so two agents on one seam cost more than one agent on both sides; the judgment is the point and the context is the input — naming, product semantics, what Ro meant (delegate the evidence-gathering, keep the decision); or you are already at the answer and delegating is procrastination.
 
 ## Parallelism
 
-Three to five concurrent agents is the working range. Beyond that you become the bottleneck, because
-every report still has to be read and checked by you. Keep your own critical path occupied while
-they run: launch, then continue, then collect. Reuse a finished agent for the next unblocked piece
-rather than waiting for the whole fan-out to land.
-
-Readers and a writer do not mix. A reader that opens a file while something else is rewriting it
-sees half of it and reports a defect that was never there — that has already happened here, four
-subagents into one task, and `Docs/Roadmap/Parallel agents on one machine.md` records it. Either the
-fan-out is read-only, or every agent in it owns its paths exclusively under
-`parallel-implementation`. Never both at once over the same seam.
+Three to five concurrent agents is the working range; beyond that you become the bottleneck, since every report still has to be read and checked by you. Launch, then continue, then collect, and reuse a finished agent for the next unblocked piece rather than waiting for the whole fan-out. Readers and a writer do not mix — a reader that opens a file while something else rewrites it reports a defect that was never there. Either the fan-out is read-only, or every agent owns its paths exclusively under `references/parallel-implementation.md`; never both over the same seam.
 
 ## Model and effort routing
 
-Work is routed to a tier, and the tier is spelled per harness in one place below, so that a model
-release changes one table instead of every skill and profile.
+Work is routed to a tier, spelled per harness in one table, so a model release changes one table instead of every skill and profile.
 
 | Work                                                                       | Tier                                        | Effort |
 | -------------------------------------------------------------------------- | ------------------------------------------- | ------ |
@@ -80,110 +44,24 @@ release changes one table instead of every skill and profile.
 | deep     | `opus`              | `gpt-5.6-sol`     | `claude-opus-5`    | 5                   |
 | frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` | 10                  |
 
-Cost is the Claude family's per-token ratio, and it is the reason the default is not the top tier.
-Claude Code and Codex accept `low`, `medium`, `high`, and `xhigh` for effort, spelled `effort` in a
-Claude subagent profile and `model_reasoning_effort` in the Codex one. Cursor carries effort inside
-the model string instead, as `claude-opus-5[effort=high]`.
+Cost is the Claude family's per-token ratio, which is why the default is not the top tier. Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` for effort (`effort` in a Claude subagent profile, `model_reasoning_effort` in Codex's); Cursor carries it inside the model string, as `claude-opus-5[effort=high]`. `repo-lint` rejects a profile naming a model no row offers, and the Codex `[agents]` defaults are generated from the standard row, so a model release is one edit here plus a regeneration.
 
-This table is not only documentation. `repo-lint` rejects a profile naming a model no row offers,
-and the Codex `[agents]` defaults are generated from the standard row, so a model release is an edit
-here and a regeneration.
-
-Two directions, both normal:
-
-- **Downward.** The usual case. A deep or frontier orchestrator almost never lets a subagent inherit
-  its model; inheritance is the expensive default, not the safe one. Say the tier explicitly.
-- **Upward.** A standard or deep orchestrator escalates a single hard question to `oracle`: a root
-  cause that has survived two attempts, a design fork with costly branches, a diagnosis you keep
-  circling. One question, read-only, no mandate to fix. `oracle` defaults to deep, so name the
-  frontier tier on the call when you are already there — a profile's model is its default, not its
-  ceiling, and naming one on the call overrides it.
-
-Effort is separate from tier. A stronger model at low effort beats a weaker one at high effort for
-judgment, and loses for breadth.
+Downward is the usual direction: a deep or frontier orchestrator almost never lets a subagent inherit its model, so say the tier explicitly. Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; name the frontier tier on the call if you are already there, since `oracle` defaults to deep. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
 
 ## Choosing the tier
 
-The table decides. When a task matches a row, take it and say which tier you chose in one line; do
-not ask. Ask Ro only when the choice is genuinely uncertain and the cost of being wrong is real:
-
-- The work fits no row, and your confidence between two tiers is low.
-- You are about to spend the frontier tier, or expect the agent to run more than about ten minutes.
-- The log shows the pattern already: a task like this one was re-run at a higher tier, came back
-  inadequate, or was obvious overkill.
-
-Ask as a single question with your recommendation marked, then write the answer into the routing
-table above in the same task so the question does not recur. That edit is the point of asking; an
-answer that only lives in one conversation was wasted.
-
-`Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` records what has been asked and
-settled, and holds the criteria that end the calibration period and delete this clause.
+The table decides: when a task matches a row, take it and say which tier you chose in one line, without asking. Ask Ro only when the work fits no row and your confidence between two tiers is low, when you are about to spend the frontier tier or expect the agent to run more than about ten minutes, or when the log already shows this kind of task re-run at a different tier — as one question with your recommendation marked, then write the answer into the table above so it does not recur.
 
 ## The brief
 
-The agent sees the brief and nothing else. Every brief carries:
+The agent sees the brief and nothing else. Every brief carries: **goal** and why it matters; **what is already known** — paths, findings, things ruled out; **decisions already made**, so it does not silently re-decide them; **boundaries** — paths it owns, must not touch, and whether it may write; **return format** and length; and a **stop condition** — what "done" is and what to do when the answer is not there.
 
-1. **Goal**, and why it matters to the larger task.
-2. **What is already known** — paths, findings, and the things you have ruled out. This is what stops
-   the agent rediscovering your last twenty minutes.
-3. **Decisions already made**, so it does not silently re-decide them.
-4. **Boundaries**: paths it owns, paths it must not touch, and whether it may write at all.
-5. **Return format** and the length you want.
-6. **Stop condition** — what "done" is, and what to do when the answer is not there.
+Repository boilerplate for every brief you launch into this worktree: run from the worktree root without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit `Docs/Roadmap/Developer environment upgrades.md`, its archive index, or its entry files, and return developer-environment findings to the caller instead. Root `AGENTS.md` binds every agent that reads a brief, including never naming any agent identity in work products.
 
-Root `AGENTS.md` binds every agent that reads the brief, including the rule against naming any agent
-identity in work products. Everything else depends on where the brief is going.
+A brief Ro asks you to print takes none of that worktree boilerplate. Ro pastes it into a fresh agent that gets a worktree of its own, sharing nothing with this session — not this worktree's path, not its branch, not its uncommitted edits, not its `.artifacts/`. A request to print, paste, or hand over a prompt is always that kind; only an agent you launch through the harness yourself is the other. So: name no worktree path and never say where to run, because pointing it at `…/.claude/worktrees/<name>` sends it to edit a tree that belongs to somebody else, and the rule against `cd` is what makes that stick. Say what it starts from — `main`, or a named commit — rather than assuming state you are sitting on, and carry every finding into the brief as a `file:line` that survives a clean checkout, along with reproductions runnable from one; a scratch fixture or a generated tree you built here does not exist for it. Exclusive path ownership still belongs in the brief but buys something different, since separate worktrees cannot corrupt each other's writes: the hazard is the merge and any shared ledger that allocates IDs, where two branches taking the next `DEVENV` number collide silently and `_repo-lint` is what catches it. Its branch, its gates, and its merge message are its own, so say which of those you expect it to reach — no integration owner is watching it.
 
-### A brief you launch yourself
+## The return contract and what you do with it
 
-It runs in this worktree, on this branch, over your uncommitted work, so tell it so: run from the
-worktree root without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit
-`Docs/Roadmap/Developer environment upgrades.md`, its archive index, or anything under
-`Docs/Roadmap/Developer environment upgrades/`, and return developer-environment findings to the
-caller instead.
+Ask for, and hold agents to, one to two thousand dense tokens: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Agent-to-agent text is exempt from the response shape Ro reads.
 
-### A brief Ro asks you to print
-
-Ro pastes a printed brief into a fresh agent that gets a worktree of its own. That agent shares
-nothing with this session — not this worktree's path, not its branch, not its uncommitted edits, not
-its `.artifacts/`. A request to print, paste, or hand over a prompt is always this kind; only an
-agent you launch through the harness yourself is the other. Write it for a cold start:
-
-- Never name this worktree's path, and never tell it where to run. It has its own root and knows it.
-  "Run everything from `…/.claude/worktrees/<name>`" points it at a tree that belongs to somebody
-  else, and the instruction not to `cd` is what makes that stick.
-- Say what it starts from — `main`, or a named commit — instead of assuming the state you are
-  sitting on. Findings you have not landed are not there: put each one in the brief, with the
-  `file:line` that survives a fresh checkout, or land them first.
-- Make every reproduction runnable from a clean checkout. A scratch fixture, a path under
-  `.artifacts/`, or a generated tree you built in this session does not exist for it.
-- Exclusive path ownership still belongs in the brief, but it buys something different: separate
-  worktrees cannot corrupt each other's writes, so the hazard is the merge rather than the edit.
-  Keep two printed briefs off the same files anyway, and off any shared ledger that allocates IDs —
-  two branches that both take the next `DEVENV` number collide silently, and `_repo-lint` is what
-  catches it.
-- Everything a landing needs is the printed agent's own: its branch, its gates, its merge message.
-  Say which of those you expect it to reach, because no integration owner is watching it.
-
-## The return contract
-
-Ask for, and hold agents to, a report of one to two thousand tokens:
-
-- Conclusion first.
-- Evidence as `file:line`, commands, or output, not description of evidence.
-- Decisions taken and the reasoning that is not obvious from them.
-- Open questions, and what it did not check.
-
-Agent-to-agent text is exempt from the response shape Ro reads; `AGENTS.md` says so. Ask for dense,
-not polite.
-
-## What you do with the report
-
-Completion is not correctness, and a confident summary is not evidence. Before you build on a
-report, check one thing in it that the agent could not have produced without doing the work: open a
-cited `file:line`, re-run the one command, look at the diff. A report that cites nothing checkable
-is a prompt to redo the work, not a result.
-
-Two failures to watch for, because they are quiet: an agent that stopped early and reported as
-though it finished, and a summary that dropped the decision or the open question that mattered. Both
-read as success.
+Completion is not correctness, and a confident summary is not evidence. Before building on a report, check one thing the agent could not have produced without doing the work — a cited `file:line`, the one command, the diff. A report that cites nothing checkable is a prompt to redo the work, not a result. Watch for two quiet failures: an agent that stopped early and reported as though it finished, and a summary that dropped the decision or open question that mattered.

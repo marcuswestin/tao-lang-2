@@ -5,6 +5,7 @@ import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../de
 import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileSnapshot, StudioWriteAcknowledgement } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
+import { StudioMessages } from '../StudioMessages'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import {
   type StudioCheckpointSummary,
@@ -149,32 +150,19 @@ export class StudioApiError extends Error {
 export const StudioApiEventStream = {
   /** dispatch routes one socket message to its handler; a server event with no branch here is a type error. */
   dispatch(message: StudioHandshake | StudioSessionSocketEvent, handlers: StudioApiEventHandlers): void {
-    if (message.type === 'handshake') {
-      handlers.onHandshake?.(message)
-    } else if (message.type === 'compile-state') {
-      handlers.onCompile(message.state)
-    } else if (message.type === 'file-changed') {
-      handlers.onFile(message.file)
-    } else if (message.type === 'files-changed') {
-      handlers.onFiles?.(message.files)
-    } else if (message.type === 'preview-manifest-changed') {
-      handlers.onManifest(message.manifest)
-    } else if (message.type === 'sketch-catalog-changed') {
-      handlers.onSketchCatalog?.(message.catalog)
-    } else if (message.type === 'device-state') {
-      handlers.onDeviceState?.(message.status)
-    } else if (message.type === 'checkpoint-changed') {
-      handlers.onCheckpoint?.(message.checkpoint)
-    } else if (message.type === 'data-invalidated') {
-      handlers.onDataInvalidated?.({ entities: message.entities, revision: message.revision })
-    } else if (message.type === 'cell-reconfigured') {
-      handlers.onCellReconfigured?.(message.cellId)
-    } else if (message.type === 'studio-writes-acknowledged') {
-      handlers.onWritesAcknowledged?.(message.acknowledgements)
-    } else {
-      const unhandled: never = message
-      Errors.throwUnexpected(`Studio event stream sent an unknown message: ${JSON.stringify(unhandled)}`)
-    }
+    StudioMessages.dispatch<StudioHandshake | StudioSessionSocketEvent>(message, {
+      'cell-reconfigured': event => handlers.onCellReconfigured?.(event.cellId),
+      'checkpoint-changed': event => handlers.onCheckpoint?.(event.checkpoint),
+      'compile-state': event => handlers.onCompile(event.state),
+      'data-invalidated': event => handlers.onDataInvalidated?.({ entities: event.entities, revision: event.revision }),
+      'device-state': event => handlers.onDeviceState?.(event.status),
+      'file-changed': event => handlers.onFile(event.file),
+      'files-changed': event => handlers.onFiles?.(event.files),
+      handshake: event => handlers.onHandshake?.(event),
+      'preview-manifest-changed': event => handlers.onManifest(event.manifest),
+      'sketch-catalog-changed': event => handlers.onSketchCatalog?.(event.catalog),
+      'studio-writes-acknowledged': event => handlers.onWritesAcknowledged?.(event.acknowledgements),
+    })
   },
 }
 

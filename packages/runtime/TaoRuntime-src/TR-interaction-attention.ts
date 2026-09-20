@@ -14,6 +14,7 @@ import {
   type TaoOutlineLiveNode,
   visualOrder,
 } from './TR-interaction-outline'
+import { runtimeRevisionStore } from './TR-listeners'
 import type { Evaluable } from './TR-navigation-presentables'
 
 export type { TaoAttentionKey } from './TR-interaction-keys'
@@ -79,7 +80,7 @@ export class InteractionAttention {
   #focusRegion: string | undefined
   #focusStack: string[] = []
   #hints = false
-  #listeners = new Set<() => void>()
+  readonly #changes = runtimeRevisionStore()
   #memory = new Map<string, RegionMemory>()
   #outlineRevalidationScheduled = false
   #overview = false
@@ -90,7 +91,6 @@ export class InteractionAttention {
   #pendingTarget: string | undefined
   #pressed = new Set<string>()
   #hovered = new Set<string>()
-  #revision = 0
   #verbRefreshScheduled = false
   #verbPending: PendingVerb | undefined
   #verbs: readonly TaoInteractionVerb[] = []
@@ -103,11 +103,8 @@ export class InteractionAttention {
     outline.subscribeLive(() => this.scheduleOutlineRevalidation())
   }
 
-  readonly snapshot = (): number => this.#revision
-  readonly subscribe = (listener: () => void): () => void => {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
+  readonly snapshot = this.#changes.snapshot
+  readonly subscribe = this.#changes.subscribe
 
   readonly condition = (
     subject: string,
@@ -1166,10 +1163,7 @@ export class InteractionAttention {
   }
 
   private emit(): void {
-    this.#revision += 1
-    for (const listener of [...this.#listeners]) {
-      listener()
-    }
+    this.#changes.changed()
   }
 }
 

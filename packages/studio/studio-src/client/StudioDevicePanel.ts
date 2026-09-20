@@ -544,7 +544,9 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
       return
     }
     const target = event.target as Node | null
-    if (target !== null && (popover.contains(target) || button.contains(target))) {
+    /** The popover and the button that opens it are one surface; a pointer inside either stays open. */
+    const insidePanel = target !== null && (popover.contains(target) || button.contains(target))
+    if (insidePanel) {
       return
     }
     controller.close()

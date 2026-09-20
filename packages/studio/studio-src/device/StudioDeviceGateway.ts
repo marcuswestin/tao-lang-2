@@ -5,7 +5,9 @@ import {
   type TaoStudioDeviceDescription,
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
+  type TaoStudioDeviceLogEntry,
   type TaoStudioDeviceManifest,
+  type TaoStudioDeviceNetworkCondition,
   type TaoStudioDeviceOccurrence,
   TaoStudioDeviceProtocol,
   type TaoStudioDeviceRejectCode,
@@ -18,6 +20,7 @@ import {
 } from '@runtime/TR-studio-device-trust'
 import { Errors, FS, Http, Json } from '@shared'
 import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
+import { StudioMessages } from '../StudioMessages'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
 import { studioProtocolChannel, studioProtocolVersion, studioSourceActionVersion } from '../StudioProtocol'
@@ -689,30 +692,37 @@ export class StudioDeviceGateway {
     if (connection.state !== 'connected') {
       return
     }
-    if (event.type === 'compile-state') {
-      this.#sendSealed(connection, { ...compileState(event.state), type: 'studio.compileState' })
-      return
-    }
-    if (event.type === 'cell-reconfigured') {
+    StudioMessages.dispatch<StudioSessionEvent>(event, {
       // The reconfigure released every instance of this cell, this device's included, so its next
       // `device.applied` would be refused as no longer current. Re-assign to hand it a live instance
       // carrying the new arguments, environment, state layers, or replayed capture.
-      if (connection.cellId === event.cellId) {
-        this.#assign(connection, event.cellId)
-      }
+      'cell-reconfigured': reconfigured => {
+        if (connection.cellId === reconfigured.cellId) {
+          this.#assign(connection, reconfigured.cellId)
+        }
+      },
+      'checkpoint-changed': StudioMessages.ignore,
+      'compile-state': compiled => {
+        this.#sendSealed(connection, { ...compileState(compiled.state), type: 'studio.compileState' })
+      },
+      'file-changed': StudioMessages.ignore,
+      'files-changed': StudioMessages.ignore,
+      'preview-manifest-changed': changed => this.#manifestChanged(connection, changed.manifest),
+      'sketch-catalog-changed': StudioMessages.ignore,
+      'studio-writes-acknowledged': StudioMessages.ignore,
+    })
+  }
+
+  #manifestChanged(connection: Connection, manifest: StudioPreviewManifestV2): void {
+    this.#sendSealed(connection, { manifest: deviceManifest(manifest), type: 'studio.manifest' })
+    if (connection.cellId === undefined) {
       return
     }
-    if (event.type === 'preview-manifest-changed') {
-      this.#sendSealed(connection, { manifest: deviceManifest(event.manifest), type: 'studio.manifest' })
-      if (connection.cellId === undefined) {
-        return
-      }
-      const cellId = event.manifest.cells.some(cell => cell.cellId === connection.cellId)
-        ? connection.cellId
-        : event.manifest.cells[0]?.cellId
-      if (cellId !== undefined) {
-        this.#assign(connection, cellId)
-      }
+    const cellId = manifest.cells.some(cell => cell.cellId === connection.cellId)
+      ? connection.cellId
+      : manifest.cells[0]?.cellId
+    if (cellId !== undefined) {
+      this.#assign(connection, cellId)
     }
   }
 
@@ -909,104 +919,116 @@ export class StudioDeviceGateway {
     // carries nothing; every other message — a log line, a report, a selection — would put an
     // unconfirmed device's text in front of the person who is deciding whether to trust it.
     if (connection.state !== 'connected') {
-      if (message.type === 'device.ping') {
-        this.#sendSealed(connection, { type: 'studio.pong' })
-        return
-      }
-      this.#sendSealed(connection, {
-        code: 'pairing-pending',
-        message: 'Studio has not confirmed pairing yet.',
-        type: 'studio.error',
+      this.#sendSealed(
+        connection,
+        message.type === 'device.ping'
+          ? { type: 'studio.pong' }
+          : { code: 'pairing-pending', message: 'Studio has not confirmed pairing yet.', type: 'studio.error' },
+      )
+      return
+    }
+    StudioMessages.dispatch<TaoStudioDeviceDeviceMessage>(message, {
+      'device.applied': applied => this.#deviceApplied(connection, ref, applied),
+      'device.log': logged => this.#deviceLog(connection, logged.entries),
+      'device.ping': () => this.#sendSealed(connection, { type: 'studio.pong' }),
+      'device.report': reported => this.#deviceReport(connection, ref, reported.level, reported.message),
+      'device.runtimeCaptureFailed': failed => this.#resolveCapture(failed.requestId, { error: failed.error }),
+      'device.runtimeCaptured': captured => this.#resolveCapture(captured.requestId, { capture: captured.capture }),
+      'device.selectCell': selected => this.#assign(connection, selected.cellId),
+      'device.selectSource': selected => this.#deviceSelectSource(ref, selected.occurrence),
+      'device.setNetwork': chosen => this.#deviceSetNetwork(connection, ref, chosen.network),
+      'device.sourceAction': action => void this.#applyDeviceSourceAction(connection, ref, action),
+    })
+  }
+
+  /**
+   * Straight into Studio's own output, where a person driving Studio is already looking. The lines
+   * also still print on the phone, so a dropped connection loses the mirror, not the log.
+   */
+  #deviceLog(connection: Connection, entries: readonly TaoStudioDeviceLogEntry[]): void {
+    const name = deviceText(connection.device?.name ?? 'unknown')
+    for (const entry of entries) {
+      this.#log(`device ${name} ${entry.level}: ${deviceText(entry.message)}`)
+    }
+  }
+
+  #deviceReport(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    level: 'error' | 'info',
+    message: string,
+  ): void {
+    const reported = deviceText(message)
+    connection.lastReport = { level, message: reported }
+    this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} ${level}: ${reported}`)
+    this.#emit(ref.sessionId)
+  }
+
+  #deviceSelectSource(ref: StudioDeviceGatewaySessionRef, occurrence: TaoStudioDeviceOccurrence): void {
+    const state = this.#states.get(ref.sessionId)
+    if (state === undefined) {
+      return
+    }
+    state.selection = { ...occurrence, sequence: ++this.#selectionSequence }
+    this.#emit(ref.sessionId)
+  }
+
+  #deviceSetNetwork(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    condition: TaoStudioDeviceNetworkCondition,
+  ): void {
+    const assignment = connection.assignment
+    if (assignment === undefined) {
+      return
+    }
+    // Studio owns the figures behind each named condition; the phone chooses the situation.
+    const network = condition === 'offline'
+      ? { latencyMs: 0, outcome: 'offline' as const }
+      : condition === 'slow'
+      ? { latencyMs: 1_200, outcome: 'normal' as const }
+      : { latencyMs: 0, outcome: 'normal' as const }
+    try {
+      // An environment is reconfigured whole, so the chosen condition is merged into the one the
+      // cell is already under rather than replacing it — the phone is changing the network, not
+      // resetting the scheme and viewport with it.
+      const current = (ref.session.previewCellInstance(assignment.previewInstanceId) as {
+        cell?: { environment?: Record<string, unknown> }
+      }).cell?.environment ?? {}
+      // The whole identity, because a reconfigure is refused against a cell revision that has
+      // moved on — the phone names a condition, Studio decides whether the cell is still current.
+      ref.session.reconfigureCell({
+        appName: assignment.identity.appName,
+        cellId: assignment.identity.cellId,
+        cellRevision: assignment.identity.cellRevision,
+        compileRevision: assignment.identity.compileRevision,
+        environment: { ...current, network },
+        manifestRevision: assignment.identity.manifestRevision,
+        project: ref.session.projectRoot,
       })
+      connection.lastError = undefined
+    } catch (error) {
+      connection.lastError = Errors.formatForUser(error)
+    }
+    this.#emit(ref.sessionId)
+  }
+
+  /** A request with no pending entry was already timed out or already answered; the answer is dropped. */
+  #resolveCapture(requestId: string, result: { capture?: unknown; error?: string }): void {
+    const pending = this.#captures.get(requestId)
+    if (pending === undefined) {
       return
     }
-    if (message.type === 'device.ping') {
-      this.#sendSealed(connection, { type: 'studio.pong' })
-      return
-    }
-    if (message.type === 'device.log') {
-      // Straight into Studio's own output, where a person driving Studio is already looking. The
-      // lines also still print on the phone, so a dropped connection loses the mirror, not the log.
-      const name = deviceText(connection.device?.name ?? 'unknown')
-      for (const entry of message.entries) {
-        this.#log(`device ${name} ${entry.level}: ${deviceText(entry.message)}`)
-      }
-      return
-    }
-    if (message.type === 'device.report') {
-      const reported = deviceText(message.message)
-      connection.lastReport = { level: message.level, message: reported }
-      this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} ${message.level}: ${reported}`)
-      this.#emit(ref.sessionId)
-      return
-    }
-    if (message.type === 'device.selectCell') {
-      this.#assign(connection, message.cellId)
-      return
-    }
-    if (message.type === 'device.selectSource') {
-      const state = this.#states.get(ref.sessionId)
-      if (state !== undefined) {
-        state.selection = { ...message.occurrence, sequence: ++this.#selectionSequence }
-        this.#emit(ref.sessionId)
-      }
-      return
-    }
-    if (message.type === 'device.setNetwork') {
-      const assignment = connection.assignment
-      if (assignment === undefined) {
-        return
-      }
-      // Studio owns the figures behind each named condition; the phone chooses the situation.
-      const network = message.network === 'offline'
-        ? { latencyMs: 0, outcome: 'offline' as const }
-        : message.network === 'slow'
-        ? { latencyMs: 1_200, outcome: 'normal' as const }
-        : { latencyMs: 0, outcome: 'normal' as const }
-      try {
-        // An environment is reconfigured whole, so the chosen condition is merged into the one the
-        // cell is already under rather than replacing it — the phone is changing the network, not
-        // resetting the scheme and viewport with it.
-        const current = (ref.session.previewCellInstance(assignment.previewInstanceId) as {
-          cell?: { environment?: Record<string, unknown> }
-        }).cell?.environment ?? {}
-        // The whole identity, because a reconfigure is refused against a cell revision that has
-        // moved on — the phone names a condition, Studio decides whether the cell is still current.
-        ref.session.reconfigureCell({
-          appName: assignment.identity.appName,
-          cellId: assignment.identity.cellId,
-          cellRevision: assignment.identity.cellRevision,
-          compileRevision: assignment.identity.compileRevision,
-          environment: { ...current, network },
-          manifestRevision: assignment.identity.manifestRevision,
-          project: ref.session.projectRoot,
-        })
-        connection.lastError = undefined
-      } catch (error) {
-        connection.lastError = Errors.formatForUser(error)
-      }
-      this.#emit(ref.sessionId)
-      return
-    }
-    if (message.type === 'device.sourceAction') {
-      void this.#applyDeviceSourceAction(connection, ref, message)
-      return
-    }
-    if (message.type === 'device.runtimeCaptured' || message.type === 'device.runtimeCaptureFailed') {
-      const pending = this.#captures.get(message.requestId)
-      if (pending === undefined) {
-        // A late or unasked-for answer: the request already timed out, or the device answered twice.
-        return
-      }
-      this.#captures.delete(message.requestId)
-      clearTimeout(pending.timer)
-      if (message.type === 'device.runtimeCaptured') {
-        pending.resolve({ capture: message.capture })
-      } else {
-        pending.resolve({ error: message.error })
-      }
-      return
-    }
+    this.#captures.delete(requestId)
+    clearTimeout(pending.timer)
+    pending.resolve(result)
+  }
+
+  #deviceApplied(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    message: Extract<TaoStudioDeviceDeviceMessage, { type: 'device.applied' }>,
+  ): void {
     let accepted = false
     let refused = false
     try {
@@ -1040,7 +1062,8 @@ export class StudioDeviceGateway {
     // claim "applied ✓" for a revision that never produced a bundle. A throw is the session refusing
     // the identity outright (stale, wrong instance), and proves nothing about the device at all.
     const snapshot = ref.session.compileSnapshot()
-    if (accepted || (!refused && message.appliedRevision <= snapshot.appliedRevision)) {
+    const claimProven = accepted || (!refused && message.appliedRevision <= snapshot.appliedRevision)
+    if (claimProven) {
       connection.appliedRevision = message.appliedRevision
     }
     this.#sendSealed(connection, { accepted, compileRevision: message.compileRevision, type: 'studio.appliedAck' })

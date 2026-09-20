@@ -72,7 +72,7 @@ Ro has already ruled on the following; do not reopen them, and record them for a
    - `parallel-implementation` if independent workstreams genuinely warrant it
 5. Work on a named `feat/<name>` branch.
 6. Preserve unrelated and concurrent changes.
-7. Never edit `Docs/Roadmap/Archive/`.
+7. Never edit `Docs/Archive/`.
 8. Do not edit authoritative Tao Revolution decisions without Ro’s approval.
 9. Language changes must proceed through the normal vertical slice:
    - decision/specification;

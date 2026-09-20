@@ -35,6 +35,14 @@ Describe('simplify audit', () => {
     Expect(kindChainIssues([{ path: 'packages/studio/studio-tests/new.test.ts', source: chain }], [])).toEqual([])
   })
 
+  Test('does not join guards from separate functions into one chain', () => {
+    const guard = (
+      kind: string,
+    ) => [`function is${kind}(type: Type) {`, `  if (type.kind === '${kind}') {`, '    return true', '  }', '}']
+    const source = ['a', 'b', 'c'].flatMap(guard).join('\n')
+    Expect(kindChainIssues([{ path: chainPath, source }], [])).toEqual([])
+  })
+
   Test('measures source, constants, instructions, and docs from the files it is given', () => {
     const report = simplifyAudit([
       { path: chainPath, source: `const LIMIT = 200\n${chain}` },
