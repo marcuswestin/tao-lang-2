@@ -1,5 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { kindChainIssues } from '../dev-src/repository-tests/repo-lint'
+import { instructionBudgetIssues, kindChainIssues } from '../dev-src/repository-tests/repo-lint'
 import { simplifyAudit } from '../dev-src/simplify-audit/SimplifyAudit'
 
 const chainPath = 'packages/studio/studio-src/StudioNew.ts'
@@ -33,6 +33,22 @@ Describe('simplify audit', () => {
     const twoBranches = chain.split('\n').filter(line => !line.includes("'c'")).join('\n')
     Expect(kindChainIssues([{ path: chainPath, source: twoBranches }], [])).toEqual([])
     Expect(kindChainIssues([{ path: 'packages/studio/studio-tests/new.test.ts', source: chain }], [])).toEqual([])
+  })
+
+  Test('does not join guards from separate functions into one chain', () => {
+    const guard = (
+      kind: string,
+    ) => [`function is${kind}(type: Type) {`, `  if (type.kind === '${kind}') {`, '    return true', '  }', '}']
+    const source = ['a', 'b', 'c'].flatMap(guard).join('\n')
+    Expect(kindChainIssues([{ path: chainPath, source }], [])).toEqual([])
+  })
+
+  Test('reports an instruction file over its budget and leaves reference files alone', () => {
+    Expect(instructionBudgetIssues([
+      { path: 'AGENTS.md', source: 'rule\n'.repeat(61) },
+      { path: 'agents/skills/git-workflow/SKILL.md', source: 'rule\n'.repeat(80) },
+      { path: 'agents/skills/git-workflow/references/landing.md', source: 'rule\n'.repeat(200) },
+    ])).toEqual(['AGENTS.md is 61 lines, over its 60-line budget; move detail into a reference file or a gate.'])
   })
 
   Test('measures source, constants, instructions, and docs from the files it is given', () => {

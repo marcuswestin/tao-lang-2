@@ -41,6 +41,7 @@ const EXCLUDED_SUFFIX = '.tsbuildinfo'
 
 /** TaoStdlib owns the declared Tao stdlib root and the identity of the tree it names. */
 export const TaoStdlib = {
+  ABSENT,
   DECLARED_ROOT_ENV,
   declaredRoot,
   declaredRootIdentity,

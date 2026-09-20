@@ -1,9 +1,10 @@
 # Plan - Repository simplification 2
 
-Status: Wave 0 landed; Wave 1 not started. Decisions settled with Ro on 2026-09-19. The `simplify-repo` skill
-owns the repeatable method; this document owns this run: its baseline, fences, waves, and ledger.
+Status: Waves 0 and 1 landed; Wave 2 integrated. Decisions settled
+with Ro on 2026-09-19. The `simplify-repo` skill owns the repeatable method; this document owns this
+run: its baseline, fences, waves, and ledger.
 
-The first pass is archived at `Docs/Roadmap/Archive/Repository simplification/`. It and its three
+The first pass is archived at `Docs/Archive/Plans/Repository simplification/`. It and its three
 follow-ups took dead exports, name-level duplicate helpers, typed errors, the Studio wire contract,
 and the `repo-lint` convention table. Its Documentation and Command-surface parts never started.
 
@@ -131,3 +132,53 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
 | Wave | Source lines | Instruction lines | Allowlist entries | Chain files | Defects fixed |
 | ---- | ------------ | ----------------- | ----------------- | ----------- | ------------- |
 | 0    | 141,135      | 1,761             | 145               | 23          | none          |
+| 1    | 141,422      | 1,411             | 145               | 3           | 3             |
+| 2    | 141,652      | 1,428             | 135               | 3           | none          |
+
+### Wave 1 notes
+
+- Pattern conformance landed; line reduction did not. Exhaustive handler tables spell out branches a
+  chain fell through, which cost about what the removed repetition saved.
+- The two latent defects: an unknown persisted `kind` fell back to `item`, and an unlisted primitive
+  validated as a number. Both now fail to compile.
+- The wave's review found one defect class, fixed in the wave: a handler table indexed by a wire
+  value resolved `constructor`, `toString`, and `__proto__` to inherited `Object` members. `Switch`,
+  `RuntimeSwitch`, `StudioMessages.dispatch`, the window-message parser table, and the device
+  protocol's parser table, where the hole predated the wave, now read own keys only.
+- Instructions fell 20%, not half. The remainder waits on Wave 2's hooks and a second pass over the
+  skills that were already under budget.
+- `packages/dev` outside `repository-tests/` had little to give.
+- Carried to Wave 2: a `type`-property form and a shared no-op handler for `Switch`, so
+  `StudioMessages.dispatch` can retire; `journalLimit` mirrored across the runtime–Studio seam.
+- Mapped but not started, each its own slice: the sketch block of `StudioProjectSession.ts`, a route
+  table for `StudioServer.ts`, seam splits of `TR-studio-preview.tsx` and
+  `TR-studio-device-host.tsx`, and a deep-tier read of `Type.ts`, `compiler.ts`, and `FS.ts`.
+
+### Wave 2 notes
+
+- Gates added to `repo-lint`: instruction budgets, and generated harness files that regenerating
+  from `.rulesync/` would change.
+- Warn-only hooks: shell habits before a Bash call, the standing rules at a subagent's start, and
+  `commit-msg` and `pre-commit` Git hooks that `./agent setup` installs. The Git hooks live in the
+  `.git` every worktree shares, so each asks the committing worktree for its own script and stays
+  silent where there is none. The prose they replace is cut from `AGENTS.md`, `git-workflow`, and
+  `delegation`.
+- `Switch.on(item, property, handlers)` and `Switch.nothing` landed; `StudioMessages` is gone.
+- Hashing, signing, and random ids go through flat `Platform` functions, not a `Platform.Crypto`
+  namespace, because `Platform` has no nested namespaces. Ten `node:` allowlist entries retired.
+- Instruction lines rose by 17: the hooks removed about as much prose as the `after-merging-main`
+  reference Ro asked for added. The halving target still needs its own pass.
+- Not done: `journalLimit` stays mirrored across the runtime–Studio seam, because the test that pins
+  runtime mirrors is fenced.
+
+### Follow-ups after Wave 2
+
+- `land-unlock --force` requires `--holder <pid>` and compares it inside the registry lock, after an
+  agent force-released a lock other than the one it had checked. Waiter messages no longer suggest
+  forcing, and the force commands go to permission review in Claude Code; Codex's generator emits
+  only `allow`, so it cannot express that.
+- The three hooks' logic moved from zsh to TypeScript under `packages/dev/dev-src/agent-hooks/`,
+  476 lines to 393, with shims of about a dozen lines that find `bun` and always exit 0. The
+  shell-habits hook costs 31–43 ms a call; routed through `./dev` it would cost about 250 ms.
+- A hook earns its place when the rule is cheap to detect and often broken. Logic goes in
+  TypeScript; shell stays only where the environment may not exist yet.

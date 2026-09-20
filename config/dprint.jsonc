@@ -9,7 +9,7 @@
     "**/*-lock.json",
     "**/_gen_*/**",
     ".*",
-    "Docs/Roadmap/Archive/**",
+    "Docs/Archive/**",
     "packages/old-*",
     "packages/old-*/**",
   ],

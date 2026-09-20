@@ -5,6 +5,7 @@
 // this code does; nothing here ever sees or stores a passphrase.
 
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { ENV_PATH, LOCAL_PATH } from './SecretsFile'
 import {
   type Cipher,
   formatStore,
@@ -17,10 +18,6 @@ import {
 
 /** Committed: readable keys, readable metadata, encrypted values. */
 const STORE_PATH = 'secrets/secrets.jsonc'
-/** Generated, git-ignored, wholly owned by this command. */
-const ENV_PATH = '.env.secrets'
-/** Hand-written, git-ignored, never written by this command. Named here only to say so in messages. */
-const LOCAL_PATH = '.env.local'
 /** Outside the repository, so every worktree on this machine shares one identity. */
 const IDENTITY_PATH = '~/.config/tao/secrets-identity.txt'
 

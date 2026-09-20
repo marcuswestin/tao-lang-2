@@ -248,8 +248,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   let panning: number | undefined
   let spaceHeld = false
+  /** The canvas pans on the middle button, or on the left button while space is held. */
+  const startsPan = (event: PointerEvent): boolean => event.button === 1 || (event.button === 0 && spaceHeld)
   const onPointerDown = (event: PointerEvent): void => {
-    if (panning !== undefined || !(event.button === 1 || (event.button === 0 && spaceHeld))) {
+    if (panning !== undefined || !startsPan(event)) {
       return
     }
     panning = event.pointerId

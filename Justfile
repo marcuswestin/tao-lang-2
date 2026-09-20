@@ -15,7 +15,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config
+_setup: _deps _agent-config _git-hooks
 
 # Configure this checkout and GitHub CLI for HTTPS Git authentication
 [group('Setup')]
@@ -431,6 +431,9 @@ _agent-config:
 
 _deps:
     zsh packages/dev/dev-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+
+_git-hooks:
+    ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
     bun run packages/dev/dev-src/doctor/DependencyHealth.ts

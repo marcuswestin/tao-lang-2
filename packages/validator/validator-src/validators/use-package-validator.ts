@@ -1,5 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -72,18 +73,27 @@ export const usePackageValidationChecks = {
       return
     }
     const resolution = AST.configurableTypeAliasResolution(declaration)
-    if (resolution.kind === 'unresolved') {
-      return
-    }
-    if (resolution.kind === 'cycle') {
-      ctx.error(declaration, usePackageValidationMessages.typeAliasCycle(declaration.name))
-      return
-    }
-    if (resolution.kind === 'invalid' || !AST.isConfigurableDeclaration(resolution.target)) {
-      ctx.error(
-        declaration,
-        usePackageValidationMessages.typeAliasTargetKind(declaration.name, resolution.target.name),
-      )
-    }
+    Switch.kind(resolution, {
+      unresolved: () => {},
+      cycle: () => {
+        ctx.error(declaration, usePackageValidationMessages.typeAliasCycle(declaration.name))
+      },
+      invalid: resolution => reportInvalidTypeAliasTarget(declaration, resolution, ctx),
+      target: resolution => reportInvalidTypeAliasTarget(declaration, resolution, ctx),
+    })
   },
 } satisfies NodeValidationChecks
+
+/** reportInvalidTypeAliasTarget errors when a resolved type alias does not land on a configurable type. */
+function reportInvalidTypeAliasTarget(
+  declaration: AST.TypeDeclaration,
+  resolution: Extract<AST.ConfigurableTypeAliasResolution, { kind: 'invalid' | 'target' }>,
+  ctx: ValidationContext,
+): void {
+  if (resolution.kind === 'invalid' || !AST.isConfigurableDeclaration(resolution.target)) {
+    ctx.error(
+      declaration,
+      usePackageValidationMessages.typeAliasTargetKind(declaration.name, resolution.target.name),
+    )
+  }
+}

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Json, Platform } from '@shared'
 
 const metadataFileName = 'tao-studio-hutch-home.json'
 const metadataVersion = 1
@@ -98,9 +98,9 @@ async function readMetadata(targetHome: string): Promise<HutchHomeMetadata | und
   try {
     const value = await FS.readJson<unknown>(FS.resolvePath(metadataFileName, targetHome))
     if (
-      typeof value === 'object' && value !== null
-      && typeof (value as Record<string, unknown>)['sourceHome'] === 'string'
-      && typeof (value as Record<string, unknown>)['version'] === 'number'
+      Json.isRecord(value)
+      && typeof value['sourceHome'] === 'string'
+      && typeof value['version'] === 'number'
     ) {
       return value as HutchHomeMetadata
     }

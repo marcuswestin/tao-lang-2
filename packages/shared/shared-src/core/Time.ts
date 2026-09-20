@@ -1,3 +1,6 @@
+/** NANOSECONDS_PER_MILLISECOND converts between the nanosecond duration base and milliseconds. */
+export const NANOSECONDS_PER_MILLISECOND = 1e6
+
 /** sleep waits for the specified number of milliseconds. */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))

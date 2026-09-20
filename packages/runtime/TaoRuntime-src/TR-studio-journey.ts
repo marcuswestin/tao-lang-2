@@ -1,4 +1,5 @@
 import { RuntimeAssert } from './TR-assert'
+import RuntimeSwitch from './TR-switch'
 
 export type TaoJourneySelector = 'label' | 'placeholder' | 'tag' | 'text'
 
@@ -132,29 +133,39 @@ async function replayTaoJourneyStep<Target>(
   adapter: TaoJourneyAdapter<Target>,
   scope?: () => Target | Promise<Target>,
 ): Promise<void> {
-  if (step.kind === 'advance') {
-    RuntimeAssert.input(
-      Number.isFinite(step.milliseconds) && step.milliseconds >= 0,
-      'A Tao journey can only advance by a non-negative number of milliseconds.',
-      { milliseconds: step.milliseconds },
-    )
-    await adapter.advance(step.milliseconds)
-    return
+  /** Every step but `advance` and `select` is one event against one found target. */
+  const event = async (eventStep: Exclude<TaoJourneyStep, { kind: 'advance' | 'select' }>): Promise<void> => {
+    await replayTaoJourneyEventStep(eventStep, adapter, scope ? await scope() : undefined)
   }
-  if (step.kind === 'select') {
-    RuntimeAssert.input(
-      Number.isSafeInteger(step.index) && step.index > 0,
-      'A Tao journey can only select a positive whole-numbered row.',
-      { index: step.index, tag: step.tag },
-    )
-    await replayTaoJourneySteps(
-      step.steps,
-      adapter,
-      async () => await adapter.select(step.tag, step.index, scope ? await scope() : undefined),
-    )
-    return
-  }
-  await replayTaoJourneyEventStep(step, adapter, scope ? await scope() : undefined)
+  await RuntimeSwitch.kind<TaoJourneyStep, Promise<void>>(step, {
+    advance: async advance => {
+      RuntimeAssert.input(
+        Number.isFinite(advance.milliseconds) && advance.milliseconds >= 0,
+        'A Tao journey can only advance by a non-negative number of milliseconds.',
+        { milliseconds: advance.milliseconds },
+      )
+      await adapter.advance(advance.milliseconds)
+    },
+    enter: event,
+    focus: event,
+    hover: event,
+    press: event,
+    pressDown: event,
+    pressUp: event,
+    select: async selection => {
+      RuntimeAssert.input(
+        Number.isSafeInteger(selection.index) && selection.index > 0,
+        'A Tao journey can only select a positive whole-numbered row.',
+        { index: selection.index, tag: selection.tag },
+      )
+      await replayTaoJourneySteps(
+        selection.steps,
+        adapter,
+        async () => await adapter.select(selection.tag, selection.index, scope ? await scope() : undefined),
+      )
+    },
+    submit: event,
+  })
 }
 
 /** replayTaoJourneyEventStep applies one event-only step without exposing the clock adapter surface. */

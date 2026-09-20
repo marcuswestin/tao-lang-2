@@ -222,10 +222,10 @@ item-specific one.
 
 - `packages/AGENTS.md` before editing `packages/`. Expected semantic and source-shape diagnostics
   belong in the validator; codegen assumes validated input.
-- `Docs/Roadmap/Archive/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
+- `Docs/Archive/Reports/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
 - `./agent verify` before every commit. Branch `feat/<name>`; never commit from detached HEAD.
 - Many worktrees share this repo and other agents work concurrently — preserve changes you did not
   make, and do not touch the Git index unless Ro asks.
-- `Docs/Roadmap/Archive/` is frozen.
+- `Docs/Archive/` is frozen.
 - Ask Ro on language semantics and ambiguous product behavior. Resolve routine implementation choices
   from repository evidence.

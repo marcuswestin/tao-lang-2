@@ -3,12 +3,13 @@ import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
 import { testDataConnection } from './TR-data-provider'
 import { UserInputError } from './TR-errors'
+import { runtimeListeners } from './TR-listeners'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
 let testMode = false
 const schemas = new Set<TaoDataSchema>()
-const globalListeners = new Set<() => void>()
+const globalListeners = runtimeListeners()
 let globalRevision = 0
 
 export type TaoDataCapture = Readonly<{
@@ -126,8 +127,7 @@ export async function resetAllDataSchemas(): Promise<TaoDataCapture> {
 }
 
 export function subscribeAll(listener: () => void): () => void {
-  globalListeners.add(listener)
-  return () => globalListeners.delete(listener)
+  return globalListeners.subscribe(listener)
 }
 
 export function revision(): number {
@@ -150,7 +150,5 @@ export function emitDataChange(localListeners: Iterable<() => void>): void {
   for (const listener of localListeners) {
     listener()
   }
-  for (const listener of globalListeners) {
-    listener()
-  }
+  globalListeners.notify()
 }

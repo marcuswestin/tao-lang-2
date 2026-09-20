@@ -29,7 +29,7 @@ Before editing, inspect the live checkout, worktree list, branch, status, instru
 and current tests. Read these sources in order:
 
 1. repository `AGENTS.md` and `packages/AGENTS.md`;
-2. `agents/skills/parallel-implementation/SKILL.md`;
+2. `agents/skills/delegation/references/parallel-implementation.md`;
 3. the companion plan linked above, especially **Development foundation** and Slice 1;
 4. `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`;
 5. `Docs/Spec/Tao Studio.md`;

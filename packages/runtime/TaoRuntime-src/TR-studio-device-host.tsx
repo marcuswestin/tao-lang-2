@@ -181,10 +181,7 @@ export function resolveDeviceBootstrap(input: {
         : `the bundle URL '${input.scriptURL}' names no host`,
     )
   }
-  const gatewayPort = typeof input.gatewayPort === 'number' && Number.isSafeInteger(input.gatewayPort)
-      && input.gatewayPort > 0 && input.gatewayPort <= 65_535
-    ? input.gatewayPort
-    : undefined
+  const gatewayPort = validPort(input.gatewayPort) ? input.gatewayPort : undefined
   if (gatewayPort === undefined) {
     missing.push('the gateway port (expo.extra.taoStudioDevice.gatewayPort) is missing from the Expo manifest')
   }
@@ -457,9 +454,7 @@ export function studioBonjourGateways(value: unknown): readonly { studioPublicKe
       record['protocol'] !== TaoStudioDeviceProtocol.name
       || host === undefined
       || !validBonjourHost(host)
-      || !Number.isSafeInteger(port)
-      || port <= 0
-      || port > 65_535
+      || !validPort(port)
       || typeof studioPublicKey !== 'string'
       || !StudioDeviceTrust.validPublicKey(studioPublicKey)
     ) {
@@ -473,6 +468,16 @@ export function studioBonjourGateways(value: unknown): readonly { studioPublicKe
 
 function validBonjourHost(host: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(host) || /^[0-9a-fA-F:]+$/.test(host)
+}
+
+/** A usable TCP port: a whole number inside the port range, however the advertiser spelled it. */
+function validPort(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 65_535
+}
+
+/** An optional stored field is either absent or text; anything else is a record to discard. */
+function optionalText(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string'
 }
 
 function nativeStudioBonjourDiscovery():
@@ -531,7 +536,7 @@ export function parseStoredRecord(raw: string): TaoStudioDeviceStoredRecord | un
       typeof publicKey !== 'string'
       || typeof secretKey !== 'string'
       || !StudioDeviceTrust.validPublicKey(publicKey)
-      || (pinnedStudioKey !== undefined && typeof pinnedStudioKey !== 'string')
+      || !optionalText(pinnedStudioKey)
     ) {
       return undefined
     }
@@ -796,75 +801,48 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     ? 'Studio applied the move.'
     : `Studio refused the move: ${state.sourceAction.error ?? 'no reason given'}`
 
-  const menuActions: readonly DeviceMenuAction[] = [
+  // Choosing anything in the badge menu closes it, so each action below names only its own work.
+  const menuActions: readonly DeviceMenuAction[] = ([
     {
       active: inspecting,
       id: 'inspect',
-      label: inspecting ? 'Inspect: on' : 'Inspect',
-      onPress: () => {
+      label: menuToggleLabel('Inspect', inspecting),
+      onPress: () =>
         setInspecting(on => {
           if (on) {
             setSelection(undefined)
           }
           return !on
-        })
-        setMenuOpen(false)
-      },
+        }),
     },
-    {
-      disabled: selection === undefined,
-      id: 'move-up',
-      label: 'Move up',
-      onPress: () => {
-        move('up')
-        setMenuOpen(false)
-      },
-    },
-    {
-      disabled: selection === undefined,
-      id: 'move-down',
-      label: 'Move down',
-      onPress: () => {
-        move('down')
-        setMenuOpen(false)
-      },
-    },
+    { disabled: selection === undefined, id: 'move-up', label: 'Move up', onPress: () => move('up') },
+    { disabled: selection === undefined, id: 'move-down', label: 'Move down', onPress: () => move('down') },
     {
       active: assignedNetwork === 'offline',
       id: 'offline',
-      label: assignedNetwork === 'offline' ? 'Offline: on' : 'Offline',
-      onPress: () => {
-        client.setNetwork(assignedNetwork === 'offline' ? 'normal' : 'offline')
-        setMenuOpen(false)
-      },
+      label: menuToggleLabel('Offline', assignedNetwork === 'offline'),
+      onPress: () => client.setNetwork(assignedNetwork === 'offline' ? 'normal' : 'offline'),
     },
     {
       active: assignedNetwork === 'slow',
       id: 'slow-network',
-      label: assignedNetwork === 'slow' ? 'Slow network: on' : 'Slow network',
-      onPress: () => {
-        client.setNetwork(assignedNetwork === 'slow' ? 'normal' : 'slow')
-        setMenuOpen(false)
-      },
+      label: menuToggleLabel('Slow network', assignedNetwork === 'slow'),
+      onPress: () => client.setNetwork(assignedNetwork === 'slow' ? 'normal' : 'slow'),
     },
     {
       active: devMode.layoutBounds,
       id: 'layout-bounds',
-      label: devMode.layoutBounds ? 'Layout bounds: on' : 'Layout bounds',
-      onPress: () => {
-        Dev.toggleLayoutBounds()
-        setMenuOpen(false)
-      },
+      label: menuToggleLabel('Layout bounds', devMode.layoutBounds),
+      onPress: () => Dev.toggleLayoutBounds(),
     },
-    {
-      id: 'scenarios',
-      label: 'Scenarios',
-      onPress: () => {
-        setMenuOpen(false)
-        setSheetOpen(true)
-      },
+    { id: 'scenarios', label: 'Scenarios', onPress: () => setSheetOpen(true) },
+  ] satisfies readonly DeviceMenuAction[]).map(action => ({
+    ...action,
+    onPress: () => {
+      action.onPress()
+      setMenuOpen(false)
     },
-  ]
+  }))
 
   const content = presentation.kind === 'cell'
     ? React.createElement(StudioDeviceCell, {
@@ -1046,17 +1024,13 @@ function DeviceNotices(props: {
           accessibilityRole: 'button',
           key: notice.testID,
           onPress: notice.onDismiss,
-          style: notice.tone === 'failure' ? failureNoticeStyle : infoNoticeStyle,
+          style: noticeToneStyles[notice.tone].panel,
           testID: notice.testID,
         },
+        React.createElement(RN.Text, { style: noticeToneStyles[notice.tone].eyebrow }, notice.eyebrow),
         React.createElement(
           RN.Text,
-          { style: notice.tone === 'failure' ? failureNoticeEyebrowStyle : infoNoticeEyebrowStyle },
-          notice.eyebrow,
-        ),
-        React.createElement(
-          RN.Text,
-          { numberOfLines: 4, style: notice.tone === 'failure' ? failureNoticeTextStyle : infoNoticeTextStyle },
+          { numberOfLines: 4, style: noticeToneStyles[notice.tone].body },
           notice.message,
         ),
       )
@@ -1350,6 +1324,11 @@ type DeviceMenuAction = {
   id: string
   label: string
   onPress: () => void
+}
+
+/** A menu toggle says it is on in its label, not only in its highlight. */
+function menuToggleLabel(name: string, on: boolean): string {
+  return on ? `${name}: on` : name
 }
 
 function DeviceBadge(
@@ -1669,46 +1648,36 @@ const noticeLayerStyle = {
   zIndex: 10001,
 } as const
 
-const failureNoticeStyle = {
-  backgroundColor: '#7f1d1d',
+const noticePanelStyle = {
   gap: 4,
   paddingBottom: 12,
   paddingHorizontal: 16,
   paddingTop: 12,
 } as const
 
-const failureNoticeEyebrowStyle = {
-  color: '#fecaca',
+const noticeEyebrowStyle = {
   fontSize: 11,
   fontWeight: '700',
   letterSpacing: 1,
 } as const
 
-const failureNoticeTextStyle = {
-  color: '#fef2f2',
+const noticeBodyStyle = {
   fontSize: 14,
   lineHeight: 19,
 } as const
 
-const infoNoticeStyle = {
-  backgroundColor: '#1e293b',
-  gap: 4,
-  paddingBottom: 12,
-  paddingHorizontal: 16,
-  paddingTop: 12,
-} as const
-
-const infoNoticeEyebrowStyle = {
-  color: '#94a3b8',
-  fontSize: 11,
-  fontWeight: '700',
-  letterSpacing: 1,
-} as const
-
-const infoNoticeTextStyle = {
-  color: '#e2e8f0',
-  fontSize: 14,
-  lineHeight: 19,
+/** A notice's tone chooses its palette; the panel, the eyebrow and the body are shaped alike. */
+const noticeToneStyles = {
+  failure: {
+    body: { ...noticeBodyStyle, color: '#fef2f2' },
+    eyebrow: { ...noticeEyebrowStyle, color: '#fecaca' },
+    panel: { ...noticePanelStyle, backgroundColor: '#7f1d1d' },
+  },
+  info: {
+    body: { ...noticeBodyStyle, color: '#e2e8f0' },
+    eyebrow: { ...noticeEyebrowStyle, color: '#94a3b8' },
+    panel: { ...noticePanelStyle, backgroundColor: '#1e293b' },
+  },
 } as const
 
 const badgeStyle = {

@@ -432,9 +432,9 @@ and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
 `./dev studio-smoke` on worker indices the graph assigns from the `studio-smoke` pool
 (`StudioSmoke.resources()` gives each index its own ports and artifact root); the native shell and
 canary are serialized on a `gui` resource so they never overlap each other while the browser lanes
-run beside them. The simulated-user browser lane is quarantined from the graph with its reason in
-the rollup while DEVENV-042 tracks its synthetic sketch gestures;
-`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it. A failing lane no longer hides the lanes after it — every lane
+run beside them. The simulated-user browser lane is an ordinary member of the graph again, and closed
+DEVENV-042 on 2026-09-20 with ten consecutive green normal-terminal runs;
+`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
 appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
 `just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the
 smoke lanes need an unsandboxed shell (Chrome cannot create its socket and Crashpad directories
