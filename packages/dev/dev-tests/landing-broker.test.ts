@@ -4,7 +4,10 @@ import {
   archiveBranch,
   isInspectableBranch,
   isLandableBranch,
+  LANDING_BROKER_GIT_TIMEOUT_MS,
   LANDING_BROKER_HOST,
+  LANDING_BROKER_PING_TIMEOUT_MS,
+  LANDING_BROKER_REQUEST_TIMEOUT_MS,
   LANDING_BROKER_VERSION,
   type LandingBrokerConfig,
 } from '../dev-src/landing-broker/LandingBrokerProtocol'
@@ -23,6 +26,12 @@ Test('landing broker transport crosses the managed loopback boundary', async () 
   } finally {
     await server.close()
   }
+})
+
+Test('landing broker gives Git work a bounded budget beyond the readiness probe', () => {
+  Expect(LANDING_BROKER_PING_TIMEOUT_MS).toBe(2_000)
+  Expect(LANDING_BROKER_GIT_TIMEOUT_MS).toBe(120_000)
+  Expect(LANDING_BROKER_REQUEST_TIMEOUT_MS).toBeGreaterThan(LANDING_BROKER_GIT_TIMEOUT_MS)
 })
 
 Test('landing broker entry bundles into a script the pinned Bun can launch', async () => {

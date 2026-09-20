@@ -3,6 +3,9 @@ import { FS } from '@shared'
 export const LANDING_BROKER_VERSION = 2
 export const LANDING_BROKER_LABEL = 'com.tao-lang.landing-broker'
 export const LANDING_BROKER_HOST = '127.0.0.1'
+export const LANDING_BROKER_PING_TIMEOUT_MS = 2_000
+export const LANDING_BROKER_GIT_TIMEOUT_MS = 120_000
+export const LANDING_BROKER_REQUEST_TIMEOUT_MS = LANDING_BROKER_GIT_TIMEOUT_MS + 5_000
 
 export type LandingBrokerRepository = {
   gitCommonDir: string

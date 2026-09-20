@@ -4,6 +4,7 @@ import {
   isCommitSha,
   isInspectableBranch,
   isLandableBranch,
+  LANDING_BROKER_GIT_TIMEOUT_MS,
   LANDING_BROKER_HOST,
   LANDING_BROKER_VERSION,
   type LandingBrokerConfig,
@@ -256,7 +257,9 @@ async function git(
       GIT_OBJECT_DIRECTORY: repository.objectDirectory,
       GIT_TERMINAL_PROMPT: '0',
     },
+    processPolicy: 'test',
     stdio: 'pipe',
+    timeoutMs: LANDING_BROKER_GIT_TIMEOUT_MS,
   })
   if (
     result.error !== undefined

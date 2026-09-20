@@ -1,6 +1,8 @@
 import { CLI, Errors, FS, LocalSocket } from '@shared'
 import {
   LANDING_BROKER_HOST,
+  LANDING_BROKER_PING_TIMEOUT_MS,
+  LANDING_BROKER_REQUEST_TIMEOUT_MS,
   LANDING_BROKER_VERSION,
   landingBrokerConfigPath,
   type LandingBrokerPushRequest,
@@ -83,7 +85,14 @@ async function requestBroker(request: LandingBrokerRequest): Promise<LandingBrok
     Errors.throwHostEnvironment(`The landing broker locator is invalid: ${landingBrokerConfigPath()}`)
   }
   try {
-    return await LocalSocket.request<LandingBrokerResponse>({ host: config.host, port: config.port }, request)
+    const timeoutMs = request.operation === 'ping'
+      ? LANDING_BROKER_PING_TIMEOUT_MS
+      : LANDING_BROKER_REQUEST_TIMEOUT_MS
+    return await LocalSocket.request<LandingBrokerResponse>(
+      { host: config.host, port: config.port },
+      request,
+      timeoutMs,
+    )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT' || code === 'ECONNREFUSED') {
