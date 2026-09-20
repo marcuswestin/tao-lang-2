@@ -3,6 +3,7 @@ import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
 import { TaoReferences } from './tao-references'
 import { TaoTokenBuilder } from './tao-token-builder'
@@ -220,6 +221,8 @@ function taoLanguageModule(packages: PackageResolver) {
       // Tao deliberately resolves token-identical configured constructors and one-field
       // unlabeled item forms from their linked owner declarations.
       ParserConfig: () => ({ skipValidations: true }),
+      LexerErrorMessageProvider: () => new TaoLexerErrorMessageProvider(),
+      ParserErrorMessageProvider: () => new TaoParserErrorMessageProvider(),
       TokenBuilder: () => new TaoTokenBuilder(),
       ValueConverter: () => new TaoValueConverter(),
     },
@@ -343,7 +346,7 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
   return {
     filePath: document?.uri.path,
     message: error.message,
-    range: rangeFromParserError(error),
+    range: rangeFromParserError(error, document),
     severity: 'error',
     source: 'parser',
   }
@@ -360,7 +363,7 @@ function referenceDiagnostic(reference: AST.Document['references'][number], docu
 }
 
 function rangeFromLexerError(error: LexerError): DiagnosticRange | undefined {
-  if (error.line === undefined || error.column === undefined) {
+  if (!isPlaced(error.line) || !isPlaced(error.column)) {
     return undefined
   }
   const line = error.line - 1
@@ -371,16 +374,41 @@ function rangeFromLexerError(error: LexerError): DiagnosticRange | undefined {
   }
 }
 
-function rangeFromParserError(error: ParserError): DiagnosticRange | undefined {
+function rangeFromParserError(error: ParserError, document?: AST.Document): DiagnosticRange | undefined {
   const token = error.token
-  if (token.startLine === undefined || token.startColumn === undefined) {
-    return undefined
+  if (!isPlaced(token.startLine) || !isPlaced(token.startColumn)) {
+    // Chevrotain's end-of-file token carries NaN rather than nothing, so an error reported against
+    // it has no position of its own. The place the author has to look is the end of what they
+    // wrote, which is where the missing `}` or `)` belongs.
+    return endOfSourceRange(document)
   }
-  const endLine = token.endLine ?? token.startLine
-  const endColumn = token.endColumn ?? token.startColumn
+  const endLine = isPlaced(token.endLine) ? token.endLine : token.startLine
+  const endColumn = isPlaced(token.endColumn) ? token.endColumn : token.startColumn
   return {
     start: RangeLocation(token.startLine - 1, token.startColumn - 1),
     end: RangeLocation(endLine - 1, Math.max(endColumn, token.startColumn)),
+  }
+}
+
+/** isPlaced says whether a lexer or parser position is a real one, which `NaN` is not. */
+function isPlaced(position: number | undefined): position is number {
+  return position !== undefined && Number.isFinite(position)
+}
+
+/** endOfSourceRange points at the last character the author wrote, skipping a trailing newline. */
+function endOfSourceRange(document?: AST.Document): DiagnosticRange | undefined {
+  const text = document?.textDocument.getText()
+  if (text === undefined) {
+    return undefined
+  }
+  const lines = text.split('\n')
+  // A file ending in a newline has an empty last line, and underlining nothing there tells nobody
+  // anything; the last line with content on it is what the author recognizes.
+  const line = lines.at(-1) === '' && lines.length > 1 ? lines.length - 2 : lines.length - 1
+  const character = lines[line]?.length ?? 0
+  return {
+    start: RangeLocation(Math.max(line, 0), Math.max(character - 1, 0)),
+    end: RangeLocation(Math.max(line, 0), character),
   }
 }
 
