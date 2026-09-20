@@ -1,5 +1,5 @@
 import { Packages } from '@ast-utils'
-import Formatter, { type FormatterSession } from '@formatter'
+import Formatter, { type FormatAttempt, type FormatterSession } from '@formatter'
 import { Diagnostic, Diagnostics, FS } from '@shared'
 import SourceActions from '@source-actions'
 import Workspace from '@workspace'
@@ -170,10 +170,30 @@ async function ownedTaoFiles(root: string, options: InPlace.PathOptions): Promis
   })))
 }
 
+/**
+ * formatFile formats one file, or reports its syntax errors instead — the same two outcomes
+ * `canonicalizeFile` gives `check` and `fix`, so `fmt` prints a positioned diagnostic for a file it
+ * cannot parse rather than the formatter's internal invariant.
+ */
 async function formatFile(session: FormatterSession, file: OwnedTaoFile): Promise<InPlace.Result> {
+  let attempt: FormatAttempt
+  try {
+    attempt = await session.tryFormatFile(file.path)
+  } catch (error) {
+    return inPlace.errorResult(file.path, error)
+  }
+  const { formatted } = attempt
+  if (formatted === undefined) {
+    const syntaxError = firstSyntaxError(attempt.diagnostics, file.path)
+    return {
+      path: file.path,
+      status: 'error',
+      diagnostics: syntaxError === undefined ? attempt.diagnostics : [syntaxError],
+    }
+  }
   return await inPlace.processFile(
     file.path,
-    () => session.formatFile(file.path),
+    async () => formatted,
     protectedWriteOptions(file.path, file.workspaceRoot, true),
   )
 }
