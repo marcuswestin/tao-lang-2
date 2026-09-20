@@ -1,4 +1,4 @@
-import { Assert, CLI, Errors, FS, Json, Platform, Time } from '@shared'
+import { Assert, CLI, Errors, FS, Json, Platform, Switch, Time } from '@shared'
 
 export const studioSketchCatalogFormatVersion = 1 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
@@ -441,171 +441,196 @@ function emptyCatalog(): StudioSketchCatalogSnapshot {
   return { formatVersion: studioSketchCatalogFormatVersion, nextViewNumber: 1, revision: 0, sketches: [] }
 }
 
+type StudioSketchCatalogEdit = Readonly<{
+  catalog: StudioSketchCatalogSnapshot
+  createdSketch?: StudioSketch
+}>
+
+type StudioSketchAction<KindT extends StudioSketchCatalogAction['kind']> = Extract<
+  StudioSketchCatalogAction,
+  { kind: KindT }
+>
+
 function applyAction(
   catalog: StudioSketchCatalogSnapshot,
   action: StudioSketchCatalogAction,
-): Readonly<{ catalog: StudioSketchCatalogSnapshot; createdSketch?: StudioSketch }> {
-  if (action.kind === 'create-sketch') {
-    const name = `View${catalog.nextViewNumber}`
-    const createdSketch: StudioSketch = {
-      height: action.height,
-      id: action.id,
-      name,
-      project: projectIdentity(action.project),
-      rectOrder: action.rects.map(rect => rect.id),
-      rects: action.rects,
-      snapped: [],
-      view: name,
-      width: action.width,
-      x: action.x ?? 0,
-      y: action.y ?? 0,
-    }
-    return {
-      catalog: {
-        ...catalog,
-        nextViewNumber: catalog.nextViewNumber + 1,
-        sketches: [...catalog.sketches, createdSketch],
-      },
-      createdSketch,
-    }
+): StudioSketchCatalogEdit {
+  return Switch.kind<StudioSketchCatalogAction, StudioSketchCatalogEdit>(action, {
+    'add-rect': added => editSketch(catalog, added.sketchId, sketch => addRect(sketch, added)),
+    'bind-rect': bound => editSketch(catalog, bound.sketchId, sketch => bindRect(sketch, bound)),
+    'create-sketch': created => createSketch(catalog, created),
+    'delete-rect': removed => editSketch(catalog, removed.sketchId, sketch => deleteRect(sketch, removed.rectId)),
+    'delete-sketch': removed => {
+      requireSketch(catalog, removed.id)
+      return { catalog: { ...catalog, sketches: catalog.sketches.filter(sketch => sketch.id !== removed.id) } }
+    },
+    'duplicate-rect': copied => editSketch(catalog, copied.sketchId, sketch => duplicateRect(sketch, copied)),
+    'refresh-snap-targets': refreshed =>
+      editSketch(catalog, refreshed.sketchId, sketch => refreshSnapTargets(sketch, refreshed.targets)),
+    'snap-rects': snapped => editSketch(catalog, snapped.sketchId, sketch => snapRects(sketch, snapped.targets)),
+    'unsnap-rects': unsnapped => editSketch(catalog, unsnapped.sketchId, sketch => unsnapRects(sketch, unsnapped)),
+    'update-rect': updated => editSketch(catalog, updated.sketchId, sketch => updateRect(sketch, updated)),
+  })
+}
+
+/** Every rectangle action names an existing sketch and replaces it, leaving the rest of the catalog alone. */
+function editSketch(
+  catalog: StudioSketchCatalogSnapshot,
+  sketchId: string,
+  edit: (sketch: StudioSketch) => StudioSketch,
+): StudioSketchCatalogEdit {
+  return { catalog: replaceSketch(catalog, edit(requireSketch(catalog, sketchId))) }
+}
+
+function createSketch(
+  catalog: StudioSketchCatalogSnapshot,
+  action: StudioSketchAction<'create-sketch'>,
+): StudioSketchCatalogEdit {
+  const name = `View${catalog.nextViewNumber}`
+  const createdSketch: StudioSketch = {
+    height: action.height,
+    id: action.id,
+    name,
+    project: projectIdentity(action.project),
+    rectOrder: action.rects.map(rect => rect.id),
+    rects: action.rects,
+    snapped: [],
+    view: name,
+    width: action.width,
+    x: action.x ?? 0,
+    y: action.y ?? 0,
   }
-  if (action.kind === 'delete-sketch') {
-    requireSketch(catalog, action.id)
-    return { catalog: { ...catalog, sketches: catalog.sketches.filter(sketch => sketch.id !== action.id) } }
-  }
-  const sketch = requireSketch(catalog, action.sketchId)
-  if (action.kind === 'snap-rects') {
-    const ids = action.targets.map(target => target.studioRectId)
-    requireUnique(ids, 'snap rectangle id')
-    const previouslySnapped = new Map(sketch.snapped.map(item => [item.rect.id, item.rect]))
-    const newlySnapped = ids.filter(id => !previouslySnapped.has(id))
-    Assert.input(newlySnapped.length > 0, 'Studio Snap must include at least one free rectangle.')
-    Assert.input(
-      sketch.snapped.every(item => ids.includes(item.rect.id)),
-      'Studio Snap targets must cover every surviving snapped rectangle exactly once.',
-    )
-    const newlySnappedIds = new Set(newlySnapped)
-    const snapped = action.targets.map(target => {
-      const rect = previouslySnapped.get(target.studioRectId)
-        ?? sketch.rects[requireRectIndex(sketch, target.studioRectId)]!
-      Assert.input(
-        target.view === sketch.view,
-        `Studio snapped rectangle ${rect.id} must target its sketch view ${sketch.view}.`,
-      )
-      return { rect, target }
-    })
-    return {
-      catalog: replaceSketch(catalog, {
-        ...sketch,
-        rects: sketch.rects.filter(rect => !newlySnappedIds.has(rect.id)),
-        snapped,
-      }),
-    }
-  }
-  if (action.kind === 'unsnap-rects') {
-    requireUnique(action.rectIds, 'unsnap rectangle id')
-    const selected = new Set(action.rectIds)
-    const restored = action.rectIds.map(id => sketch.snapped[requireSnappedRectIndex(sketch, id)]!.rect)
-    const targets = action.targets.map(target => [target.studioRectId, target] as const)
-    requireUnique(targets.map(([id]) => id), 'unsnap target rectangle id')
-    const surviving = sketch.snapped.filter(item => !selected.has(item.rect.id))
-    Assert.input(
-      targets.length === surviving.length && surviving.every(item => targets.some(([id]) => id === item.rect.id)),
-      'Studio Unsnap targets must cover every surviving snapped rectangle exactly once.',
-    )
-    const survivingRects = new Map(surviving.map(item => [item.rect.id, item.rect]))
-    const order = new Map(sketch.rectOrder.map((id, index) => [id, index]))
-    const rects = [...sketch.rects, ...restored].toSorted((left, right) => order.get(left.id)! - order.get(right.id)!)
-    const snapped = targets.map(([id, target]) => {
-      Assert.input(
-        target.view === sketch.view,
-        `Studio refreshed rectangle ${id} must target its sketch view ${sketch.view}.`,
-      )
-      return { rect: survivingRects.get(id)!, target }
-    })
-    return {
-      catalog: replaceSketch(catalog, {
-        ...sketch,
-        rects,
-        snapped,
-      }),
-    }
-  }
-  if (action.kind === 'refresh-snap-targets') {
-    const ids = action.targets.map(target => target.studioRectId)
-    requireUnique(ids, 'refreshed snap target rectangle id')
-    const expected = sketch.snapped.map(item => item.rect.id)
-    Assert.input(
-      ids.length === expected.length && expected.every(id => ids.includes(id)),
-      'Studio refreshed snap targets must cover every surviving snapped rectangle exactly once.',
-    )
-    const targets = new Map(action.targets.map(target => [target.studioRectId, target]))
-    return {
-      catalog: replaceSketch(catalog, {
-        ...sketch,
-        snapped: sketch.snapped.map(item => {
-          const target = targets.get(item.rect.id)!
-          Assert.input(
-            target.view === sketch.view && target.studioRectId === item.rect.id,
-            `Studio refreshed rectangle ${item.rect.id} must target its sketch view ${sketch.view}.`,
-          )
-          return { ...item, target }
-        }),
-      }),
-    }
-  }
-  if (action.kind === 'add-rect') {
-    const insertion = action.afterRectId === undefined
-      ? sketch.rects.length
-      : requireRectIndex(sketch, action.afterRectId) + 1
-    const rects = [...sketch.rects]
-    rects.splice(insertion, 0, action.rect)
-    const orderInsertion = action.afterRectId === undefined
-      ? sketch.rectOrder.length
-      : sketch.rectOrder.indexOf(action.afterRectId) + 1
-    const rectOrder = [...sketch.rectOrder]
-    rectOrder.splice(orderInsertion, 0, action.rect.id)
-    return { catalog: replaceSketch(catalog, { ...sketch, rectOrder, rects }) }
-  }
-  if (action.kind === 'update-rect') {
-    const index = requireRectIndex(sketch, action.rectId)
-    Assert.input(action.rect.id === action.rectId, 'A Studio rectangle update cannot change its id.')
-    const rects = [...sketch.rects]
-    rects[index] = action.rect
-    return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
-  }
-  if (action.kind === 'bind-rect') {
-    const freeIndex = sketch.rects.findIndex(rect => rect.id === action.rectId)
-    if (freeIndex >= 0) {
-      const rects = [...sketch.rects]
-      rects[freeIndex] = { ...rects[freeIndex]!, fieldBinding: action.binding }
-      return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
-    }
-    const snappedIndex = requireSnappedRectIndex(sketch, action.rectId)
-    const snapped = [...sketch.snapped]
-    const item = snapped[snappedIndex]!
-    snapped[snappedIndex] = { ...item, rect: { ...item.rect, fieldBinding: action.binding } }
-    return { catalog: replaceSketch(catalog, { ...sketch, snapped }) }
-  }
-  if (action.kind === 'duplicate-rect') {
-    const index = requireRectIndex(sketch, action.rectId)
-    const source = sketch.rects[index]!
-    const rects = [...sketch.rects]
-    rects.splice(index + 1, 0, { ...source, id: action.id, x: action.x, y: action.y })
-    const rectOrder = [...sketch.rectOrder]
-    rectOrder.splice(sketch.rectOrder.indexOf(action.rectId) + 1, 0, action.id)
-    return { catalog: replaceSketch(catalog, { ...sketch, rectOrder, rects }) }
-  }
-  const index = requireRectIndex(sketch, action.rectId)
-  const rects = [...sketch.rects]
-  rects.splice(index, 1)
   return {
-    catalog: replaceSketch(catalog, {
-      ...sketch,
-      rectOrder: sketch.rectOrder.filter(id => id !== action.rectId),
-      rects,
+    catalog: {
+      ...catalog,
+      nextViewNumber: catalog.nextViewNumber + 1,
+      sketches: [...catalog.sketches, createdSketch],
+    },
+    createdSketch,
+  }
+}
+
+function snapRects(sketch: StudioSketch, targets: readonly StudioSketchRenderTarget[]): StudioSketch {
+  const ids = targets.map(target => target.studioRectId)
+  requireUnique(ids, 'snap rectangle id')
+  const previouslySnapped = new Map(sketch.snapped.map(item => [item.rect.id, item.rect]))
+  const newlySnapped = ids.filter(id => !previouslySnapped.has(id))
+  Assert.input(newlySnapped.length > 0, 'Studio Snap must include at least one free rectangle.')
+  Assert.input(
+    sketch.snapped.every(item => ids.includes(item.rect.id)),
+    'Studio Snap targets must cover every surviving snapped rectangle exactly once.',
+  )
+  const newlySnappedIds = new Set(newlySnapped)
+  const snapped = targets.map(target => {
+    const rect = previouslySnapped.get(target.studioRectId)
+      ?? sketch.rects[requireRectIndex(sketch, target.studioRectId)]!
+    Assert.input(
+      target.view === sketch.view,
+      `Studio snapped rectangle ${rect.id} must target its sketch view ${sketch.view}.`,
+    )
+    return { rect, target }
+  })
+  return { ...sketch, rects: sketch.rects.filter(rect => !newlySnappedIds.has(rect.id)), snapped }
+}
+
+function unsnapRects(sketch: StudioSketch, action: StudioSketchAction<'unsnap-rects'>): StudioSketch {
+  requireUnique(action.rectIds, 'unsnap rectangle id')
+  const selected = new Set(action.rectIds)
+  const restored = action.rectIds.map(id => sketch.snapped[requireSnappedRectIndex(sketch, id)]!.rect)
+  const targets = action.targets.map(target => [target.studioRectId, target] as const)
+  requireUnique(targets.map(([id]) => id), 'unsnap target rectangle id')
+  const surviving = sketch.snapped.filter(item => !selected.has(item.rect.id))
+  Assert.input(
+    targets.length === surviving.length && surviving.every(item => targets.some(([id]) => id === item.rect.id)),
+    'Studio Unsnap targets must cover every surviving snapped rectangle exactly once.',
+  )
+  const survivingRects = new Map(surviving.map(item => [item.rect.id, item.rect]))
+  const order = new Map(sketch.rectOrder.map((id, index) => [id, index]))
+  const rects = [...sketch.rects, ...restored].toSorted((left, right) => order.get(left.id)! - order.get(right.id)!)
+  const snapped = targets.map(([id, target]) => {
+    Assert.input(
+      target.view === sketch.view,
+      `Studio refreshed rectangle ${id} must target its sketch view ${sketch.view}.`,
+    )
+    return { rect: survivingRects.get(id)!, target }
+  })
+  return { ...sketch, rects, snapped }
+}
+
+function refreshSnapTargets(sketch: StudioSketch, targets: readonly StudioSketchRenderTarget[]): StudioSketch {
+  const ids = targets.map(target => target.studioRectId)
+  requireUnique(ids, 'refreshed snap target rectangle id')
+  const expected = sketch.snapped.map(item => item.rect.id)
+  Assert.input(
+    ids.length === expected.length && expected.every(id => ids.includes(id)),
+    'Studio refreshed snap targets must cover every surviving snapped rectangle exactly once.',
+  )
+  const byRectId = new Map(targets.map(target => [target.studioRectId, target]))
+  return {
+    ...sketch,
+    snapped: sketch.snapped.map(item => {
+      const target = byRectId.get(item.rect.id)!
+      Assert.input(
+        target.view === sketch.view && target.studioRectId === item.rect.id,
+        `Studio refreshed rectangle ${item.rect.id} must target its sketch view ${sketch.view}.`,
+      )
+      return { ...item, target }
     }),
   }
+}
+
+function addRect(sketch: StudioSketch, action: StudioSketchAction<'add-rect'>): StudioSketch {
+  const insertion = action.afterRectId === undefined
+    ? sketch.rects.length
+    : requireRectIndex(sketch, action.afterRectId) + 1
+  const rects = [...sketch.rects]
+  rects.splice(insertion, 0, action.rect)
+  const orderInsertion = action.afterRectId === undefined
+    ? sketch.rectOrder.length
+    : sketch.rectOrder.indexOf(action.afterRectId) + 1
+  const rectOrder = [...sketch.rectOrder]
+  rectOrder.splice(orderInsertion, 0, action.rect.id)
+  return { ...sketch, rectOrder, rects }
+}
+
+function updateRect(sketch: StudioSketch, action: StudioSketchAction<'update-rect'>): StudioSketch {
+  const index = requireRectIndex(sketch, action.rectId)
+  Assert.input(action.rect.id === action.rectId, 'A Studio rectangle update cannot change its id.')
+  const rects = [...sketch.rects]
+  rects[index] = action.rect
+  return { ...sketch, rects }
+}
+
+/** A binding lands on the free rectangle if there is one, and on the snapped copy otherwise. */
+function bindRect(sketch: StudioSketch, action: StudioSketchAction<'bind-rect'>): StudioSketch {
+  const freeIndex = sketch.rects.findIndex(rect => rect.id === action.rectId)
+  if (freeIndex >= 0) {
+    const rects = [...sketch.rects]
+    rects[freeIndex] = { ...rects[freeIndex]!, fieldBinding: action.binding }
+    return { ...sketch, rects }
+  }
+  const snappedIndex = requireSnappedRectIndex(sketch, action.rectId)
+  const snapped = [...sketch.snapped]
+  const item = snapped[snappedIndex]!
+  snapped[snappedIndex] = { ...item, rect: { ...item.rect, fieldBinding: action.binding } }
+  return { ...sketch, snapped }
+}
+
+function duplicateRect(sketch: StudioSketch, action: StudioSketchAction<'duplicate-rect'>): StudioSketch {
+  const index = requireRectIndex(sketch, action.rectId)
+  const source = sketch.rects[index]!
+  const rects = [...sketch.rects]
+  rects.splice(index + 1, 0, { ...source, id: action.id, x: action.x, y: action.y })
+  const rectOrder = [...sketch.rectOrder]
+  rectOrder.splice(sketch.rectOrder.indexOf(action.rectId) + 1, 0, action.id)
+  return { ...sketch, rectOrder, rects }
+}
+
+function deleteRect(sketch: StudioSketch, rectId: string): StudioSketch {
+  const index = requireRectIndex(sketch, rectId)
+  const rects = [...sketch.rects]
+  rects.splice(index, 1)
+  return { ...sketch, rectOrder: sketch.rectOrder.filter(id => id !== rectId), rects }
 }
 
 function replaceSketch(catalog: StudioSketchCatalogSnapshot, replacement: StudioSketch): StudioSketchCatalogSnapshot {

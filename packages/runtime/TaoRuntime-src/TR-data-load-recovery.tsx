@@ -1,5 +1,6 @@
 import React from 'react'
 import { errorMessage } from './TR-errors'
+import { runtimeRevisionStore } from './TR-listeners'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 type DataLoadFailure = Readonly<{
@@ -14,11 +15,10 @@ type DataLoadRecoveryBoundaryProps = {
   children?: React.ReactNode
 }
 
-const listeners = new Set<() => void>()
+const changes = runtimeRevisionStore()
 let activeFailure: DataLoadFailure | undefined
 let nextFailureId = 0
 let reloadRevision = 0
-let revision = 0
 
 const styles = {
   button: {
@@ -68,7 +68,7 @@ export const DataLoadRecovery = {
       recover: recovery.run,
       source,
     }
-    emit()
+    changes.changed()
   },
 
   resolve(source: object): void {
@@ -76,13 +76,13 @@ export const DataLoadRecovery = {
       return
     }
     activeFailure = undefined
-    emit()
+    changes.changed()
   },
 } as const
 
 /** DataLoadRecoveryBoundary blocks a failed app and remounts it after provider-defined recovery. */
 export function DataLoadRecoveryBoundary(props: DataLoadRecoveryBoundaryProps): React.JSX.Element {
-  React.useSyncExternalStore(subscribe, snapshot, snapshot)
+  React.useSyncExternalStore(changes.subscribe, changes.snapshot, changes.snapshot)
   const failure = activeFailure
 
   return React.createElement(
@@ -149,21 +149,5 @@ function completeRecovery(failure: DataLoadFailure): void {
   }
   activeFailure = undefined
   reloadRevision += 1
-  emit()
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-function snapshot(): number {
-  return revision
-}
-
-function emit(): void {
-  revision += 1
-  for (const listener of listeners) {
-    listener()
-  }
+  changes.changed()
 }

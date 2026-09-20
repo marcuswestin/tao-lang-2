@@ -3,7 +3,7 @@ name: implementer
 description: >-
   Builds one already-specified workstream inside paths it exclusively owns. Use for a slice whose
   design is settled and whose files no concurrent agent touches, as the worker in a
-  `parallel-implementation` fan-out. Not for exploratory or coupled changes.
+  `delegation` parallel-implementation fan-out. Not for exploratory or coupled changes.
 targets: [codexcli, claudecode, cursor]
 codexcli:
   model_reasoning_effort: high

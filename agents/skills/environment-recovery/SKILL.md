@@ -69,8 +69,7 @@ output is not enough, or when you need the reasoning behind it.
   than reviewed, so it fails with `operation not permitted`; add it to `.rulesync/permissions.jsonc`
   if it is genuinely needed.
 - Repository code reads process facts through `ProcessTree`, never through `ps`. On macOS it uses
-  libproc with no subprocess, so a sandbox denial cannot silently degrade it — which is exactly what
-  happened to a liveness check that shelled out instead and lost its PID-reuse protection.
+  libproc with no subprocess, so a sandbox denial cannot silently degrade its PID-reuse protection.
 - After review, confirm the PID belongs to the intended task. Send `kill -TERM <pid>` first and
   use `kill -KILL <pid>` only when the process survives graceful shutdown.
 - Studio has its own lifecycle commands — `./dev studio-ps`, `./dev studio-stop`,

@@ -1,4 +1,4 @@
-import { CLI, Errors } from '@shared'
+import { CLI, Errors, Json } from '@shared'
 import type {
   StudioDeviceLaunchDiagnostic,
   StudioDeviceLauncher,
@@ -465,6 +465,6 @@ function networkErrorMessage(error: unknown): string {
     return String(error)
   }
   const cause = error.cause
-  const code = typeof cause === 'object' && cause !== null && 'code' in cause ? String(cause.code) : undefined
+  const code = Json.isRecord(cause) && 'code' in cause ? String(cause['code']) : undefined
   return code === undefined ? error.message : `${error.message} (${code})`
 }

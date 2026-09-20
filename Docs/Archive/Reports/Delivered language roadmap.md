@@ -6,8 +6,8 @@ spellings. The live contracts are `Apps/WordFlower/` and `Docs/Spec/`.
 
 ## Language MVP slices
 
-- Complete the autonomous functional-language MVP experiment. Record: `Docs/Roadmap/Archive/Autonomous language MVP/Project.md`.
-- Add item/list/custom type MVP. Plan: `Docs/Roadmap/Archive/Add item list custom type MVP/`.
+- Complete the autonomous functional-language MVP experiment. Record: `Docs/Archive/Reports/Autonomous language MVP/Project.md`.
+- Add item/list/custom type MVP. Plan: `Docs/Archive/Plans/Add item list custom type MVP/`.
 - Add layout clauses and app-shell baseline: runtime layout lowering, safe default app frame, safe-area and keyboard basics.
 - Add state and action MVP: `state`, named and inline actions, `set`, `do`, action parameters, reactive rerendering.
 - Expand the core expression/value language: booleans, `none`, interpolation inside strings, arithmetic/comparison/boolean expressions, function calls, collection and text members, and mandatory `Name(args)` invocation delimiters.
@@ -23,17 +23,17 @@ spellings. The live contracts are `Apps/WordFlower/` and `Docs/Spec/`.
 - Absorb the 2026-08 WordFlower tranche into Current, then cut the following tranche.
 - Implement the WordFlower tranche 3 contract into Current: selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/stdlib/tao`.
 - Cut and solidify the WordFlower tranche 4 contract in Next: the declaration/value model, Prelude hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes, non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
-- Implement the WordFlower tranche 4 contract into Current, absorbing the complete Next directory slice by slice. Record: `Docs/Roadmap/Archive/Implement WordFlower tranche 4/`. InstantDB, remote authorization semantics, richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy remain in later tiers.
+- Implement the WordFlower tranche 4 contract into Current, absorbing the complete Next directory slice by slice. Record: `Docs/Archive/Plans/Implement WordFlower tranche 4/`. InstantDB, remote authorization semantics, richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy remain in later tiers.
 - Add typed TS value injection expressions: `let X is T = inject T …` with Tao-side typing and generated TypeScript return checking, delivered by tranche 4.
-- Cut and implement the dialect-migration tranche (Process step 1). Record: `Docs/Roadmap/Archive/Dialect migration tranche/`.
-- Implement the focused writing tranche. Record: `Docs/Roadmap/Archive/Focused writing tranche/`.
+- Cut and implement the dialect-migration tranche (Process step 1). Record: `Docs/Archive/Explorations/Dialect migration tranche/`.
+- Implement the focused writing tranche. Record: `Docs/Archive/Plans/Focused writing tranche/`.
 
 ## Delivered from Ro's stack
 
 - Retire the `ui` keyword — the unified-view tranche folded it into `view`. No `scene` construct was introduced, and none is intended; the original "rename UI to Scene" wording described a rename that did not happen.
 - Upgrade all dependencies of e.g. expo/react-native/expo-router/etc.
 - String interpolation syntax highlighting.
-- Reorganize agent context. Reports and plan: `Docs/Roadmap/Archive/Reorganize agent context/`.
+- Reorganize agent context. Reports and plan: `Docs/Archive/Reports/Reorganize agent context/`.
 - Implement boolean operators — conventional precedence-aware expressions with `not`, `and`, `or`.
 - Add the remaining control mini slice — expression-bodied functions with explicit return types and one exhaustive conditional.
 - Add `on press|change|submit`, scoped inline handlers, and direct-state two-way input binding.
@@ -61,5 +61,5 @@ between 2026-05 and 2026-06 against a Kitchen Sink app that no longer exists.
 - **Parser** — the app fixture, `packages/parser` as `@parser`, split grammar under `parser-grammar`, generated Langium artifacts under `parser-src/_gen_tao-parser`, exported `AST`/`Langium`/`Parser`, support for `app`, `view`, text parameters, `render`, view calls, and `inject` fences, general statement parsing with placement checks left to the validator, and parser tests.
 - **Compiler** — tests before implementation, `packages/compiler` as `@compiler`, exported entrypoints, Expo-compatible TSX for the supported AST, and a default exported React component.
 - **Runtime** — an e2e test before implementation, `packages/runtime` as `@runtime`, minimal Expo web host files, compilation into the ignored `_gen_tao-app`, and a dev-loop Expo launch.
-- **Follow-on work** — the plain codegen wrapper, a proper `inject` statement, removal of hard-coded fixture handling, the validator/type system and IDE diagnostics (plan: `Docs/Roadmap/Archive/Add validator and type system/`), and the `TR` runtime object with instructions for minimizing generated code.
+- **Follow-on work** — the plain codegen wrapper, a proper `inject` statement, removal of hard-coded fixture handling, the validator/type system and IDE diagnostics (plan: `Docs/Archive/Plans/Add validator and type system/`), and the `TR` runtime object with instructions for minimizing generated code.
 - **Dev loop** — `./dev [app path]` starting a TUI that defaults to the canonical app, compiles it, launches Expo across web/iOS/Android, watches app and toolchain sources, and accepts single-key commands for reload, targets, tests, fix, verify, clean, app switching, and IDE extension install.

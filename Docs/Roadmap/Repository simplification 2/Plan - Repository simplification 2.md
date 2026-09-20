@@ -1,9 +1,10 @@
 # Plan - Repository simplification 2
 
-Status: Wave 0 landed; Wave 1 not started. Decisions settled with Ro on 2026-09-19. The `simplify-repo` skill
-owns the repeatable method; this document owns this run: its baseline, fences, waves, and ledger.
+Status: Wave 0 landed; Wave 1 integrated, reviewed, and verified. Decisions settled
+with Ro on 2026-09-19. The `simplify-repo` skill owns the repeatable method; this document owns this
+run: its baseline, fences, waves, and ledger.
 
-The first pass is archived at `Docs/Roadmap/Archive/Repository simplification/`. It and its three
+The first pass is archived at `Docs/Archive/Plans/Repository simplification/`. It and its three
 follow-ups took dead exports, name-level duplicate helpers, typed errors, the Studio wire contract,
 and the `repo-lint` convention table. Its Documentation and Command-surface parts never started.
 
@@ -131,3 +132,23 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
 | Wave | Source lines | Instruction lines | Allowlist entries | Chain files | Defects fixed |
 | ---- | ------------ | ----------------- | ----------------- | ----------- | ------------- |
 | 0    | 141,135      | 1,761             | 145               | 23          | none          |
+| 1    | 141,422      | 1,411             | 145               | 3           | 3             |
+
+### Wave 1 notes
+
+- Pattern conformance landed; line reduction did not. Exhaustive handler tables spell out branches a
+  chain fell through, which cost about what the removed repetition saved.
+- The two latent defects: an unknown persisted `kind` fell back to `item`, and an unlisted primitive
+  validated as a number. Both now fail to compile.
+- The wave's review found one defect class, fixed in the wave: a handler table indexed by a wire
+  value resolved `constructor`, `toString`, and `__proto__` to inherited `Object` members. `Switch`,
+  `RuntimeSwitch`, `StudioMessages.dispatch`, the window-message parser table, and the device
+  protocol's parser table, where the hole predated the wave, now read own keys only.
+- Instructions fell 20%, not half. The remainder waits on Wave 2's hooks and a second pass over the
+  skills that were already under budget.
+- `packages/dev` outside `repository-tests/` had little to give.
+- Carried to Wave 2: a `type`-property form and a shared no-op handler for `Switch`, so
+  `StudioMessages.dispatch` can retire; `journalLimit` mirrored across the runtime–Studio seam.
+- Mapped but not started, each its own slice: the sketch block of `StudioProjectSession.ts`, a route
+  table for `StudioServer.ts`, seam splits of `TR-studio-preview.tsx` and
+  `TR-studio-device-host.tsx`, and a deep-tier read of `Type.ts`, `compiler.ts`, and `FS.ts`.

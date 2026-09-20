@@ -636,13 +636,12 @@ export function publishStudioJourneyReplayResult(
   ) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    ...(result === 'failed' ? { error: previewErrorMessage(error) } : {}),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    type: result === 'failed' ? 'preview-journey-replay-failed' : 'preview-journey-replay-settled',
-  }, config.parentOrigin)
+  postToStudio(
+    host,
+    config,
+    result === 'failed' ? 'preview-journey-replay-failed' : 'preview-journey-replay-settled',
+    result === 'failed' ? { error: previewErrorMessage(error) } : {},
+  )
 }
 
 /** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */
@@ -655,13 +654,7 @@ export function publishStudioScheme(
   if (host === undefined || !validPreviewConfig(config)) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    scheme,
-    type: 'preview-scheme-changed',
-  }, config.parentOrigin)
+  postToStudio(host, config, 'preview-scheme-changed', { scheme })
 }
 
 /** mountStudioPreviewBridge mounts one imperative browser bridge and returns its complete cleanup. */
@@ -695,16 +688,12 @@ export function mountStudioPreviewBridge(
     if (stopped || host.document.body?.getBoundingClientRect === undefined) {
       return
     }
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
+    postToStudio(host, config, 'preview-layout-measurements', {
       measurements: collectStudioPreviewLayoutMeasurements(
         host.document.querySelectorAll(studioRenderSelector),
         host.document.body.getBoundingClientRect(),
       ),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-layout-measurements',
-    }, config.parentOrigin)
+    })
   }
   const scheduleLayoutMeasurements = () => {
     if (measurementQueued) {
@@ -714,6 +703,13 @@ export function mountStudioPreviewBridge(
     queueMicrotask(postLayoutMeasurements)
   }
 
+  /**
+   * An edit gesture is a real pointer event arriving while the canvas is in edit mode. A synthetic
+   * journey event belongs to the app's own replay, and run mode belongs to the app entirely.
+   */
+  const editingGesture = (event: StudioPreviewPointerEvent): boolean =>
+    event.taoStudioJourney !== true && interactionMode !== 'run'
+
   const disarmDrag = () => {
     drag = undefined
     dragOverlay?.remove()
@@ -722,34 +718,36 @@ export function mountStudioPreviewBridge(
     dropOverlay = undefined
   }
 
+  /** Leaving edit mode — for run mode or for a recording — drops everything edit mode was showing. */
+  const clearEditSelection = () => {
+    hoverTarget = undefined
+    selectedTarget = undefined
+    sourceTarget = undefined
+    disarmDrag()
+    overlay?.remove()
+    overlay = undefined
+  }
+
   const postRecordingState = (
     activeRecording: StudioJourneyRecording,
     status: 'recording' | 'stopped' | 'invalidated',
   ) => {
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
+    postToStudio(host, config, 'preview-journey-recording-state', {
       recordingId: activeRecording.id,
       sequence: activeRecording.sequence,
       status,
-      type: 'preview-journey-recording-state',
-    }, config.parentOrigin)
+    })
   }
   const postRecordedStep = (
     activeRecording: StudioJourneyRecording,
     step: Readonly<Record<string, unknown>>,
   ) => {
     activeRecording.sequence += 1
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
+    postToStudio(host, config, 'preview-journey-step-recorded', {
       recordingId: activeRecording.id,
       sequence: activeRecording.sequence,
       step,
-      type: 'preview-journey-step-recorded',
-    }, config.parentOrigin)
+    })
   }
   const flushRecordedInput = (element?: StudioPreviewElement) => {
     const activeRecording = recording
@@ -788,12 +786,7 @@ export function mountStudioPreviewBridge(
         sequence: 0,
       }
       interactionMode = 'run'
-      hoverTarget = undefined
-      selectedTarget = undefined
-      sourceTarget = undefined
-      disarmDrag()
-      overlay?.remove()
-      overlay = undefined
+      clearEditSelection()
       postRecordingState(recording, 'recording')
     } else if (recording?.id === control.recordingId) {
       const stoppedRecording = recording
@@ -858,18 +851,11 @@ export function mountStudioPreviewBridge(
       return
     }
     overlay ??= createOverlay(host)
-    const rect = target.element.getBoundingClientRect()
     overlay.setAttribute(
       'data-tao-studio-overlay',
       sourceTarget !== undefined ? 'source' : hoverTarget !== undefined ? 'hover' : 'selection',
     )
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: `${Math.max(0, rect.height)}px`,
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${Math.max(0, rect.width)}px`,
-    })
+    positionOverlay(overlay, target.element.getBoundingClientRect())
   }
   const onResize = () => {
     redrawOverlay()
@@ -888,24 +874,17 @@ export function mountStudioPreviewBridge(
     // Cancellation is synchronous and happens only after the parent has advertised that Design
     // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
     event.preventDefault?.()
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
+    postToStudio(host, config, 'preview-canvas-gesture', {
       clientX: event.clientX,
       clientY: event.clientY,
       deltaX: event.deltaX,
       deltaY: event.deltaY,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-canvas-gesture',
       zoom: event.ctrlKey === true || event.metaKey === true,
-    }, config.parentOrigin)
+    })
   }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -924,10 +903,7 @@ export function mountStudioPreviewBridge(
     postSourceMessage(host, config, 'preview-select-source', target.identity)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -943,15 +919,7 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseMove = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (
-      interactionMode === 'run'
-      || drag === undefined
-      || event.clientX === undefined
-      || event.clientY === undefined
-    ) {
+    if (!editingGesture(event) || drag === undefined || event.clientX === undefined || event.clientY === undefined) {
       return
     }
     blockAppPointerEvent(event)
@@ -974,10 +942,7 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseUp = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     blockAppPointerEvent(event)
@@ -992,14 +957,11 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseOver = (event: StudioPreviewPointerEvent) => {
-    if (event.taoStudioJourney === true) {
-      return
-    }
-    if (interactionMode === 'run') {
+    if (!editingGesture(event)) {
       return
     }
     const target = renderTargetFromEvent(event)
-    const key = target === undefined ? undefined : renderIdentityKey(target.identity)
+    const key = target === undefined ? undefined : renderId(target.identity)
     hoverTarget = target
     redrawOverlay()
     if (target !== undefined && key !== postedHoverKey) {
@@ -1028,12 +990,7 @@ export function mountStudioPreviewBridge(
     if (requestedMode !== undefined) {
       interactionMode = requestedMode
       if (interactionMode === 'run') {
-        hoverTarget = undefined
-        selectedTarget = undefined
-        sourceTarget = undefined
-        disarmDrag()
-        overlay?.remove()
-        overlay = undefined
+        clearEditSelection()
       }
       return
     }
@@ -1044,7 +1001,7 @@ export function mountStudioPreviewBridge(
     if (captureRequestId !== undefined && captureFixture !== undefined) {
       void captureFixture().then(
         fixture => postCapturedFixture(host, config, captureRequestId, fixture),
-        error => postCaptureFailure(host, config, captureRequestId, error),
+        error => postCaptureFailure(host, config, 'preview-fixture-capture-failed', captureRequestId, error),
       )
       return
     }
@@ -1052,7 +1009,7 @@ export function mountStudioPreviewBridge(
     if (runtimeCaptureRequestId !== undefined) {
       void captureRuntime().then(
         capture => postRuntimeCapture(host, config, runtimeCaptureRequestId, capture),
-        error => postRuntimeCaptureFailure(host, config, runtimeCaptureRequestId, error),
+        error => postCaptureFailure(host, config, 'preview-runtime-capture-failed', runtimeCaptureRequestId, error),
       )
       return
     }
@@ -1066,43 +1023,41 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
   }
 
-  host.document.addEventListener('click', onClick, true)
-  host.document.addEventListener('click', onRecordedClick, true)
-  host.document.addEventListener('input', onRecordedInput, true)
-  host.document.addEventListener('blur', onRecordedBlur, true)
-  host.document.addEventListener('keydown', onRecordedKeyDown, true)
-  host.document.addEventListener('mousedown', onMouseDown, true)
-  host.document.addEventListener('mouseleave', disarmDrag)
-  host.document.addEventListener('mousemove', onMouseMove, true)
-  host.document.addEventListener('mouseover', onMouseOver)
-  host.document.addEventListener('mouseout', onMouseOut)
-  host.document.addEventListener('mouseup', onMouseUp, true)
-  host.document.addEventListener('wheel', onCanvasWheel, true)
-  host.window.addEventListener('blur', disarmDrag)
-  host.window.addEventListener('message', onMessage)
-  host.window.addEventListener('resize', onResize)
-  host.window.addEventListener('scroll', redrawOverlay)
+  // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
+  // was added, which two hand-written sequences could not promise.
+  const documentListeners: readonly Parameters<StudioPreviewHost['document']['addEventListener']>[] = [
+    ['click', onClick, true],
+    ['click', onRecordedClick, true],
+    ['input', onRecordedInput, true],
+    ['blur', onRecordedBlur, true],
+    ['keydown', onRecordedKeyDown, true],
+    ['mousedown', onMouseDown, true],
+    ['mouseleave', disarmDrag],
+    ['mousemove', onMouseMove, true],
+    ['mouseover', onMouseOver],
+    ['mouseout', onMouseOut],
+    ['mouseup', onMouseUp, true],
+    ['wheel', onCanvasWheel, true],
+  ]
+  const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
+    ['blur', disarmDrag],
+    ['message', onMessage],
+    ['resize', onResize],
+    ['scroll', redrawOverlay],
+  ]
+  for (const [type, listener, capture] of documentListeners) {
+    host.document.addEventListener(type, listener, capture)
+  }
+  for (const [type, listener] of windowListeners) {
+    host.window.addEventListener(type, listener)
+  }
   postAppliedRevision(host, config)
   scheduleLayoutMeasurements()
-  const stopFailures = onRuntimeFailure(capture => {
-    host.parent.postMessage({
-      capture,
-      channel: studioProtocolChannel,
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-runtime-failure',
-    }, config.parentOrigin)
-  })
+  const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
   const restoreConsole = forwardPreviewConsole(host, config)
-  const stopDebug = Debug.onEvent(event => {
-    host.parent.postMessage({
-      channel: studioProtocolChannel,
-      event: captureArguments(event),
-      identity: previewIdentity(config),
-      protocolVersion: studioProtocolVersion,
-      type: 'preview-debug',
-    }, config.parentOrigin)
-  })
+  const stopDebug = Debug.onEvent(event =>
+    postToStudio(host, config, 'preview-debug', { event: captureArguments(event) })
+  )
 
   return () => {
     stopped = true
@@ -1119,22 +1074,12 @@ export function mountStudioPreviewBridge(
     restoreConsole()
     stopFailures()
     stopDebug()
-    host.document.removeEventListener('click', onClick, true)
-    host.document.removeEventListener('click', onRecordedClick, true)
-    host.document.removeEventListener('input', onRecordedInput, true)
-    host.document.removeEventListener('blur', onRecordedBlur, true)
-    host.document.removeEventListener('keydown', onRecordedKeyDown, true)
-    host.document.removeEventListener('mousedown', onMouseDown, true)
-    host.document.removeEventListener('mouseleave', disarmDrag)
-    host.document.removeEventListener('mousemove', onMouseMove, true)
-    host.document.removeEventListener('mouseover', onMouseOver)
-    host.document.removeEventListener('mouseout', onMouseOut)
-    host.document.removeEventListener('mouseup', onMouseUp, true)
-    host.document.removeEventListener('wheel', onCanvasWheel, true)
-    host.window.removeEventListener('blur', disarmDrag)
-    host.window.removeEventListener('message', onMessage)
-    host.window.removeEventListener('resize', onResize)
-    host.window.removeEventListener('scroll', redrawOverlay)
+    for (const [type, listener, capture] of documentListeners) {
+      host.document.removeEventListener(type, listener, capture)
+    }
+    for (const [type, listener] of windowListeners) {
+      host.window.removeEventListener(type, listener)
+    }
     overlay?.remove()
     disarmDrag()
   }
@@ -1190,15 +1135,11 @@ function forwardPreviewConsole(host: StudioPreviewHost, config: StudioPreviewCon
     const forwarded = (...arguments_: unknown[]): void => {
       original(...arguments_)
       const captured = captureArguments(arguments_)
-      host.parent.postMessage({
+      postToStudio(host, config, 'preview-console', {
         arguments: Array.isArray(captured) ? captured : [captured],
-        channel: studioProtocolChannel,
-        identity: previewIdentity(config),
         level,
-        protocolVersion: studioProtocolVersion,
         timestamp: Date.now(),
-        type: 'preview-console',
-      }, config.parentOrigin)
+      })
     }
     host.console[level] = forwarded
     restorers.push(() => {
@@ -1226,20 +1167,8 @@ function applyDebugCommand(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): boolean {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return false
-  }
-  const message = event.data
-  const identity = message['identity']
-  if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'debug-command'
-    || !isObject(identity)
-    || identity['appName'] !== config.appName
-    || identity['project'] !== config.project
-    || identity['previewInstanceId'] !== config.previewInstanceId
-  ) {
+  const message = studioMessageFor(event, config, parent, 'debug-command')
+  if (message === undefined) {
     return false
   }
   const steps = Array.isArray(message['steps']) ? message['steps'] : []
@@ -1279,21 +1208,8 @@ function canvasGestureOwnershipFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): boolean | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'set-canvas-gestures'
-      && typeof message['owned'] === 'boolean'
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['owned']
-    : undefined
+  const message = studioMessageFor(event, config, parent, 'set-canvas-gestures')
+  return message !== undefined && typeof message['owned'] === 'boolean' ? message['owned'] : undefined
 }
 
 function interactionModeFromMessage(
@@ -1301,22 +1217,8 @@ function interactionModeFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): 'edit' | 'run' | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  const mode = message['mode']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'set-interaction-mode'
-      && (mode === 'edit' || mode === 'run')
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? mode
-    : undefined
+  const mode = studioMessageFor(event, config, parent, 'set-interaction-mode')?.['mode']
+  return mode === 'edit' || mode === 'run' ? mode : undefined
 }
 
 function recordingControlFromMessage(
@@ -1324,30 +1226,19 @@ function recordingControlFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): Readonly<{ active: boolean; captureSensitiveText: boolean; recordingId: string }> | undefined {
-  if (
-    event.origin !== config.parentOrigin
-    || event.source !== parent
-    || config.cellId === undefined
-    || config.cellRevision === undefined
-    || config.manifestRevision === undefined
-    || !isObject(event.data)
-  ) {
+  if (config.cellId === undefined || config.cellRevision === undefined || config.manifestRevision === undefined) {
     return undefined
   }
-  const message = event.data
+  const message = studioMessageFor(event, config, parent, 'set-journey-recording')
+  if (message === undefined) {
+    return undefined
+  }
   const identity = message['identity']
   if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'set-journey-recording'
-    || typeof message['active'] !== 'boolean'
-    || typeof message['recordingId'] !== 'string'
-    || message['recordingId'].trim() === ''
+    typeof message['active'] !== 'boolean'
+    || !nonEmptyValue(message['recordingId'])
     || (message['captureSensitiveText'] !== undefined && typeof message['captureSensitiveText'] !== 'boolean')
     || !isObject(identity)
-    || identity['appName'] !== config.appName
-    || identity['project'] !== config.project
-    || identity['previewInstanceId'] !== config.previewInstanceId
     || identity['cellId'] !== config.cellId
     || identity['cellRevision'] !== config.cellRevision
     || identity['compileRevision'] !== config.compileRevision
@@ -1454,21 +1345,7 @@ function captureRequestFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): string | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'capture-fixture'
-      && nonEmptyValue(message['requestId'])
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['requestId']
-    : undefined
+  return captureRequestIdFor(event, config, parent, 'capture-fixture')
 }
 
 function runtimeCaptureRequestFromMessage(
@@ -1476,21 +1353,18 @@ function runtimeCaptureRequestFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): string | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  const identity = message['identity']
-  return message['channel'] === studioProtocolChannel
-      && message['protocolVersion'] === studioProtocolVersion
-      && message['type'] === 'capture-runtime'
-      && nonEmptyValue(message['requestId'])
-      && isObject(identity)
-      && identity['appName'] === config.appName
-      && identity['project'] === config.project
-      && identity['previewInstanceId'] === config.previewInstanceId
-    ? message['requestId']
-    : undefined
+  return captureRequestIdFor(event, config, parent, 'capture-runtime')
+}
+
+/** Both capture requests are one addressed frame carrying one request id. */
+function captureRequestIdFor(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+  type: 'capture-fixture' | 'capture-runtime',
+): string | undefined {
+  const requestId = studioMessageFor(event, config, parent, type)?.['requestId']
+  return nonEmptyValue(requestId) ? requestId : undefined
 }
 
 function postRuntimeCapture(
@@ -1499,31 +1373,31 @@ function postRuntimeCapture(
   requestId: string,
   capture: TaoRuntimeCaptureArtifact,
 ): void {
-  host.parent.postMessage({
-    capture,
-    channel: studioProtocolChannel,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-runtime-captured',
-  }, config.parentOrigin)
+  postToStudio(host, config, 'preview-runtime-captured', { capture, requestId })
 }
 
-function postRuntimeCaptureFailure(
+function postCapturedFixture(
   host: StudioPreviewHost,
   config: StudioPreviewConfig,
   requestId: string,
+  fixture: TaoStudioFixturePlan,
+): void {
+  postToStudio(host, config, 'preview-fixture-captured', { fixture, requestId })
+}
+
+/** A runtime capture and a fixture capture fail the same way; only the type names which one. */
+function postCaptureFailure(
+  host: StudioPreviewHost,
+  config: StudioPreviewConfig,
+  type: 'preview-fixture-capture-failed' | 'preview-runtime-capture-failed',
+  requestId: string,
   error: unknown,
 ): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
+  postToStudio(host, config, type, {
     error: error instanceof Error ? error.message : String(error),
     errorName: runtimeCaptureErrorName(error),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
     requestId,
-    type: 'preview-runtime-capture-failed',
-  }, config.parentOrigin)
+  })
 }
 
 function runtimeCaptureErrorName(
@@ -1536,39 +1410,6 @@ function runtimeCaptureErrorName(
     return 'UserInputError'
   }
   return error instanceof UnexpectedBehaviorError ? error.name : 'UnexpectedBehaviorError'
-}
-
-function postCapturedFixture(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  fixture: TaoStudioFixturePlan,
-): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    fixture,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-fixture-captured',
-  }, config.parentOrigin)
-}
-
-function postCaptureFailure(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  error: unknown,
-): void {
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    error: error instanceof Error ? error.message : String(error),
-    errorName: runtimeCaptureErrorName(error),
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    type: 'preview-fixture-capture-failed',
-  }, config.parentOrigin)
 }
 
 function browserPreviewHost(): StudioPreviewHost | undefined {
@@ -1616,14 +1457,24 @@ function exactWebOrigin(value: string): boolean {
 }
 
 function postAppliedRevision(host: StudioPreviewHost, config: StudioPreviewConfig): void {
-  host.parent.postMessage({
+  postToStudio(host, config, 'preview-applied', {
     appliedRevision: config.compileRevision,
-    channel: studioProtocolChannel,
     compileRevision: config.compileRevision,
-    identity: previewIdentity(config),
-    protocolVersion: studioProtocolVersion,
-    type: 'preview-applied',
-  }, config.parentOrigin)
+  })
+}
+
+/** An occurrence-bearing frame names the render it is about on the preview identity itself. */
+function occurrenceIdentity(
+  config: StudioPreviewConfig,
+  occurrence: TaoStudioIdentity,
+  sourceVersion: string,
+): Record<string, unknown> {
+  return {
+    ...previewIdentity(config),
+    occurrence: sourceActionOccurrence(occurrence),
+    path: occurrence.sourcePath,
+    sourceVersion,
+  }
 }
 
 function postSourceMessage(
@@ -1636,18 +1487,10 @@ function postSourceMessage(
   if (sourceVersion === undefined) {
     return
   }
-  host.parent.postMessage({
-    channel: studioProtocolChannel,
-    identity: {
-      ...previewIdentity(config),
-      occurrence: sourceActionOccurrence(occurrence),
-      path: occurrence.sourcePath,
-      sourceVersion,
-    },
-    protocolVersion: studioProtocolVersion,
+  postToStudio(host, config, type, {
+    identity: occurrenceIdentity(config, occurrence, sourceVersion),
     range: { end: occurrence.end, start: occurrence.start },
-    type,
-  }, config.parentOrigin)
+  })
 }
 
 function postMoveRenderAction(
@@ -1666,26 +1509,18 @@ function postMoveRenderAction(
     return
   }
   const requestId = `preview-${config.previewInstanceId}-${nextStudioSourceActionId++}`
-  host.parent.postMessage({
+  postToStudio(host, config, 'source-action', {
     action: {
       ...(gap.after === undefined ? {} : { afterId: renderId(gap.after.identity) }),
       ...(gap.before === undefined ? {} : { beforeId: renderId(gap.before.identity) }),
       draggedId: renderId(dragged),
       kind: 'move-render',
     },
-    channel: studioProtocolChannel,
     checkpoint: { id: requestId, phase: 'single' },
-    identity: {
-      ...previewIdentity(config),
-      occurrence: sourceActionOccurrence(dragged),
-      path: dragged.sourcePath,
-      sourceVersion,
-    },
-    protocolVersion: studioProtocolVersion,
+    identity: occurrenceIdentity(config, dragged, sourceVersion),
     requestId,
     sourceActionVersion: studioSourceActionVersion,
-    type: 'source-action',
-  }, config.parentOrigin)
+  })
 }
 
 function sourceActionOccurrence(identity: TaoStudioIdentity): {
@@ -1696,6 +1531,57 @@ function sourceActionOccurrence(identity: TaoStudioIdentity): {
     nodeKind: identity.kind,
     ...(identity.ownerName ? { renderOwner: identity.ownerName } : {}),
   }
+}
+
+/**
+ * postToStudio addresses one frame to the Studio window this preview belongs to. Every outgoing
+ * message spelled the channel, the protocol version, the preview identity and the parent origin
+ * out in full; each call site now names only its own `type` and the fields that type carries. A
+ * payload may override `identity` when it attaches an occurrence to it.
+ */
+function postToStudio(
+  host: StudioPreviewHost,
+  config: StudioPreviewConfig,
+  type: string,
+  payload: Readonly<Record<string, unknown>> = {},
+): void {
+  host.parent.postMessage({
+    channel: studioProtocolChannel,
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    ...payload,
+    type,
+  }, config.parentOrigin)
+}
+
+/**
+ * studioMessageFor answers the one question every inbound handler asks first: did the Studio
+ * window this preview belongs to send this frame, on this protocol, of this type, naming this
+ * preview? Each parser is then left with only the fields its own message carries.
+ */
+function studioMessageFor(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+  type: string,
+): Record<string, unknown> | undefined {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  if (
+    message['channel'] !== studioProtocolChannel
+    || message['protocolVersion'] !== studioProtocolVersion
+    || message['type'] !== type
+    || !isObject(identity)
+    || identity['appName'] !== config.appName
+    || identity['project'] !== config.project
+    || identity['previewInstanceId'] !== config.previewInstanceId
+  ) {
+    return undefined
+  }
+  return message
 }
 
 function previewIdentity(config: StudioPreviewConfig): {
@@ -1727,24 +1613,13 @@ function highlightSelectionFromMessage(
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
 ): { path: string; range: StudioSourceRange | undefined } | undefined {
-  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
-    return undefined
-  }
-  const message = event.data
-  if (
-    message['channel'] !== studioProtocolChannel
-    || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== 'highlight-source'
-    || !isObject(message['identity'])
-  ) {
+  const message = studioMessageFor(event, config, parent, 'highlight-source')
+  if (message === undefined || !isObject(message['identity'])) {
     return undefined
   }
   const identity = message['identity']
   if (
-    identity['appName'] !== config.appName
-    || identity['previewInstanceId'] !== config.previewInstanceId
-    || identity['project'] !== config.project
-    || !nonEmptyValue(identity['path'])
+    !nonEmptyValue(identity['path'])
     || !nonEmptyValue(identity['sourceVersion'])
     || sourceVersionFor(config, identity['path']) !== identity['sourceVersion']
   ) {
@@ -1827,15 +1702,21 @@ function sourceVersionFor(config: StudioPreviewConfig, sourcePath: string): stri
   return Object.entries(config.sourceVersions).find(([path]) => normalizePath(path) === normalized)?.[1]
 }
 
+/** Every preview overlay floats over the app without taking its pointer events. */
+const overlayBaseStyle = {
+  boxSizing: 'border-box',
+  pointerEvents: 'none',
+  position: 'fixed',
+  zIndex: '2147483647',
+} as const
+
+/** The drop indicator's thickness, and the smallest extent it is drawn along its other axis. */
+const dropIndicatorThickness = 3
+const dropIndicatorMinimumLength = { across: 16, along: 24 } as const
+
 function createOverlay(host: StudioPreviewHost): StudioPreviewOverlay {
   const overlay = host.document.createElement('div')
-  Object.assign(overlay.style, {
-    border: '2px solid #2563eb',
-    boxSizing: 'border-box',
-    pointerEvents: 'none',
-    position: 'fixed',
-    zIndex: '2147483647',
-  })
+  Object.assign(overlay.style, { ...overlayBaseStyle, border: '2px solid #2563eb' })
   host.document.body?.appendChild(overlay)
   return overlay
 }
@@ -1844,25 +1725,35 @@ function createDragOverlay(host: StudioPreviewHost, kind: 'drag' | 'drop'): Stud
   const overlay = host.document.createElement('div')
   overlay.setAttribute('data-tao-studio-drag-overlay', kind)
   Object.assign(overlay.style, {
+    ...overlayBaseStyle,
     background: kind === 'drag' ? 'rgba(37, 99, 235, 0.12)' : '#f3c969',
     border: kind === 'drag' ? '2px dashed #2563eb' : 'none',
-    boxSizing: 'border-box',
     opacity: kind === 'drag' ? '0.75' : '1',
-    pointerEvents: 'none',
-    position: 'fixed',
-    zIndex: '2147483647',
   })
   host.document.body?.appendChild(overlay)
   return overlay
 }
 
-function positionOverlay(overlay: StudioPreviewOverlay, rect: StudioPreviewRect): void {
+/** showOverlayBox is the one way an overlay is placed: revealing it and sizing it are one act. */
+function showOverlayBox(
+  overlay: StudioPreviewOverlay,
+  box: Readonly<{ height: number; left: number; top: number; width: number }>,
+): void {
   Object.assign(overlay.style, {
     display: 'block',
-    height: `${Math.max(0, rect.height)}px`,
-    left: `${rect.left}px`,
-    top: `${rect.top}px`,
-    width: `${Math.max(0, rect.width)}px`,
+    height: `${box.height}px`,
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+  })
+}
+
+function positionOverlay(overlay: StudioPreviewOverlay, rect: StudioPreviewRect): void {
+  showOverlayBox(overlay, {
+    height: Math.max(0, rect.height),
+    left: rect.left,
+    top: rect.top,
+    width: Math.max(0, rect.width),
   })
 }
 
@@ -1876,42 +1767,36 @@ function positionDropOverlay(overlay: StudioPreviewOverlay, gap: StudioRenderGap
       return
     }
     if (gap.horizontal) {
-      Object.assign(overlay.style, {
-        display: 'block',
-        height: `${Math.max(reference.height, 16)}px`,
-        left: `${after === undefined ? reference.left : reference.left + reference.width}px`,
-        top: `${reference.top}px`,
-        width: '3px',
+      showOverlayBox(overlay, {
+        height: Math.max(reference.height, dropIndicatorMinimumLength.across),
+        left: after === undefined ? reference.left : reference.left + reference.width,
+        top: reference.top,
+        width: dropIndicatorThickness,
       })
       return
     }
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: '3px',
-      left: `${reference.left}px`,
-      top: `${after === undefined ? reference.top : reference.top + reference.height}px`,
-      width: `${Math.max(reference.width, 24)}px`,
+    showOverlayBox(overlay, {
+      height: dropIndicatorThickness,
+      left: reference.left,
+      top: after === undefined ? reference.top : reference.top + reference.height,
+      width: Math.max(reference.width, dropIndicatorMinimumLength.along),
     })
     return
   }
   if (gap.horizontal) {
-    const left = after.left + after.width + (before.left - after.left - after.width) / 2
-    Object.assign(overlay.style, {
-      display: 'block',
-      height: `${Math.max(after.height, before.height, 16)}px`,
-      left: `${left}px`,
-      top: `${Math.min(after.top, before.top)}px`,
-      width: '3px',
+    showOverlayBox(overlay, {
+      height: Math.max(after.height, before.height, dropIndicatorMinimumLength.across),
+      left: after.left + after.width + (before.left - after.left - after.width) / 2,
+      top: Math.min(after.top, before.top),
+      width: dropIndicatorThickness,
     })
     return
   }
-  const top = after.top + after.height + (before.top - after.top - after.height) / 2
-  Object.assign(overlay.style, {
-    display: 'block',
-    height: '3px',
-    left: `${Math.min(after.left, before.left)}px`,
-    top: `${top}px`,
-    width: `${Math.max(after.width, before.width, 24)}px`,
+  showOverlayBox(overlay, {
+    height: dropIndicatorThickness,
+    left: Math.min(after.left, before.left),
+    top: after.top + after.height + (before.top - after.top - after.height) / 2,
+    width: Math.max(after.width, before.width, dropIndicatorMinimumLength.along),
   })
 }
 
@@ -1925,21 +1810,19 @@ function bestRenderGap(
   for (const target of allRenderTargets(host)) {
     const parent = target.element.parentElement?.closest?.(studioRenderSelector)
     const parentTarget = renderTargetFromElement(parent)
-    const key = parentTarget === undefined ? 'root' : renderIdentityKey(parentTarget.identity)
+    const key = parentTarget === undefined ? 'root' : renderId(parentTarget.identity)
     groups.set(key, [...(groups.get(key) ?? []), target])
   }
+  /** A render is a drop anchor only if it is not the dragged render itself. */
+  const isOtherRender = (target: StudioRenderTarget): boolean =>
+    renderId(target.identity) !== renderId(dragged.identity)
   let best: StudioRenderGap | undefined
   for (const targets of groups.values()) {
-    if (
-      targets.some(target =>
-        renderIdentityKey(target.identity) !== renderIdentityKey(dragged.identity)
-        && dragged.element.contains?.(target.element)
-      )
-    ) {
+    if (targets.some(target => isOtherRender(target) && dragged.element.contains?.(target.element))) {
       continue
     }
     const candidates = targets.filter(target =>
-      renderIdentityKey(target.identity) !== renderIdentityKey(dragged.identity)
+      isOtherRender(target)
       && normalizePath(target.identity.sourcePath) === normalizePath(dragged.identity.sourcePath)
       && target.identity.ownerName === dragged.identity.ownerName
     )
@@ -2007,10 +1890,6 @@ function renderEnd(rect: StudioPreviewRect, horizontal: boolean): number {
 }
 
 function renderId(identity: TaoStudioIdentity): string {
-  return `${identity.sourcePath}:${identity.start}:${identity.end}`
-}
-
-function renderIdentityKey(identity: TaoStudioIdentity): string {
   return `${identity.sourcePath}:${identity.start}:${identity.end}`
 }
 

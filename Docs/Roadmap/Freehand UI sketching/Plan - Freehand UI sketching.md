@@ -17,7 +17,7 @@ the decisions rather than reopening their alternatives.
 - Tao Studio is a forcing app. Its own Tao client may force a capability, but WordFlower absorbs
   every new spelling in the same tranche. Current never leads Next.
 - `Docs/Spec/` describes only landed executable behavior. The design record and this plan own future
-  work until its slice lands. `Docs/Roadmap/Archive/` remains frozen.
+  work until its slice lands. `Docs/Archive/` remains frozen.
 - Unsnapped rectangles are Studio catalog rows, never Tao source. Only snapping writes flowed render
   nodes. Until L3 and Slice 5 land, the matrix draws them through a TypeScript overlay (FS-D1, D5).
 - The Studio server is the sole project-file and sketch-catalog writer. All client changes pass

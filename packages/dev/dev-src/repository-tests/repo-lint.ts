@@ -277,9 +277,7 @@ export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): stri
  */
 
 /** Studio kind dispatches that predate the shared `Switch` helper; convert them to close this list. */
-const NATIVE_SWITCH_ALLOWLIST = [
-  'packages/studio/studio-src/StudioProductHostProtocol.ts',
-]
+const NATIVE_SWITCH_ALLOWLIST: readonly string[] = []
 
 /**
  * `Test-Bun.ts` is the sanctioned home for `bun:test`. The two runtime tests close with the shared
@@ -322,6 +320,7 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
 const RAW_THROW_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts',
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
   'packages/studio/studio-src/StudioWelcome.ts',
@@ -367,16 +366,16 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts:561',
   'packages/dev/dev-src/studio/StudioCdp.ts:730',
   'packages/dev/dev-src/studio/StudioCdp.ts:880',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:112',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:391',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:523',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:542',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:582',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:729',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:736',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:742',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:763',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:766',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:100',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:235',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:367',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:386',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:426',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:573',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:580',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:586',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:607',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:610',
   'packages/dev/studio-smoke/studio-real-app.test.ts:128',
   'packages/dev/studio-smoke/studio-real-app.test.ts:264',
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
@@ -460,8 +459,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
   'packages/dev/dev-src/studio/StudioCdp.ts:2',
   'packages/dev/dev-src/studio/StudioCdp.ts:3',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:697',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:699',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:541',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:543',
   'packages/dev/dev-src/studio/StudioNative.ts:4',
   'packages/dev/dev-src/studio/StudioNative.ts:5',
   'packages/dev/dev-src/studio/StudioReview.ts:2',
@@ -511,7 +510,7 @@ const CONSOLE_CALL_ALLOWLIST = [
   // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
   'packages/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioWatchHealth.ts',
   'packages/runtime-toolchain/runtime-toolchain-tests/release-bundle-proof.test.ts',
   'packages/update-server/update-server-tests/update-server.test.ts',
@@ -524,7 +523,7 @@ const CONSOLE_CALL_ALLOWLIST = [
 const PROCESS_ACCESS_ALLOWLIST = [
   // Emitted text: the Electrobun main, a bundler `define` key, child scripts a test renders, and
   // tests asserting on generated source.
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioNative.ts',
   'packages/dev/dev-tests/machine-lanes.test.ts',
   'packages/dev/dev-tests/native-host-lease.test.ts',
@@ -542,7 +541,7 @@ const PROCESS_ACCESS_ALLOWLIST = [
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
 const BUN_CONVENIENCE_ALLOWLIST = [
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
 ]
 
 const NODE_IMPORT_DETAIL = 'imports a `node:` module directly; reach for `FS`, `CLI`, `Platform`, or `HCI`'
@@ -681,28 +680,8 @@ export function conventionRuleIssues(
  */
 const KIND_CHAIN_ALLOWLIST = [
   'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
-  'packages/compiler/compiler-src/codegen/app/StateCompiler.ts',
   'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
-  'packages/runtime/TaoRuntime-src/TR-persisted-state.ts',
-  'packages/runtime/TaoRuntime-src/TR-studio-device-client.ts',
-  'packages/runtime/TaoRuntime-src/TR-studio-journey.ts',
-  'packages/source-actions/source-actions-src/studio/studio-design-styles.ts',
-  'packages/studio/studio-src/StudioInspector.ts',
-  'packages/studio/studio-src/StudioPreviewManifest.ts',
-  'packages/studio/studio-src/StudioPreviewSession.ts',
-  'packages/studio/studio-src/StudioServer.ts',
-  'packages/studio/studio-src/StudioSketchCatalog.ts',
-  'packages/studio/studio-src/agent-chat/AgentChatSession.ts',
-  'packages/studio/studio-src/agent-chat/FeaturePlan.ts',
-  'packages/studio/studio-src/agent-chat/SemanticSnapshot.ts',
-  'packages/studio/studio-src/client/StudioApiClient.ts',
-  'packages/studio/studio-src/client/app/StudioCommandPaletteWiring.ts',
-  'packages/studio/studio-src/client/app/StudioScenarioActions.ts',
-  'packages/studio/studio-src/device/StudioDeviceGateway.ts',
-  'packages/validator/validator-src/validators/FunctionalCoreValidator.ts',
-  'packages/validator/validator-src/validators/StateValidator.ts',
   'packages/validator/validator-src/validators/types-validator.ts',
-  'packages/validator/validator-src/validators/use-package-validator.ts',
 ]
 
 /** kindChainIssues reports discriminant chains in non-test package source, which `Switch` would check for exhaustiveness. */

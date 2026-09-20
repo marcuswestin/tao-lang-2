@@ -639,8 +639,9 @@ The browser client is split into API/event, editor, matrix, shell, visual-editin
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
 scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
 The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, and
-the simulated-user journey runs as an ordinary `verify-full` gate; it still owes the ten consecutive
-reliable normal-terminal runs DEVENV-042 asks for, so no final browser acceptance is claimed here.
+the simulated-user journey runs as an ordinary `verify-full` gate and recorded its ten consecutive
+reliable normal-terminal runs on 2026-09-20. Native and canary acceptance remains a separate
+person-run gate, so no final browser acceptance is claimed here.
 
 `./dev studio` and `./dev studio-native` both start the multi-project session server. Every opened project
 owns its own Expo server, generated preview runtime, preview session, file watcher, and initial compile;

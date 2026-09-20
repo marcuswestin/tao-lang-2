@@ -44,6 +44,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-035 — Performance-contract timeout under the full graph](<Developer environment upgrades/Archive/DEVENV-035-performance-contract-timeout-under-the-full-graph.md>) — Resolved
 - [DEVENV-037 — Native Studio host coordination and bounded Hutch phases](<Developer environment upgrades/Archive/DEVENV-037-native-studio-host-coordination-and-bounded-hutch-phases.md>) — Resolved
 - [DEVENV-041 — Nested gate-runner tests inherit the live machine registry](<Developer environment upgrades/Archive/DEVENV-041-nested-gate-runner-tests-inherit-the-live-machine-registry.md>) — Resolved
+- [DEVENV-042 — Studio smoke observes persistence before browser reconciliation](<Developer environment upgrades/Archive/DEVENV-042-studio-smoke-observes-persistence-before-browser-reconciliat.md>) — Resolved
 - [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/Archive/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved

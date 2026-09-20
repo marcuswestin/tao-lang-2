@@ -28,7 +28,7 @@ and reports a syntax error as `Expected: Tao source without syntax errors when a
 fixes` with no line, column, or description. Errors are most of what a person exploring a new
 language sees.
 
-- Context: `packages/validator`, `packages/tao-cli/cli-src`, the `error-handling` skill, and the
+- Context: `packages/validator`, `packages/tao-cli/cli-src`, the Errors section of `packages/AGENTS.md`, and the
   `tao check` entry under **Build the enforcement and diagnostics surface** in `Roadmap.md`.
 - Done: validation errors and parse errors reach the CLI with file, line, column, and a readable
   message; the exit code reflects failure; tests cover both kinds; the roadmap line that says
@@ -259,6 +259,9 @@ Closed by `34132956`. The journey ran ten consecutive green runs in a normal ter
 `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again; `VERIFY_FULL_SKIPPED`
 is empty, so the release no longer carries a quarantined lane. The editor-ownership, source-identity,
 canvas geometry, pointer-release, drag-in, and sketch transaction defects it found landed with it.
+It then failed the first `verify-repo` it was part of, on a last defect of its own: Unsnap pressed on
+a selection an authoritative render had discarded unsnaps the whole flow. That is fixed, and the ten
+consecutive green runs were re-established on 2026-09-20, which closed DEVENV-042.
 
 ### A16 — A reachable datasource for the public demo
 

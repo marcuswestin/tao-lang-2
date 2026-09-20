@@ -6,7 +6,7 @@ Superseded by:
 
 - `Docs/Spec/Tao Presentation and Navigation.md` for normative behavior.
 - `Docs/Spec/Tao Type System.md` for `let`, declaration properties, argument binding, and `with`.
-- `Docs/Roadmap/Archive/Add navigation and routing MVP/Research - Add navigation and routing MVP.md` for rationale and traceability.
+- `Docs/Archive/Plans/Add navigation and routing MVP/Research - Add navigation and routing MVP.md` for rationale and traceability.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md` for deferred work.
 - `Apps/MVP-4/MVP-Writer.tao` for complete intended usage.
 
@@ -61,6 +61,6 @@ The deleted exploration also contained legitimate later questions. They are reta
 - Routes, restoration migrations, scenes, window geometry, durable suspension, guards/lifecycle, and presentation handles: `DEF-NAV-001` through `DEF-NAV-007`.
 - Target-specific declarations, values crossing suspension, unsafe native boundaries, event concurrency, conditional navigation chrome, restoration API/policy, user-defined identity metadata, dynamic occurrence targeting, and refreshed Toast child identity: `DEF-NAV-008` through `DEF-NAV-017`.
 - Broader non-navigation syntax options from the 30-file triage: `Docs/Roadmap/Deferred Tao language decisions.md`.
-- Minimal non-normative code forms retained from staged-only sketches: `Docs/Roadmap/Archive/Add navigation and routing MVP/Deferred syntax explorations.md`.
+- Minimal non-normative code forms retained from staged-only sketches: `Docs/Archive/Plans/Add navigation and routing MVP/Deferred syntax explorations.md`.
 
 Git history preserves committed option sketches. Material that existed only in staged or uncommitted files is summarized by the active preservation records. Active work should start from the superseding sources above.

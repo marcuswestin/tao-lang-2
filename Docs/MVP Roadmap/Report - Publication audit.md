@@ -244,7 +244,7 @@ design sketch, and `R3` has not yet settled what stability is promised.
   wants. Hold the per-program plan folders back until `R3` fixes the stability promise, then publish
   them behind a clear "planned, not built" banner.
 
-### P12 — `Docs/Roadmap/Archive/` — Low
+### P12 — `Docs/Archive/` — Low
 
 33 archived files, including spike patches, prompt documents, and a `dialect-spike.test.ts.txt`.
 Frozen by `AGENTS.md`; historical rather than forward-looking, so it sets no expectations.

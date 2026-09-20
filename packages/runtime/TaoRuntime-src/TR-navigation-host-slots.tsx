@@ -1,6 +1,7 @@
 import React from 'react'
 import { RuntimeCommand } from './TR-interaction'
 import type { TaoCommandSnapshot } from './TR-interaction'
+import { runtimeRevisionStore } from './TR-listeners'
 import type { Evaluable } from './TR-navigation-presentables'
 import type { Subscription } from './TR-navigation-state'
 
@@ -24,16 +25,12 @@ export type TaoNavHostSlotConfiguration = Readonly<
 /** RuntimeHostReadChannel belongs to one presented occurrence, never to its render descendants. */
 export class RuntimeHostReadChannel implements Subscription {
   private invocations = new Map<string, { current(): unknown; invoke(): unknown }>()
-  private listeners = new Set<() => void>()
-  private revision = 0
+  private readonly changes = runtimeRevisionStore()
   private current: TaoHostSlotSnapshot = emptyHostSlotSnapshot
 
-  readonly snapshot = (): number => this.revision
+  readonly snapshot = this.changes.snapshot
 
-  readonly subscribe = (listener: () => void): () => void => {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
+  readonly subscribe = this.changes.subscribe
 
   read(): TaoHostSlotSnapshot {
     return this.current
@@ -75,10 +72,7 @@ export class RuntimeHostReadChannel implements Subscription {
     if (!changed) {
       return
     }
-    this.revision += 1
-    for (const listener of this.listeners) {
-      listener()
-    }
+    this.changes.changed()
   }
 }
 

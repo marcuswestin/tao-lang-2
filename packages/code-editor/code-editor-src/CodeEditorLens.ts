@@ -377,8 +377,15 @@ function lineRuns(doc: Text, hiddenLines: ReadonlySet<number>): { first: number;
       runs.push({ first: number, last: number })
     }
   }
+  /**
+   * A run swallows the blank line after it only when that line is really blank and still shown, and
+   * when the run itself starts the file or is already preceded by a blank — otherwise the fold would
+   * eat the separator between this run and the declaration above it.
+   */
+  const absorbsFollowingBlank = (run: { first: number; last: number }): boolean =>
+    blank(run.last + 1) && !hidden(run.last + 1) && (run.first === 1 || blank(run.first - 1))
   for (const run of runs) {
-    if (blank(run.last + 1) && !hidden(run.last + 1) && (run.first === 1 || blank(run.first - 1))) {
+    if (absorbsFollowingBlank(run)) {
       run.last += 1
     }
   }

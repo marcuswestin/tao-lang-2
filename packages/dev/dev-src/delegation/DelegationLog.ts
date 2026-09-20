@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Json } from '@shared'
 
 /** Where the hooks in .rulesync/hooks.jsonc write one file per delegation event. */
 export const DELEGATION_EVENTS_PATH = '.artifacts/delegation/events'
@@ -39,9 +39,7 @@ type ProfileTally = {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined
+  return Json.isRecord(value) ? value : undefined
 }
 
 function asText(value: unknown): string | undefined {

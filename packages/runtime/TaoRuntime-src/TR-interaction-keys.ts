@@ -1,3 +1,5 @@
+import { runtimeRevisionStore } from './TR-listeners'
+
 /** The canonical keys understood by the attention reducer. */
 export type TaoAttentionKey =
   | 'ArrowDown'
@@ -33,14 +35,10 @@ export type TaoKeyPlatform = Readonly<{
 /** InteractionKeyboardPresence hides keyboard-only affordances until a key enters the app. */
 class InteractionKeyboardPresence {
   #present = false
-  #revision = 0
-  #listeners = new Set<() => void>()
+  readonly #changes = runtimeRevisionStore()
 
-  readonly snapshot = (): number => this.#revision
-  readonly subscribe = (listener: () => void): () => void => {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
+  readonly snapshot = this.#changes.snapshot
+  readonly subscribe = this.#changes.subscribe
 
   read(): boolean {
     return this.#present
@@ -51,10 +49,7 @@ class InteractionKeyboardPresence {
       return
     }
     this.#present = true
-    this.#revision += 1
-    for (const listener of [...this.#listeners]) {
-      listener()
-    }
+    this.#changes.changed()
   }
 
   reset(): void {
@@ -62,10 +57,7 @@ class InteractionKeyboardPresence {
       return
     }
     this.#present = false
-    this.#revision += 1
-    for (const listener of [...this.#listeners]) {
-      listener()
-    }
+    this.#changes.changed()
   }
 }
 

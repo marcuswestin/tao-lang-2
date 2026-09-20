@@ -1,6 +1,7 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { type StudioClientAssetProvider, StudioClientAssets } from '@studio'
 import { watch } from 'chokidar'
+import { previewUrlMarker } from './StudioClientSnapshotProcess'
 
 type StudioClientChangeListener = (change: StudioClientChange) => Promise<void>
 
@@ -115,7 +116,6 @@ type StudioClientAssetSnapshot = {
   html: string
 }
 
-const previewUrlMarker = '__TAO_STUDIO_DEV_PREVIEW_URL__'
 const clientConfigMarker = JSON.stringify({ previewUrl: previewUrlMarker })
 
 function studioClientAssetSnapshot(snapshot: StudioClientAssetSnapshot): StudioClientAssetProvider {
