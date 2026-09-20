@@ -12,6 +12,7 @@ const RULES = [
   'The Git index belongs to the caller: work here does not stage, unstage, commit, reset, stash, or switch branches.',
   "The developer-environment ledger under `Docs/Roadmap/Developer environment upgrades/` and its index are the caller's to edit; findings about the developer environment go back in the report instead.",
   'Work products in this repository — file names, documents, code, comments, branch names, commit messages — name no agent identity, and carry no AI `Co-Authored-By` trailer or generated-with line.',
+  "Messaging another agent or session is Ro's to approve, and nothing here sends one uninvited; work travels back to the caller as a report, and a message worth sending goes into that report as a request.",
 ]
 
 /** subagentBrief returns the boilerplate, one sentence per rule. */
