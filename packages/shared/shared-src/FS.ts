@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto'
 import {
   type Dirent,
   existsSync as nodeExistsSync,
@@ -10,7 +9,7 @@ import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
 import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Errors'
 import { sleep } from './core/Time'
-import { processIsAlive, runtimeProcess, spawnSync } from './Platform'
+import { processIsAlive, randomUUID, runtimeProcess, sha256Hex, spawnSync } from './Platform'
 
 /** WalkOptions declares filters for recursive file walking. */
 export type WalkOptions = {
@@ -488,7 +487,7 @@ async function fileEntryIdentity(path: string): Promise<string> {
     if (!stats.isFile()) {
       return 'unsupported'
     }
-    return `file:${createHash('sha256').update(await readFile(path)).digest('hex')}`
+    return `file:${sha256Hex(await readFile(path))}`
   } catch (error) {
     if (fileErrorCode(error) === 'ENOENT') {
       return 'missing'
@@ -632,14 +631,14 @@ async function treeFilesIdentity(root: string): Promise<string> {
 export async function filesIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
   const identities: string[] = []
   for (const [relative, path] of [...entries].sort(([left], [right]) => left.localeCompare(right))) {
-    identities.push(`${relative}\n${createHash('sha256').update(await readFile(path)).digest('hex')}`)
+    identities.push(`${relative}\n${sha256Hex(await readFile(path))}`)
   }
   return contentIdentity(identities)
 }
 
 /** contentIdentity is the content identity of ordered parts; order is part of what it identifies. */
 export function contentIdentity(identities: readonly string[]): string {
-  return createHash('sha256').update(identities.join('\n')).digest('hex')
+  return sha256Hex(identities.join('\n'))
 }
 
 const FILE_MUTATION_LOCK_POLL_MS = 10

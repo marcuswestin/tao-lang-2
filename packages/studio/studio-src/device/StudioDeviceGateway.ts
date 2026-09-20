@@ -18,9 +18,8 @@ import {
   StudioDeviceTrustError,
   type TaoStudioDeviceSessionKeys,
 } from '@runtime/TR-studio-device-trust'
-import { Errors, FS, Http, Json } from '@shared'
+import { Errors, FS, Http, Json, Switch } from '@shared'
 import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
-import { StudioMessages } from '../StudioMessages'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
 import { studioProtocolChannel, studioProtocolVersion, studioSourceActionVersion } from '../StudioProtocol'
@@ -692,7 +691,7 @@ export class StudioDeviceGateway {
     if (connection.state !== 'connected') {
       return
     }
-    StudioMessages.dispatch<StudioSessionEvent>(event, {
+    Switch.on(event, 'type', {
       // The reconfigure released every instance of this cell, this device's included, so its next
       // `device.applied` would be refused as no longer current. Re-assign to hand it a live instance
       // carrying the new arguments, environment, state layers, or replayed capture.
@@ -701,15 +700,15 @@ export class StudioDeviceGateway {
           this.#assign(connection, reconfigured.cellId)
         }
       },
-      'checkpoint-changed': StudioMessages.ignore,
+      'checkpoint-changed': Switch.nothing,
       'compile-state': compiled => {
         this.#sendSealed(connection, { ...compileState(compiled.state), type: 'studio.compileState' })
       },
-      'file-changed': StudioMessages.ignore,
-      'files-changed': StudioMessages.ignore,
+      'file-changed': Switch.nothing,
+      'files-changed': Switch.nothing,
       'preview-manifest-changed': changed => this.#manifestChanged(connection, changed.manifest),
-      'sketch-catalog-changed': StudioMessages.ignore,
-      'studio-writes-acknowledged': StudioMessages.ignore,
+      'sketch-catalog-changed': Switch.nothing,
+      'studio-writes-acknowledged': Switch.nothing,
     })
   }
 
@@ -927,7 +926,7 @@ export class StudioDeviceGateway {
       )
       return
     }
-    StudioMessages.dispatch<TaoStudioDeviceDeviceMessage>(message, {
+    Switch.on(message, 'type', {
       'device.applied': applied => this.#deviceApplied(connection, ref, applied),
       'device.log': logged => this.#deviceLog(connection, logged.entries),
       'device.ping': () => this.#sendSealed(connection, { type: 'studio.pong' }),

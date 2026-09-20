@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { Platform } from '@shared'
 
 /**
  * The bootstrap facts a development build needs to find the dev data server: mirrored by
@@ -35,7 +35,7 @@ export type DevDataManifest = {
  * `tao dev` and Studio derive the same key for the same app, so both see the same rows.
  */
 export function devDataAppKey(projectRoot: string, appName: string): string {
-  const digest = createHash('sha256').update(projectRoot).digest('hex').slice(0, 8)
+  const digest = Platform.sha256Hex(projectRoot).slice(0, 8)
   const name = appName.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^[^A-Za-z0-9]+/, '')
   return `${name === '' ? 'app' : name}-${digest}`
 }

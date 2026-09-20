@@ -1,6 +1,5 @@
 import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
 import { Expect, Test } from '@shared/test'
-import { randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
 import { startAppleFoundationModelsService } from '../generation-src/apple-server'
 import {
@@ -85,7 +84,7 @@ Test(
 
     const binary = Repo.resolvePath('.artifacts/build/foundation-models/tao-foundation-models-server')
     Expect(await FS.isFile(binary)).toBe(true)
-    const token = randomUUID()
+    const token = Platform.randomUUID()
     let stdout = ''
     let stderr = ''
     let resolveReady: ((port: number) => void) | undefined
