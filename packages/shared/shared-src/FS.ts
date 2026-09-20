@@ -59,26 +59,33 @@ export const relativePath = (fromPath: string, toPath: string) => slashPath(node
 /** pathIsWithin returns whether `path` is `directoryPath` or a path inside it. */
 export function pathIsWithin(path: string, directoryPath: string): boolean {
   const relative = relativePath(directoryPath, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
+  return relative === '' || (!nodePath.isAbsolute(relative) && !relative.startsWith('../') && relative !== '..')
 }
 /**
- * displayPath returns the shortest readable spelling of a path: relative to the current working
- * directory, or absolute with the home directory written as `~`. A path outside the cwd otherwise
- * renders as a run of `../` segments longer than the location it names, which no reader can follow.
+ * displayPath returns a readable spelling of a path: relative to the current working directory,
+ * or absolute with the home directory written as `~`. A path outside the cwd never renders as a
+ * run of `../` segments, which can obscure the location a diagnostic names.
  */
 export function displayPath(inputPath: string): string {
-  const relative = relativePath(resolvePath('.'), inputPath)
+  return displayPathFrom(resolvePath(inputPath), resolvePath('.'), homeDir())
+}
+
+/** displayPathFrom renders an absolute path against explicit cwd and home locations. */
+export function displayPathFrom(absolutePath: string, cwd: string, home: string): string {
+  const relative = relativePath(cwd, absolutePath)
   if (relative === '') {
     return '.'
   }
-  const absolute = homeShortenedPath(resolvePath(inputPath))
-  return absolute.length < relative.length ? absolute : relative
+  return pathIsWithin(absolutePath, cwd) ? relative : homeShortenedPath(absolutePath, home)
 }
 
 /** homeShortenedPath writes an absolute path under the home directory as `~/…`. */
-function homeShortenedPath(absolutePath: string): string {
-  const fromHome = relativePath(homeDir(), absolutePath)
-  return fromHome !== '' && !fromHome.startsWith('..') ? `~/${fromHome}` : slashPath(absolutePath)
+function homeShortenedPath(absolutePath: string, home: string): string {
+  const fromHome = relativePath(home, absolutePath)
+  if (fromHome === '') {
+    return '~'
+  }
+  return pathIsWithin(absolutePath, home) ? `~/${fromHome}` : slashPath(absolutePath)
 }
 /** slashPath returns a path with host separators normalized to slashes. */
 export const slashPath = (inputPath: string) =>
