@@ -14,7 +14,10 @@
     "commander": "^15.0.0",
     "ink": "^7.1.1",
     "react": "^19.2.8",
+    "tao-e2e-testing": "workspace:*",
     "tao-generation": "workspace:*",
+    "tao-host-control": "workspace:*",
+    "tao-host-control-appium": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-studio": "workspace:*",
     "wrap-ansi": "^10.0.1"

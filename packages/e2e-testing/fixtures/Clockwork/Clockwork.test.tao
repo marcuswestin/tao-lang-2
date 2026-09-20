@@ -1,0 +1,12 @@
+use Clockwork from ./
+
+test "clockwork" {
+   test "counts down after a controlled second" {
+      run Clockwork
+
+      expect text "Countdown: 0:10"
+      advance 1.s
+      expect text "Control received: advance 1000ms"
+      expect text "Countdown: 0:09"
+   }
+}

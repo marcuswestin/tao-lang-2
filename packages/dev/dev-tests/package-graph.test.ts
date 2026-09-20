@@ -91,7 +91,8 @@ Describe('workspace package graph', () => {
     ])
     Expect(graph.imports.get('code-editor')!.has('runtime')).toBe(true)
     Expect(graph.imports.get('stdlib')!.has('icloud-native')).toBe(true)
-    Expect(graph.imports.get('shared')!.size).toBe(0)
+    // Shared re-exports the shipped, host-neutral Effects core instead of copying it.
+    Expect([...graph.imports.get('shared')!]).toEqual(['runtime'])
     const fromShared = PackageGraph.affected(graph, ['shared']).map(entry => entry.package)
     for (const name of ['compiler', 'dev', 'studio', 'tao-cli', 'runtime-toolchain']) {
       Expect(fromShared).toContain(name)

@@ -25,6 +25,9 @@ Describe('agent worktree profile bootstrap', () => {
           'tao_activate_devenv_profile "$2" "$3"',
           'command -v node',
           'node --version',
+          'print -r -- "$ANDROID_HOME"',
+          'print -r -- "$ANDROID_SDK_ROOT"',
+          'print -r -- "$ANDROID_USER_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -34,6 +37,9 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(result.stdout.trim().split('\n')).toEqual([
         FS.resolvePath('bin/node', profile),
         'v24.test',
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('.android', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
@@ -990,6 +996,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
+    await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
     await makeExecutable(primaryNode)
   }

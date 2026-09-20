@@ -29,6 +29,11 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
     duplicated per worktree for no reason, and where a single orchestrator does and does not help
     live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
+## Real-host testing
+
+- [ ] Prove the additive [real-host testing prototype](Docs/Roadmap/Real-host%20testing%20prototype.md)
+      on browser, simulator, and physical-device UI before proposing replacement of existing suites.
+
 ## Documentation cleanup
 
 Two scoped passes over the repository's own records. Both are bookkeeping, not language work, and

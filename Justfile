@@ -108,6 +108,11 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
+# Run the opt-in real-host testing prototype; does not run or replace the existing suites
+[group('Host proofs')]
+test-host *ARGS:
+    ./dev test-host {{ ARGS }}
+
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
 studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
@@ -117,6 +122,16 @@ studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id=
 [group('Host proofs')]
 studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
+
+# Prove semantic host control against the owned native Studio shell
+[group('Host proofs')]
+studio-host-control-smoke run_id="local":
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-host-control.test.ts
+
+# Probe external Studio accessibility and physical input through Appium Mac2
+[group('Host proofs')]
+studio-mac2-acceptance run_id="local":
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]

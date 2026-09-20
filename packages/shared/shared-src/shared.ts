@@ -1,5 +1,17 @@
 import * as CLI from './CLI'
-import { Assert, Diagnostic, Diagnostics, Errors, Http, Json, Switch, Text, Time } from './core/shared-core'
+import {
+  Arrays,
+  Assert,
+  Diagnostic,
+  Diagnostics,
+  Effects,
+  Errors,
+  Http,
+  Json,
+  Switch,
+  Text,
+  Time,
+} from './core/shared-core'
 import * as FS from './FS'
 import * as HCI from './HCI'
 import * as LocalSocket from './LocalSocket'
@@ -19,10 +31,12 @@ export type {
 export type { ProcessSignalSeams, ProcessTableEntry, TrackedProcess } from './ProcessTree'
 
 export {
+  Arrays,
   Assert,
   CLI,
   Diagnostic,
   Diagnostics,
+  Effects,
   Errors,
   FS,
   HCI,

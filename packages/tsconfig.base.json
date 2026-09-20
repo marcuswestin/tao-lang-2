@@ -20,6 +20,18 @@
     "noPropertyAccessFromIndexSignature": true,
     "rootDir": ".",
     "paths": {
+      "@host-control": [
+        "./host-control/host-control-src/host-control.ts"
+      ],
+      "@host-control/playwright": [
+        "./host-control-playwright/host-control-playwright-src/host-control-playwright.ts"
+      ],
+      "@host-control/appium": [
+        "./host-control-appium/appium-src/appium.ts"
+      ],
+      "@e2e-testing": [
+        "./e2e-testing/HostTestingCommand.ts"
+      ],
       "@shared": [
         "./shared/shared-src/shared.ts"
       ],
@@ -79,6 +91,9 @@
       ],
       "@tao/runtime": [
         "./runtime/TaoRuntime-src/TR.ts"
+      ],
+      "@tao/runtime/core": [
+        "./runtime/TaoRuntime-src/core/RuntimeCore.ts"
       ],
       "@runtime/*": [
         "./runtime/TaoRuntime-src/*"

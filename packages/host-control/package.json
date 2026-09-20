@@ -1,0 +1,13 @@
+{
+  "name": "tao-host-control",
+  "private": true,
+  "type": "module",
+  "main": "host-control-src/host-control.ts",
+  "module": "host-control-src/host-control.ts",
+  "exports": {
+    ".": "./host-control-src/host-control.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  }
+}

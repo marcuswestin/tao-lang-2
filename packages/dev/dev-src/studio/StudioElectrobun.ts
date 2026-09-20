@@ -37,6 +37,7 @@ export type StudioElectrobunProject = {
   buildStable: StudioElectrobunCommand
   configPath: string
   dev: StudioElectrobunCommand
+  hostControlPath: string
   install: StudioElectrobunCommand
   mainPath: string
   prepare: StudioElectrobunCommand
@@ -88,6 +89,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
   const mainPath = FS.resolvePath('src/bun/index.ts', root)
   const configPath = FS.resolvePath('electrobun.config.ts', root)
   const runtimeResultPath = FS.resolvePath('artifacts/runtime-result.json', root)
+  const hostControlPath = FS.resolvePath('artifacts/host-control.json', root)
   await FS.mkdir(FS.dirname(mainPath))
   await FS.mkdir(FS.dirname(runtimeResultPath))
   await FS.writeText(mainPath, generated.main)
@@ -112,6 +114,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
     TAO_STUDIO_ELECTROBUN_RESULT_PATH: runtimeResultPath,
     TAO_STUDIO_ELECTROBUN_RUN_PROBE: options.runProbe === true ? 'true' : 'false',
     TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS: options.showWindow === false ? 'false' : 'true',
+    TAO_STUDIO_HOST_CONTROL_PATH: hostControlPath,
     TAO_STUDIO_PREVIEW_URL: localHttpUrl(options.previewUrl, 'Studio preview').href,
     ...(options.projectUrl === undefined
       ? {}
@@ -123,6 +126,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
     buildStable: command(root, ['run', 'build:stable']),
     configPath,
     dev: command(root, ['run', 'dev'], environment),
+    hostControlPath,
     install: command(root, ['install']),
     mainPath,
     prepare: command(root, ['electrobun', 'prepare']),

@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { normalizeInteractionKey, type TaoAttentionKey } from './TR-interaction-keys'
 
 /** One visible interaction identity and the localized label from which its hint key is derived. */
@@ -91,11 +92,11 @@ export function allocateInteractionKeys(
     // An exceptionally dense surface may consume every ASCII letter as a one-key assignment.
     // Release the last deterministic single-letter assignment into a continuation branch rather
     // than introducing a timeout or making a complete key the prefix of another complete key.
-    const released = [...assignments.entries()]
-      .filter(([, key]) => /^[a-z]$/u.test(key) && !excluded.has(key))
-      .sort(([leftIdentity, leftKey], [rightIdentity, rightKey]) =>
-        codePointCompare(leftKey, rightKey) || codePointCompare(leftIdentity, rightIdentity)
-      )
+    const released = Arrays.sorted(
+      [...assignments.entries()].filter(([, key]) => /^[a-z]$/u.test(key) && !excluded.has(key)),
+      ([leftIdentity, leftKey], [rightIdentity, rightKey]) =>
+        codePointCompare(leftKey, rightKey) || codePointCompare(leftIdentity, rightIdentity),
+    )
       .at(-1)
     if (!released) {
       break
@@ -128,7 +129,7 @@ export function allocateInteractionKeys(
 function canonicalCandidates(
   candidates: readonly TaoInteractionAllocationCandidate[],
 ): readonly TaoInteractionAllocationCandidate[] {
-  return [...candidates].sort((left, right) => codePointCompare(left.identity, right.identity))
+  return Arrays.sorted(candidates, (left, right) => codePointCompare(left.identity, right.identity))
 }
 
 function codePointCompare(left: string, right: string): number {
@@ -224,7 +225,7 @@ function availableSequenceCount(
 }
 
 function* prefixedTwoLetterSequences(prefixes: ReadonlySet<string>): Generator<string> {
-  for (const first of [...prefixes].sort(codePointCompare)) {
+  for (const first of Arrays.sorted([...prefixes], codePointCompare)) {
     for (const second of asciiLetters) {
       yield `${first}${second}`
     }

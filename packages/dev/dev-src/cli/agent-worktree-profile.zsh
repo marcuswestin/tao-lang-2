@@ -74,6 +74,12 @@ function tao_activate_devenv_profile() {
   local devenv_profile="$2"
   tao_link_primary_devenv_profile "$worktree_dir" "$devenv_profile" || return 1
   export PATH="$devenv_profile/bin:$PATH"
+  local android_sdk="$devenv_profile/libexec/android-sdk"
+  if [[ -d "$android_sdk" ]]; then
+    export ANDROID_HOME="$android_sdk"
+    export ANDROID_SDK_ROOT="$android_sdk"
+    export ANDROID_USER_HOME="$worktree_dir/.android"
+  fi
 }
 
 # Report whether an agent host is confining this process to an OS-level sandbox.
