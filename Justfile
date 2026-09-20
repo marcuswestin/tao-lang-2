@@ -33,7 +33,18 @@ github-setup:
     gh auth setup-git --hostname github.com
     git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
     git ls-remote --exit-code origin refs/heads/main >/dev/null
+    ./dev landing-broker-install
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
+
+# Install or update the credential-isolated landing service for this repository
+[group('Setup')]
+landing-setup:
+    ./dev landing-broker-install
+
+# Check the credential-isolated landing service without performing a GitHub operation
+[group('Setup')]
+landing-status:
+    ./dev landing-broker-status
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]

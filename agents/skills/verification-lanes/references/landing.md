@@ -3,6 +3,12 @@
 `git-workflow` owns the underlying Git commands; this covers what `just merge-with-main` does, its
 flags, its message format, and how a red lane is classified.
 
+Remote inspection and push automatically use the host-owned landing broker when installed. If the
+command says it is unavailable, ask Ro to run `just landing-setup` in a normal terminal; never grant
+the repository access to `~/.config/gh` and never run mutable repository code wholesale outside the
+sandbox. The broker exposes only this repository's fixed HTTPS remote and an atomic, lease-checked
+main/archive update, not a general Git or credential API.
+
 ## `just merge-with-main`
 
 The plain invocation verifies, squashes, commits, and pushes — no flag needed. It touches no checkout

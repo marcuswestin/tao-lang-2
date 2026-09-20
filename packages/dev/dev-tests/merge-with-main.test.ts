@@ -242,7 +242,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       repository.mirrorHead = args[2]!
       return result(command, args, spec.cwd)
     }
-    if (joined === 'merge --no-edit origin/main') {
+    if (joined.startsWith('merge --no-edit ')) {
       if (repository.failFeatureMerge === true) {
         repository.featureStatus = 'UU example.ts\n'
         return result(command, args, spec.cwd, '', 1)
@@ -504,7 +504,7 @@ Describe('merge-with-main', () => {
 
     Expect(failure).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect(Errors.messageOf(failure)).toContain('sandbox denied')
-    Expect(Errors.messageOf(failure)).toContain('unsandboxed shell')
+    Expect(Errors.messageOf(failure)).toContain('just landing-setup')
     Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     Expect(fake.snapshots.size).toBe(0)
   })
@@ -748,6 +748,47 @@ Describe('merge-with-main', () => {
     )
   })
 
+  Test('uses the credential-isolated broker for every remote read and one atomic landing', async () => {
+    const fake = fakeDependencies()
+    const pushes: unknown[] = []
+    fake.dependencies.inspectRemote = async (_root, branches) => ({
+      refs: new Map(branches.flatMap(branch => {
+        if (branch === 'main') {
+          return [[branch, fake.repository.remoteMainHead]]
+        }
+        if (branch === fake.repository.branch) {
+          return [[branch, fake.repository.remoteFeatureHead!]]
+        }
+        return []
+      })),
+    })
+    fake.dependencies.pushRemote = async (_root, push) => {
+      pushes.push(push)
+      return {
+        refs: new Map([
+          ['main', fake.repository.builtHead],
+          ['merged/example', fake.repository.featureHead],
+        ]),
+      }
+    }
+
+    const outcome = await MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fake.dependencies)
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(pushes).toHaveLength(1)
+    Expect(pushes[0]).toMatchObject({
+      branch: 'feat/example',
+      expectedRemoteFeatureHead: fake.repository.remoteFeatureHead,
+      expectedRemoteMainHead: fake.repository.remoteMainHead,
+      featureHead: fake.repository.featureHead,
+      landedHead: fake.repository.builtHead,
+    })
+    Expect(fake.calls.some(call => call.args[0] === 'ls-remote' || call.args[0] === 'fetch')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
+  })
+
   Test('--skip-verify-full verifies the staged squash on main instead of the feature branch', async () => {
     const fake = fakeDependencies()
 
@@ -939,11 +980,11 @@ Describe('merge-with-main', () => {
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(operations.filter(operation => operation === 'just verify-full')).toHaveLength(2)
-    Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
+    Expect(operations.indexOf(`git merge --no-edit ${movedMain}`)).toBeGreaterThan(
       operations.indexOf('just verify-full'),
     )
     Expect(operations.findLastIndex(operation => operation === 'just verify-full')).toBeGreaterThan(
-      operations.indexOf('git merge --no-edit origin/main'),
+      operations.indexOf(`git merge --no-edit ${movedMain}`),
     )
     // Main is a ref now, so catching up with the remote is a compare-and-swap, not a checkout.
     Expect(operations.findIndex(operation => operation.startsWith('git update-ref'))).toBeGreaterThan(

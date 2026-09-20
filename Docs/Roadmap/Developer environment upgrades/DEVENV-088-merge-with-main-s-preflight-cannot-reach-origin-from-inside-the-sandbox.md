@@ -45,14 +45,21 @@
   wholesale outside the sandbox for the same reason.
 - **Change made:** `merge-with-main` reports the sandbox denial with its recovery. `just github-setup`
   now standardizes the global URL rewrites, GitHub CLI protocol and credential helper, this checkout's
-  stored origin, and a live remote probe. `./agent doctor` reports drift back to SSH, an implicit URL
-  rewrite, or a missing GitHub CLI helper. The narrow host-owned landing capability remains open.
+  stored origin, and a live remote probe. It also installs a compiled per-user LaunchAgent outside
+  repository-writable paths. The service is registered for this repository's canonical Git object
+  store and fixed HTTPS remote; it disables hooks and global/system Git configuration, fetches remote
+  objects into the registered store, validates the proposed squash parent and finalized tree, and
+  atomically updates main, the merged archive, and any feature-branch deletion under explicit leases.
+  Its Unix-socket protocol returns refs and verdicts only, never credentials or an arbitrary command
+  surface. `finalize` and `merge-with-main` prefer it automatically and retain direct Git only for
+  ordinary human shells. `./agent doctor` reports HTTPS/helper drift and a missing broker.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-068 owns the
   general case of a child process denied an operation the shell may perform; DEVENV-087 owns the
   argument-order gap in the same rule.
 - **Acceptance:** `just github-setup` leaves the effective and stored origin on HTTPS with the GitHub
-  CLI credential helper, and `./agent doctor` reports that state. `./dev merge-with-main --dry-run`
-  either completes inside a sandboxed shell or fails with a message that names the sandbox as the
-  cause. Full resolution additionally requires an agent-callable host capability that lands without
-  exposing the GitHub credential or executing mutable repository code outside the sandbox.
+  CLI credential helper and a running landing broker, and `./agent doctor` reports that state.
+  `./dev merge-with-main --dry-run` completes inside a sandboxed shell through the broker. A test
+  proves the landing workflow performs no direct remote Git operation when the broker is available;
+  live resolution additionally requires installing the service and landing this branch from a
+  sandboxed task without exposing the GitHub credential or executing repository code outside it.
 - **Source:** 2026-09-19 review-findings round on `feat/work-based-test-timeouts`.
