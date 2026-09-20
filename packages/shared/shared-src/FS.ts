@@ -268,7 +268,7 @@ export async function copyDirectory(fromPath: string, toPath: string): Promise<v
  * but reject directory removal or rename; generated assets still need exact file membership there.
  * Empty destination directories may remain, but no stale file survives.
  */
-type SynchronizeDirectoryFilesOptions = {
+export type SynchronizeDirectoryFilesOptions = {
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeCleanup?: () => Promise<void>
   /** beforeCommit is a test seam for mutations that race the final drift check. */
@@ -278,9 +278,23 @@ type SynchronizeDirectoryFilesOptions = {
   beforeMove?: (fromPath: string, toPath: string) => Promise<void>
   beforeRemove?: (path: string) => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
-  /** boundaryPath is the trusted ancestor from which source and destination symlinks are rejected. */
+  /** boundaryPath is the trusted ancestor for a single synchronization's source and destination. */
   boundaryPath?: string
   inspectProcessIdentity?: (pid: number) => Promise<FileMutationProcessIdentity>
+}
+
+export type DirectoryFileSynchronization = {
+  fromPath: string
+  toPath: string
+}
+
+export type SynchronizeDirectoryFileSetsOptions = Omit<SynchronizeDirectoryFilesOptions, 'boundaryPath'> & {
+  /** boundaryPath is the trusted ancestor for every persistent destination and the shared lock. */
+  boundaryPath?: string
+  /** lockPath is the target whose mutation lock serializes the complete multi-root publication. */
+  lockPath?: string
+  /** sourceBoundaryPath is the trusted ancestor for staged sources outside boundaryPath. */
+  sourceBoundaryPath?: string
 }
 
 export async function synchronizeDirectoryFiles(
@@ -289,11 +303,43 @@ export async function synchronizeDirectoryFiles(
   options: Partial<SynchronizeDirectoryFilesOptions> = {},
 ): Promise<void> {
   const boundaryPath = resolvePath(options.boundaryPath ?? commonPathAncestor(fromPath, toPath))
+  await synchronizeDirectoryFileSets([{ fromPath, toPath }], {
+    ...options,
+    boundaryPath,
+    sourceBoundaryPath: boundaryPath,
+  })
+}
+
+/** synchronizeDirectoryFileSets publishes disjoint directory roots in one rollback-safe transaction. */
+export async function synchronizeDirectoryFileSets(
+  fileSets: readonly DirectoryFileSynchronization[],
+  options: Partial<SynchronizeDirectoryFileSetsOptions> = {},
+): Promise<void> {
+  if (fileSets.length === 0) {
+    throwUnexpected('At least one directory file set is required for synchronization.')
+  }
+  const resolvedFileSets = fileSets.map(fileSet => ({
+    fromPath: resolvePath(fileSet.fromPath),
+    toPath: resolvePath(fileSet.toPath),
+  }))
+  assertDisjointSynchronizationTargets(resolvedFileSets)
+  const boundaryPath = resolvePath(
+    options.boundaryPath ?? commonPathAncestorOf(resolvedFileSets.map(fileSet => fileSet.toPath)),
+  )
+  const sourceBoundaryPath = resolvePath(
+    options.sourceBoundaryPath ?? commonPathAncestorOf(resolvedFileSets.map(fileSet => fileSet.fromPath)),
+  )
+  const lockPath = resolvePath(options.lockPath ?? resolvedFileSets[0]!.toPath)
   await withFileMutationLock(
-    toPath,
+    lockPath,
     boundaryPath,
     async () => {
-      await synchronizeDirectoryFilesLocked(fromPath, toPath, boundaryPath, options)
+      await synchronizeDirectoryFileSetsLocked(
+        resolvedFileSets,
+        sourceBoundaryPath,
+        boundaryPath,
+        options,
+      )
     },
     {
       beforeClaimPublish: options.beforeClaimPublish,
@@ -304,56 +350,93 @@ export async function synchronizeDirectoryFiles(
   )
 }
 
-async function synchronizeDirectoryFilesLocked(
-  fromPath: string,
-  toPath: string,
+function assertDisjointSynchronizationTargets(fileSets: readonly DirectoryFileSynchronization[]): void {
+  for (const [index, fileSet] of fileSets.entries()) {
+    for (const other of fileSets.slice(index + 1)) {
+      if (pathIsWithin(fileSet.toPath, other.toPath) || pathIsWithin(other.toPath, fileSet.toPath)) {
+        throwUnexpected(`Directory synchronization targets overlap: ${fileSet.toPath} and ${other.toPath}.`)
+      }
+    }
+  }
+}
+
+type SynchronizedFile = {
+  fileSetIndex: number
+  label: string
+  path: string
+  relative: string
+  root: string
+}
+
+async function synchronizeDirectoryFileSetsLocked(
+  fileSets: readonly DirectoryFileSynchronization[],
+  sourceBoundaryPath: string,
   boundaryPath: string,
-  options: Partial<SynchronizeDirectoryFilesOptions>,
+  options: Partial<SynchronizeDirectoryFileSetsOptions>,
 ): Promise<void> {
-  await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
-  await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
-  await removeOrphanedSynchronizationFiles(toPath, boundaryPath, options)
-  const sourceFiles = await walkedFiles(fromPath)
-  const targetFiles = await isDirectory(toPath) ? await walkedFiles(toPath) : []
-  const sourceByRelativePath = new Map(sourceFiles.map(path => [relativePath(fromPath, path), path]))
-  const targetByRelativePath = new Map(targetFiles.map(path => [relativePath(toPath, path), path]))
+  for (const fileSet of fileSets) {
+    await assertTreeHasNoSymbolicLinks(sourceBoundaryPath, fileSet.fromPath, 'source')
+    await assertTreeHasNoSymbolicLinks(boundaryPath, fileSet.toPath, 'destination')
+    await removeOrphanedSynchronizationFiles(fileSet.toPath, boundaryPath, options)
+  }
+  const sourceFiles = await synchronizedFiles(fileSets, 'fromPath')
+  const targetFiles = await synchronizedFiles(fileSets, 'toPath')
+  const sourceByLabel = new Map(sourceFiles.map(file => [file.label, file]))
   const backupRoot = await mkTmpDir('tao-directory-sync-backup-')
-  const stagedFiles: Array<{ path: string; relative: string; targetPath: string }> = []
+  const backupByTargetPath = new Map<string, string>()
+  const stagedFiles: Array<{
+    label: string
+    path: string
+    publish: boolean
+    targetPath: string
+    targetRoot: string
+  }> = []
   const temporaryFiles: string[] = []
   const committedChanges: FileSynchronizationChange[] = []
   let commitStarted = false
   let primaryError: unknown
   try {
-    for (const [relative, targetPath] of targetByRelativePath) {
-      await copyFile(targetPath, resolvePath(relative, backupRoot))
+    for (const target of targetFiles) {
+      const backupPath = resolvePath(target.label, backupRoot)
+      await copyFile(target.path, backupPath)
+      backupByTargetPath.set(target.path, backupPath)
     }
     const targetSnapshot = await filesIdentity(
-      [...targetByRelativePath].map(([relative]) => [relative, resolvePath(relative, backupRoot)]),
+      targetFiles.map(target => [target.label, backupByTargetPath.get(target.path)!]),
     )
-    for (const [index, [relative, sourcePath]] of [...sourceByRelativePath].entries()) {
-      const targetPath = resolvePath(relative, toPath)
-      const stagedPath = `${toPath}.${randomFileSuffix()}.${index}.tmp`
-      await copyFile(sourcePath, stagedPath)
-      stagedFiles.push({ path: stagedPath, relative, targetPath })
+    for (const [index, source] of sourceFiles.entries()) {
+      const fileSet = fileSets[source.fileSetIndex]!
+      const targetPath = resolvePath(source.relative, fileSet.toPath)
+      const stagedPath = `${fileSet.toPath}.${randomFileSuffix()}.${index}.tmp`
+      await copyFile(source.path, stagedPath)
+      const backupPath = backupByTargetPath.get(targetPath)
+      const publish = backupPath === undefined
+        || await fileEntryIdentity(stagedPath) !== await fileEntryIdentity(backupPath)
+      stagedFiles.push({ label: source.label, path: stagedPath, publish, targetPath, targetRoot: fileSet.toPath })
       temporaryFiles.push(stagedPath)
     }
-    const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.relative, staged.path]))
+    const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.label, staged.path]))
     await options.beforeCommit?.()
 
     // Recheck both trees immediately before the first worktree mutation. The content identities
     // make a concurrent non-cooperating writer fail closed instead of being overwritten or restored.
-    await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
-    await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
-    if (await treeFilesIdentity(fromPath) !== sourceSnapshot) {
-      throwUnexpected(`Source files changed while synchronizing ${fromPath}.`)
+    for (const fileSet of fileSets) {
+      await assertTreeHasNoSymbolicLinks(sourceBoundaryPath, fileSet.fromPath, 'source')
+      await assertTreeHasNoSymbolicLinks(boundaryPath, fileSet.toPath, 'destination')
     }
-    if (await treeFilesIdentity(toPath) !== targetSnapshot) {
-      throwUnexpected(`Destination files changed while synchronizing ${toPath}.`)
+    if (await synchronizedFilesIdentity(fileSets, 'fromPath') !== sourceSnapshot) {
+      throwUnexpected('Source files changed while synchronizing directory file sets.')
+    }
+    if (await synchronizedFilesIdentity(fileSets, 'toPath') !== targetSnapshot) {
+      throwUnexpected('Destination files changed while synchronizing directory file sets.')
     }
 
     commitStarted = true
     for (const staged of stagedFiles) {
-      const change = await fileSynchronizationChange(staged.targetPath, targetByRelativePath, toPath, backupRoot)
+      if (!staged.publish) {
+        continue
+      }
+      const change = fileSynchronizationChange(staged.targetPath, staged.targetRoot, backupByTargetPath)
       const expectedIdentity = await fileEntryIdentity(staged.path)
       try {
         await moveFileWithinBoundary(staged.path, staged.targetPath, boundaryPath, options)
@@ -365,13 +448,13 @@ async function synchronizeDirectoryFilesLocked(
       }
       committedChanges.push({ ...change, expectedIdentity })
     }
-    for (const [relative, targetPath] of targetByRelativePath) {
-      if (!sourceByRelativePath.has(relative)) {
-        const change = await fileSynchronizationChange(targetPath, targetByRelativePath, toPath, backupRoot)
+    for (const target of targetFiles) {
+      if (!sourceByLabel.has(target.label)) {
+        const change = fileSynchronizationChange(target.path, target.root, backupByTargetPath)
         try {
-          await removeFileWithinBoundary(targetPath, boundaryPath, options)
+          await removeFileWithinBoundary(target.path, boundaryPath, options)
         } catch (error) {
-          if (!await exists(targetPath)) {
+          if (!await exists(target.path)) {
             committedChanges.push({ ...change, expectedIdentity: 'missing' })
           }
           throw error
@@ -385,7 +468,6 @@ async function synchronizeDirectoryFilesLocked(
       const rollbackIssues = await rollbackDirectorySynchronization(
         committedChanges,
         temporaryFiles,
-        toPath,
         boundaryPath,
         options,
       )
@@ -423,31 +505,56 @@ async function synchronizeDirectoryFilesLocked(
   }
 }
 
+async function synchronizedFiles(
+  fileSets: readonly DirectoryFileSynchronization[],
+  side: 'fromPath' | 'toPath',
+): Promise<SynchronizedFile[]> {
+  const files: SynchronizedFile[] = []
+  for (const [index, fileSet] of fileSets.entries()) {
+    const root = fileSet[side]
+    if (!await isDirectory(root)) {
+      continue
+    }
+    for (const path of await walkedFiles(root)) {
+      const relative = relativePath(root, path)
+      files.push({ fileSetIndex: index, label: `${index}/${relative}`, path, relative, root })
+    }
+  }
+  return files
+}
+
+async function synchronizedFilesIdentity(
+  fileSets: readonly DirectoryFileSynchronization[],
+  side: 'fromPath' | 'toPath',
+): Promise<string> {
+  return filesIdentity((await synchronizedFiles(fileSets, side)).map(file => [file.label, file.path]))
+}
+
 type FileSynchronizationChange = {
   backupPath?: string
   expectedIdentity: string
   path: string
+  targetRoot: string
 }
 
-async function fileSynchronizationChange(
+function fileSynchronizationChange(
   path: string,
-  targetByRelativePath: ReadonlyMap<string, string>,
-  toPath: string,
-  backupRoot: string,
-): Promise<Omit<FileSynchronizationChange, 'expectedIdentity'>> {
-  const relative = relativePath(toPath, path)
+  targetRoot: string,
+  backupByTargetPath: ReadonlyMap<string, string>,
+): Omit<FileSynchronizationChange, 'expectedIdentity'> {
+  const backupPath = backupByTargetPath.get(path)
   return {
-    ...(targetByRelativePath.has(relative) ? { backupPath: resolvePath(relative, backupRoot) } : {}),
+    ...(backupPath === undefined ? {} : { backupPath }),
     path,
+    targetRoot,
   }
 }
 
 async function rollbackDirectorySynchronization(
   changes: readonly FileSynchronizationChange[],
   temporaryFiles: string[],
-  toPath: string,
   boundaryPath: string,
-  options: Partial<SynchronizeDirectoryFilesOptions>,
+  options: Partial<SynchronizeDirectoryFileSetsOptions>,
 ): Promise<unknown[]> {
   const issues: unknown[] = []
   for (const [index, change] of [...changes].reverse().entries()) {
@@ -465,7 +572,7 @@ async function rollbackDirectorySynchronization(
         }
         continue
       }
-      const restorePath = `${toPath}.${randomFileSuffix()}.${index}.restore`
+      const restorePath = `${change.targetRoot}.${randomFileSuffix()}.${index}.restore`
       temporaryFiles.push(restorePath)
       await copyFile(change.backupPath, restorePath)
       await moveFileWithinBoundary(restorePath, change.path, boundaryPath, options)
@@ -617,11 +724,19 @@ function commonPathAncestor(leftPath: string, rightPath: string): string {
   return candidate
 }
 
-async function treeFilesIdentity(root: string): Promise<string> {
-  if (!await isDirectory(root)) {
-    return contentIdentity([])
+function commonPathAncestorOf(paths: readonly string[]): string {
+  let ancestor = dirname(resolvePath(paths[0]!))
+  for (const path of paths.slice(1)) {
+    const resolved = resolvePath(path)
+    while (!pathIsWithin(resolved, ancestor)) {
+      const parent = dirname(ancestor)
+      if (parent === ancestor) {
+        return ancestor
+      }
+      ancestor = parent
+    }
   }
-  return filesIdentity((await walkedFiles(root)).map(path => [relativePath(root, path), path]))
+  return ancestor
 }
 
 /**

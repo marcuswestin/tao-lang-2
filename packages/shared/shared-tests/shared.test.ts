@@ -217,6 +217,41 @@ Describe('FS', () => {
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
   })
 
+  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
+    Test(`restores every persistent root after an injected ${errorCode} multi-root publication failure`, async () => {
+      const root = await tmpDir()
+      const firstSource = FS.resolvePath('staging/first', root)
+      const secondSource = FS.resolvePath('staging/second', root)
+      const firstTarget = FS.resolvePath('persistent/first', root)
+      const secondTarget = FS.resolvePath('persistent/second', root)
+      await FS.writeText(FS.resolvePath('changed.txt', firstSource), 'new first bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', secondSource), 'new second bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', firstTarget), 'old first bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', secondTarget), 'old second bytes')
+      await FS.writeText(FS.resolvePath('stale.txt', secondTarget), 'old stale bytes')
+      const before = await directoryFileSetsIdentity([firstTarget, secondTarget])
+      let injected = false
+
+      await Expect(FS.synchronizeDirectoryFileSets([
+        { fromPath: firstSource, toPath: firstTarget },
+        { fromPath: secondSource, toPath: secondTarget },
+      ], {
+        beforeRemove: async path => {
+          if (!injected && FS.basename(path) === 'stale.txt') {
+            injected = true
+            Errors.throwHostEnvironment(`${errorCode}: injected persistent-output removal failure`)
+          }
+        },
+        boundaryPath: root,
+        lockPath: firstTarget,
+        sourceBoundaryPath: root,
+      })).rejects.toThrow(errorCode)
+
+      Expect(injected).toBe(true)
+      Expect(await directoryFileSetsIdentity([firstTarget, secondTarget])).toBe(before)
+    })
+  }
+
   Test('sweeps staging files a killed synchronization orphaned beside the destination', async () => {
     const root = await tmpDir()
     const sourceDir = FS.resolvePath('source', root)
@@ -1312,6 +1347,19 @@ async function tmpDir() {
   const dir = await mkTestDir('tao-shared-test-')
   cleanupPaths.push(dir)
   return dir
+}
+
+async function directoryFileSetsIdentity(roots: readonly string[]): Promise<string> {
+  const entries: Array<readonly [string, string]> = []
+  for (const [index, root] of roots.entries()) {
+    if (!await FS.isDirectory(root)) {
+      continue
+    }
+    for await (const path of FS.walk(root, { includeHidden: true })) {
+      entries.push([`${index}/${FS.relativePath(root, path)}`, path])
+    }
+  }
+  return await FS.filesIdentity(entries)
 }
 
 async function untrackedTmpDir() {

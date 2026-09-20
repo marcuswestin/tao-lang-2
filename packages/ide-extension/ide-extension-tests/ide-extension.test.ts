@@ -1,9 +1,10 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { TaoFormatter } from 'tao-formatter'
 import { AST, codeProjectRoot, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { LSPWorkspace } from 'tao-workspace'
+import { publishIdeExtensionOutputs } from '../esbuild.config'
 import { workspaceServerPlan, workspaceServerRoots } from '../ide-extension-src/extension/workspace-server-roots'
 import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
@@ -29,6 +30,42 @@ Describe('Tao IDE extension smoke', () => {
     Expect(packageJson.contributes.languages[0]?.configuration).toBe('./language-configuration.json')
     Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
   })
+
+  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
+    Test(`restores both persistent IDE output roots after an injected ${errorCode} failure`, async () => {
+      const root = await mkTestDir(`tao-ide-publication-${errorCode.toLowerCase()}-`)
+      const stagingPackageRoot = FS.resolvePath('staging/packages/ide-extension', root)
+      const packageRoot = FS.resolvePath('persistent/packages/ide-extension', root)
+      const generatedRoot = FS.resolvePath('_gen_ide-extension', packageRoot)
+      const syntaxRoot = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes', packageRoot)
+      await FS.writeText(
+        FS.resolvePath('_gen_ide-extension/extension/main.cjs', stagingPackageRoot),
+        'new extension bytes',
+      )
+      await FS.writeText(
+        FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', stagingPackageRoot),
+        'new grammar bytes',
+      )
+      await FS.writeText(FS.resolvePath('extension/main.cjs', generatedRoot), 'old extension bytes')
+      await FS.writeText(FS.resolvePath('tao-lang.tmLanguage.json', syntaxRoot), 'old grammar bytes')
+      await FS.writeText(FS.resolvePath('stale.json', syntaxRoot), 'old stale bytes')
+      const before = await persistentOutputIdentity([generatedRoot, syntaxRoot])
+      let injected = false
+
+      await Expect(publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, {
+        beforeRemove: async path => {
+          if (!injected && FS.basename(path) === 'stale.json') {
+            injected = true
+            Errors.throwHostEnvironment(`${errorCode}: injected IDE publication failure`)
+          }
+        },
+        boundaryPath: root,
+      })).rejects.toThrow(errorCode)
+
+      Expect(injected).toBe(true)
+      Expect(await persistentOutputIdentity([generatedRoot, syntaxRoot])).toBe(before)
+    })
+  }
 
   Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
     const generatedGrammar = await FS.readJson<Record<string, unknown>>(
@@ -396,6 +433,19 @@ async function validateOnDiskFileWithLanguageServerServices(
   } finally {
     await FS.remove(rootDir)
   }
+}
+
+async function persistentOutputIdentity(roots: readonly string[]): Promise<string> {
+  const entries: Array<readonly [string, string]> = []
+  for (const [index, root] of roots.entries()) {
+    if (!await FS.isDirectory(root)) {
+      continue
+    }
+    for await (const path of FS.walk(root, { includeHidden: true })) {
+      entries.push([`${index}/${FS.relativePath(root, path)}`, path])
+    }
+  }
+  return await FS.filesIdentity(entries)
 }
 
 type IdeExtensionPackageJson = {
