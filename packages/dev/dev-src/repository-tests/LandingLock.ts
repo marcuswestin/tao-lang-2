@@ -164,7 +164,8 @@ export class LandingLockUnreadableError extends Errors.HostEnvironmentError {
     super(
       `The landing lock record exists but cannot be read (${reason}), so this cannot tell whether a `
         + 'landing is in progress. Refusing to take the lock rather than risk two agents holding it. '
-        + 'Confirm no landing is running, then clear it with `./dev land-unlock --force`.',
+        + 'Confirm no landing is running, then clear it with `./dev land-unlock --force` — a corrupt '
+        + 'record names no PID, so no `--holder` is needed.',
     )
   }
 }
@@ -288,7 +289,8 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
   const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
   const startedMs = Time.nowMs()
   const deadlineMs = startedMs + Math.max(0, waitTimeoutMs)
-  let warnedAtMs = startedMs
+  let reportedAtMs = startedMs
+  let reportedWaiting = false
 
   while (true) {
     const attempt = await claim(registryRoot, options)
@@ -301,14 +303,15 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
       throw new LandingLockBusyError(
         `The landing lock has been held by ${describe(holder)} for the whole ${
           describeDuration(waitedMs)
-        } this command waited. Nothing takes the lock away on a timer, so this needs a person: `
-          + 'confirm that landing is really still running, and release it with '
-          + '`./dev land-unlock --force` if it is not.',
+        } this command waited. A dead PID would not mean it was released, and waiting this long is `
+          + "not unusual on its own. Forcing it is Ro's call — bring the output of `./agent board` to "
+          + 'Ro rather than clearing it yourself.',
         holder,
       )
     }
-    if (Time.nowMs() - warnedAtMs >= WAIT_WARN_INTERVAL_MS) {
-      warnedAtMs = Time.nowMs()
+    if (!reportedWaiting || Time.nowMs() - reportedAtMs >= WAIT_WARN_INTERVAL_MS) {
+      reportedWaiting = true
+      reportedAtMs = Time.nowMs()
       options.onWaiting?.(holder, waitedMs)
     }
     await Time.sleep(POLL_MS)
@@ -384,8 +387,8 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
     if (existing.holder !== repositoryRoot) {
       Errors.throwUserInput(
         `The landing lock is held by ${describe(existing)}, not by this worktree, so this cannot `
-          + 'release it. Release it from that worktree, or use `./dev land-unlock --force` if you have '
-          + 'confirmed that landing is no longer running.',
+          + "release it. Release it from that worktree instead; forcing it is Ro's call, so bring the "
+          + 'output of `./agent board` to Ro rather than clearing it yourself.',
       )
     }
     const remaining: LandingLockRecord = {
@@ -404,21 +407,52 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
   })
 }
 
+export type ForceReleaseOptions = {
+  /**
+   * The PID the caller believes holds the lock, printed by every waiter message. This is an
+   * identity check against the record, never a liveness check — a dead PID never proved the lock
+   * was free, so it cannot prove this force is aimed at the lock the caller actually watched. A
+   * held, readable record refuses without a match; an unreadable one has no PID to match against,
+   * so `--force` alone still clears it, as it always could.
+   */
+  holder?: number
+}
+
 /**
  * Release whoever holds the lock, including a record too corrupt to name one. This is the
  * person-shaped escape hatch the automatic paths refuse to be, and it returns the record it removed
  * so the caller can say whose lock it just ended.
+ *
+ * The identity check runs inside the same registry lock as the read, so there is no gap between
+ * confirming the holder and deleting the record for a different one to land in. That gap is exactly
+ * how one waiter broke a second lane's lock: it read the holder, the first lane released on its own,
+ * a second lane claimed the lock, and the waiter's force then deleted that unrelated claim.
  */
-async function forceRelease(registryRoot = MachineLanes.registryRoot()): Promise<LandingLockRecord | undefined> {
+async function forceRelease(
+  registryRoot = MachineLanes.registryRoot(),
+  options: ForceReleaseOptions = {},
+): Promise<LandingLockRecord | undefined> {
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
     const state = await readLockState(registryRoot)
     if (state.kind === 'free') {
       return undefined
     }
-    // An unreadable record is exactly the case a person reaches for this command to clear, so it
-    // must delete the file rather than read past it.
+    if (state.kind === 'unreadable') {
+      // An unreadable record is exactly the case a person reaches for this command to clear, and it
+      // names no PID to check `options.holder` against, so `--force` alone is still enough.
+      await FS.remove(lockPath(registryRoot))
+      return undefined
+    }
+    const existing = state.record
+    if (options.holder === undefined || options.holder !== existing.pid) {
+      Errors.throwUserInput(
+        `The landing lock is held by ${describe(existing)}, which is not the holder this call named. `
+          + '`--force` breaks only the lock whose holder was checked, named with `--holder <pid>`; a '
+          + 'different holder is a different decision, so look at it afresh rather than retrying.',
+      )
+    }
     await FS.remove(lockPath(registryRoot))
-    return state.kind === 'held' ? state.record : undefined
+    return existing
   })
 }
 
@@ -488,6 +522,16 @@ function describeDuration(elapsedMs: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
 }
 
+/** Explain a blocked acquisition immediately, then escalate the same holder on periodic reminders. */
+function describeWaiting(record: LandingLockRecord, waitedMs: number): string {
+  if (waitedMs < WAIT_WARN_INTERVAL_MS) {
+    return `WAIT  Landing lock held by ${describe(record)}. This command will start when the lock is released.`
+  }
+  return `WARN  Still waiting ${describeDuration(waitedMs)} for the landing lock, held by ${describe(record)}. `
+    + "A dead PID would not mean it was released, and waiting this long is normal. Forcing it is Ro's call — "
+    + 'bring the output of `./agent board` to Ro rather than clearing it yourself.'
+}
+
 export const LandingLock = {
   DEFAULT_WAIT_TIMEOUT_MS,
   LOCKED_LANES,
@@ -495,6 +539,7 @@ export const LandingLock = {
   acquire,
   describe,
   describeDuration,
+  describeWaiting,
   forceRelease,
   holding,
   inspectState,

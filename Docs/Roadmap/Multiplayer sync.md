@@ -5,9 +5,9 @@ Status: **exploration, dialogue open**. The body is a thousand-mile overview of 
 > Implementation note (2026-09-05): the family's runtime machinery — change-sets, the fold, a
 > snapshot bridge, the in-process authority, and the conformance suite — and a CloudKit provider
 > over `CKSyncEngine` landed as a stab under stated working assumptions for open questions 1, 2,
-> and 5. `Docs/Roadmap/CloudKit granular datasource provider/Implementation - CloudKit granular
-> datasource provider.md` records what was built and what those assumptions are; the dialogue
-> below is unchanged by it.
+> and 5. `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "CloudKit" provider
+> section records what was built and what those assumptions are; the dialogue below is unchanged
+> by it.
 
 ## Framing
 
@@ -18,7 +18,7 @@ Live collaboration enters a Tao app in four ways, and they are in very different
 3. **Working apart.** The plane door closes. Decided: offline is never an error; the outcome vocabulary separates `queued` (durably accepted on this device) from `saved` (confirmed by the provider) (§5); the `Offline { }` block declares the full closure of what stays usable (§11); local-first — optimistic writes, durable queues, tombstones — is provider behaviour, never screen code. Open: the queue's semantics — replay order, rebasing under fieldwise-latest, and above all where a _late_ refusal lands when the calling site is gone (the revoked member's queued write).
 4. **Being there.** `presence Viewers on Recipe` — `Viewers.Others` lists the other accounts with this row open now (§6). That one sentence is the entire ruling. Open: everything underneath — transport, visibility, identity, whether presence is a query-family declaration or something environment-shaped, and the separate question of the `Connection` value the demo apps already read (`if Connection is Offline`).
 
-Out of scope here: authority itself (decided; §3–§4 lower to provider-enforced rules and this program consumes that lowering), collaborative _text_ (character-merged editing inside one field is a different machine — see Deferred ideas), and schema migrations (the option space belongs to `Docs/Roadmap/Tao ship.md`; this program only states what sync requires of it).
+Out of scope here: authority itself (decided; §3–§4 lower to provider-enforced rules and this program consumes that lowering), collaborative _text_ (character-merged editing inside one field is a different machine — see Deferred ideas), and schema migrations (the option space belongs to `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`'s "Schema migration" section; this program only states what sync requires of it).
 
 > **Every write in a Tao app flows through a typed, declared construct the compiler sees — so a Tao sync engine is never told "bytes changed, go diff": it is handed the change in units the language already made meaningful — a field, a `together` pair, a draft commit, a transaction.**
 

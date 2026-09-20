@@ -1,5 +1,6 @@
 import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { GeneratedEvidence } from '../dev-src/repository-tests/GeneratedEvidence'
 import { GreenTree, type GreenTreeKey, type GreenTreeRecord } from '../dev-src/repository-tests/GreenTree'
 
 /** The toolchain every store test shares; the toolchain tests below read real symlinks instead. */
@@ -45,6 +46,179 @@ function recordFile(root: string, name: string): string {
 }
 
 Describe('green tree records', () => {
+  Test('compiled-app evidence closes over the ignored parser tree it consumes', () => {
+    Expect(GeneratedEvidence.outputsForGates(['_compile-word-flower-app'])).toEqual(['compiled-app', 'parser'])
+  })
+
+  Test('IDE evidence closes over the ignored parser tree it consumes', () => {
+    Expect(GeneratedEvidence.outputsForGates(['_ide-extension-build'])).toEqual(['ide-extension', 'parser'])
+  })
+
+  Test('IDE evidence invalidates on installed input or either generated output tree changing', async () => {
+    const root = await mkTestDir('tao-green-tree-ide-generated-')
+    const wasm = FS.resolvePath('packages/formatter/node_modules/@dprint/typescript/plugin.wasm', root)
+    const bundleRoot = FS.resolvePath('packages/ide-extension/_gen_ide-extension', root)
+    const syntaxRoot = FS.resolvePath('packages/ide-extension/ide-extension-syntaxes/_gen_syntaxes', root)
+    const bundle = FS.resolvePath('extension/main.cjs', bundleRoot)
+    const added = FS.resolvePath('language/added.cjs', bundleRoot)
+    const syntax = FS.resolvePath('tao-lang.tmLanguage.json', syntaxRoot)
+    try {
+      await FS.writeText(wasm, 'wasm-one')
+      await FS.writeText(bundle, 'bundle-one\n')
+      await FS.writeText(syntax, '{"name":"Tao"}\n')
+      const generated = await GeneratedEvidence.capture(root, ['ide-extension'])
+      Expect(generated).toBeDefined()
+      await GreenTree.record(root, 'verify', entryFor('tree-1', '/logs/verify'), [], {
+        laneGenerated: generated,
+      })
+      const find = async () =>
+        await GreenTree.find(root, keyFor('tree-1'), ['verify'], {
+          generatedOutputs: ['ide-extension'],
+        })
+      Expect(await find()).toBeDefined()
+
+      const cases = [
+        {
+          mutate: async () => await FS.writeText(wasm, 'wasm-two'),
+          restore: async () => await FS.writeText(wasm, 'wasm-one'),
+        },
+        {
+          mutate: async () => await FS.writeText(bundle, 'bundle-two\n'),
+          restore: async () => await FS.writeText(bundle, 'bundle-one\n'),
+        },
+        {
+          mutate: async () => await FS.writeText(added, 'added\n'),
+          restore: async () => await FS.remove(added),
+        },
+        {
+          mutate: async () => await FS.remove(syntax),
+          restore: async () => await FS.writeText(syntax, '{"name":"Tao"}\n'),
+        },
+        {
+          mutate: async () => await FS.remove(bundleRoot),
+          restore: async () => await FS.writeText(bundle, 'bundle-one\n'),
+        },
+        {
+          mutate: async () => await FS.remove(syntaxRoot),
+          restore: async () => await FS.writeText(syntax, '{"name":"Tao"}\n'),
+        },
+      ]
+      for (const scenario of cases) {
+        await scenario.mutate()
+        Expect(await find()).toBeUndefined()
+        await scenario.restore()
+        Expect(await find()).toBeDefined()
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('generated output evidence invalidates a lane on edit, addition, deletion, or absence', async () => {
+    const root = await mkTestDir('tao-green-tree-generated-')
+    const outputRoot = FS.resolvePath('packages/runtime-toolchain/_gen_tao-app', root)
+    const app = FS.resolvePath('App.tsx', outputRoot)
+    const added = FS.resolvePath('Added.tsx', outputRoot)
+    try {
+      await FS.writeText(app, 'export default 1\n')
+      const generated = await GeneratedEvidence.capture(root, ['compiled-app'])
+      Expect(generated).toBeDefined()
+      await GreenTree.record(root, 'verify', entryFor('tree-1', '/logs/verify'), [], {
+        laneGenerated: generated,
+      })
+      const find = async () =>
+        await GreenTree.find(root, keyFor('tree-1'), ['verify'], {
+          generatedOutputs: ['compiled-app'],
+        })
+      Expect(await find()).toBeDefined()
+
+      const cases = [
+        {
+          mutate: async () => await FS.writeText(app, 'export default 2\n'),
+          restore: async () => await FS.writeText(app, 'export default 1\n'),
+        },
+        {
+          mutate: async () => await FS.writeText(added, 'export const added = true\n'),
+          restore: async () => await FS.remove(added),
+        },
+        {
+          mutate: async () => await FS.remove(app),
+          restore: async () => await FS.writeText(app, 'export default 1\n'),
+        },
+        {
+          mutate: async () => await FS.remove(outputRoot),
+          restore: async () => await FS.writeText(app, 'export default 1\n'),
+        },
+      ]
+      for (const scenario of cases) {
+        await scenario.mutate()
+        Expect(await find()).toBeUndefined()
+        await scenario.restore()
+        Expect(await find()).toBeDefined()
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('generated evidence fails closed on missing, changed-input, or unknown evidence', async () => {
+    const root = await mkTestDir('tao-green-tree-generated-invalid-')
+    try {
+      const entry = entryFor('tree-1', '/logs/verify')
+      await GreenTree.record(root, 'verify', entry)
+      Expect(
+        await GreenTree.find(root, keyFor('tree-1'), ['verify'], {
+          captureGenerated: async () => ({
+            outputs: { parser: { inputs: 'inputs-1', outputs: 'outputs-1' } },
+            version: 1,
+          }),
+          generatedOutputs: ['parser'],
+        }),
+      ).toBeUndefined()
+
+      await GreenTree.record(root, 'verify', entry, [], {
+        laneGenerated: {
+          outputs: { parser: { inputs: 'inputs-1', outputs: 'outputs-1' } },
+          version: 1,
+        },
+      })
+      Expect(
+        await GreenTree.find(root, keyFor('tree-1'), ['verify'], {
+          captureGenerated: async () => ({
+            outputs: { parser: { inputs: 'inputs-2', outputs: 'outputs-1' } },
+            version: 1,
+          }),
+          generatedOutputs: ['parser'],
+        }),
+      ).toBeUndefined()
+
+      await FS.writeJson(recordFile(root, 'lane-verify.json'), {
+        ...entry,
+        generated: {
+          outputs: { unknown: { inputs: 'inputs', outputs: 'outputs' } },
+          version: 1,
+        },
+        kind: 'lane',
+        name: 'verify',
+      })
+      Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
+
+      await FS.writeJson(recordFile(root, 'lane-verify.json'), {
+        ...entry,
+        generated: {
+          outputs: { parser: { inputs: 'inputs', outputs: 'outputs' } },
+          unexpected: true,
+          version: 1,
+        },
+        kind: 'lane',
+        name: 'verify',
+      })
+      Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('the tree hash follows the working tree, staged or not, and the untracked files in it', async () => {
     const root = await repository()
     try {

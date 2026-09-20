@@ -1,8 +1,10 @@
 # Exploration - Semantic agent proof of concept
 
 Retired on 2026-09-05: the on-device tab, its Swift helper, and the `/api/agent-poc/` commands were removed once
-the hosted agent chat (`Plan - Studio agent chat.md`) had absorbed the semantic snapshot, feature lowering, and
-verdict seams, which now live in `packages/studio/studio-src/agent-chat/`. The exploration below is history.
+the hosted agent chat (`Docs/Roadmap/Tao Studio AI/Plan - Studio agent chat.md`) had absorbed the semantic
+snapshot, feature lowering, and verdict seams, which now live in `packages/studio/studio-src/agent-chat/`. The
+exploration below is history; its decision ledger, open questions, and design rationale are carried forward in
+that document's "Absorbed from the retired on-device PoC" section.
 
 Status: **exploration and disposable proof of concept, not a production design**. This document records
 the working direction, provisional decisions, open questions, PoC definition, and suggested implementation

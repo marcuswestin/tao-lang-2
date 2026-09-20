@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { LandingLock, LandingLockBusyError, LandingLockUnreadableError } from '../dev-src/repository-tests/LandingLock'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 
@@ -57,6 +57,39 @@ Describe('landing lock', () => {
     Expect((await LandingLock.inspect(root))?.holder).toBe(TWO)
   })
 
+  Test('reports the holder as soon as another worktree has to wait', async () => {
+    const root = await mkTestDir('landing-lock-wait-report')
+    const first = await acquire(root, ONE, 'verify from one')
+    const reports: { holder: string; message: string; waitedMs: number }[] = []
+    const waiting = LandingLock.acquire({
+      label: 'verify from two',
+      onWaiting: (holder, waitedMs) =>
+        reports.push({
+          holder: holder.holder,
+          message: LandingLock.describeWaiting(holder, waitedMs),
+          waitedMs,
+        }),
+      registryRoot: root,
+      repositoryRoot: TWO,
+      waitTimeoutMs: 5_000,
+    })
+    try {
+      await until(() => reports.length > 0, {
+        description: 'the landing-lock waiter to identify the holder',
+        intervalMs: 5,
+        timeoutMs: 200,
+      })
+      Expect(reports[0]?.holder).toBe(ONE)
+      Expect(reports[0]?.waitedMs).toBeLessThan(1_000)
+      Expect(reports[0]?.message).toContain("WAIT  Landing lock held by 'verify from one' in /worktree/one")
+      Expect(reports[0]?.message).toContain('This command will start when the lock is released.')
+    } finally {
+      await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: first.token! })
+      const second = await waiting
+      await LandingLock.release({ registryRoot: root, repositoryRoot: TWO, token: second.token! })
+    }
+  })
+
   Test('releasing a lock nobody holds is a no-op, so a cleanup path is always safe to run', async () => {
     const root = await mkTestDir('landing-lock-release-free')
     Expect(await LandingLock.release({ registryRoot: root, repositoryRoot: ONE })).toBe('not-held')
@@ -74,13 +107,36 @@ Describe('landing lock', () => {
     },
   )
 
-  Test('force-release is the only way past a holder, and reports whose lock it ended', async () => {
+  Test('force-release with the matching holder releases, and reports whose lock it ended', async () => {
     const root = await mkTestDir('landing-lock-force')
-    await acquire(root, ONE, 'wedged landing')
-    const previous = await LandingLock.forceRelease(root)
+    const hold = await acquire(root, ONE, 'wedged landing')
+    const previous = await LandingLock.forceRelease(root, { holder: hold.record.pid })
     Expect(previous?.holder).toBe(ONE)
     Expect(previous?.label).toBe('wedged landing')
     Expect(await LandingLock.inspect(root)).toBeUndefined()
+  })
+
+  Test('force-release with a wrong holder refuses, naming the current holder', async () => {
+    const root = await mkTestDir('landing-lock-force-wrong-holder')
+    const hold = await acquire(root, ONE, 'wedged landing')
+    const error = await LandingLock.forceRelease(root, { holder: hold.record.pid + 1 })
+      .then(() => undefined, (caught: unknown) => caught)
+    Expect((error as Error).message).toContain('wedged landing')
+    Expect((error as Error).message).toContain(ONE)
+    Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
+  })
+
+  Test('force-release with no holder refuses while a readable record exists', async () => {
+    const root = await mkTestDir('landing-lock-force-no-holder')
+    await acquire(root, ONE, 'wedged landing')
+    const error = await LandingLock.forceRelease(root).then(() => undefined, (caught: unknown) => caught)
+    Expect((error as Error).message).toContain('wedged landing')
+    Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
+  })
+
+  Test('force-release on a free lock is a no-op', async () => {
+    const root = await mkTestDir('landing-lock-force-free')
+    Expect(await LandingLock.forceRelease(root)).toBeUndefined()
   })
 
   Test('a durable claim survives its acquiring process, because it is meant to outlive it', async () => {

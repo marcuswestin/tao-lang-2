@@ -1,12 +1,20 @@
 import { CLI, FS, Repo, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { branchWarnings, commitMessageWarnings } from '../dev-src/agent-hooks/CommitChecks'
+import { PIPE_WARNING, PREFIX_WARNING, SEARCH_WARNING, shellHabitWarnings } from '../dev-src/agent-hooks/ShellHabits'
+import { subagentBrief } from '../dev-src/agent-hooks/SubagentBrief'
 
 const SHELL_HABITS = Repo.resolvePath('packages/dev/dev-src/cli/agent-shell-habits.zsh')
 const SUBAGENT_BRIEF = Repo.resolvePath('packages/dev/dev-src/cli/agent-subagent-brief.zsh')
 const GIT_HOOKS = Repo.resolvePath('packages/dev/dev-src/cli/agent-git-hooks.zsh')
 
-/** The habits the shell hook reports, as the codes the fixture below prints for each. */
+/** The habits the shell hook reports, as the codes the table below names for each. */
 type Habit = 'PREFIX' | 'SEARCH' | 'PIPE'
+const HABIT_WARNING: Record<Habit, string> = {
+  PIPE: PIPE_WARNING,
+  PREFIX: PREFIX_WARNING,
+  SEARCH: SEARCH_WARNING,
+}
 
 /** Each case is one Bash command and every habit it should be warned about, in report order. */
 const SHELL_CASES: ReadonlyArray<readonly [string, readonly Habit[]]> = [
@@ -60,10 +68,12 @@ const COMMIT_MESSAGE_CASES: ReadonlyArray<readonly [string, string, number]> = [
 ]
 
 Describe('agent hooks', () => {
-  Test('reports the shell habits a command shows, and stays silent otherwise', async () => {
-    const codes = await shellHabitCodes(SHELL_CASES.map(([command]) => command))
+  Test('reports the shell habits a command shows, and stays silent otherwise', () => {
+    const reported = SHELL_CASES.map(([command]) => `${command}\t${shellHabitWarnings(command).join(',')}`)
 
-    Expect(codes).toEqual(SHELL_CASES.map(([command, habits]) => `${command}\t${habits.join(',')}`))
+    Expect(reported).toEqual(
+      SHELL_CASES.map(([command, habits]) => `${command}\t${habits.map(habit => HABIT_WARNING[habit]).join(',')}`),
+    )
   })
 
   Test('carries a warning to the model without touching the permission decision', async () => {
@@ -106,60 +116,34 @@ Describe('agent hooks', () => {
       hookSpecificOutput: { additionalContext: string; hookEventName: string }
     }
     Expect(output.hookSpecificOutput.hookEventName).toBe('SubagentStart')
-    const brief = output.hookSpecificOutput.additionalContext
+    Expect(output.hookSpecificOutput.additionalContext).toBe(subagentBrief())
     for (const rule of ['worktree root', '`rg`', 'stage, unstage', 'developer environment', 'no agent identity']) {
-      Expect(brief).toContain(rule)
+      Expect(output.hookSpecificOutput.additionalContext).toContain(rule)
     }
   })
 
-  Test('reports what a commit message will carry into history, without echoing it back', async () => {
-    const root = await mkTestDir('tao-commit-msg-')
-    try {
-      const reported: string[] = []
-      for (const [name, message] of COMMIT_MESSAGE_CASES) {
-        const path = FS.resolvePath('message.txt', root)
-        await FS.writeText(path, message)
-        const result = await sourceGitHooks(`tao_commit_message_warnings "$2"\nprint -r -- "\${#reply}"`, [path])
+  Test('reports what a commit message will carry into history, without echoing it back', () => {
+    const reported = COMMIT_MESSAGE_CASES.map(([name, message]) => `${name}\t${commitMessageWarnings(message).length}`)
 
-        Expect(result.exitCode).toBe(0)
-        reported.push(`${name}\t${result.stdout.trim()}`)
-        // The rule is named; the offending line is not repeated anywhere in the warning.
-        Expect(result.stdout).not.toContain('noreply@')
-      }
-
-      Expect(reported).toEqual(COMMIT_MESSAGE_CASES.map(([name, , expected]) => `${name}\t${expected}`))
-    } finally {
-      await FS.remove(root)
+    Expect(reported).toEqual(COMMIT_MESSAGE_CASES.map(([name, , expected]) => `${name}\t${expected}`))
+    // The rule is named; the offending line is not repeated anywhere in the warning.
+    for (const [, message] of COMMIT_MESSAGE_CASES) {
+      Expect(commitMessageWarnings(message).join('\n')).not.toContain('noreply@')
     }
   })
 
-  Test('reports a detached HEAD and a branch outside the two work prefixes', async () => {
-    const root = await mkTestDir('tao-branch-warn-')
-    try {
-      const repository = await initRepository(root, 'repo')
-      const warnings = async () => {
-        const result = await sourceGitHooks('tao_branch_warnings "$2"\nprint -rl -- "${reply[@]}"', [repository])
-        Expect(result.exitCode).toBe(0)
-        return result.stdout.trim()
-      }
-
-      Expect(await warnings()).toContain('is not a `feat/<name>` or `dev/<name>` branch')
-      await git(repository, ['switch', '--quiet', '-c', 'feat/hooks'])
-      Expect(await warnings()).toBe('')
-      await git(repository, ['switch', '--quiet', '-c', 'dev/spike'])
-      Expect(await warnings()).toBe('')
-      await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
-      Expect(await warnings()).toContain('detached HEAD')
-    } finally {
-      await FS.remove(root)
-    }
+  Test('reports a detached HEAD and a branch outside the two work prefixes', () => {
+    Expect(branchWarnings(undefined)[0]).toContain('detached HEAD')
+    Expect(branchWarnings('wip')[0]).toContain('is not a `feat/<name>` or `dev/<name>` branch')
+    Expect(branchWarnings('feat/hooks')).toEqual([])
+    Expect(branchWarnings('dev/spike')).toEqual([])
   })
 
   Test('warns through a real commit without ever failing one', async () => {
     const root = await mkTestDir('tao-commit-warn-')
     try {
       const repository = await initRepository(root, 'repo')
-      await addHookScript(repository)
+      await addHookSupport(repository)
       await installGitHooks(repository)
 
       const commit = await commitChange(
@@ -185,7 +169,7 @@ Describe('agent hooks', () => {
     try {
       const repository = await initRepository(root, 'repo')
       const before = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
-      await addHookScript(repository)
+      await addHookSupport(repository)
       await installGitHooks(repository)
 
       const older = FS.resolvePath('older', root)
@@ -206,7 +190,7 @@ Describe('agent hooks', () => {
     const root = await mkTestDir('tao-plumbing-')
     try {
       const repository = await initRepository(root, 'repo')
-      await addHookScript(repository)
+      await addHookSupport(repository)
       await installGitHooks(repository)
       await FS.writeText(FS.resolvePath('f.txt', repository), 'two')
       await git(repository, ['add', '-A'])
@@ -237,6 +221,7 @@ Describe('agent hooks', () => {
     const root = await mkTestDir('tao-hook-install-')
     try {
       const repository = await initRepository(root, 'repo')
+      await addHookSupport(repository)
       const hooksDir = FS.resolvePath('.git/hooks', repository)
 
       Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
@@ -284,32 +269,6 @@ Describe('agent hooks', () => {
   })
 })
 
-/** shellHabitCodes runs every case in one shell, so the table costs one process rather than one each. */
-async function shellHabitCodes(commands: readonly string[]): Promise<string[]> {
-  const script = [
-    'source "$1"',
-    'for command in "${@:2}"; do',
-    '  tao_shell_habit_warnings "$command"',
-    '  codes=()',
-    '  for warning in "${reply[@]}"; do',
-    // Quoted comparisons, not `case` patterns: the warning texts hold `*`, `[`, and backticks.
-    '    if [[ "$warning" == "$TAO_PREFIX_WARNING" ]]; then codes+=(PREFIX)',
-    '    elif [[ "$warning" == "$TAO_SEARCH_WARNING" ]]; then codes+=(SEARCH)',
-    '    elif [[ "$warning" == "$TAO_PIPE_WARNING" ]]; then codes+=(PIPE)',
-    '    else codes+=(UNKNOWN)',
-    '    fi',
-    '  done',
-    '  printf "%s\\t%s\\n" "$command" "${(j:,:)codes}"',
-    'done',
-  ].join('\n')
-  const result = await CLI.run('zsh', { args: ['-c', script, 'habits', SHELL_HABITS, ...commands] })
-
-  Expect(result.stderr).toBe('')
-  Expect(result.exitCode).toBe(0)
-  // Not `trimEnd`: a case with no warnings ends its line in the separator, which trimming eats.
-  return result.stdout.split('\n').slice(0, -1)
-}
-
 /** runHook feeds a harness payload to a hook script the way a harness does. */
 async function runHook(script: string, payload: string): Promise<CLI.CommandResult> {
   return await CLI.run(script, { stdin: payload })
@@ -325,11 +284,6 @@ function preToolUsePayload(command: string): string {
   })
 }
 
-/** sourceGitHooks calls one of the hook script's functions, which is where its logic lives. */
-async function sourceGitHooks(script: string, args: readonly string[]): Promise<CLI.CommandResult> {
-  return await CLI.run('zsh', { args: ['-c', `source "$1"\n${script}`, 'git-hooks', GIT_HOOKS, ...args] })
-}
-
 async function initRepository(root: string, name: string): Promise<string> {
   const repository = FS.resolvePath(name, root)
   await FS.writeText(FS.resolvePath('f.txt', repository), 'one')
@@ -339,11 +293,28 @@ async function initRepository(root: string, name: string): Promise<string> {
   return repository
 }
 
-/** addHookScript commits the implementation the installed entry scripts look for. */
-async function addHookScript(repository: string): Promise<void> {
-  const path = FS.resolvePath('packages/dev/dev-src/cli/agent-git-hooks.zsh', repository)
-  await FS.writeText(path, await FS.readText(GIT_HOOKS))
-  await FS.chmod(path, 0o755)
+/**
+ * addHookSupport commits the shim and its TypeScript entry chain into a scratch repository, so a
+ * real `git commit` there exercises the same code this worktree runs. The shared package it
+ * imports carries no third-party dependency, so copying its source is enough; no install needed.
+ */
+async function addHookSupport(repository: string): Promise<void> {
+  const files = [
+    'packages/dev/dev-src/cli/agent-git-hooks.zsh',
+    'packages/dev/dev-src/agent-hooks/GitHooksEntry.ts',
+    'packages/dev/dev-src/agent-hooks/CommitChecks.ts',
+    'packages/dev/dev-src/agent-hooks/GitHooksInstaller.ts',
+    'packages/dev/tsconfig.json',
+    'packages/tsconfig.base.json',
+  ]
+  for (const file of files) {
+    await FS.writeText(FS.resolvePath(file, repository), await FS.readText(Repo.resolvePath(file)))
+  }
+  await FS.chmod(FS.resolvePath('packages/dev/dev-src/cli/agent-git-hooks.zsh', repository), 0o755)
+  await FS.copyDirectory(
+    Repo.resolvePath('packages/shared/shared-src'),
+    FS.resolvePath('packages/shared/shared-src', repository),
+  )
   await git(repository, ['add', '-A'])
   await commitStaged(repository, 'add the hook script')
 }

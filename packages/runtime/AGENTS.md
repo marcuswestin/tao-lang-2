@@ -8,8 +8,7 @@
 - Keep compiler handlers AST-node-oriented and recurse through `Compile.<Node>`; compile lists with
   the existing generator helpers at the use site.
 - Preserve source order unless validated semantic lowering requires runtime declaration order.
-- Keep feature naming aligned across the parser, validator, formatter, compiler, and runtime slices
-  of one change.
+  `packages/AGENTS.md` owns cross-slice feature naming.
 - Test through Tao AST, diagnostics, compilation, or runtime behavior rather than generated text
   substrings.
 - This package imports nothing from `@shared`, so `TR-errors.ts` and `TR-assert.ts` mirror the
