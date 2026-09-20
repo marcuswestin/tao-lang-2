@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto'
 import {
   type Dirent,
   existsSync as nodeExistsSync,
@@ -9,8 +8,9 @@ import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
 import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Errors'
+import * as Json from './core/Json'
 import { sleep } from './core/Time'
-import { processIsAlive, runtimeProcess, spawnSync } from './Platform'
+import { processIsAlive, randomUUID, runtimeProcess, sha256Hex, spawnSync } from './Platform'
 
 /** WalkOptions declares filters for recursive file walking. */
 export type WalkOptions = {
@@ -59,26 +59,33 @@ export const relativePath = (fromPath: string, toPath: string) => slashPath(node
 /** pathIsWithin returns whether `path` is `directoryPath` or a path inside it. */
 export function pathIsWithin(path: string, directoryPath: string): boolean {
   const relative = relativePath(directoryPath, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
+  return relative === '' || (!nodePath.isAbsolute(relative) && !relative.startsWith('../') && relative !== '..')
 }
 /**
- * displayPath returns the shortest readable spelling of a path: relative to the current working
- * directory, or absolute with the home directory written as `~`. A path outside the cwd otherwise
- * renders as a run of `../` segments longer than the location it names, which no reader can follow.
+ * displayPath returns a readable spelling of a path: relative to the current working directory,
+ * or absolute with the home directory written as `~`. A path outside the cwd never renders as a
+ * run of `../` segments, which can obscure the location a diagnostic names.
  */
 export function displayPath(inputPath: string): string {
-  const relative = relativePath(resolvePath('.'), inputPath)
+  return displayPathFrom(resolvePath(inputPath), resolvePath('.'), homeDir())
+}
+
+/** displayPathFrom renders an absolute path against explicit cwd and home locations. */
+export function displayPathFrom(absolutePath: string, cwd: string, home: string): string {
+  const relative = relativePath(cwd, absolutePath)
   if (relative === '') {
     return '.'
   }
-  const absolute = homeShortenedPath(resolvePath(inputPath))
-  return absolute.length < relative.length ? absolute : relative
+  return pathIsWithin(absolutePath, cwd) ? relative : homeShortenedPath(absolutePath, home)
 }
 
 /** homeShortenedPath writes an absolute path under the home directory as `~/…`. */
-function homeShortenedPath(absolutePath: string): string {
-  const fromHome = relativePath(homeDir(), absolutePath)
-  return fromHome !== '' && !fromHome.startsWith('..') ? `~/${fromHome}` : slashPath(absolutePath)
+function homeShortenedPath(absolutePath: string, home: string): string {
+  const fromHome = relativePath(home, absolutePath)
+  if (fromHome === '') {
+    return '~'
+  }
+  return pathIsWithin(absolutePath, home) ? `~/${fromHome}` : slashPath(absolutePath)
 }
 /** slashPath returns a path with host separators normalized to slashes. */
 export const slashPath = (inputPath: string) =>
@@ -101,14 +108,21 @@ export async function mkTmpDir(prefix: string): Promise<string> {
   return nodeFs.mkdtemp(nodePath.isAbsolute(prefix) ? prefix : nodePath.join(nodeOs.tmpdir(), prefix))
 }
 
+/** catching runs `check`, returning `fallback` instead of throwing when it fails. */
+async function catching<Value>(check: () => Promise<Value>, fallback: Value): Promise<Value> {
+  try {
+    return await check()
+  } catch {
+    return fallback
+  }
+}
+
 /** exists checks whether a path can be accessed. */
 export async function exists(inputPath: string): Promise<boolean> {
-  try {
+  return catching(async () => {
     await nodeFs.access(inputPath)
     return true
-  } catch {
-    return false
-  }
+  }, false)
 }
 
 /** existsSync checks whether a path exists without leaving sync-only callers to import node:fs. */
@@ -118,29 +132,17 @@ export function existsSync(inputPath: string): boolean {
 
 /** isFile checks whether a path exists and is a file. */
 export async function isFile(inputPath: string): Promise<boolean> {
-  try {
-    return (await nodeFs.stat(inputPath)).isFile()
-  } catch {
-    return false
-  }
+  return catching(async () => (await nodeFs.stat(inputPath)).isFile(), false)
 }
 
 /** isDirectory checks whether a path exists and is a directory. */
 export async function isDirectory(inputPath: string): Promise<boolean> {
-  try {
-    return (await nodeFs.stat(inputPath)).isDirectory()
-  } catch {
-    return false
-  }
+  return catching(async () => (await nodeFs.stat(inputPath)).isDirectory(), false)
 }
 
 /** isSymbolicLink reports on the path entry itself rather than following its target. */
 export async function isSymbolicLink(inputPath: string): Promise<boolean> {
-  try {
-    return (await nodeFs.lstat(inputPath)).isSymbolicLink()
-  } catch {
-    return false
-  }
+  return catching(async () => (await nodeFs.lstat(inputPath)).isSymbolicLink(), false)
 }
 
 /** realPath resolves symlinks and filesystem indirections for an existing path. */
@@ -278,9 +280,23 @@ type SynchronizeDirectoryFilesOptions = {
   beforeMove?: (fromPath: string, toPath: string) => Promise<void>
   beforeRemove?: (path: string) => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
-  /** boundaryPath is the trusted ancestor from which source and destination symlinks are rejected. */
+  /** boundaryPath is the trusted ancestor for a single synchronization's source and destination. */
   boundaryPath?: string
   inspectProcessIdentity?: (pid: number) => Promise<FileMutationProcessIdentity>
+}
+
+type DirectoryFileSynchronization = {
+  fromPath: string
+  toPath: string
+}
+
+export type SynchronizeDirectoryFileSetsOptions = Omit<SynchronizeDirectoryFilesOptions, 'boundaryPath'> & {
+  /** boundaryPath is the trusted ancestor for every persistent destination and the shared lock. */
+  boundaryPath?: string
+  /** lockPath is the target whose mutation lock serializes the complete multi-root publication. */
+  lockPath?: string
+  /** sourceBoundaryPath is the trusted ancestor for staged sources outside boundaryPath. */
+  sourceBoundaryPath?: string
 }
 
 export async function synchronizeDirectoryFiles(
@@ -289,11 +305,43 @@ export async function synchronizeDirectoryFiles(
   options: Partial<SynchronizeDirectoryFilesOptions> = {},
 ): Promise<void> {
   const boundaryPath = resolvePath(options.boundaryPath ?? commonPathAncestor(fromPath, toPath))
+  await synchronizeDirectoryFileSets([{ fromPath, toPath }], {
+    ...options,
+    boundaryPath,
+    sourceBoundaryPath: boundaryPath,
+  })
+}
+
+/** synchronizeDirectoryFileSets publishes disjoint directory roots in one rollback-safe transaction. */
+export async function synchronizeDirectoryFileSets(
+  fileSets: readonly DirectoryFileSynchronization[],
+  options: Partial<SynchronizeDirectoryFileSetsOptions> = {},
+): Promise<void> {
+  if (fileSets.length === 0) {
+    throwUnexpected('At least one directory file set is required for synchronization.')
+  }
+  const resolvedFileSets = fileSets.map(fileSet => ({
+    fromPath: resolvePath(fileSet.fromPath),
+    toPath: resolvePath(fileSet.toPath),
+  }))
+  assertDisjointSynchronizationTargets(resolvedFileSets)
+  const boundaryPath = resolvePath(
+    options.boundaryPath ?? commonPathAncestorOf(resolvedFileSets.map(fileSet => fileSet.toPath)),
+  )
+  const sourceBoundaryPath = resolvePath(
+    options.sourceBoundaryPath ?? commonPathAncestorOf(resolvedFileSets.map(fileSet => fileSet.fromPath)),
+  )
+  const lockPath = resolvePath(options.lockPath ?? resolvedFileSets[0]!.toPath)
   await withFileMutationLock(
-    toPath,
+    lockPath,
     boundaryPath,
     async () => {
-      await synchronizeDirectoryFilesLocked(fromPath, toPath, boundaryPath, options)
+      await synchronizeDirectoryFileSetsLocked(
+        resolvedFileSets,
+        sourceBoundaryPath,
+        boundaryPath,
+        options,
+      )
     },
     {
       beforeClaimPublish: options.beforeClaimPublish,
@@ -304,56 +352,93 @@ export async function synchronizeDirectoryFiles(
   )
 }
 
-async function synchronizeDirectoryFilesLocked(
-  fromPath: string,
-  toPath: string,
+function assertDisjointSynchronizationTargets(fileSets: readonly DirectoryFileSynchronization[]): void {
+  for (const [index, fileSet] of fileSets.entries()) {
+    for (const other of fileSets.slice(index + 1)) {
+      if (pathIsWithin(fileSet.toPath, other.toPath) || pathIsWithin(other.toPath, fileSet.toPath)) {
+        throwUnexpected(`Directory synchronization targets overlap: ${fileSet.toPath} and ${other.toPath}.`)
+      }
+    }
+  }
+}
+
+type SynchronizedFile = {
+  fileSetIndex: number
+  label: string
+  path: string
+  relative: string
+  root: string
+}
+
+async function synchronizeDirectoryFileSetsLocked(
+  fileSets: readonly DirectoryFileSynchronization[],
+  sourceBoundaryPath: string,
   boundaryPath: string,
-  options: Partial<SynchronizeDirectoryFilesOptions>,
+  options: Partial<SynchronizeDirectoryFileSetsOptions>,
 ): Promise<void> {
-  await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
-  await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
-  await removeOrphanedSynchronizationFiles(toPath, boundaryPath, options)
-  const sourceFiles = await walkedFiles(fromPath)
-  const targetFiles = await isDirectory(toPath) ? await walkedFiles(toPath) : []
-  const sourceByRelativePath = new Map(sourceFiles.map(path => [relativePath(fromPath, path), path]))
-  const targetByRelativePath = new Map(targetFiles.map(path => [relativePath(toPath, path), path]))
+  for (const fileSet of fileSets) {
+    await assertTreeHasNoSymbolicLinks(sourceBoundaryPath, fileSet.fromPath, 'source')
+    await assertTreeHasNoSymbolicLinks(boundaryPath, fileSet.toPath, 'destination')
+    await removeOrphanedSynchronizationFiles(fileSet.toPath, boundaryPath, options)
+  }
+  const sourceFiles = await synchronizedFiles(fileSets, 'fromPath')
+  const targetFiles = await synchronizedFiles(fileSets, 'toPath')
+  const sourceByLabel = new Map(sourceFiles.map(file => [file.label, file]))
   const backupRoot = await mkTmpDir('tao-directory-sync-backup-')
-  const stagedFiles: Array<{ path: string; relative: string; targetPath: string }> = []
+  const backupByTargetPath = new Map<string, string>()
+  const stagedFiles: Array<{
+    label: string
+    path: string
+    publish: boolean
+    targetPath: string
+    targetRoot: string
+  }> = []
   const temporaryFiles: string[] = []
   const committedChanges: FileSynchronizationChange[] = []
   let commitStarted = false
   let primaryError: unknown
   try {
-    for (const [relative, targetPath] of targetByRelativePath) {
-      await copyFile(targetPath, resolvePath(relative, backupRoot))
+    for (const target of targetFiles) {
+      const backupPath = resolvePath(target.label, backupRoot)
+      await copyFile(target.path, backupPath)
+      backupByTargetPath.set(target.path, backupPath)
     }
     const targetSnapshot = await filesIdentity(
-      [...targetByRelativePath].map(([relative]) => [relative, resolvePath(relative, backupRoot)]),
+      targetFiles.map(target => [target.label, backupByTargetPath.get(target.path)!]),
     )
-    for (const [index, [relative, sourcePath]] of [...sourceByRelativePath].entries()) {
-      const targetPath = resolvePath(relative, toPath)
-      const stagedPath = `${toPath}.${randomFileSuffix()}.${index}.tmp`
-      await copyFile(sourcePath, stagedPath)
-      stagedFiles.push({ path: stagedPath, relative, targetPath })
+    for (const [index, source] of sourceFiles.entries()) {
+      const fileSet = fileSets[source.fileSetIndex]!
+      const targetPath = resolvePath(source.relative, fileSet.toPath)
+      const stagedPath = `${fileSet.toPath}.${randomFileSuffix()}.${index}.tmp`
+      await copyFile(source.path, stagedPath)
+      const backupPath = backupByTargetPath.get(targetPath)
+      const publish = backupPath === undefined
+        || await fileEntryIdentity(stagedPath) !== await fileEntryIdentity(backupPath)
+      stagedFiles.push({ label: source.label, path: stagedPath, publish, targetPath, targetRoot: fileSet.toPath })
       temporaryFiles.push(stagedPath)
     }
-    const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.relative, staged.path]))
+    const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.label, staged.path]))
     await options.beforeCommit?.()
 
     // Recheck both trees immediately before the first worktree mutation. The content identities
     // make a concurrent non-cooperating writer fail closed instead of being overwritten or restored.
-    await assertTreeHasNoSymbolicLinks(boundaryPath, fromPath, 'source')
-    await assertTreeHasNoSymbolicLinks(boundaryPath, toPath, 'destination')
-    if (await treeFilesIdentity(fromPath) !== sourceSnapshot) {
-      throwUnexpected(`Source files changed while synchronizing ${fromPath}.`)
+    for (const fileSet of fileSets) {
+      await assertTreeHasNoSymbolicLinks(sourceBoundaryPath, fileSet.fromPath, 'source')
+      await assertTreeHasNoSymbolicLinks(boundaryPath, fileSet.toPath, 'destination')
     }
-    if (await treeFilesIdentity(toPath) !== targetSnapshot) {
-      throwUnexpected(`Destination files changed while synchronizing ${toPath}.`)
+    if (await synchronizedFilesIdentity(fileSets, 'fromPath') !== sourceSnapshot) {
+      throwUnexpected('Source files changed while synchronizing directory file sets.')
+    }
+    if (await synchronizedFilesIdentity(fileSets, 'toPath') !== targetSnapshot) {
+      throwUnexpected('Destination files changed while synchronizing directory file sets.')
     }
 
     commitStarted = true
     for (const staged of stagedFiles) {
-      const change = await fileSynchronizationChange(staged.targetPath, targetByRelativePath, toPath, backupRoot)
+      if (!staged.publish) {
+        continue
+      }
+      const change = fileSynchronizationChange(staged.targetPath, staged.targetRoot, backupByTargetPath)
       const expectedIdentity = await fileEntryIdentity(staged.path)
       try {
         await moveFileWithinBoundary(staged.path, staged.targetPath, boundaryPath, options)
@@ -365,13 +450,13 @@ async function synchronizeDirectoryFilesLocked(
       }
       committedChanges.push({ ...change, expectedIdentity })
     }
-    for (const [relative, targetPath] of targetByRelativePath) {
-      if (!sourceByRelativePath.has(relative)) {
-        const change = await fileSynchronizationChange(targetPath, targetByRelativePath, toPath, backupRoot)
+    for (const target of targetFiles) {
+      if (!sourceByLabel.has(target.label)) {
+        const change = fileSynchronizationChange(target.path, target.root, backupByTargetPath)
         try {
-          await removeFileWithinBoundary(targetPath, boundaryPath, options)
+          await removeFileWithinBoundary(target.path, boundaryPath, options)
         } catch (error) {
-          if (!await exists(targetPath)) {
+          if (!await exists(target.path)) {
             committedChanges.push({ ...change, expectedIdentity: 'missing' })
           }
           throw error
@@ -385,7 +470,6 @@ async function synchronizeDirectoryFilesLocked(
       const rollbackIssues = await rollbackDirectorySynchronization(
         committedChanges,
         temporaryFiles,
-        toPath,
         boundaryPath,
         options,
       )
@@ -395,23 +479,13 @@ async function synchronizeDirectoryFilesLocked(
     }
   }
   const cleanupIssues: unknown[] = []
-  try {
+  await collectingFailures(cleanupIssues, async () => {
     await options.beforeCleanup?.()
-  } catch (error) {
-    cleanupIssues.push(error)
-  }
+  })
   for (const path of temporaryFiles) {
-    try {
-      await remove(path)
-    } catch (error) {
-      cleanupIssues.push(error)
-    }
+    await collectingFailures(cleanupIssues, () => remove(path))
   }
-  try {
-    await remove(backupRoot)
-  } catch (error) {
-    cleanupIssues.push(error)
-  }
+  await collectingFailures(cleanupIssues, () => remove(backupRoot))
   if (primaryError !== undefined) {
     if (cleanupIssues.length > 0) {
       throw combinedFailure(primaryError, 'stagingCleanupIssues', cleanupIssues.map(messageOf))
@@ -423,31 +497,56 @@ async function synchronizeDirectoryFilesLocked(
   }
 }
 
+async function synchronizedFiles(
+  fileSets: readonly DirectoryFileSynchronization[],
+  side: 'fromPath' | 'toPath',
+): Promise<SynchronizedFile[]> {
+  const files: SynchronizedFile[] = []
+  for (const [index, fileSet] of fileSets.entries()) {
+    const root = fileSet[side]
+    if (!await isDirectory(root)) {
+      continue
+    }
+    for (const path of await walkedFiles(root)) {
+      const relative = relativePath(root, path)
+      files.push({ fileSetIndex: index, label: `${index}/${relative}`, path, relative, root })
+    }
+  }
+  return files
+}
+
+async function synchronizedFilesIdentity(
+  fileSets: readonly DirectoryFileSynchronization[],
+  side: 'fromPath' | 'toPath',
+): Promise<string> {
+  return filesIdentity((await synchronizedFiles(fileSets, side)).map(file => [file.label, file.path]))
+}
+
 type FileSynchronizationChange = {
   backupPath?: string
   expectedIdentity: string
   path: string
+  targetRoot: string
 }
 
-async function fileSynchronizationChange(
+function fileSynchronizationChange(
   path: string,
-  targetByRelativePath: ReadonlyMap<string, string>,
-  toPath: string,
-  backupRoot: string,
-): Promise<Omit<FileSynchronizationChange, 'expectedIdentity'>> {
-  const relative = relativePath(toPath, path)
+  targetRoot: string,
+  backupByTargetPath: ReadonlyMap<string, string>,
+): Omit<FileSynchronizationChange, 'expectedIdentity'> {
+  const backupPath = backupByTargetPath.get(path)
   return {
-    ...(targetByRelativePath.has(relative) ? { backupPath: resolvePath(relative, backupRoot) } : {}),
+    ...(backupPath === undefined ? {} : { backupPath }),
     path,
+    targetRoot,
   }
 }
 
 async function rollbackDirectorySynchronization(
   changes: readonly FileSynchronizationChange[],
   temporaryFiles: string[],
-  toPath: string,
   boundaryPath: string,
-  options: Partial<SynchronizeDirectoryFilesOptions>,
+  options: Partial<SynchronizeDirectoryFileSetsOptions>,
 ): Promise<unknown[]> {
   const issues: unknown[] = []
   for (const [index, change] of [...changes].reverse().entries()) {
@@ -465,7 +564,7 @@ async function rollbackDirectorySynchronization(
         }
         continue
       }
-      const restorePath = `${toPath}.${randomFileSuffix()}.${index}.restore`
+      const restorePath = `${change.targetRoot}.${randomFileSuffix()}.${index}.restore`
       temporaryFiles.push(restorePath)
       await copyFile(change.backupPath, restorePath)
       await moveFileWithinBoundary(restorePath, change.path, boundaryPath, options)
@@ -488,7 +587,7 @@ async function fileEntryIdentity(path: string): Promise<string> {
     if (!stats.isFile()) {
       return 'unsupported'
     }
-    return `file:${createHash('sha256').update(await readFile(path)).digest('hex')}`
+    return `file:${sha256Hex(await readFile(path))}`
   } catch (error) {
     if (fileErrorCode(error) === 'ENOENT') {
       return 'missing'
@@ -502,6 +601,15 @@ function combinedFailure(primary: unknown, detailName: string, secondary: unknow
     cause: primary,
     details: { [detailName]: secondary },
   })
+}
+
+/** collectingFailures runs `action`, pushing a thrown error onto `issues` instead of propagating it. */
+async function collectingFailures(issues: unknown[], action: () => Promise<void>): Promise<void> {
+  try {
+    await action()
+  } catch (error) {
+    issues.push(error)
+  }
 }
 
 async function assertTreeHasNoSymbolicLinks(boundaryPath: string, root: string, role: string): Promise<void> {
@@ -617,11 +725,19 @@ function commonPathAncestor(leftPath: string, rightPath: string): string {
   return candidate
 }
 
-async function treeFilesIdentity(root: string): Promise<string> {
-  if (!await isDirectory(root)) {
-    return contentIdentity([])
+function commonPathAncestorOf(paths: readonly string[]): string {
+  let ancestor = dirname(resolvePath(paths[0]!))
+  for (const path of paths.slice(1)) {
+    const resolved = resolvePath(path)
+    while (!pathIsWithin(resolved, ancestor)) {
+      const parent = dirname(ancestor)
+      if (parent === ancestor) {
+        return ancestor
+      }
+      ancestor = parent
+    }
   }
-  return filesIdentity((await walkedFiles(root)).map(path => [relativePath(root, path), path]))
+  return ancestor
 }
 
 /**
@@ -632,14 +748,14 @@ async function treeFilesIdentity(root: string): Promise<string> {
 export async function filesIdentity(entries: readonly (readonly [string, string])[]): Promise<string> {
   const identities: string[] = []
   for (const [relative, path] of [...entries].sort(([left], [right]) => left.localeCompare(right))) {
-    identities.push(`${relative}\n${createHash('sha256').update(await readFile(path)).digest('hex')}`)
+    identities.push(`${relative}\n${sha256Hex(await readFile(path))}`)
   }
   return contentIdentity(identities)
 }
 
 /** contentIdentity is the content identity of ordered parts; order is part of what it identifies. */
 export function contentIdentity(identities: readonly string[]): string {
-  return createHash('sha256').update(identities.join('\n')).digest('hex')
+  return sha256Hex(identities.join('\n'))
 }
 
 const FILE_MUTATION_LOCK_POLL_MS = 10
@@ -732,16 +848,10 @@ async function withMutationLockFile<Value>(
     primaryError = error
   }
   const releaseErrors: unknown[] = []
-  try {
+  await collectingFailures(releaseErrors, async () => {
     await options.beforeRelease?.()
-  } catch (error) {
-    releaseErrors.push(error)
-  }
-  try {
-    await releaseFileMutationLock(lockPath, acquired!)
-  } catch (error) {
-    releaseErrors.push(error)
-  }
+  })
+  await collectingFailures(releaseErrors, () => releaseFileMutationLock(lockPath, acquired!))
   if (primaryError !== undefined) {
     const cleanupErrors = [
       ...(claimCleanupError === undefined
@@ -791,12 +901,7 @@ async function publishFileMutationClaim(
       cleanupError = error
     }
   }
-  if (primaryError !== undefined) {
-    if (cleanupError !== undefined) {
-      throwCombinedFailure(primaryError, 'claimOwnerCleanupError', cleanupError)
-    }
-    throw primaryError
-  }
+  throwIfPrimaryFailed(primaryError, cleanupError, 'claimOwnerCleanupError')
   // The claim itself is valid and complete. Return an owner-link cleanup failure so the caller can
   // release the lock first and then surface it without stranding a live claim.
   return cleanupError
@@ -809,21 +914,18 @@ async function readFileMutationLockSnapshot(path: string): Promise<FileMutationL
     const stats = await handle.stat()
     const value: unknown = JSON.parse(await handle.readFile('utf8'))
     if (
-      typeof value === 'object'
-      && value !== null
-      && 'pid' in value
-      && Number.isInteger(value.pid)
-      && (value.pid as number) > 0
-      && (!('processStartedAt' in value) || typeof value.processStartedAt === 'string')
-      && 'token' in value
-      && typeof value.token === 'string'
+      Json.isRecord(value)
+      && Number.isInteger(value['pid'])
+      && (value['pid'] as number) > 0
+      && (value['processStartedAt'] === undefined || typeof value['processStartedAt'] === 'string')
+      && typeof value['token'] === 'string'
     ) {
       return {
         device: String(stats.dev),
         inode: String(stats.ino),
-        pid: value.pid as number,
-        ...('processStartedAt' in value ? { processStartedAt: value.processStartedAt as string } : {}),
-        token: value.token,
+        pid: value['pid'] as number,
+        ...(typeof value['processStartedAt'] === 'string' ? { processStartedAt: value['processStartedAt'] } : {}),
+        token: value['token'],
       }
     }
   } catch {
@@ -904,14 +1006,7 @@ async function reclaimFileMutationLock(lockPath: string, observed: FileMutationL
       || !sameLockIdentity(current, observed)
     )
     if (ownsObservedLock) {
-      const tombstone = `${lockPath}.stale-${observed.token}-${randomUUID()}`
-      await nodeFs.rename(lockPath, tombstone)
-      const moved = await readFileMutationLockSnapshot(tombstone)
-      if (moved === undefined || !sameLockIdentity(moved, observed)) {
-        await restoreDisplacedFileMutationClaim(tombstone, lockPath)
-        throwUnexpected(`The file mutation lock changed while ${lockPath} was being reclaimed.`)
-      }
-      await nodeFs.unlink(tombstone)
+      await nodeFs.unlink(await renameLockToTombstone(lockPath, observed, 'stale', 'reclaimed'))
     }
   } catch (error) {
     primaryError = error
@@ -925,12 +1020,7 @@ async function reclaimFileMutationLock(lockPath: string, observed: FileMutationL
   } catch (error) {
     cleanupError = error
   }
-  if (primaryError !== undefined) {
-    if (cleanupError !== undefined) {
-      throwCombinedFailure(primaryError, 'reclaimLinkCleanupError', cleanupError)
-    }
-    throw primaryError
-  }
+  throwIfPrimaryFailed(primaryError, cleanupError, 'reclaimLinkCleanupError')
   if (cleanupError !== undefined) {
     throw cleanupError
   }
@@ -941,14 +1031,27 @@ async function releaseFileMutationLock(lockPath: string, acquired: FileMutationL
   if (current === undefined || !sameLockIdentity(current, acquired)) {
     throwUnexpected(`The file mutation lock changed before ${lockPath} could be released.`)
   }
-  const tombstone = `${lockPath}.release-${acquired.token}-${randomUUID()}`
+  await nodeFs.unlink(await renameLockToTombstone(lockPath, acquired, 'release', 'released'))
+}
+
+/**
+ * renameLockToTombstone claims a lock file for disposal by renaming it to a private path, verifying
+ * the rename kept its identity, and returns the tombstone for the caller to remove.
+ */
+async function renameLockToTombstone(
+  lockPath: string,
+  expected: FileMutationLockSnapshot,
+  tombstonePrefix: string,
+  verb: string,
+): Promise<string> {
+  const tombstone = `${lockPath}.${tombstonePrefix}-${expected.token}-${randomUUID()}`
   await nodeFs.rename(lockPath, tombstone)
   const moved = await readFileMutationLockSnapshot(tombstone)
-  if (moved === undefined || !sameLockIdentity(moved, acquired)) {
+  if (moved === undefined || !sameLockIdentity(moved, expected)) {
     await restoreDisplacedFileMutationClaim(tombstone, lockPath)
-    throwUnexpected(`The file mutation lock changed while ${lockPath} was being released.`)
+    throwUnexpected(`The file mutation lock changed while ${lockPath} was being ${verb}.`)
   }
-  await nodeFs.unlink(tombstone)
+  return tombstone
 }
 
 async function restoreDisplacedFileMutationClaim(fromPath: string, lockPath: string): Promise<void> {
@@ -972,28 +1075,28 @@ function sameLockIdentity(left: FileMutationLockSnapshot, right: FileMutationLoc
  * reclaimer that has just claimed the lock is not mistaken for an abandoned one.
  */
 async function reclaimLinkAgeMs(path: string): Promise<number> {
-  try {
-    return Math.max(0, Date.now() - (await nodeFs.stat(path)).ctimeMs)
-  } catch {
-    return Number.POSITIVE_INFINITY
-  }
+  return catching(async () => Math.max(0, Date.now() - (await nodeFs.stat(path)).ctimeMs), Number.POSITIVE_INFINITY)
 }
 
 function fileErrorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) {
+  if (!Json.isRecord(error)) {
     return undefined
   }
-  if ('code' in error && (error as { code?: unknown }).code !== undefined) {
-    return String((error as { code?: unknown }).code)
-  }
-  return 'cause' in error ? fileErrorCode((error as { cause?: unknown }).cause) : undefined
+  return error['code'] !== undefined ? String(error['code']) : fileErrorCode(error['cause'])
 }
 
 function throwCombinedFailure(primary: unknown, detailName: string, secondary: unknown): never {
-  throwUnexpected(messageOf(primary), {
-    cause: primary,
-    details: { [detailName]: secondary instanceof Error ? secondary.message : secondary },
-  })
+  throw combinedFailure(primary, detailName, secondary instanceof Error ? secondary.message : secondary)
+}
+
+/** throwIfPrimaryFailed rethrows a primary failure, folding in a cleanup failure alongside it. */
+function throwIfPrimaryFailed(primaryError: unknown, cleanupError: unknown, detailName: string): void {
+  if (primaryError !== undefined) {
+    if (cleanupError !== undefined) {
+      throwCombinedFailure(primaryError, detailName, cleanupError)
+    }
+    throw primaryError
+  }
 }
 
 function randomFileSuffix(): string {
@@ -1146,11 +1249,7 @@ async function isFollowedSymlinkDirectory(
   if (options.followSymlinks !== true || !entry.isSymbolicLink()) {
     return false
   }
-  try {
-    return (await nodeFs.stat(entryPath)).isDirectory()
-  } catch {
-    return false
-  }
+  return catching(async () => (await nodeFs.stat(entryPath)).isDirectory(), false)
 }
 
 function shouldWalkDirectory(name: string, options: WalkOptions): boolean {

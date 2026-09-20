@@ -17,9 +17,9 @@ help:
 # `just setup` is what every harness runs through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-# Setup dependencies and generated agent adapters
+# Setup dependencies, current parser output, generated agent adapters, and the warn-only Git hooks
 [group('Setup')]
-setup: deps _agent-config
+setup: deps _parser-gen _agent-config _git-hooks
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -112,6 +112,11 @@ studio-canary project="Apps/HNReader" app="HNReader":
 [group('Host proofs')]
 ship-bundle-proof:
     bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
+
+# Compile every repository native module for the iOS simulator; intentionally outside routine verification
+[group('Host proofs')]
+native-module-check:
+    ./dev native-module-check
 
 # Run the native Studio checks that require a person; never part of test or verify
 [group('Host proofs')]
@@ -434,6 +439,9 @@ _doctor-json:
 
 _agent-config:
     ./dev agent-config
+
+_git-hooks:
+    ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
     bun run packages/dev/dev-src/doctor/DependencyHealth.ts

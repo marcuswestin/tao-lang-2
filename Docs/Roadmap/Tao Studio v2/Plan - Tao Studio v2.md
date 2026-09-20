@@ -101,6 +101,19 @@ validity as unverified when Apple's tools are absent rather than as passed.
    system's locale-aware, case-insensitive, ordered word-prefix matcher while preserving Studio's
    label-before-detail ranking. Add focused multiword and ordering tests.
 
+## Absorbed from the v1 ledger
+
+`Plan - Tao Studio v1.md` and its native-device-canvas exploration are archived
+(`Docs/Archive/Plans/`, `Docs/Archive/Explorations/`) now that v2 supersedes their Electron
+architecture, client shape, launch assumption, and scenario syntax. Their still-open items are
+folded in here rather than restated: multi-cell updates without remounting unaffected state landed
+in the "Scenario groups and canvas" row above; fixture `through` execution and loading captured
+fixtures through the Tao test harness are Slices 7 and 8 above; the listener-dependent browser proof
+of observable network effects and cross-cell isolation is folded into Slice 11. The v1-flagged
+native-device-as-Studio-canvas real-device spike is no longer tracked here —
+`Docs/Roadmap/Tao Studio companion app/` completed a real-iPhone pairing and rendering proof in its
+Slice 1.
+
 ## Simulated-user lane: editor ownership and the preview origin boundary
 
 `studio-simulated-user.test.ts` had never been run by any recipe before `verify-full` was repaired, so its
@@ -134,4 +147,4 @@ stub now follows the real preview contract: it receives `path` and `sourceVersio
 allowed cell-bootstrap route. Relaxing the allowlist would trade a deliberate boundary for a green test.
 
 The implemented contract is maintained in [Tao Studio](../../Spec/Tao%20Studio.md). The historical v1
-ledger remains in [Plan - Tao Studio v1](../Tao%20Studio%20v1/Plan%20-%20Tao%20Studio%20v1.md).
+ledger is archived at `Docs/Archive/Plans/Plan - Tao Studio v1.md`.

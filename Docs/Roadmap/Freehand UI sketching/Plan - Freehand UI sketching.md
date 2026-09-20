@@ -1,8 +1,12 @@
 # Plan - Freehand UI sketching
 
 The implementation plan for freehand UI sketching decided in
-`Design - Freehand UI sketching.md` (FS-D1–FS-D20). Read that design summary first; this plan cites
-the decisions rather than reopening their alternatives.
+`Product - Freehand UI sketching.md`'s "Design record" section (FS-D1–FS-D20). Read that design
+record first; this plan cites the decisions rather than reopening their alternatives. L1, the `@`
+tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; the Slice 3 (Feed) server foundations are
+green. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
+active bodies of work that polish the landed slices and the Studio canvas UI without reopening
+FS-D1–FS-D20 or reordering the FS-D20 sequence.
 
 ## Ground rules
 
@@ -56,6 +60,10 @@ tranches because they settle different contracts and force different application
 
 ## L1 — scenario steps, stand-ins, optional fixture, `Placeholder` and `Spacer`
 
+**Landed.** Ordered scenario steps, pointer phases, action stand-ins, optional fixture, `Placeholder`,
+and `Spacer` are implemented and absorbed. Details of what landed with it, and the hardening that
+followed, are under "Figma-at-home strides" below.
+
 **Decisions.** FS-D7, FS-D8, FS-D9, FS-D10.
 
 **Goal.** A focused scenario can reach interaction states through ordered journey steps, including
@@ -98,6 +106,8 @@ semantic leaf with implicit `claim 1`, overridable by `[claim N]`.
 
 ## Tooling — the root `@` package
 
+**Landed.** The `@` package, Studio's `@/studio` writer, and Move to package are implemented.
+
 **Decision.** FS-D3.
 
 **Goal.** Reserve a project's root `@/` as a generated-code package whose subfolders resolve through
@@ -135,6 +145,9 @@ project scaffold documentation, and `Coverage.md` if the package form gains a de
 
 ## Slice 1 — Draw
 
+**Landed**, then hardened through "Figma-at-home strides" Stride 0 and Stride 1 below (real-browser
+proof, keyboard/tool-model reflexes, undo, numeric fields, rename, delete, smart guides, inline text).
+
 **Decisions.** FS-D1, FS-D4, FS-D13, FS-D14.
 
 **Goal.** Draw, select, move, resize, retype, edit text, and Option-drag duplicate free rectangles
@@ -169,11 +182,15 @@ scrolling, but their product meaning is settled.
 
 ## Slice 2 — Snap
 
-**Implementation status (2026-09-03).** The transactional Snap/Unsnap, typed flow edits, proposal
-parity, render-identity refresh, and preservation contracts are implemented. The committed 16-case
-component-layout corpus is regression evidence only: 12 cases project directly and four require
-confirmation. The required 15–20 real-screen corpus and operational inspector-fix measurement remain
-open, so FS-D11 acceptance is not yet closed.
+**Implementation status (2026-09-20).** The transactional Snap/Unsnap, typed flow edits, proposal
+parity, render-identity refresh, and preservation contracts are implemented and hardened into
+cross-process transactions with version checks (see "Figma-at-home strides" below). The committed
+16-case component-layout corpus remains regression evidence only: 12 cases project directly and four
+require confirmation. The simulated-browser smoke lane — the only real-browser proof of Draw and
+Snap — rejoined `verify-full`, ran ten consecutive green times in a normal Terminal, and closed
+DEVENV-042. The required 15–20 real-screen corpus and its operational inspector-fix measurement
+remain open (Figma-at-home strides, Stride 2a), so FS-D11 acceptance is not yet closed. Native and
+canary acceptance remain a separate normal-Terminal gate.
 
 **Decisions.** FS-D11, FS-D12.
 
@@ -211,11 +228,12 @@ step; do not change the settled heuristic to fit individual screens invisibly.
 
 ## Slice 3 — Feed
 
-**Implementation status (2026-09-03).** Foundations are green and committed: shared fixture imports,
+**Implementation status (2026-09-04).** Foundations are green and committed: shared fixture imports,
 entity-aware preview manifests, deterministic four-source inventory, canonical shared-fixture source,
 typed entity/field source actions, durable free/snapped field bindings, and scope-derived arguments for
 parameterized project-view insertion. The slice remains open until Studio exposes the row/chip browser
-and lands entity/field drop, atomic Keep, Move-to-package scenario relocation, and their browser journey.
+and lands entity/field drop, atomic Keep, Move-to-package scenario relocation, and their browser
+journey; "Figma-at-home strides" Stride 3 below is the work that finishes it.
 
 **Decisions.** FS-D6, FS-D16.
 
@@ -412,3 +430,515 @@ Studio spec, physical-proof ledger, and Coverage.
 **Open before starting.** None after the dependencies exist. Confirm the exact Expo PencilKit module
 API against the supported iOS/Pencil versions as adapter implementation evidence, not a new product
 decision.
+
+---
+
+## Figma-at-home strides
+
+Adopted 2026-09-04, with Ro's rulings recorded in this section's "Decisions" below; implementation in
+progress. It builds on the landed foundation of `feat/freehand-ui-sketching-implementation` and does
+not reopen FS-D1–FS-D20 or reorder the FS-D20 sequence above. It names the first strides that make
+Studio feel like home to a person fluent in Figma: the reflexes they bring with them (keys, selection,
+undo, guides, numeric fields), a Snap they can trust, and a sketch fed with real data. Strides 1, 2,
+and 4 are polish of the landed Draw and Snap slices; stride 3 finishes Feed, the next slice in
+FS-D20's mandated order.
+
+### Where the work stands
+
+The foundation landed on `main` as squash `13d2577c` (2026-09-04 22:20).
+
+A review of everything that landed on 2026-09-04 and 2026-09-05 followed. For this plan's surface it
+fixed: the inspector's Layout, Style, and Text drafts follow the inspected element instead of the first
+one seeded, and Set text refuses to swap a binding for `Text("")`; a sketch board recovers from a lost
+pointer capture instead of holding the render gate closed; the matrix reconciler removes departed cells
+before placing survivors, so a removal no longer detaches the sketch host mid-gesture; canvas mode keeps
+the app visible when the focused view is no longer rendered; `remove-render` refuses a `#studio_rect_`
+marker (Unsnap first) and a container's only child; `tao check` warns about a shipping `Placeholder`
+under `@/studio` too (FS-D2) while Snap's measured `width` and `height` no longer count as explorations
+there; projection order is code-point order. The later hardening made Snap/Unsnap, restore, sketch
+revision, and rename operations cross-process transactions with version checks. The shared marker
+decoder remains a cleanup. `hover`, `down`, and `up` are ordinary spelling-validated test words,
+not global grammar keywords.
+
+Landed: L1 (ordered scenario steps, pointer phases, action stand-ins, optional fixture,
+`Placeholder`, `Spacer`), the root `@` package with Move to package, Slice 1 Draw, Slice 2 Snap with
+the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundations, and the review
+roadmap's first two targets (Record journey, `tao review`).
+
+Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, has
+rejoined `verify-full` (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
+and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
+source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
+including a real pointer-release drag-one-in target; no remaining failure has been attributed to the
+browser automation itself. The last one found, on 2026-09-19, was the lane's own: it pressed Unsnap
+on a selection an authoritative render had already discarded, and Unsnap with nothing selected
+unsnaps the whole flow. The evidence gate is met: the complete journey ran ten consecutive green
+times in a normal Terminal on 2026-09-20, which closed DEVENV-042. Native and canary acceptance
+remains a separate normal-Terminal gate.
+
+What the client offers today: drag on empty canvas creates a sketch; drag inside a sketch draws a
+rectangle; click selects and Shift-click extends; eight handles resize; Option-drag duplicates; the
+sketch inspector has a kind select and a content field; a toolbar carries Snap, Undo Snap, a
+snapped-node select, Unsnap, Toggle direction, Insert separator, and a spacer ratio field; a gap
+indicator handles drag-one-in; overlap opens an Apply/Cancel proposal.
+
+What a Figma person reaches for and does not find: any keyboard handling (no Delete, arrows,
+Escape, ⌘D, ⌘A, ⇧A), marquee selection, deleting a rectangle (the catalog action exists and is not
+wired), undo of a move or resize (only Snap has undo), numeric X/Y/W/H, renaming the view, deleting a
+sketch (the server rejects it), smart guides, Shift and Option constraints, zoom and pan, the Data
+panel with entity drop and field chips, the FS-D11 real-screen corpus, and alignment or nested-pad
+inference.
+
+### Figma reflex to Tao Studio
+
+| Figma reflex                                         | Today                                | Stride |
+| ---------------------------------------------------- | ------------------------------------ | ------ |
+| Delete, arrows, Shift+arrows, Escape, ⌘D, ⌘A, Tab    | none                                 | 1a     |
+| V select with marquee, R rectangle, T text           | always drawing                       | 1b     |
+| Shift constrains, Option resizes from the centre     | none                                 | 1c     |
+| ⌘Z after every move                                  | Snap only                            | 1d     |
+| X, Y, W, H fields with arithmetic; frame presets     | kind and content only                | 1e     |
+| Rename the frame                                     | display name only                    | 1f     |
+| Delete the frame                                     | rejected by the server               | 1g     |
+| Red alignment guides, pink spacing hints             | none                                 | 1h     |
+| Double-click text to edit in place                   | inspector field                      | 1i     |
+| ⇧A adds auto layout and it just works                | Snap, 75% direct on component corpus | 2a–2c  |
+| Drag an edge to fill or hug, flip direction, reorder | toolbar buttons and inspector        | 2d     |
+| Content Reel, Sheets sync, real records              | server side only                     | 3      |
+| ⌘+wheel zoom, space-drag pan, ⇧1 fit                 | none                                 | 4      |
+| Option-drag a frame to make a variant                | after L2, Slice 4 as decided         | later  |
+
+### Stride 0 — Real-browser proof for Draw and Snap
+
+**Goal.** Every later stride adds gestures; none of them can claim browser evidence while the only
+browser lane for sketching is unreliable. Make that lane deterministic and keep it in the graph.
+
+**Done (2026-09-04).** Hit-test diagnostics in the lane showed the failures were product defects:
+the toolbar covered the drawing surface, drag-one-in depended on an HTML5 drag the move gesture
+suppressed, and a re-render could replace a board mid-gesture. All three are fixed with pure
+helpers and unit tests: the toolbar and proposal live in a frame around the board, drag-one-in is a
+pointer gesture released over the sketch's running cell, and renders are held while a gesture is in
+flight. The lane now passes Draw, four further draws, Snap, and reload in a normal terminal, runs
+the sketch section in the Run preset at a designer-sized viewport, and records board state, the
+element under the pointer, host errors, and a screenshot on every sketch timeout.
+
+**Done (2026-09-20).** The product path has a real pointer-release drag-one-in target and preserves
+authored source through the proposal/transaction path. The simulated-user lane has been removed from
+`VERIFY_FULL_SKIPPED`, runs in both full lanes, and recorded ten consecutive reliable normal-terminal
+runs, which closed DEVENV-042. Native and canary evidence remains separate and must be confirmed from
+the Terminal in the same acceptance pass.
+
+**Size.** S–M remaining. **Depends on.** Nothing.
+
+### Stride 1 — Reflexes on the sketch
+
+**Goal.** Every gesture a Figma person performs without thinking works on free rectangles, and all
+of it stays catalog-only, so no language change and no compile per keystroke.
+
+- **a. Keys.** Delete and Backspace remove the selection (`delete-rect`). Arrows nudge by one,
+  Shift+arrows by ten, coalesced into one `update-rect` per burst. Escape cancels a gesture in
+  progress, otherwise clears selection. ⌘D duplicates in place with a small offset
+  (`duplicate-rect`). ⌘A selects every free rectangle in the sketch. ⇧A snaps the selection, or every
+  free rectangle when nothing is selected. Enter edits the selected rectangle's content. T, B, and I
+  retype the selection to `Text`, `Button`, and `Image`. Tab and Shift+Tab walk `rectOrder`.
+- **b. Tool model.** V is select: dragging empty sketch space draws a marquee, Shift adds to it. R
+  is draw: dragging creates a rectangle as today. T draws a `Text` rectangle. Dragging empty canvas
+  outside any sketch still creates a sketch. A three-button strip above the sketch shows the active
+  tool. Ruled by decision B.
+- **c. Constraints.** Shift keeps a square while drawing or corner-resizing and locks the axis while
+  moving; Option resizes from the centre.
+- **d. Undo.** ⌘Z and ⇧⌘Z walk one client-held, time-ordered stack over catalog gestures and source
+  checkpoints. A catalog entry stores its inverse action and replays it through the versioned
+  endpoint with the expected revision; a source entry reuses the existing checkpoint undo. Ruled by
+  decision C.
+- **e. Numbers.** X, Y, W, and H fields that accept arithmetic (`100+20`), a sketch size badge with
+  the `phone`, `tablet`, and `laptop` presets, and edge handles on the sketch itself. Resizing the
+  sketch is one transaction: the catalog size plus the generated `Placeholder` size and `device`
+  clause while the view is unsnapped.
+- **f. Rename.** A `rename-sketch-view` transaction renames the declaration, moves
+  `@/studio/<Old>.tao` to `<New>.tao` with history, rewrites `use … from @/studio` sites through the
+  Move to package machinery, and updates the catalog's `view` and `name` and every snapped
+  association. A collision is refused before mutation. FS-D13 still allocates `ViewN` at creation.
+- **g. Delete a sketch.** Lift the server rejection by putting generated-file removal inside the same
+  rollback contract as creation. Refuse when the app references the view; offer Discard sketch on a
+  sketch that has a scenario entry only.
+- **h. Smart guides.** While moving or resizing, snap to sibling edges and centres, to the sketch
+  edges and its inferred pad, and to equal spacing between neighbours, with a four-pixel screen
+  threshold and Figma's red line and pink spacing rendering. This matters more here than in Figma:
+  FS-D11 infers `gap` from the median neighbour distance and `pad` from the edge distance, so a
+  drawing snapped to guides projects cleanly by construction.
+- **i. Inline text.** Double-click a `Text` rectangle to edit its content in place; Enter commits,
+  Escape cancels.
+
+**Tests.** A Studio journey per gesture in `studio-sketch-view.test.ts` and `studio-sketch-session.test.ts`;
+the simulated smoke lane gains one keyboard pass (draw, nudge, duplicate, delete, undo, marquee) and
+one guide pass (a drawing that snaps to guides projects without a proposal). Every journey asserts
+that no gesture other than Snap writes the Tao render tree.
+
+**Reconcile.** `Docs/Spec/Tao Studio.md` (gesture and key contract, rename, delete, sketch resize),
+`packages/studio/README.md`.
+
+**Size.** L overall: a S, b M, c S, d M, e M, f M, g M, h M, i S. **Depends on.** Stride 0.
+
+### Stride 2 — A Snap you can trust, and Figma gestures on flowed views
+
+**Goal.** Close FS-D11's acceptance evidence and let a person edit an existing screen's flow with
+the gestures wireframe 7 draws, not toolbar buttons.
+
+- **a. Real-screen corpus.** Build the 15–20 screen corpus FS-D11 demands from running apps rather
+  than hand-drawn cases: the preview already reports measured rectangles per render identity, so
+  flatten WordFlower, HNReader, and the Layout and App Shell test apps to leaf rectangles, record
+  the authored tree normalized to the projection vocabulary as the expected result, and count
+  inspector fixes as the clause diff. Report the direct-projection rate and fix count honestly in
+  the README. Tune rules only with the corpus in view, and document every rule change.
+- **b. Inference extensions.** Cross-axis alignment (`content` start, centre, or end from leaf
+  positions within a lane), nested container pad (a lane's inset relative to its siblings), and
+  equal-size runs to `claim` weights. Proposal-on-ambiguity stays. Ruled by decision D.
+- **c. Snap preview.** Hovering Snap, or holding ⇧A, shows the inferred tree as a translucent overlay
+  before anything is written. The proposal endpoint already returns the canonical tree; render it
+  for clean cases too. This is the cheapest trust a Figma person can be given.
+- **d. Flow gestures on the preview.** Select a flowed node in any cell, sketch or app: dragging its
+  edge to the container edge writes `fill`, back to content writes `hug`, anywhere else `width N`
+  or `height N` (`set-layout-entry`); ⌘-click a container flips direction
+  (`set-container-direction`); ⌥-click a gap opens the palette insert at that gap
+  (`insert-component`, `insert-project-view`); dragging a node reorders it (`move-render`); dragging
+  a spacer edge rewrites neighbour `claim` weights. The toolbar buttons move into the inspector for
+  discoverability. This is the first stride where a Figma person edits an existing screen the way
+  they would in Figma, and it works on every view, not only sketches.
+
+**Tests.** The corpus is a committed fixture with a property test over projection invariants; a
+journey per flow gesture with exact source diffs; the smoke lane's Snap path gains the edge-drag
+and ⌘-click cases.
+
+**Reconcile.** Studio spec and README for inference, corpus result, and gesture contract; layout spec
+only where an existing action's behaviour is exercised.
+
+**Size.** a M, b M, c S, d L. **Depends on.** Stride 0; d is independent of a–c.
+
+### Stride 3 — Feed in the client
+
+**Goal.** Finish Slice 3 so a sketch is never a picture of a row.
+
+- A Data panel listing entities and rows from the four sources: fixture, generated with a visible
+  seed, live store, and library.
+- Drag an entity onto a sketch (`add-sketch-entity-parameter`); field chips appear beside it.
+- Drop a chip on a free rectangle (`bind-rect`) or a snapped leaf (`bind-sketch-field`); a
+  collection field proposes a `loop` with a row view.
+- Keep as one multi-file transaction into `@/studio/Sketches.tao` and the scenario arguments; an
+  example-source selector per cell.
+- Move to package offers scenario relocation to `Scenarios.tao`, defaulting to yes.
+- Insert a parameterized sketch view into a loop with its argument bound from scope.
+
+**Tests.** The journeys this plan already assigns to Slice 3.
+
+**Size.** L. **Depends on.** Stride 0; benefits from stride 1's selection and undo.
+
+### Stride 4 — The canvas as a place
+
+**Goal.** A phone-sized sketch fits on screen and a person moves around it the way they expect.
+
+- ⌘+wheel and pinch zoom, ⌘0 for 100%, ⇧1 fit, ⇧2 zoom to selection; space-drag and trackpad pan.
+- Zoom-aware pointer math for every stride 1 gesture; guides and handles keep screen size.
+- Several sketches per group row; optional rulers.
+
+**Size.** M. **Depends on.** Stride 1b (the tool model owns the space key).
+
+### Canvas mode proof of concept
+
+**Landed 2026-09-04**, ahead of strides 1 and 2, as the first end-to-end taste of editing an existing
+view the way a Figma user edits a component: select an element in the running app, press **Focus
+view**, and the owning view stands alone with its scenario cells while the app's other groups hide.
+Every edit lands in that one definition and shows in every occurrence.
+
+- Entry reuses the view's existing focused `scenarios` group (decision A, first branch); a view
+  without one is not focusable yet. Creating a `draft` entry on demand and taking the instance's
+  arguments from item provenance (FS-D15) remain open.
+- Content edits are flow edits (decision B): the palette inserts `Row`, `Col`, and `Text` at the
+  selected gap; the inspector wraps in `Row`, `Col`, or `Stack` and removes a child. Free rectangles
+  inside authored views stay out, per FS-D12.
+- Binding is the inspector's Text section (decision C, inspector half): edit the literal or bind the
+  leaf to a parameter, loop item, local value, or one-level entity field the source makes visible.
+  Chips dragged onto the preview wait for stride 2d's on-preview gestures.
+- New source actions (decision D): `remove-render`, `set-text-content`, `bind-text`, and `wrap-render`
+  for `Row` and `Col`; `inspectRender` publishes the text leaf's expression, literal, and candidates.
+- Forcing app (decision E): HNReader's `StoryRow`, which already has the `rows` scenario group.
+
+`Docs/Spec/Tao Studio.md` carries the executable contract under "Canvas mode".
+
+### After these strides
+
+FS-D20's order continues unchanged: L2, Slice 4 Variants, L3, Slice 5 Tao-rendered canvas, Slice 6
+Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
+undo stack is what Slice 4's cell edits will join.
+
+### Decisions
+
+Settled by Ro on 2026-09-04, taking the recommendations.
+
+- **A. When to land the branch.** Moot: the foundation landed on `main` as `13d2577c` before this
+  plan was adopted.
+- **B. Tool model on the sketch.** Figma's: V selects with marquee by default, R and T draw. The
+  alternative, draw-by-default with Shift-drag as marquee, was declined.
+- **C. Undo model.** One ⌘Z stack in the client over catalog gestures and source checkpoints in time
+  order. Source-only undo was declined.
+- **D. Snap inference extensions.** Add cross-axis alignment, nested pad, and equal-size runs, judged
+  on the real-screen corpus. Keeping FS-D11's rule set unchanged was declined.
+- **E. Stride order.** 0, 1, 2, 3, 4. Taking Feed first was declined; every later gesture reuses
+  selection, keys, and undo.
+
+A decision discovered during implementation joins the next round with Ro; it is not decided silently.
+
+### Sizes and dependencies
+
+| Stride | Size | Depends on | Language change |
+| ------ | ---- | ---------- | --------------- |
+| 0      | S–M  | none       | none            |
+| 1      | L    | 0          | none            |
+| 2      | L    | 0          | none            |
+| 3      | L    | 0          | none            |
+| 4      | M    | 1b         | none            |
+
+### Verification
+
+Each stride lands with a Studio journey per gesture in `packages/studio/studio-tests`, its smoke-lane
+steps green on a host with Chrome, `./agent verify` green, and the Studio spec and README reconciled
+to what landed. Corpus numbers are reported as measured, never rounded up to the threshold.
+
+---
+
+## Canvas-first design mode
+
+Status: implementation record, reconciled 2026-09-16. Written as a proposal after a 2026-09-06
+visual inspection of Studio on `Apps/HNReader`; the inspection and proposed work below remain dated
+history, while each **Landed** paragraph records the current boundary. The responsive Design split,
+viewport reveal, preview-only transforms, iframe-safe gestures, canonical occurrence identity, real
+`owner.rect`, serialized Focus enter/leave restoration, and listener disposal have landed. The lane
+runs in `verify-full` again and met its ten-green-runs condition on 2026-09-20; what remains of
+acceptance is the visual inspection below and the separate native and canary pass.
+
+### What the inspection showed
+
+1. **The canvas is not the hero.** At 1440 px wide the preview column is the rightmost sixth of the
+   window; Files, Scenario, and the editor take the rest. In Design mode a person sees one phone
+   frame cut off at the right edge and nothing else of the app.
+2. **Everything is open at once.** The Scenario pane shows View arguments, Environment (device, size,
+   network, latency, scheme), Selection, Layout, Style, and later Data, Text, and Actions, all
+   expanded, most of them saying "Select a rendered element in the preview." Two rows of lens chips
+   sit above the editor (All, Compose, Style, Trace, Data, Outline; Structure, Layout, Behavior,
+   Data, Wiring, Tests), with `Data` appearing in both rows.
+3. **No visible way in.** Nothing on screen says how to draw, how to focus a view, or what Design mode
+   is for. Focus view appears only after a selection; drawing needs a drag on empty canvas that
+   nothing announces.
+4. **Focus fills the device.** Focusing a list row shows it inside the phone frame's full 390×844,
+   because the focused group's cells keep the scenario's device size. A row occupying 390×64 in the
+   app becomes a full-screen cell with the row at the top.
+5. **Small things.** Beta ship is the loudest button on screen. Mode: Edit, Device, and the search
+   field share the top bar with the three primary tabs. The inspector repeats section headers with
+   disabled placeholders instead of one hint.
+
+### Principles
+
+- **One next action per state.** Each state of the canvas has one obvious thing to do, shown once,
+  where the eye already is. Everything else waits behind a selection or a menu.
+- **The canvas is where design happens.** In Design mode the canvas takes half the window and shows
+  the whole app as frames side by side. Source and inspector share the other half.
+- **Figma's vocabulary, Tao's model.** Frame, select, focus, hand, zoom, and the bottom tool strip
+  mean what a Figma person expects. Underneath, every edit is still a source action on one view
+  definition (FS-D3, FS-D12), and free rectangles live in the catalog until they snap (FS-D4).
+- **Show, do not list.** Discoverability comes from a short tool strip, hover outlines, and empty
+  states that name the one next step, not from more chips.
+
+### Stride A — Canvas takes half the window
+
+Design mode becomes a 50/50 split: canvas left, source and inspector right, with a draggable
+divider that remembers its position per project. Files and Scenario collapse into the left icon
+rail, opening as popovers; the scenario strip (group name, device, scheme) moves to a single line
+above the canvas.
+
+- The canvas becomes one pannable surface (`.studio-preview-grid` gains a transform layer, see
+  Stride C) on which every scenario group is a labelled frame. Groups sit in a row per group with a
+  fixed gap, so several screens and views are visible around each other at once; the layout is the
+  existing `reconcileMatrix` output positioned absolutely instead of flowed.
+- Code mode keeps today's layout. Run mode keeps the device preview alone. The Design/Code/Run tabs
+  are the only way the layout changes; no other control moves panels.
+- The inspector on the right shows one section at a time chosen by the selection: nothing selected
+  shows a single line ("Select an element, or press F to focus a view"); a container shows Layout
+  first; a Text leaf shows Text first; Style and Actions are collapsed headers until opened.
+- Work: `StudioShell.ts` layout and CSS, `StudioApp.ts` mode wiring, panel collapse into the rail,
+  inspector section policy in `TaoStudioClient.tao`. Two to three days.
+- **Landed 2026-09-07.** Entering Design collapses the file tree into the rail, which still reopens
+  it, and sizes the canvas to half the workbench, clamped so the inspector, a usable editor and the
+  dividers keep their room; leaving Design restores what was there, and the divider still overrides
+  either way. Group rows no longer scroll horizontally on their own, so every cell of every group
+  lies on the one surface and zoom-to-fit shows them together. Fixed along the way: the body panes
+  now name their grid columns, because a collapsed pane is `hidden`, which removes it as a grid item
+  and shifted every later pane one column left. Still open from this stride: the scenario strip above
+  the canvas, Files and Scenario as rail popovers, and the inspector's one-section-per-selection policy.
+
+### Stride B — A focused view gets a frame the size it had
+
+Focusing a view wraps it in a frame whose size is the occurrence's measured size, not the device.
+
+- Where the size comes from (checked 2026-09-06): the runtime already posts every mounted render's
+  rectangle after each layout (`preview-layout-measurements` from `TR-studio-preview.tsx`,
+  `collectStudioPreviewLayoutMeasurements`, keyed by `renderId`), the client forwards it untouched
+  (`StudioMatrixView` → `StudioApiClient.previewLayoutMeasurements`), and the server keeps a
+  per-cell `measurements` map in `StudioProjectSession` for Snap. The client holds no rectangles and
+  the selection (`inspected.identity`) carries an owner name, not a rectangle. So `inspectRender`
+  gains an `occurrence` field: the server maps the owner view to its root `render` occurrence in
+  that cell instance (it has the render occurrences) and returns that render's measured rectangle.
+  On Focus view the client reconfigures the focused group's cells with `Device custom` and that
+  width and height through the existing `reconfigureEnvironment` (`viewport` without a `presetId`).
+  The cell _is_ the frame; nothing new renders inside the iframe.
+- The frame draws eight handles. Dragging a handle resizes the cell live (debounced
+  `reconfigureEnvironment`); the size shows in the canvas bar and in the inspector's Frame fields.
+  Height may be "hug" (grow to content, reported back by the runtime) or fixed.
+- The frame size is editing state, kept in the sketch catalog next to the group
+  (`.tao-project/studio/sketches.jsonc`, a `frames` map keyed by view name), never in `.tao` source.
+  A "Save as scenario size" command writes it into the scenario's `Size` when the person wants it.
+- Views without a focused `scenarios` group become focusable by creating a `draft` group on demand
+  (decision A, second branch, from the strides plan), whose arguments come from the occurrence's
+  provenance where the runtime has it and from the inspector's argument drafts otherwise.
+- Work: `StudioMatrixView.focusView` gains a frame; `StudioApp` passes the rectangle; catalog gains
+  `frames`; canvas bar and inspector Frame fields. Two days. Depends on nothing in Stride A.
+- **Landed.** Inspection and layout measurements share canonical structural occurrence identity.
+  `inspectRender` returns the owning view's real measured `owner.rect` only for the selecting cell
+  instance; Focus uses it as the custom viewport and serialized enter/leave restoration returns to
+  the prior app state. The missing-rectangle investigation above is closed rather than a current
+  product defect.
+
+### Stride C — Zoom and pan the way Figma does
+
+- One CSS transform on the canvas layer: `translate(x, y) scale(z)`. Iframes scale with it; their
+  pointer events keep working in Chromium. Text goes soft above 1×, which is acceptable for the
+  first cut; a later "true zoom" re-renders cells with the CSS `zoom` property at integer factors.
+- Gestures: pinch and ⌘+wheel zoom around the cursor; two-finger scroll and Space+drag pan; ⌘0 fit
+  all, ⌘1 100 %, ⇧1 zoom to selection, ⇧2 zoom to the focused frame, ⌘+ and ⌘−. A zoom pill at the
+  bottom right shows the percentage and opens these as a menu.
+- Geometry: every client hit test that turns a pointer into canvas coordinates (`relativePoint` in
+  `StudioSketchView.ts`, `StudioSketchGeometry`, the matrix focus outline) divides deltas by `z`;
+  `getBoundingClientRect` already reflects the transform for positions. Sketch boards, frames, and
+  handles keep constant on-screen stroke widths by scaling the inverse on their border layer.
+- Persistence: viewport per project in the catalog (`viewport: {x, y, z}`), restored on open.
+- Work: transform layer and gesture handling in `StudioMatrixView`, coordinate helpers, zoom pill,
+  keyboard bindings in `StudioApp`. Two days. Lands before Stride A's frames-on-a-surface so the
+  surface is pannable from the start.
+- **Landed 2026-09-07.** `StudioCanvasViewport.ts` owns the pan and zoom state per preview host and
+  writes one transform onto the grid, which the matrix re-applies after each reconcile. Wheel and
+  two-finger scroll pan; the same with ⌘ or ctrl, and a trackpad pinch, zoom around the pointer;
+  space-drag and the middle button pan; ⌘0 fits, ⌘1 returns to 100 %, ⌘+ and ⌘− step the ladder. The
+  pill at the bottom right shows the percentage and toggles fit against 100 %. Sketch pointer
+  coordinates divide by the scale, so drawing stays accurate while zoomed. Still open from this
+  stride: zoom to selection and to the focused frame, the pill's menu, persistence of the viewport
+  across sessions, and counter-scaled stroke widths on sketch handles.
+- **Hardened 2026-09-16.** Only preview cells receive the viewport transform, hit testing and pointer
+  release remain correct over iframes, reveal scrolls through the viewport coordinate space, and all
+  gesture/listener registrations are disposed with their host. Zoom-menu and persistence enhancements
+  listed above remain product follow-ups rather than correctness blockers.
+
+### Stride D — Focus-selection mode with a red outline on view frames
+
+A tool that answers "which view is this?" before entering it.
+
+- Tool strip button **Focus** (shortcut F). While it is on, hovering the preview outlines not the
+  hovered leaf but the boundary of the _view definition occurrence_ that renders it, in a distinct
+  red (`--studio-focus-pick`), with the view's name as a label. Click enters canvas mode for that
+  view (Stride B frame). Escape leaves the tool.
+- Only focusable occurrences light up: views with their own definition in the project (not `Text`,
+  `Row`, or other `@tao/ui` primitives) and, once Stride B lands, any view. Package views are skipped.
+- The runtime already tags each render with its identity (`occurrence.renderOwner`); the hit test
+  walks up from the hovered node to the nearest node whose `renderOwner` differs from the leaf's
+  owner and reports that node's rectangle. A row rendered by `StoryRow` in a loop inside `FrontPage`
+  outlines the whole row and says "StoryRow". The walk can run inside the preview (the DOM nodes
+  carry `studioRenderSelector` attributes and `renderTargetFromElement` decodes them), so the tool
+  needs one new preview message, `preview-focus-candidate`, carrying the owner name, its root
+  render id, and its rectangle, sent on hover while the tool is on.
+- Today's `focusableView()` in `StudioApp.ts` only accepts an owner that already has a
+  `data-tao-studio-group-view` row; Stride B's `draft` groups lift that limit, and until then the
+  outline is grey with a "no scenario yet" label rather than red.
+- The ordinary Select tool (V) keeps the blue outline on the leaf, and its inspector keeps offering
+  Focus view for the leaf's owning view, so both paths exist.
+- Work: runtime hit-test message (`TR-studio-preview.tsx`), client tool state and outline colour,
+  tool strip. One and a half days.
+
+### Stride E — Draw a new view on the canvas
+
+- Tool strip button **Frame** (R). Dragging on empty canvas draws a rectangle that becomes a view
+  definition at once: a sketch is created (existing outer draw), snapped immediately into
+  `@/studio/<Name>.tao` with a `Placeholder` of that size (FS-D2 warns until it ships something
+  real), and a `draft` scenario group so it shows as a focused frame. An inline name field appears
+  on the frame; Enter confirms, Escape keeps the generated name.
+- The frame's size while editing is Stride B's frame size. The person then adds content with Stride
+  F. Deleting the frame while it still holds only the Placeholder removes the view and its group
+  (the "server rejects sketch deletion" gap in "Figma-at-home strides" above closes here).
+- Work: new tool, immediate snap path through existing catalog and Snap actions, naming UI. One day
+  after Strides B and C.
+
+### Stride F — Adding UI into a focused view
+
+Two ways to add, one rule for where it lands.
+
+- **Draw** (R inside a focused frame, or the palette's Text, Image, Row, Col dragged onto the
+  frame): the rectangle or component is placed over the frame; on release it snaps into the flow
+  (FS-D4, existing drag-one-in), and a drawn rectangle's kind select decides what it becomes.
+- **Where it lands.** The default target is the nearest slot among the siblings under the pointer,
+  shown by the existing gap indicator. Instead of a modifier deciding "sibling or child", the pointer
+  decides by depth with a dwell, as Figma does when dragging into frames: hovering over a container's
+  interior for about 400 ms enters it, its outline nests one level, and the gap indicator now shows
+  slots among its children; moving out backs up a level. ⌥ forces "into" and ⌘ forces "beside" for
+  people who want the override, but nobody has to learn them.
+- Reason for not making the modifier primary: a hidden modifier is exactly the kind of invisible
+  option this plan is trying to remove, and Figma users already trust the dwell-to-enter gesture.
+  The question you raised out loud resolves the same way for both of us: the pointer should say
+  where, and the modifier is an escape hatch.
+- Every landing is a source action on the focused view (`insert-render` at a slot, `wrap-render`
+  where a leaf must become a container, `set-text-content` and `bind-text` for Text), so undo is the
+  one ⌘Z stack "Figma-at-home strides" already decided.
+- Work: dwell-to-enter in `StudioSketchDragOneIn` and the matrix drop target, nested outline,
+  modifier overrides, palette drop onto frames. Two days after Stride B.
+
+### Stride G — Discoverability and calm
+
+- **Tool strip at the bottom centre of the canvas**: Select (V), Focus (F), Frame (R), Text (T),
+  Hand (H), and the zoom pill. Six things, with tooltips that carry the shortcut. This replaces the
+  hidden drag-on-empty-canvas as the way to start drawing.
+- **One lens row.** Merge the two chip rows into one: Compose, Style, Data, Outline, plus a More
+  menu holding Trace, Wiring, Tests, Behavior. Drop the duplicate Data. The row lives above the
+  editor only in Code mode; in Design mode the inspector's selected section is the lens.
+- **Inspector shows one hint until there is a selection**, then the section the selection needs,
+  with the others as collapsed headers. Disabled placeholder text disappears.
+- **Top bar**: project name, Design/Code/Run, device, and search. Beta ship moves into the project
+  menu; Mode: Edit becomes part of the Run tab (Run shows the app interactive, Design does not).
+- **Empty states name the next step**: an empty canvas says "Press R to draw your first view";
+  a focused frame with only a Placeholder says "Draw or drop something into this frame"; a group
+  with no selection says "Click an element to edit it, or press F to focus its view".
+- **First-run coach**: three cards over the canvas on the first open of a project — Select, Focus,
+  Draw — dismissed once and never again (stored in the catalog).
+- Work: half a day each for the tool strip, lens merge, and inspector policy; one day for the top
+  bar and empty states; half a day for the coach.
+
+### Order
+
+C (zoom and pan) → A (half-window canvas on the pannable surface) → B (frame at occurrence size,
+draft groups) → D (Focus tool, red outline) → G (tool strip, lens merge, inspector policy) → E (Frame
+tool) → F (dwell-to-enter insertion). About twelve working days in total; A, B, and G can proceed in
+parallel once C has landed.
+
+### Decisions for Ro
+
+1. Frame size as catalog state with an explicit "Save as scenario size", rather than writing the
+   scenario's `Size` on every resize.
+2. Dwell-to-enter as the primary "into a container" gesture, with ⌥ (into) and ⌘ (beside) as
+   overrides, instead of a modifier as the only way.
+3. Red for the Focus tool's outline (`--studio-focus-pick`), blue kept for element selection.
+4. Frame tool snaps immediately into a generated view with a `draft` group, rather than leaving a
+   free sketch first.
+5. Beta ship leaves the top bar for the project menu.
+
+### Verification
+
+Each stride adds a browser-lane scenario under `just studio-smoke` (zoom hit-testing, focus frame
+size equals the occurrence size within 1 px, Focus tool outlines the owner not the leaf,
+dwell-to-enter lands as a child, empty states present) and a screenshot pair in
+`.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
+and met "Figma-at-home strides"'s ten-green-runs condition on 2026-09-20.

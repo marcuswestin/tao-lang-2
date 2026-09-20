@@ -1,4 +1,4 @@
-# DEVENV-110 — The guidance invites agents to force-release a lock the design reserves for a person
+# DEVENV-112 — The guidance invites agents to force-release a lock the design reserves for a person
 
 - **Status:** Candidate
 - **Area:** Landing and merge workflow

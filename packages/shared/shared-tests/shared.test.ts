@@ -101,29 +101,19 @@ Describe('FS', () => {
     Expect(Repo.resolvePath('packages/shared')).toBe(sharedPath)
   })
 
-  Test('displays a path inside the cwd relatively and one outside it absolutely', async () => {
-    const inside = FS.resolvePath('packages/shared/shared-tests/shared.test.ts')
+  Test('displays paths from explicit locations without depending on checkout depth', () => {
+    const cwd = FS.resolvePath('/workspace/checkouts/tao')
+    const home = FS.resolvePath('/users/ro')
+    const inside = FS.resolvePath('packages/App.tao', cwd)
+    const outside = FS.resolvePath('../neighbor/App.tao', cwd)
+    const inHome = FS.resolvePath('Library/Tao/App.tao', home)
 
-    Expect(FS.displayPath(inside)).toBe('packages/shared/shared-tests/shared.test.ts')
-    Expect(FS.displayPath(FS.resolvePath('.'))).toBe('.')
-  })
-
-  Test('displays an escaping path without a run of parent segments longer than the path itself', async () => {
-    // A worktree nests several directories deep, so a sibling file is many `../` hops from the cwd.
-    const escaping = '/tmp/tao-display-path/Notes/Notes.tao'
-    const shown = FS.displayPath(escaping)
-
-    Expect(shown).toBe(escaping)
-    Expect(shown.startsWith('..')).toBe(false)
-    Expect(shown.length).toBeLessThanOrEqual(FS.relativePath(FS.resolvePath('.'), escaping).length)
-  })
-
-  Test('writes a path under the home directory as a tilde when that is shorter', async () => {
-    // Tests run from the checkout, which sits several directories under the home directory, so the
-    // relative spelling of a top-level home path is always the longer of the two.
-    const homePath = FS.resolvePath('some-directory/File.tao', FS.homeDir())
-
-    Expect(FS.displayPath(homePath)).toBe('~/some-directory/File.tao')
+    Expect(FS.displayPathFrom(cwd, cwd, home)).toBe('.')
+    Expect(FS.displayPathFrom(inside, cwd, home)).toBe('packages/App.tao')
+    // The former shortest-spelling policy would return `../neighbor/App.tao` here.
+    Expect(FS.displayPathFrom(outside, cwd, home)).toBe(FS.slashPath(outside))
+    Expect(FS.displayPathFrom(home, cwd, home)).toBe('~')
+    Expect(FS.displayPathFrom(inHome, cwd, home)).toBe('~/Library/Tao/App.tao')
   })
 
   Test('writes and reads text and json files', async () => {
@@ -216,6 +206,41 @@ Describe('FS', () => {
     Expect(await FS.exists(FS.resolvePath('empty-after-sync/file.txt', targetDir))).toBe(false)
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
   })
+
+  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
+    Test(`restores every persistent root after an injected ${errorCode} multi-root publication failure`, async () => {
+      const root = await tmpDir()
+      const firstSource = FS.resolvePath('staging/first', root)
+      const secondSource = FS.resolvePath('staging/second', root)
+      const firstTarget = FS.resolvePath('persistent/first', root)
+      const secondTarget = FS.resolvePath('persistent/second', root)
+      await FS.writeText(FS.resolvePath('changed.txt', firstSource), 'new first bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', secondSource), 'new second bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', firstTarget), 'old first bytes')
+      await FS.writeText(FS.resolvePath('changed.txt', secondTarget), 'old second bytes')
+      await FS.writeText(FS.resolvePath('stale.txt', secondTarget), 'old stale bytes')
+      const before = await directoryFileSetsIdentity([firstTarget, secondTarget])
+      let injected = false
+
+      await Expect(FS.synchronizeDirectoryFileSets([
+        { fromPath: firstSource, toPath: firstTarget },
+        { fromPath: secondSource, toPath: secondTarget },
+      ], {
+        beforeRemove: async path => {
+          if (!injected && FS.basename(path) === 'stale.txt') {
+            injected = true
+            Errors.throwHostEnvironment(`${errorCode}: injected persistent-output removal failure`)
+          }
+        },
+        boundaryPath: root,
+        lockPath: firstTarget,
+        sourceBoundaryPath: root,
+      })).rejects.toThrow(errorCode)
+
+      Expect(injected).toBe(true)
+      Expect(await directoryFileSetsIdentity([firstTarget, secondTarget])).toBe(before)
+    })
+  }
 
   Test('sweeps staging files a killed synchronization orphaned beside the destination', async () => {
     const root = await tmpDir()
@@ -1312,6 +1337,19 @@ async function tmpDir() {
   const dir = await mkTestDir('tao-shared-test-')
   cleanupPaths.push(dir)
   return dir
+}
+
+async function directoryFileSetsIdentity(roots: readonly string[]): Promise<string> {
+  const entries: Array<readonly [string, string]> = []
+  for (const [index, root] of roots.entries()) {
+    if (!await FS.isDirectory(root)) {
+      continue
+    }
+    for await (const path of FS.walk(root, { includeHidden: true })) {
+      entries.push([`${index}/${FS.relativePath(root, path)}`, path])
+    }
+  }
+  return await FS.filesIdentity(entries)
 }
 
 async function untrackedTmpDir() {

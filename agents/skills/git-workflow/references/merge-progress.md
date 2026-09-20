@@ -15,18 +15,17 @@ Move the line until every item on the finished side is true on its own: its beha
 complete, not a first half; it has the tests it deserves, and they pass; it does not depend on
 anything still in progress; and its roadmap entry, ledger row, or spec paragraph is updated. A defect
 found but not fixed is not a cut boundary — record it (below) and land the fixes around it. If the
-finished side is empty, say so and do not merge; a merge that lands nothing costs Ro a review and
-buys nothing.
+finished side is empty, say so and do not merge.
 
 ## Bringing the branch to a good state
 
 Before touching `main`: land every finished change as commits so `git status` is clean (an
 in-progress change may be committed too, only if inert — not reachable from anything Ro would run);
-reverse anything in progress that is not inert, restoring the previous state rather than leaving a
-worse one; leave loud markers (a quarantine entry) exactly where they were, note updated to say where
-work now stands; refresh the documents the landed work changed, saying which items are done and open;
-run `./agent verify --complete` plus the reachable host lanes, and say explicitly if a lane was
-already red rather than implying it passed; then write or refresh `.artifacts/merge/<branch>.msg`.
+reverse anything in progress that is not inert, restoring the previous state; leave loud markers (a
+quarantine entry) exactly where they were, note updated to say where work now stands; refresh the
+documents the landed work changed; run `./agent verify --complete` plus the reachable host lanes,
+saying explicitly if a lane was already red rather than implying it passed; then write or refresh
+`.artifacts/merge/<branch>.msg`.
 
 ## The merge message for a partial landing
 

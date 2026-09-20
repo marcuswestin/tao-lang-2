@@ -36,7 +36,7 @@
   truth. Until this is fixed, prove the tool works (`ps -axo pid= | wc -l` returning a plausible
   count) and never suppress its stderr before trusting silence. This does **not** apply to the
   landing lock: that lock is held by a worktree and is deliberately never liveness-checked, and
-  scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-110`.
+  scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-112`.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
   the adjacent host process-visibility constraints.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its

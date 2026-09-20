@@ -139,11 +139,7 @@ await runWithCommands(commands => {
           durable: true,
           label: options.label ?? `landing from ${FS.basename(repositoryRoot)}`,
           onWaiting: (holder, waitedMs) => {
-            HCI.writeErrorLine(
-              `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-                + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing `
-                + 'is no longer running, release it with `./dev land-unlock --force`.',
-            )
+            HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
           },
           repositoryRoot,
           ...(options.wait === false ? { waitTimeoutMs: 0 } : {}),
@@ -161,7 +157,12 @@ await runWithCommands(commands => {
     .command('land-unlock')
     .description('Release the machine-wide landing lock this worktree holds.')
     .option('--force', 'Release it even when another worktree holds it, after confirming that landing has stopped.')
-    .action(async (options: { force?: boolean } = {}) => {
+    .option(
+      '--holder <pid>',
+      'The PID a held record must belong to, as printed by the waiter message; required with --force '
+        + 'against a readable, held record.',
+    )
+    .action(async (options: { force?: boolean; holder?: string } = {}) => {
       await runExitCommand(async () => {
         if (options.force === true) {
           // Breaking somebody else's lock is the one destructive act this command can perform, and
@@ -181,7 +182,9 @@ await runWithCommands(commands => {
               return 0
             }
           }
-          const previous = await LandingLock.forceRelease()
+          const previous = await LandingLock.forceRelease(undefined, {
+            holder: parseOptionalPositiveInteger(options.holder, '--holder'),
+          })
           HCI.writeLine(
             previous === undefined
               ? 'PASS  The landing lock was already free or unreadable; it is clear now.'
@@ -408,6 +411,14 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('native-module-check')
+    .description('Compile every Tao native module for the iOS simulator in an isolated generated host.')
+    .action(async () => {
+      const { NativeModuleCheck } = await import('./native-module-check/NativeModuleCheck')
+      Platform.runtimeProcess.exit(await NativeModuleCheck.run())
     })
 
   commands
@@ -704,11 +715,7 @@ async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Prom
   return await LandingLock.holdingForLane({
     lane,
     onWaiting: (holder, waitedMs) => {
-      HCI.writeErrorLine(
-        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
-          + 'no longer running, release it with `./dev land-unlock --force`.',
-      )
+      HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
     },
     repositoryRoot: Repo.getRoot(),
   }, work)

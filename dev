@@ -40,6 +40,11 @@ function tao_dev_restore_dependencies() {
     echo "Recover with: ./agent setup, which reports which operation was denied." >&2
     exit 1
   fi
+
+  local install_stamp
+  install_stamp="$(tao_dependency_install_stamp "$SCRIPT_DIR")"
+  mkdir -p "${install_stamp:h}"
+  touch "$install_stamp"
 }
 
 mkdir -p "$SCRIPT_DIR/.artifacts/tmp"

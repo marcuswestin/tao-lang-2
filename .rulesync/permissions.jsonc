@@ -5,6 +5,15 @@
   // (via packages/dev's CodexConfigGenerator). Edit this file, never the generated ones.
   "permission": {
     "bash": {
+      // `--force` breaks a lock this session did not necessarily take, on the strength of a dead
+      // PID that proves nothing (see LandingLock.ts). These sit above the blanket `./agent *` /
+      // `./dev *` / `just *` allows below — deny, then ask, then allow, is Claude Code's own
+      // precedence regardless of rule order — so a force-unlock always asks even though the plain
+      // command does not. Codex cannot express this: `CodexConfigGenerator.renderCodexRules` only
+      // emits `allow` entries, so Codex gets no equivalent gate; that asymmetry is accepted.
+      "./dev land-unlock --force*": "ask",
+      "./agent land-unlock --force*": "ask",
+      "just land-unlock --force*": "ask",
       // The repository's own workflow surface. Agents run these without asking.
       "./agent *": "allow",
       "./dev *": "allow",
@@ -195,6 +204,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
+          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
+          // during the native-module compiler proof. The command still requires explicit host
+          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          "repo1.maven.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",
