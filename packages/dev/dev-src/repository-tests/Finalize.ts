@@ -10,17 +10,21 @@ import { VerificationLanes } from './VerificationLanes'
  * agent's own re-entry after a background job reports. `finalize` makes the sequence a command and
  * records enough evidence to make a re-entry cheap.
  *
- * Only one step here trusts recorded state to decide whether to skip work: drafting the merge
- * message, gated on whether `.artifacts/merge/<branch>.msg` was already written for the exact HEAD
- * finalize is looking at. Main integration and verification never do: integration re-asks Git
- * whether main is already an ancestor (a single cheap command), and verification is gated entirely
- * by `GreenTree`, whose records are keyed by tree content, not by anything this file writes. A
- * missing, unreadable, malformed, or older-version state file therefore degrades to doing the full
- * work — it can only ever cause a redraft, never a skipped integration or a skipped proof.
+ * Only one step here trusts recorded state, and it no longer trusts it with anything destructive:
+ * the merge message is written only when none exists, or when `--redraft` explicitly asks for a new
+ * one. Recorded state now decides one thing — whether a kept message is *proved* to cover the HEAD
+ * finalize is looking at, or whether the report has to ask the author to confirm it. Main
+ * integration and verification never trust it: integration re-asks Git whether main is already an
+ * ancestor (a single cheap command), and verification is gated entirely by `GreenTree`, whose
+ * records are keyed by tree content, not by anything this file writes. A missing, unreadable,
+ * malformed, or older-version state file therefore degrades to keeping the message and saying it
+ * could not be proved current — never to a replaced message, a skipped integration, or a skipped
+ * proof.
  */
 
 /** Bumped because `verifiedToolchain` is a new required field; an older-version file therefore
- * always degrades to redrafting rather than being read as if the field were absent. */
+ * degrades to keeping an existing merge message unproved rather than being read as if the field
+ * were absent. */
 const STATE_VERSION = 2
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
@@ -65,10 +69,16 @@ const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
 export type FinalizeOptions = {
   /** Report without mutating anything: no merge, no verification lane, no file written. */
   check?: boolean
-  /** Ignore the recorded finalize state, mirroring `verify --fresh`. */
+  /**
+   * Ignore the recorded finalize state, mirroring `verify --fresh`. It never replaces an existing
+   * merge message: without the record, finalize keeps the message and reports that nothing proves
+   * which HEAD it was written for. `--redraft` is the only thing that replaces a message.
+   */
   fresh?: boolean
   /** Override `.artifacts/merge/<branch>.msg`, principally for tests. */
   messageFile?: string
+  /** Explicitly ask for a fresh mechanical draft, replacing any merge message already on disk. */
+  redraft?: boolean
   /** Override the current repository root, principally for tests. */
   repositoryRoot?: string
 }
@@ -114,12 +124,15 @@ const defaultDependencies: FinalizeDependencies = {
 
 /**
  * FinalizeState is evidence about specific inputs, never a "done" flag. A re-entry recomputes the
- * current inputs (the branch's HEAD, the tree hash, main's sha) and skips only the one step — the
- * merge message — whose recorded input is byte-identical to the current one.
+ * current inputs (the branch's HEAD, the tree hash, main's sha) and reports the merge message as
+ * current only when its recorded input is byte-identical to the current one. Nothing here authorizes
+ * overwriting a file.
  */
 export type FinalizeState = {
   headSha: string
   mainIntegratedSha: string
+  /** The HEAD the merge message on disk is known to cover — the HEAD it was drafted for, or the
+   * HEAD at which finalize last kept and reported it. Never a licence to replace the file. */
   messageHeadSha: string
   updatedAt: string
   verifiedAt: string
@@ -143,9 +156,18 @@ type VerificationOutcome = {
   treeHash: string
 }
 
+/** Which of the three things finalize did to `.artifacts/merge/<branch>.msg` on this run. */
+type MessageDecision = 'drafted' | 'kept' | 'redrafted'
+
 type MessageOutcome = {
-  drafted: boolean
+  decision: MessageDecision
   messageHeadSha: string
+  /**
+   * Why a kept message is not proved to cover this HEAD — empty when it is proved, or when the
+   * message was drafted or redrafted. Only the author can settle this, so it becomes remaining work
+   * rather than being resolved here.
+   */
+  unconfirmedReason: string
 }
 
 type DraftCommit = {
@@ -182,11 +204,10 @@ export const FinalizeCommand = {
       integration.mainSha,
       integration.headSha,
       check,
+      options.redraft === true,
       lines,
     )
-    if (message.drafted) {
-      remaining.push(`Review the drafted merge message before landing: ${FS.displayPath(messageFile)}`)
-    }
+    remaining.push(...messageRemaining(message, messageFile))
 
     // Advisory judgments never gate finalize's own exit code — the brief is explicit that this list
     // is advisory, not a gate. They are printed in their own section so a person can weigh them
@@ -230,7 +251,7 @@ function summaryLines(
         ? 'no record covers this tree yet'
         : `stood on ${verification.lane} at ${verification.at}`
     }`,
-    `3. Merge message: ${message.drafted ? 'drafted or redrafted — needs review' : 'already current for this HEAD'}`,
+    `3. Merge message: ${messageSummary(message)}`,
     remaining.length === 0
       ? '4. Remaining: none'
       : `4. Remaining:\n${remaining.map(item => `   - ${item}`).join('\n')}`,
@@ -240,6 +261,35 @@ function summaryLines(
       ? '5. Advisory (not a gate): none'
       : `5. Advisory (not a gate):\n${advisories.map(item => `   - ${item}`).join('\n')}`,
   ]
+}
+
+/**
+ * The summary always names which of the three things happened — kept, drafted, or redrafted — so no
+ * run can leave a reader guessing whether a file they wrote is still the file that will land.
+ */
+function messageSummary(message: MessageOutcome): string {
+  if (message.decision === 'drafted') {
+    return 'drafted — needs review'
+  }
+  if (message.decision === 'redrafted') {
+    return 'redrafted on request, replacing what was there — needs review'
+  }
+  return message.unconfirmedReason === ''
+    ? 'kept — recorded as written for this HEAD'
+    : `kept — ${message.unconfirmedReason}; only the author can confirm it still describes this branch`
+}
+
+function messageRemaining(message: MessageOutcome, messageFile: string): string[] {
+  const path = FS.displayPath(messageFile)
+  if (message.decision === 'drafted') {
+    return [`Review the drafted merge message before landing: ${path}`]
+  }
+  if (message.decision === 'redrafted') {
+    return [`Review the redrafted merge message before landing; it replaced the previous one: ${path}`]
+  }
+  return message.unconfirmedReason === ''
+    ? []
+    : [`Confirm the kept merge message still describes this branch (${message.unconfirmedReason}): ${path}`]
 }
 
 async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
@@ -378,10 +428,19 @@ async function verifyTree(
 }
 
 /**
- * The merge message is drafted fresh whenever it is absent, or the recorded state does not prove it
- * was written for the exact HEAD finalize is looking at now — including when that state cannot be
- * read at all, which is the only way this file lets a missing record turn into repeated work rather
- * than a wrongly skipped one.
+ * The merge message is the one artifact finalize cannot regenerate: it is what an author wrote and
+ * what Ro may have read. So an existing message is never replaced except on an explicit `--redraft`,
+ * and a message is drafted only when none exists. Recorded state decides nothing about writing any
+ * more — it decides only whether the report can say the kept message is proved to cover this HEAD,
+ * or has to hand that judgment to the author. This is deliberately asymmetric: finalize may keep a
+ * message it should have redrafted, and must never replace one it should have kept.
+ *
+ * `check` reaches the same decision from the same inputs as a real run, so `--check` can no longer
+ * describe the message differently from the run that follows it.
+ *
+ * A kept-but-unproved message is recorded against this HEAD once the run ends, so the confirmation
+ * is asked for once rather than on every re-run of the landing convoy. The file itself is untouched
+ * either way.
  */
 async function draftOrKeepMessage(
   dependencies: FinalizeDependencies,
@@ -391,31 +450,56 @@ async function draftOrKeepMessage(
   mainSha: string,
   headSha: string,
   check: boolean,
+  redraft: boolean,
   lines: string[],
 ): Promise<MessageOutcome> {
   const messageExists = await dependencies.exists(messageFile)
-  if (priorState !== undefined && priorState.messageHeadSha === headSha && messageExists) {
-    lines.push(`PASS  Merge message is current for ${shortSha(headSha)}: ${FS.displayPath(messageFile)}`)
-    return { drafted: false, messageHeadSha: headSha }
+  if (messageExists && !redraft) {
+    const unconfirmedReason = keptMessageReason(priorState, headSha)
+    lines.push(
+      `PASS  Kept the existing merge message; ${
+        unconfirmedReason === ''
+          ? `it is recorded as written for ${shortSha(headSha)}`
+          : unconfirmedReason
+      }: ${FS.displayPath(messageFile)}`,
+    )
+    return { decision: 'kept', messageHeadSha: headSha, unconfirmedReason }
   }
 
+  const decision: MessageDecision = messageExists ? 'redrafted' : 'drafted'
   if (check) {
     lines.push(
       messageExists
-        ? `PLAN  Redraft the merge message; it is not recorded as written for ${shortSha(headSha)}.`
+        ? `PLAN  Redraft the merge message on request, replacing ${FS.displayPath(messageFile)}.`
         : 'PLAN  Draft the merge message; none exists yet.',
     )
-    return { drafted: true, messageHeadSha: headSha }
+    return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
   }
 
   const commits = await readFeatureCommits(dependencies, root, mainSha, headSha)
   const draft = assertDraftValidates(draftMergeMessage(commits))
   await dependencies.writeText(messageFile, `${draft}\n`)
   lines.push(
-    `PASS  Drafted the merge message from ${commits.length} commit(s); review it before landing: `
+    `PASS  ${messageExists ? 'Redrafted' : 'Drafted'} the merge message from ${commits.length} commit(s)`
+      + `${messageExists ? ', replacing what was there' : ''}; review it before landing: `
       + FS.displayPath(messageFile),
   )
-  return { drafted: true, messageHeadSha: headSha }
+  return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
+}
+
+/**
+ * Why a kept message cannot be called current, in the author's terms: either nothing records which
+ * HEAD it was written for (it was written by hand, or the record was discarded by `--fresh`), or it
+ * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
+ * record proves it covers this HEAD.
+ */
+function keptMessageReason(priorState: FinalizeState | undefined, headSha: string): string {
+  if (priorState === undefined) {
+    return 'nothing records which HEAD it was written for'
+  }
+  return priorState.messageHeadSha === headSha
+    ? ''
+    : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
 }
 
 async function readFeatureCommits(
