@@ -2,6 +2,7 @@ import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { GateCatalog } from '../dev-src/repository-tests/GateCatalog'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
+import type { GeneratedEvidence, GeneratedOutput } from '../dev-src/repository-tests/GeneratedEvidence'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
 import type { GateSummary } from '../dev-src/repository-tests/RunSummary'
 import { type TestHistoryEvent, TestLedger } from '../dev-src/repository-tests/TestLedger'
@@ -48,7 +49,11 @@ async function runLane(root: string, options: LaneOptions): Promise<LaneRun> {
   const readings = [...options.hashes ?? [options.hash]]
   const summary = await runGates({
     gates: options.gates,
-    greenTree: { hashTree: async () => readings.length > 1 ? readings.shift()! : readings[0]!, lanes },
+    greenTree: {
+      captureGenerated: stableGeneratedEvidence,
+      hashTree: async () => readings.length > 1 ? readings.shift()! : readings[0]!,
+      lanes,
+    },
     jobs: 2,
     lane: options.lane ?? lanes[0],
     registryRoot: FS.resolvePath('registry', root),
@@ -63,6 +68,20 @@ async function runLane(root: string, options: LaneOptions): Promise<LaneRun> {
     },
   })
   return { started, summary }
+}
+
+/** stableGeneratedEvidence lets policy tests isolate recordability from filesystem generation. */
+async function stableGeneratedEvidence(
+  _root: string,
+  outputs: readonly GeneratedOutput[],
+): Promise<GeneratedEvidence> {
+  return {
+    outputs: Object.fromEntries(outputs.map(output => [
+      output,
+      { inputs: `inputs-${output}`, outputs: `outputs-${output}` },
+    ])),
+    version: 1,
+  }
 }
 
 /**
@@ -139,7 +158,7 @@ Describe('gates a green record never covers', () => {
     }
   })
 
-  Test('never records a generator, whose output no tree hash describes', async () => {
+  Test('never records a generator per-gate, even when whole-lane evidence describes its output', async () => {
     Expect(GateCatalog.isPrepare(PREPARE_GATE)).toBe(true)
     Expect(GateCatalog.isRecordable(PREPARE_GATE)).toBe(false)
 
@@ -220,7 +239,7 @@ Describe('gates a green record never covers', () => {
       // stand on a record while whatever regenerates those trees runs beside it. Every real lane
       // carrying `_test` carries them; a lane list without them would make this assertion about the
       // generated-tree rule rather than about the flake ledger.
-      const laneGates = ['_compile-word-flower-app', '_parser-gen', '_test']
+      const laneGates = ['_compile-word-flower-app', '_ide-extension-build', '_parser-gen', '_test']
       const first = await runLane(root, { gates: laneGates, hash: 'tree-1', lanes: ['verify-full'], reportTests: true })
       Expect(first.summary.status).toBe('passed')
       Expect(first.started).toContain(SUITE_PACKAGE)
@@ -240,7 +259,12 @@ Describe('gates a green record never covers', () => {
       // The node owning the flaky file ran even though its record matched, and the summary names it
       // rather than leaving a surprising re-run unexplained.
       // The generators always run, because a generator is never recordable.
-      Expect(second.started.sort()).toEqual(['_compile-word-flower-app', '_parser-gen', SUITE_PACKAGE].sort())
+      Expect(second.started.sort()).toEqual([
+        '_compile-word-flower-app',
+        '_ide-extension-build',
+        '_parser-gen',
+        SUITE_PACKAGE,
+      ].sort())
       Expect(second.summary.warnings).toContain(
         `${SUITE_PACKAGE}: proved green at this tree by an earlier run, but that record was excluded; `
           + 'running it again.',

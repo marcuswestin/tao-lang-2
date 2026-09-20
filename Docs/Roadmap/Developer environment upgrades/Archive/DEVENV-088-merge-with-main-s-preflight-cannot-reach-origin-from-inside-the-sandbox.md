@@ -1,6 +1,6 @@
 # DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Area:** Sandbox
 - **Impact:** `./dev merge-with-main --dry-run` — the command an agent is supposed to run to check that
   a branch is landable — fails inside a sandboxed shell on its own remote query, so a branch cannot be
@@ -45,4 +45,10 @@
   argument-order gap in the same rule.
 - **Acceptance:** `./dev merge-with-main --dry-run` either completes inside a sandboxed shell, or
   fails with a message that names the sandbox as the cause and the unsandboxed retry as the recovery.
+- **Resolution (2026-09-20):** Reverified from a fresh worktree at `7b7dc0bc`. The sandboxed
+  `./dev merge-with-main --dry-run` exited 1 with `The sandbox denied merge-with-main's query of
+  remote 'origin'. Retry the merge-with-main command from an unsandboxed shell.` The repository
+  defect is resolved. The broader choice to exclude the top-level landing command remains deliberately
+  unmade because it would also unsandbox every child mutation, network operation, and push.
 - **Source:** 2026-09-19 review-findings round on `feat/work-based-test-timeouts`.
+- **Archived:** 2026-09-20

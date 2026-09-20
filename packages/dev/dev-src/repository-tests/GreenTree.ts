@@ -1,5 +1,11 @@
 import { Assert, CLI, Errors, FS, Json } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
+import {
+  GeneratedEvidence,
+  type GeneratedEvidence as GeneratedEvidenceRecord,
+  type GeneratedEvidenceCapture,
+  type GeneratedOutput,
+} from './GeneratedEvidence'
 
 /**
  * A verification lane proves a tree, not a moment. When the tree is byte-identical to one a lane
@@ -9,9 +15,10 @@ import { createHash, randomUUID } from 'node:crypto'
  * it.
  *
  * A record is keyed by the whole visible tree of one checkout, never by a test file, a package, or
- * any declared input set. That coarseness is the design: it makes it impossible to reuse a verdict
- * after a file the run depended on changed, without anyone having to declare that dependency. There
- * is no time-to-live, because time is not what makes a verdict stale.
+ * any declared visible-tree input set. Whole-lane records that cover generator nodes additionally
+ * carry versioned hashes of the ignored outputs and their inputs. That coarseness is the design: it
+ * makes it impossible to reuse a verdict after state the run depended on changed. There is no
+ * time-to-live, because time is not what makes a verdict stale.
  *
  * The key has a second component, because a tree hash does not describe the tools that read it: the
  * resolved `.devenv/profile` symlink target, which pins bun, node, just, and dprint at once.
@@ -34,8 +41,9 @@ import { createHash, randomUUID } from 'node:crypto'
  * same bytes. Two kinds of gate are never recorded, and this module does not decide which gates
  * those are — the caller declares them, because the gate table owns that fact:
  *
- * - A gate that rewrites the tree or fills a generated directory produces derived state the tree
- *   hash does not describe, so proving it again is the only way to know its output is present.
+ * - A gate that rewrites the visible tree is not described by its starting key. A gate that fills
+ *   an ignored generated directory is not recorded per-gate either; a whole lane may represent it
+ *   only with explicit generated evidence whose current inputs and outputs still match.
  * - A gate whose verdict depends on the host — Chrome, Electrobun, the iOS simulator, the macOS
  *   window server — is not described by any tree hash at all. Recording one is the only way this
  *   design can produce a false green, so `record` refuses a gate the caller listed in
@@ -49,6 +57,8 @@ import { createHash, randomUUID } from 'node:crypto'
 
 export type GreenTreeRecord = {
   at: string
+  /** Ignored generated inputs and outputs, present only on whole-lane records that require them. */
+  generated?: GeneratedEvidenceRecord
   logRoot: string
   /** Resolved `.devenv/profile` symlink target; a toolchain change invalidates every record. */
   toolchain: string
@@ -87,8 +97,17 @@ export type FindGatesOptions = {
 }
 
 export type RecordOptions = {
+  /** Ignored-state evidence attached to the whole-lane record, never to its per-gate records. */
+  laneGenerated?: GeneratedEvidenceRecord
   /** Gate names it is a defect to record; `record` fails rather than writing one. */
   neverRecord?: ReadonlySet<string>
+}
+
+export type FindOptions = {
+  /** Test seam; production reads the generator-owned inputs and outputs through GeneratedEvidence. */
+  captureGenerated?: GeneratedEvidenceCapture
+  /** Ignored outputs a matching whole-lane record must describe exactly. */
+  generatedOutputs?: readonly GeneratedOutput[]
 }
 
 export type KeyOptions = {
@@ -300,7 +319,13 @@ function recordPath(repositoryRoot: string, kind: RecordKind, name: string): str
 }
 
 function plainRecord(stored: StoredRecord): GreenTreeRecord {
-  return { at: stored.at, logRoot: stored.logRoot, toolchain: stored.toolchain, treeHash: stored.treeHash }
+  return {
+    at: stored.at,
+    ...(stored.generated === undefined ? {} : { generated: stored.generated }),
+    logRoot: stored.logRoot,
+    toolchain: stored.toolchain,
+    treeHash: stored.treeHash,
+  }
 }
 
 function isStoredRecord(value: unknown): value is StoredRecord {
@@ -309,6 +334,7 @@ function isStoredRecord(value: unknown): value is StoredRecord {
     && typeof value['name'] === 'string'
     && typeof value['at'] === 'string'
     && typeof value['logRoot'] === 'string'
+    && (value['generated'] === undefined || GeneratedEvidence.is(value['generated']))
     // A record written before the toolchain field existed fails here, and so never matches.
     && typeof value['toolchain'] === 'string'
     && typeof value['treeHash'] === 'string'
@@ -343,6 +369,7 @@ async function writeRecord(
   const temporaryPath = `${path}.${randomUUID()}.tmp`
   const stored: StoredRecord = {
     at: entry.at,
+    ...(entry.generated === undefined ? {} : { generated: entry.generated }),
     kind,
     logRoot: entry.logRoot,
     name,
@@ -390,10 +417,23 @@ async function find(
   repositoryRoot: string,
   wanted: GreenTreeKey,
   acceptedLanes: readonly string[],
+  options: FindOptions = {},
 ): Promise<GreenTreeMatch | undefined> {
+  const generatedOutputs = options.generatedOutputs ?? []
+  const currentGenerated = generatedOutputs.length === 0
+    ? undefined
+    : await (options.captureGenerated ?? GeneratedEvidence.capture)(repositoryRoot, generatedOutputs)
+  if (generatedOutputs.length > 0 && currentGenerated === undefined) {
+    return undefined
+  }
   for (const lane of acceptedLanes) {
     const found = await readRecord(repositoryRoot, 'lane', lane)
-    if (found !== undefined && matches(found, wanted)) {
+    if (
+      found !== undefined
+      && matches(found, wanted)
+      && GeneratedEvidence.covers(found.generated, generatedOutputs)
+      && GeneratedEvidence.equals(found.generated, currentGenerated)
+    ) {
       return { ...found, lane }
     }
   }
@@ -457,7 +497,12 @@ async function record(
   // predate the toolchain field, so none of them could ever match.
   await FS.remove(FS.resolvePath(LEGACY_STORE_PATH, repositoryRoot)).catch(() => {})
   await Promise.all([
-    ...(lane === undefined ? [] : [writeRecord(repositoryRoot, 'lane', lane, entry)]),
+    ...(lane === undefined
+      ? []
+      : [writeRecord(repositoryRoot, 'lane', lane, {
+        ...entry,
+        ...(options.laneGenerated === undefined ? {} : { generated: options.laneGenerated }),
+      })]),
     ...gates.map(async gate => writeRecord(repositoryRoot, 'gate', gate, entry)),
   ])
 }
