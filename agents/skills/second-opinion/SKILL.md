@@ -48,9 +48,8 @@ codex exec -s read-only --ephemeral --color never "<the question and the code it
 
 ## What the answer is worth
 
-The other model cannot see this conversation, your instructions, or why the code is the way it is.
-It will be confidently wrong about intent and occasionally right about something no one here would
-have questioned. Read it for the second, not the first.
+The other model cannot see this conversation or why the code is the way it is, so read it for the
+second, not the first.
 
 - Where it agrees, you have learned little; agreement is what a plausible answer produces.
 - Where it disagrees, find out which of you is reasoning from something the other cannot see, and

@@ -170,3 +170,63 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
   reference Ro asked for added. The halving target still needs its own pass.
 - Not done: `journalLimit` stays mirrored across the runtime–Studio seam, because the test that pins
   runtime mirrors is fenced.
+
+### Follow-ups after Wave 2
+
+- `land-unlock --force` requires `--holder <pid>` and compares it inside the registry lock, after an
+  agent force-released a lock other than the one it had checked. Waiter messages no longer suggest
+  forcing, and the force commands go to permission review in Claude Code; Codex's generator emits
+  only `allow`, so it cannot express that.
+- The three hooks' logic moved from zsh to TypeScript under `packages/dev/dev-src/agent-hooks/`,
+  476 lines to 393, with shims of about a dozen lines that find `bun` and always exit 0. The
+  shell-habits hook costs 31–43 ms a call; routed through `./dev` it would cost about 250 ms.
+- A hook earns its place when the rule is cheap to detect and often broken. Logic goes in
+  TypeScript; shell stays only where the environment may not exist yet.
+
+### Reduction slices
+
+Five implementers, one file set each, measured on net lines removed rather than lines moved.
+
+| Files                                                | Before | After | Net  |
+| ---------------------------------------------------- | ------ | ----- | ---- |
+| `StudioProjectSession.ts`                            | 2,042  | 1,926 | −116 |
+| `StudioServer.ts`                                    | 1,253  | 1,198 | −55  |
+| `TR-studio-preview.tsx`, `TR-studio-device-host.tsx` | 3,790  | 3,574 | −216 |
+| `Type.ts`, `compiler.ts`                             | 2,689  | 2,551 | −138 |
+| `shared/FS.ts`                                       | 1,175  | 1,153 | −22  |
+
+- 547 lines, of which about 90 are style constants written on one line as the rest of the runtime
+  writes them. Every slice fell short of its target and said why with a duplicate scan: earlier
+  passes already took the repetition these files held.
+- A route table for `StudioServer.ts` costs more than the branches it replaces: 346 lines of table,
+  contexts, and dispatch against 310 of `if (at(…))` chains. It landed for the compile-time
+  exhaustiveness, and the file's saving came from its validators and subscription registries.
+- Splitting a large file deletes nothing, and the lock and directory-sync half of `FS.ts` repeats
+  on purpose, each copy a distinct safety check.
+- What is left in line count is not deduplication: JSX in the runtime in place of
+  `React.createElement`, the documentation merge list, and package consolidation.
+- Leads not taken: the `#studio_rect_` tag codec spelled in both `source-actions` and
+  `StudioProjectSession.ts`; `chainFrom` in `Type.ts` as a shared parent walk; exporting the parser's
+  `findAncestor` and `FS.commonPathAncestor`.
+
+### Documentation merges and the second instruction pass
+
+- The six groups of the merge list are merged, with Ro's sign-off: live documents for those groups
+  fell from about 10,500 lines to 8,200, and every absorbed source is kept under `Docs/Archive/`.
+  No pair of sources needed an "Unreconciled" heading. Two stale claims in the Tao ship material
+  were corrected while merging: Electron to Electrobun, and a slice requirement that has landed.
+- Left live for Ro: `Exploration - Studio server hot reload.md`, which the list counted but never
+  placed; `Roadmap - Studio review and refinement.md`; and `Component kits`.
+- The second instruction pass cut 54 lines and 8.5% of the words, to 1,379 lines against a target
+  near 880. It removed ten duplicated or gate-covered rules. What remains is one rule per line, so
+  the count falls only when a rule goes, and the rest is not enforced by code and not inferable.
+  Halving would mean cutting rules rather than prose, which is Ro's call rule by rule.
+- Package consolidation is safe once deprecated duplicates of the old aliases stay in
+  `packages/tsconfig.base.json` for one cycle; aliases resolve only through its `paths`. The
+  branches it would hurt are `feat/misc-changes` and `feat/multiple-datasources-plan-ab9e5f`, which
+  add new files under directories that move, and `feat/real-host-testing-prototype`, which edits
+  every shared config file the move rewrites.
+- JSX in the runtime is viable and not recommended inside this pass: the runtime's `tsconfig` names
+  the classic transform while every consumer applies the automatic one, a dev hook behind
+  `createReactElement` would stop firing, nine files including the `TR.ts` entry would be renamed,
+  and the rewrite of about 280 call sites lands on the package with the most unlanded work.

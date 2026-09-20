@@ -9,6 +9,9 @@
   `.devenv/profile/bin` from `PATH`, so Metro could not find Watchman and fell back to Node watching.
   The shell reported a high `ulimit -n`, but `launchctl limit maxfiles` retained a 256 soft limit.
   The pinned `.devenv/profile/bin/watchman --version` succeeded as `2026.01.19.00`.
+  Reproduced again on 2026-09-20 after fresh `./agent setup`: the real HNReader smoke passed its
+  compile/edit/undo case, then Watchman failed opening its LaunchAgent plist and Metro fell back to
+  Node watching, ending in `EMFILE` before browser dispatch.
 - **Workaround:** Run Studio acceptance from a shell that has loaded the materialized devenv profile;
   in a managed task shell, prepend this checkout's `.devenv/profile/bin` once before launching the
   lane.

@@ -1,8 +1,8 @@
 # HNReader
 
-A Hacker News reader, and the forcing app for the query-driven `Http` datasource
-(`Docs/Roadmap/HTTP Datasource/`) and for binding more than one datasource to an app
-(`Docs/Roadmap/Multiple datasources/`). Both are specified in `Docs/Spec/Tao Data.md`.
+A Hacker News reader, and the forcing app for the query-driven `Http` datasource and for binding
+more than one datasource to an app (`Docs/Roadmap/Multiple datasources/Plan - Multiple
+datasources.md`). Both are specified in `Docs/Spec/Tao Data.md`.
 
 ```text
 Apps/HNReader/

@@ -1,6 +1,6 @@
 # DEVENV-105 — `finalize` cannot consume the green evidence that `verify` records
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Verification, landing workflow
 - **Impact:** A complete green `verify` run cannot satisfy `finalize`, so finalization always invokes
   `just verify --complete` again. That needlessly repeats the lane and makes an unrelated dependency
@@ -11,16 +11,19 @@
   in the `deps` preamble before reaching a gate. `GateRunner` deliberately writes no whole-lane
   record when a lane contains a non-recordable generated-tree writer; every verification lane
   contains `_parser-gen` and `_compile-word-flower-app`. `Finalize.verifyTree` only searches
-  whole-lane records, so the producer and consumer contracts cannot meet.
-- **Workaround:** Preserve the complete verification summary and hand the ready branch to a person
-  who can finish from an unsandboxed, dependency-healthy shell; rerunning `finalize` does not reuse
-  the gate-level proof.
-- **Proposed change:** Give `finalize` a sound way to consume a completed `verify` run that includes
-  generated-tree writers, without treating generated output as a fact described only by the Git
-  tree hash.
+  whole-lane records, so the producer and consumer contracts could not meet.
+- **Resolution:** Whole-lane evidence now carries a versioned identity for every ignored writer in
+  `verify`: parser output and generator inputs, compiled-app output and declared stdlib, and both IDE
+  output roots plus the installed dprint WASM. Generators still run on ordinary verification, but a
+  completed lane is reusable by `finalize` only while the visible tree, toolchain, generated inputs,
+  and generated outputs all match. Missing, edited, added, or deleted generated output fails closed.
+- **Workaround:** None needed.
+- **Proposed change:** Done as proposed without treating a Git-tree hash as generated-output proof.
 - **Dependencies:** DEVENV-104 covers the separate missing `./agent` install stamp; archived
   DEVENV-100 fixed the narrower mismatch in accepted `verify-full` lane names. This entry covers
   verification evidence that `finalize` cannot consume even when the dependency tree is healthy.
-- **Acceptance:** Immediately after `verify` passes on an unchanged tree, `finalize --check` reports
-  that verification is already covered and `finalize` does not invoke `just verify --complete`.
+- **Acceptance:** Focused GreenTree, gate-runner, catalog, and finalize tests prove unchanged evidence
+  is consumed and relevant source, toolchain, installed-input, or generated-output drift invalidates it.
+  Immediately after a complete green lane, `finalize --check` consumes that record rather than
+  planning another `just verify --complete`.
 - **Source:** 2026-09-19 merge-preflight and concurrent-dev-test remediation.

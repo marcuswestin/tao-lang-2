@@ -9,7 +9,8 @@
 - **Workaround:** Keep a narrow allowlist entry with a site-specific explanation.
 - **Proposed change:** Decide between an explicit test-only exemption and a typed helper that documents
   third-party failure simulation; do not weaken production scanning.
-- **Dependencies:** Semantic-agent tests must land first.
+- **Dependencies:** None; the semantic-agent tests landed. The test-only exemption versus typed-helper
+  policy remains undecided and unimplemented.
 - **Acceptance:** Representative failure mocks remain faithful while a mutation introducing a production
   raw error still fails repo lint.
 - **Source:** 2026-09-03 semantic-agent implementation briefing.

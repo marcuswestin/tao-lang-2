@@ -50,5 +50,5 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 ## Prefer a gate to a sentence
 
 Every pattern or rule this pass settles ends as a lint, hook, or command behavior where a machine
-can judge it, and the prose that stated it is deleted in the same change. Patterns only a reader
-can judge stay review-only and are written once, in the nearest `AGENTS.md`.
+can judge it, and the prose that stated it is deleted in the same change. A pattern only a reader
+can judge stays review-only, written once in the nearest `AGENTS.md`.

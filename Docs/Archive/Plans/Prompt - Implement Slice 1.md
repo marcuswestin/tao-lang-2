@@ -31,7 +31,7 @@ and current tests. Read these sources in order:
 1. repository `AGENTS.md` and `packages/AGENTS.md`;
 2. `agents/skills/delegation/references/parallel-implementation.md`;
 3. the companion plan linked above, especially **Development foundation** and Slice 1;
-4. `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`;
+4. `Docs/Archive/Explorations/Exploration - Native device as Studio canvas.md`;
 5. `Docs/Spec/Tao Studio.md`;
 6. `packages/dev/dev-src/studio/StudioPreviewRuntime.ts` and `StudioDev.ts`;
 7. `packages/dev/dev-src/expo-dev-loop/expo-runner/metro.ts`, `physical-device.ts`, and their tests;

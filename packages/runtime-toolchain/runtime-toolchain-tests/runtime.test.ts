@@ -545,6 +545,48 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 
+  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
+    Test(
+      `restores the complete ordinary generated graph after an injected ${errorCode} publication failure`,
+      async () => {
+        const runtimePackageRoot = await createRuntimePackageRoot()
+
+        await withTaoFiles(
+          `tao-runtime-ordinary-${errorCode.toLowerCase()}-rollback-`,
+          {
+            'Main.tao':
+              'app Example { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+          },
+          async paths => {
+            await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+            await FS.writeText(generatedPreviewPath(runtimePackageRoot, 'stale.ts'), 'persistent stale bytes\n')
+            const lastGoodGraph = await generatedGraph(runtimePackageRoot)
+            await FS.writeText(
+              paths['Main.tao'],
+              'app Example { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+            )
+            let injected = false
+
+            await Expect(Runtime.generateApp(paths['Main.tao'], {
+              publicationHooks: {
+                beforeRemove: async path => {
+                  if (!injected && FS.basename(path) === 'stale.ts') {
+                    injected = true
+                    Errors.throwHostEnvironment(`${errorCode}: injected ordinary publication failure`)
+                  }
+                },
+              },
+              runtimePackageRoot,
+            })).rejects.toThrow(errorCode)
+
+            Expect(injected).toBe(true)
+            Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastGoodGraph)
+          },
+        )
+      },
+    )
+  }
+
   Test('rolls a stable preview graph back when publication cleanup fails', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 

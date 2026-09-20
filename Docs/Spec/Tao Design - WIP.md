@@ -2,7 +2,7 @@
 
 Status: authoritative for the implemented first design-language slice and intended direction beyond
 it. Compatible layers beyond that slice remain future work. Tooling, artifacts, and rollout live in
-`Docs/Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
+`Docs/Roadmap/Add Tao design system MVP/Plan - Add Tao design system MVP.md`.
 
 Current implementation status: Tao-authored `design` declarations provide flat hexadecimal color
 tokens and named clause bundles in ordinary source. An app mounts one declaration through `Design`;
@@ -383,7 +383,7 @@ Platform adaptation should preserve app identity while respecting native expecta
 
 The `tao design` CLI surface, the design lockfile, AI and visual iteration policy, scenario-driven
 review, the phased implementation path, prior art, and the remaining tooling decisions live in
-`Docs/Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
+`Docs/Roadmap/Add Tao design system MVP/Plan - Add Tao design system MVP.md`.
 
 ## Open Questions
 

@@ -5,14 +5,32 @@ import {
   type FinalizeDependencies,
   type FinalizeState,
 } from '../dev-src/repository-tests/Finalize'
+import {
+  GeneratedEvidence,
+  type GeneratedEvidence as GeneratedEvidenceRecord,
+} from '../dev-src/repository-tests/GeneratedEvidence'
 import { validateMergeMessage } from '../dev-src/repository-tests/MergeWithMain'
 
-type GreenTreeRecord = { at: string; logRoot: string; toolchain: string; treeHash: string }
+type GreenTreeRecord = {
+  at: string
+  generated?: GeneratedEvidenceRecord
+  logRoot: string
+  toolchain: string
+  treeHash: string
+}
 
 /** A fixed resolved-toolchain stand-in: fakes agree on this value everywhere a real run would read
  * `.devenv/profile`, so a test opts into a *different* value only when it means to prove that a
  * toolchain mismatch, not a tree change, is what should force a real run. */
 const FAKE_TOOLCHAIN = 'fake-toolchain-abc'
+const FAKE_GENERATED: GeneratedEvidenceRecord = {
+  outputs: {
+    'compiled-app': { inputs: 'compiled-inputs', outputs: 'compiled-outputs' },
+    'ide-extension': { inputs: 'ide-inputs', outputs: 'ide-outputs' },
+    parser: { inputs: 'parser-inputs', outputs: 'parser-outputs' },
+  },
+  version: 1,
+}
 
 type FakeRepository = {
   branch: string
@@ -105,6 +123,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       if ((repository.verifyExitCode ?? 0) === 0) {
         greenTreeRecords.set('verify', {
           at: '2026-09-17T10:00:00.000Z',
+          generated: FAKE_GENERATED,
           logRoot: '/logs/verify',
           toolchain: FAKE_TOOLCHAIN,
           treeHash,
@@ -117,10 +136,17 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const dependencies: FinalizeDependencies = {
     exists: async path => states.has(path) || files.has(path),
-    findGreenTree: async (_root, wanted, acceptedLanes) => {
+    findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
-        if (record !== undefined && record.treeHash === wanted.treeHash && record.toolchain === wanted.toolchain) {
+        const requested = options.generatedOutputs ?? []
+        if (
+          record !== undefined
+          && record.treeHash === wanted.treeHash
+          && record.toolchain === wanted.toolchain
+          && GeneratedEvidence.covers(record.generated, requested)
+          && GeneratedEvidence.equals(record.generated, requested.length === 0 ? undefined : FAKE_GENERATED)
+        ) {
           return { ...record, lane }
         }
       }
@@ -216,6 +242,7 @@ Describe('finalize', () => {
     // with each other and with nothing else, and the re-verification bug stayed invisible.
     fake.greenTreeRecords.set('verify-full', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/full',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -233,6 +260,7 @@ Describe('finalize', () => {
       const fake = fakeDependencies()
       fake.greenTreeRecords.set('full-verify', {
         at: '2026-09-17T09:00:00.000Z',
+        generated: FAKE_GENERATED,
         logRoot: '/logs/full',
         toolchain: 'a-different-toolchain',
         treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -323,6 +351,7 @@ Describe('finalize', () => {
     fake.states.set(statePath, state)
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
@@ -430,6 +459,7 @@ Describe('finalize', () => {
     const fake = fakeDependencies()
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -438,6 +468,35 @@ Describe('finalize', () => {
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
+  Test('--check consumes verify evidence only while its generated inputs and outputs still match', async () => {
+    const headSha = 'mainsha00000000000000000000000000000000000'
+    const fake = fakeDependencies({ headSha })
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
+      logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
+      treeHash: `tree-of-${headSha}`,
+    })
+
+    const covered = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(covered.lines.some(line => line.includes('tree unchanged since the green run'))).toBe(true)
+    Expect(covered.lines.some(line => line.includes('Run just verify --complete'))).toBe(false)
+
+    fake.greenTreeRecords.set('verify', {
+      ...fake.greenTreeRecords.get('verify')!,
+      generated: {
+        ...FAKE_GENERATED,
+        outputs: {
+          ...FAKE_GENERATED.outputs,
+          parser: { inputs: 'changed-inputs', outputs: 'parser-outputs' },
+        },
+      },
+    })
+    const stale = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(stale.lines).toContain('PLAN  Run just verify --complete; no record already covers this tree.')
   })
 
   Test('--check reports without integrating main, running a lane, or writing any file', async () => {
@@ -473,6 +532,7 @@ Describe('finalize', () => {
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
@@ -509,6 +569,7 @@ Describe('finalize', () => {
       )
       fake.greenTreeRecords.set('verify', {
         at: '2026-09-17T09:00:00.000Z',
+        generated: FAKE_GENERATED,
         logRoot: '/logs/verify',
         toolchain: FAKE_TOOLCHAIN,
         treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
@@ -546,6 +607,7 @@ Describe('finalize', () => {
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
