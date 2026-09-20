@@ -672,14 +672,21 @@ Describe('Studio smoke resource isolation', () => {
           exitCode: 0,
           signal: null,
           stderr: '',
-          stdout: '{"watch":"/repo"}',
+          stdout: spec.args?.[0] === 'watch-project'
+            ? '{"watch":"/repo"}'
+            : spec.args?.includes('get-sockname')
+            ? '{"sockname":"/repo/.watchman.sock"}'
+            : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
         }
       },
       watchRoot: '/repo/.artifacts/dev/studio-preview/runtime-test',
     })
 
     Expect(environment['PATH']).toBe('/repo/.devenv/profile/bin:/usr/bin:/bin')
-    Expect(calls[0]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
+    Expect(environment['WATCHMAN_SOCK']).toBe('/repo/.watchman.sock')
+    Expect(calls[0]?.args).toEqual(['list-capabilities', '--output-encoding=json', '--no-pretty', '--no-spawn'])
+    Expect(calls[1]?.args).toEqual(['--no-pretty', 'get-sockname', '--no-spawn'])
+    Expect(calls[2]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
   })
 
   Test('stops before Metro when pinned Watchman is unavailable', async () => {
@@ -693,16 +700,59 @@ Describe('Studio smoke resource isolation', () => {
     await Expect(StudioDev.testing.studioWatchmanEnvironment({
       isFile: async () => true,
       repositoryRoot: '/repo',
-      run: async command => ({
+      run: async (command, spec) => ({
         args: ['watch-project', '/repo'],
         command,
-        exitCode: 1,
+        exitCode: spec.args?.[0] === 'watch-project' ? 1 : 0,
         signal: null,
-        stderr:
-          'Failed to open /Users/test/Library/LaunchAgents/com.github.facebook.watchman.plist: Operation not permitted',
-        stdout: '',
+        stderr: spec.args?.[0] === 'watch-project'
+          ? 'Failed to open /Users/test/Library/LaunchAgents/com.github.facebook.watchman.plist: Operation not permitted'
+          : '',
+        stdout: spec.args?.[0] === 'watch-project'
+          ? ''
+          : spec.args?.includes('get-sockname')
+          ? '{"sockname":"/repo/.watchman.sock"}'
+          : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
       }),
     })).rejects.toThrow('ordinary host shell')
+  })
+
+  Test('stops before Metro when Watchman cannot pass Metro\'s no-spawn capability check', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async (command, spec) => ({
+        args: [...(spec.args ?? [])],
+        command,
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: spec.args?.[0] === 'watch-project'
+          ? '{"watch":"/repo"}'
+          : spec.args?.includes('get-sockname')
+          ? '{"sockname":"/repo/.watchman.sock"}'
+          : '{"version":"2026.01.19.00","capabilities":["relative_root"]}',
+      }),
+    })).rejects.toThrow('missing Metro capability')
+  })
+
+  Test('stops before Metro when Watchman omits Metro\'s required version field', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async (command, spec) => ({
+        args: [...(spec.args ?? [])],
+        command,
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: spec.args?.[0] === 'watch-project'
+          ? '{"watch":"/repo"}'
+          : spec.args?.includes('get-sockname')
+          ? '{"sockname":"/repo/.watchman.sock"}'
+          : '{"capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
+      }),
+    })).rejects.toThrow('missing Metro capability')
   })
 
   Test('treats a native probe result as terminal and stops Hutch watch mode', async () => {
