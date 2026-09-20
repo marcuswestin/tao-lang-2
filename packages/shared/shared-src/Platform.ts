@@ -132,6 +132,11 @@ export function onProcessSignal(signal: ProcessSignal, listener: () => void): ()
   return () => process.off(signal, listener)
 }
 
+/** readStdinText resolves the full text piped to this process on stdin, or '' when stdin is a live terminal. */
+export async function readStdinText(): Promise<string> {
+  return process.stdin.isTTY ? '' : await Bun.stdin.text()
+}
+
 /**
  * setInputRawMode toggles raw mode on an input stream, reporting whether it applied. A stream that is
  * not an interactive TTY has no raw mode to enter, so it reads as ordinary line-buffered input.
