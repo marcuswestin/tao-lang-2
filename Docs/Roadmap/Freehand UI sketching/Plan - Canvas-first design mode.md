@@ -4,8 +4,9 @@ Status: implementation record, reconciled 2026-09-16. Written as a proposal afte
 visual inspection of Studio on `Apps/HNReader`; the inspection and proposed work below remain dated
 history, while each **Landed** paragraph records the current boundary. The responsive Design split,
 viewport reveal, preview-only transforms, iframe-safe gestures, canonical occurrence identity, real
-`owner.rect`, serialized Focus enter/leave restoration, and listener disposal have landed. The final
-simulated-user acceptance condition remains open and quarantined.
+`owner.rect`, serialized Focus enter/leave restoration, and listener disposal have landed. The lane
+runs in `verify-full` again and met its ten-green-runs condition on 2026-09-20; what remains of
+acceptance is the visual inspection below and the separate native and canary pass.
 
 ## What the inspection showed
 
@@ -231,5 +232,5 @@ parallel once C has landed.
 Each stride adds a browser-lane scenario under `just studio-smoke` (zoom hit-testing, focus frame
 size equals the occurrence size within 1 px, Focus tool outlines the owner not the leaf,
 dwell-to-enter lands as a child, empty states present) and a screenshot pair in
-`.artifacts/studio-smoke/` reviewed by eye before landing. The quarantined simulated lane stays
-quarantined until the strides plan's ten-green-runs condition is met.
+`.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
+and met the strides plan's ten-green-runs condition on 2026-09-20.

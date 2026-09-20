@@ -16,6 +16,7 @@ type FakeRepository = {
   failDetach?: boolean
   failFeatureMerge?: boolean
   failMainPush?: boolean
+  failRemoteQuery?: { exitCode?: number; stderr: string }
   featureHead: string
   featureRoot: string
   featureStatus: string
@@ -39,8 +40,15 @@ type FakeRepository = {
   tree: string
 }
 
-function result(command: string, args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0) {
-  return { args: [...args], command, cwd, error: undefined, exitCode, signal: null, stderr: '', stdout }
+function result(
+  command: string,
+  args: readonly string[],
+  cwd: string | undefined,
+  stdout = '',
+  exitCode = 0,
+  stderr = '',
+) {
+  return { args: [...args], command, cwd, error: undefined, exitCode, signal: null, stderr, stdout }
 }
 
 const realOwner: MachineResourceOwner = {
@@ -155,6 +163,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       )
     }
     if (args[0] === 'ls-remote') {
+      if (repository.failRemoteQuery !== undefined) {
+        return result(
+          command,
+          args,
+          spec.cwd,
+          '',
+          repository.failRemoteQuery.exitCode ?? 128,
+          repository.failRemoteQuery.stderr,
+        )
+      }
       advertisedRemoteMain = remoteMainSequence.shift() ?? advertisedRemoteMain
       return result(
         command,
@@ -460,6 +478,40 @@ Describe('merge-with-main', () => {
       'DRY RUN  No refs or worktrees changed. Land it with: ./dev merge-with-main',
     )
     Expect(fake.snapshots.size).toBe(0)
+  })
+
+  Test('reports a sandbox-denied remote query as an environment failure with its recovery', async () => {
+    const fake = fakeDependencies({
+      failRemoteQuery: {
+        stderr: 'hostkeys_foreach failed for /Users/example/.ssh/known_hosts: Operation not permitted',
+      },
+    })
+    let failure: unknown
+    try {
+      await MergeWithMainCommand.run(
+        { dryRun: true, repositoryRoot: fake.repository.featureRoot },
+        fake.dependencies,
+      )
+    } catch (error) {
+      failure = error
+    }
+
+    Expect(failure).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(failure)).toContain('sandbox denied')
+    Expect(Errors.messageOf(failure)).toContain('unsandboxed shell')
+    Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+    Expect(fake.snapshots.size).toBe(0)
+  })
+
+  Test('preserves an ordinary remote failure as a command failure', async () => {
+    const fake = fakeDependencies({
+      failRemoteQuery: { stderr: 'fatal: Could not read from remote repository.' },
+    })
+
+    await Expect(MergeWithMainCommand.run(
+      { dryRun: true, repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )).rejects.toThrow(Errors.CommandExecutionError)
   })
 
   Test('--dry-run names the flag that will skip each verification phase', async () => {

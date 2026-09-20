@@ -74,9 +74,8 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-038 — Machine-lane lease age uses mismatched clocks](<Developer environment upgrades/DEVENV-038-machine-lane-lease-age-uses-mismatched-clocks.md>) — Candidate
 - [DEVENV-039 — Native Studio launch resolves the generated app before it is written](<Developer environment upgrades/DEVENV-039-native-studio-launch-resolves-the-generated-app-before-it-is.md>) — Candidate
 - [DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures](<Developer environment upgrades/DEVENV-040-bun-dependency-recovery-conflicts-with-protected-package-fix.md>) — Candidate
-- [DEVENV-042 — Studio smoke observes persistence before browser reconciliation](<Developer environment upgrades/DEVENV-042-studio-smoke-observes-persistence-before-browser-reconciliat.md>) — In progress
 - [DEVENV-045 — Agent shell habits route routine commands through harness review](<Developer environment upgrades/DEVENV-045-agent-shell-habits-route-routine-commands-through-harness-re.md>) — In progress
-- [DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path](<Developer environment upgrades/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — Candidate
+- [DEVENV-046 — WordFlower remains the tail of the sharded Tao app tests](<Developer environment upgrades/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — Candidate
 - [DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree](<Developer environment upgrades/DEVENV-047-release-bundle-proof-shares-metro-s-cache-with-every-other-w.md>) — Candidate
 - [DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated](<Developer environment upgrades/DEVENV-048-a-fresh-linked-worktree-cannot-launch-studio-until-the-parse.md>) — Candidate
 - [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Candidate
@@ -107,7 +106,7 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
-- [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — Candidate
+- [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — In progress
 - [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 - [DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself](<Developer environment upgrades/DEVENV-090-a-stale-generated-parser-fails-runtime-jest-without-naming-i.md>) — Candidate
 - [DEVENV-091 — A dependency tree can be unusable while every health check passes](<Developer environment upgrades/DEVENV-091-a-dependency-tree-can-be-unusable-while-every-health-check-p.md>) — Candidate
@@ -120,4 +119,7 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox](<Developer environment upgrades/DEVENV-101-fix-dprint-cannot-format-a-skill-file-inside-the-sandbox.md>) — Candidate
 - [DEVENV-102 — No gate parses `.tao-revolution` spec sources](<Developer environment upgrades/DEVENV-102-no-gate-parses-tao-revolution-spec-sources.md>) — Candidate
 - [DEVENV-103 — `$TMPDIR` resolves to two different paths between tool calls](<Developer environment upgrades/DEVENV-103-tmpdir-resolves-to-two-different-paths-between-tool-calls.md>) — Candidate
-- [DEVENV-104 — The dev-data cross-process test times out under a full lane](<Developer environment upgrades/DEVENV-104-dev-data-cross-process-test-times-out-under-a-full-lane.md>) — Candidate
+- [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Candidate
+- [DEVENV-105 — `finalize` cannot consume the green evidence that `verify` records](<Developer environment upgrades/DEVENV-105-finalize-cannot-consume-the-green-evidence-that-verify-records.md>) — Candidate
+- [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Candidate
+- [DEVENV-109 — The dev-data cross-process test times out under a full lane](<Developer environment upgrades/DEVENV-109-dev-data-cross-process-test-times-out-under-a-full-lane.md>) — Candidate

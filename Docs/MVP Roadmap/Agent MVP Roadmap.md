@@ -259,6 +259,9 @@ Closed by `34132956`. The journey ran ten consecutive green runs in a normal ter
 `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again; `VERIFY_FULL_SKIPPED`
 is empty, so the release no longer carries a quarantined lane. The editor-ownership, source-identity,
 canvas geometry, pointer-release, drag-in, and sketch transaction defects it found landed with it.
+It then failed the first `verify-repo` it was part of, on a last defect of its own: Unsnap pressed on
+a selection an authoritative render had discarded unsnaps the whole flow. That is fixed, and the ten
+consecutive green runs were re-established on 2026-09-20, which closed DEVENV-042.
 
 ### A16 — A reachable datasource for the public demo
 

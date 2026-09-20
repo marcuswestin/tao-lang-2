@@ -1,5 +1,4 @@
-import { Errors, FS, Platform, Repo, Time } from '@shared'
-import type { CLI } from '@shared'
+import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { DevDataServer } from '../dev-src/dev-data/DevDataServer'
@@ -939,11 +938,12 @@ Describe('Studio smoke resource isolation', () => {
   Test('creates disjoint preview runtime roots backed by the installed toolchain', async () => {
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
     const artifactRoot = await mkTestDir('studio-preview-artifacts-')
+    await FS.symlink(Repo.resolvePath('node_modules'), FS.resolvePath('node_modules', artifactRoot))
     let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
     let second: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
     try {
       first = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
-      second = await StudioPreviewRuntime.create(sourceRoot)
+      second = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
       Expect(first.root === second.root).toBe(false)
       Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
       // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
@@ -969,40 +969,50 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('keeps the bundler file map inside the preview runtime it describes', async () => {
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
-    const runtime = await StudioPreviewRuntime.create(sourceRoot)
-    const previousSourceRoot = Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
-    Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = sourceRoot
+    const artifactRoot = await mkTestDir('studio-preview-file-map-')
+    const runtime = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
     try {
       // Metro keys its file map by project root, so the map of a per-session root is unreadable by
       // every later session. Inside the root, closing the session removes it; outside, it is a
       // couple of megabytes of permanent litter per Studio start.
-      const previewConfig = require(FS.resolvePath('metro.config.cjs', runtime.root)) as {
-        fileMapCacheDirectory?: string
-      }
-      const toolchainConfig = require(FS.resolvePath('metro.config.cjs', sourceRoot)) as {
-        fileMapCacheDirectory?: string
-      }
+      const previewConfigPath = FS.resolvePath('metro.config.cjs', runtime.root)
+      const toolchainConfigPath = FS.resolvePath('metro.config.cjs', sourceRoot)
+      const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+      const inspectConfigs = `
+        const { HCI } = require(${JSON.stringify(sharedPath)})
+        const preview = require(${JSON.stringify(previewConfigPath)})
+        const toolchain = require(${JSON.stringify(toolchainConfigPath)})
+        HCI.writeLine(JSON.stringify({
+          preview: preview.fileMapCacheDirectory,
+          toolchain: toolchain.fileMapCacheDirectory,
+        }))
+      `
+      const inspected = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['-e', inspectConfigs],
+        env: { TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: sourceRoot },
+        stdio: 'pipe',
+      })
+      Expect(inspected.exitCode).toBe(0)
+      const config = JSON.parse(inspected.stdout.trim()) as { preview?: string; toolchain?: string }
 
-      Expect(previewConfig.fileMapCacheDirectory).toBeDefined()
-      Expect(await FS.realPath(FS.dirname(previewConfig.fileMapCacheDirectory!))).toBe(await FS.realPath(runtime.root))
+      Expect(config.preview).toBeDefined()
+      Expect(await FS.realPath(FS.dirname(config.preview!))).toBe(await FS.realPath(runtime.root))
       // The toolchain project is stable and reuses its map, so it keeps Metro's shared default.
-      Expect(toolchainConfig.fileMapCacheDirectory).toBe(undefined)
+      Expect(config.toolchain).toBe(undefined)
 
       await runtime.close()
       Expect(await FS.exists(runtime.root)).toBe(false)
     } finally {
-      if (previousSourceRoot === undefined) {
-        delete Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
-      } else {
-        Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = previousSourceRoot
-      }
       await runtime.close()
+      await FS.remove(artifactRoot)
     }
   })
 
   Test('gives the preview project the companion scheme and gateway bootstrap fact only', async () => {
     const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
-    const runtime = await StudioPreviewRuntime.create(sourceRoot, { deviceGatewayPort: 43_210 })
+    const artifactRoot = await mkTestDir('studio-preview-companion-')
+    const runtime = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot, deviceGatewayPort: 43_210 })
+    let plain: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
     try {
       const source = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', sourceRoot))
       const preview = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
@@ -1034,16 +1044,15 @@ Describe('Studio smoke resource isolation', () => {
         taoStudioDevice: { gatewayPort: 43_210, protocol: 'tao-studio-device-v1' },
       })
       Expect(configured.expo['scheme']).toBe('taostudiocompanion')
+      await runtime.close()
+      plain = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
+      const plainConfig = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', plain.root))
+      Expect(plainConfig.expo['scheme']).toBe('taostudiocompanion')
+      Expect(plainConfig.expo['extra']).toBeUndefined()
     } finally {
       await runtime.close()
-    }
-    const plain = await StudioPreviewRuntime.create(sourceRoot)
-    try {
-      const preview = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', plain.root))
-      Expect(preview.expo['scheme']).toBe('taostudiocompanion')
-      Expect(preview.expo['extra']).toBeUndefined()
-    } finally {
-      await plain.close()
+      await plain?.close()
+      await FS.remove(artifactRoot)
     }
   })
 
