@@ -1,7 +1,6 @@
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
-import { createHash } from 'node:crypto'
 import { delimiter as pathDelimiter } from 'node:path'
 import {
   MachineLanes,
@@ -839,7 +838,7 @@ async function materializeStudioNodeRuntime(
       if (!dependency.startsWith('/nix/store/') || targetBySource.has(dependency)) {
         continue
       }
-      const hash = createHash('sha256').update(dependency).digest('hex').slice(0, 12)
+      const hash = Platform.sha256Hex(dependency).slice(0, 12)
       targetBySource.set(dependency, FS.resolvePath(`lib/${hash}-${FS.basename(dependency)}`, payloadRoot))
       pending.push(dependency)
     }

@@ -1,6 +1,5 @@
 import Runtime, { RuntimeToolchainPaths, type ShipManifest as RuntimeShipManifest } from '@runtime-toolchain'
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
-import { createHash } from 'node:crypto'
 import { createAppStoreConnectToken } from './app-store-connect-auth'
 import { type AppStoreBuild, AppStoreConnectClient } from './app-store-connect-client'
 import type { PreparedShip, ShipCommandOptions } from './ship-command'
@@ -540,7 +539,7 @@ async function publicationFromExport(
   const artifacts = await Runtime.expoUpdateArtifacts(exportRoot, 'ios')
   const upload = async (descriptor: typeof artifacts.launchAsset): Promise<ExpoUpdateAsset> => {
     const bytes = await FS.readFile(descriptor.path)
-    const hash = createHash('sha256').update(bytes).digest('base64url')
+    const hash = Platform.sha256Base64Url(bytes)
     return await client.uploadAsset({
       applicationId: prepared.project.id,
       bytes,
