@@ -106,6 +106,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const snapshots = new Map<string, unknown>()
   const moves: Array<{ fromPath: string; toPath: string }> = []
   const lines: string[] = []
+  const successLines: string[] = []
   const ancestorExitCodes = [...(repository.ancestorExitCodes ?? [])]
   const remoteMainSequence = [...(repository.remoteMainSequence ?? [])]
   let advertisedRemoteMain = repository.remoteMainHead
@@ -241,7 +242,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       repository.mirrorHead = args[2]!
       return result(command, args, spec.cwd)
     }
-    if (joined === 'merge --no-edit origin/main') {
+    if (joined.startsWith('merge --no-edit ')) {
       if (repository.failFeatureMerge === true) {
         repository.featureStatus = 'UU example.ts\n'
         return result(command, args, spec.cwd, '', 1)
@@ -314,12 +315,17 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     writeJson: async (path, value) => {
       snapshots.set(path, structuredClone(value))
     },
-    writeLine: line => lines.push(line),
+    writeLine: (line, kind) => {
+      lines.push(line)
+      if (kind === 'success') {
+        successLines.push(line)
+      }
+    },
     writeText: async (path, value) => {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots }
+  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots, successLines }
 }
 
 Describe('merge-with-main', () => {
@@ -498,7 +504,7 @@ Describe('merge-with-main', () => {
 
     Expect(failure).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect(Errors.messageOf(failure)).toContain('sandbox denied')
-    Expect(Errors.messageOf(failure)).toContain('unsandboxed shell')
+    Expect(Errors.messageOf(failure)).toContain('just landing-setup')
     Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     Expect(fake.snapshots.size).toBe(0)
   })
@@ -671,6 +677,7 @@ Describe('merge-with-main', () => {
       'PASS  Preserved the clean invoking worktree at /repo-feature on detached HEAD; '
       + 'archive its owning task when you are ready to remove it.',
     ])
+    Expect(fake.successLines).toEqual(outcome.lines)
     Expect(outcome.snapshotPath).toMatch(
       /^\/repo-feature\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
     )
@@ -739,6 +746,47 @@ Describe('merge-with-main', () => {
     Expect(fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)).toContain(
       `git push origin --force-with-lease=refs/heads/main:${fake.repository.remoteMainHead} main:main`,
     )
+  })
+
+  Test('uses the credential-isolated broker for every remote read and one atomic landing', async () => {
+    const fake = fakeDependencies()
+    const pushes: unknown[] = []
+    fake.dependencies.inspectRemote = async (_root, branches) => ({
+      refs: new Map(branches.flatMap(branch => {
+        if (branch === 'main') {
+          return [[branch, fake.repository.remoteMainHead]]
+        }
+        if (branch === fake.repository.branch) {
+          return [[branch, fake.repository.remoteFeatureHead!]]
+        }
+        return []
+      })),
+    })
+    fake.dependencies.pushRemote = async (_root, push) => {
+      pushes.push(push)
+      return {
+        refs: new Map([
+          ['main', fake.repository.builtHead],
+          ['merged/example', fake.repository.featureHead],
+        ]),
+      }
+    }
+
+    const outcome = await MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fake.dependencies)
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(pushes).toHaveLength(1)
+    Expect(pushes[0]).toMatchObject({
+      branch: 'feat/example',
+      expectedRemoteFeatureHead: fake.repository.remoteFeatureHead,
+      expectedRemoteMainHead: fake.repository.remoteMainHead,
+      featureHead: fake.repository.featureHead,
+      landedHead: fake.repository.builtHead,
+    })
+    Expect(fake.calls.some(call => call.args[0] === 'ls-remote' || call.args[0] === 'fetch')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
   })
 
   Test('--skip-verify-full verifies the staged squash on main instead of the feature branch', async () => {
@@ -932,11 +980,11 @@ Describe('merge-with-main', () => {
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(operations.filter(operation => operation === 'just verify-full')).toHaveLength(2)
-    Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
+    Expect(operations.indexOf(`git merge --no-edit ${movedMain}`)).toBeGreaterThan(
       operations.indexOf('just verify-full'),
     )
     Expect(operations.findLastIndex(operation => operation === 'just verify-full')).toBeGreaterThan(
-      operations.indexOf('git merge --no-edit origin/main'),
+      operations.indexOf(`git merge --no-edit ${movedMain}`),
     )
     // Main is a ref now, so catching up with the remote is a compare-and-swap, not a checkout.
     Expect(operations.findIndex(operation => operation.startsWith('git update-ref'))).toBeGreaterThan(

@@ -14,6 +14,7 @@ import {
 } from './core/shared-core'
 import * as FS from './FS'
 import * as HCI from './HCI'
+import * as LocalSocket from './LocalSocket'
 import * as Platform from './Platform'
 import { ProcessTree } from './ProcessTree'
 import * as Repo from './Repo'
@@ -41,6 +42,7 @@ export {
   HCI,
   Http,
   Json,
+  LocalSocket,
   Platform,
   ProcessTree,
   Repo,

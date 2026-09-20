@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { inspectLandingRemote, type LandingBrokerInspection } from '../landing-broker/LandingBrokerClient'
 import { GeneratedEvidence } from './GeneratedEvidence'
 import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
 import { validateMergeMessage } from './MergeWithMain'
@@ -110,6 +111,7 @@ export type FinalizeDependencies = {
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
+  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   run: FinalizeCommandRunner
@@ -121,6 +123,7 @@ export type FinalizeDependencies = {
 const defaultDependencies: FinalizeDependencies = {
   exists: FS.exists,
   findGreenTree: GreenTree.find,
+  inspectRemote: inspectLandingRemote,
   key: GreenTree.key,
   now: () => new Date(),
   readJson: FS.readJson,
@@ -326,9 +329,9 @@ async function assertCleanWorktree(dependencies: FinalizeDependencies, root: str
 }
 
 /**
- * Integrate main when the branch does not already contain it. `origin` is preferred, but
- * `git fetch origin` fails inside this repository's sandbox, so the local `main` branch is the
- * ordinary fallback here, not a degraded path — it is reported as progress, never as a warning.
+ * Integrate main when the branch does not already contain it. The installed broker fetches the
+ * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
+ * machines that have not installed it working, with local main as the final offline fallback.
  */
 async function integrateMain(
   dependencies: FinalizeDependencies,
@@ -336,17 +339,24 @@ async function integrateMain(
   check: boolean,
   lines: string[],
 ): Promise<MainIntegration> {
-  const fetch = await dependencies.run('git', {
-    args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  const remoteReachable = fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null
-  const mainSha = remoteReachable
-    ? (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    : await localMainSha(dependencies, root)
+  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
+  const brokerMain = broker?.refs.get(MAIN_BRANCH)
+  let directMain: string | undefined
+  if (brokerMain === undefined) {
+    const fetch = await dependencies.run('git', {
+      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
+      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    }
+  }
+  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
   lines.push(
-    remoteReachable
+    brokerMain !== undefined
+      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
+      : directMain !== undefined
       ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
       : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
   )

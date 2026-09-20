@@ -422,7 +422,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-tests/agent-config-generation.test.ts:84',
   'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:214',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',

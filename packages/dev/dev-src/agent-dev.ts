@@ -58,7 +58,7 @@ await runWithCommands(commands => {
       .passThroughOptions()
       .action(async (args: string[] = []) => {
         const result = await CLI.run('just', {
-          args: [command, ...args],
+          args: [command === 'setup' ? '_setup' : command, ...args],
           cwd: Repo.getRoot(),
           stdio: 'inherit',
         })
