@@ -1,4 +1,4 @@
-// Semantic agent proof of concept: a throwaway semantic snapshot of one Tao app.
+// Semantic project inspection: a graph of one Tao app for Studio and the Tao CLI.
 //
 // Every relationship carries an `origin`: `compiler` means it came from a resolved cross-reference or
 // declaration structure in the linked AST; `poc-derived` means a name-matching heuristic this PoC

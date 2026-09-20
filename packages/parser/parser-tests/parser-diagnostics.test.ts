@@ -1,6 +1,6 @@
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { declarationWord } from '../parser-src/linker-diagnostics'
+import { declarationWord, tokenWord } from '../parser-src/grammar-words'
 import { Parser } from '../parser-src/parser'
 import * as AST from '../parser-src/parserASTExport'
 import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser, testParseCode } from './test-parse'
@@ -175,3 +175,140 @@ Describe('parser: diagnostics', () => {
     Expect(spellings.filter(spelling => /[A-Z]/.test(spelling))).toEqual([])
   })
 })
+
+/*
+ * Chevrotain builds six syntax error messages and Langium replaces two of them, so Tao registers
+ * a provider for each of the six. Every case below asserts the finished sentence, because the
+ * sentence is the product surface: a regression in the wording and a regression in the service
+ * wiring both read as a changed sentence here.
+ */
+Describe('parser: syntax diagnostics', () => {
+  Test('states the one token a mismatch expected, and what stands there instead', async () => {
+    const errors = await syntaxErrors('view Text(Value is text) { }\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'MismatchedTokenException',
+      message: 'Expected `)` here, but found `is`.',
+    })
+  })
+
+  Test('names a terminal by what an author writes in its place, and spells out running off the end', async () => {
+    const errors = await syntaxErrors('use Text from')
+
+    Expect(errors[0]).toEqual({
+      kind: 'MismatchedTokenException',
+      message: 'Expected an import path here, but found the end of the file.',
+    })
+  })
+
+  Test('states source that runs on past the last declaration', async () => {
+    const errors = await syntaxErrors('view Main() { }\n)\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'NotAllInputParsedException',
+      message: 'Expected the end of the file here, but found `)`.',
+    })
+  })
+
+  // Two alternatives fit inside the sentence, so the reader is told exactly what to type.
+  Test('names the alternatives when only a few tokens could stand here', async () => {
+    const errors = await syntaxErrors('view Main {\n}\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'NoViableAltException',
+      message: 'Expected `(` or `=` here, but found `{`.',
+    })
+  })
+
+  // A view body accepts forty-six different opening tokens, which Chevrotain printed as seventy
+  // numbered lines. Naming the construct is the whole point of the threshold.
+  Test('names the construct when too many tokens could stand here to list them', async () => {
+    const errors = await syntaxErrors('view Broken() {\n  Text is "hi"\n}\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'NoViableAltException',
+      message: 'Expected a view member here, but found `Text`.',
+    })
+  })
+
+  Test('states a repetition that matched nothing at all', async () => {
+    const errors = await syntaxErrors('view Main() {\n  guard Thing { }\n}\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'EarlyExitException',
+      message: 'Expected a guard case here, but found `}`.',
+    })
+  })
+
+  Test('states a closing brace that closes nothing', async () => {
+    const errors = await syntaxErrors('view Main() {\n}\n}\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'lexer',
+      message: 'Expected an open block for this `}` to close, but none is open here.',
+    })
+  })
+
+  // Every kind of token is legal after `=`, which is too broad a category to act on, so the
+  // sentence shows one of each instead of naming three abstractions and a byte offset.
+  Test('shows what a character Tao cannot read should have been, by example', async () => {
+    const errors = await syntaxErrors('view Main() {\n  let x = §\n}\n')
+
+    Expect(errors[0]).toEqual({
+      kind: 'lexer',
+      message: 'Expected a name like `Greeting`, a value like `"hello"`, or a keyword like `render` here, '
+        + 'but found `§`.',
+    })
+  })
+
+  // The threshold only earns its place if it holds for every shape, so this sweeps them together.
+  Test('never prints a list of expected tokens a reader cannot scan', async () => {
+    const sources = [
+      'view Text(Value is text) { }\n',
+      'use Text from',
+      'view Main() { }\n)\n',
+      'view Main {\n}\n',
+      'view Broken() {\n  Text is "hi"\n}\n',
+      'view Main() {\n  guard Thing { }\n}\n',
+      'view Main() {\n}\n}\n',
+      'view Main() {\n  let x = §\n}\n',
+      'view Main() {\n  let Greeting =\n}\n',
+      'app MyApp view Home\n',
+    ]
+    const messages = (await Promise.all(sources.map(syntaxErrors))).flat().map(error => error.message)
+
+    // One line, and short enough to read at a glance: the widest is the one carrying three examples.
+    Expect(messages.length).toBeGreaterThan(sources.length)
+    Expect(messages.filter(message => message.includes('\n'))).toEqual([])
+    Expect(messages.filter(message => message.length > 110)).toEqual([])
+    Expect(messages.filter(message => !message.startsWith('Expected '))).toEqual([])
+  })
+
+  // The companion of the cross-reference test above: a terminal name is just as internal as a
+  // grammar type name, and an unlisted one still has to come out as words.
+  Test('spells every lexer token in Tao words rather than by its terminal name', () => {
+    const tokenNames = Object.keys(Parser.createContext().services.language.parser.Lexer.definition)
+    const spellings = tokenNames.map(name => ({ name, word: tokenWord({ name }) }))
+
+    Expect(tokenNames.length).toBeGreaterThan(0)
+    Expect(spellings.filter(spelling => spelling.word.includes('_'))).toEqual([])
+    Expect(spellings.filter(spelling => /[A-Z]/.test(spelling.name) && spelling.word.includes(spelling.name)))
+      .toEqual([])
+  })
+})
+
+/** SyntaxError pairs one syntax diagnostic's sentence with the Chevrotain builder that wrote it. */
+type SyntaxError = { kind: string; message: string }
+
+/**
+ * syntaxErrors returns a parse's lexer and parser errors in report order. The builder is named
+ * alongside the sentence so a case proves which of the six produced it; every lexer error is
+ * reported as `lexer`, since its two builders are told apart by their sentences alone.
+ */
+async function syntaxErrors(source: string): Promise<SyntaxError[]> {
+  const { lexerErrors, parserErrors } = (await Parser.parseCode(source)).entry.document.parseResult
+  return [
+    ...lexerErrors.map(error => ({ kind: 'lexer', message: error.message })),
+    ...parserErrors.map(error => ({ kind: error.name, message: error.message })),
+  ]
+}

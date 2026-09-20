@@ -4,21 +4,24 @@
 // they live. Every tool here is total: it validates its operands against the semantic graph and returns a
 // refusal a model can read, rather than throwing or reaching for something it was not given.
 
+import {
+  declarationSource,
+  fieldStory,
+  fileOutlines,
+  improvementFacts,
+  inspect,
+  overview,
+  parseChecks,
+  resolveTarget,
+  type SemanticSnapshot,
+  trace,
+  viewCoverage,
+} from '@workspace'
 import { jsonSchema, tool, type ToolSet } from 'ai'
-import { parseChecks, viewCoverage } from './AgentChatCoverage'
-import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
 import { taoGuarantees } from './AgentChatGuarantees'
 import { findSpec, specSections } from './AgentChatReference'
 import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 import type { TestRunSummary } from './FeatureVerdict'
-import {
-  fieldStory,
-  inspect,
-  overview,
-  resolveTarget,
-  type SemanticSnapshot,
-  trace,
-} from './SemanticSnapshot'
 
 type AgentChatFile = { path: string; content: string; sourceVersion?: string }
 

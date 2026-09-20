@@ -43,29 +43,30 @@ language sees.
   `0ac05257`: it now returns the first lexer or parser error as the same positioned `InPlace` result
   `check` and `fix` return, while `Formatter.formatCode` and `formatFile` keep throwing for callers
   that parsed the source themselves and have nowhere to report.
-- Still open from this item, re-measured on `main` at `0ac05257` and worse than first recorded:
-  - Chevrotain's own wording reaches the reader unchanged, and "Expecting token of type …" is the
-    mild shape. Inside a view body the no-viable-alternative shape prints **seventy-five lines** for
-    one misplaced word — a numbered list of every possible token sequence — before naming what it
-    found. Lexer messages are raw too: `unexpected character: ->§<- at offset: 24, skipped 1
-    characters.` and `Unable to pop Lexer Mode after encountering Token ->}<- The Mode Stack is
-    empty`. Against this item's own bar — diagnostics a newcomer can act on — this is the worst
-    output the CLI produces, not a matter of polish.
-  - Both halves are one change: Langium injects `parser.ParserErrorMessageProvider` and
-    `parser.LexerErrorMessageProvider`, so registering Tao's own in `taoLanguageModule`
-    (`packages/parser/parser-src/parser.ts`) rewrites every shape at the producer rather than
-    editing strings afterwards, which is why an earlier attempt correctly declined to touch them.
-    Chevrotain has exactly six builders, so the set is closed and each can be authored deliberately.
-  - A syntax error at end of file is reported at `<path>:NaN:NaN` by `check`, `fix` and `fmt` alike —
-    `view Broken() {` with nothing after it prints
-    `B.tao:NaN:NaN error: Expecting token of type '}' but found ``.`. Chevrotain's EOF token carries
-    `NaN` for `startLine` and `startColumn` rather than leaving them undefined, so the guard in
-    `rangeFromParserError` (`packages/parser/parser-src/parser.ts:376`) lets it through. This is a
-    hole in what this item already landed, not in the formatter fix, and it belongs with the message
-    work because both live in the same file.
-- A1 closes when the wording and the `NaN` position land. Whoever lands the last of them closes this
-  item and the matching bullet under **Build the enforcement and diagnostics surface** in
-  `Roadmap.md`; neither file is owned by the slices themselves, so nothing closes it on its own.
+- The wording and the `NaN` position both landed on `feat/tao-error-messages-78ff65`, which closes
+  this item:
+  - Every lexer and parser syntax error is Tao's own sentence. Tao registers all six of Chevrotain's
+    message builders in `taoLanguageModule`, which reaches the core parser, the language server, and
+    every workspace or session built on either, so `tao check`, `tao fix`, the LSP, and Studio read
+    one set of sentences. Past three deduplicated alternatives a diagnostic names the construct it
+    was parsing rather than listing what could start it, so the seventy-five-line list becomes one
+    sentence. The four shapes now read:
+
+    ```
+    Expected a view member here, but found `Text`.
+    Expected `(` or `=` here, but found `{`.
+    Expected a name like `Greeting`, a value like `"hello"`, or a keyword like `render` here, but found `§`.
+    Expected an open block for this `}` to close, but none is open here.
+    ```
+  - A report is also easier to read: an excerpt leads with the line above the mistake, and a file
+    reports the first error on each line — its lexer error first, since a character Tao cannot read
+    explains the parse that follows — capped at three with the rest counted.
+  - The `NaN:NaN` position is fixed at its cause. `isPlaced` now rejects a non-finite position as
+    well as a missing one, and an error against Chevrotain's end-of-file token is placed at the end
+    of the source, so `view Broken() {` reports `a.tao:1:15` under the unclosed brace instead of
+    `NaN:NaN` followed by the formatter's assertion.
+- **Done.** The matching bullet under **Build the enforcement and diagnostics surface** in
+  `Roadmap.md` is closed with it.
 
 ### A2 — A standalone cross-platform `tao` executable
 
