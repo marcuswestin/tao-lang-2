@@ -17,6 +17,24 @@ help:
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
 _setup: _deps _agent-config
 
+# Configure this checkout and GitHub CLI for HTTPS Git authentication
+[group('Setup')]
+github-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git config --global --unset-all 'url.git@github.com:.insteadOf' 2>/dev/null || true
+    git config --global --unset-all 'url.ssh://git@github.com/.insteadOf' 2>/dev/null || true
+    git config --global --replace-all 'url.https://github.com/.insteadOf' 'git@github.com:'
+    git config --global --add 'url.https://github.com/.insteadOf' 'ssh://git@github.com/'
+    if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+      gh auth login --hostname github.com --git-protocol https --web
+    fi
+    gh config set git_protocol https --host github.com
+    gh auth setup-git --hostname github.com
+    git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
+    git ls-remote --exit-code origin refs/heads/main >/dev/null
+    printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
+
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
 secrets *ARGS:

@@ -93,6 +93,13 @@ type ArtifactRoot = {
   writable: boolean
 }
 
+/** GitHubTransport records the configured URL, its effective rewrite, and HTTPS credential wiring. */
+type GitHubTransport = {
+  configuredOriginUrl?: string
+  credentialHelpers: readonly string[]
+  effectiveOriginUrl?: string
+}
+
 /** DoctorFacts is the machine state the checks read, gathered once so the checks stay pure. */
 export type DoctorFacts = {
   artifactRoots: readonly ArtifactRoot[]
@@ -108,6 +115,7 @@ export type DoctorFacts = {
   devenvProfileNode?: string
   direnvAllowed?: boolean
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
+  githubTransport: GitHubTransport
   linkedWorktree: boolean
   lockfilePresent: boolean
   machine: MachineState
@@ -131,6 +139,7 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     bunTempDirCheck(facts),
     dependencyInstallationCheck(facts),
     dependencyCompatibilityCheck(facts),
+    githubTransportCheck(facts),
     watchmanCheck(facts),
     machineLanesCheck(facts),
     parserArtifactCheck(facts),
@@ -326,6 +335,47 @@ function dependencyCompatibilityCheck(facts: DoctorFacts): DoctorCheck {
   }
 }
 
+function githubTransportCheck(facts: DoctorFacts): DoctorCheck {
+  const { configuredOriginUrl, credentialHelpers, effectiveOriginUrl } = facts.githubTransport
+  if (effectiveOriginUrl === undefined) {
+    return {
+      detail: 'origin has no readable URL',
+      name: 'GitHub transport',
+      remediation: 'Configure GitHub HTTPS authentication with: just github-setup',
+      status: 'fail',
+    }
+  }
+  if (!effectiveOriginUrl.startsWith('https://github.com/')) {
+    return {
+      detail: `origin resolves to ${effectiveOriginUrl}, not GitHub HTTPS`,
+      name: 'GitHub transport',
+      remediation: 'Configure GitHub HTTPS authentication with: just github-setup',
+      status: 'fail',
+    }
+  }
+  if (configuredOriginUrl !== effectiveOriginUrl) {
+    return {
+      detail: `origin resolves to ${effectiveOriginUrl}, but is stored as ${configuredOriginUrl ?? '<missing>'}`,
+      name: 'GitHub transport',
+      remediation: 'Store the HTTPS URL directly with: just github-setup',
+      status: 'warn',
+    }
+  }
+  if (!credentialHelpers.some(helper => helper.includes('auth git-credential'))) {
+    return {
+      detail: `${effectiveOriginUrl} has no GitHub CLI credential helper`,
+      name: 'GitHub transport',
+      remediation: 'Configure the helper with: just github-setup',
+      status: 'warn',
+    }
+  }
+  return {
+    detail: `${effectiveOriginUrl} with the GitHub CLI credential helper`,
+    name: 'GitHub transport',
+    status: 'pass',
+  }
+}
+
 function watchmanCheck(facts: DoctorFacts): DoctorCheck {
   if (facts.watchmanVersion === undefined) {
     return {
@@ -477,6 +527,7 @@ export async function readDoctorFacts(
     ports,
     dependencyIssues,
     fingerprintFacts,
+    githubTransport,
   ] = await Promise.all([
     readBranch(repositoryRoot),
     readLinkedWorktree(repositoryRoot),
@@ -488,6 +539,7 @@ export async function readDoctorFacts(
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
     readFingerprintFacts(repositoryRoot),
+    readGitHubTransport(repositoryRoot),
   ])
   const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
     canonicalPath(repositoryRoot),
@@ -509,6 +561,7 @@ export async function readDoctorFacts(
     direnvAllowed,
     fingerprint: environmentFingerprint(fingerprintFacts),
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
+    githubTransport,
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
     machine: {
@@ -526,6 +579,32 @@ export async function readDoctorFacts(
     watchmanHealthy: watchman.healthy,
     watchmanVersion: watchman.version,
   }
+}
+
+async function readGitHubTransport(repositoryRoot: string): Promise<GitHubTransport> {
+  const [configured, effective, helpers] = await Promise.all([
+    CLI.run('git', { args: ['config', '--local', '--get', 'remote.origin.url'], cwd: repositoryRoot }),
+    CLI.run('git', { args: ['remote', 'get-url', 'origin'], cwd: repositoryRoot }),
+    CLI.run('git', {
+      args: ['config', '--get-all', 'credential.https://github.com.helper'],
+      cwd: repositoryRoot,
+    }),
+  ])
+  return {
+    configuredOriginUrl: successfulLine(configured),
+    credentialHelpers: helpers.exitCode === 0
+      ? helpers.stdout.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+      : [],
+    effectiveOriginUrl: successfulLine(effective),
+  }
+}
+
+function successfulLine(result: CLI.CommandResult): string | undefined {
+  if (result.error !== undefined || result.exitCode !== 0) {
+    return undefined
+  }
+  const line = result.stdout.trim().split('\n')[0]?.trim()
+  return line === '' ? undefined : line
 }
 
 async function canonicalPath(path: string): Promise<string> {

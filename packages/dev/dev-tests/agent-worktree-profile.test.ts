@@ -707,6 +707,16 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('merge-with-main')).not.toContain('--skip-')
   })
 
+  Test('GitHub setup standardizes HTTPS, the credential helper, and this origin', async () => {
+    const commands = await justCommands('github-setup')
+
+    Expect(commands).toContain('url.https://github.com/.insteadOf')
+    Expect(commands).toContain('gh auth login --hostname github.com --git-protocol https --web')
+    Expect(commands).toContain('gh auth setup-git --hostname github.com')
+    Expect(commands).toContain('git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git')
+    Expect(commands).toContain('git ls-remote --exit-code origin refs/heads/main')
+  })
+
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('verify-full')
 

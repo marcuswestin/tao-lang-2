@@ -129,9 +129,10 @@
         "gh *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
-        // inherits git's sandbox, so networked git failed with a misleading
-        // "could not read Username for 'https://github.com'". Excluding these fixes fetch,
-        // push, and ls-remote while the credential deny still binds every other command.
+        // inherits git's sandbox, so networked git fails with a misleading
+        // "could not read Username for 'https://github.com'". These exclusions make direct
+        // top-level Git commands eligible for host review; they cannot lift a nested Git command
+        // such as merge-with-main's own preflight out of the sandbox.
         "git fetch origin *",
         "git ls-remote origin *",
         "git ls-remote --heads origin *",
