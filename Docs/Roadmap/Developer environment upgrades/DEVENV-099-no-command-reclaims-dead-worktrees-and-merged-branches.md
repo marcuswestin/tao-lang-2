@@ -24,6 +24,13 @@
   permitted`, naming both the worktree directory and its `.git/worktrees/<name>` record; it fails
   before deleting anything, so the worktree survives intact, but the operation needs an unsandboxed
   shell.
+  Re-checked on 2026-09-20 against `main` at `e241941a`, after Simplification Waves 1 and 2 and the
+  landing-lock rework: still true, and larger. The machine now holds 47 registered worktrees, 19 of
+  them `ahead 0` of `main` by `board`'s own reckoning. No reclamation command exists in `./agent
+  help`, the `Justfile`, or `packages/dev/dev-src/`, and `board` computes no verdict to act on —
+  `Board.ts:258` states the intent outright: "a read-only report leaves cleanup to an explicit `git
+  worktree prune`". The word `reclaim` does not appear in `Board.ts` at all. None of the three
+  acceptance criteria is met, so nothing here can be downgraded.
 - **Workaround:** Build the inventory by hand as above and re-read the lane registry immediately
   before each destructive command, treating any doubt as live. Run `git worktree remove` unsandboxed.
 - **Proposed change:** Give `./agent` a reclamation command — `./agent board` already computes most
