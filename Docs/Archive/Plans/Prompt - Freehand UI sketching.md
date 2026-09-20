@@ -155,7 +155,7 @@ slice needs it: scenario spellings for text scale, loading, and empty as world c
      KEY-D7, KEY-D8, KEY-D13) and `Plan - Keyboard driven apps.md` (the plan format to follow)
    - `Docs/Roadmap/Tao Studio v2/Prompt - Complete Tao Studio v2.md` (settled ruling 1: Studio is a
      forcing app) and `Plan - Tao Studio v2.md`
-   - `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md` and the companion
+   - `Docs/Archive/Explorations/Exploration - Native device as Studio canvas.md` and the companion
      app section of `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`
    - `packages/source-actions/source-actions-src/studio-actions.ts`,
      `packages/studio/studio-src/StudioInspector.ts`, `packages/studio/README.md`

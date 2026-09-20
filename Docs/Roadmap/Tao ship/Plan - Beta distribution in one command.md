@@ -75,8 +75,8 @@ since eas-cli 14.6 through 22.0 that motion registers the bundle identifier, cre
 Store Connect record, creates an internal TestFlight group, and invites the account's admins. Tao
 does not reimplement any of that; it derives the inputs and drives the tool. Second, EAS Update's
 runtime version can be a computed native fingerprint, which is exactly the "computed, not
-hand-declared" compatibility gate `../Tao ship.md` wants, so the update slice inherits a working
-mechanism instead of designing one.
+hand-declared" compatibility gate _Versioning & identity — the braid_ below wants, so the update
+slice inherits a working mechanism instead of designing one.
 
 This comparison predates the local-Xcode ruling. EAS was not adopted; the implemented binary lane
 uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol update service.
@@ -418,11 +418,371 @@ Scope: a development build of the same derived host with `expo-dev-client`, so t
 `tao dev` no longer depends on the App Store Expo Go; it is the companion app's ancestor and
 converges with that program. The EAS lanes this slice once listed are dropped with Expo.
 
-### Handoff
+### Slice 5 — schema fingerprint and the additive class
 
-Slices 3 through 6 of `../Tao ship.md` — schema fingerprint and the additive class, the deploy
-configuration channel, hosted provisioning — pick up from here unchanged. Slice 1 and 2 here are
-the exploration's slices 1 and 2 made concrete.
+Scope, not started: make `schemaVersion` real (content-derived from the `data` declarations, not the
+hardcoded `1` the runtime writes today), ship-held schema history, mechanical additive migration for
+Local, the ship-time compatibility gate on `--update`. Act 3 (below) on-device. Continues in _Schema
+migration_ below.
+
+### Slice 6 — deploy configuration channel
+
+Scope, not started: the `config`-resolution mechanism sketched in _Secrets & deploy configuration_
+below, per-variant stores, credentials out of source. Blocks on the secrets-wording seam with the
+authority program.
+
+### Slice 7 — hosted provisioning v0
+
+Scope, not started: managed InstantDB app-per-variant provisioning and the first derived rules push;
+the provider protocol grows schema/rules lanes. Act 3 hosted, fleet gate included. Continues in
+_The hosted runtime_ below.
+
+### Slice 8 — beyond
+
+Not sequenced: automation execution host, error-report store, derived analytics, the managed
+commercial front, Play/store expansion, desktop lane. Short self-contained implementation prompts
+for any of slices 5–8 on request, after their decisions settle.
+
+## The acceptance narrative, three acts
+
+The acceptance narrative for the whole program, in the canonical app, per the tranche rule — a
+capability exists only if a real feature in one of the four apps forces it — so WordFlower's
+`2 - Next` tier grows the ship-forcing features as slices land:
+
+1. **Clean checkout → installable build.** `tao ship . --app WordFlowerInstantDB --beta` on a fresh
+   clone: derives name/bundle-id/targets/permission strings, builds locally with Xcode and the
+   developer's accounts, submits to TestFlight. A phone installs it; documents sync through
+   InstantDB. _(Slice 1, landed.)_
+2. **A one-line copy change, over the air.** Edit a string; `tao ship . --app WordFlowerInstantDB
+   --update`. Runtime fingerprint unchanged, schema fingerprint unchanged → the update publishes to
+   the variant's channel; the installed app picks it up on next launch. No store review, no build.
+   _(Slice 2, landed.)_
+3. **A `data` field addition that loses no one's document.** Add `Starred boolean` to `Documents`;
+   ship an update. The schema gate classifies it additive; devices upgrade their envelope on load;
+   the hosted snapshot upgrades once; a teammate's un-updated phone is gated honestly rather than
+   overwriting. Every document survives. _(Slice 5's first proof; not started — acts 1–2 needed no
+   migration machinery, act 3 is what would prove it.)_
+
+## Versioning & identity — the braid
+
+Five versions coexist and must be told apart, not unified:
+
+1. **Store version** ("1.4.2") — marketing, authored or auto-bumped. Implemented: `project { version
+   "…" }`, bumped per _Command surface_ above.
+2. **Build number** — monotonic, derived; `tao ship` counts it. Implemented.
+3. **Runtime fingerprint** — derived from the native closure; gates OTA compatibility. Implemented,
+   computed from the host rather than hand-declared (the `runtimeVersion` an EAS pipeline would have
+   made the developer author).
+4. **Schema fingerprint** — derived from `data`; gates data compatibility (see _Schema migration_
+   below). Distinct from the runtime fingerprint: a copy change moves neither; a new sidecar moves 3
+   but not 4; a new field moves 4 but not 3. The fingerprint itself is computed (`ship-executor.ts`);
+   the migration machinery that acts on a change in it is not built — see below.
+5. **Project version** — `tao publish`'s package-registry version (`Docs/Spec/Tao Packages.md`), a
+   different product surface that happens to share the word.
+
+## Secrets & deploy configuration
+
+Not started. Two different things currently share one word, and the first act of this section is to
+split them:
+
+1. **`secret` the value type** (`Decisions.md` §2–§4): capability-grade, rotatable, lives in user
+   data, already decided. Owned by the authority program. Not this document's subject — except that
+   the ship pipeline must honor its guarantees (a `secret` never serializes into a prompt, never into
+   an error report — see _Error reports in production_ below).
+2. **Deploy credentials and provider configuration**: App Store Connect keys (the accepted ones —
+   `issuerId`, `keyId` — already live in `.tao-project/lock.jsonc`, per _Precedent: accepted project
+   metadata_ below), Play service-account keys, InstantDB admin tokens, API keys a sidecar needs. No
+   general owner yet; an app's `AppId` values are still hardcoded in `.tao` source, survivable only
+   because InstantDB app ids are public client values.
+
+Design sketch for (2), to be settled in dialogue: configuration values referenced by name in
+provider bindings, resolved at ship time from a per-project store that is never source:
+
+```tao
+datasource WordFlowerStore = InstantDB { AppId config InstantAppId }
+```
+
+with `tao ship` resolving `InstantAppId` per variant from the ship service's config store (or a
+local `.tao-project/` file for the fully-local lane), prompting on first miss. Admin-grade values (an
+Instant admin token, an ASC key) never reach the client bundle at all — they are consumed
+server-side by the ship/backend service; the type system can enforce the split (client-config vs
+server-credential) because the compiler knows which side each consumer runs on. **Seam flag**: the
+word `config` vs overloading `secret`, and the InstantDB provider's config surface, are shared with
+the authority & multiplayer program — collision to surface, not decide here.
+
+## The hosted runtime — a backend derived, not configured
+
+Not started, beyond the InstantDB provider status recorded in `Docs/Roadmap/Multiple datasources/Plan
+
+- Multiple datasources.md`. The server-shaped parts of a declared Tao app, and where each comes from:
+
+| Hosted piece        | Derived from                                                    | Firebase/Vercel equivalent           |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------ |
+| Data store + schema | `data` declarations                                             | hand-authored schema/collections     |
+| Store rules         | `validate` lowering, access rules, publish projections (§2, §4) | hand-written security rules          |
+| Scheduled work      | `automation` — trigger, `while`, `once per`, audience, payload  | cron config + job code + dedup logic |
+| Push delivery       | `notify` payloads + `Notifications` provider                    | FCM/APNs glue                        |
+| Auth service        | `use auth from @tao/auth`, account references in access rules   | Auth product config                  |
+| Error-report store  | the error architecture's capture bundles                        | third-party crash SDK                |
+| Analytics           | declared commands/transactions/scenes (see _Derived analytics_) | event-tracking SDK + taxonomy doc    |
+
+Two grounding facts give this section its shape. First, `Decisions.md` §12 decides `automation` is
+"provider-owned scheduled work … explicitly not a timer on one mounted device" — but no decision
+names the machine it runs on when every device is off. There is exactly one honest answer: a hosted
+service. The hosted runtime is not an optional accessory; it is the **unnamed execution host the
+language already promised.** Second, §4's publish machinery is decided as "(none of it is server
+code)" — lowered to provider-native rules. So the hosted runtime's job is narrow and derivable: hold
+the store, enforce the derived rules, evaluate automation schedules, deliver push, answer auth — and
+_not_ run app code. An automation cannot write (§12); it `do`es a transaction, whose authority
+question (§12 gap: what identity does a server-side scheduled `do` carry?) is a real language
+decision this program must put to Ro.
+
+Provisioning is a ship-time act: `tao ship` diffs the derived backend (schema, rules, indices,
+automation schedules, push config) against what the service currently runs for that variant, shows
+the diff, applies it. The InstantDB provider is the precedent and the gap: today it pushes nothing
+(one opaque row, empty rules; see its status in `Docs/Roadmap/Multiple datasources/Plan - Multiple
+datasources.md`). The path runs through making the provider protocol provisioning-aware — schema
+push, rules push, and a migration lane (see _Schema migration_) — regardless of whether the store
+under the Tao service is InstantDB, Postgres, or provider-per-plan.
+
+**Error vocabulary is a contract, not a style.** Everything the hosted runtime emits speaks the
+established language: provider failures are `fails <Case> "<sentence>"` — a case declared in Tao,
+never a server-authored string ("English never crosses into TypeScript" extends to "English never
+crosses out of the server"); a server-side write rejection arrives shaped exactly like a local
+`validate`/`refuse when` outcome (`rejected` with a sentence, not an `error`); offline is never an
+error. A backend whose failures are ordinary Tao cases is a backend whose failures are renderable,
+translatable, and testable with the existing scenario machinery.
+
+### Auth hosting
+
+`Decisions.md` §11 decides the surface (`use auth from @tao/auth`, `auth.Account`, sign-in flows);
+InstantDB brings its own auth (magic codes); the authority program owns access semantics. Ship's
+narrower questions: who operates the identity service under a Tao-managed backend, whether accounts
+are per-app or Tao-wide (recommended: per-app — a WordFlower account is WordFlower's; Tao-wide
+identity is a product decision nobody has made), and how auth config (OAuth client ids, Apple
+Sign-In keys) rides the deploy-configuration channel above. Flagged as a seam; not designed past
+here.
+
+## Schema migration — the honest option space
+
+Not started. The hardest unsolved question in the language. First, the ground truth, verified in
+code: **today, any change to any `data` declaration is fatal to all existing data.** The runtime's
+`parseEnvelope` (`packages/runtime/TaoRuntime-src/TR-data-persistence.ts`) demands _exact_ equality
+between the persisted shape's `schemaVersion` and the compiled shape's — entity sets and per-row
+field sets must match by name; even a purely additive field trips it on the first row. `schemaVersion`
+is wired end-to-end through the envelope but still hardcoded to `1` by the compiler; it has never once
+gated anything, and no `migrate` keyword exists in the grammar. The outcomes:
+
+- **Local datasource**: the app blocks behind a modal whose only working button is **"Reset app
+  data and reload"** — one tap, total data loss. The old data is not corrupted — it sits intact
+  and unreadable on disk while the app offers to erase it.
+- **InstantDB**: the connection deliberately grants no `reset()` (correct in isolation — a
+  client must not wipe a shared store it can't read), so the only button is a retry that can
+  never succeed. **Shipping a schema change to a hosted Tao app today permanently bricks every
+  existing client.**
+- **Mixed-version fleet**: a running client that receives a peer's newer-shaped snapshot
+  degrades to a recoverable sync error — and then the two clients last-snapshot-wins overwrite
+  each other's divergent data, because the store is an opaque blob that cannot arbitrate.
+
+And one structural fact that shapes every option: **the store cannot help.** The hosted snapshot is
+one JSON string InstantDB never parses; there is no server-side representation of entities to
+migrate. Any migration is a read-transform-write by something that understands both shapes — a
+client, or a Tao-aware service.
+
+### The theaters
+
+Any answer must play in three places at once:
+
+1. **The device** — a Local snapshot upgraded in place when the app updates.
+2. **The hosted store** — shared state that must change shape exactly once, not once per client.
+3. **The fleet** — during any rollout (and forever, for users who never update), old and new
+   binaries coexist against the same store.
+
+### The option space
+
+- **O0 — Status quo (refuse + wipe).** Honest, implemented, and disqualifying for a shipped
+  app. Recorded because it is the baseline every option is measured against: anything shipped
+  must strictly dominate "brick or wipe."
+
+- **O1 — Derived compatibility: make `schemaVersion` real.** The compiler derives a schema
+  fingerprint from the `data` declarations' content. The ship service keeps every shipped
+  schema (this is the uniquely-Tao move: **schema history is a ship artifact**, so `tao ship`
+  always holds both shapes and can classify the diff _before anything reaches a user_).
+  Additive-compatible changes — new entity; new field with a derivable default (optional,
+  defaulted, or case-with-none) — migrate mechanically: fill on read, write back upgraded.
+  Anything else is refused at ship time until the developer says what it means. The lenient
+  half of the classifier is small, checkable, and covers the overwhelming majority of real
+  app evolution.
+
+- **O2 — Declared migrations, in Tao.** For the refused class, the developer states meaning in
+  source, next to the entity, in the language's own vocabulary:
+
+  ```tao
+  data Documents / Document {
+     Title text
+     Body text
+     Starred boolean            // added in the same change as:
+     migrate from 3 { Starred: no }          // sketch — spelling entirely unsettled
+     migrate from 2 { Title: Name }          // a rename is a statement, not a guess
+  }
+  ```
+
+  Checked at ship time against the _actual_ previous shipped schema (not a guessed one — the
+  service has it), chainable across skipped versions, testable with the scenario machinery
+  against captured fixtures from the old shape. The design bar: a migration is a total,
+  deterministic, store-only function of the old row — no I/O, no model calls, so it can run
+  anywhere (device or service) with identical results.
+
+- **O3 — Eager server-side migration on deploy.** The ship service transforms the hosted
+  snapshot(s) once, at `tao ship` time, using the O1/O2 rules. Solves theater 2 exactly once;
+  requires the provider protocol to grow a migration lane (or the service to own the store
+  outright), and requires the fleet gate below, because the moment the store is new-shaped,
+  old binaries can no longer be allowed to write.
+
+- **O4 — Lazy client-side migration on load.** Each client upgrades whatever it reads (old
+  envelope → chained migrations → new shape) and writes back. Perfect for theater 1 (Local:
+  this is simply what "app update" should mean). Dangerous alone in theater 2: with
+  last-snapshot-wins blob storage, a lagging old client can overwrite the upgraded snapshot
+  wholesale — lazy migration of a shared store is unsound without the fleet gate.
+
+- **O5 — Expand/contract (dual-shape tolerance windows).** The industrial answer for
+  zero-downtime services: ship shapes that read both, contract later. Maximum availability,
+  maximum ceremony — it forces every developer to think in three-phase deploys, which is
+  precisely the class of burden Tao exists to delete. Recorded as the escape hatch for the
+  hosted service's _own_ internals, not as the developer surface.
+
+- **The fleet gate (orthogonal, required by O3/O4).** The schema fingerprint becomes a sync
+  gate the way the runtime fingerprint gates OTA: the store carries its shape's version; a
+  client behind it does not brick and does not overwrite — it renders an honest, decided-vocabulary
+  state ("This app needs updating to keep working with your data"), read-only at best. The
+  current mixed-fleet mutual-overwrite behavior is thereby retired. Old binaries that never
+  update stay in theater-3 purgatory honestly instead of corrupting theater 2 silently.
+
+### Recommended composite (to seed the dialogue, not to end it)
+
+O1 as the spine (derived fingerprint, ship-held schema history, mechanical additive class) +
+O2 for everything the classifier refuses + O4 for Local + O3-with-fleet-gate for hosted stores
+once the provider protocol has a migration lane. The WordFlower acceptance test falls out (see act 3
+above): adding `Starred boolean` is O1's additive class — no declaration, no ceremony, and **no user
+loses a document**, on device or hosted. Renaming `Name` to `Title` is one O2 line. Deleting a
+field is a decision (`migrate` says drop, or the ship refuses) — never an accident.
+
+What this composite deliberately does not solve, kept visible: reversible rollback past a
+migration (refused unless the migration declares an inverse); migrations that need I/O or
+human judgment (out of the model — that is an app feature, not a migration); and the long tail
+of never-updated clients (gated read-only, forever, honestly).
+
+## Error reports in production
+
+Not started. The PROD half of the error architecture, deferred to this program by the Studio work.
+The vocabulary and the capture machinery already exist; ship adds transport, storage, and defaults.
+
+- **A capture bundle is the existing Studio capture, produced in the field**: the datasource
+  snapshots (the only implemented capture domain, extended per the error architecture),
+  persisted state, nav state, the action log, and environment values — exactly the ingredients
+  Studio already replays as fixture + scenario. A production error report is therefore _a
+  reproducible test case_, not a stack trace: opened in Studio, it becomes a named state and a
+  failing scenario.
+- **Structural exclusions, not scrubbing lists**: `secret`-typed values never serialize into a
+  capture (the same language-level guarantee that keeps them out of prompts); credentials are
+  excluded by construction because the capture domains simply do not include a credential
+  store. Reports carry account _identity_ (whose session) because replay and support need it —
+  identity is data the app already holds; credentials are not.
+- **Scrubbing defaults for the rest**: user-content fields are the app's actual data, and a
+  full-snapshot capture of them is radioactive. Default posture to settle in dialogue —
+  leaning: report capture is **opt-in per app** (`Reports` slot or similar), with a declared
+  redaction level (shape-only / sampled / full), surfaced to the developer at ship time and to
+  the user in the platform-standard consent surface.
+- **The report store is part of the hosted runtime**, keyed by shipped version + runtime
+  fingerprint + schema fingerprint (so a report is replayable against the exact source that
+  produced it — the ship service holds every shipped artifact). Report-store auth rides the
+  same account model as the rest of the backend.
+- **Errors speak the vocabulary**: a report's headline is a `Case + sentence` when the app
+  refused/failed honestly, and only unhandled exceptions arrive as raw `error` — making the
+  ratio of the two the first derived quality metric.
+
+## Derived analytics
+
+Not started. Tao apps need no analytics SDK because the taxonomy is the source: every titled
+command, transaction, and scene is a named event with declared parameters; the navigation graph is
+the funnel diagram. The hosted runtime counts them.
+
+- **Counts, not content**: the derived event is the declaration name + timestamp + anonymous
+  session key — parameters and payloads stay out unless explicitly opted in, matching the
+  deny-by-default posture everywhere else in the language.
+- The dashboard is derivable too: scenes over the nav graph, commands per scene, the
+  `rejected`-vs-`saved` outcome ratio per transaction (which doubles as the health metric the
+  error section wants).
+- Open: whether analytics is on-by-default-anonymous or opt-in like reports; app-store privacy
+  ("nutrition label") declarations are themselves derivable from these choices — a genuinely
+  novel derivation (the compiler can _prove_ what the app collects).
+
+## The commercial shape
+
+What people pay for, and why it is defensible:
+
+- **Free**: the language, the compiler, Studio, local/BYO shipping (`tao ship` over your own
+  Apple/Google accounts, Local datasources, self-hosted anything). The loop must be
+  walkable end to end for $0 — the funnel is the product.
+- **Paid — the managed path** (per app per month, tiered by MAU/usage, in the shape of the
+  hosting market: free dev tier → ~$19 hobby → ~$99+ production):
+  1. **Hosted backend** — the Cloud datasource, derived rules, automation execution, push,
+     auth, error-report store, analytics. The recurring engine; none of it exists without a
+     server, and Tao's server is provisioned by the compiler.
+  2. **Managed pipeline** — signing custody, schema-gated OTA, schema history and migration
+     checks, sold as "ship without ever seeing four consoles."
+- **Tenancy**: the `project id` is the tenant key (already decided as the stable identity that
+  "travels with clones and published artifacts", with `--replace` as the explicit fork/sever
+  operation); variants are environments _within_ a project's tenancy; a Tao account owns
+  projects. Per-app auth (recommended above) keeps end-user accounts inside the app's tenancy.
+- **The moat is derivation, not hosting.** Hosting is commodity; what Firebase/Vercel/Supabase
+  cannot do is _see the app_: derived rules that cannot drift from `validate`, OTA gated by a
+  schema the platform actually understands, migration checked against held history, analytics
+  with a compiler-proven privacy label, error reports that replay as test cases. Every paid
+  feature above is a compiler feature wearing a service; that is the pitch and the defense.
+
+## Cross-program seams (flagged, not decided)
+
+- **Studio v2 / error architecture**: this program owns the PROD half (capture transport,
+  report store, scrubbing defaults) and must emit the settled vocabulary exactly; the fixture +
+  scenario replay path is consumed as-is. The desktop Studio shell (Electrobun-packaged;
+  signed/distributable packaging explicitly beyond Studio v1) is the eventual publish cockpit and
+  the most demanding ship customer — recorded as a known lane; phone-first is v1. The missing
+  production-bundle assertion (no Studio machinery in release builds) is proven by slice 1, landed.
+- **Authority & multiplayer**: the `secret` value type vs deploy-config wording; the InstantDB
+  provider's config/auth surface; per-app account semantics. Shared dependencies — collisions
+  get surfaced to Ro, not designed past.
+- **AI in Tao apps**: hosted agent execution, agent access to production data, on-device model
+  entitlements in store builds, and eval runs against shipped model versions are intersections;
+  noted here, owned there.
+
+## Open questions, gathered
+
+1. Migration composite: ratify O1+O2+O4+O3-with-gate? What may the additive classifier accept
+   without a declaration? `migrate` spelling and its ship-held-history check.
+2. Automation authority: what identity does a server-side scheduled `do` carry? (A §12 gap
+   that needs a `Decisions.md` amendment, not just implementation.)
+3. Error-report capture default (opt-in level, redaction tiers) and analytics default
+   (anonymous-on vs opt-in).
+4. Permissions spelling reconciliation (§11 `Reason` vs demos' `while using … because`) —
+   needed before usage-string derivation is implementable.
+5. Per-app vs Tao-wide end-user accounts (flagged to the authority seam).
+6. Listing-asset derivation (Studio-rendered screenshots, `Icon` slot) — provided for now, later
+   derived? The icon half is settled: a Tao default with a badged variant default now, the `Icon`
+   slot argued separately as a grammar addition.
+7. Web delivery (the browser is a medium, not a target): where `tao ship` puts the web build,
+   and whether it is slice-worthy before the stores are solid.
+
+## Deferred (liked, not scheduled)
+
+- Studio as publish cockpit: the ship motion with a face — diff of the derived backend, channel
+  dashboards, migration previews over captured fixtures.
+- Screenshot derivation from named states; store-listing copy through the translation pipeline.
+- Compiler-proven privacy nutrition labels submitted with the listing.
+- Reversible migrations with declared inverses enabling gated rollback across schema changes.
+- Self-hosted update server lane (open protocol) as an enterprise posture.
+- Desktop Electrobun app shipping — signed, notarized, auto-updating — the Studio shell itself as
+  first customer.
 
 ## Decisions for Ro
 
@@ -471,8 +831,8 @@ on 2026-09-02 found it in three places, and together they say what decision 2 sh
   promotes the hidden file over the committed one. The later "Look Great By Default" plan on the
   old repository's `app/meny-proto` branch grew the same lock with a template selection and a
   schema version bump, and gave it `tao design update` and `--reroll` commands.
-- **This repository's design-system plan**, `Docs/Roadmap/Add Tao design system MVP/Design
-  tooling and rollout.md`, carries the same idea as a lockfile sketch: a theme with generation
+- **This repository's design-system plan**, `Docs/Roadmap/Add Tao design system MVP/Plan - Add Tao
+  design system MVP.md`, carries the same idea as a lockfile sketch: a theme with generation
   provenance and an acceptance time, an app fingerprint, generated tokens and recipes marked
   `locked` or `modifiedByUser`, per-screen render hashes and baselines, and an AI section whose
   `maxEditScope` bounds what generation may touch. Its rules are the useful ones: never rewrite a

@@ -812,8 +812,9 @@ query AisleTotals from MyKitchen.Groceries {
 presence Viewers on Recipe   // Viewers.Others lists the other accounts with this Recipe open now
 ```
 
-**Amended by the HTTP datasource work** (implemented; `Docs/Roadmap/HTTP Datasource/`, forced by
-`Apps/HNReader`). Remote read-only feeds enter through the datasource seam, never through
+**Amended by the HTTP datasource work** (implemented; `Docs/Roadmap/Multiple datasources/Plan -
+Multiple datasources.md`'s "Http" section, forced by `Apps/HNReader`). Remote read-only feeds enter
+through the datasource seam, never through
 imperative fetch actions:
 
 - **`Http` in `@tao/data` is a query-driven datasource.** Entities stay ordinary `data`

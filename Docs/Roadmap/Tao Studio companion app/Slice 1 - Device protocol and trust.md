@@ -1,9 +1,10 @@
 # Slice 1 - Device protocol and trust
 
-Status: Barrier 0 contract for [Prompt - Implement Slice 1](./Prompt%20-%20Implement%20Slice%201.md).
-This is the settled seam between Tao Studio, its development tooling, the dependency-light runtime,
-and the companion shell for **Pair and render one real device**. Later slices extend it; nothing here
-adopts Tao language semantics.
+Status: settled seam between Tao Studio, its development tooling, the dependency-light runtime, and
+the companion shell for **Pair and render one real device**; Slice 1 landed and is proven below.
+This was the Barrier 0 contract for the multi-agent implementation prompt, now archived at
+`Docs/Archive/Plans/Prompt - Implement Slice 1.md`. Later slices extend it; nothing here adopts Tao
+language semantics.
 
 ## Topology and lifecycle
 

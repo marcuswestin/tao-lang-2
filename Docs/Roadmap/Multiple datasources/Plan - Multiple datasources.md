@@ -315,3 +315,479 @@ slot instead), and a Studio provider overlay keyed per datasource beyond what fi
 - **An optional data field with no default is still required by a `create`.** `hasDataFieldDefault`
   in `data-write-bindings.ts` ignores `field.optional`. Pre-existing, unrelated to this work, and
   noticed only because an optional `reference` was the first field where it was tempting.
+
+## Provider status
+
+Per-provider status, folded in from what were standalone reports for the `Http`, `InstantDB`,
+`ICloud`, and `CloudKit` datasource types. None of these providers depend on the multiple-datasources
+work above to function alone; `Http` and the granular `CloudKit` family predate it, and this section
+just keeps their status beside the datasource abstraction they configure into.
+
+### Http
+
+Settled design, landed with `Docs/Spec/Tao Data.md` as the implemented contract. `Apps/HNReader`
+(`Apps/HNReader`) is the forcing app and remains the reference implementation.
+
+**The protocol: descriptor-driven fill, local evaluation.** The provider does not own query results.
+It is _notified that a query descriptor became active_ (entity, filters, order, limit), fetches, and
+upserts rows into the store; the store keeps evaluating every query locally over its rows, exactly as
+it does for `Local` and `Memory`.
+
+- **Fetch-on-demand, superset-fill, local evaluation.** A filter the API cannot express means the
+  provider fetches a superset and the query block still filters locally.
+- **Upsert by `(unique)`.** A fill addresses rows by the entity's unique field (`HnId`), so a
+  refetch updates rather than duplicates. Relation fields in fills are addressed by the target
+  entity's unique field value (`Story: { HnId: … }`), resolved to the store row by the provider.
+- **API-side ordering is materialized as a row field.** HN's front-page rank is not derivable from
+  any field, so the adapter writes `Rank: index` and the query says `order by Rank`. Ordering
+  becomes visible, typed data instead of an invisible API side effect.
+- Rejected alternative: the provider returning per-query result sets (each query an island; rows
+  unshared; the Tao query block reduced to advisory text). TanStack Query's document cache is that
+  model, and TanStack built TanStack DB — normalized collections, locally evaluated live queries,
+  fetches relegated to collection fillers — to correct it. Their correction is this design.
+
+**Availability: cache-first, per-query.** Fill lifecycle is tracked per descriptor, with a
+four-member case vocabulary: `loading` (first fill in flight, nothing to show yet), `refreshing`
+(rows present and renderable, a fill runs behind them), `stale` (rows present, the latest fill
+failed), `error` (fill failed and nothing to show). `refreshing` and `stale` are advisory: a guard
+that does not name them falls through and renders content, and they never route to the app-wide
+`guard default` net — only nothing-to-show cases do. A case is also a predicate:
+`if FrontPage is refreshing { Spinner() }`. Offline stays a non-error: a failed refresh over cached
+rows is `stale`, never `error`.
+
+**The adapter: declared shapes, loud failures.** An adapter is a list of declared query shapes per
+entity. A live query matching no declared shape is a development-time diagnostic at subscription —
+never a silent non-fetch. The declarations double as documentation of the API's real capability
+surface, which for most REST APIs is an enumerable set of shapes, not a query language:
+
+```ts
+// HNAdapter.ts — as landed: entries key by the singular entity name, and a stated `orderBy` or
+// `orderDirection` must match the descriptor exactly.
+export const HNAdapter = TR.Http.adapter({
+  Story: [
+    TR.Http.on({ orderBy: 'Rank' }, async (query, { upsert }) => {
+      upsert(toStories(await fetchJson(`${API}/search?tags=front_page&hitsPerPage=${query.limit}`)))
+    }),
+  ],
+  Comment: [
+    TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {
+      upsert(flattenComments(await fetchJson(`${API}/items/${query.where.Story.HnId}`)))
+    }),
+  ],
+})
+```
+
+**Relations.** A relation traversal (`query Thread from Story.Comments`) reaches the adapter as an
+ordinary filtered descriptor — entity `Comments`, where `Story` is this row — which is what the
+compiler already lowers traversals to. One descriptor vocabulary, one matching mechanism; the handler
+receives the parent row as a plain snapshot (`where.Story.HnId`). A row-by-unique-key shape covers
+deep links whose entity parameter is not yet cached.
+
+**The stdlib/app split.** `@tao/data` publishes an `Http` datasource type; an app derives from it and
+supplies the adapter:
+
+```tao
+type HNSource is Http with {
+   Adapter item is HNAdapter from ./HNAdapter.ts
+   CacheFor duration is 5.min
+}
+```
+
+The stdlib piece is deliberately a thin, honest machine — per-descriptor in-flight dedup, staleness
+against the Tao clock (`CacheFor`), upsert-by-unique, fill-state tracking, error mapping to the cases
+above. All API-specific truth lives in the app's adapter. The generic "translate any query to HTTP"
+datasource is explicitly not the goal.
+
+**TanStack.** Use their model, not their code, for v1. TanStack Query's two-axis state maps exactly
+onto the four cases above (`pending`/`fetching` = loading, `success`+`fetching` = refreshing,
+kept-data-plus-error = stale), which is strong independent validation. Not depending on it, for now:
+the deterministic test clock (Tao holds and `advance`s time; TanStack runs on real timers with no
+injection seam), spec ownership (`CacheFor` and the cases are language semantics, not "whatever the
+installed version does"), and the v1 subset being small. The provider's internal seam mirrors
+query-core's shapes so adopting it later — when retry/backoff/gc/reconnect are wanted — is cheap.
+
+**Testing.** Journeys bind a deterministic datasource through the decided app-variant mechanism
+rather than stubbing the network: either `Datasource Memory` with seeded rows, or an `Http`-typed
+datasource whose adapter is a canned in-repo stub — the latter exercises the real fill machinery
+(loading → ready → refreshing) with no network. The real adapter's descriptor-to-URL mapping gets
+ordinary TypeScript unit tests.
+
+**Landed:** the `limit` query clause; `(unique)` threaded from grammar to the runtime definition;
+`refreshing`/`stale` as builtin subject cases (grammar, validator, compiler, runtime match); a
+`from`-bridge typed in place by its configuration slot (`Adapter item is HNAdapter from
+./HNAdapter.ts`); the fill-capable provider protocol (`fill` beside `load`/`persist`), per-descriptor
+state on the schema, upsert-by-unique with relation resolution, per-query availability, staleness and
+dedup on the runtime clock, and `settle` covering fills; the stdlib `Http` datasource,
+`TR.Http.adapter`/`TR.Http.on`, `withConfiguration` plumbing carrying `Adapter` and `CacheFor` from
+the configured value to the bound provider; `Apps/HNReader`'s entities, Algolia adapter, screens, and
+journeys running the stub-adapter variant through the real fill machinery, with the test harness
+settling data between steps.
+
+**No longer deferred: per-entity datasource scoping.** An app binds a set of datasources, each
+stating the collections it stores, and `reference` links a row to one held by another store — see
+_The ask_ and _Decisions_ above; HNReader's bookmarks are the local favorites this deferral was
+waiting for. The decisions are recorded in `Decisions.md` §6 under "Amended by the HTTP datasource
+work".
+
+**Still deferred, deliberately:**
+
+- Snapshot persistence for an offline cache across launches (the Http provider's base store is
+  in-memory; cache-first behavior holds within a session).
+- Writes through a remote datasource (HN is read-only; the source rejects writes).
+- Pull-to-refresh and any user-triggered re-fetch spelling.
+- Cache eviction (keep-all) and retry/backoff (where TanStack query-core becomes interesting).
+- Entity-handle-level `refreshing`/`stale` (queries only for now).
+- Per-feed row provenance in the store. Filled rows land in the entity's shared row set, so
+  distinct feeds over one entity own their queryable facts instead: each feed materializes its own
+  field (defaulted for rows other feeds fetch) and filters on it — `Rank number (default 0)` with
+  `where Rank >= 1`.
+
+**Known consequences of the deferrals**, visible in the shipped app rather than merely theoretical:
+
+- **The refresh states are not reachable from HNReader today.** A descriptor is offered on query
+  mount and on descriptor change only; there is no focus, foreground, or interval re-offer, and
+  `FrontPage` is the stack root, so it fills once per launch. `refreshing` and `stale` are real,
+  tested at the schema level, and correct the moment a refresh spelling lands — but no journey
+  through the app can display their banners now.
+- **Rows are never evicted.** A story that falls off the front page keeps its old `Rank`, so a
+  refill interleaves it with new rows under duplicate ranks. Eviction is deferred above; this is
+  what deferring it looks like on screen.
+- **An adapter's own unit tests have no home.** `Apps/tsconfig.json` now typechecks sidecar
+  `@tao/runtime` imports, but `HNAdapter.ts` is still outside the package test suites, so its
+  behavior is covered only indirectly through the stub adapter's journeys. A unit-test home for app
+  sidecars is its own piece of work.
+
+### InstantDB
+
+Status: semi-experimental implementation. The package and runtime boundary are implemented; live
+two-client acceptance remains before this can be treated as the production sync model.
+
+Datasource implementations are Tao packages: `@tao/data/providers/local`, `@tao/data/providers/memory`,
+and `@tao/data/providers/instantdb`. The runtime no longer owns or names concrete providers. A package
+provider connects with an evaluated configuration, the compiled Tao data schema, and a stable storage
+key. A connection loads and saves full serialized snapshots, may publish live snapshots, may opt into
+destructive reset recovery, and may release connection-owned resources. Runtime queries, entity
+handles, defaults, relationships, validation, and serialized write ordering remain provider-neutral.
+`StorageKey` defaults to the mounted Tao data schema name; `Local` requires an explicit key in its Tao
+contract, `InstantDB` makes it optional so app variants can normally configure only `AppId`.
+
+**The adapter.** It stores one `taoSnapshots` entity per `AppId` and storage key. Its deterministic
+entity ID does not require a unique attribute or an Instant schema-push step. Initial state resolves
+from the first `subscribeQuery` result — so an offline launch serves the SDK's local cache — and the
+same subscription then feeds live changes; writes use `transact`. `ApiURI` and `WebsocketURI` are
+optional configuration for local Instant development.
+
+The previous repository supplied the proven client operations and a test app ID:
+`9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f`. Its local endpoints were `http://localhost:9020` and
+`ws://localhost:9020/runtime/session`. No admin token or other secret is copied into this repository.
+The previous provider-specific query and row-write engine is not ported: this slice preserves the
+current Tao runtime's data semantics behind the new connection boundary.
+
+Local development uses InstantDB's published self-hosted images through a small adaptation of its
+official `self-hosting/docker-compose.local.yml`. `just start-local-instantdb` starts and waits for
+the stack, then idempotently provisions the stable WordFlower app; `just stop-local-instantdb` stops
+it without deleting data. Compared with the previous repository, this removes the InstantDB source
+checkout, pinned development-server build, custom Dockerfile, and dependency-cache volumes.
+
+**Known limits:**
+
+- Sync is a whole-datasource snapshot, not entity-level InstantDB storage. Concurrent writers are
+  last-snapshot-wins and can overwrite unrelated edits. A local commit wins over subscription
+  snapshots observed while its ordered save queue is pending, avoiding a transient remote/local
+  flip-flop without pretending to provide conflict resolution.
+- Authentication, permissions, presence, schema provisioning, migrations, conflict resolution, and
+  offline reconciliation are not yet modeled by the Tao provider protocol.
+- A remote provider load failure offers a safe retry. It cannot opt into the reset action used by
+  Local and Memory, so a transient network or malformed remote snapshot cannot silently erase remote
+  data.
+- A subscription error preserves the last usable data and appears through query error state rather
+  than replacing the app with the initial-load recovery overlay. A later valid snapshot recovers it.
+- The SDK is initially pinned to the previous implementation's `@instantdb/react-native` 1.0.22 while
+  the interface settles.
+- Copied provider sidecars resolve native dependencies from the runtime host, so that host installs
+  the InstantDB SDK and its React Native peers. Metro includes the SDK only when the compiled module
+  graph reaches the InstantDB sidecar; a Tao file containing both Local and InstantDB app variants,
+  such as WordFlower, keeps it reachable even when the Local variant is selected.
+
+**Validation.** Before the final provider-package refinements, `./agent verify` passed all 15 suites:
+1,002 tests, 1,002 passed. Package-owned focused coverage now exercises Local and Memory conformance
+plus InstantDB configuration, deterministic snapshot identity, reads, writes, live subscriptions, and
+native-SDK lazy loading and reference-counted shutdown. Focused compiler coverage also compiles the
+InstantDB import and copied sidecar, while runtime coverage applies live snapshots, releases outgoing
+connections, preserves usable data through subscription errors, and keeps pending local saves stable.
+
+A temporary Current configuration mounted `DeviceStore` from InstantDB with the previous local app ID
+and endpoints. All four WordFlower Current Tao test files passed, and Current was then restored
+byte-identical to Next. This proves provider package loading and app integration under the Tao test
+harness; the harness deliberately substitutes an isolated test connection, so it is not evidence of
+network-backed InstantDB behavior.
+
+**Live acceptance still required:**
+
+1. With `just start-local-instantdb` running, mount two app clients using the test app ID and
+   confirm create, update, delete, restart hydration, and subscription propagation.
+2. Decide whether the next InstantDB slice should keep snapshot sync or introduce an explicit
+   entity/change protocol before calling the provider production-ready.
+
+### ICloud
+
+Status: implemented boundary, not yet proven on devices. The package, native module, ship
+entitlements, and provider protocol are in place and covered by focused tests; two-device live
+acceptance on real iCloud accounts remains before this can be treated as a production sync path.
+
+**Why a platform-sync provider.** `Local` keeps a store on one device; `InstantDB` syncs it through a
+hosted backend that needs an app id, a server, and eventually accounts. Between the two sits what the
+platform already gives a signed-in person for free: the same store on every device of one iCloud
+account, with no server, no sign-in flow, and no account model of Tao's own. `ICloud` is that
+provider, for apps whose data is "mine, on my devices" rather than "ours, in a household." It is
+deliberately a member of the existing full-snapshot family. The snapshot protocol already has a
+remote member with last-snapshot-wins semantics (InstantDB), so iCloud Drive's document model — a
+file per storage key, conflict versions when two devices wrote concurrently — maps onto it without
+touching the runtime. CloudKit, the other Apple sync surface, is the granular-family target instead
+(see _CloudKit_ below and `Docs/Roadmap/Multiplayer sync.md`): record-level changes, change tokens,
+push-driven fetches, and record-zone sharing are the shape that family wants, and too heavy for whole
+snapshots.
+
+**Implemented boundary.**
+
+- `@tao/data/providers/icloud` declares `type ICloud is datasource with { StorageKey text?,
+  Container text? }` and binds `ICloudProvider` from its sidecar, exactly as InstantDB does.
+  `Container` names the iCloud container identifier; omitted, the app's first entitled container
+  is used.
+- The connection keeps one document per storage key at `<container>/Tao Data/<key>.json`,
+  outside the container's `Documents/` folder so the Files app never lists it while iCloud still
+  syncs it. `load` reads it, `save` replaces it under file coordination, and `subscribe` follows
+  it through a metadata query so another device's write arrives as a replacement snapshot. There
+  is no `reset`: the document is shared with the account's other devices, so a device that failed
+  to parse it must not wipe it, matching InstantDB.
+- Echoes and transients are filtered in the provider. The metadata query reports this connection's
+  own write like any other change, so the last written snapshot is dropped when it comes back; a
+  document can read as missing for a moment while iCloud rearranges its bookkeeping, so a missing
+  document never reaches the store (nothing in this design deletes it); and while a write is in
+  flight the watch only notes that something changed, and the connection re-reads the document
+  once its writes settle, so the watch can never publish an earlier snapshot over a later one.
+- A read that finds no local item asks iCloud's metadata whether the document exists anywhere
+  (bounded at eight seconds) before answering "no document", so a freshly signed-in device does not
+  mount empty and then win the newest-wins conflict against the account's real data.
+- Conflicts collapse to the newest version by modification date (last snapshot wins). A write
+  supersedes any conflict versions outstanding at the time, since the runtime committed it over
+  the newest contents it had seen.
+- Configuration readers shared by InstantDB and ICloud live in
+  `@tao/data/providers/provider-configuration.ts`, copied with each sidecar's relative import graph.
+
+**The native module.** `packages/icloud-native` (`tao-icloud-native`) is the repository's first
+native code: an Expo module in Swift, autolinked into the runtime host through the existing
+`autolinkingModuleResolution` setting because the package is a dependency of `tao-runtime-toolchain`.
+
+- `ios/TaoICloudModule.swift` exposes `readDocument`, `writeDocument`, `startWatching`, and
+  `stopWatching`, plus a `documentChanged` event. Reads and writes go through `NSFileCoordinator`
+  (a coordinated read of an undownloaded item waits for its download); watches are
+  `NSMetadataQuery` objects over the ubiquitous data and documents scopes, started on the main
+  thread, reading off it. JavaScript chooses the watch identifier so no event can precede its
+  owner learning it.
+- `icloud-native-src/icloud-native.ts` publishes `ICloudDocuments`, the boundary the provider
+  drives, and `loadICloudDocuments`, which binds the Swift module lazily and fails with a
+  host-environment error where the module is absent — Android, the web, or an Expo Go session.
+- `plugins/with-tao-icloud.cjs` (`app.plugin.js`) grants the iCloud Documents entitlements. The
+  ship pipeline applies it from the manifest: `tao ship` detects an app bound to `ICloud`
+  (directly, through a named datasource, or inherited from its direct base app), records the
+  explicit `Container` if any, and `app.config.js` adds the plugin with
+  `iCloud.<bundle identifier>` as the default container.
+
+Consequences for the development loop: Expo Go cannot load the module, so an app mounting an
+iCloud datasource needs a development or release build; the companion app plan already introduces
+that loop. On the iOS Simulator, sign the simulator into an iCloud account and use _Features ›
+Trigger iCloud Sync_ to push changes between simulators.
+
+**Known limits:**
+
+- Apple platforms only. A mount elsewhere fails loudly with a host-environment error; an app that
+  also targets Android or the web binds another datasource in a variant for those targets. Whether
+  the validator should refuse such a target at compile time is a decision for Ro.
+- Single account, many devices. iCloud Drive offers no server-side rule evaluation, no accounts of
+  its own, and no sharing of a data-scope document, so the §3 access rules have nowhere to run and
+  the household demos are out of scope. Sharing arrives with CloudKit in the granular family.
+- Whole-snapshot last-writer-wins, as InstantDB today. Concurrent edits on two devices overwrite
+  each other's unrelated changes; the snapshot family's sequential row ids (open question 5 in the
+  multiplayer exploration) also collide across devices that create rows offline at once.
+- The container belongs to the signing team. If Tao's ship pipeline signs under Tao's own account,
+  the container is Tao's while the data lives in the person's iCloud quota; a developer shipping
+  under their own team gets their own container. Neither is wrong, but the ship documentation
+  should say which one applies.
+- Delivery latency is iCloud's. A metadata query reports a remote write when the daemon has
+  downloaded it, which in practice is seconds on a live device and manual on the simulator.
+
+**Validation.** Focused coverage: `packages/icloud-native/icloud-native-tests` proves the document
+boundary over a fake native module (absent documents, container pass-through, watch routing by
+identifier, stop-once, start failures) and the config plugin's container derivation and entitlement
+merging. `packages/stdlib/stdlib-tests/data-providers.test.ts` runs `ICloud` through `TR.testProvider`
+with a fake document store and a rejecting variant, and proves document naming per storage key and
+container, the absence of `reset`, echo and transient filtering, unsubscribe guarding, and
+configuration validation before the native module loads. Compiler coverage compiles the `ICloud`
+import with its copied sidecar and shared configuration reader; CLI coverage proves the ship binding
+derivation; toolchain coverage proves the manifest's `icloud` section becomes the plugin entry.
+
+The Swift module compiles: `expo prebuild` of the runtime host, `pod install`, and an `xcodebuild`
+of the `TaoICloudNative` pod target for the iOS Simulator succeeded against ExpoModulesCore 3.0. The
+three commands, and which of them the Bash sandbox refuses, are recorded as DEVENV-055 in
+`Docs/Roadmap/Developer environment upgrades.md`. No simulator or device has run the provider yet.
+
+**Live acceptance still required:**
+
+1. Build a development client with the module linked and an iCloud-entitled bundle identifier,
+   install it on two devices (or two simulators) signed into one iCloud account, and confirm
+   create, update, delete, relaunch hydration, and cross-device propagation.
+2. Force a conflict — write on both devices while one is offline, then reconnect — and confirm
+   the newest snapshot wins on both without either device blocking behind an error.
+3. Decide whether platform-scoped datasources need a validator rule for non-Apple targets.
+
+### CloudKit
+
+Status: implementation stab, reviewed once. The granular-write family's runtime machinery, its
+conformance suite, and a CloudKit provider over `CKSyncEngine` are implemented and covered by
+focused tests. Three working assumptions stand in for decisions the multiplayer exploration leaves
+open, and no device has run the provider yet. Nothing here is language law;
+`Docs/Roadmap/Multiplayer sync.md` owns the design dialogue and `Decisions.md` wins where they
+collide.
+
+**What landed, and where it sits in the sequence.** `Docs/Roadmap/Multiplayer sync.md` sequences the
+family as: the change-set ledger, the fold, the family contract with a simulated provider and
+conformance suite, the durable queue, and then the InstantDB granular provider. This stab lands the
+first four as one contained runtime module and adds CloudKit — Apple's own granular sync surface —
+as the first provider, ahead of InstantDB. It does so without touching the store's commit path or any
+grammar: the ledger is derived at the provider boundary by diffing the snapshots the store already
+saves, and the fold is projected back into the snapshot the store already loads.
+
+- **`packages/runtime/TaoRuntime-src/TR-data-sync.ts`** is the family. `TaoChangeSet` and
+  `TaoSyncOp` are the wire shapes (row upserts carrying stamped field values, and stamped deletes);
+  `TaoSyncProvider` / `TaoSyncConnection` / `TaoSyncObserver` are the provider contract (push,
+  subscribe to remote change-sets and to acceptance of one's own, optional fetch, an `online`
+  signal for transports that refuse pushes while offline, and a `remote` that resolves once the
+  change-set is checkpointed so a transport can acknowledge delivery); `snapshotConnectionOverSync`
+  is the bridge that mounts a granular provider behind today's snapshot contract;
+  `createMemorySyncAuthority` is the in-process authority with a per-provider online switch;
+  `testSyncProvider` is the conformance suite. `TR.Sync` publishes the bridge, the authority, the
+  suite, and `stampAt`.
+- **The bridge** keeps one durable checkpoint per store in the host's key-value storage, scoped by
+  provider and container: replica identity, hybrid-logical-clock state, the fold (every row's
+  stamped fields and tombstone), and the pending queue. `load` projects the fold; `save` diffs the
+  saved snapshot against the rows the store is known to hold — its load, its saves, and the
+  publishes it applied, never the fold itself, because a store mid-save buffers a publish and its
+  next snapshot predates that remote change — stamps the difference as one change-set, persists
+  first and applies only if the persist succeeded, hands back the fold if it holds anything the
+  snapshot lacked, and pushes on a chain of its own so a slow transport never holds the fold. A
+  remote change-set folds, persists, and republishes the projection only if it changed. Acceptance
+  drops a change-set from the queue; a push the transport rejects leaves it queued until `online`;
+  a transport failure reaches the store as the recoverable sync error.
+- **`@tao/data/providers/cloudkit`** declares `type CloudKit is datasource with { StorageKey
+  text?, Container text? }`. `CloudKitProvider` wraps `CloudKitSyncProvider` in the bridge with
+  AsyncStorage as checkpoint storage; the sync provider maps each row to one record named
+  `<origin>:<Entity>:<id>`. Every record is the one generic `TaoRow` type with a single JSON
+  `payload` field holding the row's stamped fields (relations as row identities, booleans and
+  times as JSON values) and, for a deleted row, a stamped tombstone rather than a CloudKit
+  deletion, so a device that relaunches with an empty record cache cannot re-create a deleted row.
+  One record type with one field means the CloudKit schema is deployed to production once and
+  never follows a Tao `data` change — production forbids just-in-time schema and promoted fields
+  can never be renamed or removed — and nothing is lost, since the fold evaluates queries locally
+  and CloudKit indexes are unused. A change-set's records go out as one batch marked atomic by
+  zone; a record refused with `batchRequestFailed` because a sibling conflicted is queued again
+  behind the resolved conflict. It keeps an
+  image of every record it has sent or fetched, so each send is a whole record and a server
+  conflict merges fieldwise (server-newer fields land locally as a remote change, the merged record
+  goes out again); a change-set counts as accepted only once every record it touched has been saved
+  carrying that change-set's stamps, so a later change-set to the same row is never accepted by an
+  earlier save. `unknownItem` on a save means the server has no such record (a zone reset or a
+  purge) and the local image is re-created whole; a zone reset clears the images; an iCloud account
+  change stops pushes until the app relaunches, so one account's queue is never written into
+  another's database.
+- **`TaoCloudKitModule.swift`** (in `tao-icloud-native`, beside the iCloud Documents module) is
+  one `CKSyncEngine` per session over one record zone of the private database. Fetched changes are
+  written to an inbox file before the delegate returns and stay there until JavaScript acknowledges
+  them after checkpointing, so the engine's change token never advances past records the fold has
+  not persisted, and a relaunch replays the inbox first. It persists the engine's state
+  serialization under Application Support, caches the server's copy of each record it has seen so a
+  later save carries the change tag (copying records so an in-flight batch never sees a later
+  send's fields), reports fetched changes, saved records with their fields, `serverRecordChanged`
+  conflicts with the server record, failed zone saves, and other failures by error-code name as
+  `cloudKitEvent`s, drops pending changes that no longer have a record to send, gives up on a
+  missing zone after three retries, and needs iOS 17 (a clear exception below that). `stop` mutes
+  the session rather than dropping the engine under in-flight work.
+- **Ship**: the manifest's `icloud` section names services as well as containers; the entitlement
+  plugin grants `CloudKit` (and `CloudDocuments` for `ICloud`); `tao ship` detects a `CloudKit`
+  binding exactly as it detects `ICloud`.
+
+**Working assumptions** (open questions in the multiplayer exploration):
+
+1. **"Latest" is edit order** on a hybrid logical clock: a stamp is wall milliseconds advanced past
+   every stamp the replica has seen, a counter, and the origin as tie-break. (Open question 1;
+   the exploration's own lean.)
+2. **A delete stays a delete.** A tombstone is one more stamped unit; a later field edit merges into
+   the tombstoned row without reviving it, so an eventual undo restores the row with the edit
+   intact. (Open question 2; the exploration's lean.) The tombstone travels with the record, so
+   every device and the server agree.
+3. **Wire identity is (origin, local id).** A replica's store shows its own rows under their local
+   ids and every other replica's under `<id>~<origin>`; relation values project the same way. This
+   answers open question 5 for the bridge without touching the store's id generation, and the
+   projected ids are stable for the row's life, so navigation restoration tokens keep working.
+4. **A child is hidden until its parent arrives**, and until every schema field of the row has
+   been folded, so a transport may deliver in any order and the projected snapshot always
+   validates.
+
+**Known limits:**
+
+- **Push delivery is entitled but unproven.** The plugin grants `aps-environment` and the
+  `remote-notification` background mode for a CloudKit binding, the session registers the app for
+  remote notifications, and it fetches again whenever the app returns to the foreground; whether
+  silent pushes reach the engine on a real device is part of the live acceptance.
+- **Tombstones are never purged.** A deleted row's record stays in the zone with its tombstone;
+  `Deletes tombstones for 30 days` in the design implies a retention purge that is not written.
+- **Whole-record sends.** Every send carries the full record image; CloudKit accepts partial
+  updates, but a whole record keeps the conflict path simple. Record size is bounded by CloudKit's
+  1 MB field limit per record, which a Tao row will not approach.
+- **After a relaunch the native record cache is empty**, so the first save of an existing record
+  comes back as a conflict, merges, and resends. Correct, one extra round trip.
+- **A zone reset loses what the server had accepted.** Local rows stay in the fold, but they are
+  only re-created in the zone when edited again; the person is told through the sync error.
+- **An account switch needs a relaunch**, and the previous account's checkpoint stays on the
+  device: clearing it, and the engine state, on a switch is not written.
+- **One account.** The private database only; `CKShare` and the shared database, which are the
+  natural home for the household model, are not modelled. Neither are the authority rules of
+  Decisions §3, which CloudKit cannot evaluate server-side.
+- **A corrupt checkpoint blocks the mount** with the load error and its retry; the bridge grants
+  no `reset`, since a checkpoint also holds the pending queue.
+- **The store still saves whole snapshots** to the bridge; the ledger is derived by diffing. When
+  the runtime grows a native ledger (the exploration's first slice as written), the diff goes away
+  and the family contract, the fold, and the providers stay.
+- **Not run on a device.** The Swift compiles (see DEVENV-055 for the build steps); the provider
+  is proven only against the fake CloudKit zone in `packages/stdlib/stdlib-tests`, which stores
+  numbers as the server does, versions records, answers conflicts with the server's copy, plays an
+  offline session's queue against the server on reconnect, and counts acknowledgements — but has
+  no real engine, no push, and no account.
+
+**Validation.**
+
+- `packages/runtime/TR-tests/TR-data-sync.test.ts`: the conformance suite over the memory
+  authority (which now also proves both pending queues drain); concurrent edits to different fields
+  both survive and a same-field race resolves by stamp under a real partition; offline change-sets
+  survive a relaunch and push once online; a child delivered before its parent is hidden and then
+  shown; a deleted row stays deleted under a later edit; a remote row a save predates is neither
+  deleted nor lost; transport-minted stamps order below later local edits; an echo of the replica's
+  own change-set republishes nothing.
+- `packages/stdlib/stdlib-tests/data-providers.test.ts`: the CloudKit sync provider passes the
+  conformance suite over the fake zone; records carry stamped fields, encoded booleans, relation
+  identities, and a tombstone on delete; a server conflict merges fieldwise, both devices converge,
+  and every fetched batch is acknowledged; configuration is validated before the native side loads.
+- `packages/icloud-native/icloud-native-tests`: the zone boundary starts one session per zone,
+  routes fetched, sent, zone-reset, account-change, and failure events by session, acknowledges a
+  batch, classifies native rejections, and the plugin grants CloudKit without the Documents-only
+  ubiquity container.
+
+**Live acceptance still required:**
+
+1. Two devices on one iCloud account with a CloudKit-entitled development build: create, update,
+   delete, relaunch, and conflict scenarios against the real `CKSyncEngine`, including a kill
+   between fetch and acknowledgement to prove the inbox replays.
+2. Settle open questions 1, 2, and 5 with Ro and adjust the fold if the answers differ from the
+   assumptions above; decide the tombstone retention and purge.
+3. Decide whether CloudKit or InstantDB carries the household demos, which need sharing and
+   server-side rules the private database cannot provide.
