@@ -155,6 +155,29 @@ Describe('tao check', () => {
     })
   })
 
+  // Chevrotain's end-of-file token carries NaN rather than nothing, which reached the reader as
+  // `NaN:NaN` and, because NaN never equals itself, slipped past the first-error-per-line filter
+  // and let the formatter's own assertion through behind it.
+  Test('positions an error at the end of the file under the last thing the author wrote', async () => {
+    await withTaoFixture({
+      'no-newline.tao': 'view Broken() {',
+      'trailing-newline.tao': 'view Broken() {\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const reported = results.map(result => [
+        FS.basename(result.path),
+        result.diagnostics?.length,
+        result.error,
+        result.diagnostics?.[0]?.range?.start,
+      ])
+
+      Expect(reported).toEqual([
+        ['no-newline.tao', 1, undefined, { line: 0, character: 14 }],
+        ['trailing-newline.tao', 1, undefined, { line: 0, character: 14 }],
+      ])
+    })
+  })
+
   // The parser error here sits at an earlier column than the lexer error, so source order alone
   // would report the consequence and hide the character that caused it.
   Test('leads a line with its lexer error even when a parser error precedes it', async () => {

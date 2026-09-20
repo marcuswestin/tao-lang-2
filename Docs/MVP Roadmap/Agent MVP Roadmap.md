@@ -39,15 +39,29 @@ language sees.
   gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
   Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
   entry graph, which is fixed.
-- Also landed on `feat/tao-error-messages-78ff65`: every lexer and parser syntax error is now Tao's
-  own sentence rather than Chevrotain's. Tao registers all six of Chevrotain's message builders on
-  `taoLanguageModule`, so `tao check`, `tao fix`, the LSP, and Studio read the same wording. A
-  seventy-line list of possible token sequences is now `Expected a view member here, but found
-  \`Text\`.`, an unreadable character names what Tao expected by example instead of a byte offset,
-  and a report shows the line above the mistake, one error per line, and at most three per file.
-- Nothing is open from this item. The last piece, `tao fmt` reporting an unparseable file through
-  the formatter's own assertion, landed separately as `Report a file tao fmt cannot parse the way
-  tao check does`; `fmt` now reports the same positioned list as `check` and `fix`.
+- `tao fmt` reporting an unparseable file through the formatter's assertion is fixed, on
+  `0ac05257`: it now returns the first lexer or parser error as the same positioned `InPlace` result
+  `check` and `fix` return, while `Formatter.formatCode` and `formatFile` keep throwing for callers
+  that parsed the source themselves and have nowhere to report.
+- The wording and the `NaN` position both landed on `feat/tao-error-messages-78ff65`, which closes
+  this item:
+  - Every lexer and parser syntax error is Tao's own sentence. Tao registers all six of Chevrotain's
+    message builders in `taoLanguageModule`, which reaches the core parser, the language server, and
+    every workspace or session built on either, so `tao check`, `tao fix`, the LSP, and Studio read
+    one set of sentences. The seventy-five-line list is now `Expected a view member here, but found
+    \`Text\`.`: past three deduplicated alternatives a diagnostic names the construct it was parsing
+    rather than listing what could start it. The two raw lexer messages are now `Expected a name
+    like \`Greeting\`, a value like \`"hello"\`, or a keyword like \`render\` here, but found \`§\`.`
+    and `Expected an open block for this \`}\` to close, but none is open here.`
+  - A report is also easier to read: an excerpt leads with the line above the mistake, and a file
+    reports the first error on each line — its lexer error first, since a character Tao cannot read
+    explains the parse that follows — capped at three with the rest counted.
+  - The `NaN:NaN` position is fixed at its cause. `isPlaced` now rejects a non-finite position as
+    well as a missing one, and an error against Chevrotain's end-of-file token is placed at the end
+    of the source, so `view Broken() {` reports `a.tao:1:15` under the unclosed brace instead of
+    `NaN:NaN` followed by the formatter's assertion.
+- **Done.** The matching bullet under **Build the enforcement and diagnostics surface** in
+  `Roadmap.md` is closed with it.
 
 ### A2 — A standalone cross-platform `tao` executable
 

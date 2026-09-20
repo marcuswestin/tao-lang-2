@@ -258,8 +258,10 @@ function reportableSyntaxErrors(diagnostics: readonly Diagnostic[], path: string
   const inFile = Diagnostics.errors(diagnostics, 'lexer', 'parser')
     .filter(diagnostic => diagnostic.filePath === path)
     .sort(bySourcePosition)
+  // Compared through `lineOf` rather than on the raw line: an unplaced diagnostic must still match
+  // itself, and `NaN === NaN` is false, which would drop every diagnostic on such a line instead.
   const firstPerLine = inFile.filter((diagnostic, index) =>
-    inFile.findIndex(other => other.range?.start.line === diagnostic.range?.start.line) === index
+    inFile.findIndex(other => lineOf(other) === lineOf(diagnostic)) === index
   )
   return {
     reported: firstPerLine.slice(0, REPORTED_SYNTAX_ERRORS),
@@ -280,9 +282,10 @@ function bySourcePosition(left: Diagnostic, right: Diagnostic): number {
   return (left.range?.start.character ?? 0) - (right.range?.start.character ?? 0)
 }
 
-/** lineOf returns the line a diagnostic points at, sorting one with no range to the end. */
+/** lineOf returns the line a diagnostic points at, sorting one that is not placed to the end. */
 function lineOf(diagnostic: Diagnostic): number {
-  return diagnostic.range?.start.line ?? Number.MAX_SAFE_INTEGER
+  const line = diagnostic.range?.start.line
+  return line === undefined || !Number.isFinite(line) ? Number.MAX_SAFE_INTEGER : line
 }
 
 /** isLexerError says whether a diagnostic came from the lexer rather than the parser. */
