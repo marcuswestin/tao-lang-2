@@ -284,6 +284,19 @@ export function studioDeviceAppStateHandler(
   }
 }
 
+type TaoStudioDeviceOverlay = Extract<TaoStudioDeviceHostPresentation, { kind: 'overlay' }>
+
+/**
+ * Every overlay is the same frame — why the cell is not on screen, in a title and a sentence, with
+ * whatever the person can do about it — so each reason below names only its own words, and one that
+ * offers nothing to do says nothing about actions.
+ */
+function deviceOverlay(
+  overlay: Omit<TaoStudioDeviceOverlay, 'actions' | 'kind'> & { actions?: readonly TaoStudioDeviceHostAction[] },
+): TaoStudioDeviceHostPresentation {
+  return { actions: [], ...overlay, kind: 'overlay' }
+}
+
 /** deviceHostPresentation decides what one client snapshot puts on the screen. */
 export function deviceHostPresentation(
   state: TaoStudioDeviceClientState,
@@ -291,92 +304,78 @@ export function deviceHostPresentation(
 ): TaoStudioDeviceHostPresentation {
   const host = state.host === undefined ? 'Tao Studio' : `Tao Studio at ${state.host}`
   if (state.phase === 'idle') {
-    return {
+    return deviceOverlay({
       actions: ['reconnect'],
-      kind: 'overlay',
       message: 'The device host is not connected to Tao Studio.',
       reason: 'idle',
       title: 'Not connected',
-    }
+    })
   }
   if (state.phase === 'connecting') {
-    return { actions: [], kind: 'overlay', message: `Reaching ${host}…`, reason: 'connecting', title: 'Connecting' }
+    return deviceOverlay({ message: `Reaching ${host}…`, reason: 'connecting', title: 'Connecting' })
   }
   if (state.phase === 'handshaking') {
-    return {
-      actions: [],
-      kind: 'overlay',
+    return deviceOverlay({
       message: `Verifying ${host}${state.studioFingerprint === undefined ? '' : ` (${state.studioFingerprint})`}…`,
       reason: 'handshaking',
       title: 'Verifying Tao Studio',
-    }
+    })
   }
   if (state.phase === 'pairing') {
-    return {
-      actions: [],
+    return deviceOverlay({
       ...(state.code === undefined ? {} : { code: state.code }),
-      kind: 'overlay',
       message: 'Compare this code with Tao Studio, then confirm there.',
       reason: 'pairing',
       title: 'Pair with Tao Studio',
-    }
+    })
   }
   if (state.phase === 'disconnected') {
     if (state.lastError?.code === 'studio-key-mismatch') {
-      return {
+      return deviceOverlay({
         actions: ['forget', 'reconnect'],
-        kind: 'overlay',
         message: state.lastError.message,
         reason: 'key-mismatch',
         title: 'Tao Studio changed its identity',
-      }
+      })
     }
     if (state.lastError?.code === 'pairing-closed' && state.retryAt !== undefined) {
-      return {
+      return deviceOverlay({
         actions: ['reconnect'],
-        kind: 'overlay',
         message: `${state.lastError.message} This phone keeps asking until you do.`,
         reason: 'pairing-closed',
         title: 'Waiting for pairing',
-      }
+      })
     }
     const retry = state.retryAt === undefined ? '' : ' Retrying automatically.'
-    return {
+    return deviceOverlay({
       actions: ['reconnect'],
-      kind: 'overlay',
       message: `${state.lastError?.message ?? 'The connection ended.'}${retry}`,
       reason: 'disconnected',
       title: `Disconnected${state.lastError === undefined ? '' : ` (${state.lastError.code})`}`,
-    }
+    })
   }
   if (state.cellUnavailable !== undefined) {
-    return {
-      actions: [],
-      kind: 'overlay',
+    return deviceOverlay({
       message: state.cellUnavailable.message,
       reason: 'cell-unavailable',
       title: `Scenario unavailable (${state.cellUnavailable.code})`,
-    }
+    })
   }
   if (state.assignment === undefined) {
-    return {
-      actions: [],
-      kind: 'overlay',
+    return deviceOverlay({
       message: 'Connected. Waiting for Tao Studio to assign a scenario.',
       reason: 'waiting-for-cell',
       title: 'Waiting for a scenario',
-    }
+    })
   }
   const assigned = state.assignment.identity.compileRevision
   if (assigned !== publication.compileRevision) {
-    return {
-      actions: [],
-      kind: 'overlay',
+    return deviceOverlay({
       message: `Stale bundle: device has revision ${publication.compileRevision}, `
         + `Studio assigned ${assigned} — waiting for Fast Refresh.`,
       reason: 'stale-bundle',
       title: 'Waiting for Fast Refresh',
-    }
+    })
   }
   return { assignment: state.assignment, kind: 'cell' }
 }
@@ -802,39 +801,27 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     : `Studio refused the move: ${state.sourceAction.error ?? 'no reason given'}`
 
   // Choosing anything in the badge menu closes it, so each action below names only its own work.
+  /** Turning a named network condition on means asking for it; turning it off means normal. */
+  const networkToggle = (condition: 'offline' | 'slow', id: string, name: string): DeviceMenuAction =>
+    menuToggle(
+      id,
+      name,
+      assignedNetwork === condition,
+      () => client.setNetwork(assignedNetwork === condition ? 'normal' : condition),
+    )
   const menuActions: readonly DeviceMenuAction[] = ([
-    {
-      active: inspecting,
-      id: 'inspect',
-      label: menuToggleLabel('Inspect', inspecting),
-      onPress: () =>
-        setInspecting(on => {
-          if (on) {
-            setSelection(undefined)
-          }
-          return !on
-        }),
-    },
+    menuToggle('inspect', 'Inspect', inspecting, () =>
+      setInspecting(on => {
+        if (on) {
+          setSelection(undefined)
+        }
+        return !on
+      })),
     { disabled: selection === undefined, id: 'move-up', label: 'Move up', onPress: () => move('up') },
     { disabled: selection === undefined, id: 'move-down', label: 'Move down', onPress: () => move('down') },
-    {
-      active: assignedNetwork === 'offline',
-      id: 'offline',
-      label: menuToggleLabel('Offline', assignedNetwork === 'offline'),
-      onPress: () => client.setNetwork(assignedNetwork === 'offline' ? 'normal' : 'offline'),
-    },
-    {
-      active: assignedNetwork === 'slow',
-      id: 'slow-network',
-      label: menuToggleLabel('Slow network', assignedNetwork === 'slow'),
-      onPress: () => client.setNetwork(assignedNetwork === 'slow' ? 'normal' : 'slow'),
-    },
-    {
-      active: devMode.layoutBounds,
-      id: 'layout-bounds',
-      label: menuToggleLabel('Layout bounds', devMode.layoutBounds),
-      onPress: () => Dev.toggleLayoutBounds(),
-    },
+    networkToggle('offline', 'offline', 'Offline'),
+    networkToggle('slow', 'slow-network', 'Slow network'),
+    menuToggle('layout-bounds', 'Layout bounds', devMode.layoutBounds, () => Dev.toggleLayoutBounds()),
     { id: 'scenarios', label: 'Scenarios', onPress: () => setSheetOpen(true) },
   ] satisfies readonly DeviceMenuAction[]).map(action => ({
     ...action,
@@ -879,20 +866,20 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
         : null,
       React.createElement(DeviceNotices, {
         notices: [
-          ...(containedFailure === undefined ? [] : [{
-            eyebrow: 'TAO STUDIO · SENT TO STUDIO',
-            message: containedFailure,
-            onDismiss: () => setContainedFailure(undefined),
-            testID: 'tao-studio-device-failure',
-            tone: 'failure' as const,
-          }]),
-          ...(viewportNotice === undefined || viewportNoticeSeen ? [] : [{
-            eyebrow: 'TAO STUDIO · DEVICE VIEWPORT',
-            message: viewportNotice,
-            onDismiss: () => setViewportNoticeSeen(true),
-            testID: 'tao-studio-device-viewport',
-            tone: 'info' as const,
-          }]),
+          ...deviceNotice(
+            'failure',
+            'TAO STUDIO · SENT TO STUDIO',
+            'tao-studio-device-failure',
+            containedFailure,
+            () => setContainedFailure(undefined),
+          ),
+          ...deviceNotice(
+            'info',
+            'TAO STUDIO · DEVICE VIEWPORT',
+            'tao-studio-device-viewport',
+            viewportNoticeSeen ? undefined : viewportNotice,
+            () => setViewportNoticeSeen(true),
+          ),
         ],
       }),
       presentation.kind === 'cell'
@@ -971,25 +958,36 @@ function StudioDeviceCellContent(props: {
 function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode; testID: string }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
-  if (!props.bareView) {
-    return React.createElement(RN.View, { style: rootStyle, testID: props.testID }, props.children)
+  const padding = {
+    paddingBottom: insets.bottom,
+    paddingLeft: insets.left,
+    paddingRight: insets.right,
+    paddingTop: insets.top,
   }
   return React.createElement(
     RN.View,
-    {
-      style: [
-        rootStyle,
-        {
-          paddingBottom: insets.bottom,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-          paddingTop: insets.top,
-        },
-      ],
-      testID: props.testID,
-    },
+    { style: props.bareView ? [rootStyle, padding] : rootStyle, testID: props.testID },
     props.children,
   )
+}
+
+type DeviceNotice = {
+  eyebrow: string
+  message: string
+  onDismiss: () => void
+  testID: string
+  tone: 'failure' | 'info'
+}
+
+/** A notice exists only while it has something to say, so an absent message is no notice at all. */
+function deviceNotice(
+  tone: DeviceNotice['tone'],
+  eyebrow: string,
+  testID: string,
+  message: string | undefined,
+  onDismiss: () => void,
+): readonly DeviceNotice[] {
+  return message === undefined ? [] : [{ eyebrow, message, onDismiss, testID, tone }]
 }
 
 /**
@@ -999,15 +997,7 @@ function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode;
  * when one arrives, and a failure is already on its way to Studio besides, so a notice only has to
  * say what happened — not stop the session to say it. Tapping one dismisses it.
  */
-function DeviceNotices(props: {
-  notices: readonly {
-    eyebrow: string
-    message: string
-    onDismiss: () => void
-    testID: string
-    tone: 'failure' | 'info'
-  }[]
-}): React.JSX.Element | null {
+function DeviceNotices(props: { notices: readonly DeviceNotice[] }): React.JSX.Element | null {
   const RN = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   if (props.notices.length === 0) {
@@ -1086,17 +1076,11 @@ function DeviceActions(props: {
         {
           accessibilityRole: 'button',
           key: action,
-          onPress: () => {
-            if (action === 'forget') {
-              void props.client.forgetStudio()
-            } else {
-              props.client.reconnect()
-            }
-          },
-          style: action === 'forget' ? forgetButtonStyle : actionButtonStyle,
+          onPress: () => deviceActionButtons[action].press(props.client),
+          style: deviceActionButtons[action].style,
           testID: `tao-studio-device-${action}`,
         },
-        React.createElement(RN.Text, { style: actionTextStyle }, action === 'forget' ? 'Forget Studio' : 'Reconnect'),
+        React.createElement(RN.Text, { style: actionTextStyle }, deviceActionButtons[action].label),
       )
     ),
   )
@@ -1267,13 +1251,7 @@ function DeviceInspectOverlay(props: {
     selected === undefined ? null : React.createElement(
       RN.View,
       {
-        style: {
-          ...inspectHighlightStyle,
-          height: selected.hit.rect.height,
-          left: selected.hit.rect.x,
-          top: selected.hit.rect.y,
-          width: selected.hit.rect.width,
-        },
+        style: outlineStyle(inspectHighlightStyle, selected.hit.rect),
         testID: 'tao-studio-device-inspect-highlight',
       },
       React.createElement(RN.Text, { style: inspectLabelStyle }, occurrenceLabel(selected.hit.identity)),
@@ -1304,17 +1282,19 @@ function DeviceRemoteHighlight(props: { rects: readonly StudioInspectRect[] }): 
     ...props.rects.map((rect, index) =>
       React.createElement(RN.View, {
         key: `${rect.x}:${rect.y}:${index}`,
-        style: {
-          ...inspectRemoteHighlightStyle,
-          height: rect.height,
-          left: rect.x,
-          top: rect.y,
-          width: rect.width,
-        },
+        style: outlineStyle(inspectRemoteHighlightStyle, rect),
         testID: 'tao-studio-device-remote-highlight',
       })
     ),
   )
+}
+
+/** An outline is drawn over a measured frame the same way wherever the measurement came from. */
+function outlineStyle<StyleT extends object>(
+  outline: StyleT,
+  rect: StudioInspectRect,
+): StyleT & { height: number; left: number; top: number; width: number } {
+  return { ...outline, height: rect.height, left: rect.x, top: rect.y, width: rect.width }
 }
 
 /** One entry in the fan-out menu; `active` is what makes a mode read as on rather than available. */
@@ -1327,8 +1307,8 @@ type DeviceMenuAction = {
 }
 
 /** A menu toggle says it is on in its label, not only in its highlight. */
-function menuToggleLabel(name: string, on: boolean): string {
-  return on ? `${name}: on` : name
+function menuToggle(id: string, name: string, on: boolean, onPress: () => void): DeviceMenuAction {
+  return { active: on, id, label: on ? `${name}: on` : name, onPress }
 }
 
 function DeviceBadge(
@@ -1574,6 +1554,9 @@ function DeviceSheet(props: {
 
 const rootStyle = { flex: 1 } as const
 
+/** A layer over the whole host: the inspect target and the sheet backdrop both cover the screen. */
+const screenLayerStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
+
 const overlayStyle = {
   alignItems: 'stretch',
   backgroundColor: '#0f172a',
@@ -1592,17 +1575,9 @@ const overlayEyebrowStyle = {
   textTransform: 'uppercase',
 } as const
 
-const overlayTitleStyle = {
-  color: '#f8fafc',
-  fontSize: 28,
-  fontWeight: '800',
-} as const
+const overlayTitleStyle = { color: '#f8fafc', fontSize: 28, fontWeight: '800' } as const
 
-const overlayMessageStyle = {
-  color: '#cbd5e1',
-  fontSize: 16,
-  lineHeight: 22,
-} as const
+const overlayMessageStyle = { color: '#cbd5e1', fontSize: 16, lineHeight: 22 } as const
 
 const codeStyle = {
   color: '#f8fafc',
@@ -1613,12 +1588,7 @@ const codeStyle = {
   textAlign: 'center',
 } as const
 
-const actionsRowStyle = {
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 12,
-  marginTop: 8,
-} as const
+const actionsRowStyle = { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 } as const
 
 const actionButtonStyle = {
   backgroundColor: '#2563eb',
@@ -1629,42 +1599,25 @@ const actionButtonStyle = {
   paddingVertical: 10,
 } as const
 
-const forgetButtonStyle = {
-  ...actionButtonStyle,
-  backgroundColor: '#7f1d1d',
-} as const
+const forgetButtonStyle = { ...actionButtonStyle, backgroundColor: '#7f1d1d' } as const
 
-const actionTextStyle = {
-  color: '#f8fafc',
-  fontSize: 16,
-  fontWeight: '700',
-} as const
+const actionTextStyle = { color: '#f8fafc', fontSize: 16, fontWeight: '700' } as const
 
-const noticeLayerStyle = {
-  left: 0,
-  position: 'absolute',
-  right: 0,
-  top: 0,
-  zIndex: 10001,
-} as const
+/** The two things an overlay offers; each names its own words, its colour, and the work it does. */
+const deviceActionButtons: Readonly<
+  Record<TaoStudioDeviceHostAction, { label: string; press: (client: StudioDeviceClient) => void; style: object }>
+> = {
+  forget: { label: 'Forget Studio', press: client => void client.forgetStudio(), style: forgetButtonStyle },
+  reconnect: { label: 'Reconnect', press: client => client.reconnect(), style: actionButtonStyle },
+}
 
-const noticePanelStyle = {
-  gap: 4,
-  paddingBottom: 12,
-  paddingHorizontal: 16,
-  paddingTop: 12,
-} as const
+const noticeLayerStyle = { left: 0, position: 'absolute', right: 0, top: 0, zIndex: 10001 } as const
 
-const noticeEyebrowStyle = {
-  fontSize: 11,
-  fontWeight: '700',
-  letterSpacing: 1,
-} as const
+const noticePanelStyle = { gap: 4, paddingBottom: 12, paddingHorizontal: 16, paddingTop: 12 } as const
 
-const noticeBodyStyle = {
-  fontSize: 14,
-  lineHeight: 19,
-} as const
+const noticeEyebrowStyle = { fontSize: 11, fontWeight: '700', letterSpacing: 1 } as const
+
+const noticeBodyStyle = { fontSize: 14, lineHeight: 19 } as const
 
 /** A notice's tone chooses its palette; the panel, the eyebrow and the body are shaped alike. */
 const noticeToneStyles = {
@@ -1692,11 +1645,7 @@ const badgeStyle = {
   zIndex: 10000,
 } as const
 
-const badgeTextStyle = {
-  color: '#f9fafb',
-  fontSize: 14,
-  fontWeight: '800',
-} as const
+const badgeTextStyle = { color: '#f9fafb', fontSize: 14, fontWeight: '800' } as const
 
 const menuItemStyle = {
   alignItems: 'center',
@@ -1713,20 +1662,11 @@ const menuItemStyle = {
   zIndex: 10000,
 } as const
 
-const menuItemActiveStyle = {
-  backgroundColor: '#2563eb',
-  borderColor: '#60a5fa',
-} as const
+const menuItemActiveStyle = { backgroundColor: '#2563eb', borderColor: '#60a5fa' } as const
 
-const menuItemDisabledStyle = {
-  opacity: 0.45,
-} as const
+const menuItemDisabledStyle = { opacity: 0.45 } as const
 
-const menuItemTextStyle = {
-  color: '#f9fafb',
-  fontSize: 13,
-  fontWeight: '600',
-} as const
+const menuItemTextStyle = { color: '#f9fafb', fontSize: 13, fontWeight: '600' } as const
 
 /**
  * The inspect layer sits above the app and takes every touch while inspect is on. That is the whole
@@ -1734,17 +1674,10 @@ const menuItemTextStyle = {
  * and there is no gesture that reliably means one and not the other on a phone already using taps,
  * long-presses and drags for its own purposes.
  */
-const inspectOverlayStyle = {
-  bottom: 0,
-  left: 0,
-  position: 'absolute',
-  right: 0,
-  top: 0,
-  zIndex: 9000,
-} as const
+const inspectOverlayStyle = { ...screenLayerStyle, zIndex: 9000 } as const
 
-const inspectHighlightStyle = {
-  borderColor: '#2563eb',
+/** Both inspect outlines draw the same box over a measured frame; the colour says whose it is. */
+const inspectOutlineStyle = {
   borderRadius: 4,
   borderWidth: 2,
   pointerEvents: 'none',
@@ -1752,15 +1685,9 @@ const inspectHighlightStyle = {
   zIndex: 9500,
 } as const
 
-const inspectRemoteHighlightStyle = {
-  borderColor: '#f59e0b',
-  borderRadius: 4,
-  borderStyle: 'dashed',
-  borderWidth: 2,
-  pointerEvents: 'none',
-  position: 'absolute',
-  zIndex: 9500,
-} as const
+const inspectHighlightStyle = { ...inspectOutlineStyle, borderColor: '#2563eb' } as const
+
+const inspectRemoteHighlightStyle = { ...inspectOutlineStyle, borderColor: '#f59e0b', borderStyle: 'dashed' } as const
 
 const inspectLabelStyle = {
   alignSelf: 'flex-start',
@@ -1791,21 +1718,9 @@ const inspectHintStyle = {
   zIndex: 9600,
 } as const
 
-const sheetBackdropStyle = {
-  bottom: 0,
-  elevation: 9999,
-  justifyContent: 'flex-end',
-  left: 0,
-  position: 'absolute',
-  right: 0,
-  top: 0,
-  zIndex: 9999,
-} as const
+const sheetBackdropStyle = { ...screenLayerStyle, elevation: 9999, justifyContent: 'flex-end', zIndex: 9999 } as const
 
-const sheetDismissStyle = {
-  backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  flex: 1,
-} as const
+const sheetDismissStyle = { backgroundColor: 'rgba(15, 23, 42, 0.45)', flex: 1 } as const
 
 const sheetPanelStyle = {
   backgroundColor: '#111827',
@@ -1817,49 +1732,18 @@ const sheetPanelStyle = {
   paddingBottom: 28,
 } as const
 
-const sheetTitleStyle = {
-  color: '#f9fafb',
-  fontSize: 18,
-  fontWeight: '800',
-} as const
+const sheetTitleStyle = { color: '#f9fafb', fontSize: 18, fontWeight: '800' } as const
 
-const sheetListStyle = {
-  flexGrow: 0,
-  maxHeight: 260,
-} as const
+const sheetListStyle = { flexGrow: 0, maxHeight: 260 } as const
 
-const scenarioRowStyle = {
-  borderRadius: 8,
-  gap: 2,
-  paddingHorizontal: 12,
-  paddingVertical: 10,
-} as const
+const scenarioRowStyle = { borderRadius: 8, gap: 2, paddingHorizontal: 12, paddingVertical: 10 } as const
 
-const scenarioSelectedStyle = {
-  ...scenarioRowStyle,
-  backgroundColor: '#1f2937',
-} as const
+const scenarioSelectedStyle = { ...scenarioRowStyle, backgroundColor: '#1f2937' } as const
 
-const scenarioLabelStyle = {
-  color: '#f9fafb',
-  fontSize: 16,
-  fontWeight: '600',
-} as const
+const scenarioLabelStyle = { color: '#f9fafb', fontSize: 16, fontWeight: '600' } as const
 
-const scenarioDetailStyle = {
-  color: '#9ca3af',
-  fontSize: 13,
-} as const
+const scenarioDetailStyle = { color: '#9ca3af', fontSize: 13 } as const
 
-const sheetStatusBlockStyle = {
-  borderTopColor: '#374151',
-  borderTopWidth: 1,
-  gap: 4,
-  paddingTop: 12,
-} as const
+const sheetStatusBlockStyle = { borderTopColor: '#374151', borderTopWidth: 1, gap: 4, paddingTop: 12 } as const
 
-const sheetStatusStyle = {
-  color: '#d1d5db',
-  fontFamily: 'monospace',
-  fontSize: 12,
-} as const
+const sheetStatusStyle = { color: '#d1d5db', fontFamily: 'monospace', fontSize: 12 } as const

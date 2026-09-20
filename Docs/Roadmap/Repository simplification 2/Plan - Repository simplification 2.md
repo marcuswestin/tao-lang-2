@@ -182,3 +182,29 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
   shell-habits hook costs 31–43 ms a call; routed through `./dev` it would cost about 250 ms.
 - A hook earns its place when the rule is cheap to detect and often broken. Logic goes in
   TypeScript; shell stays only where the environment may not exist yet.
+
+### Reduction slices
+
+Five implementers, one file set each, measured on net lines removed rather than lines moved.
+
+| Files                                                | Before | After | Net  |
+| ---------------------------------------------------- | ------ | ----- | ---- |
+| `StudioProjectSession.ts`                            | 2,042  | 1,926 | −116 |
+| `StudioServer.ts`                                    | 1,253  | 1,198 | −55  |
+| `TR-studio-preview.tsx`, `TR-studio-device-host.tsx` | 3,790  | 3,574 | −216 |
+| `Type.ts`, `compiler.ts`                             | 2,689  | 2,551 | −138 |
+| `shared/FS.ts`                                       | 1,175  | 1,153 | −22  |
+
+- 547 lines, of which about 90 are style constants written on one line as the rest of the runtime
+  writes them. Every slice fell short of its target and said why with a duplicate scan: earlier
+  passes already took the repetition these files held.
+- A route table for `StudioServer.ts` costs more than the branches it replaces: 346 lines of table,
+  contexts, and dispatch against 310 of `if (at(…))` chains. It landed for the compile-time
+  exhaustiveness, and the file's saving came from its validators and subscription registries.
+- Splitting a large file deletes nothing, and the lock and directory-sync half of `FS.ts` repeats
+  on purpose, each copy a distinct safety check.
+- What is left in line count is not deduplication: JSX in the runtime in place of
+  `React.createElement`, the documentation merge list, and package consolidation.
+- Leads not taken: the `#studio_rect_` tag codec spelled in both `source-actions` and
+  `StudioProjectSession.ts`; `chainFrom` in `Type.ts` as a shared parent walk; exporting the parser's
+  `findAncestor` and `FS.commonPathAncestor`.
