@@ -6,8 +6,8 @@ description: >-
 
 # Git Workflow
 
-Root `AGENTS.md` owns the hard constraints: never commit from detached HEAD, always be on a named
-`feat/<name>` branch first, and never change the Git index unless Ro asks in the current request.
+Root `AGENTS.md` owns the hard constraints on branches and the Git index; the warn-only Git hooks
+`./agent setup` installs speak up on a detached HEAD, an unnamed branch, or an attribution trailer.
 `verification-lanes` owns `merge-with-main`'s evidence, flags, and message-file format.
 
 ## This repository has many worktrees

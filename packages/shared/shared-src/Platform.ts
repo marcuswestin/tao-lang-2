@@ -6,7 +6,7 @@ import {
   type SpawnSyncOptions as NodeSpawnSyncOptions,
   type SpawnSyncReturns,
 } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { availableParallelism, loadavg } from 'node:os'
 import type { Readable } from 'node:stream'
 import { throwUnexpected } from './core/Errors'
@@ -48,13 +48,35 @@ export function randomUUID(): string {
 }
 
 /**
- * sha256Hex reduces content to a hexadecimal digest. It is the digest seam `repo-lint`'s node-import
- * rule names: a build stamp comparing what it read last time against what it reads now goes through
- * here rather than importing `node:crypto` and taking an allowlist entry. The existing direct
- * `node:crypto` hashing callers close onto this the next time each is swept.
+ * sha256Hex reduces content to a hexadecimal digest, in one call for a single value or, for content
+ * that arrives in pieces, over ordered parts fed to the same digest. It is the digest seam
+ * `repo-lint`'s node-import rule names: a build stamp comparing what it read last time against what
+ * it reads now goes through here rather than importing `node:crypto` and taking an allowlist entry.
  */
-export function sha256Hex(content: string | Uint8Array): string {
-  return createHash('sha256').update(content).digest('hex')
+export function sha256Hex(content: string | Uint8Array | readonly (string | Uint8Array)[]): string {
+  const hash = createHash('sha256')
+  for (const part of Array.isArray(content) ? content : [content]) {
+    hash.update(part)
+  }
+  return hash.digest('hex')
+}
+
+/** sha256Base64Url reduces content to a base64url digest, for identities that end up in a URL or a filename. */
+export function sha256Base64Url(content: string | Uint8Array): string {
+  return createHash('sha256').update(content).digest('base64url')
+}
+
+/**
+ * secretsEqual reports whether two secrets are equal, comparing their digests in constant time so
+ * neither a length nor an early mismatch leaks through response timing.
+ */
+export function secretsEqual(left: string, right: string): boolean {
+  return timingSafeEqual(createHash('sha256').update(left).digest(), createHash('sha256').update(right).digest())
+}
+
+/** signES256 signs data with an EC private key using the ES256 (SHA-256, IEEE P1363) scheme a JWT expects. */
+export function signES256(privateKeyPem: string, data: Uint8Array): Buffer {
+  return sign('sha256', data, { dsaEncoding: 'ieee-p1363', key: createPrivateKey(privateKeyPem) })
 }
 
 /*
@@ -108,6 +130,11 @@ export function spawnSync(command: string, options: SpawnSyncOptions = {}): Spaw
 export function onProcessSignal(signal: ProcessSignal, listener: () => void): () => void {
   process.on(signal, listener)
   return () => process.off(signal, listener)
+}
+
+/** readStdinText resolves the full text piped to this process on stdin, or '' when stdin is a live terminal. */
+export async function readStdinText(): Promise<string> {
+  return process.stdin.isTTY ? '' : await Bun.stdin.text()
 }
 
 /**

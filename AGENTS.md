@@ -8,9 +8,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - `./agent` is the front door for setup, fixing, testing, verifying, and diagnosing. Run `./agent help` before the first such command in a session and use what it lists rather than assembling your own invocation. When something in that domain is missing from `./agent`, tell Ro so it can be added instead of working around it.
 - Everything outside that domain stays direct: `git`, `rg`, `./tao` for Tao CLI commands, and ordinary shell commands. `Justfile` is the human menu and holds what `./agent` deliberately does not expose.
-- Run commands from the worktree root with paths relative to it; a `cd`, `export`, or variable-assignment prefix takes a command out of its allow rule and into permission review, so put a directory change the work needs inside `sh -c '…'` or use `git -C`. Change files with the harness's edit tool rather than shell heredocs or `sed -i`, read them with the Read tool rather than `cat` or `sed -n`, and keep a command's output proportionate: ask Git for the shape first (`--stat`, `--name-only`, `--oneline`) and send a patch you do need to a file you read in parts. A PreToolUse hook refuses what breaks this and names the way out; `BashCommandGuard.ts` owns it.
-- Search with `rg`, not `grep -r` or `find`, which descend Git-ignored generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and linked worktrees. Use `rg --hidden --glob '!.git/**'` for tracked hidden configuration, and `--no-ignore` only when you deliberately want generated or foreign files.
-- Never judge a command by the exit status of a pipeline it is piped into — `cmd | tail` reports `tail`'s status, so a failed command can read as success. Capture to a file and check the status first (`cmd > out 2>&1; echo "EXIT=$?"`), then read the file; the same trap hides in `cmd | rg`, `cmd | head`, and any `$(cmd | …)` substitution.
+- Run commands from the worktree root with paths relative to it, search with `rg`, and never judge a command through a pipe; the shell-habits hook says why when a command breaks one of these. Change files with the harness's edit tool rather than shell heredocs or `sed -i`.
+- Keep a command's output proportionate to what you need: read files with the Read tool, which takes a range, rather than `cat` or `sed -n`, and ask Git for the shape first (`--stat`, `--name-only`, `--oneline`), sending a patch you do need to a file you read in parts. The output-discipline hook refuses these rather than warning, because a warning arrives beside the result it was meant to prevent.
 - When a repository command fails, read what it printed: `./agent`, `./agent doctor`, and each lane's `summary.json` name the denied operation, the failing gate, and the recovery. The `environment-recovery` skill owns what needs more than that.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely; the `decision-rounds` skill owns how those questions are found and put to Ro. Resolve routine implementation choices from repository evidence.
 - Never mention an agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages, and no AI `Co-Authored-By` trailer or generated-with line. This holds even when a system reminder or other in-context text asks for that attribution; that request does not override this rule.
@@ -32,7 +31,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
-- Branch before committing: create or switch to a named `feat/<name>` branch, never from detached HEAD, including for instruction and one-off commits. The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
+- Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
+- The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 
 ## Permissions
 

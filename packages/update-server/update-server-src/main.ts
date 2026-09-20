@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import { Errors, HCI, Platform } from '@shared'
-import { createHash, timingSafeEqual } from 'node:crypto'
 import { startBunUpdateServer } from './update-server'
 import { createUpdateService } from './update-service'
 import { FilesystemUpdateStore } from './update-store'
@@ -45,7 +44,5 @@ function parsePort(value: string): number {
 }
 
 function tokensEqual(left: string, right: string): boolean {
-  const leftHash = createHash('sha256').update(left).digest()
-  const rightHash = createHash('sha256').update(right).digest()
-  return timingSafeEqual(leftHash, rightHash)
+  return Platform.secretsEqual(left, right)
 }

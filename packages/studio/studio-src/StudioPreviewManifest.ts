@@ -346,7 +346,7 @@ function validateParameter(parameter: StudioParameterSchema): void {
   }
   Switch.kind<StudioParameterSchema['type'], void>(parameter.type, {
     // A boolean, a free text, and a time carry nothing beyond their kind.
-    boolean: () => {},
+    boolean: Switch.nothing,
     choice: ({ values }) => {
       if (values.length === 0) {
         Errors.throwUserInput(`Studio choice parameter has no values: ${parameter.parameterId}`)
@@ -367,8 +367,8 @@ function validateParameter(parameter: StudioParameterSchema): void {
         Errors.throwUserInput(`Studio numeric parameter step must be positive: ${parameter.parameterId}`)
       }
     },
-    text: () => {},
-    time: () => {},
+    text: Switch.nothing,
+    time: Switch.nothing,
   })
 }
 

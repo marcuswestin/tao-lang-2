@@ -64,6 +64,11 @@
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
       "Read(~/.ssh/**)"
+    ],
+    "ask": [
+      "Bash(./agent land-unlock --force*)",
+      "Bash(./dev land-unlock --force*)",
+      "Bash(just land-unlock --force*)"
     ]
   },
   "sandbox": {
@@ -179,6 +184,15 @@
             "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -187,6 +201,10 @@
           {
             "type": "command",
             "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
+          },
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true"
           }
         ]
       }

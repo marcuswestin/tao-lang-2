@@ -33,9 +33,15 @@ type PropertyHandlers<ItemT, PropertyT extends keyof ItemT, ResultT> = PropertyV
     & (undefined extends ValueT ? { undefined: (value: undefined) => ResultT } : {})
   : never
 
+type OnHandlers<ItemT extends object, PropertyT extends keyof ItemT, ResultT> = {
+  [KeyT in ItemT[PropertyT] & PropertyKey]: (item: Extract<ItemT, Record<PropertyT, KeyT>>) => ResultT
+}
+
 export default Object.assign(Switch, {
   kind: SwitchKind,
   kindMaybe: SwitchKindMaybe,
+  nothing,
+  on: SwitchOn,
   property: SwitchProperty,
   type: SwitchType,
   typeMaybe: SwitchTypeMaybe,
@@ -77,7 +83,11 @@ function SwitchType<ItemT extends TypeItem, ResultT>(
   return (handler as (item: ItemT) => ResultT)(item)
 }
 
-/** SwitchKind dispatches exhaustively on a `kind` discriminator. */
+/**
+ * SwitchKind dispatches exhaustively on a `kind` discriminator. When `ItemT` is a single type whose
+ * `kind` is itself a literal union rather than a union of distinct types, this gives handlers no
+ * narrowing; a handler that needs a narrower type must close over the item instead.
+ */
 function SwitchKind<ItemT extends KindItem, ResultT>(
   item: ItemT,
   handlers: KindHandlers<ItemT, ResultT>,
@@ -134,3 +144,25 @@ function SwitchProperty<ItemT extends object, PropertyT extends keyof ItemT, Res
   }
   return (handler as (value: PropertyValue<ItemT, PropertyT>) => ResultT)(propertyValue)
 }
+
+/**
+ * SwitchOn dispatches exhaustively on one property, like SwitchProperty, but passes each handler the
+ * item narrowed to that property's member instead of the property's value.
+ */
+function SwitchOn<ItemT extends object, PropertyT extends keyof ItemT, ResultT>(
+  item: ItemT,
+  propertyName: PropertyT,
+  handlers: OnHandlers<ItemT, PropertyT, ResultT>,
+): ResultT {
+  const propertyValue = item[propertyName]
+  const key = propertyValue === undefined ? 'undefined' : propertyValue
+  const handler = ownHandler(handlers, key as PropertyKey)
+
+  if (!handler) {
+    throw new UnexpectedBehaviorError(`Unhandled property value: ${String(propertyValue)}`)
+  }
+  return (handler as (item: ItemT) => ResultT)(item)
+}
+
+/** nothing is a no-op handler for a branch whose receiver deliberately ignores it. */
+function nothing(): void {}
