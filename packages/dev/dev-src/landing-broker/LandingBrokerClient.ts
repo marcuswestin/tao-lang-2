@@ -1,10 +1,11 @@
 import { CLI, Errors, FS, LocalSocket } from '@shared'
 import {
+  LANDING_BROKER_HOST,
   LANDING_BROKER_VERSION,
+  landingBrokerConfigPath,
   type LandingBrokerPushRequest,
   type LandingBrokerRequest,
   type LandingBrokerResponse,
-  landingBrokerSocketPath,
 } from './LandingBrokerProtocol'
 
 export type LandingBrokerInspection = {
@@ -68,8 +69,21 @@ export async function landingBrokerIsReady(): Promise<boolean> {
 }
 
 async function requestBroker(request: LandingBrokerRequest): Promise<LandingBrokerResponse | undefined> {
+  if (!await FS.isFile(landingBrokerConfigPath())) {
+    return undefined
+  }
+  const config = await FS.readJson<{ host?: unknown; port?: unknown }>(landingBrokerConfigPath())
+  if (
+    config.host !== LANDING_BROKER_HOST
+    || typeof config.port !== 'number'
+    || !Number.isInteger(config.port)
+    || config.port < 1
+    || config.port > 65_535
+  ) {
+    Errors.throwHostEnvironment(`The landing broker locator is invalid: ${landingBrokerConfigPath()}`)
+  }
   try {
-    return await LocalSocket.request<LandingBrokerResponse>(landingBrokerSocketPath(), request)
+    return await LocalSocket.request<LandingBrokerResponse>({ host: config.host, port: config.port }, request)
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT' || code === 'ECONNREFUSED') {

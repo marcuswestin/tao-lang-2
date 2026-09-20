@@ -1,9 +1,10 @@
-import { CLI, FS, Repo } from '@shared'
+import { CLI, FS, LocalSocket, Repo } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   archiveBranch,
   isInspectableBranch,
   isLandableBranch,
+  LANDING_BROKER_HOST,
   LANDING_BROKER_VERSION,
   type LandingBrokerConfig,
 } from '../dev-src/landing-broker/LandingBrokerProtocol'
@@ -13,6 +14,16 @@ import {
 } from '../dev-src/landing-broker/LandingBrokerServer'
 
 const SHA = 'a'.repeat(40)
+
+Test('landing broker transport crosses the managed loopback boundary', async () => {
+  const endpoint = { host: LANDING_BROKER_HOST, port: await LocalSocket.availablePort(LANDING_BROKER_HOST) }
+  const server = await LocalSocket.serve(endpoint, async request => ({ echoed: request }))
+  try {
+    Expect(await LocalSocket.request(endpoint, { ready: true })).toEqual({ echoed: { ready: true } })
+  } finally {
+    await server.close()
+  }
+})
 
 Test('landing broker entry bundles into a script the pinned Bun can launch', async () => {
   const root = Repo.getRoot()
@@ -116,13 +127,14 @@ Test('landing broker fetches and atomically lands only the validated tree and re
     const config: LandingBrokerConfig = {
       ghPath: '/usr/bin/true',
       gitPath,
+      host: LANDING_BROKER_HOST,
+      port: 49_371,
       repositories: [{
         gitCommonDir: common,
         mirrorGitDir: mirror,
         objectDirectory: await FS.realPath(FS.resolvePath('objects', common)),
         remoteUrl: remote,
       }],
-      socketPath: FS.resolvePath('broker.sock', root),
       version: LANDING_BROKER_VERSION,
     }
 

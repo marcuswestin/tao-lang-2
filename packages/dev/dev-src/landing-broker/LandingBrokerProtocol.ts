@@ -1,7 +1,8 @@
 import { FS } from '@shared'
 
-export const LANDING_BROKER_VERSION = 1
+export const LANDING_BROKER_VERSION = 2
 export const LANDING_BROKER_LABEL = 'com.tao-lang.landing-broker'
+export const LANDING_BROKER_HOST = '127.0.0.1'
 
 export type LandingBrokerRepository = {
   gitCommonDir: string
@@ -13,8 +14,9 @@ export type LandingBrokerRepository = {
 export type LandingBrokerConfig = {
   ghPath: string
   gitPath: string
+  host: typeof LANDING_BROKER_HOST
+  port: number
   repositories: readonly LandingBrokerRepository[]
-  socketPath: string
   version: typeof LANDING_BROKER_VERSION
 }
 
@@ -54,10 +56,6 @@ export function landingBrokerRoot(): string {
 
 export function landingBrokerConfigPath(): string {
   return FS.resolvePath('config.json', landingBrokerRoot())
-}
-
-export function landingBrokerSocketPath(): string {
-  return FS.resolvePath('broker.sock', landingBrokerRoot())
 }
 
 export function landingBrokerBinaryPath(): string {

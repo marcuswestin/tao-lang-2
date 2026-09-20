@@ -4,6 +4,7 @@ import {
   isCommitSha,
   isInspectableBranch,
   isLandableBranch,
+  LANDING_BROKER_HOST,
   LANDING_BROKER_VERSION,
   type LandingBrokerConfig,
   type LandingBrokerPushRequest,
@@ -17,14 +18,11 @@ const MAIN_BRANCH = 'main'
 /** runLandingBroker serves the installed, credential-bearing half of Tao's landing protocol. */
 async function runLandingBroker(configPath: string): Promise<void> {
   const config = await readConfig(configPath)
-  await FS.mkdir(FS.dirname(config.socketPath))
-  await FS.remove(config.socketPath)
   const server = await LocalSocket.serve<LandingBrokerRequest, LandingBrokerResponse>(
-    config.socketPath,
+    { host: config.host, port: config.port },
     async request => await handleLandingBrokerRequest(config, request),
   )
-  await FS.chmod(config.socketPath, 0o600)
-  HCI.writeLine(`Tao landing broker listening at ${config.socketPath}.`)
+  HCI.writeLine(`Tao landing broker listening at ${config.host}:${config.port}.`)
 
   await new Promise<void>(resolve => {
     const stop = () => resolve()
@@ -32,7 +30,6 @@ async function runLandingBroker(configPath: string): Promise<void> {
     Platform.onProcessSignal('SIGTERM', stop)
   })
   await server.close()
-  await FS.remove(config.socketPath)
   Platform.runtimeProcess.exit(0)
 }
 
@@ -281,7 +278,10 @@ async function readConfig(configPath: string): Promise<LandingBrokerConfig> {
     config.version !== LANDING_BROKER_VERSION
     || !FS.isAbsolute(config.gitPath)
     || !FS.isAbsolute(config.ghPath)
-    || !FS.isAbsolute(config.socketPath)
+    || config.host !== LANDING_BROKER_HOST
+    || !Number.isInteger(config.port)
+    || config.port < 1
+    || config.port > 65_535
     || !Array.isArray(config.repositories)
   ) {
     Errors.throwHostEnvironment(`Landing broker configuration is invalid: ${configPath}`)

@@ -50,7 +50,7 @@
   store and fixed HTTPS remote; it disables hooks and global/system Git configuration, fetches remote
   objects into the registered store, validates the proposed squash parent and finalized tree, and
   atomically updates main, the merged archive, and any feature-branch deletion under explicit leases.
-  Its Unix-socket protocol returns refs and verdicts only, never credentials or an arbitrary command
+  Its loopback-only protocol returns refs and verdicts only, never credentials or an arbitrary command
   surface. `finalize` and `merge-with-main` prefer it automatically and retain direct Git only for
   ordinary human shells. `./agent doctor` reports HTTPS/helper drift and a missing broker.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-068 owns the

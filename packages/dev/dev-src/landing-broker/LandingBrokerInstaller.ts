@@ -1,6 +1,7 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, LocalSocket, Platform, Repo, Time } from '@shared'
 import { landingBrokerIsReady } from './LandingBrokerClient'
 import {
+  LANDING_BROKER_HOST,
   LANDING_BROKER_LABEL,
   LANDING_BROKER_VERSION,
   landingBrokerBinaryPath,
@@ -9,7 +10,6 @@ import {
   landingBrokerLaunchAgentPath,
   type LandingBrokerRepository,
   landingBrokerRoot,
-  landingBrokerSocketPath,
 } from './LandingBrokerProtocol'
 
 const START_TIMEOUT_MS = 5_000
@@ -50,6 +50,7 @@ export const LandingBrokerInstaller = {
       remoteUrl,
     }
     const current = await readExistingConfig()
+    const port = current?.port ?? await LocalSocket.availablePort(LANDING_BROKER_HOST)
     const repositories = [
       ...(current?.repositories ?? []).filter(candidate => candidate.gitCommonDir !== canonicalGitDir),
       repository,
@@ -57,8 +58,9 @@ export const LandingBrokerInstaller = {
     const config: LandingBrokerConfig = {
       ghPath: await FS.realPath(ghPath),
       gitPath: await FS.realPath(gitPath),
+      host: LANDING_BROKER_HOST,
+      port,
       repositories,
-      socketPath: landingBrokerSocketPath(),
       version: LANDING_BROKER_VERSION,
     }
 
@@ -97,8 +99,11 @@ async function readExistingConfig(): Promise<LandingBrokerConfig | undefined> {
     return undefined
   }
   const config = await FS.readJson<LandingBrokerConfig>(landingBrokerConfigPath())
-  if (config.version !== LANDING_BROKER_VERSION || !Array.isArray(config.repositories)) {
+  if (!Array.isArray(config.repositories)) {
     Errors.throwHostEnvironment(`The existing landing broker config is unsupported: ${landingBrokerConfigPath()}`)
+  }
+  if (config.version !== LANDING_BROKER_VERSION) {
+    return undefined
   }
   return config
 }
