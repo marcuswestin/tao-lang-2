@@ -22,7 +22,11 @@
   `agents/skills/parallel-implementation/SKILL.md` — which the command never printed. Re-running the
   same integration as a top-level `git merge origin/main`, which
   `.rulesync/permissions.jsonc` excludes from the sandbox, reported both conflicts correctly and
-  produced a tree that verified green.
+  produced a tree that verified green. Independently reproduced the same day on
+  `feat/agent-context-optimization-421aa5` against the same `main`: the same empty conflict list, 61
+  dirty tracked paths of which 60 were byte-identical to `main`, 5 untracked paths all present in
+  `main`, no `MERGE_HEAD`, and a plain `git merge main` afterwards that named the one real conflict.
+  A different branch and a different conflicting path, so this is the command and not one branch.
 - **Workaround:** Set the debris aside with `git stash push -u -m '<unique-tag>'` rather than
   `git checkout -f`, which is both sandbox-denied and classifier-denied; then run `git merge
   origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD
