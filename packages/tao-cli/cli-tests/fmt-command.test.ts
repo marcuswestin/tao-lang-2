@@ -1,7 +1,10 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { runFmt } from '../cli-src/source-commands'
+import { runCheck, runFmt } from '../cli-src/source-commands'
 import { statusByFile, withTaoFixture } from './test-cli-files'
+
+/** brokenSource is source whose first syntax error sits mid-line, where it carries a position. */
+const brokenSource = 'view Broken() {\n   let ? = 1\n}\n'
 
 Describe('tao fmt', () => {
   Test('formats .tao files in place across nested directories', async () => {
@@ -21,9 +24,9 @@ Describe('tao fmt', () => {
     })
   })
 
-  Test('reports syntax errors per file and leaves the file untouched', async () => {
+  Test('reports a positioned syntax error per file and leaves the file untouched', async () => {
     await withTaoFixture({
-      'broken.tao': 'view Broken() {',
+      'broken.tao': brokenSource,
       'valid.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const results = await runFmt(rootDir)
@@ -33,8 +36,31 @@ Describe('tao fmt', () => {
         'valid.tao': 'changed',
       })
       const broken = results.find(result => result.status === 'error')
-      Expect(broken?.error).toContain('Tao source without syntax errors')
-      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken() {')
+      // The formatter's own invariant is not an author-facing message: a file that does not parse is
+      // reported through its diagnostics, which carry the position the CLI renders.
+      Expect(broken?.error).toBeUndefined()
+      Expect(broken?.diagnostics).toHaveLength(1)
+      const diagnostic = broken?.diagnostics?.[0]
+      Expect(diagnostic?.filePath).toBe(FS.resolvePath('broken.tao', rootDir))
+      Expect(diagnostic?.severity).toBe('error')
+      Expect(['lexer', 'parser']).toContain(diagnostic?.source)
+      Expect(diagnostic?.range?.start).toEqual({ character: 7, line: 1 })
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe(brokenSource)
+    })
+  })
+
+  // A1: `fmt` and `check` reach a file that does not parse by different routes, and an author who
+  // ran either must be told the same thing about it.
+  Test('reports the same syntax error `tao check` reports', async () => {
+    await withTaoFixture({
+      'broken.tao': brokenSource,
+    }, async (rootDir) => {
+      const formatted = await runFmt(rootDir)
+      const checked = await runCheck(rootDir)
+
+      Expect(formatted).toEqual(checked)
+      Expect(formatted.map(result => result.status)).toEqual(['error'])
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe(brokenSource)
     })
   })
 
