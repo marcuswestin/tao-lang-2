@@ -15,13 +15,16 @@
   The 2026-09-20 fix first reproduced that fallback from a fresh worktree. The same smoke then stopped
   before Metro with `HostEnvironmentError`: the pinned Watchman could not establish a watch because
   macOS denied its LaunchAgent write, and the diagnostic directed the developer to an ordinary host
-  shell. Focused Studio tests prove the pinned path, real `watch-project` probe, child `PATH`, missing
-  binary, and denied LaunchAgent cases.
+  shell. A later real-app smoke exposed that Metro's separate no-spawn capability/socket discovery
+  could still choose Node watching after a successful `watch-project`. The completed fix mirrors that
+  capability probe, passes its proven socket as `WATCHMAN_SOCK`, then verifies `watch-project`; the
+  real-app smoke now stops before Metro with the actionable host diagnostic and no `EMFILE`.
 - **Workaround:** Run Studio acceptance from an ordinary host shell where Watchman can use
   `~/Library/LaunchAgents`.
-- **Proposed change:** Implemented: Studio proves the generated preview runtime is watchable with the
-  repository-pinned Watchman, places the profile first in Metro's child `PATH`, and refuses to start
-  Metro with an actionable host diagnostic rather than allowing the Node watcher fallback.
+- **Proposed change:** Implemented: Studio proves Metro's no-spawn capability and socket path, proves the
+  generated preview runtime is watchable with the repository-pinned Watchman, places the profile first
+  in Metro's child `PATH`, and refuses to start Metro with an actionable host diagnostic rather than
+  allowing the Node watcher fallback.
 - **Dependencies:** DEVENV-015 remains the later Chrome/LaunchServices boundary once Metro starts.
 - **Acceptance:** A managed-shell Studio launch either uses the pinned Watchman and reaches browser
   dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node

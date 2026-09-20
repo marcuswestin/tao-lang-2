@@ -40,6 +40,10 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/Archive/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Resolved
 - [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/Archive/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Resolved
 - [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/Archive/DEVENV-016-studio-process-ownership-and-status.md>) — Resolved
+- [DEVENV-017 — Studio snapshot command consistency](<Developer environment upgrades/Archive/DEVENV-017-studio-snapshot-command-consistency.md>) — Resolved
+- [DEVENV-018 — Semantic facts and coverage commands](<Developer environment upgrades/Archive/DEVENV-018-semantic-facts-and-coverage-commands.md>) — Resolved
+- [DEVENV-019 — Idempotent workspace opening](<Developer environment upgrades/Archive/DEVENV-019-idempotent-workspace-opening.md>) — Resolved
+- [DEVENV-021 — Safe scratch scripts and concurrent staging](<Developer environment upgrades/Archive/DEVENV-021-safe-scratch-scripts-and-concurrent-staging.md>) — Resolved
 - [DEVENV-022 — Raw Error policy for failure mocks](<Developer environment upgrades/Archive/DEVENV-022-raw-error-policy-for-failure-mocks.md>) — Resolved
 - [DEVENV-023 — React Native test renderer convention](<Developer environment upgrades/Archive/DEVENV-023-react-native-test-renderer-convention.md>) — Closed
 - [DEVENV-025 — Worktree-safe CLI test roots](<Developer environment upgrades/Archive/DEVENV-025-worktree-safe-cli-test-roots.md>) — Resolved
