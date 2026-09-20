@@ -268,7 +268,7 @@ export async function copyDirectory(fromPath: string, toPath: string): Promise<v
  * but reject directory removal or rename; generated assets still need exact file membership there.
  * Empty destination directories may remain, but no stale file survives.
  */
-export type SynchronizeDirectoryFilesOptions = {
+type SynchronizeDirectoryFilesOptions = {
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeCleanup?: () => Promise<void>
   /** beforeCommit is a test seam for mutations that race the final drift check. */
@@ -283,7 +283,7 @@ export type SynchronizeDirectoryFilesOptions = {
   inspectProcessIdentity?: (pid: number) => Promise<FileMutationProcessIdentity>
 }
 
-export type DirectoryFileSynchronization = {
+type DirectoryFileSynchronization = {
   fromPath: string
   toPath: string
 }
