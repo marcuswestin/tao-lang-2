@@ -3,7 +3,7 @@
 - **Status:** Candidate
 - **Area:** Landing and merge workflow
 - **Impact:** `LandingLock.ts` is explicit that the lock is never reclaimed automatically, that a
-  dead PID does not mean a released lock because the acquiring process is *expected* to exit while
+  dead PID does not mean a released lock because the acquiring process is _expected_ to exit while
   the lock is still held, and that "a stuck lock is therefore a person's problem on purpose". The
   instructions an agent actually reads say something weaker. Root `AGENTS.md` ends its lock
   paragraph with "`./agent land-unlock --force` is the deliberate way past one", and the waiter's own
