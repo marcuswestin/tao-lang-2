@@ -27,5 +27,9 @@
   discovery, missing targets, and retained artifacts. The 2026-09-19 host run completed prebuild and
   reached CocoaPods, then the active task's network policy blocked React Native's Hermes download from
   `repo1.maven.org`; that required domain is now canonical but takes effect in a newly generated task.
+  A 2026-09-20 rerun from the task that generated the committed adapters reached the isolated iOS host
+  again, but the already-running task's immutable network profile still denied the same domain and
+  retained `.artifacts/native-module-check/run-q8wMIW`. This needs a newly started task or an ordinary
+  host shell; regenerating files cannot mutate the permissions of the process already running.
   Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
