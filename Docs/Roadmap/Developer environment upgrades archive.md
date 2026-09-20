@@ -59,6 +59,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-042 — Studio smoke observes persistence before browser reconciliation](<Developer environment upgrades/Archive/DEVENV-042-studio-smoke-observes-persistence-before-browser-reconciliat.md>) — Resolved
 - [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/Archive/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
+- [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved

@@ -362,10 +362,15 @@ await runWithCommands(commands => {
     .command('finalize')
     .description('Bring a feature branch to the state where merge-with-main can run; safe to re-run.')
     .option('--check', 'Report without mutating anything: no merge, no verification lane, no file written.')
-    .option('--fresh', 'Ignore the recorded finalize state and redraft the merge message.')
-    .action(async (options: { check?: boolean; fresh?: boolean } = {}) => {
+    .option('--fresh', 'Ignore the recorded finalize state.')
+    .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft.')
+    .action(async (options: { check?: boolean; fresh?: boolean; redraft?: boolean } = {}) => {
       try {
-        const outcome = await FinalizeCommand.run({ check: options.check === true, fresh: options.fresh === true })
+        const outcome = await FinalizeCommand.run({
+          check: options.check === true,
+          fresh: options.fresh === true,
+          redraft: options.redraft === true,
+        })
         Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

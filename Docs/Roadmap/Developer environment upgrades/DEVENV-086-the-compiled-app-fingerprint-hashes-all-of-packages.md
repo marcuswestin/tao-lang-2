@@ -38,6 +38,13 @@
   reuse, plus an explicit checked registry for non-import filesystem inputs. Tests must cover a new
   import, alias, manifest rename, computed require, and filesystem dependency; merely enumerating the
   present package list cannot prove future completeness.
+  Re-audited on 2026-09-20 on `feat/devenv-parser-cache-followups`: the current `PackageGraph` closure
+  rooted at `tao-cli` contains 18 of the repository's 20 packages, so it would save almost no hashing
+  even before correctness guards. The graph still derives edges only from literal TypeScript import
+  strings, while `TaoAppModules.runtimeRoot` discovers `packages/runtime` by testing the filesystem.
+  The missing proof is a fail-closed dependency model for those non-import reads, followed by one
+  table-driven invalidation matrix shared by `TestCache` and `CheckCache`; the present cache suites
+  prove broad invalidation only.
 - **Dependencies:** DEVENV-081 (the compiled-output memo) and the `tao check` workspace stamp both
   key on this identity.
 - **Acceptance:** an edit under `packages/<name>` invalidates only the memos whose verdict can reach
