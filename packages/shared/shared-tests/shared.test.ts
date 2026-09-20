@@ -101,29 +101,19 @@ Describe('FS', () => {
     Expect(Repo.resolvePath('packages/shared')).toBe(sharedPath)
   })
 
-  Test('displays a path inside the cwd relatively and one outside it absolutely', async () => {
-    const inside = FS.resolvePath('packages/shared/shared-tests/shared.test.ts')
+  Test('displays paths from explicit locations without depending on checkout depth', () => {
+    const cwd = FS.resolvePath('/workspace/checkouts/tao')
+    const home = FS.resolvePath('/users/ro')
+    const inside = FS.resolvePath('packages/App.tao', cwd)
+    const outside = FS.resolvePath('../neighbor/App.tao', cwd)
+    const inHome = FS.resolvePath('Library/Tao/App.tao', home)
 
-    Expect(FS.displayPath(inside)).toBe('packages/shared/shared-tests/shared.test.ts')
-    Expect(FS.displayPath(FS.resolvePath('.'))).toBe('.')
-  })
-
-  Test('displays an escaping path without a run of parent segments longer than the path itself', async () => {
-    // A worktree nests several directories deep, so a sibling file is many `../` hops from the cwd.
-    const escaping = '/tmp/tao-display-path/Notes/Notes.tao'
-    const shown = FS.displayPath(escaping)
-
-    Expect(shown).toBe(escaping)
-    Expect(shown.startsWith('..')).toBe(false)
-    Expect(shown.length).toBeLessThanOrEqual(FS.relativePath(FS.resolvePath('.'), escaping).length)
-  })
-
-  Test('writes a path under the home directory as a tilde when that is shorter', async () => {
-    // Tests run from the checkout, which sits several directories under the home directory, so the
-    // relative spelling of a top-level home path is always the longer of the two.
-    const homePath = FS.resolvePath('some-directory/File.tao', FS.homeDir())
-
-    Expect(FS.displayPath(homePath)).toBe('~/some-directory/File.tao')
+    Expect(FS.displayPathFrom(cwd, cwd, home)).toBe('.')
+    Expect(FS.displayPathFrom(inside, cwd, home)).toBe('packages/App.tao')
+    // The former shortest-spelling policy would return `../neighbor/App.tao` here.
+    Expect(FS.displayPathFrom(outside, cwd, home)).toBe(FS.slashPath(outside))
+    Expect(FS.displayPathFrom(home, cwd, home)).toBe('~')
+    Expect(FS.displayPathFrom(inHome, cwd, home)).toBe('~/Library/Tao/App.tao')
   })
 
   Test('writes and reads text and json files', async () => {
