@@ -1,4 +1,4 @@
-# DEVENV-110 — `finalize` leaves a conflicted integration in the worktree and names no conflicting path
+# DEVENV-111 — `finalize` leaves a conflicted integration in the worktree and names no conflicting path
 
 - **Status:** Candidate
 - **Area:** Merge workflow
