@@ -1,11 +1,10 @@
 import type { Transport } from '@codemirror/lsp-client'
-import { Errors } from '@shared/core'
+import { Errors, Switch } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../device/StudioDeviceLauncher'
 import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileSnapshot, StudioWriteAcknowledgement } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
-import { StudioMessages } from '../StudioMessages'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import {
   type StudioCheckpointSummary,
@@ -150,7 +149,7 @@ export class StudioApiError extends Error {
 export const StudioApiEventStream = {
   /** dispatch routes one socket message to its handler; a server event with no branch here is a type error. */
   dispatch(message: StudioHandshake | StudioSessionSocketEvent, handlers: StudioApiEventHandlers): void {
-    StudioMessages.dispatch<StudioHandshake | StudioSessionSocketEvent>(message, {
+    Switch.on(message, 'type', {
       'cell-reconfigured': event => handlers.onCellReconfigured?.(event.cellId),
       'checkpoint-changed': event => handlers.onCheckpoint?.(event.checkpoint),
       'compile-state': event => handlers.onCompile(event.state),
