@@ -226,8 +226,10 @@ Do not re-audit this list. If a new audit raises one of these again, it is readi
 `feat/september-remediation-continued` carries the rest from the `main` that holds the follow-up
 branch's landing, and should:
 
-1. Chase the simulated-user quarantine to ten consecutive green runs, starting from the component
-   drag described above, then remove its `VERIFY_FULL_SKIPPED` entry.
+1. ~~Chase the simulated-user lane to ten consecutive green runs, starting from the component drag
+   described above.~~ Its `VERIFY_FULL_SKIPPED` entry is gone and the lane recorded ten consecutive
+   green runs on 2026-09-20, closing DEVENV-042. One further defect in the lane — Unsnap pressed on
+   a selection a render had discarded — was found and fixed first.
 2. Run `studio-smoke-native`, `studio-canary`, and a complete `just verify-full` chain to
    completion. The first two do not depend on item 1 and can run now.
 3. Triage the "cross-checked, partly unaddressed" list above: confirm each against current code,

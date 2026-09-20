@@ -30,13 +30,15 @@ Landed: L1 (ordered scenario steps, pointer phases, action stand-ins, optional f
 the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundations, and the review
 roadmap's first two targets (Record journey, `tao review`).
 
-Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, is
-quarantined from `verify-full` again (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it). The landing
+Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, has
+rejoined `verify-full` (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
 and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
 source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
 including a real pointer-release drag-one-in target; no remaining failure has been attributed to the
-browser automation itself. The remaining gate is evidence: the complete journey must run green ten
-consecutive times in a normal Terminal before it rejoins `verify-full`. Native and canary acceptance
+browser automation itself. The last one found, on 2026-09-19, was the lane's own: it pressed Unsnap
+on a selection an authoritative render had already discarded, and Unsnap with nothing selected
+unsnaps the whole flow. The evidence gate is met: the complete journey ran ten consecutive green
+times in a normal Terminal on 2026-09-20, which closed DEVENV-042. Native and canary acceptance
 remains a separate normal-Terminal gate.
 
 What the client offers today: drag on empty canvas creates a sketch; drag inside a sketch draws a
@@ -74,7 +76,7 @@ inference.
 ## Stride 0 — Real-browser proof for Draw and Snap
 
 **Goal.** Every later stride adds gestures; none of them can claim browser evidence while the only
-browser lane for sketching is quarantined. Make that lane deterministic and bring it back.
+browser lane for sketching is unreliable. Make that lane deterministic and keep it in the graph.
 
 **Done (2026-09-04).** Hit-test diagnostics in the lane showed the failures were product defects:
 the toolbar covered the drawing surface, drag-one-in depended on an HTML5 drag the move gesture
@@ -85,11 +87,11 @@ flight. The lane now passes Draw, four further draws, Snap, and reload in a norm
 the sketch section in the Run preset at a designer-sized viewport, and records board state, the
 element under the pointer, host errors, and a screenshot on every sketch timeout.
 
-**Current boundary.** The product path now has a real pointer-release drag-one-in target and preserves
-authored source through the proposal/transaction path. The simulated-user lane nevertheless stays
-quarantined until the complete journey records ten consecutive reliable normal-terminal runs; only
-then may `VERIFY_FULL_SKIPPED` be removed and DEVENV-042 resolved. Native and canary evidence remains
-separate and must be confirmed from the Terminal in the same acceptance pass.
+**Done (2026-09-20).** The product path has a real pointer-release drag-one-in target and preserves
+authored source through the proposal/transaction path. The simulated-user lane has been removed from
+`VERIFY_FULL_SKIPPED`, runs in both full lanes, and recorded ten consecutive reliable normal-terminal
+runs, which closed DEVENV-042. Native and canary evidence remains separate and must be confirmed from
+the Terminal in the same acceptance pass.
 
 **Size.** S–M remaining. **Depends on.** Nothing.
 
