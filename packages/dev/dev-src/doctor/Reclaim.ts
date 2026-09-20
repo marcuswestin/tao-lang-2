@@ -47,10 +47,10 @@ export type ReclaimDependencies = {
  *   a Git command that failed. This is the class that keeps the command honest: it is where
  *   everything the rules do not cover lands, rather than defaulting into `reclaimable`.
  */
-export type ReclaimVerdict = 'live' | 'reclaimable' | 'unclassified'
+type ReclaimVerdict = 'live' | 'reclaimable' | 'unclassified'
 
 /** ReclaimWorktree is one checkout with its verdict and the evidence that produced it. */
-export type ReclaimWorktree = {
+type ReclaimWorktree = {
   branch?: string
   detached: boolean
   /** Why this verdict, in the order the checks ran. Always populated: a verdict with no evidence
@@ -346,10 +346,3 @@ export function formatReclaimReport(report: ReclaimReport): string {
   ]
   return sections.join('\n')
 }
-
-/** Reclaim groups the worktree reclamation entry points. */
-export const Reclaim = {
-  execute,
-  formatReclaimReport,
-  reclaim,
-} as const
