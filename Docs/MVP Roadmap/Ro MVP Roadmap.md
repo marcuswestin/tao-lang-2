@@ -19,8 +19,31 @@ their own product.
 - Options: keep AGPL everywhere; keep AGPL with a runtime exception so apps built with Tao are
   unaffected; license the runtime and stdlib permissively (MIT or Apache-2.0) and keep the toolchain
   AGPL; go permissive throughout.
-- **Recommended:** AGPL for the toolchain with a permissive runtime and stdlib. It keeps the
-  copyleft where the commercial risk is and removes it from the developer's own product.
+- **Decided 2026-09-20 — direction, not the final licence.** Keep AGPL-3.0 for now and settle the
+  structure as part of a final release consideration. What that structure must achieve:
+  - Anyone may use Tao to build anything, in any app, for any purpose, using the shipped versions of
+    the Tao stack. Nothing built with Tao carries an obligation.
+  - The only restriction targets serving the functionality of the Tao stack *itself* as a product —
+    taking the Tao source and repackaging it as something to sell — as distinct from selling the
+    products someone built with Tao.
+  - Probable shape: a permissive licence (MIT) at the root, with copyleft licences on the particular
+    packages that need them, each scoped to what that part may not be used for.
+  - Governing principle: the first impression must be that Tao is open source and that there is no
+    danger whatsoever in using it to build products. Restrictions exist only as the mechanism that
+    prevents a company repackaging Tao as a competing product.
+- **To resolve at that consideration:** LGPL is the copyleft named above, but LGPL has no network
+  clause — its obligation concerns relinking a modified library, not offering software as a service.
+  A company could host the Tao stack as a product without triggering it. The licences that do bind a
+  hosted repackager are AGPL, which this repository already carries, or a source-available licence
+  such as BSL. The goal above is the thing LGPL alone does not achieve, so the pairing needs
+  deliberate choice.
+- **Structural prerequisites, whatever is chosen:** `LICENSE` stops at §17 with no
+  `END OF TERMS` and no appendix, names no copyright holder, and no `package.json` declares a
+  `license`. Until those are fixed this decision is invisible downstream — see
+  `Report - Publication audit.md` `P24`, and `P23` for why the runtime's licence reaches inside every
+  app built with Tao.
+- Relicensing is cheap only while there is one copyright holder. Every commit is authored by one
+  person today; a second contributor turns this into a consent-gathering exercise.
 
 ### R2 — What becomes public
 
@@ -31,8 +54,23 @@ committed `secrets/secrets.jsonc`.
 - Blocks: `A3` (what the README addresses), and the disposition of `A10`'s audit findings.
 - Options: publish as-is and accept the exposure; publish a curated public repository (toolchain,
   docs, examples) and keep this one private; split by subtree with a one-way sync.
-- **Recommended:** decide after reading `A10`'s inventory. A curated public repository is the likely
-  answer, but the cost depends on what the audit finds.
+- **Decided 2026-09-20: publish the whole repository.** The aim is an open-source contributor
+  community around Tao, and a curated or split repository works against that — contributors cannot
+  send a pull request to a mirror, and a one-way sync makes every outside change a manual port.
+  Publishing everything is what makes contribution possible at all.
+- What that accepts, from `Report - Publication audit.md`: the agent instruction set and the
+  `Responses to Ro` section (`P1`), the "never mention an agent identity" rule (`P2`), the sandbox
+  policy as a map of what agents may do (`P3`), `Roadmap.md`'s two personal sections (`P7`, `P8`),
+  the September remediation record (`P9`), the developer-environment backlog (`P10`), and commit
+  authorship in perpetuity (`P20`). The audit judged none of these unsafe — only candid.
+- What it does **not** waive, because publishing as-is makes these mandatory rather than optional:
+  `P15` (untrack the App Store Connect identifiers and rotate that key), `P16` (`roPhone`), `P17`
+  and `P18` (the machine-specific paths), and `P24` (the licence structure). These were the audit's
+  prerequisites under every option and they are now the only blocking work.
+- Worth doing deliberately rather than by omission: the audit's per-entry recommendations for `P1`,
+  `P2`, and `P7`–`P10` assumed a curated repository was available as an out. It no longer is, so
+  each becomes a choice to publish as written, to edit before publishing, or to move out of the
+  repository — decide them as a set rather than one at a time.
 
 ### R3 — Launch timing, positioning, and the stability promise
 
