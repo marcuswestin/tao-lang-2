@@ -1,6 +1,6 @@
 # Plan - Repository simplification 2
 
-Status: Wave 0 landed; Wave 1 integrated, reviewed, and verified. Decisions settled
+Status: Waves 0 and 1 landed; Wave 2 integrated. Decisions settled
 with Ro on 2026-09-19. The `simplify-repo` skill owns the repeatable method; this document owns this
 run: its baseline, fences, waves, and ledger.
 
@@ -133,6 +133,7 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
 | ---- | ------------ | ----------------- | ----------------- | ----------- | ------------- |
 | 0    | 141,135      | 1,761             | 145               | 23          | none          |
 | 1    | 141,422      | 1,411             | 145               | 3           | 3             |
+| 2    | 141,652      | 1,428             | 135               | 3           | none          |
 
 ### Wave 1 notes
 
@@ -152,3 +153,20 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
 - Mapped but not started, each its own slice: the sketch block of `StudioProjectSession.ts`, a route
   table for `StudioServer.ts`, seam splits of `TR-studio-preview.tsx` and
   `TR-studio-device-host.tsx`, and a deep-tier read of `Type.ts`, `compiler.ts`, and `FS.ts`.
+
+### Wave 2 notes
+
+- Gates added to `repo-lint`: instruction budgets, and generated harness files that regenerating
+  from `.rulesync/` would change.
+- Warn-only hooks: shell habits before a Bash call, the standing rules at a subagent's start, and
+  `commit-msg` and `pre-commit` Git hooks that `./agent setup` installs. The Git hooks live in the
+  `.git` every worktree shares, so each asks the committing worktree for its own script and stays
+  silent where there is none. The prose they replace is cut from `AGENTS.md`, `git-workflow`, and
+  `delegation`.
+- `Switch.on(item, property, handlers)` and `Switch.nothing` landed; `StudioMessages` is gone.
+- Hashing, signing, and random ids go through flat `Platform` functions, not a `Platform.Crypto`
+  namespace, because `Platform` has no nested namespaces. Ten `node:` allowlist entries retired.
+- Instruction lines rose by 17: the hooks removed about as much prose as the `after-merging-main`
+  reference Ro asked for added. The halving target still needs its own pass.
+- Not done: `journalLimit` stays mirrored across the runtime–Studio seam, because the test that pins
+  runtime mirrors is fenced.

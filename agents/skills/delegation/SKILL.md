@@ -56,7 +56,7 @@ The table decides: when a task matches a row, take it and say which tier you cho
 
 The agent sees the brief and nothing else. Every brief carries: **goal** and why it matters; **what is already known** — paths, findings, things ruled out; **decisions already made**, so it does not silently re-decide them; **boundaries** — paths it owns, must not touch, and whether it may write; **return format** and length; and a **stop condition** — what "done" is and what to do when the answer is not there.
 
-Repository boilerplate for every brief touching this worktree: run from the worktree root without `cd`; search with `rg`; do not stage, unstage, reset, or stash; do not edit `Docs/Roadmap/Developer environment upgrades.md`, its archive index, or its entry files, and return developer-environment findings to the caller instead. Root `AGENTS.md` binds subagents too, including never naming any agent identity in work products.
+The `subagentStart` hook gives every Claude Code and Codex subagent the repository's standing rules (worktree root, `rg`, no Git index changes, no ledger edits, no agent identity), so a brief does not repeat them; a Cursor brief still does.
 
 ## The return contract and what you do with it
 
