@@ -170,3 +170,15 @@ Record per wave: non-test source lines, instruction lines, allowlist entries, de
   reference Ro asked for added. The halving target still needs its own pass.
 - Not done: `journalLimit` stays mirrored across the runtime–Studio seam, because the test that pins
   runtime mirrors is fenced.
+
+### Follow-ups after Wave 2
+
+- `land-unlock --force` requires `--holder <pid>` and compares it inside the registry lock, after an
+  agent force-released a lock other than the one it had checked. Waiter messages no longer suggest
+  forcing, and the force commands go to permission review in Claude Code; Codex's generator emits
+  only `allow`, so it cannot express that.
+- The three hooks' logic moved from zsh to TypeScript under `packages/dev/dev-src/agent-hooks/`,
+  476 lines to 393, with shims of about a dozen lines that find `bun` and always exit 0. The
+  shell-habits hook costs 31–43 ms a call; routed through `./dev` it would cost about 250 ms.
+- A hook earns its place when the rule is cheap to detect and often broken. Logic goes in
+  TypeScript; shell stays only where the environment may not exist yet.

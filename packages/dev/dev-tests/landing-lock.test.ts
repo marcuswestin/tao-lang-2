@@ -74,13 +74,36 @@ Describe('landing lock', () => {
     },
   )
 
-  Test('force-release is the only way past a holder, and reports whose lock it ended', async () => {
+  Test('force-release with the matching holder releases, and reports whose lock it ended', async () => {
     const root = await mkTestDir('landing-lock-force')
-    await acquire(root, ONE, 'wedged landing')
-    const previous = await LandingLock.forceRelease(root)
+    const hold = await acquire(root, ONE, 'wedged landing')
+    const previous = await LandingLock.forceRelease(root, { holder: hold.record.pid })
     Expect(previous?.holder).toBe(ONE)
     Expect(previous?.label).toBe('wedged landing')
     Expect(await LandingLock.inspect(root)).toBeUndefined()
+  })
+
+  Test('force-release with a wrong holder refuses, naming the current holder', async () => {
+    const root = await mkTestDir('landing-lock-force-wrong-holder')
+    const hold = await acquire(root, ONE, 'wedged landing')
+    const error = await LandingLock.forceRelease(root, { holder: hold.record.pid + 1 })
+      .then(() => undefined, (caught: unknown) => caught)
+    Expect((error as Error).message).toContain('wedged landing')
+    Expect((error as Error).message).toContain(ONE)
+    Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
+  })
+
+  Test('force-release with no holder refuses while a readable record exists', async () => {
+    const root = await mkTestDir('landing-lock-force-no-holder')
+    await acquire(root, ONE, 'wedged landing')
+    const error = await LandingLock.forceRelease(root).then(() => undefined, (caught: unknown) => caught)
+    Expect((error as Error).message).toContain('wedged landing')
+    Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
+  })
+
+  Test('force-release on a free lock is a no-op', async () => {
+    const root = await mkTestDir('landing-lock-force-free')
+    Expect(await LandingLock.forceRelease(root)).toBeUndefined()
   })
 
   Test('a durable claim survives its acquiring process, because it is meant to outlive it', async () => {

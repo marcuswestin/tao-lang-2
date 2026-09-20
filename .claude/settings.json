@@ -64,6 +64,11 @@
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
       "Read(~/.ssh/**)"
+    ],
+    "ask": [
+      "Bash(./agent land-unlock --force*)",
+      "Bash(./dev land-unlock --force*)",
+      "Bash(just land-unlock --force*)"
     ]
   },
   "sandbox": {
