@@ -13,6 +13,7 @@ claudecode:
   model: sonnet
   effort: medium
   permissionMode: plan
+  tools: WebSearch, WebFetch, Read, Bash, ToolSearch
 cursor:
   model: claude-sonnet-5
   readonly: true

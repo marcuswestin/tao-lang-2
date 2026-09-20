@@ -12,6 +12,7 @@ codexcli:
 claudecode:
   model: sonnet
   effort: high
+  tools: Bash, Read, Edit, Write, Skill, Monitor, ToolSearch
 cursor:
   model: claude-sonnet-5
   readonly: false

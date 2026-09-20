@@ -18,7 +18,7 @@ const skillSource = [
 ].join('\n')
 
 const readOnlyEverywhere = {
-  claudecode: { model: 'haiku', permissionMode: 'plan' },
+  claudecode: { model: 'haiku', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
   codexcli: { sandbox_mode: 'read-only' },
   cursor: { model: 'composer-2.5', readonly: 'true' },
 }
@@ -88,13 +88,16 @@ Describe('delegation profiles', () => {
 
   Test('rejects a profile that names no model, because the caller would inherit one', () => {
     Expect(issuesFor(profile({
-      sections: { ...readOnlyEverywhere, claudecode: { permissionMode: 'plan' } },
+      sections: { ...readOnlyEverywhere, claudecode: { permissionMode: 'plan', tools: 'Bash, Read, Skill' } },
     }))).toEqual(['agents/subagents/scout.md must name a Claude Code model, so a caller inherits nothing by accident.'])
   })
 
   Test('rejects a model no tier in the routing table offers', () => {
     Expect(issuesFor(profile({
-      sections: { ...readOnlyEverywhere, claudecode: { model: 'sonnet', permissionMode: 'plan' } },
+      sections: {
+        ...readOnlyEverywhere,
+        claudecode: { model: 'sonnet', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
+      },
     }))).toEqual([
       `agents/subagents/scout.md names Claude Code model 'sonnet', which no tier in ${DELEGATION_SKILL_PATH} offers.`,
     ])
@@ -104,8 +107,44 @@ Describe('delegation profiles', () => {
     Expect(issuesFor(profile({
       sections: {
         ...readOnlyEverywhere,
-        claudecode: { model: 'opus', permissionMode: 'plan' },
+        claudecode: { model: 'opus', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
         cursor: { model: 'claude-opus-5[effort=high,context=300k]', readonly: 'true' },
+      },
+    }))).toEqual([])
+  })
+
+  Test('rejects a profile that names no tools, because it would inherit every tool schema', () => {
+    Expect(issuesFor(profile({
+      sections: { ...readOnlyEverywhere, claudecode: { model: 'haiku', permissionMode: 'plan' } },
+    }))).toEqual([
+      'agents/subagents/scout.md must name the Claude Code tools it needs; a profile that names none '
+      + 'loads every tool schema into every request it makes.',
+    ])
+  })
+
+  Test('rejects an empty tool list, which would leave the profile nothing to work with', () => {
+    Expect(issuesFor(profile({
+      sections: { ...readOnlyEverywhere, claudecode: { model: 'haiku', permissionMode: 'plan', tools: ' , ' } },
+    }))).toEqual([
+      'agents/subagents/scout.md declares an empty Claude Code tool list; it would have nothing to work with.',
+    ])
+  })
+
+  Test('rejects a read-only profile whose tool list can still write', () => {
+    Expect(issuesFor(profile({
+      sections: {
+        ...readOnlyEverywhere,
+        claudecode: { model: 'haiku', permissionMode: 'plan', tools: 'Bash, Read, Edit, Write' },
+      },
+    }))).toEqual(['agents/subagents/scout.md is read-only but lists Edit and Write; drop them from its tool list.'])
+  })
+
+  Test('leaves a writable profile free to list the tools that write', () => {
+    Expect(issuesFor(profile({
+      sections: {
+        claudecode: { effort: 'high', model: 'haiku', tools: 'Bash, Read, Edit, Write' },
+        codexcli: { sandbox_mode: 'workspace-write' },
+        cursor: { model: 'composer-2.5', readonly: 'false' },
       },
     }))).toEqual([])
   })

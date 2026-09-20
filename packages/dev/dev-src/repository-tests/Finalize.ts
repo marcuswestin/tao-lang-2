@@ -375,18 +375,80 @@ async function integrateMain(
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
 
+  const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
   const merge = await dependencies.run('git', { args: ['merge', '--no-edit', mainSha], cwd: root, stdio: 'pipe' })
   if (merge.exitCode !== 0 || merge.error !== undefined || merge.signal !== null) {
-    const conflicts = (await git(dependencies, root, ['diff', '--name-only', '--diff-filter=U']))
-      .stdout.trim().split('\n').filter(Boolean)
-    Errors.throwUserInput(
-      `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. Conflicting paths:\n`
-        + conflicts.map(path => `- ${path}`).join('\n'),
-    )
+    Errors.throwUserInput(failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root)))
   }
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
   return { headSha, integratedNow: true, mainSha }
+}
+
+/**
+ * mergeTreeConflicts asks what an integration would conflict on without touching the worktree.
+ * `git merge-tree --write-tree` writes only into the object database, so it answers even where the
+ * merge itself cannot run — which is the case this exists for: a sandboxed shell denies writes to
+ * the paths the policy protects, the merge stops partway, and the index it would have recorded the
+ * conflicts in was never written. Asking first means a failure can always name paths.
+ */
+async function mergeTreeConflicts(
+  dependencies: FinalizeDependencies,
+  root: string,
+  branchHead: string,
+  mainSha: string,
+): Promise<string[]> {
+  const preview = await dependencies.run('git', {
+    args: ['merge-tree', '--write-tree', '--name-only', branchHead, mainSha],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (preview.exitCode === 0 || preview.error !== undefined || preview.signal !== null) {
+    return []
+  }
+  // The first line is the tree this merge would produce; the conflicted paths follow, then a blank
+  // line and git's own messages about them.
+  const [, ...rest] = preview.stdout.split('\n')
+  return rest.slice(0, rest.indexOf('')).map(line => line.trim()).filter(Boolean)
+}
+
+/** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */
+async function unmergedPaths(dependencies: FinalizeDependencies, root: string): Promise<string[]> {
+  const unmerged = await dependencies.run('git', {
+    args: ['diff', '--name-only', '--diff-filter=U'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return unmerged.stdout.trim().split('\n').filter(Boolean)
+}
+
+/**
+ * failedIntegrationReport separates the two failures that used to read identically. A merge that
+ * conflicted leaves unmerged entries and is resolved by hand; a merge that never completed leaves
+ * none, and telling its reader to resolve a conflict sends them looking for something that is not
+ * there. The second case names what `merge-tree` says would conflict, and says the recovery, because
+ * a grandchild `git` inherits the sandbox its top-level command is excluded from.
+ */
+function failedIntegrationReport(
+  merge: { stderr?: string },
+  wouldConflict: readonly string[],
+  unmerged: readonly string[],
+): string {
+  const list = (paths: readonly string[]): string => paths.map(path => `- ${path}`).join('\n')
+  if (unmerged.length > 0) {
+    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. `
+      + `Conflicting paths:\n${list(unmerged)}`
+  }
+  const reason = (merge.stderr ?? '').trim()
+  return `Integrating ${MAIN_BRANCH} did not complete, and it is not a conflict: the merge recorded no `
+    + 'unmerged paths, so the worktree may hold a partly written tree that no Git command describes.\n'
+    + (reason === '' ? '' : `Git said:\n${reason}\n`)
+    + (wouldConflict.length === 0
+      ? 'Nothing would have conflicted.\n'
+      : `These paths would conflict:\n${list(wouldConflict)}\n`)
+    + `Run \`git merge ${MAIN_BRANCH}\` yourself as a top-level command and resolve it there. A `
+    + 'sandboxed shell denies the writes this merge needs under the paths the policy protects, and a '
+    + 'grandchild `git` inherits a sandbox that its top-level command is excluded from (DEVENV-111).'
 }
 
 async function localMainSha(dependencies: FinalizeDependencies, root: string): Promise<string> {
