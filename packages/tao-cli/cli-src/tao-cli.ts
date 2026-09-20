@@ -374,6 +374,7 @@ async function runInPlaceCommand(
     const errored = results.filter(result => result.status === 'error')
     const diagnostics = results.flatMap(result => result.diagnostics ?? [])
     const errorCount = diagnostics.filter(Diagnostic.isError).length
+      + results.reduce((held, result) => held + (result.unreportedDiagnostics ?? 0), 0)
       + errored.filter(result => result.error !== undefined).length
     const warningCount = diagnostics.filter(Diagnostic.isWarning).length
 
@@ -409,7 +410,8 @@ async function runInPlaceCommand(
 /**
  * writeDiagnosticResults prints every file's diagnostics with its location and offending source
  * line. The file is re-read for the excerpt because the run reports after all files are processed,
- * and only files that actually carry a diagnostic are read.
+ * and only files that actually carry a diagnostic are read. A file that held findings back says so
+ * once at the end of its own block, so the reader knows the list is a starting point.
  */
 async function writeDiagnosticResults(results: readonly InPlace.Result[], labels: InPlaceLabels): Promise<void> {
   for (const result of results) {
@@ -424,6 +426,13 @@ async function writeDiagnosticResults(results: readonly InPlace.Result[], labels
       } else {
         HCI.logProcessWarn(labels.failedVerb, block)
       }
+    }
+    const held = result.unreportedDiagnostics ?? 0
+    if (held > 0) {
+      HCI.writeErrorLine(
+        `${FS.displayPath(result.path)}: ${held} more error${held === 1 ? '' : 's'} further down this file. `
+          + 'Fix these first — one mistake often explains the rest.',
+      )
     }
   }
 }
