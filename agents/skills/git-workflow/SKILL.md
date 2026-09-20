@@ -1,7 +1,7 @@
 ---
 name: git-workflow
 description: >-
-  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when Ro asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref; also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`) and landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`).
+  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when Ro asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`) and landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`).
 ---
 
 # Git Workflow
@@ -55,6 +55,7 @@ deliberately: `git fetch origin main` immediately before landing, since another 
 between the verification run and the merge command; fast-forward a behind local `main` only where it
 is checked out, never in a borrowed worktree; an ahead local `main` pushes forward alongside yours,
 which is correct; if both moved, merge refreshed `main` into the feature branch and re-verify.
+After any merge of `main` into a branch, skim what arrived: `references/after-merging-main.md`.
 
 A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does, through the `Mine`
 `Justfile` recipes. Pushing is irreversible: confirm with Ro before pushing anything Ro did not ask
