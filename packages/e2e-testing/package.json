@@ -11,6 +11,7 @@
     "@playwright/test": "1.63.0",
     "tao-icloud-native": "workspace:*",
     "tao-host-control": "workspace:*",
+    "tao-host-control-appium": "workspace:*",
     "tao-host-control-playwright": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-runtime-toolchain": "workspace:*",

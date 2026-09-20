@@ -45,6 +45,7 @@ export type HostSessionDescriptor = Readonly<{
 /** HostTarget occurrence is 1-based, matching authored Tao `select #tag[n]` scopes. */
 export type HostTarget =
   | Readonly<{ kind: 'accessibility'; name: string; occurrence?: number; role?: string }>
+  | Readonly<{ kind: 'scoped'; scope: HostTarget; target: HostTarget }>
   | Readonly<{ kind: 'tag'; occurrence?: number; value: string }>
   | Readonly<{ kind: 'text'; occurrence?: number; value: string }>
 

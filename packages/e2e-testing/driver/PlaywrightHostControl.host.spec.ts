@@ -29,6 +29,8 @@ Describe('Playwright host control', () => {
         Expect(first.descriptor()).toMatchObject({ driver: 'playwright', mode: 'development', version: 1 })
         Expect(first.descriptor().id).not.toBe(second.descriptor().id)
         Expect(first.descriptor().lease).not.toEqual(second.descriptor().lease)
+        Expect(first.descriptor().lease.name).toBe(`browser-context:${first.descriptor().id}`)
+        Expect(second.descriptor().lease.name).toBe(`browser-context:${second.descriptor().id}`)
         Expect(first.descriptor().capabilities).not.toContain('relaunchApplication')
 
         await typeInto(first, 'Session input', 'alpha')
@@ -219,6 +221,16 @@ Describe('Playwright host control', () => {
             target: { kind: 'tag', occurrence: 2, value: 'repeated' },
           })).text,
         ).toBe('Second occurrence')
+        Expect(
+          (await session.observe({
+            expectedRevision: firstRevision,
+            target: {
+              kind: 'scoped',
+              scope: { kind: 'tag', occurrence: 2, value: 'row' },
+              target: { kind: 'tag', value: 'child' },
+            },
+          })).text,
+        ).toBe('Second child')
         await expectHostFailure(
           session.observe({
             expectedRevision: firstRevision,
@@ -470,6 +482,8 @@ function replacementFixture(): string {
   <body>
     <button data-testid="repeated">First occurrence</button>
     <button data-testid="repeated">Second occurrence</button>
+    <section data-testid="row"><span data-testid="child">First child</span></section>
+    <section data-testid="row"><span data-testid="child">Second child</span></section>
     <button id="observed" data-testid="replaceable">Original</button>
     <p data-testid="replacement-result">Clicked: none</p>
     <script>

@@ -26,6 +26,9 @@
       "@host-control/playwright": [
         "./host-control-playwright/host-control-playwright-src/host-control-playwright.ts"
       ],
+      "@host-control/appium": [
+        "./host-control-appium/appium-src/appium.ts"
+      ],
       "@e2e-testing": [
         "./e2e-testing/HostTestingCommand.ts"
       ],

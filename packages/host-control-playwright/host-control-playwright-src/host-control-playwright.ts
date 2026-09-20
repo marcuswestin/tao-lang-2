@@ -12,6 +12,7 @@ import {
   type HostScreenshot,
   type HostSession,
   type HostSessionDescriptor,
+  hostSessionTargetLeaseName,
   type HostTarget,
 } from '@host-control'
 import { Errors, FS, Platform, Switch } from '@shared'
@@ -182,7 +183,10 @@ class PlaywrightHostSession implements HostSession {
     this.#artifactRoot = options.artifactRoot
     this.#context = options.context
     this.#id = options.id
-    this.#lease = Object.freeze({ generation: Platform.randomUUID(), name: `browser-context-${options.id}` })
+    this.#lease = Object.freeze({
+      generation: Platform.randomUUID(),
+      name: hostSessionTargetLeaseName({ id: options.id, kind: 'browserContext' }),
+    })
     this.#mode = options.mode
     this.#onClose = options.onClose
     this.#page = options.page
@@ -434,7 +438,10 @@ class PlaywrightHostSession implements HostSession {
   }
 }
 
-function locatorFor(page: Page, target: HostTarget): Locator {
+function locatorFor(root: Page | Locator, target: HostTarget): Locator {
+  if (target.kind === 'scoped') {
+    return locatorFor(locatorFor(root, target.scope), target.target)
+  }
   const occurrence = target.occurrence ?? 1
   if (!Number.isInteger(occurrence) || occurrence < 1) {
     throw new HostControlError('assertion', 'A host target occurrence must be a positive integer.', { target })
@@ -442,13 +449,16 @@ function locatorFor(page: Page, target: HostTarget): Locator {
   const locator = Switch.kind<HostTarget, Locator>(target, {
     accessibility: accessibility =>
       accessibility.role === undefined
-        ? page.getByLabel(accessibility.name, { exact: true })
-        : page.getByRole(accessibility.role as Parameters<Page['getByRole']>[0], {
+        ? root.getByLabel(accessibility.name, { exact: true })
+        : root.getByRole(accessibility.role as Parameters<Page['getByRole']>[0], {
           exact: true,
           name: accessibility.name,
         }),
-    tag: tag => page.getByTestId(tag.value),
-    text: text => page.getByText(text.value, { exact: true }),
+    scoped: () => {
+      throw new HostControlError('assertion', 'A scoped host target must be resolved through its parent target.')
+    },
+    tag: tag => root.getByTestId(tag.value),
+    text: text => root.getByText(text.value, { exact: true }),
   })
   return locator.nth(occurrence - 1)
 }
@@ -481,6 +491,12 @@ function copyTarget(target: HostTarget): HostTarget {
         occurrence: accessibility.occurrence,
         role: accessibility.role,
       }),
+    scoped: scoped =>
+      Object.freeze({
+        kind: 'scoped',
+        scope: copyTarget(scoped.scope),
+        target: copyTarget(scoped.target),
+      }),
     tag: tag => Object.freeze({ kind: 'tag', occurrence: tag.occurrence, value: tag.value }),
     text: text => Object.freeze({ kind: 'text', occurrence: text.occurrence, value: text.value }),
   })
@@ -503,6 +519,7 @@ function artifactName(name: string): string {
 function describeTarget(target: HostTarget): string {
   return Switch.kind<HostTarget, string>(target, {
     accessibility: accessibility => `with accessibility name '${accessibility.name}'`,
+    scoped: scoped => `${describeTarget(scoped.target)} within ${describeTarget(scoped.scope)}`,
     tag: tag => `tagged '${tag.value}'`,
     text: text => `with text '${text.value}'`,
   })

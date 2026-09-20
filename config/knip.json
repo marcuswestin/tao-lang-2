@@ -91,6 +91,16 @@
         "host-control-playwright-src/**/*.ts"
       ]
     },
+    "packages/host-control-appium": {
+      "entry": [
+        "appium-src/appium.ts",
+        "appium-tests/**/*.test.ts"
+      ],
+      "project": [
+        "appium-src/**/*.ts",
+        "appium-tests/**/*.ts"
+      ]
+    },
     "packages/ide-extension": {
       "entry": [
         "esbuild.config.ts",
