@@ -2,6 +2,46 @@
 
 ## Continuation evidence (current session)
 
+### Appium mobile, Studio host control, and session isolation
+
+The next four additive slices now use the universal `HostControl` contract with target-specific
+drivers. Browser sessions remain on Playwright. iOS simulators run the compiled Tao journey through
+Appium XCUITest; Android emulators run it through Appium UiAutomator2. Studio development uses a
+capability-protected semantic RPC inside its owned Electrobun shell, while Appium Mac2 is the separate
+external native acceptance driver. The shared Effects and Arrays core remains unchanged and
+host-neutral.
+
+Mobile sessions lease the explicit target before build/install, reserve private driver ports, use a
+run-scoped application identifier and artifact root, and retain target ownership when remote cleanup
+is ambiguous. Normal cleanup records the Appium log, closes the remote session and owned server,
+uninstalls the isolated app, and releases its leases. Worktree deletion alone cannot prove these host
+resources stopped. Browser and Studio semantic sessions isolate revisions and reject stale
+observations; macOS physical input is serialized behind its own machine-wide lease.
+
+Current evidence under `.artifacts/host-testing/`:
+
+| Run                                    | Result                                                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `e2f1572a-a8b1-464a-bf20-5faa57e386b1` | All 96 registered host-free controls passed                                               |
+| `99098101-81a9-46ad-8644-30f0816f964d` | Independent E2E package typecheck passed                                                  |
+| `2905042f-2de0-486a-abee-579e3a180a3b` | Five owned real-Chrome driver proofs passed                                               |
+| `04741792-5a1e-45ff-b537-9753c51dd8f6` | HNReader real-Chrome journey passed                                                       |
+| `71314794-b650-432f-83ec-8be6158e7476` | Deliberate browser persistence fault was detected at the authored assertion               |
+| `8bbd8767-e792-4655-8218-e743767711ac` | HNReader iOS simulator journey passed through XCUITest                                    |
+| `db1cd6b3-6b2f-41ed-bd12-7223b9ca858c` | Deliberate iOS persistence fault was detected at the authored post-relaunch assertion     |
+| `213e1c43-ba31-4651-8407-6428c80e25a4` | HNReader Android emulator journey passed through UiAutomator2                             |
+| `131d04ff-f9bf-4b95-8191-a14791e42d8f` | Deliberate Android persistence fault was detected at the authored post-relaunch assertion |
+
+The real Studio semantic smoke passed against an owned Electrobun shell. The Mac2 smoke starts its
+owned Appium server and reaches healthy WebDriverAgent status, then this host stalls on `POST
+/session` before any Studio product assertion; no TCC denial was observed. This is a driver/session
+service boundary, not a passing native acceptance result.
+
+Physical iOS remains install-only and distinct from UI acceptance. Real simultaneous multi-simulator
+execution is also incomplete even though allocation and conflict behavior have host-free coverage.
+The next slice set is physical iOS/Android UI acceptance and making Studio a Tao app built and
+developed through the Tao CLI. The legacy Maestro path is dormant; its deletion awaits approval.
+
 ### Agreed cleanup after prototype review
 
 The follow-up places real-host orchestration and its dedicated fixtures in `packages/e2e-testing`.
@@ -14,23 +54,24 @@ nonmutating ordering; explicitly named in-place helpers preserve intentional mut
 runtime uses these helpers and repository lint prevents raw ordering-method access elsewhere in it.
 `Effects` remains the same shared, host-neutral implementation.
 
-The first host-control slices are now implemented additively. Compiler test plans have a versioned
+The first host-control milestone was implemented additively. Compiler test plans gained a versioned
 public IR; a source-linked host journey interpreter compiles the existing HNReader persistence check
 and a new Clockwork Tao check without invoking the in-process runner. An additive HNReader browser
 test executes that authored plan through real browser input. Native `#tag[n]` targeting is represented
-exactly by the Appium seam, but no real Appium transport has run the journey, so the retained Maestro
-YAML remains the simulator acceptance proof.
+exactly by the Appium seam. At that milestone no real Appium transport had run the journey, and the
+retained Maestro YAML was the simulator acceptance proof. The current evidence above supersedes that
+limitation with XCUITest and UiAutomator2 journeys.
 
 `packages/host-control` owns the neutral session, revision, target and fencing contract plus the
 machine-wide named-resource lease extracted from developer automation. Live owners are never evicted
 solely by age. `packages/host-control-playwright` owns fresh Playwright library contexts; five real
 Chrome tests in the opt-in `./agent test-host driver` lane prove concurrent
 storage/input/artifact isolation, concrete observed-target binding, development revision publication,
-stale-revision rejection and immutable acceptance without entering cacheable host-free verification. The bounded
-Appium XCUITest seam under `packages/e2e-testing/native/appium` has eleven fake-client proofs for
+stale-revision rejection and immutable acceptance without entering cacheable host-free verification. At that milestone
+the bounded Appium XCUITest seam under `packages/e2e-testing/native/appium` had eleven fake-client proofs for
 target and port isolation, signing inputs, exact tag occurrence, serialized input, displayed-state
-inspection, retryable receipt-first cleanup and revision fencing. It has not
-started Appium, WebDriverAgent, a simulator session or a physical-device UI session.
+inspection, retryable receipt-first cleanup and revision fencing, but had not started Appium,
+WebDriverAgent or a simulator session. Physical-device UI acceptance remains incomplete.
 
 Review follow-up also closes the remaining CloudKit default-container hole, requires explicit JUnit
 success evidence, writes inconclusive verdicts for faulted prepare/export-only runs, resolves Maestro

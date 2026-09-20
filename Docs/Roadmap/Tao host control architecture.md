@@ -12,11 +12,11 @@ The additive first implementation now lives in `packages/host-control`,
 Protocol on every host. The existing `StudioCdp` is a Chrome driver, not the source-aware contract.
 Avoid a permanent second general browser driver or an abstraction containing every vendor method.
 
-Use Playwright's library for the default browser adapter. Keep the current Maestro simulator journeys
-as batch acceptance evidence. Evaluate Appium XCUITest in a bounded native session spike when adding
-interactive control and physical iOS acceptance; do not install its server/signing machinery merely
-to complete the current prototype. If it proves suitable on both simulator and device, prefer one
-native driver for development and acceptance over maintaining two equivalent long-term implementations.
+Use Playwright's library for browser sessions and Appium for native sessions: XCUITest on iOS,
+UiAutomator2 on Android, and Mac2 for external Studio acceptance. Studio development uses a Tao
+semantic RPC inside its owned Electrobun shell. Real simulator and emulator journeys established the
+mobile drivers; physical-device UI acceptance remains separate and incomplete. Maestro no longer
+drives the current simulator routes and is not part of the lasting architecture.
 
 ## Separate four responsibilities
 
@@ -37,12 +37,15 @@ in the shipped runtime and gains no browser, device, process, or runner dependen
 
 ## Driver choices and tradeoffs
 
-| Backend                    | Recommended role                                             | Reason and limit                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Playwright library         | Default owned browser sessions                               | Maintained locators, real input and browser contexts reduce custom automation work. Tao owns explicit context cleanup and library-level tracing. |
-| Existing Chrome CDP driver | Preserve existing callers; narrow attach/debug escape hatch  | Useful for existing Studio work. Do not build a second full locator/runner API or make raw evaluation the common interface.                      |
-| Maestro                    | Existing simulator acceptance flows                          | Useful native input and artifacts; its documented CLI/flow surface is not a general persistent interactive SDK.                                  |
-| Appium XCUITest            | Optional native-control spike for simulator and physical iOS | Real-device support and a persistent command surface fit interactive sessions, at the cost of WDA, signing, ports and startup complexity.        |
+| Backend                    | Recommended role                                            | Reason and limit                                                                                                                                 |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Playwright library         | Owned browser development and acceptance sessions           | Maintained locators, real input and browser contexts reduce custom automation work. Tao owns explicit context cleanup and library-level tracing. |
+| Existing Chrome CDP driver | Preserve existing callers; narrow attach/debug escape hatch | Useful for existing Studio work. Do not build a second full locator/runner API or make raw evaluation the common interface.                      |
+| Appium XCUITest            | iOS simulator now; physical iOS next                        | The persistent W3C surface passed the real simulator journey and fault probe. Physical-device UI acceptance is still unproved.                   |
+| Appium UiAutomator2        | Android emulator now; physical Android next                 | The same compiled Tao journey passed on a real emulator, with isolated ports, artifacts, cleanup, and fault detection.                           |
+| Studio semantic RPC        | Fast native Studio development                              | Source-aware observation and revision publication stay inside the owned shell and do not claim external accessibility acceptance.                |
+| Appium Mac2                | Serialized external Studio acceptance                       | It owns the macOS physical-input lease. This host reaches WDA but currently stalls while creating the Mac2 session.                              |
+| Maestro                    | Dormant legacy implementation pending removal               | Its batch flow surface does not satisfy persistent interactive development and would duplicate the Appium acceptance surface.                    |
 
 Playwright separates its library from its test runner. The library can serve an interactive session
 without test callbacks; its caller must close contexts and arrange tracing and waits. Keep Playwright
@@ -54,18 +57,18 @@ documented as lower fidelity than a Playwright-protocol connection. Report reduc
 instead of pretending an attached human browser has a fresh isolated context.
 [Connection documentation](https://playwright.dev/docs/api/class-browsertype).
 
-Maestro's CLI executes flows, while Studio provides interactive authoring. Its web support currently
-documents Chromium-only beta behavior and preset viewport/locale restrictions, so it is not the
-recommended browser foundation. Its documented iOS workflow establishes simulator support; physical
-iOS acceptance remains unproved in this project.
+Maestro's CLI executes flows but does not provide the persistent interactive session required for
+parallel development. Its web support documents Chromium-only beta behavior and preset
+viewport/locale restrictions. The legacy flow files are no longer reached by the current iOS and
+Android commands and remain only until their deletion is approved.
 [CLI](https://docs.maestro.dev/maestro-cli),
 [web support](https://docs.maestro.dev/get-started/supported-platform/web-browser),
 [iOS support](https://docs.maestro.dev/get-started/supported-platform/ios).
 
-Appium XCUITest supports real iOS devices, but a usable spike must measure cold and warm startup,
-signing recovery, screenshot/hierarchy latency, keyboard input, gestures, app relaunch, and repeated
-attachment on this machine's iOS/Xcode versions. Parallel sessions need distinct device IDs, WDA
-local ports and derived-data paths. These are reasons to test it, not a claim it already works here.
+Appium XCUITest supports real iOS devices. The simulator proof now covers startup, hierarchy queries,
+touch input, screenshot, application relaunch, cleanup, and an authored fault. Parallel sessions use
+distinct device IDs, WDA and MJPEG ports, and derived-data paths. Physical-device signing, attachment,
+and UI assertions remain for the next slice.
 [Driver overview](https://appium.github.io/appium-xcuitest-driver/),
 [parallel setup](https://appium.github.io/appium-xcuitest-driver/latest/guides/parallel-tests/).
 
@@ -117,6 +120,8 @@ private source paths or development control endpoints.
   The configured pool limit is visible; never preempt a live development session automatically.
 - Every session owns its driver ports, app identifier/data policy, artifacts and build output.
   Resource exhaustion queues or reports busy instead of falling back to another session's device.
+- Studio semantic sessions share one owned process and use a process-wide operation and revision
+  fence. Appium Mac2 separately owns the global `macos-physical-input` lease.
 - Development sessions retain state and support fast refresh and visual iteration. Acceptance
   sessions bind an immutable build identity and explicit initial state. Promotion creates a separate
   acceptance session; an edit cannot silently alter a run already claiming that build.
@@ -136,31 +141,33 @@ input, installs or source edits after an ambiguous timeout. Inspect the resultin
 explicit new acceptance attempt, retaining the failed attempt. Closing a browser context must flush
 its artifacts before releasing ownership; device cleanup must verify the lease and isolated app ID.
 
-## Candidate slices for discussion
+Normal Appium close writes receipts and server logs, deletes the remote session, stops the owned
+server, uninstalls the isolated application, and releases ports and the target lease. Worktree removal
+cannot prove that those host resources stopped, so runtime cleanup remains necessary. An ambiguous
+remote deletion retains its lease to prevent another session from reusing a live target.
 
-Implementation status on 2026-09-19: slice 1 has a versioned Tao plan/interpreter and additive browser
-execution, while native execution still uses retained Maestro YAML; slice 2 has a real Playwright
-library adapter and concurrent-context proofs, but no CLI/Studio operator surface; slice 3 has a
-fenced Appium/XCUITest contract and fake-client parallelism proofs, but no real Appium/WDA run.
+## Completed slices and next set
 
-1. **Tao-authored real-host journeys (recommended first).** Compile the existing HNReader persistence
-   journey into a source-linked declarative plan and execute it on browser and simulator; add the
-   Clockwork journey in Tao. Keep compiler/plan ownership independent of the drivers. Any retained
-   Maestro YAML becomes generated driver output. Acceptance: one authored journey per behavior,
-   real host input and lifecycle, source-line failures, explicit unsupported capabilities, and the
-   same deliberate countdown/persistence faults detected on both hosts. Existing in-process suites
-   stay intact. This removes duplicate authoring before expanding the driver surface.
-2. **Owned browser development sessions.** Extract the reusable production host-control boundary
-   beneath `packages/e2e-testing`, backed by Playwright library. Demonstrate two concurrent sessions
-   with inspection, screenshots, input, explicit close and a visual-editing loop. Acceptance: no
-   cross-session storage/input/artifact interference, revision-bound observations, and a separate
-   immutable acceptance run after editing. Start with the capabilities that those demonstrations need.
-3. **Persistent native control and physical-device acceptance.** Evaluate an Appium XCUITest session
-   on a simulator and roPhone against the existing HNReader lifecycle journey and a visual-edit loop.
-   Add explicit per-target ownership and prove a second simulator is unaffected by the first session's
-   input and cleanup. Acceptance: actual physical UI assertions, source/build/target receipts,
-   stale-owner rejection, and measured startup/debugging costs before selecting the lasting native
-   driver. Full pooling, adaptive budgets and retention policy follow this bounded proof.
+Slices 1–4 are implemented additively:
 
-Slices are proposals, not scheduled implementation or completed capabilities. The current additive
-prototype and its [handoff evidence](Real-host%20testing%20handoff.md) remain the reviewable milestone.
+1. iOS simulator journeys execute the compiled Tao plan through Appium XCUITest, including cleanup,
+   artifacts, relaunch persistence, and deliberate-fault detection.
+2. Studio exposes semantic development control through its owned Electrobun process. The Appium Mac2
+   seam and smoke are implemented; this host currently stalls while creating the Mac2 WDA session,
+   before product assertions.
+3. Host sessions isolate target leases, ports, application identifiers, revisions, and artifacts.
+   Browser concurrency is proved; native allocation has host-free proofs and real single-target runs.
+   A simultaneous multi-simulator host proof remains outstanding.
+4. Android emulator journeys execute the same compiled Tao plan through Appium UiAutomator2,
+   including cleanup, artifacts, relaunch persistence, and deliberate-fault detection.
+
+The next slice set is:
+
+5. **Physical-device UI acceptance.** Execute the authored journey through Appium on explicit iOS
+   and Android devices, keeping installation receipts distinct from UI assertions and adding
+   device-safe cleanup and retention policy.
+6. **Studio as a Tao app.** Make Tao Studio buildable and developable through the Tao CLI toolchain,
+   then run its semantic development and native acceptance surfaces against that product path.
+
+The current additive prototype and its [handoff evidence](Real-host%20testing%20handoff.md) remain the
+reviewable milestone. Existing in-process suites and their gate membership stay intact.

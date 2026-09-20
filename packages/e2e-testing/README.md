@@ -7,8 +7,8 @@ gates are unchanged, and this package does not reuse their runners, fixtures, mo
 
 The related `tao-host-control` package owns host-neutral sessions, semantic targets, revisions and
 fenced machine-resource leases. `tao-host-control-playwright` supplies owned Playwright-library browser
-contexts for interactive development and acceptance. The Appium XCUITest seam remains here while it
-is a bounded native spike rather than a proven production driver.
+contexts. `tao-host-control-appium` owns the reusable W3C transport, Appium server lifecycle, and Mac2
+controller. This package owns the iOS and Android target policies and compiled-journey adapters.
 
 `playwright.config.ts` discovers tests only through scoped control and subject-specific browser globs
 inside this package. HNReader is the only existing app admitted as a subject; Clockwork is a harness
@@ -45,6 +45,7 @@ Each invocation writes a unique `.artifacts/host-testing/<run-id>/` directory.
 ./agent test-host browser --app clockwork --fault
 ./agent test-host browser --app hnreader --fault
 ./agent test-host ios --app clockwork --device <simulator-UDID>
+./agent test-host android --app hnreader --device <emulator-serial>
 ./agent test-host device --app hnreader --device <physical-device-ID>
 ```
 
@@ -53,9 +54,10 @@ that meaningful fault detection. A compile, browser-launch, or unrelated asserti
 prove the fault was caught. `check --fault` is rejected because controls do not build an application.
 `application-fault.json` classifies browser mutations as `detected`, `escaped`, or `inconclusive`;
 only the expected named assertion failures, with no unrelated or global failures, count as detected.
-Native mutation runs use the same verdicts, requiring matching build provenance, subprocess receipts,
-Maestro JUnit, and exact command traces. HNReader requires successful history before an actual
-matching-app kill and launch, followed by the persistence assertion failure. Every mutation command
+Native mutation runs use the same verdicts, requiring matching build provenance, source-linked Appium
+timelines, driver receipts, and the exact expected authored assertion. HNReader requires successful
+history before an actual matching-app termination and relaunch, followed by the distinct post-relaunch
+persistence assertion failure. Every mutation command
 exits nonzero, including an escaped mutation; a generic host failure is inconclusive.
 `prepare` only compiles; `export` also builds the web bundle. When either is run with `--fault`, its
 receipt is explicitly `inconclusive` because no host assertion ran, even when mutation provenance is
@@ -63,9 +65,11 @@ valid. Neither claims UI behavior. Browser runs use installed Chrome with fresh 
 temporary profiles. To use Playwright's downloaded Chromium, run `setup`, then pass
 `--browser-channel chromium`. A browser launch failure is a failed proof, not a skipped test.
 
-Native runs require an explicit target and a unique test bundle identifier. The simulator uses Maestro;
-physical iOS currently reaches only the Release build/install milestone and then reports blocked because
-a physical-device UI driver has not been implemented. See [native details](native/README.md).
+Native runs require an explicit target and a unique test application identifier. iOS simulators use
+Appium XCUITest and Android emulators use Appium UiAutomator2. Both current routes execute the compiled
+Tao journey and preserve screenshots, driver receipts, server logs, and cleanup evidence. Physical iOS
+currently reaches only the Release build/install milestone and reports blocked because physical-device
+UI acceptance has not been implemented. See [native details](native/README.md).
 
 ## Time, randomness, and parallelism
 
@@ -88,6 +92,9 @@ Owned browser contexts are independent targets. Native targets and Appium driver
 machine-wide generation-fenced leases with process identity; a demonstrably live owner is never
 reclaimed because its session is old. Acceptance sessions bind an immutable revision. Development
 sessions may publish a revision only through a driver operation that actually refreshes or deploys it.
+Appium close deletes the remote session, stops its owned server, uninstalls the isolated application,
+and then releases target and port leases. An ambiguous remote delete retains the target lease; deleting
+a worktree alone cannot prove that host services or installed applications stopped.
 
 `HostTestEnvironment` adapts that core to a test bridge. The new test entry point alone installs
 the bridge. Production entry points do not import it.
@@ -107,15 +114,16 @@ need stronger analysis before claiming comprehensive enforcement.
 
 ## Before promotion
 
-- Retain the green browser/simulator receipts and establish physical-device UI acceptance.
-- Replace the physical iOS driver stub with an actual device UI driver.
+- Retain the green browser, iOS-simulator, and Android-emulator receipts and establish physical-device
+  UI acceptance through Appium. Keep build/install evidence distinct from UI assertions.
 - Retain the demonstrated browser and simulator fault checks as the host coverage grows.
-- Connect the Tao-plan interpreter to the lasting native driver and prove the authored HNReader
-  journey, including exact `#reading[n]` scopes, on simulator and physical iOS.
-- Bind the Appium seam to a pinned real client/server lifecycle, then measure WebDriverAgent signing,
-  cold/warm startup, inspection, screenshot, input and recovery costs before promoting it.
-- Expose owned development sessions through the CLI/Studio surface after the session API settles;
-  the opt-in driver lane proves the reusable browser-driver contract, not a finished operator workflow.
+- Prove simultaneous multi-simulator allocation on the host; current real evidence covers one explicit
+  iOS target and one explicit Android target, while host-free controls cover conflicting leases and ports.
+- Resolve the Appium Mac2 WDA session-creation stall, then exercise external Studio accessibility and
+  physical input. The semantic Studio development path is already a distinct real-shell proof.
+- Make Studio a Tao app that is built and developed through the Tao CLI toolchain.
+- Remove the dormant Maestro implementation after deletion is approved; current simulator commands do
+  not call it.
 - Decide the production-wide effect interfaces and migrate callers before broadening lint enforcement.
 - Map required behavior to independently asserted journeys and lower-level exceptions; prove parity
   before retiring any old suite. Measure the new suite's cost and diagnostic usefulness.

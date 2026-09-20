@@ -20,17 +20,17 @@ register coverage without file-by-file inventories; effect lint records the expa
 on an empty registration. Command dispatch, build preparation, host execution and evidence reporting
 have separate named responsibilities.
 
-Tao is the agreed authored language for product journeys. A source-linked compiled journey plan and
-real-host executors are the next implementation boundary. The existing Playwright and Maestro
-journeys remain executable acceptance evidence until that replacement is proven; YAML is not the
-intended second authoring language. Physical termination/relaunch must remain distinct from an
-in-process renderer remount, and unsupported host steps must fail explicitly.
+Tao is the authored language for product journeys. The source-linked compiled journey plan now runs
+through Playwright, Appium XCUITest, and Appium UiAutomator2. The old Maestro YAML is no longer reached
+by current simulator commands and is not an intended second authoring language. Physical
+termination/relaunch remains distinct from an in-process renderer remount, and unsupported host steps
+fail explicitly.
 
-Reusable host ownership, inspection and input belong below the journey runner so interactive
-development and visual iteration can use them without importing testing orchestration. The production
-`tao-host-control` package now owns host-neutral sessions, semantic targets, revisions, and fenced
-machine-resource leases; browser control is supplied by its Playwright adapter. This cleanup adds no
-universal native driver or simulator pool.
+Reusable host ownership, inspection and input sit below the journey runner so interactive development
+and visual iteration can use them without importing testing orchestration. The production
+`tao-host-control` package owns host-neutral sessions, semantic targets, revisions, and fenced
+machine-resource leases; Playwright and Appium packages supply target drivers. Studio adds a semantic
+development transport inside its owned native shell and a distinct Appium Mac2 acceptance seam.
 
 ## Prototype acceptance
 
@@ -57,18 +57,19 @@ return fresh arrays from readonly inputs; intentional mutation uses explicitly n
 Repository lint keeps raw sorting/reversal methods inside `core/Arrays.ts` throughout shipped runtime
 source, preventing a recurrence of the native Hermes `toSorted` startup failure.
 
-Native physical-device driving and broad lint enforcement remain open implementation work. No test
-suite has been retired and no pre-merge gate has been replaced.
+Physical-device UI driving, simultaneous multi-simulator host proof, and broad lint enforcement remain
+open. No existing suite or pre-merge gate has been retired or replaced.
 
 ## Explicit behavior inventory
 
-| Subject                      | Registered proof                                            | Independently observed behavior                                                                                                       |
-| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| HNReaderStub, browser        | `browser/hnreader.host.spec.ts`                             | Story comments, return navigation, two opened stories in newest-first order, persistence after page reload                            |
-| Clockwork, browser           | `browser/clockwork.host.spec.ts`                            | Visible color action and countdown after controlled runtime scheduling                                                                |
-| Browser realm isolation      | `browser/clockwork-environment.host.spec.ts`                | Separate clocks and random streams in fresh browser contexts                                                                          |
-| Effects core and enforcement | Explicit `controls` Playwright project                      | Same-process session isolation, invalid controls, lifecycle cleanup, synchronous clock observation, scoped effect/import restrictions |
-| Native subjects              | `native/flows/clockwork.yaml`, `native/flows/hnreader.yaml` | Intended simulator OS input, deep-link controls, and process-relaunch persistence; acceptance depends on native receipts              |
+| Subject                      | Registered proof                                 | Independently observed behavior                                                                                                       |
+| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| HNReaderStub, browser        | `browser/hnreader.host.spec.ts`                  | Story comments, return navigation, two opened stories in newest-first order, persistence after page reload                            |
+| Clockwork, browser           | `browser/clockwork.host.spec.ts`                 | Visible color action and countdown after controlled runtime scheduling                                                                |
+| Browser realm isolation      | `browser/clockwork-environment.host.spec.ts`     | Separate clocks and random streams in fresh browser contexts                                                                          |
+| Effects core and enforcement | Explicit `controls` Playwright project           | Same-process session isolation, invalid controls, lifecycle cleanup, synchronous clock observation, scoped effect/import restrictions |
+| iOS native subjects          | Compiled Tao journey through Appium XCUITest     | Simulator input, run-scoped deep-link controls, process-relaunch persistence, screenshots, and source-linked receipts                 |
+| Android native subjects      | Compiled Tao journey through Appium UiAutomator2 | Emulator input, run-scoped controls, process-relaunch persistence, screenshots, and source-linked receipts                            |
 
 These are additive prototype proofs. They do not establish live Hacker News, CloudKit, all navigation
 semantics, or parity with the repository's existing suites. No replacement is justified by this inventory.
@@ -76,21 +77,15 @@ semantics, or parity with the repository's existing suites. No replacement is ju
 ## Recommended next architecture
 
 The [host-control architecture recommendation](Tao%20host%20control%20architecture.md) records the
-research following Ro's request for one universal Tao API. Recommend a small production control
-contract over owned host sessions, Playwright library for browser control, Maestro for the current
-simulator batch proofs, and a bounded Appium XCUITest spike for interactive/physical iOS control.
-Source-aware inspection and ownership sit above drivers; the driver is not the journey runner.
-This recommendation is not an implementation or permission to replace existing coverage.
+selected universal Tao API: a small production contract over owned host sessions, Playwright for
+browsers, Appium for native acceptance, and semantic RPC for Studio development. Source-aware
+inspection and ownership sit above drivers; the driver is not the journey runner.
 
 ## Parallel development and host testing
 
-Ro requested that the architecture support concurrent agents both testing and actively developing on
-real hosts, including visual-design iteration. The following is a proposed direction, not implemented
-capacity or a settled lifecycle policy:
+Ro requested concurrent agents both testing and actively developing on real hosts, including visual
+design iteration. The current implementation provides these foundations:
 
-- Use a shared production host-session authority for development and acceptance. A session identifies
-  its owner, worktree, target, app/build, logs, screenshots, and UI-control endpoints. Reuse production
-  coordination utilities where suitable; do not import existing testing infrastructure into this PoC.
 - Hold an exclusive target lease across installation, UI interaction, and cleanup. Separate simulators
   permit parallel control; one physical device remains exclusive. Never infer ownership from which
   app or simulator happens to be foreground.
@@ -104,14 +99,14 @@ capacity or a settled lifecycle policy:
 - Make deterministic scenarios, time, and randomness explicit session options for visual iteration;
   ordinary development should retain live effects. Host allocation must not silently install test
   clocks or replace the app's data sources.
-- Support explicit handoff, release, owner-liveness checks, and crash recovery. Cleanup must neither
+- Support explicit release, owner-liveness checks, and crash recovery. Cleanup must neither
   erase another session's target nor interrupt a human or another agent's development preview.
 - Keep scheduling and control receipts visible through the existing machine activity reporting.
 
-Decisions still to settle: pool capacity policy, idle development-session retention, and preemption.
-Recommended defaults are adaptive bounded capacity, reusable development sessions, and no automatic
-preemption of active development. The current PoC still relies on coordinated serial native runs;
-unique app IDs and run-scoped controls alone do not make same-target concurrent driving safe.
+Pool capacity, idle development-session retention, and explicit handoff remain future policy. Current
+drivers isolate application IDs, artifacts, ports, revisions, and target leases, but real native
+evidence still comes from coordinated single-target runs. A simultaneous multi-simulator host proof is
+required before claiming that capacity. Same-target driving remains serialized by design.
 
 Ro recalls an earlier decision against Playwright that has not yet been located. The subsequent
 research recommends its library behind the Tao browser adapter to reduce locator/wait/debugging
@@ -119,10 +114,7 @@ maintenance, while preserving existing direct-CDP callers and keeping raw CDP a 
 or attach capability. This does not select Playwright Test as the universal runner; its use for
 host-free controls is still prototype-only. See the recommendation for the evidence and tradeoffs.
 
-Repository seams inspected: `MachineLanes.ts` already owns cross-worktree atomic resource leases,
-but lives under `repository-tests`; do not import that testing infrastructure into the PoC. A future
-shared production lease primitive would need an explicit extraction with existing callers preserved.
-`StudioNative.ts` currently reserves one global native host, whereas a simulator pool needs one lease
-per target. `StudioCompanionSimulator.ts` can discover/boot/open an explicit simulator but does not
-allocate one. `StudioPreviewRuntime.ts` provides an existing production preview-build seam for
-stateful development. These are architectural references, not implemented integration.
+The production `MachineResources` primitive now provides cross-worktree generation-fenced leases.
+Mobile controllers lease each explicit simulator or emulator and their driver ports. Studio semantic
+sessions share one owned native process; external Mac2 input owns one global physical-input lease.
+`StudioPreviewRuntime.ts` remains the production preview-build seam for stateful development.

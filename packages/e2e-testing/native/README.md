@@ -1,27 +1,33 @@
 # Native host proof
 
-`runNativeHostProof` receives an isolated Expo build callback, an unsigned 32-bit seed, and both entry-source and
-compiled-artifact digests. It validates the exact run-scoped `dev.tao.taohost…` bundle identifier before any install
-or cleanup action, then installs that project with
-`expo run:ios --device <UDID> --configuration Release --no-bundler` so the JavaScript bundle is standalone
-and Expo exits after installation instead of retaining its development server/log stream, then runs a
-subject-specific Maestro flow. Its receipt
-is the proof record: blocked and failed runs are never green.
+The current simulator and emulator commands build an isolated Release application and execute a
+compiled Tao journey through Appium:
 
-The first flow targets an iOS simulator. The physical-device option requires an explicit identifier and performs
-physical-device discovery plus the isolated Release build/install, then returns `physical-ios-ui-driver-unsupported`:
-Maestro cannot establish an on-device UI proof. A physical milestone therefore needs a separate physical-device UI
-driver; it must not reuse the simulator lane's result.
+```sh
+./agent test-host ios --app hnreader --device <simulator-UDID>
+./agent test-host android --app hnreader --device <emulator-serial>
+```
 
-`reset.yaml` uses `clearState: true` only on the isolated PoC bundle ID before each test. The HNReader
-flow subsequently uses OS `killApp`/`launchApp` without clearing state, so the final Reading
-assertion proves both persistence and most-recent ordering rather than a fake relaunch. Its detail
-checks name the stub's actual comment and empty-thread states, not merely a story title rendered on
-both screens. Clockwork checks the seeded sequence across real native taps before advancing its
-controlled clock.
+Each run uses an explicit target and a run-scoped `dev.tao.taohost…` application identifier. The iOS
+path uses XCUITest; the Android path uses UiAutomator2. Both perform real input, application
+termination and relaunch, source-linked assertions, screenshots, and deliberate-fault classification.
+The app's run-scoped control link advances deterministic time, and the visible receipt must appear
+before countdown-dependent assertions continue.
 
-Maestro requires Java 17 or later. `runNativeHostProof` honors `JAVA_HOME`; when it is unset, its
-Maestro child process discovers a Homebrew JDK 17 (then the current Homebrew JDK) at either standard
-Apple Silicon or Intel prefix. This scoped fallback avoids a machine-global `sudo` JDK symlink. It
-also disables Maestro analytics for the proof process, because a managed host may not grant write
-access to `~/.maestro`.
+Target and driver ports are protected by machine-wide generation-fenced leases. The iOS allocation
+owns WebDriverAgent and MJPEG ports plus a derived-data path. Android owns UiAutomator2 system and
+MJPEG ports. Each run has a private Appium home and server port beneath its artifact root.
+
+Cleanup attempts every owned step independently: write the Appium server log, stop the server,
+uninstall the isolated application, and release the target lease. The platform controller first
+deletes the remote WebDriver session and releases its platform-specific port leases. If remote
+session deletion is ambiguous, the target lease is retained so another process cannot reuse a
+possibly live simulator or emulator. Worktree deletion is not a substitute for this runtime cleanup.
+
+The physical `device` mode remains distinct. It discovers the explicit iOS device, builds and installs
+the isolated Release app, records that milestone, and reports `physical-ios-ui-driver-unsupported`.
+No physical-device UI assertion is inferred from installation. Physical iOS and Android Appium
+acceptance are planned in the next slice set.
+
+The old Maestro runner and YAML flows are not reached by the current `ios` or `android` commands.
+They remain in the repository only until their removal is approved.
