@@ -184,11 +184,12 @@ async function formatFile(session: FormatterSession, file: OwnedTaoFile): Promis
   }
   const { formatted } = attempt
   if (formatted === undefined) {
-    const syntaxError = firstSyntaxError(attempt.diagnostics, file.path)
+    const syntax = reportableSyntaxErrors(attempt.diagnostics, file.path)
     return {
       path: file.path,
       status: 'error',
-      diagnostics: syntaxError === undefined ? attempt.diagnostics : [syntaxError],
+      diagnostics: syntax.reported.length === 0 ? attempt.diagnostics : syntax.reported,
+      unreportedDiagnostics: syntax.unreported,
     }
   }
   return await inPlace.processFile(
