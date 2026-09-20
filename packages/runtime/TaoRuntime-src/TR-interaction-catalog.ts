@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import type { TaoDesign, TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
@@ -186,8 +187,8 @@ export class CommandCatalog {
       && isActive(node, nodes)
       && (node.identity === focusRegion || isAncestor(node.identity, focusRegion ?? '', nodes))
     )
-    const inFocusedRegion = [...this.#surfaces.values()]
-      .filter(surface => {
+    const inFocusedRegion = Arrays.sorted(
+      [...this.#surfaces.values()].filter(surface => {
         const parent = nodes.find(node => node.identity === surface.parent)
         const regionScoped = parent?.kind === 'region' || isWithinNavigationSiblingRegion(surface.parent, nodes)
         return regionScoped && (!parent || isActive(parent, nodes)) && (focusRegion === undefined || (modal
@@ -196,8 +197,9 @@ export class CommandCatalog {
             || isAncestor(focusRegion, surface.parent ?? '', nodes)
             || isAncestor(surface.parent, focusRegion, nodes)
             || isWithinNavigationSiblingRegion(surface.parent, nodes)))
-      })
-      .sort((left, right) => right.sequence - left.sequence)
+      }),
+      (left, right) => right.sequence - left.sequence,
+    )
     for (const surface of inFocusedRegion) {
       for (const command of surface.commands) {
         const verb = this.verbForCommand(command, 'view')
@@ -274,9 +276,10 @@ export class CommandCatalog {
       for (const identity of surfaced) {
         add(this.verbForEntry(this.entries().find(entry => entry.identity === identity), target, 'entity'))
       }
-      const remainder = this.applicable(entityType)
-        .filter(entry => !seen.has(entry.identity))
-        .sort((left, right) => staticLabel(left).localeCompare(staticLabel(right), undefined, { sensitivity: 'base' }))
+      const remainder = Arrays.sorted(
+        this.applicable(entityType).filter(entry => !seen.has(entry.identity)),
+        (left, right) => staticLabel(left).localeCompare(staticLabel(right), undefined, { sensitivity: 'base' }),
+      )
       for (const entry of remainder) {
         add(this.verbForEntry(entry, target, 'catalog'))
       }
@@ -304,8 +307,8 @@ export class CommandCatalog {
     focusRegion: string | undefined,
     nodes: readonly TaoOutlineLiveNode[],
   ): readonly MountedCommandTable[] {
-    return [...this.#tables.values()]
-      .filter(table => {
+    return Arrays.sorted(
+      [...this.#tables.values()].filter(table => {
         if (table.parent === undefined || !table.commands.some(entry => entry.scope.kind === 'view')) {
           return false
         }
@@ -316,25 +319,29 @@ export class CommandCatalog {
         return target
           ? table.parent === target.identity || isAncestor(table.parent, target.identity, nodes)
           : table.parent === focusRegion
-      })
-      .sort((left, right) => {
+      }),
+      (left, right) => {
         const leftDistance = ancestorDistance(left.parent, target?.identity, nodes)
         const rightDistance = ancestorDistance(right.parent, target?.identity, nodes)
         return leftDistance - rightDistance || right.sequence - left.sequence
-      })
+      },
+    )
   }
 
   private surfacesForTarget(
     target: TaoOutlineLiveNode,
     nodes: readonly TaoOutlineLiveNode[],
   ): readonly MountedCommandSurface[] {
-    return [...this.#surfaces.values()]
-      .filter(surface => surface.parent === target.identity || isAncestor(surface.parent, target.identity, nodes))
-      .sort((left, right) => {
+    return Arrays.sorted(
+      [...this.#surfaces.values()].filter(surface =>
+        surface.parent === target.identity || isAncestor(surface.parent, target.identity, nodes)
+      ),
+      (left, right) => {
         const leftDistance = ancestorDistance(left.parent, target.identity, nodes)
         const rightDistance = ancestorDistance(right.parent, target.identity, nodes)
         return leftDistance - rightDistance || right.sequence - left.sequence
-      })
+      },
+    )
   }
 
   private verbForCommand(command: RuntimeCommand, source: TaoInteractionVerb['source']): TaoInteractionVerb {

@@ -5,7 +5,7 @@ import SourceActions, {
   StudioSourceOccurrenceConflictError,
   type StudioSourcePatchRequest,
 } from '@source-actions'
-import { Workspace } from '@workspace'
+import { loadSemanticSnapshot, type SemanticSnapshot, Workspace } from '@workspace'
 import { discoverStudioApp, requireStudioProjectRoot } from './session/StudioAppDiscovery'
 import {
   type SketchSnapCheckpoint,
@@ -404,9 +404,13 @@ export class StudioProjectSession {
     return compile
   }
 
-  /** agentParse parses the selected app entry with linked cross-references. */
-  agentParse(): Promise<ParseResult> {
-    return this.#workspace.parse(this.entryPath)
+  semanticSnapshot(): Promise<SemanticSnapshot> {
+    return loadSemanticSnapshot({
+      appName: this.appName,
+      entryPath: this.entryPath,
+      projectRoot: this.projectRoot,
+      validate: async entryPath => await this.#workspace.validate(entryPath),
+    })
   }
 
   compileSnapshot(): StudioCompileSnapshot {

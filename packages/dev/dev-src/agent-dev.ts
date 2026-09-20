@@ -17,6 +17,7 @@ const JUST_COMMANDS = [
   // AGENTS.md rather than dropping to `just`.
   'land-lock',
   'land-unlock',
+  'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
@@ -30,6 +31,7 @@ const JUST_COMMANDS = [
   'test-all',
   'test-changed',
   'test-file',
+  'test-host',
   'test-retry',
   // Each verification scope is its own name rather than a flag on one name, so an agent reaches it
   // the same way a developer does: by completing a prefix, not by recalling which flag it took.

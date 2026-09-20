@@ -24,6 +24,9 @@ Describe('agent worktree profile bootstrap', () => {
           'tao_activate_devenv_profile "$2" "$3"',
           'command -v node',
           'node --version',
+          'print -r -- "$ANDROID_HOME"',
+          'print -r -- "$ANDROID_SDK_ROOT"',
+          'print -r -- "$ANDROID_USER_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -33,6 +36,9 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(result.stdout.trim().split('\n')).toEqual([
         FS.resolvePath('bin/node', profile),
         'v24.test',
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('.android', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
@@ -727,6 +733,12 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('merge-with-main')).not.toContain('--skip-')
   })
 
+  Test('the human landing recipe exposes the read-only dry run', async () => {
+    const command = await justCommands('merge-with-main', '--dry-run')
+    Expect(command).toContain('./dev merge-with-main')
+    Expect(command).toContain('--dry-run')
+  })
+
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('verify-full')
 
@@ -944,6 +956,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
+    await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
     await makeExecutable(primaryNode)
   }

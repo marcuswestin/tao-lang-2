@@ -7,6 +7,7 @@ const remoteNotificationMode = 'remote-notification'
 const containersKey = 'com.apple.developer.icloud-container-identifiers'
 const servicesKey = 'com.apple.developer.icloud-services'
 const ubiquityContainersKey = 'com.apple.developer.ubiquity-container-identifiers'
+const cloudKitContainersInfoKey = 'TaoCloudKitContainerIdentifiers'
 const cloudDocumentsService = 'CloudDocuments'
 const cloudKitService = 'CloudKit'
 const knownServices = [cloudDocumentsService, cloudKitService]
@@ -52,6 +53,14 @@ function iCloudEntitlements(
   return result
 }
 
+/** cloudKitInfoPlist records the plugin's declared containers for the native module's launch guard. */
+function cloudKitInfoPlist(infoPlist, containers) {
+  return {
+    ...infoPlist,
+    [cloudKitContainersInfoKey]: containers,
+  }
+}
+
 /**
  * withTaoICloud grants the iCloud entitlements Tao's Apple datasources need: iCloud Documents for
  * `ICloud`, CloudKit for `CloudKit`, both when an app binds both.
@@ -74,15 +83,23 @@ function withTaoICloud(config, props = {}) {
     return entitled
   }
   return withInfoPlist(entitled, modConfig => {
+    const containers = resolveContainers(props.containers, modConfig.ios && modConfig.ios.bundleIdentifier)
     const modes = Array.isArray(modConfig.modResults[backgroundModesKey])
       ? modConfig.modResults[backgroundModesKey]
       : []
-    modConfig.modResults[backgroundModesKey] = [...new Set([...modes, remoteNotificationMode])]
+    modConfig.modResults = cloudKitInfoPlist(
+      {
+        ...modConfig.modResults,
+        [backgroundModesKey]: [...new Set([...modes, remoteNotificationMode])],
+      },
+      containers,
+    )
     return modConfig
   })
 }
 
 module.exports = withTaoICloud
+module.exports.cloudKitContainersInfoKey = cloudKitContainersInfoKey
 module.exports.iCloudEntitlements = iCloudEntitlements
 module.exports.resolveContainers = resolveContainers
 module.exports.resolveServices = resolveServices

@@ -5,6 +5,7 @@ import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
 import { FinalizeCommand } from './repository-tests/Finalize'
@@ -65,6 +66,24 @@ const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui o
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('test-host')
+    .description('Run the opt-in real-host testing prototype, independently of existing suites.')
+    .argument(
+      '[mode]',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
+      'check',
+    )
+    .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
+    .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
+    .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
+    .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
+    .action(async (mode, options) => {
+      const { runHostTesting } = await import('@e2e-testing')
+      await runHostTesting(mode, options)
+    })
 
   commands
     .command('test')
@@ -384,6 +403,19 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report instead of the table.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await BoardCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('reclaim')
+    .description(
+      'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
+    )
+    .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
+    .option('--json', 'Print a versioned structured report instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(
+        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+      )
     })
 
   commands

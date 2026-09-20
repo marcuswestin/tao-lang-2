@@ -4,6 +4,7 @@ import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
 import { instructionBudget, instructionLineCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
+import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -368,16 +369,28 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts:560',
   'packages/dev/dev-src/studio/StudioCdp.ts:729',
   'packages/dev/dev-src/studio/StudioCdp.ts:879',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:100',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:235',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:367',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:386',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:426',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:573',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:580',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:586',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:607',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:610',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:102',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:248',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:396',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:415',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:523',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:525',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:538',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:549',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:576',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:613',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:622',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:630',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:633',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:636',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:637',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:644',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:782',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:804',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:811',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:817',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:838',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:841',
   'packages/dev/studio-smoke/studio-real-app.test.ts:128',
   'packages/dev/studio-smoke/studio-real-app.test.ts:264',
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
@@ -400,7 +413,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/studio/studio-tests/studio-client.test.ts:626',
   'packages/studio/studio-tests/studio-client.test.ts:3043',
   // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
+  'packages/icloud-native/plugins/with-tao-icloud.cjs:32',
   'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
@@ -460,9 +473,11 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
   'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
   'packages/dev/dev-src/studio/StudioCdp.ts:2',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:541',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:543',
-  'packages/dev/dev-src/studio/StudioNative.ts:4',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:469',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:471',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:759',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:761',
+  'packages/dev/dev-src/studio/StudioNative.ts:6',
   'packages/dev/dev-tests/studio-review.test.ts:3',
   'packages/update-server/update-server-tests/update-server.test.ts:3',
   // `node:crypto` key signing for App Store Connect.
@@ -941,6 +956,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
+  issues.push(...runtimeArrayConventionIssues(packageFiles))
   return issues
 }
 

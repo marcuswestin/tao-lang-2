@@ -18,6 +18,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Delegation
 
 - Delegate work whose input is large and whose conclusion is small, and work that can run in the background while you carry on. Name a model tier for every subagent instead of letting it inherit yours. Treat a returned report as a claim: check one cited `file:line`, command, or diff before building on it.
+- Never message another agent, session, or subagent without Ro's approval in the current request; a subagent's own return is the one agent-to-agent channel that needs none. When an exchange would genuinely help, ask Ro first — name the recipient, what you would send, and what it buys — and take the answer as covering that message alone.
 - The `delegation` skill owns the decision rule, the routing table and tiers, the brief, and the return contract. Read it before the first delegation of a task.
 
 ## Responses to Ro
@@ -31,6 +32,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
+- When other agents may write, stage only exact reviewed paths (`git add -- <path>…`); never `git add .`, `git add -A`, or a directory-wide path.
 - Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
 - The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 
@@ -38,7 +40,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. The `environment-recovery` skill owns what to do when the sandbox is the obstacle; never widen the policy to route around one.
-- Propose a merge; do not make one. Bring the branch to ready, say what a gate could not settle, and land only on Ro's explicit yes in the current request — a yes that may be given ahead of time for a named slice, to land as soon as it is done. The `verification-lanes` skill owns the evidence line and the machine-wide landing lock; a direct `git push` still stops for Ro.
+- Propose a merge; do not make one. Bring the branch to ready, say what a gate could not settle, and land only on Ro's explicit yes in the current request — a yes that may be given ahead of time for a named slice, to land as soon as it is done. The `verification-lanes` skill owns the evidence line and the machine-wide landing lock. Landing pushes, because `merge-with-main` pushes as part of landing.
 - Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds.
 - `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` the opt-in profiles, `.rulesync/hooks.jsonc` the agent hooks, and `agents/subagents/` the subagent profiles; every generated harness file comes from them. Never edit a generated harness file; change the source and run `./agent setup`. The `agent-instructions` skill owns which generator produces what.
 

@@ -117,7 +117,16 @@ Describe('agent hooks', () => {
     }
     Expect(output.hookSpecificOutput.hookEventName).toBe('SubagentStart')
     Expect(output.hookSpecificOutput.additionalContext).toBe(subagentBrief())
-    for (const rule of ['worktree root', '`rg`', 'stage, unstage', 'developer environment', 'no agent identity']) {
+    for (
+      const rule of [
+        'worktree root',
+        '`rg`',
+        'stage, unstage',
+        'developer environment',
+        'no agent identity',
+        'Messaging another agent',
+      ]
+    ) {
       Expect(output.hookSpecificOutput.additionalContext).toContain(rule)
     }
   })

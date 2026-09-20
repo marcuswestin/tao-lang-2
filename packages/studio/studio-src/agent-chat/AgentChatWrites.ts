@@ -6,14 +6,13 @@
 // rather than a change, which is not consent to anything they have seen.
 
 import Formatter from '@formatter'
+import { declarationSource, resolveTarget, type SnapshotNode } from '@workspace'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import { StudioProjectSession } from '../StudioProjectSession'
-import { declarationSource } from './AgentChatFacts'
 import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
-import { resolveTarget, type SnapshotNode } from './SemanticSnapshot'
 
 type DeclarationEdit = { declaration: string; replacement: string }
 

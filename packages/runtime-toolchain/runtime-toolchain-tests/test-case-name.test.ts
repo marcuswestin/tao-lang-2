@@ -2,7 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { TestCaseName } from '../runtime-toolchain-src/testing/test-case-name'
 import type * as TestCompiler from '../runtime-toolchain-src/testing/test-compiler/TestCompiler'
 
-const file = { sourcePath: '/projects/HN Reader/HNReader.test.tao', suites: [] } as TestCompiler.File
+const file = { sourcePath: '/projects/HN Reader/HNReader.test.tao', suites: [], version: 1 } as TestCompiler.File
 const suite = { checks: [], name: 'hn reader', source: { filePath: file.sourcePath } } as TestCompiler.Suite
 const check = { name: 'adds a story' } as TestCompiler.Check
 
