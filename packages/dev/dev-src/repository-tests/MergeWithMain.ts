@@ -133,7 +133,7 @@ export type MergeWithMainDependencies = {
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
   writeJson: (path: string, value: unknown) => Promise<void>
-  writeLine: (line: string) => void
+  writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
 }
 
@@ -157,7 +157,13 @@ const defaultDependencies: MergeWithMainDependencies = {
   remove: FS.remove,
   run: CLI.run,
   writeJson: FS.writeJson,
-  writeLine: HCI.writeLine,
+  writeLine: (line, kind) => {
+    if (kind === 'success') {
+      HCI.writeSuccess(`${line}\n`)
+    } else {
+      HCI.writeLine(line)
+    }
+  },
   writeText: FS.writeText,
 }
 
@@ -430,7 +436,7 @@ export const MergeWithMainCommand = {
         `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
-      writeLines(dependencies, completed)
+      writeLines(dependencies, completed, 'success')
       return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
     } finally {
       await lease.release()
@@ -1420,8 +1426,12 @@ function shortSha(sha: string): string {
   return sha.slice(0, 12)
 }
 
-function writeLines(dependencies: MergeWithMainDependencies, lines: readonly string[]): void {
+function writeLines(
+  dependencies: MergeWithMainDependencies,
+  lines: readonly string[],
+  kind?: 'success',
+): void {
   for (const line of lines) {
-    dependencies.writeLine(line)
+    dependencies.writeLine(line, kind)
   }
 }

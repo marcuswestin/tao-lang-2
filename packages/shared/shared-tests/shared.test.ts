@@ -632,12 +632,14 @@ Describe('HCI', () => {
     HCI.writeLine(' line', { output: stdout.output })
     HCI.writeError('err', { output: stderr.output })
     HCI.writeErrorLine(' line', { output: stderr.output })
+    HCI.writeStderr(' raw', { output: stderr.output })
     HCI.writeSuccess(' success', { output: stdout.output })
 
     Expect(stripAnsi(stdout.outputText())).toBe('out line\n success')
-    Expect(stripAnsi(stderr.outputText())).toBe('err line\n')
+    Expect(stripAnsi(stderr.outputText())).toBe('err line\n raw')
     Expect(stdout.outputText()).toContain('\u001b[32m')
     Expect(stderr.outputText()).toContain('\u001b[31m')
+    Expect(stderr.outputText()).toEndWith(' raw')
   })
 
   Test('colors process log message bodies by severity', async () => {
@@ -838,7 +840,7 @@ Describe('CLI', () => {
     Expect(streamed.result.stdout).toBe('out')
     Expect(streamed.result.stderr).toBe('err')
     Expect(streamed.stdout).toBe('out')
-    Expect(stripAnsi(streamed.stderr)).toBe('err')
+    Expect(streamed.stderr).toBe('err')
   })
 
   Test('streams prefixed output while preserving captured output', async () => {

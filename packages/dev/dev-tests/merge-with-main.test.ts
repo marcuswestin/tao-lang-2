@@ -106,6 +106,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const snapshots = new Map<string, unknown>()
   const moves: Array<{ fromPath: string; toPath: string }> = []
   const lines: string[] = []
+  const successLines: string[] = []
   const ancestorExitCodes = [...(repository.ancestorExitCodes ?? [])]
   const remoteMainSequence = [...(repository.remoteMainSequence ?? [])]
   let advertisedRemoteMain = repository.remoteMainHead
@@ -314,12 +315,17 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     writeJson: async (path, value) => {
       snapshots.set(path, structuredClone(value))
     },
-    writeLine: line => lines.push(line),
+    writeLine: (line, kind) => {
+      lines.push(line)
+      if (kind === 'success') {
+        successLines.push(line)
+      }
+    },
     writeText: async (path, value) => {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots }
+  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots, successLines }
 }
 
 Describe('merge-with-main', () => {
@@ -671,6 +677,7 @@ Describe('merge-with-main', () => {
       'PASS  Preserved the clean invoking worktree at /repo-feature on detached HEAD; '
       + 'archive its owning task when you are ready to remove it.',
     ])
+    Expect(fake.successLines).toEqual(outcome.lines)
     Expect(outcome.snapshotPath).toMatch(
       /^\/repo-feature\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
     )
