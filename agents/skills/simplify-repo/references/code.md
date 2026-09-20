@@ -25,8 +25,10 @@
    - Review-only: no lint can judge "non-trivial".
 3. Errors go through `Assert` and `Errors.throw*`, or `TR-errors` in the runtime. Already gated.
 4. Platform access goes through `Platform`, `FS`, `CLI`, `Time`. Shrink the allowlists by adding
-   the missing wrapper (`Platform.Crypto` for `node:crypto`), not by adding entries. Entries for
-   emitted script text stay.
+   the missing wrapper (as `Platform.sha256Hex` and `Platform.signES256` did for `node:crypto`), not
+   by adding entries. Entries for emitted script text stay.
+   - Dispatch on a plain property of a wire union uses `Switch.on(message, 'type', handlers)`, and a
+     deliberately ignored branch uses `Switch.nothing`. Every `Switch` form reads own keys only.
 5. Utilities live in namespaced modules named for their concept, not as loose functions.
 
 ## Structure

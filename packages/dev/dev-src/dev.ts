@@ -141,8 +141,9 @@ await runWithCommands(commands => {
           onWaiting: (holder, waitedMs) => {
             HCI.writeErrorLine(
               `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-                + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing `
-                + 'is no longer running, release it with `./dev land-unlock --force`.',
+                + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and `
+                + "waiting this long is normal. Forcing it is Ro's call — bring the output of "
+                + '`./agent board` to Ro rather than clearing it yourself.',
             )
           },
           repositoryRoot,
@@ -161,7 +162,12 @@ await runWithCommands(commands => {
     .command('land-unlock')
     .description('Release the machine-wide landing lock this worktree holds.')
     .option('--force', 'Release it even when another worktree holds it, after confirming that landing has stopped.')
-    .action(async (options: { force?: boolean } = {}) => {
+    .option(
+      '--holder <pid>',
+      'The PID a held record must belong to, as printed by the waiter message; required with --force '
+        + 'against a readable, held record.',
+    )
+    .action(async (options: { force?: boolean; holder?: string } = {}) => {
       await runExitCommand(async () => {
         if (options.force === true) {
           // Breaking somebody else's lock is the one destructive act this command can perform, and
@@ -181,7 +187,9 @@ await runWithCommands(commands => {
               return 0
             }
           }
-          const previous = await LandingLock.forceRelease()
+          const previous = await LandingLock.forceRelease(undefined, {
+            holder: parseOptionalPositiveInteger(options.holder, '--holder'),
+          })
           HCI.writeLine(
             previous === undefined
               ? 'PASS  The landing lock was already free or unreadable; it is clear now.'
@@ -714,8 +722,9 @@ async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Prom
     onWaiting: (holder, waitedMs) => {
       HCI.writeErrorLine(
         `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
-          + 'no longer running, release it with `./dev land-unlock --force`.',
+          + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and waiting `
+          + "this long is normal. Forcing it is Ro's call — bring the output of `./agent board` to Ro "
+          + 'rather than clearing it yourself.',
       )
     },
     repositoryRoot: Repo.getRoot(),
