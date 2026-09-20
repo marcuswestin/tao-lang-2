@@ -20,6 +20,16 @@ type DashboardProps = {
   states: readonly WorkState[]
 }
 
+type DashboardItem =
+  | { key: string; kind: 'group'; name: string; states: readonly WorkState[] }
+  | { key: string; kind: 'node'; state: WorkState }
+
+type DashboardColumn = {
+  lines: readonly string[]
+  status: WorkStatus
+  title: string
+}
+
 const ADAPTIVE_COLUMN_WIDTHS = [22, 20, 18, 16, 14] as const
 const COLUMN_MIN_WIDTH = 24
 const RENDER_INTERVAL_MS = 500
@@ -95,6 +105,7 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
   const size = useWindowSize()
   const summary = dashboardSummaryText(props.states)
   const headerRows = summary === undefined ? 1 : 2
+  const items = dashboardItems(props.states)
   return React.createElement(
     Box,
     { flexDirection: 'column', height: DashboardGrid.availableRows(size), width: size.columns },
@@ -108,31 +119,60 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
       : React.createElement(Text, { dimColor: true, key: 'summary', wrap: 'truncate-end' }, summary),
     React.createElement(BoxedWorkDashboard, {
       headerRows,
+      items,
       key: 'grid',
-      layout: dashboardLayout(size, props.states.length, headerRows),
+      layout: dashboardLayout(size, items.length, headerRows),
       size,
-      states: props.states,
     }),
   )
 }
 
 function BoxedWorkDashboard(
-  props: { headerRows: number; layout: ColumnLayout; size: TerminalSize; states: readonly WorkState[] },
+  props: { headerRows: number; items: readonly DashboardItem[]; layout: ColumnLayout; size: TerminalSize },
 ): React.ReactElement {
-  return React.createElement(DashboardGrid<WorkState>, {
+  return React.createElement(DashboardGrid<DashboardItem>, {
     height: Math.max(1, DashboardGrid.availableRows(props.size) - props.headerRows),
-    items: props.states,
+    items: props.items,
     layout: props.layout,
-    renderItem: (state, isLast) =>
-      React.createElement(NodeColumn, {
+    renderItem: (item, isLast) =>
+      React.createElement(WorkColumn, {
         isLast,
-        key: state.name,
+        item,
+        key: item.key,
         lineLimit: props.layout.lineLimit,
-        state,
         width: props.layout.columnWidth,
       }),
     width: props.size.columns,
   })
+}
+
+/**
+ * dashboardItems groups only nodes their producer explicitly marked. Names remain opaque: a node
+ * called `example#1` is still its own card unless it belongs to a declared dashboard group.
+ */
+function dashboardItems(states: readonly WorkState[]): readonly DashboardItem[] {
+  const items: DashboardItem[] = []
+  const groups = new Map<string, { key: string; kind: 'group'; name: string; states: WorkState[] }>()
+  for (const state of states) {
+    if (state.dashboardGroup === undefined) {
+      items.push({ key: `node:${state.name}`, kind: 'node', state })
+      continue
+    }
+    const existing = groups.get(state.dashboardGroup)
+    if (existing !== undefined) {
+      existing.states.push(state)
+      continue
+    }
+    const group = {
+      key: `group:${state.dashboardGroup}`,
+      kind: 'group' as const,
+      name: state.dashboardGroup,
+      states: [state],
+    }
+    groups.set(state.dashboardGroup, group)
+    items.push(group)
+  }
+  return items
 }
 
 /**
@@ -204,15 +244,15 @@ function headerText(props: DashboardProps): string {
     + ` ${counts.pending} pending — ${OutputText.formatElapsed(Date.now() - props.startedAt)}`
 }
 
-function NodeColumn(
-  props: { isLast: boolean; lineLimit: number; state: WorkState; width: number },
+function WorkColumn(
+  props: { isLast: boolean; item: DashboardItem; lineLimit: number; width: number },
 ): React.ReactElement {
-  const lines = props.lineLimit === 0 ? [] : visibleLines(props.state).slice(-props.lineLimit)
+  const column = dashboardColumn(props.item, props.lineLimit)
 
   return React.createElement(
     Box,
     {
-      borderColor: statusColor(props.state.status),
+      borderColor: statusColor(column.status),
       borderStyle: 'round',
       flexDirection: 'column',
       height: props.lineLimit + 3,
@@ -223,19 +263,98 @@ function NodeColumn(
     },
     React.createElement(
       Text,
-      { bold: true, color: statusColor(props.state.status), wrap: 'truncate-end' },
-      `${WorkGraph.nodeLabel(props.state.node)} ${statusLabel(props.state.status)} ${
-        OutputText.formatElapsed(props.state.elapsedMs)
-      }`,
+      { bold: true, color: statusColor(column.status), wrap: 'truncate-end' },
+      column.title,
     ),
-    ...lines.map((line, index) =>
+    ...column.lines.map((line, index) =>
       React.createElement(
         Text,
-        { dimColor: statusLineDimColor(props.state.status), key: index, wrap: 'truncate-end' },
+        { dimColor: statusLineDimColor(column.status), key: index, wrap: 'truncate-end' },
         line,
       )
     ),
   )
+}
+
+function dashboardColumn(item: DashboardItem, lineLimit: number): DashboardColumn {
+  if (item.kind === 'node') {
+    const { state } = item
+    return {
+      lines: lineLimit === 0 ? [] : visibleLines(state).slice(-lineLimit),
+      status: state.status,
+      title: `${WorkGraph.nodeLabel(state.node)} ${statusLabel(state.status)} ${
+        OutputText.formatElapsed(state.elapsedMs)
+      }`,
+    }
+  }
+
+  const status = groupedStatus(item.states)
+  const done = item.states.filter(state => state.status !== 'pending' && state.status !== 'running').length
+  const elapsedMs = Math.max(0, ...item.states.map(state => state.elapsedMs))
+  const failed = item.states.filter(state => state.status === 'failed').map(state => shardLabel(item.name, state))
+  const title = failed.length === 0
+    ? `${item.name} ${done}/${item.states.length} ${statusLabel(status)} ${OutputText.formatElapsed(elapsedMs)}`
+    : `${failed.join(',')} ${statusLabel(status)} ${item.name} ${done}/${item.states.length} ${
+      OutputText.formatElapsed(elapsedMs)
+    }`
+  if (lineLimit === 0) {
+    return { lines: [], status, title }
+  }
+  // `toSorted` is stable, so equal-status shards retain the numeric plan order TestNodes supplied.
+  const ordered = [...item.states].toSorted((left, right) => statusPriority(left.status) - statusPriority(right.status))
+  return {
+    lines: [groupSummaryLine(item.states), ...ordered.map(state => shardStatusLine(item.name, state))]
+      .slice(0, lineLimit),
+    status,
+    title,
+  }
+}
+
+/** A failed shard owns the card, then active work, then waiting work, then completed history. */
+function groupedStatus(states: readonly WorkState[]): WorkStatus {
+  if (states.every(state => state.status === 'skipped')) {
+    return 'skipped'
+  }
+  return (['failed', 'running', 'pending', 'passed', 'skipped'] as const)
+    .find(status => states.some(state => state.status === status)) ?? 'skipped'
+}
+
+function statusPriority(status: WorkStatus): number {
+  return Switch<WorkStatus, number>(status, {
+    failed: () => 0,
+    running: () => 1,
+    pending: () => 2,
+    skipped: () => 3,
+    passed: () => 4,
+  })
+}
+
+function groupSummaryLine(states: readonly WorkState[]): string {
+  const counts: Record<WorkStatus, number> = { failed: 0, passed: 0, pending: 0, running: 0, skipped: 0 }
+  for (const state of states) {
+    counts[state.status] += 1
+  }
+  return ([
+    ['failed', counts.failed],
+    ['running', counts.running],
+    ['waiting', counts.pending],
+    ['passed', counts.passed],
+    ['skipped', counts.skipped],
+  ] as const)
+    .filter(([, count]) => count > 0)
+    .map(([label, count]) => `${count} ${label}`)
+    .join(' · ')
+}
+
+function shardStatusLine(group: string, state: WorkState): string {
+  const detail = state.reason ?? (state.status === 'failed' ? state.lines.at(-1) : undefined)
+  const suffix = detail ?? OutputText.formatElapsed(state.elapsedMs)
+  return `${shardLabel(group, state)} ${statusLabel(state.status)} ${suffix}`
+}
+
+function shardLabel(group: string, state: WorkState): string {
+  const prefix = `${group}#`
+  return state.name.startsWith(prefix) ? `#${state.name.slice(prefix.length)}` : WorkGraph.nodeLabel(state.node)
 }
 
 function dashboardLayout(size: TerminalSize, nodeCount: number, headerRows: number): ColumnLayout {
@@ -336,5 +455,5 @@ function statusLabel(status: WorkStatus): string {
 /** WorkTUI owns the Ink dashboard for a running work graph. */
 export const WorkTUI = {
   createReporter,
-  testing: { dashboardLayout, dashboardSummaryText },
+  testing: { dashboardColumn, dashboardItems, dashboardLayout, dashboardSummaryText, headerText },
 } as const
