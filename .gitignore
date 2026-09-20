@@ -13,7 +13,13 @@ node_modules
 .android
 local.properties
 
-.artifacts
+# Every lane writes its logs, merge messages, and scratch state here, and a shell redirect into a
+# directory that does not exist yet fails before the command it was redirecting ever runs — which
+# reads as the lane failing rather than as a missing directory. Tracking `.gitkeep` makes the
+# directory exist the moment a worktree does, however that worktree was created, so nothing has to
+# have run first. Keep the negation: collapsing this back to a bare `.artifacts` reintroduces that.
+.artifacts/*
+!.artifacts/.gitkeep
 _gen_*
 **/.tao-project/studio/sketches.jsonc.*.tmp
 

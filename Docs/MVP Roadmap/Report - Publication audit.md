@@ -1,10 +1,15 @@
 # Report - Publication audit
 
 One inventory of what publishing this repository would expose, with a recommendation per entry.
-Serves `Agent MVP Roadmap.md` item `A10`; its findings are the input `Ro MVP Roadmap.md` item `R2`
-waits on. This report decides nothing — `R2` chooses between publishing as-is, curating a public
-repository, and splitting by subtree, and every recommendation below is written to hold under any of
-those three.
+Serves `Agent MVP Roadmap.md` item `A10`; its findings were the input `Ro MVP Roadmap.md` item `R2`
+waited on.
+
+**`R2` was decided on 2026-09-20: publish the whole repository**, to make an open-source contributor
+community possible. That closes the option every entry below was written against. Each recommendation
+still names curating or withholding as an alternative, because that was the live choice when the
+audit ran; read those as the cost of publishing the thing rather than as an available out. What the
+decision does not waive is the prerequisite work — `P15`, `P16`, `P17`, `P18`, and `P24` were
+required under every option and are now the only blocking items.
 
 Entries are `P1`–`P25`, grouped by the five areas `A10` names. Each states what it is, what
 publishing it reveals, and a recommendation. Severity is **High** (publish only after acting),
