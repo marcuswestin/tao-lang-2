@@ -34,21 +34,19 @@ landing, to see who else is close.
 
 ## Whether to propose the landing or hold it back
 
-Ro's explicit yes lands a branch, given in the moment or ahead of time for a named slice; absent one
-a ready branch waits. This section decides what you ask for. The question is not how substantial the
-change is — it is whether the gates can prove it.
+Ro's explicit yes lands a branch, given in the moment or ahead of time for a named slice; absent one a
+ready branch waits. What you ask for turns on whether the gates prove the change, not on its size.
 
 - **Propose it as ready to land** when the gates that ran green cover the change: documentation,
   roadmap, agent instructions, developer tooling, and test-only changes always; product code whose
   behavior the suites actually exercise.
-- **Propose it as needing Ro's eyes first** when the change reaches what no gate proves —
-  Studio's or an app's visible behavior, a language surface Ro has not seen, native or device paths,
-  or anything covered only by the lanes a person runs: `./dev studio-manual-checks`, a device
-  install, and everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why
-  the gates do not settle it.
-- A green `full-verify` is not by itself an answer. A change can pass every gate and still be one Ro
-  wants to see first, because the thing it changed is the thing Ro is designing.
-- When the two pull against each other, say so in the proposal.
+- **Propose it as needing Ro's eyes first** when the change reaches what no gate proves — Studio's or
+  an app's visible behavior, a language surface Ro has not seen, native or device paths, or anything
+  covered only by the lanes a person runs: `./dev studio-manual-checks`, a device install, and
+  everything named in `FULL_VERIFY_SKIPPED`. Say exactly what needs looking at and why.
+- A green `full-verify` is not by itself an answer: a change can pass every gate and still be one Ro
+  wants to see first, because the thing it changed is the thing Ro is designing. When the two pull
+  against each other, say so in the proposal.
 
 ## Working inside a busy machine
 
