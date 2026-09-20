@@ -1,6 +1,6 @@
 # DEVENV-099 — No command reclaims dead worktrees and merged branches
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Worktrees, landing, diagnostics
 - **Impact:** Checkouts and branches accumulate without bound because nothing reclaims them.
   `merge-with-main` deliberately leaves a landed branch's worktree in place, clean and detached at
@@ -50,3 +50,28 @@
   inventory. It refuses to remove a worktree that acquires a lane between the report and the action,
   and it runs without an unsandboxed shell or explains why it needs one.
 - **Source:** 2026-09-19 worktree and branch sweep.
+- **Settled by:** `./agent reclaim` — `packages/dev/dev-src/doctor/Reclaim.ts` and its command in
+  `ReclaimCommand.ts`, tested in `packages/dev/dev-tests/reclaim.test.ts`. It classifies every
+  worktree as `reclaimable`, `live`, or `unclassified` and prints the evidence behind each verdict,
+  from the three registries `board` already reads — running lanes, live host-resource leases, and the
+  landing lock — plus a clean tree and reachability from `main` or any `origin/merged/*` ref, asked in
+  one `for-each-ref --contains` per worktree rather than the ref-by-worktree product that made the
+  original sweep a hand-built inventory.
+
+  The acceptance's hard part is met by `execute`, which re-reads the liveness signals immediately
+  before each removal rather than trusting the report: the 2026-09-19 near-miss, where a worktree took
+  a `verify` lane between inventory and action, is a test. Two more refusals are structural — an
+  unreadable registry forbids every removal, because an empty registry and an unreadable one produce
+  identical evidence, and a worktree under `.artifacts/merge/` is never reclaimable whatever its Git
+  state, since a landing's recovery worktree looks idle exactly while it matters. Anything not proved
+  idle _and_ proved preserved is `unclassified` and left alone.
+
+  On the acceptance's last clause, the command reports without an unsandboxed shell and says why it
+  needs one for the rest: `git worktree remove` is denied under the agent sandbox, failing before it
+  deletes anything, so `--execute` names that denial rather than letting it read as a Git failure.
+  Deliberately not done: `merge-with-main` does not offer to reclaim its own worktree. A landing is
+  standing in the worktree it would remove, and it is the moment that checkout is most likely to be
+  used again.
+
+  First real run, on `main` at `bbb2721f`: 46 worktrees — 15 reclaimable, 20 live, 11 unclassified.
+- **Archived:** 2026-09-20

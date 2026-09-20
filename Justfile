@@ -322,8 +322,14 @@ land-unlock *ARGS:
     ./dev land-unlock {{ ARGS }}
 
 # Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
+[group('Dev')]
 board *ARGS:
     ./dev board {{ ARGS }}
+
+# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+[group('Dev')]
+reclaim *ARGS:
+    ./dev reclaim {{ ARGS }}
 
 # Report process, socket, simulator, and local-service capabilities without changing anything
 [group('Report')]
