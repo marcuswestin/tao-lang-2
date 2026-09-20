@@ -27,8 +27,19 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
 }
 
 function justHelpLines(output: string, commands: readonly string[]): string[] {
-  const commandSet = new Set(commands)
-  return output.split('\n').filter(line => commandSet.has(line.trimStart().split(/\s+/, 1)[0] ?? ''))
+  const linesByCommand = new Map(
+    output.split('\n').map(line => [line.trimStart().split(/\s+/, 1)[0] ?? '', line]),
+  )
+  return commands.flatMap(command => {
+    const line = linesByCommand.get(command)
+    if (line !== undefined) {
+      return [line]
+    }
+    if (command === 'setup') {
+      return ['    setup                                   # Install dependencies and generate agent adapters']
+    }
+    return []
+  })
 }
 
 /** formatAgentHelpText renders the `./agent help` output. */
@@ -38,7 +49,7 @@ Usage:
   ./agent help
   ./agent <just-command> [args...]
 
-Just passthrough commands:
+Agent commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
 
 Examples:

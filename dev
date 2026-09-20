@@ -6,6 +6,7 @@ set -e
 # This is not the Tao CLI; `./tao dev` runs the app development loop.
 SCRIPT_DIR="${0:A:h}"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
+DEPENDENCY_SCRIPT="$SCRIPT_DIR/packages/dev/dev-src/cli/ensure-dependencies.zsh"
 
 source "$SCRIPT_DIR/packages/dev/dev-src/cli/agent-worktree-profile.zsh"
 
@@ -15,39 +16,9 @@ if ! tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE"; then
   exit 1
 fi
 
-# `./dev` runs from source, so its dependencies have to be installed before Bun can even resolve
-# the entry module. `./agent` has repaired that for itself since it was written; this had not, and
-# the gap became reachable when `just clean` started running `./dev clean`: the clean removes every
-# `node_modules` in the checkout, including the one holding the command runner `./dev` imports, so
-# the next `./dev` of any kind failed to start on a checkout whose only fault was having been
-# cleaned. A second `just clean`, a `just clean-all` after a `just clean`, and a clean on an
-# already-cleaned tree all landed there.
-#
-# Reinstalling in order to delete is wasteful, and it is what a repeated clean now costs. A repeated
-# clean is rare; a checkout that cannot run its own tooling is not something to leave behind.
-function tao_dev_restore_dependencies() {
-  [[ -d "$SCRIPT_DIR/node_modules" && -d "$SCRIPT_DIR/packages/dev/node_modules" ]] && return 0
-
-  local temp_dir
-  temp_dir="$(tao_bun_temp_dir "$SCRIPT_DIR/.artifacts/tmp")"
-  typeset -a install_args
-  tao_bun_install_args "$SCRIPT_DIR"
-  install_args=("${reply[@]}")
-
-  echo "Installing dependencies ./dev needs to start ..." >&2
-  if ! TMPDIR="$temp_dir" bun "${install_args[@]}"; then
-    echo "Bun could not install dependencies in $SCRIPT_DIR." >&2
-    echo "Recover with: ./agent setup, which reports which operation was denied." >&2
-    exit 1
-  fi
-
-  local install_stamp
-  install_stamp="$(tao_dependency_install_stamp "$SCRIPT_DIR")"
-  mkdir -p "${install_stamp:h}"
-  touch "$install_stamp"
-}
-
-mkdir -p "$SCRIPT_DIR/.artifacts/tmp"
-tao_run_with_lock "$SCRIPT_DIR/.artifacts/tmp/dev-deps.lock" 300 tao_dev_restore_dependencies
+# `./dev` runs from source, so it uses the same installer and completion proof as `./agent` before
+# Bun resolves the entry module. A dependency tree restored here therefore never triggers a second
+# install when the next command enters through `./agent`.
+zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR"
 
 exec bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"
