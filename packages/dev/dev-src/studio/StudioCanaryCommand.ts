@@ -61,6 +61,7 @@ async function runStudioCanary(
   )
   const invocation = await createCanaryInvocation(artifactBase)
   const artifactRoot = invocation.root
+  await sweepEarlierCanaryInvocations(artifactBase, invocation.id)
   const blockedReason = await dependencies.blockedReason()
   if (blockedReason !== undefined) {
     const report = evaluateCanary({ blockedReason })
@@ -112,6 +113,64 @@ async function runStudioCanary(
     await pruneNativeBuild(artifactRoot)
   }
   return canaryExitCode(report)
+}
+
+/**
+ * Pruning a passing build is the last thing a run does, so a run killed before it reported leaves
+ * its whole invocation behind, and a run killed between its report and its prune leaves the build.
+ * Nothing else looks at a sibling invocation — the surviving-process check and the prune are both
+ * scoped to this run's own launch — so those directories accumulate tens of megabytes each until
+ * someone notices. Each later run cleans up after the earlier ones it can prove are finished.
+ *
+ * What it must not remove: a failed or blocked run's build, which is the evidence that run exists
+ * to produce, and anything a live run owns. An invocation touched recently is treated as live,
+ * because a canary that has not yet written its report is indistinguishable from one that died
+ * before writing it.
+ */
+async function sweepEarlierCanaryInvocations(artifactBase: string, currentInvocationId: string): Promise<void> {
+  const invocationsRoot = FS.resolvePath('invocations', artifactBase)
+  try {
+    for (const entry of await FS.listDir(invocationsRoot)) {
+      if (entry === currentInvocationId) {
+        continue
+      }
+      const root = FS.resolvePath(entry, invocationsRoot)
+      if (!await FS.isDirectory(root) || await modifiedWithin(root, LIVE_INVOCATION_MS)) {
+        continue
+      }
+      const report = await readCanaryReportStatus(FS.resolvePath('canary.json', root))
+      if (report === undefined) {
+        // It never reported, so it is evidence of nothing.
+        await FS.remove(root)
+      } else if (report === 'passed') {
+        await FS.remove(FS.resolvePath('electrobun', root))
+      }
+    }
+  } catch (error) {
+    HCI.logProcessError(
+      'studio-canary',
+      `Could not sweep earlier canary invocations: ${Errors.formatForLog(Errors.asError(error))}`,
+    )
+  }
+}
+
+/** How recently an invocation must have been touched to be treated as still running. */
+const LIVE_INVOCATION_MS = 60 * 60 * 1000
+
+async function modifiedWithin(path: string, windowMs: number): Promise<boolean> {
+  try {
+    return Date.now() - await FS.modifiedTimeMs(path) < windowMs
+  } catch {
+    return true
+  }
+}
+
+async function readCanaryReportStatus(path: string): Promise<string | undefined> {
+  try {
+    return (await FS.readJson<{ status?: string }>(path)).status
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -287,5 +346,6 @@ export const StudioCanaryCommand = {
     findCanaryLaunch,
     freshProbeResultPath,
     runStudioCanary,
+    sweepEarlierCanaryInvocations,
   },
 }

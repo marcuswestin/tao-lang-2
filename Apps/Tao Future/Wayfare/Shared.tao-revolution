@@ -1,7 +1,13 @@
 // The vocabulary every screen uses: the open trip, the safety net, frames, the stop card, sign-in, and
 // the one question.
 
+use Account, SignIn, SignOut from @tao/auth
+
 // -- Live handles ------------------------------------------------------------------------------------------
+//
+// Identity is a library with swappable providers, not language surface: one binding at the app root,
+// and every screen reads `Me` from here (a handle with availability — loading, none, available).
+let Me = Account
 let MyTrip = Me.CurrentTrip
 
 // -- The safety net -----------------------------------------------------------------------------------------
@@ -11,7 +17,6 @@ guard default {
    unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask the trip's owner to invite you back.")
    rejected -> Problem { Text(Problem) [caption, danger] }
    error -> Message { Text(Message) [body] }
-   failed -> Problem { present Notice(Problem) as toast (Key: "failed") }
 }
 
 // -- Frames --------------------------------------------------------------------------------------------------
@@ -26,17 +31,17 @@ view Section(Title text) {
 }  }
 
 view EmptyState(Icon icon, Title text, Body text) {
-   render Col [pattern EmptyState] {
-      Icon(Icon) [@icon]
-      Text(Title) [@title]
-      Text(Body) [@body]
-      Col [@action] { @@content }
+   render Col [content center center, gap md, pad xl, width max 520] {
+      Icon(Icon) [size 34, ink muted, decorative]
+      Text(Title) [title, center]
+      Text(Body) [body, muted, center]
+      Col [gap sm] { @@content }
 }  }
 
 // -- Views ------------------------------------------------------------------------------------------------------
 type Tone is one of Neutral, Good, Warning
 
-view Status(Message text, Tone Tone (default Neutral), Announce yes / no (default no)) {
+view Status(Message text, Tone default Neutral, Announce yes / no default no) {
    let Symbol = when Tone { Neutral -> "circle"; Good -> "checkmark.circle"; Warning -> "exclamationmark.triangle" }
    render Row [content left center, gap sm, announce when Announce] {
       Icon(Symbol) [muted, ink good when Tone is Good, ink danger when Tone is Warning]
@@ -56,31 +61,31 @@ view SyncBadge() {
 
 // A stop, wherever it is listed: the day plan, Today, search. Pins on the map follow the same order.
 view StopCard(Stop) {
-   render Row [pattern Line] {
-      Col [kindMark(Stop.Kind), @leading, decorative]
-      Col [@content, gap xxs] {
+   render Row [line] {
+      Col [size 10, radius pill, background kind(Stop.Kind), lead, decorative]
+      Col [main, gap xxs] {
          Text("{ Stop.Position }. { Stop.Title }", Lines: 1) [body, strike when Stop is Visited]
          Row [gap xs] {
-            Text(if Stop.Starts is none then "Flexible" else Stop.Starts.Time) [caption]
+            Text(when Stop.Starts is none "Flexible" / not Stop.Starts.Time) [caption]
             Text(Stop.Duration) [caption]
             if Stop.Place is not none { Text(Stop.Place.Name, Lines: 1) [caption] }
       }  }
-      Text(Stop.Kind) [chip, @trailing]
-      if Stop.Attachments is not empty { Icon("paperclip", Label: "Has attachments") [muted, @trailing] }
+      Text(Stop.Kind) [chip, trail]
+      if Stop.Attachments is not empty { Icon("paperclip", Label: "Has attachments") [muted, trail] }
 }  }
 
 // -- Sign in ---------------------------------------------------------------------------------------------------
 view SignInPanel() {
    state Email = ""
    action SendLink() runs single {
-      stop if Email is empty
-      when sign in with email Email {
-         done -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
+      check Email is not empty
+      when do SignIn(Email) {
+         saved -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
    }  }
    render Col [card, gap sm] {
       #email
-      TextInput(Value: Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit SendLink }
-      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press SendLink }
+      TextInput(Value: bind Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit -> { do SendLink() } }
+      Button("Email me a sign-in link", Disabled: Email is empty) [primary, busy when SendLink.Running] { on press -> { do SendLink() } }
 }  }
 
 // -- The one question -----------------------------------------------------------------------------------------
@@ -89,9 +94,9 @@ view Confirm(Question text, Body text, Verb text) responds yes / no {
       Text(Question) [sectionTitle]
       Text(Body) [body]
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond no }
+         Button("Cancel") [secondary] { on press -> { respond no } }
          #confirm
-         Button(Verb) [destructive] { on press -> respond yes }
+         Button(Verb) [destructive] { on press -> { respond yes } }
 }  }  }
 
 view Notice(Message text) {

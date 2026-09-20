@@ -959,5 +959,5 @@ function parameterDefaultsApp(parameters: string): string {
 }
 
 function unresolvedValue(name: string): string {
-  return `Could not resolve reference to ValueDeclaration named '${name}'.`
+  return `No value named '${name}' is in scope.`
 }

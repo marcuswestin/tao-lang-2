@@ -1,6 +1,7 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
 import { validateMergeMessage } from './MergeWithMain'
+import { VerificationLanes } from './VerificationLanes'
 
 /*
  * "Finalize and prepare the merge" used to exist only as prose in AGENTS.md and the
@@ -23,9 +24,14 @@ import { validateMergeMessage } from './MergeWithMain'
 const STATE_VERSION = 2
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
-const VERIFY_LANE = 'verify'
-/** A green `verify` record is also proved by any lane whose gate membership is its superset. */
-const VERIFY_ACCEPTED_LANES: readonly string[] = ['verify', 'full-verify-sandbox', 'full-verify']
+const VERIFY_LANE = VerificationLanes.VERIFY
+/**
+ * A green `verify` record is also proved by any lane whose gate membership is its superset. The
+ * names come from `VerificationLanes` rather than being spelled here: this line previously read
+ * `full-verify-sandbox` and `full-verify`, which are not lanes, so two of its three entries matched
+ * no record and every branch last proved by `verify-full` was verified a second time for nothing.
+ */
+const VERIFY_ACCEPTED_LANES: readonly string[] = VerificationLanes.VERIFY_OR_WIDER
 const MAX_SUMMARY_LENGTH = 72
 const DRAFT_PREFIX = 'DRAFT: '
 /** ROADMAP_LEDGER_PATH is the durable developer-environment ledger this brief is itself filed against. */

@@ -58,7 +58,7 @@ access Photo as HearthItem
 // A shared list is an exact projection: open items, their quantities, and their places — never notes,
 // assignments, comments, photos, people, or completion history. Behind a rotating capability.
 
-public publish HearthList when HearthList is Shared as SharedList by capability HearthList.ShareCode {
+publish HearthList when HearthList is Shared as SharedList by capability HearthList.ShareCode {
    Name
    Kind
    Color
@@ -66,7 +66,7 @@ public publish HearthList when HearthList is Shared as SharedList by capability 
 }
 
 // An invitation shows the home's name before you belong to it, and nothing else.
-public publish Home as InvitedHome by capability Invite.Code {
+publish Home as InvitedHome by capability Invite.Code {
    Name
    Anyone = Invite.Email is none
 }

@@ -1,4 +1,4 @@
-# DEVENV-092 — `./dev` restores dependencies without satisfying `./agent`'s install stamp
+# DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp
 
 - **Status:** Candidate
 - **Area:** Dependency installation
@@ -10,7 +10,8 @@
   `./agent test-file packages/dev/dev-tests/merge-with-main.test.ts` failed in bootstrap with
   `EEXIST: File or folder exists: failed to link package: keytar@7.9.0 (clonefileat)`. Running
   `bun run packages/dev/dev-src/doctor/DependencyHealth.ts` against that tree exited zero, and the
-  same focused test passed through `./dev test-file`.
+  same focused test passed through `./dev test-file`. The same `./agent help` bootstrap failure was
+  reproduced after merging `main` on 2026-09-20.
 - **Workaround:** After `./dev` restores a healthy tree, use `./dev <command>` until an unsandboxed
   shell can run `./agent setup` or recreate the install stamp.
 - **Proposed change:** Give `./dev` and `./agent` one dependency-install completion stamp, or have

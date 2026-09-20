@@ -406,10 +406,16 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
   }
 }
 
+/**
+ * selectedWorkspaceDesigns collects the designs the apps in this build select. Which app selects a
+ * design belongs to the project, not to what one entry imports: a package file under `@ui/` imports
+ * no app, so on its own entry graph every tagged render looked like one with no design mounted at
+ * all. Project identity is batched for the same reason; see `Workspace.validateFiles`.
+ */
 function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration[] {
   return ctx.memo('design-validator.selectedWorkspaceDesigns', () => {
     const designs = new Set<AST.DesignDeclaration>()
-    for (const file of ctx.workspaceFiles) {
+    for (const file of ctx.projectFiles ?? ctx.workspaceFiles) {
       for (const property of AST.streamAllContents(file).filter(AST.isAppProperty)) {
         if (property.name !== 'Design' || !property.value || !AST.isValueReference(property.value)) {
           continue

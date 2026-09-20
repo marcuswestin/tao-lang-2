@@ -1,5 +1,8 @@
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { declarationWord } from '../parser-src/linker-diagnostics'
+import { Parser } from '../parser-src/parser'
+import * as AST from '../parser-src/parserASTExport'
 import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser, testParseCode } from './test-parse'
 
 Describe('parser: diagnostics', () => {
@@ -85,7 +88,7 @@ Describe('parser: diagnostics', () => {
     Expect(parseResult.diagnostics).toHaveLength(2)
     Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
     Expect(Diagnostics.allWithSeverity(parseResult.diagnostics, 'error')).toBe(true)
-    Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
+    Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, ' is in scope.')).toBe(true)
   })
 
   Test('limits replacement targets to app declarations', async () => {
@@ -103,10 +106,9 @@ Describe('parser: diagnostics', () => {
     Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
     Expect(parseResult.diagnostics).toHaveLength(1)
     Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
-    Expect(
-      Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference to AppValueDeclaration'),
-    )
-      .toBe(true)
+    Expect(Diagnostics.errorMessages(parseResult.diagnostics)).toEqual([
+      "No app or alias named 'Tagline' is in scope.",
+    ])
   })
 
   Test('reports lexer errors separately from parser errors', async () => {
@@ -143,5 +145,33 @@ Describe('parser: diagnostics', () => {
     Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
     Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
     Expect(Diagnostics.messages(parseResult.diagnostics, 'linker')).toEqual([])
+  })
+
+  // A grammar type name is an internal name no Tao program contains, and `packages/AGENTS.md`
+  // keeps it out of a diagnostic the author reads.
+  Test('names an unresolved render target in Tao words rather than by its grammar type', async () => {
+    const parseResult = await Parser.parseCode('view Main() {\n   render NoSuchView()\n}\n')
+    const linkerMessages = Diagnostics.errorMessages(parseResult.diagnostics, 'linker')
+
+    Expect(linkerMessages).toEqual(["No view named 'NoSuchView' is in scope."])
+  })
+
+  Test('positions an unresolved reference at the name the author wrote', async () => {
+    const parseResult = await Parser.parseCode('view Main() {\n   render NoSuchView()\n}\n')
+    const [diagnostic] = Diagnostics.errors(parseResult.diagnostics, 'linker')
+
+    Expect(diagnostic?.range?.start).toEqual({ line: 1, character: 10 })
+    Expect(diagnostic?.range?.end).toEqual({ line: 1, character: 20 })
+  })
+
+  Test('spells every grammar cross-reference type as lowercase Tao words', async () => {
+    const referenceTypes = Object.values(AST.reflection.types)
+      .flatMap(type => Object.values(type.properties))
+      .map(property => property.referenceType)
+      .filter((referenceType): referenceType is string => referenceType !== undefined)
+    const spellings = [...new Set(referenceTypes)].map(referenceType => declarationWord(referenceType))
+
+    Expect(spellings.length).toBeGreaterThan(0)
+    Expect(spellings.filter(spelling => /[A-Z]/.test(spelling))).toEqual([])
   })
 })

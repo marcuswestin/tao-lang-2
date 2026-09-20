@@ -220,9 +220,7 @@ Describe('parser: fixtures and scenarios', () => {
     `)
 
     Expect(
-      result.diagnostics.some(diagnostic =>
-        diagnostic.message.includes("Could not resolve reference to FixtureValueDeclaration named 'Later'")
-      ),
+      result.diagnostics.some(diagnostic => diagnostic.message.includes("No fixture value named 'Later'")),
     ).toBe(true)
   })
 

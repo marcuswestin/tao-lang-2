@@ -1,51 +1,115 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
+import { checkedProjectFile, checkedView, runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 Describe('tao check CLI', () => {
   Test('exits zero when files are canonical', async () => {
     await withTaoFixture({
-      'canonical.tao': 'view MainView() { }\n',
+      ...checkedProjectFile,
+      'canonical.tao': checkedView('MainView'),
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('0 noncanonical, 1 unchanged')
+      Expect(result.stdout).toContain('0 noncanonical, 2 unchanged')
     })
   })
 
   Test('prints validator warnings without turning them into check failures', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'App.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n',
     }, async rootDir => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stderr).toContain('Placeholder ships as an empty box in release.')
-      Expect(result.stdout).toContain('0 noncanonical, 1 unchanged, 1 warning')
+      Expect(result.stdout).toContain('0 noncanonical, 2 unchanged, 1 warning')
     })
   })
 
   Test('exits nonzero and reports noncanonical files', async () => {
     await withTaoFixture({
-      'drift.tao': 'view   MainView() { }',
+      ...checkedProjectFile,
+      'drift.tao': checkedView('MainView').replace('view ', 'view   '),
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(1)
       Expect(result.stderr).toContain('Needs fixes')
-      Expect(result.stderr).toContain('1 noncanonical, 0 unchanged')
+      Expect(result.stderr).toContain('1 noncanonical, 1 unchanged')
     })
   })
 
-  Test('exits nonzero on check errors', async () => {
+  // This is the mistake a newcomer makes first, and it used to produce no output and exit zero.
+  Test('reports an unresolved view with its file, line, column, and source line, and exits nonzero', async () => {
     await withTaoFixture({
-      'broken.tao': 'view Broken() {',
+      ...checkedProjectFile,
+      'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', rootDir])
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain("App.tao:2:11 error: No view named 'NoSuchView' is in scope.")
+      Expect(result.stderr).toContain('2 |    render NoSuchView()')
+      Expect(result.stderr).toContain('  |           ^^^^^^^^^^')
+      Expect(result.stdout).not.toContain('error')
+    })
+  })
+
+  // The previous output was the source-fix assertion's `Expected: …` text, with no position at all.
+  Test('reports a syntax error as a positioned parser diagnostic rather than an assertion message', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'broken.tao': 'view Broken() {\n   render Text(\n}\n',
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(1)
-      Expect(result.stderr).toContain('Failed to check')
-      Expect(result.stderr).toContain('1 failed')
+      Expect(result.stderr).toContain('broken.tao:3:1 error:')
+      Expect(result.stderr).not.toContain('Expected: Tao source without syntax errors')
+      Expect(result.stderr).not.toContain('Failed to check')
+      Expect(result.stderr).toContain('0 noncanonical, 1 unchanged, 1 error')
+    })
+  })
+
+  Test('counts errors and warnings separately in the summary', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'App.tao':
+        'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n\nview Other() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', rootDir])
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain('0 noncanonical, 2 unchanged, 1 error, 1 warning')
+    })
+  })
+
+  // Project identity is a validator error like any other, and `check` is where a person meets it
+  // before `tao compile` or `tao test` refuses the same source.
+  Test('reports missing project identity with the command that fixes it', async () => {
+    await withTaoFixture({
+      'App.tao': checkedView('Main'),
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', rootDir])
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain("Run 'tao project id <id> [path]'")
+      Expect(result.stderr).toContain('App.tao:1:1 error:')
+    })
+  })
+
+  // A run from a directory the files do not sit under used to render every path as a run of `../`
+  // segments longer than the path itself.
+  Test('shows a path outside the working directory without a run of parent segments', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', rootDir])
+
+      Expect(result.stderr).toContain(`${rootDir}/App.tao:2:11`)
+      Expect(result.stderr).not.toContain('../..')
     })
   })
 })

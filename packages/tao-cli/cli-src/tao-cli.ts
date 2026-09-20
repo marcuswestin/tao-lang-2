@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
 import type { Command as BaseCommand } from 'commander'
+import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
 
 type InPlaceLabels = {
@@ -222,7 +223,7 @@ function createCommands(): Command {
   commands
     .command('check')
     .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
-    .description('Check canonical Tao source and report validation warnings without writing.')
+    .description('Check Tao source without writing: syntax errors, validation errors and warnings, and canonical form.')
     .action(async (paths: string[]) => {
       const { runCheck } = await import('./source-commands')
       await runInPlaceCommand(paths, runCheck, {
@@ -338,13 +339,14 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
-    const warnings = results.flatMap(result => result.warnings ?? [])
+    const diagnostics = results.flatMap(result => result.diagnostics ?? [])
+    const errorCount = diagnostics.filter(Diagnostic.isError).length
+      + errored.filter(result => result.error !== undefined).length
+    const warningCount = diagnostics.filter(Diagnostic.isWarning).length
 
     writeChangedResults(changed, labels)
-    for (const warning of warnings) {
-      HCI.logProcessWarn(labels.failedVerb, warning)
-    }
-    for (const result of errored) {
+    await writeDiagnosticResults(results, labels)
+    for (const result of errored.filter(result => result.error !== undefined)) {
       HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${FS.displayPath(result.path)}: ${result.error}`)
     }
     if (results.length === 0) {
@@ -353,13 +355,15 @@ async function runInPlaceCommand(
     }
 
     const unchangedCount = results.length - changed.length - errored.length
-    const warningSummary = warnings.length === 0
-      ? ''
-      : ', ' + String(warnings.length) + ' warning' + (warnings.length === 1 ? '' : 's')
-    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged` + warningSummary
-    const shouldFail = errored.length > 0 || labels.failOnChanged && changed.length > 0
+    const summary = [
+      `${changed.length} ${labels.changed}`,
+      `${unchangedCount} unchanged`,
+      ...countPhrase(errorCount, 'error'),
+      ...countPhrase(warningCount, 'warning'),
+    ].join(', ')
+    const shouldFail = errorCount > 0 || labels.failOnChanged && changed.length > 0
     if (shouldFail) {
-      HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)
+      HCI.writeErrorLine(summary)
       Platform.runtimeProcess.exit(1)
     }
     HCI.writeSuccess(`${summary}\n`)
@@ -367,6 +371,33 @@ async function runInPlaceCommand(
     HCI.writeErrorLine(Errors.formatForUser(error))
     Platform.runtimeProcess.exit(1)
   }
+}
+
+/**
+ * writeDiagnosticResults prints every file's diagnostics with its location and offending source
+ * line. The file is re-read for the excerpt because the run reports after all files are processed,
+ * and only files that actually carry a diagnostic are read.
+ */
+async function writeDiagnosticResults(results: readonly InPlace.Result[], labels: InPlaceLabels): Promise<void> {
+  for (const result of results) {
+    if (result.diagnostics === undefined || result.diagnostics.length === 0) {
+      continue
+    }
+    const source = await FS.readText(result.path).catch(() => undefined)
+    for (const diagnostic of result.diagnostics) {
+      const block = DiagnosticReport.renderDiagnostic(diagnostic, source)
+      if (Diagnostic.isError(diagnostic)) {
+        HCI.logProcessError(labels.failedVerb, block)
+      } else {
+        HCI.logProcessWarn(labels.failedVerb, block)
+      }
+    }
+  }
+}
+
+/** countPhrase returns a pluralized `N thing` phrase, or nothing at all when the count is zero. */
+function countPhrase(count: number, noun: string): string[] {
+  return count === 0 ? [] : [`${count} ${noun}${count === 1 ? '' : 's'}`]
 }
 
 function writeChangedResults(results: readonly InPlace.Result[], labels: InPlaceLabels): void {

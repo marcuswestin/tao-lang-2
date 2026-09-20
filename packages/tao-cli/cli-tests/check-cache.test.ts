@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { Diagnostic, FS, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands'
@@ -108,17 +108,18 @@ Describe('tao check per-workspace stamp', () => {
     })
   })
 
-  Test('replays a workspace whose validation errors tao check does not report', async () => {
+  // `tao check` reports errors, and its exit code rides on them, so a stamp that replayed one would
+  // keep failing a run whose source the author may already have fixed. A workspace carrying an error
+  // is never stamped; its neighbour, which carries none, still is.
+  Test('never stamps a workspace with an error, and reports that error on every run', async () => {
     await withTaoFixture(
       { ...TWO_WORKSPACES, 'AppOne/Main.tao': 'view MainView() {\n   render Unknown()\n}\n' },
       async rootDir => {
-        // An unresolved render target is an error-severity diagnostic, and `tao check` reports
-        // canonical form and warnings rather than errors — so its verdict here is "unchanged, no
-        // warnings", and the replay has to say exactly that rather than invent a verdict of its own.
         const cold = await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })
-        Expect(cold.every(result => result.status === 'unchanged' && result.warnings === undefined)).toBe(true)
+        const errors = cold.flatMap(result => (result.diagnostics ?? []).filter(Diagnostic.isError))
 
-        Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+        Expect(errors.map(error => error.message)).toContain("No view named 'Unknown' is in scope.")
+        Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
         Expect(await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })).toEqual(cold)
       },
     )
@@ -153,7 +154,7 @@ Describe('tao check per-workspace stamp', () => {
     )
   })
 
-  Test('replays a stamped workspace warnings word for word', async () => {
+  Test("replays a stamped workspace's warnings word for word", async () => {
     await withTaoFixture({
       ...TWO_WORKSPACES,
       'AppOne/Main.tao': 'use Placeholder from @tao/ui\n\nview MainView() {\n   render Placeholder("Main")\n}\n',
@@ -161,7 +162,7 @@ Describe('tao check per-workspace stamp', () => {
       const cold = await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })
       const warm = await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })
 
-      Expect(cold.some(result => (result.warnings ?? []).length > 0)).toBe(true)
+      Expect(cold.some(result => (result.diagnostics ?? []).some(Diagnostic.isWarning))).toBe(true)
       Expect(warm).toEqual(cold)
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
     })
@@ -195,6 +196,29 @@ Describe('tao check per-workspace stamp', () => {
         // The opt-out refuses to read the stamp; it does not invalidate what is already in it.
         Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
       })
+    })
+
+    // Every test above is about whether a stamp may be reused, and a `--no-cache` lane sets exactly
+    // this variable on every process in its graph. Inherited, it would answer all of them the same
+    // way and hide the whole contract — a failure mode that stays invisible until someone runs the
+    // one scope that passes the flag. The fixture therefore clears it, and this says so.
+    Test(`clears an inherited ${key} so the stamp is what these tests measure`, async () => {
+      const previous = Platform.runtimeProcess.env[key]
+      Platform.runtimeProcess.env[key] = 'true'
+      try {
+        await withTaoFixture(TWO_WORKSPACES, async rootDir => {
+          Expect(CheckCache.disabled()).toBe(false)
+          Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
+          Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+        })
+        Expect(Platform.runtimeProcess.env[key]).toBe('true')
+      } finally {
+        if (previous === undefined) {
+          delete Platform.runtimeProcess.env[key]
+        } else {
+          Platform.runtimeProcess.env[key] = previous
+        }
+      }
     })
   }
 })
