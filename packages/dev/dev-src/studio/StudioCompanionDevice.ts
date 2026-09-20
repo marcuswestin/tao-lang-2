@@ -108,7 +108,7 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
       throwStudioDeviceFailure(
         'expo',
         `${StudioCompanionIdentity.name} dependencies are not installed under ${FS.displayPath(root)}. `
-          + 'Run `bun install` at the repository root, then retry.',
+          + 'Run `./agent setup` at the repository root, then retry.',
       )
     }
     const args = companionInstallArgs(input.deviceName)

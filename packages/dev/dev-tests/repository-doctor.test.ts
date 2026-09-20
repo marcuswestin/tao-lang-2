@@ -89,7 +89,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ dependencyHealthError: "Cannot find module 'expo/metro-config'" }))
 
     Expect(check(report, 'dependencies')?.status).toBe('fail')
-    Expect(check(report, 'dependencies')?.remediation).toContain('just deps')
+    Expect(check(report, 'dependencies')?.remediation).toContain('./agent setup')
   })
 
   Test('surfaces the runtime dependency compatibility gate', () => {

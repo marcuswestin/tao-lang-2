@@ -10,7 +10,9 @@
       "./dev *": "allow",
       "./tao *": "allow",
       "just *": "allow",
-      "bun install *": "allow",
+      // One owner prevents concurrent or redundant Bun installs from colliding in node_modules.
+      // The generated harness rules reject this directly and point agents to `./agent setup`.
+      "bun install *": "deny",
       "bun run *": "allow",
       "bun test *": "allow",
       "direnv exec . *": "allow",

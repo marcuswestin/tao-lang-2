@@ -21,7 +21,7 @@ const JUST_LABELS: Record<string, string> = {
   '_compile-word-flower-app': 'compile',
   '_parser-gen': 'parser',
   'clean': 'clean',
-  'deps': 'deps',
+  'deps': '_deps',
   'fix': 'fix',
   'install-ide-extension': 'extension',
   'verify': 'verify',

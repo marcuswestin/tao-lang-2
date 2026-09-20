@@ -286,7 +286,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: 'bun.lock is missing',
       name: 'dependencies',
-      remediation: 'Restore it from Git, then run: just deps',
+      remediation: 'Restore it from Git, then run: ./agent setup',
       status: 'fail',
     }
   }
@@ -294,7 +294,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: 'node_modules is missing',
       name: 'dependencies',
-      remediation: 'Install with: just deps',
+      remediation: 'Install with: ./agent setup',
       status: 'fail',
     }
   }
@@ -303,7 +303,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
       detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
       name: 'dependencies',
       remediation:
-        'Repair with: just deps, or from an unsandboxed shell when a package shipping .idea/ is the damaged one: rm -rf node_modules && bun install',
+        "Repair with: ./agent setup; if the sandbox denies a protected package path, run it from 'just session-unsandboxed'.",
       status: 'fail',
     }
   }

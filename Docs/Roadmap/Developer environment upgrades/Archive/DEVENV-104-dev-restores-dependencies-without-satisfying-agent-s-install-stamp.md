@@ -1,6 +1,6 @@
 # DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Dependency installation
 - **Impact:** In a fresh worktree, running `./dev` before `./agent` installs a healthy dependency tree
   but leaves `./agent` believing no install occurred. The next `./agent` invocation immediately runs a
@@ -11,7 +11,10 @@
   `EEXIST: File or folder exists: failed to link package: keytar@7.9.0 (clonefileat)`. Running
   `bun run packages/dev/dev-src/doctor/DependencyHealth.ts` against that tree exited zero, and the
   same focused test passed through `./dev test-file`. The same `./agent help` bootstrap failure was
-  reproduced after merging `main` on 2026-09-20.
+  reproduced after merging `main` on 2026-09-20. Resolved on `feat/merge-success-output` by routing
+  `./agent`, `./dev`, and verification through one private installer with one lock, health proof, and
+  completion stamp; the regression test proves a healthy unstamped tree is adopted without a second
+  install.
 - **Workaround:** After `./dev` restores a healthy tree, use `./dev <command>` until an unsandboxed
   shell can run `./agent setup` or recreate the install stamp.
 - **Proposed change:** Give `./dev` and `./agent` one dependency-install completion stamp, or have
@@ -23,3 +26,4 @@
   restores dependencies and the immediately following sandboxed `./agent test-file <path>` starts
   the requested test without running a second Bun install.
 - **Source:** 2026-09-19 merge-preflight and concurrent-dev-test remediation.
+- **Archived:** 2026-09-20
