@@ -56,7 +56,8 @@ Ro has already ruled on the following; do not reopen them, and record them for a
    - `Apps/WordFlower/README.md`
    - `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` (the landed-foundations ledger and its
      “Next integration gates”)
-   - `Docs/Roadmap/Tao Studio v1/Plan - Tao Studio v1.md` (protocol identity lineage and open items)
+   - `Docs/Archive/Plans/Plan - Tao Studio v1.md` (protocol identity lineage and open items, now
+     archived — v2 superseded its architecture)
    - `Docs/Spec/Tao Studio.md` (especially “Editing, identity, and trust” and “Current boundary”)
    - `Docs/Spec/Tao Testing.md`
    - `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md`, and `Coverage.md`
