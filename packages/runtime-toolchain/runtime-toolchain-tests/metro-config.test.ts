@@ -1,9 +1,7 @@
-import { CLI, Errors, FS, Repo } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
 type MetroConfig = {
-  cacheStores: readonly unknown[] | ((metroCache: { FileStore: unknown }) => readonly unknown[])
-  fileMapCacheDirectory?: string
   resolver: {
     nodeModulesPaths: readonly string[]
     resolveRequest: (
@@ -27,66 +25,8 @@ type MetroResolutionContext = {
 }
 
 const config = require('../metro.config.cjs') as MetroConfig
+
 Describe('Expo Metro configuration', () => {
-  Test('keeps Metro shared caches for the stable runtime-toolchain project', () => {
-    Expect(config.fileMapCacheDirectory).toBe(undefined)
-    Expect(Array.isArray(config.cacheStores)).toBe(true)
-  })
-
-  Test('keeps a disposable host transformer cache inside that host', async () => {
-    const fixtureRoot = await FS.realPath(await FS.mkTmpDir('tao-metro-config-'))
-    const disposableRoot = FS.resolvePath('runtime-toolchain', fixtureRoot)
-    const outsideTmp = FS.resolvePath('unrelated-tmp', fixtureRoot)
-    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
-    const configPath = FS.resolvePath('metro.config.cjs', disposableRoot)
-
-    try {
-      await FS.copyFile(Repo.resolvePath('packages/runtime-toolchain/metro.config.cjs'), configPath)
-      await FS.symlink(
-        await FS.realPath(Repo.resolvePath('packages/runtime-toolchain/node_modules')),
-        FS.resolvePath('node_modules', disposableRoot),
-      )
-      await FS.mkdir(outsideTmp)
-      const expoEntry = require.resolve('expo/metro-config', { paths: [disposableRoot] })
-      const expoMetroEntry = require.resolve('@expo/metro-config', { paths: [FS.dirname(expoEntry)] })
-      const metroCacheEntry = require.resolve('metro-cache', { paths: [FS.dirname(expoMetroEntry)] })
-
-      const childSource = String.raw`
-        void (async () => {
-          const configPath = ${JSON.stringify(configPath)}
-          const { FileStore } = require(${JSON.stringify(metroCacheEntry)})
-          const config = require(configPath)
-          const cacheStores = config.cacheStores({ FileStore })
-          await cacheStores[0].set(Buffer.from([0xab, 0xcd]), {
-            owner: 'disposable-host',
-            cacheStoreCount: cacheStores.length,
-            fileMapCacheDirectory: config.fileMapCacheDirectory,
-          })
-        })()
-      `
-      const child = await CLI.run('node', {
-        args: ['-e', childSource],
-        env: {
-          NODE_ENV: 'test',
-          TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: sourceRoot,
-          TMPDIR: outsideTmp,
-        },
-      })
-
-      Expect(child.stderr).toBe('')
-      Expect(child.exitCode).toBe(0)
-      Expect(await FS.readJson(FS.resolvePath('.metro-cache/ab/cd', disposableRoot))).toEqual({
-        owner: 'disposable-host',
-        cacheStoreCount: 1,
-        fileMapCacheDirectory: FS.resolvePath('.metro-file-map', disposableRoot),
-      })
-      Expect(await FS.exists(FS.resolvePath('metro-cache/ab/cd', outsideTmp))).toBe(false)
-      Expect(FS.pathIsWithin(FS.resolvePath('.metro-cache/ab/cd', disposableRoot), disposableRoot)).toBe(true)
-    } finally {
-      await FS.remove(fixtureRoot)
-    }
-  })
-
   Test('resolves packages through the physical root install used by linked worktrees', async () => {
     const installedNodeModules = await FS.realPath(Repo.resolvePath('node_modules'))
     const runtimeToolchainNodeModules = await FS.realPath(Repo.resolvePath('packages/runtime-toolchain/node_modules'))

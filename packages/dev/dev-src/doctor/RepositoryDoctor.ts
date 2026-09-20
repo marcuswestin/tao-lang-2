@@ -302,7 +302,8 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
       name: 'dependencies',
-      remediation: 'Repair with: just repair-deps (the original dependency tree is retained in /private/tmp)',
+      remediation:
+        'Repair with: just deps, or from an unsandboxed shell when a package shipping .idea/ is the damaged one: rm -rf node_modules && bun install',
       status: 'fail',
     }
   }
