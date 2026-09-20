@@ -149,7 +149,13 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * the timings store, because a hand-written count goes stale the first time a suite grows.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { args: ['--concurrent'] }],
+  // Language suites load repository standard-library Tao, but return generated plans in memory
+  // or write isolated fixtures; none consumes the shared WordFlower generated-app tree.
+  ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['parser', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['workspace', { reads: ['gen-parser', 'tao', 'ts'] }],
   // Developer tests deliberately run concurrently and many of them spawn child processes. During
   // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
   // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
@@ -172,7 +178,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
   // work for longer than that and be killed for it. The bound is a hang guard, not a budget.
   ['tao-cli', { args: ['--timeout=60000'] }],
-  ['validator', { args: ['--concurrent'] }],
+  ['validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
   // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
@@ -200,12 +206,20 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     },
   ],
 
-  // The four suites that reference no `.tao` source, no app, and no generated tree, and so wait
+  // These suites reference no `.tao` source, no app, and no generated tree, and so wait
   // for dprint alone. Verified by search; a suite that starts reading one belongs off this list.
   ['code-editor', { reads: ['ts'] }],
   ['generation', { reads: ['ts'] }],
+  ['host-control', { reads: ['ts'] }],
+  ['icloud-native', { reads: ['ts'] }],
+  ['runtime', { reads: ['ts'] }],
+  ['shared', { reads: ['ts'] }],
   ['stdlib', { reads: ['ts'] }],
   ['update-server', { reads: ['ts'] }],
+  // The statistics tests import the language-service module but never run its WordFlower benchmark.
+  ['performance-checks', { reads: ['gen-parser', 'ts'] }],
+  // Standalone parser contexts use an empty package resolver; package fixtures live in temporary roots.
+  ['ast-utils', { reads: ['gen-parser', 'ts'] }],
 ])
 
 const TAO_CHECK_COST = 2

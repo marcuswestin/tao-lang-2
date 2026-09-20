@@ -288,15 +288,58 @@ Describe('gate catalog metadata', () => {
   })
 
   Test('narrows only the suites that provably read no Tao source, app, or generated tree', () => {
-    for (const suite of ['code-editor', 'generation', 'stdlib', 'update-server']) {
+    for (
+      const suite of [
+        'code-editor',
+        'generation',
+        'host-control',
+        'icloud-native',
+        'runtime',
+        'shared',
+        'stdlib',
+        'update-server',
+      ]
+    ) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(['ts'])
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite))).toEqual(['_fix-dprint'])
     }
     // Reading a `.tao` file while `./tao fix` rewrites it is a torn read, so the default is safe.
-    for (const suite of ['dev', 'compiler', 'validator', 'tao-apps']) {
+    for (
+      const suite of [
+        'dev',
+        'ide-extension',
+        'studio',
+        'tao-cli',
+        'runtime-toolchain',
+        'runtime-jest',
+        'tao-apps',
+        'unclassified-suite',
+      ]
+    ) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(GateCatalog.DEFAULT_SUITE_READS)
     }
     Expect(GateCatalog.DEFAULT_SUITE_READS).toEqual(['gen-app', 'gen-parser', 'tao', 'ts'])
+  })
+
+  Test('keeps the parser writer before suites that load grammar without repository Tao files', () => {
+    for (const suite of ['ast-utils', 'performance-checks']) {
+      Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'ts'])
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_fix-dprint',
+        '_parser-gen',
+      ])
+    }
+  })
+
+  Test('keeps Tao and parser writers before language suites without waiting for generated apps', () => {
+    for (const suite of ['compiler', 'formatter', 'parser', 'source-actions', 'validator', 'workspace']) {
+      Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'tao', 'ts'])
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_fix-dprint',
+        '_fix-tao',
+        '_parser-gen',
+      ])
+    }
   })
 
   Test('schedules the real ship bundle proof as a bounded slow lane under its public recipe', () => {

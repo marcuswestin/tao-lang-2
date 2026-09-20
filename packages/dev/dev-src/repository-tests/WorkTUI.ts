@@ -1,5 +1,5 @@
 import { Switch } from '@shared'
-import { Box, render, Text, useWindowSize } from 'ink'
+import { Box, render, type RenderOptions, Text, useWindowSize } from 'ink'
 import React from 'react'
 
 import { type ColumnLayout, DashboardGrid, type TerminalSize } from '../cli/DashboardGrid'
@@ -22,12 +22,14 @@ type DashboardProps = {
 
 const ADAPTIVE_COLUMN_WIDTHS = [22, 20, 18, 16, 14] as const
 const COLUMN_MIN_WIDTH = 24
-const HEADER_ROWS = 1
 const RENDER_INTERVAL_MS = 500
 const ROW_GAP = 1
 
 /** createReporter renders the dashboard for one run and tears it down when the run ends. */
-function createReporter(options: { lane: string }): WorkReporterHandle {
+function createReporter(options: {
+  lane: string
+  terminal?: Pick<RenderOptions, 'stderr' | 'stdin' | 'stdout'>
+}): WorkReporterHandle {
   const startedAt = Date.now()
   let states: readonly WorkState[] = []
   let app: ReturnType<typeof render> | undefined
@@ -51,6 +53,7 @@ function createReporter(options: { lane: string }): WorkReporterHandle {
   const start = (planned: readonly WorkState[]) => {
     states = planned
     app = render(element(), {
+      ...options.terminal,
       alternateScreen: false,
       exitOnCtrlC: true,
       incrementalRendering: true,
@@ -94,6 +97,8 @@ function createReporter(options: { lane: string }): WorkReporterHandle {
 
 function WorkDashboard(props: DashboardProps): React.ReactElement {
   const size = useWindowSize()
+  const summary = dashboardSummaryText(props.states)
+  const headerRows = summary.length === 0 ? 1 : 2
   return React.createElement(
     Box,
     { flexDirection: 'column', height: DashboardGrid.availableRows(size), width: size.columns },
@@ -102,9 +107,13 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
       { bold: true, key: 'header', wrap: 'truncate-end' },
       headerText(props),
     ),
+    ...(summary.length === 0
+      ? []
+      : [React.createElement(Text, { color: 'yellow', key: 'summary', wrap: 'truncate-end' }, summary)]),
     React.createElement(BoxedWorkDashboard, {
       key: 'grid',
-      layout: dashboardLayout(size, props.states.length),
+      headerRows,
+      layout: dashboardLayout(size, props.states.length, headerRows),
       size,
       states: props.states,
     }),
@@ -112,10 +121,10 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
 }
 
 function BoxedWorkDashboard(
-  props: { layout: ColumnLayout; size: TerminalSize; states: readonly WorkState[] },
+  props: { headerRows: number; layout: ColumnLayout; size: TerminalSize; states: readonly WorkState[] },
 ): React.ReactElement {
   return React.createElement(DashboardGrid<WorkState>, {
-    height: Math.max(1, DashboardGrid.availableRows(props.size) - HEADER_ROWS),
+    height: Math.max(1, DashboardGrid.availableRows(props.size) - props.headerRows),
     items: props.states,
     layout: props.layout,
     renderItem: (state, isLast) =>
@@ -180,8 +189,8 @@ function NodeColumn(
   )
 }
 
-function dashboardLayout(size: TerminalSize, nodeCount: number): ColumnLayout {
-  const availableRows = Math.max(1, DashboardGrid.availableRows(size) - HEADER_ROWS)
+function dashboardLayout(size: TerminalSize, nodeCount: number, headerRows: number): ColumnLayout {
+  const availableRows = Math.max(1, DashboardGrid.availableRows(size) - headerRows)
   const fullLayout = DashboardGrid.columnLayout({
     size,
     itemCount: nodeCount,
@@ -221,6 +230,93 @@ function dashboardLayout(size: TerminalSize, nodeCount: number): ColumnLayout {
     lineLimit: 0,
     rowGap: 0,
   })
+}
+
+/**
+ * dashboardSummaryText turns the pending graph into one readable diagnosis. A line in an individual
+ * tile tells us little in a dense lane: all of its descendants can be blank while one prepare node
+ * is the only work preventing them from starting. Follow declared edges instead of their old wait
+ * accounting, which is historical by the time the dashboard draws it.
+ */
+function dashboardSummaryText(states: readonly WorkState[]): string {
+  const byName = new Map(states.map(state => [state.name, state]))
+  const groups = new Map<string, { count: number; text: string }>()
+
+  for (const state of states) {
+    if (state.status !== 'pending') {
+      continue
+    }
+    const path = unresolvedDependencyPath(state, byName)
+    if (path.length >= 2) {
+      addSummaryGroup(
+        groups,
+        `dependency:${path[0]!.name}:${path[1]!.name}`,
+        `blocked on ${path[0]!.name} → ${path[1]!.name}`,
+      )
+      continue
+    }
+
+    const resource = blockedResource(state, states)
+    if (resource !== undefined) {
+      addSummaryGroup(groups, `resource:${resource}`, `waiting for resource ${resource}`)
+      continue
+    }
+    if (state.reason?.startsWith('waiting for machine capacity') === true) {
+      addSummaryGroup(groups, 'machine', 'waiting for machine capacity')
+      continue
+    }
+    addSummaryGroup(groups, 'capacity', 'waiting for local capacity')
+  }
+
+  return [...groups.values()]
+    .toSorted((left, right) => right.count - left.count || left.text.localeCompare(right.text))
+    .map(group => `${group.count} ${group.count === 1 ? 'node' : 'nodes'} ${group.text}`)
+    .join('; ')
+}
+
+/** unresolvedDependencyPath traces only known, unpassed edges and stops at a cycle. */
+function unresolvedDependencyPath(
+  state: WorkState,
+  byName: ReadonlyMap<string, WorkState>,
+): readonly WorkState[] {
+  const path = [state]
+  const visited = new Set([state.name])
+  let current = state
+  while (true) {
+    const dependency = (current.node.needs ?? [])
+      .map(name => byName.get(name))
+      .find(candidate => candidate !== undefined && candidate.status !== 'passed')
+    if (dependency === undefined || visited.has(dependency.name)) {
+      return path.toReversed()
+    }
+    path.push(dependency)
+    visited.add(dependency.name)
+    current = dependency
+  }
+}
+
+/** blockedResource identifies current admission contention rather than a resource wait from an old scan. */
+function blockedResource(state: WorkState, states: readonly WorkState[]): string | undefined {
+  return (state.node.resources ?? []).find(resource =>
+    states.some(candidate =>
+      candidate !== state
+      && candidate.status === 'running'
+      && candidate.node.resources?.includes(resource) === true
+    )
+  )
+}
+
+function addSummaryGroup(
+  groups: Map<string, { count: number; text: string }>,
+  key: string,
+  text: string,
+): void {
+  const group = groups.get(key)
+  if (group === undefined) {
+    groups.set(key, { count: 1, text })
+  } else {
+    group.count += 1
+  }
 }
 
 function statusColor(status: WorkStatus): 'gray' | 'green' | 'red' | 'yellow' {
@@ -278,4 +374,6 @@ function statusLabel(status: WorkStatus): string {
 /** WorkTUI owns the Ink dashboard for a running work graph. */
 export const WorkTUI = {
   createReporter,
+  dashboardLayout,
+  dashboardSummaryText,
 } as const
