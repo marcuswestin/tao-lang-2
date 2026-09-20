@@ -23,7 +23,7 @@ their own product.
   structure as part of a final release consideration. What that structure must achieve:
   - Anyone may use Tao to build anything, in any app, for any purpose, using the shipped versions of
     the Tao stack. Nothing built with Tao carries an obligation.
-  - The only restriction targets serving the functionality of the Tao stack *itself* as a product —
+  - The only restriction targets serving the functionality of the Tao stack _itself_ as a product —
     taking the Tao source and repackaging it as something to sell — as distinct from selling the
     products someone built with Tao.
   - Probable shape: a permissive licence (MIT) at the root, with copyleft licences on the particular
