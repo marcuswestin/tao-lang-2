@@ -27,9 +27,10 @@ export function diagnosticLocation(diagnostic: Diagnostic): string {
 }
 
 /**
- * renderDiagnostic returns the block for one diagnostic: a located headline, then the source line
- * and an underline when `source` holds the file the diagnostic points into. A diagnostic whose
- * range has scrolled off the end of the source renders as the headline alone rather than guessing.
+ * renderDiagnostic returns the block for one diagnostic: a located headline, then the source around
+ * it with the offending span underlined, when `source` holds the file the diagnostic points into. A
+ * diagnostic whose range has scrolled off the end of the source renders as the headline alone
+ * rather than guessing.
  */
 export function renderDiagnostic(diagnostic: Diagnostic, source?: string): string {
   const headline = `${diagnosticLocation(diagnostic)} ${severityWord(diagnostic)}: ${diagnostic.message}`
@@ -39,17 +40,39 @@ export function renderDiagnostic(diagnostic: Diagnostic, source?: string): strin
   return excerpt === undefined ? headline : `${headline}\n${excerpt}`
 }
 
-/** sourceExcerpt returns the numbered source line plus a caret underline for the diagnostic's span. */
+/**
+ * sourceExcerpt returns the line the diagnostic points at with a caret underline for its span, led
+ * by the line above it. One line of lead-in is what turns an underlined fragment back into code the
+ * reader recognizes — it is usually the `view` or `action` header the mistake sits inside — and a
+ * second would start scrolling the terminal for no more recognition.
+ */
 function sourceExcerpt(range: DiagnosticRange, source: string): string | undefined {
-  const line = source.split('\n')[range.start.line]
+  const lines = source.split('\n')
+  const line = lines[range.start.line]
   if (line === undefined) {
     return undefined
   }
-  // Tao indents with spaces, but a stray tab would still slide the carets out from under the span.
-  const text = line.replaceAll('\t', ' ')
-  const gutter = ' '.repeat(String(range.start.line + 1).length)
+  const text = sourceLineText(line)
   const start = Math.min(range.start.character, text.length)
   const end = range.end.line === range.start.line ? Math.min(range.end.character, text.length) : text.length
   const underline = ' '.repeat(start) + '^'.repeat(Math.max(end - start, 1))
-  return `${range.start.line + 1} | ${text}\n${gutter} | ${underline}`
+  // The widest number shown is the offending line's own, so it sets the gutter every row pads to.
+  const width = String(range.start.line + 1).length
+  const preceding = lines[range.start.line - 1]
+  return [
+    ...(preceding === undefined ? [] : [numberedRow(range.start.line, width, sourceLineText(preceding))]),
+    numberedRow(range.start.line + 1, width, text),
+    `${' '.repeat(width)} | ${underline}`,
+  ].join('\n')
+}
+
+/** numberedRow returns one excerpt row, its line number padded to the block's gutter width. */
+function numberedRow(lineNumber: number, width: number, text: string): string {
+  return `${String(lineNumber).padStart(width)} | ${text}`
+}
+
+/** sourceLineText returns one source line as the excerpt shows it. */
+function sourceLineText(line: string): string {
+  // Tao indents with spaces, but a stray tab would still slide the carets out from under the span.
+  return line.replaceAll('\t', ' ')
 }

@@ -1,4 +1,4 @@
-// Studio agent chat: what a view shows, and which of it any test actually looks at.
+// Semantic coverage: what a view shows, and which tests appear to exercise it.
 //
 // The semantic graph knows what a view renders. It does not know what the tests do, because a `.test.tao`
 // sidecar imports the app rather than the other way round, so nothing reachable from the app entry ever

@@ -47,13 +47,7 @@ adding an entry, and count both when choosing an ID.
 ## Deferred project — begin after the large branches land
 
 - [DEVENV-015 — Reliable host-browser verification](<Developer environment upgrades/DEVENV-015-reliable-host-browser-verification.md>) — Planned
-- [DEVENV-017 — Studio snapshot command consistency](<Developer environment upgrades/DEVENV-017-studio-snapshot-command-consistency.md>) — Planned
-- [DEVENV-018 — Semantic facts and coverage commands](<Developer environment upgrades/DEVENV-018-semantic-facts-and-coverage-commands.md>) — Planned
-- [DEVENV-019 — Idempotent workspace opening](<Developer environment upgrades/DEVENV-019-idempotent-workspace-opening.md>) — Planned
-- [DEVENV-020 — Companion lifecycle and diagnostics](<Developer environment upgrades/DEVENV-020-companion-lifecycle-and-diagnostics.md>) — Planned
-- [DEVENV-021 — Safe scratch scripts and concurrent staging](<Developer environment upgrades/DEVENV-021-safe-scratch-scripts-and-concurrent-staging.md>) — Planned
-- [DEVENV-022 — Raw Error policy for failure mocks](<Developer environment upgrades/DEVENV-022-raw-error-policy-for-failure-mocks.md>) — Planned
-- [DEVENV-023 — React Native test renderer convention](<Developer environment upgrades/DEVENV-023-react-native-test-renderer-convention.md>) — Planned
+- [DEVENV-020 — Companion lifecycle and diagnostics](<Developer environment upgrades/DEVENV-020-companion-lifecycle-and-diagnostics.md>) — In progress
 - [DEVENV-024 — Branch-local semantic cleanup](<Developer environment upgrades/DEVENV-024-branch-local-semantic-cleanup.md>) — Blocked
 
 ## External and observational findings
@@ -68,7 +62,7 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-045 — Agent shell habits route routine commands through harness review](<Developer environment upgrades/DEVENV-045-agent-shell-habits-route-routine-commands-through-harness-re.md>) — In progress
 - [DEVENV-046 — WordFlower remains the tail of the sharded Tao app tests](<Developer environment upgrades/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — Candidate
 - [DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree](<Developer environment upgrades/DEVENV-047-release-bundle-proof-shares-metro-s-cache-with-every-other-w.md>) — Candidate
-- [DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated](<Developer environment upgrades/DEVENV-048-a-fresh-linked-worktree-cannot-launch-studio-until-the-parse.md>) — In progress
+- [DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated](<Developer environment upgrades/DEVENV-048-a-fresh-linked-worktree-cannot-launch-studio-until-the-parse.md>) — Candidate
 - [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Candidate
 - [DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason](<Developer environment upgrades/DEVENV-050-tao-test-under-a-git-ignored-path-says-no-tao-tests-found-wi.md>) — Candidate
 - [DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox](<Developer environment upgrades/DEVENV-051-sips-exits-13-inside-the-claude-code-bash-sandbox.md>) — Candidate
@@ -80,7 +74,6 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — In progress
 - [DEVENV-061 — `bun test` from the repository root loses subprocess output](<Developer environment upgrades/DEVENV-061-bun-test-from-the-repository-root-loses-subprocess-output.md>) — Candidate
 - [DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration](<Developer environment upgrades/DEVENV-062-the-default-codex-profile-cannot-refresh-its-generated-codex.md>) — Candidate
-- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Candidate
 - [DEVENV-065 — The raw-`Error` allowlist is line-precise with no way to re-derive it](<Developer environment upgrades/DEVENV-065-the-raw-error-allowlist-is-line-precise-with-no-way-to-re-de.md>) — Candidate
 - [DEVENV-066 — Browser-harness gestures silently miss an occluded target](<Developer environment upgrades/DEVENV-066-browser-harness-gestures-silently-miss-an-occluded-target.md>) — Mitigated for offset gestures
 - [DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory](<Developer environment upgrades/DEVENV-067-a-failing-deep-equality-assertion-on-ast-nodes-can-exhaust-t.md>) — In progress
@@ -95,18 +88,15 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
-- [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 - [DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself](<Developer environment upgrades/DEVENV-090-a-stale-generated-parser-fails-runtime-jest-without-naming-i.md>) — Candidate
 - [DEVENV-091 — A dependency tree can be unusable while every health check passes](<Developer environment upgrades/DEVENV-091-a-dependency-tree-can-be-unusable-while-every-health-check-p.md>) — Candidate
 - [DEVENV-094 — Simultaneous worktree finalizations collapse verification throughput](<Developer environment upgrades/DEVENV-094-simultaneous-finalizations-collapse-verification-throughput.md>) — Candidate
 - [DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27](<Developer environment upgrades/DEVENV-096-the-devenv-bun-cannot-produce-a-runnable-compiled-binary.md>) — Candidate
 - [DEVENV-097 — Verification in a freshly created worktree can never hit a green record](<Developer environment upgrades/DEVENV-097-verification-in-a-freshly-created-worktree-can-never-hit-a-green.md>) — Candidate
 - [DEVENV-098 — A fixture holding the output-capture queue through a spawn stalls its whole shard](<Developer environment upgrades/DEVENV-098-a-fixture-holding-the-output-capture-queue-through-a-spawn.md>) — Candidate
-- [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Candidate
 - [DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox](<Developer environment upgrades/DEVENV-101-fix-dprint-cannot-format-a-skill-file-inside-the-sandbox.md>) — Candidate
 - [DEVENV-102 — No gate parses `.tao-revolution` spec sources](<Developer environment upgrades/DEVENV-102-no-gate-parses-tao-revolution-spec-sources.md>) — Candidate
 - [DEVENV-103 — `$TMPDIR` resolves to two different paths between tool calls](<Developer environment upgrades/DEVENV-103-tmpdir-resolves-to-two-different-paths-between-tool-calls.md>) — Candidate
-- [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Candidate
 - [DEVENV-109 — The dev-data cross-process test times out under a full lane](<Developer environment upgrades/DEVENV-109-dev-data-cross-process-test-times-out-under-a-full-lane.md>) — Candidate
 - [DEVENV-110 — Concurrent writers in one worktree fail the pre-test app compile](<Developer environment upgrades/DEVENV-110-concurrent-writers-in-one-worktree-fail-the-pre-test-app-compile.md>) — Candidate
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — Candidate

@@ -23,6 +23,9 @@ local.properties
 _gen_*
 **/.tao-project/studio/sketches.jsonc.*.tmp
 
+# Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
+packages/*/.scratch/
+
 .expo
 packages/runtime-toolchain/ios
 packages/runtime-toolchain/android

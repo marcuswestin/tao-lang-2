@@ -262,14 +262,13 @@ tests written in Tao, green in Current, for every construct introduced.
     `@bomb.sh/tab`. Remaining: PowerShell installation, which the library generates but the installer
     does not place, and per-argument completions for app names, paths, and test patterns.
 - [ ] Build the enforcement and diagnostics surface
-  - A hosted gate that runs `verify` on pushed work. The diagnostics half has landed: `tao check`
-    reports syntax, linker, and validator diagnostics with file, line, column, severity, and the
-    underlined source line, fails the command on any error, and `tao fmt` now reports an unparseable
-    file the same way. Remaining there: Chevrotain's own lexer and parser wording reaches the reader
-    unchanged — one misplaced word inside a view body prints seventy-five lines listing every
-    possible token sequence — and a syntax error at end of file is positioned at `NaN:NaN`. `A1` in
-    `Docs/MVP Roadmap/Agent MVP Roadmap.md` holds the measured evidence and the fix, and closes this
-    bullet when it closes. Brief:
+  - A hosted gate that runs `verify` on pushed work. The diagnostics half is done: `tao check`,
+    `tao fix`, and `tao fmt` report syntax, linker, and validator diagnostics with file, line,
+    column, severity, and the underlined source line, and fail the command on any error. Every
+    lexer and parser syntax error is now stated in Tao's own words rather than Chevrotain's, a
+    report shows the line above the mistake and at most three errors per file, and an error at end
+    of file is positioned at the end of the source instead of `NaN:NaN`. What remains under this
+    bullet is the hosted gate itself. Brief:
     `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were verified against
     a much older commit, so re-check them before planning.
 - [ ] Complete canonical app and v1 hardening

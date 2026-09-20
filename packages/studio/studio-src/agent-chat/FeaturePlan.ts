@@ -3,7 +3,7 @@
 // agent-chat write tools call these; nothing here is a production change model.
 import Formatter from '@formatter'
 import { Errors } from '@shared'
-import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from './SemanticSnapshot'
+import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from '@workspace'
 
 type Json = Record<string, unknown>
 
