@@ -5,6 +5,7 @@ import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
 import { FinalizeCommand } from './repository-tests/Finalize'
@@ -389,6 +390,19 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report instead of the table.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await BoardCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('reclaim')
+    .description(
+      'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
+    )
+    .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
+    .option('--json', 'Print a versioned structured report instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(
+        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+      )
     })
 
   commands

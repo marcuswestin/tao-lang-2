@@ -17,6 +17,7 @@ const JUST_COMMANDS = [
   // AGENTS.md rather than dropping to `just`.
   'land-lock',
   'land-unlock',
+  'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
