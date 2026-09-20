@@ -39,9 +39,26 @@ language sees.
   gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
   Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
   entry graph, which is fixed.
-- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
-  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
-  of type …") is passed through unchanged.
+- Still open from this item, re-measured on `main` at `e241941a` and worse than first recorded:
+  - `tao fmt` reports a file it cannot parse through the formatter's own assertion
+    (`packages/formatter/formatter-src/formatter.ts:81`) rather than a positioned diagnostic, so the
+    same broken file that `tao check` locates to a line and column reads as
+    `Failed to format <path>: Expected: Tao source without syntax errors when formatting`.
+  - Chevrotain's own wording reaches the reader unchanged, and "Expecting token of type …" is the
+    mild shape. Inside a view body the no-viable-alternative shape prints **seventy-five lines** for
+    one misplaced word — a numbered list of every possible token sequence — before naming what it
+    found. Lexer messages are raw too: `unexpected character: ->§<- at offset: 24, skipped 1
+    characters.` and `Unable to pop Lexer Mode after encountering Token ->}<- The Mode Stack is
+    empty`. Against this item's own bar — diagnostics a newcomer can act on — this is the worst
+    output the CLI produces, not a matter of polish.
+  - Both are one change: Langium injects `parser.ParserErrorMessageProvider` and
+    `parser.LexerErrorMessageProvider`, so registering Tao's own in `taoLanguageModule`
+    (`packages/parser/parser-src/parser.ts`) rewrites every shape at the producer rather than
+    editing strings afterwards, which is why an earlier attempt correctly declined to touch them.
+    Chevrotain has exactly six builders, so the set is closed and each can be authored deliberately.
+- A1 closes when both land. Whoever lands the second of them closes this item and the matching
+  bullet under **Build the enforcement and diagnostics surface** in `Roadmap.md`; neither file is
+  owned by the slices themselves, so nothing closes it on its own.
 
 ### A2 — A standalone cross-platform `tao` executable
 
