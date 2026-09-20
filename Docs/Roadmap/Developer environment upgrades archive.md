@@ -47,6 +47,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-041 — Nested gate-runner tests inherit the live machine registry](<Developer environment upgrades/Archive/DEVENV-041-nested-gate-runner-tests-inherit-the-live-machine-registry.md>) — Resolved
 - [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/Archive/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
+- [DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path](<Developer environment upgrades/Archive/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — Resolved
 - [DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree](<Developer environment upgrades/Archive/DEVENV-047-release-bundle-proof-shares-metro-s-cache-with-every-other-w.md>) — Resolved
 - [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
