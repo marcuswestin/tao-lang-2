@@ -264,11 +264,14 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Build the enforcement and diagnostics surface
   - A hosted gate that runs `verify` on pushed work. The diagnostics half has landed: `tao check`
     reports syntax, linker, and validator diagnostics with file, line, column, severity, and the
-    underlined source line, and fails the command on any error. Remaining there: `tao fmt` still
-    reports a file it cannot parse through the formatter's assertion rather than a positioned
-    diagnostic, and Chevrotain's own parser wording ("Expecting token of type …") is passed through
-    unchanged. Brief: `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were
-    verified against a much older commit, so re-check them before planning.
+    underlined source line, fails the command on any error, and `tao fmt` now reports an unparseable
+    file the same way. Remaining there: Chevrotain's own lexer and parser wording reaches the reader
+    unchanged — one misplaced word inside a view body prints seventy-five lines listing every
+    possible token sequence — and a syntax error at end of file is positioned at `NaN:NaN`. `A1` in
+    `Docs/MVP Roadmap/Agent MVP Roadmap.md` holds the measured evidence and the fix, and closes this
+    bullet when it closes. Brief:
+    `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were verified against
+    a much older commit, so re-check them before planning.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
 
