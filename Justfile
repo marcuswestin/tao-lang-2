@@ -227,8 +227,9 @@ report-test-stats limit="20":
 # Bring a feature branch to the state where merge-with-main can run; safe and cheap to re-run
 [arg('check', long='check', value='true')]
 [arg('fresh', long='fresh', value='true')]
-finalize check='false' fresh='false':
-    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
+[arg('redraft', long='redraft', value='true')]
+finalize check='false' fresh='false' redraft='false':
+    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]
