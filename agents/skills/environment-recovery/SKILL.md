@@ -38,8 +38,9 @@ output is not enough, or when you need the reasoning behind it.
   from either side: `PermissionDenied: …` when the write is refused outright, or
   `EEXIST: failed to link package` when the existing copy cannot be replaced.
 - `./agent` distinguishes both from a denied temporary directory and prints the matching
-  recovery. Only the tempdir case is resumable; the other two repeat identically until run
-  unsandboxed, and the EEXIST case additionally needs the partial tree removed.
+  recovery. Run `just repair-deps` for either protected-path failure. It moves the unhealthy tree
+  intact without traversing it, performs one frozen install, and restores the original tree if the
+  install fails or is interrupted; a successful repair retains the backup path for host cleanup.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, which makes `bun install` unrunnable sandboxed rather than fixing it.
 

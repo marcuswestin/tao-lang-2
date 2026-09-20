@@ -1,6 +1,6 @@
 # DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Worktree setup
 - **Impact:** `./agent setup` is the documented one setup entry, yet the CLI it prepares fails on first
   use, so an agent's first `./tao` command in a new worktree dies with a module error unrelated to its
@@ -14,9 +14,11 @@
   `TAO_DEBUG_ERRORS=1` revealed `undefined is not an object (evaluating 'AST.EntityCommandPolicy.$type')`
   at validator module load, and `just _parser-gen` fixed it.
 - **Workaround:** Run `just _parser-gen`, or any lane that includes it, before the first `./tao` command.
-- **Proposed change:** Have `setup` run `_parser-gen` when `packages/parser/parser-src/_gen_tao-parser`
-  is missing or older than the grammar, or have `./tao` generate on demand with a one-line notice.
-- **Dependencies:** None.
-- **Acceptance:** In a fresh linked worktree, `./agent setup && ./tao check Apps/HNReader` succeeds
-  without a manual generation step.
+- **Proposed change:** Implemented: `setup` runs the content-stamped `_parser-gen` after dependencies
+  and before harness adapter generation.
+- **Dependencies:** Resolved by `feat/dev-environment-impact-sweep`.
+- **Acceptance:** Met on 2026-09-19 in the fresh integration worktree: `./agent setup` generated the
+  missing parser and `./tao check Apps/HNReader` then completed with zero noncanonical files and no
+  manual generation command.
 - **Source:** 2026-09-04 `tao create` work.
+- **Archived:** 2026-09-19

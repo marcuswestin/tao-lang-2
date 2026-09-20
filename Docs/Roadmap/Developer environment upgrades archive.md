@@ -43,9 +43,13 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-032 — Hosted model and evolving mock-shape observations](<Developer environment upgrades/Archive/DEVENV-032-hosted-model-and-evolving-mock-shape-observations.md>) — Closed
 - [DEVENV-035 — Performance-contract timeout under the full graph](<Developer environment upgrades/Archive/DEVENV-035-performance-contract-timeout-under-the-full-graph.md>) — Resolved
 - [DEVENV-037 — Native Studio host coordination and bounded Hutch phases](<Developer environment upgrades/Archive/DEVENV-037-native-studio-host-coordination-and-bounded-hutch-phases.md>) — Resolved
+- [DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures](<Developer environment upgrades/Archive/DEVENV-040-bun-dependency-recovery-conflicts-with-protected-package-fix.md>) — Resolved
 - [DEVENV-041 — Nested gate-runner tests inherit the live machine registry](<Developer environment upgrades/Archive/DEVENV-041-nested-gate-runner-tests-inherit-the-live-machine-registry.md>) — Resolved
 - [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/Archive/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
+- [DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path](<Developer environment upgrades/Archive/DEVENV-046-the-tao-apps-suite-is-one-22-second-process-on-the-test-crit.md>) — Resolved
+- [DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree](<Developer environment upgrades/Archive/DEVENV-047-release-bundle-proof-shares-metro-s-cache-with-every-other-w.md>) — Resolved
+- [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
@@ -60,3 +64,4 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
+- [DEVENV-107 — A mutable native recipe was auto-approved outside the sandbox](<Developer environment upgrades/Archive/DEVENV-107-mutable-native-recipe-was-auto-approved-outside-the-sandbox.md>) — Resolved

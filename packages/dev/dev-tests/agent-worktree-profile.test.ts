@@ -316,7 +316,7 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('names the denied path and an unsandboxed recovery for a denied destination', async () => {
+  Test('names the denied path and dependency repair for a denied destination', async () => {
     const testRoot = await mkTestDir('tao-agent-install-denied-')
     try {
       const outcome = await runAgentInstall(testRoot, [
@@ -331,7 +331,7 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
-      Expect(outcome.result.stderr).toContain('just session-unsandboxed')
+      Expect(outcome.result.stderr).toContain('just repair-deps')
     } finally {
       await FS.remove(testRoot)
     }
@@ -375,23 +375,35 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('a healthy dependency install runs the health probe once', async () => {
-    const repair = (await justCommands('deps')).trim().split('\n')[2]
-    Expect(repair).toBeDefined()
-    const result = await CLI.run('zsh', {
-      args: [
-        '-c',
-        [
-          'typeset -i calls=0',
-          'function just() { (( calls += 1 )); return 0 }',
-          'function bun() { return 99 }',
-          repair!,
-          'print -r -- "$calls"',
-        ].join('\n'),
-      ],
-    })
+    const testRoot = await mkTestDir('tao-healthy-dependency-recipe-')
+    const fakeBin = FS.resolvePath('bin', testRoot)
+    const callLog = FS.resolvePath('calls.log', testRoot)
+    try {
+      await Promise.all([
+        FS.writeText(FS.resolvePath('bun', fakeBin), '#!/bin/zsh\nexit 0\n'),
+        FS.writeText(
+          FS.resolvePath('just', fakeBin),
+          '#!/bin/zsh\nprint -r -- "$*" >> "$TAO_TEST_CALL_LOG"\nexit 0\n',
+        ),
+      ])
+      for (const command of ['bun', 'just']) {
+        const outcome = await CLI.run('chmod', { args: ['+x', FS.resolvePath(command, fakeBin)] })
+        Expect(outcome.exitCode).toBe(0)
+      }
 
-    Expect(result.exitCode).toBe(0)
-    Expect(result.stdout.trim()).toBe('1')
+      const result = await CLI.run('zsh', {
+        args: ['-c', await justCommands('deps')],
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_CALL_LOG: callLog,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.readText(callLog)).toBe('_dependency-health\n')
+    } finally {
+      await FS.remove(testRoot)
+    }
   })
 
   Test('repairs a damaged dependency graph before the agent CLI build can consume it', async () => {
