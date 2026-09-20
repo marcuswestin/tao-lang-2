@@ -133,31 +133,25 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
-# Install dependencies and recover a damaged tree without traversing protected package fixtures
+# Install development dependencies
+# Install dependencies, then repair a partial tree. Bun's own verification only checks that
+# package directories exist, so an install stopped partway through reports "no changes" forever;
+# `_dependency-health` loads what the entry commands load and is what notices. The repair
+# re-extracts from the shared cache first, and only falls back to a cold worktree-local cache
+# when the shared one is itself the fault — that fallback re-downloads every package.
+#
+# A repair fails loudly rather than reporting what the health probe alone can see. `--force`
+# deletes before it re-clones, and the few packages shipping `.idea/` or `.gitmodules` cannot be
+# deleted inside an agent sandbox, so a sandboxed repair can leave one of them uninstalled while
+# every probed module still loads. When that happens, or when one of those packages is itself the
+# damaged one, no sandboxed repair can reach it: run `rm -rf node_modules && bun install` from an
+# unsandboxed shell.
+# Install dependencies and repair a partial dependency tree
 [group('Setup')]
 deps:
-    #!/bin/zsh
     mkdir -p "{{ BUN_TMP_DIR }}"
-    integer install_succeeded=0
-    if TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile; then
-      install_succeeded=1
-    elif TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; then
-      install_succeeded=1
-    else
-      mkdir -p "{{ BUN_CACHE_DIR }}"
-      if TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; then
-        install_succeeded=1
-      fi
-    fi
-    if (( install_succeeded )) && just _dependency-health; then
-      exit 0
-    fi
-    TAO_DEPENDENCY_REPAIR_FORCE=1 just repair-deps
-
-# Replace an unhealthy dependency tree atomically, retaining the original under /private/tmp
-[group('Setup')]
-repair-deps:
-    zsh "{{ justfile_directory() }}/packages/dev/dev-src/cli/repair-dependencies.zsh" "{{ justfile_directory() }}" "{{ BUN_TMP_DIR }}" "{{ BUN_CACHE_DIR }}"
+    TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
+    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi; fi
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]

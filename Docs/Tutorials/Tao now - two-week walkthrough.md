@@ -220,7 +220,8 @@ they were not run because they change release state.
   representative native component, Device Kit, and navigation paths; Companion pairing, rendering,
   and scenario switching; `tao create --ai none`; `tao review`; `tao ship --dry-run`; and the slow
   Studio browser-smoke lane. This dated walkthrough is not final simulated-user acceptance: that
-  journey is currently quarantined from `verify-full` pending ten consecutive reliable browser runs.
+  journey runs as an ordinary `verify-full` gate and has since recorded ten consecutive reliable
+  browser runs (2026-09-20), which closed DEVENV-042.
 - **Present but not end-to-end verified:** freehand persistence/snap, every native control interaction,
   sharing, chromeless navigation/restoration, a successful Studio agent answer, and Dev/iCloud/CloudKit
   native behavior.

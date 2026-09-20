@@ -1,6 +1,6 @@
 # DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures
 
-- **Status:** Resolved
+- **Status:** Candidate
 - **Area:** Dependency installation
 - **Impact:** A stale Bun link can block every verification command, while the documented clean-install
   recovery cannot remove a dependency tree containing a sandbox-protected fixture file.
@@ -9,13 +9,9 @@
   `e2e/fixtures/project_files/.env` with `Operation not permitted` even in the approved elevated command.
 - **Workaround:** Move the stale `node_modules` directory intact to a unique path under `/private/tmp`,
   without reading or deleting its contents, then run `bun install --frozen-lockfile`.
-- **Proposed change:** Implemented by `just repair-deps` and the automatic `just deps` fallback. The
-  dependency-free helper takes a checkout-local lock, moves `node_modules` as one entry into a unique
-  `/private/tmp/tao-dependency-repair.*` backup, runs one frozen clean install, and restores the original
-  tree if installation or health verification fails or is interrupted.
-- **Dependencies:** Resolved by `feat/dev-environment-impact-sweep`.
-- **Acceptance:** Met on 2026-09-19. Eight focused recovery tests cover success, failure, interruption,
-  lock contention, move failure, protected fixture names, automatic fallback, and the healthy no-op;
-  the integrated dependency and setup tests also pass.
+- **Proposed change:** Make the dependency workflow repair stale links idempotently, and teach its recovery
+  diagnostic to recommend an atomic move when protected third-party fixture names prevent recursive removal.
+- **Dependencies:** None.
+- **Acceptance:** A fixture reproducing the protected-path link failure recovers through the documented
+  command without reading protected content, and a second `./agent verify` dependency check is clean.
 - **Source:** 2026-09-04 freehand/main merge verification.
-- **Archived:** 2026-09-19

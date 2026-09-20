@@ -62,9 +62,9 @@ export function pathIsWithin(path: string, directoryPath: string): boolean {
   return relative === '' || (!relative.startsWith('..') && relative !== '..')
 }
 /**
- * displayPath returns a readable spelling of a path: relative when it is inside the current working
- * directory, or absolute with the home directory written as `~` when it escapes. An outside path
- * rendered through `../` changes shape with the caller's working directory and obscures its location.
+ * displayPath returns the shortest readable spelling of a path: relative to the current working
+ * directory, or absolute with the home directory written as `~`. A path outside the cwd otherwise
+ * renders as a run of `../` segments longer than the location it names, which no reader can follow.
  */
 export function displayPath(inputPath: string): string {
   const relative = relativePath(resolvePath('.'), inputPath)
@@ -72,7 +72,7 @@ export function displayPath(inputPath: string): string {
     return '.'
   }
   const absolute = homeShortenedPath(resolvePath(inputPath))
-  return relative === '..' || relative.startsWith('../') ? absolute : relative
+  return absolute.length < relative.length ? absolute : relative
 }
 
 /** homeShortenedPath writes an absolute path under the home directory as `~/…`. */

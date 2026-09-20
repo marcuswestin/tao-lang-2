@@ -22,7 +22,6 @@ type DashboardProps = {
 
 const ADAPTIVE_COLUMN_WIDTHS = [22, 20, 18, 16, 14] as const
 const COLUMN_MIN_WIDTH = 24
-const HEADER_ROWS = 1
 const RENDER_INTERVAL_MS = 500
 const ROW_GAP = 1
 
@@ -94,6 +93,8 @@ function createReporter(options: { lane: string }): WorkReporterHandle {
 
 function WorkDashboard(props: DashboardProps): React.ReactElement {
   const size = useWindowSize()
+  const summary = dashboardSummaryText(props.states)
+  const headerRows = summary === undefined ? 1 : 2
   return React.createElement(
     Box,
     { flexDirection: 'column', height: DashboardGrid.availableRows(size), width: size.columns },
@@ -102,9 +103,13 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
       { bold: true, key: 'header', wrap: 'truncate-end' },
       headerText(props),
     ),
+    summary === undefined
+      ? null
+      : React.createElement(Text, { dimColor: true, key: 'summary', wrap: 'truncate-end' }, summary),
     React.createElement(BoxedWorkDashboard, {
+      headerRows,
       key: 'grid',
-      layout: dashboardLayout(size, props.states.length),
+      layout: dashboardLayout(size, props.states.length, headerRows),
       size,
       states: props.states,
     }),
@@ -112,10 +117,10 @@ function WorkDashboard(props: DashboardProps): React.ReactElement {
 }
 
 function BoxedWorkDashboard(
-  props: { layout: ColumnLayout; size: TerminalSize; states: readonly WorkState[] },
+  props: { headerRows: number; layout: ColumnLayout; size: TerminalSize; states: readonly WorkState[] },
 ): React.ReactElement {
   return React.createElement(DashboardGrid<WorkState>, {
-    height: Math.max(1, DashboardGrid.availableRows(props.size) - HEADER_ROWS),
+    height: Math.max(1, DashboardGrid.availableRows(props.size) - props.headerRows),
     items: props.states,
     layout: props.layout,
     renderItem: (state, isLast) =>
@@ -128,6 +133,59 @@ function BoxedWorkDashboard(
       }),
     width: props.size.columns,
   })
+}
+
+/**
+ * dashboardSummaryText names the largest reason pending work is not running. A dense graph can have
+ * dozens of identical waiting cards; the summary collapses the first two unresolved dependencies
+ * into one causal chain, counting the intermediate node as blocked too.
+ */
+function dashboardSummaryText(states: readonly WorkState[]): string | undefined {
+  const byName = new Map(states.map(state => [state.name, state]))
+  const groups = new Map<string, number>()
+  const add = (description: string) => groups.set(description, (groups.get(description) ?? 0) + 1)
+
+  for (const state of states) {
+    if (state.status !== 'pending') {
+      continue
+    }
+    const dependencyPath = unresolvedDependencyPath(state, byName, new Set())
+    if (dependencyPath.length > 1) {
+      add(`blocked on ${dependencyPath.slice(0, 2).join(' → ')}`)
+      continue
+    }
+    if (state.reason?.startsWith('waiting for machine capacity') === true) {
+      add(state.reason)
+      continue
+    }
+    const heldResource = (state.node.resources ?? []).find(resource =>
+      states.some(candidate => candidate.status === 'running' && candidate.node.resources?.includes(resource))
+    )
+    add(heldResource === undefined ? 'waiting for local capacity' : `blocked on resource ${heldResource}`)
+  }
+
+  const largest = [...groups].toSorted(
+    ([leftText, leftCount], [rightText, rightCount]) => rightCount - leftCount || leftText.localeCompare(rightText),
+  )[0]
+  return largest === undefined ? undefined : `${largest[1]} ${largest[1] === 1 ? 'node' : 'nodes'} ${largest[0]}`
+}
+
+function unresolvedDependencyPath(
+  state: WorkState,
+  byName: ReadonlyMap<string, WorkState>,
+  visiting: ReadonlySet<string>,
+): string[] {
+  if (visiting.has(state.name)) {
+    return [state.name]
+  }
+  const nextVisiting = new Set(visiting).add(state.name)
+  for (const need of state.node.needs ?? []) {
+    const dependency = byName.get(need)
+    if (dependency !== undefined && dependency.status !== 'passed') {
+      return [...unresolvedDependencyPath(dependency, byName, nextVisiting), state.name]
+    }
+  }
+  return [state.name]
 }
 
 /** headerText says how far the lane has got, so progress is readable without counting tiles. */
@@ -180,8 +238,8 @@ function NodeColumn(
   )
 }
 
-function dashboardLayout(size: TerminalSize, nodeCount: number): ColumnLayout {
-  const availableRows = Math.max(1, DashboardGrid.availableRows(size) - HEADER_ROWS)
+function dashboardLayout(size: TerminalSize, nodeCount: number, headerRows: number): ColumnLayout {
+  const availableRows = Math.max(1, DashboardGrid.availableRows(size) - headerRows)
   const fullLayout = DashboardGrid.columnLayout({
     size,
     itemCount: nodeCount,
@@ -278,4 +336,5 @@ function statusLabel(status: WorkStatus): string {
 /** WorkTUI owns the Ink dashboard for a running work graph. */
 export const WorkTUI = {
   createReporter,
+  testing: { dashboardLayout, dashboardSummaryText },
 } as const

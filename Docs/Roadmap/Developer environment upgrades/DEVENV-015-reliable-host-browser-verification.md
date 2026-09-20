@@ -16,10 +16,6 @@
   refusing to register Chrome as an app from that process context, before any repository Chrome code
   runs. Sandbox escalation did not help, and direct `--no-sandbox` launches aborted the same way; two
   React Native DevTools crashes that evening are the same failure. No fix is known.
-  On 2026-09-20 `just verify-full` reproduced the same immediate `SIGABRT` in the simulated-user,
-  dialog-browser, and agent-browser gates from a clean, completely verified tree. Bun then attempted
-  to reach `bun.report`, which the active task network policy denied, so the host lane aborted before
-  it could write `summary.json`; the individual gate logs retain the host-environment failures.
 - **Workaround:** From a normal terminal run
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
   `just verify-full`; when selecting another supported browser explicitly, set

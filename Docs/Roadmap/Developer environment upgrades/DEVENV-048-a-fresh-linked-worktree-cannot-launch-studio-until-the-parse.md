@@ -1,6 +1,6 @@
 # DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated
 
-- **Status:** In progress
+- **Status:** Candidate
 - **Area:** Worktree setup
 - **Impact:** The one setup entry leaves a new worktree unable to run the product; the first Studio launch
   fails with a module error that reads like a broken checkout rather than a missing step.
