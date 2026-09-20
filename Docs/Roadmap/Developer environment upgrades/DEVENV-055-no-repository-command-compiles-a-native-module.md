@@ -31,5 +31,9 @@
   again, but the already-running task's immutable network profile still denied the same domain and
   retained `.artifacts/native-module-check/run-q8wMIW`. This needs a newly started task or an ordinary
   host shell; regenerating files cannot mutate the permissions of the process already running.
+  A fresh `feat/devenv-landing-followups` checkout on 2026-09-20 again completed prebuild, discovered
+  the native packages, and reached CocoaPods. The active managed shell then denied SSH host-key access;
+  Hermes fell back to source and CocoaPods reported missing `cmake`. The exact failed build is retained
+  at `.artifacts/native-module-check/run-nK3ugj`; no simulator compilation occurred.
   Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.

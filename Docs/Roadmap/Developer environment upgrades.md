@@ -44,18 +44,9 @@ adding an entry, and count both when choosing an ID.
 - A task that adds or materially updates an entry links this index once in its handoff. A task that
   changes nothing here says nothing about developer-environment feedback.
 
-## Incoming fixes — do not duplicate
-
-- [DEVENV-010 — Preview publication and per-session bundler cache](<Developer environment upgrades/DEVENV-010-preview-publication-and-per-session-bundler-cache.md>) — Incoming
-- [DEVENV-011 — Preview and native-launch diagnosis](<Developer environment upgrades/DEVENV-011-preview-and-native-launch-diagnosis.md>) — Incoming
-- [DEVENV-012 — Companion endpoint and harness correctness](<Developer environment upgrades/DEVENV-012-companion-endpoint-and-harness-correctness.md>) — Incoming
-- [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Incoming
-- [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Incoming
-
 ## Deferred project — begin after the large branches land
 
 - [DEVENV-015 — Reliable host-browser verification](<Developer environment upgrades/DEVENV-015-reliable-host-browser-verification.md>) — Planned
-- [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/DEVENV-016-studio-process-ownership-and-status.md>) — Planned
 - [DEVENV-017 — Studio snapshot command consistency](<Developer environment upgrades/DEVENV-017-studio-snapshot-command-consistency.md>) — Planned
 - [DEVENV-018 — Semantic facts and coverage commands](<Developer environment upgrades/DEVENV-018-semantic-facts-and-coverage-commands.md>) — Planned
 - [DEVENV-019 — Idempotent workspace opening](<Developer environment upgrades/DEVENV-019-idempotent-workspace-opening.md>) — Planned
@@ -83,8 +74,7 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands](<Developer environment upgrades/DEVENV-053-verifying-a-sibling-worktree-from-an-agent-shell-needs-unsan.md>) — Candidate
 - [DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink](<Developer environment upgrades/DEVENV-057-git-hash-object-stdin-paths-cannot-hash-a-directory-symlink.md>) — Candidate
 - [DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled](<Developer environment upgrades/DEVENV-058-the-cli-s-bundled-tao-module-directory-is-never-filled.md>) — Candidate
-- [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — Incoming
-- [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Incoming
+- [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — In progress
 - [DEVENV-061 — `bun test` from the repository root loses subprocess output](<Developer environment upgrades/DEVENV-061-bun-test-from-the-repository-root-loses-subprocess-output.md>) — Candidate
 - [DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration](<Developer environment upgrades/DEVENV-062-the-default-codex-profile-cannot-refresh-its-generated-codex.md>) — Candidate
 - [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Candidate
@@ -103,7 +93,6 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
-- [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — In progress
 - [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 - [DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself](<Developer environment upgrades/DEVENV-090-a-stale-generated-parser-fails-runtime-jest-without-naming-i.md>) — Candidate
 - [DEVENV-091 — A dependency tree can be unusable while every health check passes](<Developer environment upgrades/DEVENV-091-a-dependency-tree-can-be-unusable-while-every-health-check-p.md>) — Candidate

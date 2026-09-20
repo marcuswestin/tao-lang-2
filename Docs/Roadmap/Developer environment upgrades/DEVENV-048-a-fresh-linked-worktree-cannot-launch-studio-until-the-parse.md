@@ -16,5 +16,9 @@
 - **Acceptance:** Parser generation and the subsequent CLI check passed from the fresh integration
   worktree on 2026-09-19. The headless Studio launch then reached Metro but failed because Watchman
   could not write its LaunchAgent and Metro exhausted macOS file watchers, so the Studio half remains
-  open under DEVENV-063 rather than being reported as green.
+  open under DEVENV-063 rather than being reported as green. Reverified on 2026-09-20 from the fresh
+  `feat/devenv-landing-followups` checkout: `./agent setup` generated the parser, `./tao check
+  Apps/HNReader` completed with zero noncanonical files, and the first real-app Studio case passed.
+  The subsequent Metro-backed case again failed with Watchman denied and Node watcher `EMFILE`, so
+  the required complete Studio host proof still belongs to DEVENV-063.
 - **Source:** 2026-09-04 Studio visual design work.

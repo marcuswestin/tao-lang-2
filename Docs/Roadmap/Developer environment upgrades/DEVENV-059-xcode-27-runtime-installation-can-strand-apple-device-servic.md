@@ -1,6 +1,6 @@
 # DEVENV-059 — Xcode 27 runtime installation can strand Apple device services
 
-- **Status:** Incoming
+- **Status:** In progress
 - **Area:** iOS simulator workflow
 - **Impact:** After installing the iOS 27 simulator runtime, Tao cannot discover, boot, install, or
   launch any simulator even though Xcode reports the iOS 27 SDK as installed.
@@ -10,11 +10,14 @@
   CoreDeviceService. Xcode 27 contains DeviceHub.app and no standalone Simulator.app.
 - **Workaround:** Restart macOS after the runtime download, open Device Hub once, and confirm
   `xcrun simctl list devices available --json` succeeds before launching Tao.
-- **Proposed change:** Support Device Hub anywhere Tao presents a simulator, keep the workspace on
-  an Expo CLI with Xcode 27 support, and teach `./agent doctor` to distinguish an absent runtime
-  from failed CoreSimulator/CoreDevice services with restart guidance.
-- **Dependencies:** Owned by unmerged branch `feat/macos-27-device-hub`; the host restart remains a
-  manual recovery step.
+- **Proposed change:** Implemented: Tao presents Device Hub when the standalone Simulator app is absent,
+  keeps simulator discovery on `simctl`, and diagnostics distinguish unavailable Apple services from
+  sandbox denial. Reverify the real simulator journey after the host services recover.
+- **Dependencies:** The host restart remains a manual recovery step; the implementation landed in
+  `6722026d`.
 - **Acceptance:** On macOS/Xcode 27, `tao dev` can present Device Hub and open HNReader on an iOS 27
   simulator; `./agent doctor` names a stuck Apple service and its recovery when discovery fails.
+  On 2026-09-20 `./agent capabilities` completed and classified CoreSimulator as unavailable with
+  restart-and-open-Device-Hub guidance, but the service remained invalid, so the real HNReader launch
+  could not be proved and this entry stays open.
 - **Source:** 2026-09-15 HNReader simulator recovery.

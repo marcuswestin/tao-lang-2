@@ -34,6 +34,12 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-007 — Per-test retry ledger and reports](<Developer environment upgrades/Archive/DEVENV-007-per-test-retry-ledger-and-reports.md>) — Resolved
 - [DEVENV-008 — Collision-proof test artifacts](<Developer environment upgrades/Archive/DEVENV-008-collision-proof-test-artifacts.md>) — Resolved
 - [DEVENV-009 — Safe, repeatable feature landing](<Developer environment upgrades/Archive/DEVENV-009-safe-repeatable-feature-landing.md>) — Resolved
+- [DEVENV-010 — Preview publication and per-session bundler cache](<Developer environment upgrades/Archive/DEVENV-010-preview-publication-and-per-session-bundler-cache.md>) — Resolved
+- [DEVENV-011 — Preview and native-launch diagnosis](<Developer environment upgrades/Archive/DEVENV-011-preview-and-native-launch-diagnosis.md>) — Resolved
+- [DEVENV-012 — Companion endpoint and harness correctness](<Developer environment upgrades/Archive/DEVENV-012-companion-endpoint-and-harness-correctness.md>) — Resolved
+- [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/Archive/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Resolved
+- [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/Archive/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Resolved
+- [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/Archive/DEVENV-016-studio-process-ownership-and-status.md>) — Resolved
 - [DEVENV-025 — Worktree-safe CLI test roots](<Developer environment upgrades/Archive/DEVENV-025-worktree-safe-cli-test-roots.md>) — Resolved
 - [DEVENV-026 — Opt-in underlying error diagnostics](<Developer environment upgrades/Archive/DEVENV-026-opt-in-underlying-error-diagnostics.md>) — Resolved
 - [DEVENV-027 — Watchman-free package-local Jest](<Developer environment upgrades/Archive/DEVENV-027-watchman-free-package-local-jest.md>) — Resolved
@@ -52,6 +58,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
+- [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
 - [DEVENV-079 — A per-test timeout measured in wall time judges the machine, not the test](<Developer environment upgrades/Archive/DEVENV-079-a-per-test-timeout-measured-in-wall-time-judges-the-machine.md>) — Resolved
@@ -61,6 +68,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-084 — `./agent`'s dependency repair could only ever damage the tree it repaired](<Developer environment upgrades/Archive/DEVENV-084-agent-setup-s-sandboxed-install-destroys-a-healthy-depend.md>) — Resolved
 - [DEVENV-085 — Jest crawled the compile cache, so the better the cache worked the slower every run got](<Developer environment upgrades/Archive/DEVENV-085-jest-crawled-the-compile-cache-on-every-run.md>) — Resolved
 - [DEVENV-087 — A permission pattern matched only one of git's two argument orders](<Developer environment upgrades/Archive/DEVENV-087-a-permission-pattern-matched-only-one-of-git-s-two-orders.md>) — Resolved
+- [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/Archive/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — Resolved
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
