@@ -14,11 +14,19 @@
   shard. A 2026-09-20 refresh in the managed host was blocked before test startup by Node CPU discovery
   (`sysctl kern.clockrate: Operation not permitted`), so the earlier valid observations remain the
   applicable width evidence.
+- **Evidence, implementation audit:** The existing compiled-output cache measured roughly 29s cold
+  to 6.7s warm for its recorded Tao test run. In the 51.3s WordFlower shard observation, Jest
+  accounted for only 6.6s; the remaining cold tail is believed to be dominated by the
+  shared-workspace validation and compilation pass. The five
+  test files deliberately run serially on one compiler worker so they observe one consistent
+  workspace. A runtime improvement therefore requires either dependency-correct cache narrowing or
+  a safely partitioned compiler workspace, both of which materially increase correctness complexity.
 - **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
-- **Proposed change:** Keep the two-slot WordFlower reservation. Investigate reducing its serial
-  validation/Jest work or safely partitioning its shared workspace before considering elastic slots.
-  Tao app directories remain indivisible because journeys under one root share a workspace; splitting
-  files without changing that lifecycle would duplicate setup or permit inconsistent workspace state.
+- **Proposed change:** Keep the two-slot WordFlower reservation and the shared app-root workspace.
+  Do not widen, elastically resize, or split the shard with the current evidence. If performance work
+  resumes, first add opt-in phase timings for discovery, fingerprint/cache lookup, validation,
+  compilation, entrypoint generation, and Jest; use those measurements to justify any later
+  correctness-sensitive workspace or cache change.
 - **Dependencies:** DEVENV-034 (Bun worker pool) is separate. Elastic allocation and finer workspace
   splitting are not warranted by the present width measurements.
 - **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
