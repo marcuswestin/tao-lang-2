@@ -1,4 +1,4 @@
-# DEVENV-104 — `finalize` overwrites a hand-written merge message with its own draft
+# DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft
 
 - **Status:** Candidate
 - **Area:** Merge workflow
