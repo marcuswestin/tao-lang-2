@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 
 /**
@@ -269,7 +270,7 @@ export function siblingRenders(
   if (!siblings.has(targetKey)) {
     return []
   }
-  return [...siblings.values()].sort((left, right) => left.identity.start - right.identity.start)
+  return Arrays.sorted([...siblings.values()], (left, right) => left.identity.start - right.identity.start)
 }
 
 /**

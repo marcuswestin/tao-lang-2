@@ -31,7 +31,8 @@ in
     reactNative.enable = true;
     platforms.version = [ "36" ];
     buildTools.version = [ "36.0.0" "35.0.0" ];
-    ndk.version = [ "27.1.12297006" ];
+    # Expo SDK 57's expo-updates plugin still requests 27.0 while React Native uses 27.1.
+    ndk.version = [ "27.0.12077973" "27.1.12297006" ];
     abis = [ "arm64-v8a" ];
     systemImageTypes = [ "google_apis" ];
     android-studio.enable = false;

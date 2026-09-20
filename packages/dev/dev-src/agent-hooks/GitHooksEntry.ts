@@ -1,4 +1,7 @@
-import { CLI, FS, HCI, Platform } from '@shared'
+import * as CLI from '@shared/CLI'
+import * as FS from '@shared/FS'
+import * as HCI from '@shared/HCI'
+import * as Platform from '@shared/Platform'
 import { branchWarnings, commitMessageWarnings } from './CommitChecks'
 import { gitHooksDir, installGitHooks } from './GitHooksInstaller'
 

@@ -1,3 +1,5 @@
+import type { HostController } from '@host-control'
+import type { Mac2HostController } from '@host-control/appium'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
@@ -14,6 +16,7 @@ import {
   StudioElectrobun,
   type StudioElectrobunProject,
 } from './StudioElectrobun'
+import { StudioHostControl } from './StudioHostControl'
 import { StudioHutchHome } from './StudioHutchHome'
 import { readLaunches } from './StudioLaunchManifest'
 import { formatStopReport, stopLaunches } from './StudioLifecycle'
@@ -62,11 +65,23 @@ export type StudioNativeProbeResult = {
 }
 
 export type StartedStudioNative = {
+  /** Opens semantic development sessions inside this already-owned Electrobun process. */
+  hostControl(): Promise<HostController>
+  /**
+   * Opens an external Mac2 acceptance controller for this app. The supplied factory keeps Appium
+   * optional for the development shell; its controller owns the machine-wide physical-input lease.
+   */
+  mac2Acceptance(factory: StudioMac2AcceptanceFactory): Promise<Mac2HostController>
   project: StudioElectrobunProject
   stop(): Promise<void>
   waitForClose(): Promise<number>
   waitForProbe(): Promise<StudioNativeProbeResult>
 }
+
+/** StudioMac2AcceptanceFactory keeps the Mac2 server/client transport outside Electrobun semantics. */
+type StudioMac2AcceptanceFactory = (
+  target: Readonly<{ appId: string }>,
+) => Mac2HostController | Promise<Mac2HostController>
 
 type StudioNativePackageOptions = {
   appName?: string
@@ -241,6 +256,7 @@ async function startWithInterruption(
     phaseOptions,
   )
   await FS.remove(project.runtimeResultPath)
+  await FS.remove(project.hostControlPath)
   try {
     await prepareElectrobun(hutchPath, project.root, { hutchHome, signal: options.signal })
   } catch (error) {
@@ -279,6 +295,10 @@ async function startWithInterruption(
   )
   const waitForHutchClose = finalizeCommand(command)
   let stopping: Promise<void> | undefined
+  let hostController: HostController | undefined
+  let hostControllerOpening: Promise<HostController> | undefined
+  let mac2Controller: Mac2HostController | undefined
+  let mac2ControllerOpening: Promise<Mac2HostController> | undefined
   let closing: Promise<number> | undefined
   let releasingNativeHost: Promise<void> | undefined
   let removeAbortStop = () => {}
@@ -295,9 +315,12 @@ async function startWithInterruption(
     return releasingNativeHost
   }
   const stopHutch = () => {
-    stopping ??= runNativePhase(
-      'owned process tree shutdown',
-      async () => await stopCommand(command, Time.sleep, waitForHutchClose),
+    stopping ??= closeHostControl().then(
+      async () =>
+        await runNativePhase(
+          'owned process tree shutdown',
+          async () => await stopCommand(command, Time.sleep, waitForHutchClose),
+        ),
     ).then(async () => {
       HCI.logProcessInfo('studio-native', 'cleanup: all command-owned processes stopped')
       await StudioHutchHome.clearStoppedProjectLocks(project.root)
@@ -307,6 +330,10 @@ async function startWithInterruption(
       await releaseNativeHostOnce()
     })
     return stopping
+  }
+  const closeHostControl = async (): Promise<void> => {
+    await hostController?.close()
+    await mac2Controller?.close()
   }
   if (options.signal !== undefined) {
     const stopOnAbort = () => {
@@ -343,6 +370,20 @@ async function startWithInterruption(
     return closing
   }
   return {
+    async hostControl() {
+      hostControllerOpening ??= StudioHostControl.waitForTransport(project.hostControlPath).then(transport => {
+        hostController = StudioHostControl.create(transport)
+        return hostController
+      })
+      return await hostControllerOpening
+    },
+    async mac2Acceptance(factory) {
+      mac2ControllerOpening ??= Promise.resolve(factory({ appId: defaultStudioBundleIdentifier })).then(controller => {
+        mac2Controller = controller
+        return controller
+      })
+      return await mac2ControllerOpening
+    },
     project,
     stop: stopHutch,
     waitForClose,
