@@ -1,12 +1,11 @@
 // Studio agent chat: authoring a state to develop against, the gate in front of app code, and the account of
 // what Tao already guarantees.
 import { Describe, Expect, Test } from '@shared/test'
+import { parseChecks, type SemanticSnapshot, type SnapshotNode, viewCoverage } from '@workspace'
 import { authoringTools, type CodeChangeRequest } from '../studio-src/agent-chat/AgentChatAuthoring'
-import { parseChecks, viewCoverage } from '../studio-src/agent-chat/AgentChatCoverage'
 import { taoGuarantees } from '../studio-src/agent-chat/AgentChatGuarantees'
 import { requireOnly } from '../studio-src/agent-chat/AgentChatScope'
 import type { AgentChatWriteWorld } from '../studio-src/agent-chat/AgentChatWrites'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 const TEST_PATH = 'App.test.tao'

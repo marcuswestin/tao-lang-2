@@ -3,8 +3,8 @@
 // The loop and the tools have their own tests. This one exercises what a person actually reaches: the command
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, Test, until } from '@shared/test'
-import { Workspace } from '@workspace'
+import { Deferred, Describe, Expect, Test, until, withTaoFiles } from '@shared/test'
+import { loadSemanticSnapshot, Workspace } from '@workspace'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
 import { conversationForTesting } from '../studio-src/agent-chat/AgentChatServer'
@@ -107,7 +107,10 @@ function session(applied: { path: string; content: string }[]): StudioProjectSes
         sourceVersions: request.edits.map(edit => ({ path: edit.path, sourceVersion: 'v1' })),
       }
     },
-    agentParse: async () => await parsed(),
+    semanticSnapshot: async () => {
+      await parsed()
+      return await loadSemanticSnapshot({ appName: 'Reader', entryPath: PATH, projectRoot: ROOT })
+    },
     compileSnapshot: () => ({ diagnostics: [], status: 'compiled' }),
     files: async () => [{ path: PATH }],
     // The snapshot keeps only files under the project root, so this has to be where the source really is.

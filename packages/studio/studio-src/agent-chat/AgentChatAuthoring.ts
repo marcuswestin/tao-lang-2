@@ -8,12 +8,12 @@ import { Text } from '@shared/core'
 // only one of them was made.
 
 import Formatter from '@formatter'
+import { resolveTarget } from '@workspace'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import { LIST, objectSchema, refusal, TEXT } from './AgentChatSchema'
 import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall } from './AgentChatTools'
 import type { AgentChatWriteWorld } from './AgentChatWrites'
-import { resolveTarget } from './SemanticSnapshot'
 
 export type CodeChangeRequest = { reason: string; missing: string }
 

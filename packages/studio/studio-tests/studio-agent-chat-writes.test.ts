@@ -1,11 +1,11 @@
 // Studio agent chat: the change surface, and the reference a model consults before writing Tao.
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import type { SemanticSnapshot, SnapshotNode } from '@workspace'
 import { chatInstructions, scenarioInstructions } from '../studio-src/agent-chat/AgentChatInstructions'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
 import { APPROVAL_REQUIRED, stageChange, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 

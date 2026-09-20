@@ -145,6 +145,39 @@ function createCommands(): Command {
     })
 
   commands
+    .command('facts')
+    .argument('<projectRoot>', 'Project directory used to resolve a relative entry path.')
+    .argument('<entryPath>', 'Tao app entry file, relative to projectRoot or absolute.')
+    .argument('<appName>', 'App declaration to inspect.')
+    .description('Print versioned, machine-readable semantic facts for one Tao app.')
+    .action(async (projectRoot: string, entryPath: string, appName: string) => {
+      try {
+        const { runSemanticFacts } = await import('./semantic-commands')
+        HCI.writeLine(JSON.stringify(await runSemanticFacts({ appName, entryPath, projectRoot })))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('coverage')
+    .argument('<projectRoot>', 'Project directory used to resolve a relative entry path.')
+    .argument('<entryPath>', 'Tao app entry file, relative to projectRoot or absolute.')
+    .argument('<appName>', 'App declaration to inspect.')
+    .argument('<view>', 'View declaration to report.')
+    .description('Print versioned, machine-readable behavior-test coverage for one Tao view.')
+    .action(async (projectRoot: string, entryPath: string, appName: string, view: string) => {
+      try {
+        const { runSemanticCoverage } = await import('./semantic-commands')
+        HCI.writeLine(JSON.stringify(await runSemanticCoverage({ appName, entryPath, projectRoot, view })))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('ship')
     .argument('[path]', 'Tao project file or directory to discover.', '.')
     .option('--app <name>', 'Select a named app instead of the project DefaultApp.')
