@@ -339,7 +339,7 @@ Describe('Studio companion device tooling', () => {
 
       const error = await expectHostFailure(() => device.install({ deviceName: 'roPhone' }))
       Expect(studioDeviceFailureLayer(error)).toBe('expo')
-      Expect(error.messageForUser).toContain('bun install')
+      Expect(error.messageForUser).toContain('./agent setup')
       Expect(runner.calls).toEqual([])
     })
   })

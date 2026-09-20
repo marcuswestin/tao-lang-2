@@ -7,6 +7,8 @@ import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
+import { LandingBrokerInstaller } from './landing-broker/LandingBrokerInstaller'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
 import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
@@ -300,6 +302,25 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('landing-broker-install')
+    .description('Install or update the host-owned GitHub landing broker for this repository.')
+    .action(async () => {
+      await runExitCommand(async () => {
+        await LandingBrokerInstaller.install()
+        return 0
+      })
+    })
+
+  commands
+    .command('landing-broker-status')
+    .description('Check whether the host-owned GitHub landing broker is available.')
+    .action(async () => {
+      const ready = await landingBrokerIsReady()
+      HCI.writeLine(ready ? 'PASS  Tao landing broker is ready.' : 'FAIL  Tao landing broker is not available.')
+      Platform.runtimeProcess.exit(ready ? 0 : 1)
     })
 
   commands

@@ -12,14 +12,6 @@ function tao_bun_install_args() {
   reply=(install --cwd "$worktree_dir")
 }
 
-# Return the fact both development entrypoints use to say a dependency install completed.
-# A source-run `./dev` can be first in a fresh worktree, while `./agent` owns the bootstrap build;
-# keeping this path here prevents one wrapper from successfully installing and the other reinstalling.
-function tao_dependency_install_stamp() {
-  local worktree_dir="$1"
-  print -r -- "${worktree_dir:A}/.artifacts/build/agent-dev/dev-deps.stamp"
-}
-
 # Run a command under a kernel-managed lock that is released with the owning subshell.
 function tao_run_with_lock() {
   local lock_file="$1"
