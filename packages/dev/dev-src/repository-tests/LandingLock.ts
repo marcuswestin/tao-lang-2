@@ -289,7 +289,8 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
   const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
   const startedMs = Time.nowMs()
   const deadlineMs = startedMs + Math.max(0, waitTimeoutMs)
-  let warnedAtMs = startedMs
+  let reportedAtMs = startedMs
+  let reportedWaiting = false
 
   while (true) {
     const attempt = await claim(registryRoot, options)
@@ -308,8 +309,9 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
         holder,
       )
     }
-    if (Time.nowMs() - warnedAtMs >= WAIT_WARN_INTERVAL_MS) {
-      warnedAtMs = Time.nowMs()
+    if (!reportedWaiting || Time.nowMs() - reportedAtMs >= WAIT_WARN_INTERVAL_MS) {
+      reportedWaiting = true
+      reportedAtMs = Time.nowMs()
       options.onWaiting?.(holder, waitedMs)
     }
     await Time.sleep(POLL_MS)
@@ -520,6 +522,16 @@ function describeDuration(elapsedMs: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
 }
 
+/** Explain a blocked acquisition immediately, then escalate the same holder on periodic reminders. */
+function describeWaiting(record: LandingLockRecord, waitedMs: number): string {
+  if (waitedMs < WAIT_WARN_INTERVAL_MS) {
+    return `WAIT  Landing lock held by ${describe(record)}. This command will start when the lock is released.`
+  }
+  return `WARN  Still waiting ${describeDuration(waitedMs)} for the landing lock, held by ${describe(record)}. `
+    + "A dead PID would not mean it was released, and waiting this long is normal. Forcing it is Ro's call — "
+    + 'bring the output of `./agent board` to Ro rather than clearing it yourself.'
+}
+
 export const LandingLock = {
   DEFAULT_WAIT_TIMEOUT_MS,
   LOCKED_LANES,
@@ -527,6 +539,7 @@ export const LandingLock = {
   acquire,
   describe,
   describeDuration,
+  describeWaiting,
   forceRelease,
   holding,
   inspectState,

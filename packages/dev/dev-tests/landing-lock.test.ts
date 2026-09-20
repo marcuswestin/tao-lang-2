@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { LandingLock, LandingLockBusyError, LandingLockUnreadableError } from '../dev-src/repository-tests/LandingLock'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 
@@ -55,6 +55,39 @@ Describe('landing lock', () => {
     const next = await acquire(root, TWO)
     Expect(next.acquired).toBe(true)
     Expect((await LandingLock.inspect(root))?.holder).toBe(TWO)
+  })
+
+  Test('reports the holder as soon as another worktree has to wait', async () => {
+    const root = await mkTestDir('landing-lock-wait-report')
+    const first = await acquire(root, ONE, 'verify from one')
+    const reports: { holder: string; message: string; waitedMs: number }[] = []
+    const waiting = LandingLock.acquire({
+      label: 'verify from two',
+      onWaiting: (holder, waitedMs) =>
+        reports.push({
+          holder: holder.holder,
+          message: LandingLock.describeWaiting(holder, waitedMs),
+          waitedMs,
+        }),
+      registryRoot: root,
+      repositoryRoot: TWO,
+      waitTimeoutMs: 5_000,
+    })
+    try {
+      await until(() => reports.length > 0, {
+        description: 'the landing-lock waiter to identify the holder',
+        intervalMs: 5,
+        timeoutMs: 200,
+      })
+      Expect(reports[0]?.holder).toBe(ONE)
+      Expect(reports[0]?.waitedMs).toBeLessThan(1_000)
+      Expect(reports[0]?.message).toContain("WAIT  Landing lock held by 'verify from one' in /worktree/one")
+      Expect(reports[0]?.message).toContain('This command will start when the lock is released.')
+    } finally {
+      await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: first.token! })
+      const second = await waiting
+      await LandingLock.release({ registryRoot: root, repositoryRoot: TWO, token: second.token! })
+    }
   })
 
   Test('releasing a lock nobody holds is a no-op, so a cleanup path is always safe to run', async () => {
