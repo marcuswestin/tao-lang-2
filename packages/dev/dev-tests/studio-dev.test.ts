@@ -658,6 +658,53 @@ Describe('Studio smoke resource isolation', () => {
     Expect(StudioDev.testing.preferredExpoPort()).toBe(0)
   })
 
+  Test('puts the verified pinned Watchman before Metro starts', async () => {
+    const calls: CLI.CommandSpec[] = []
+    const environment = await StudioDev.testing.studioWatchmanEnvironment({
+      environment: { PATH: '/repo/.devenv/profile/bin:/usr/bin:/bin' },
+      isFile: async path => path === '/repo/.devenv/profile/bin/watchman',
+      repositoryRoot: '/repo',
+      run: async (command, spec) => {
+        calls.push(spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          exitCode: 0,
+          signal: null,
+          stderr: '',
+          stdout: '{"watch":"/repo"}',
+        }
+      },
+      watchRoot: '/repo/.artifacts/dev/studio-preview/runtime-test',
+    })
+
+    Expect(environment['PATH']).toBe('/repo/.devenv/profile/bin:/usr/bin:/bin')
+    Expect(calls[0]?.args).toEqual(['watch-project', '/repo/.artifacts/dev/studio-preview/runtime-test'])
+  })
+
+  Test('stops before Metro when pinned Watchman is unavailable', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => false,
+      repositoryRoot: '/repo',
+    })).rejects.toThrow('cannot start Metro safely')
+  })
+
+  Test('stops before Metro when pinned Watchman cannot establish a watch', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async command => ({
+        args: ['watch-project', '/repo'],
+        command,
+        exitCode: 1,
+        signal: null,
+        stderr:
+          'Failed to open /Users/test/Library/LaunchAgents/com.github.facebook.watchman.plist: Operation not permitted',
+        stdout: '',
+      }),
+    })).rejects.toThrow('ordinary host shell')
+  })
+
   Test('treats a native probe result as terminal and stops Hutch watch mode', async () => {
     const events: string[] = []
     const exitCode = await StudioDev.testing.completeNativeProbe({

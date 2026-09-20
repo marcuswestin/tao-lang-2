@@ -1,7 +1,7 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { Errors, FS, HCI, Json, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, Repo, Time } from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -34,6 +34,8 @@ import type { StartedStudioNative } from './StudioNative'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
 import { openTarget, waitForReadyUrl, writeReadiness } from './StudioReadiness'
 import { StudioTestProcessRunner } from './StudioTestProcessRunner'
+
+const PROFILE_BIN_PATH = '.devenv/profile/bin'
 
 export type StudioDevOptions = {
   appName?: string
@@ -70,6 +72,7 @@ export const StudioDev = {
     createProjectOpeners,
     preferredExpoPort,
     publishPreviewBeforeBundling,
+    studioWatchmanEnvironment,
     withCleanup,
   },
 }
@@ -503,8 +506,12 @@ export async function openStudioProjectResource(
       artifactRoot: options.previewArtifactRoot,
       deviceGatewayPort: options.deviceGatewayPort,
     })
+    // Metro falls back to its Node watcher when Watchman cannot establish a real watch. Prove the
+    // generated runtime is watchable, then put the pinned binary first in the child environment.
+    const metroEnvironment = await studioWatchmanEnvironment({ watchRoot: previewRuntime.root })
     expoServer = expo.createServer(previewRuntime.root, {
       command: options.expoCommand,
+      env: metroEnvironment,
       logRoot: options.logRoot,
       runtimeToolchainSourceRoot: runtimeToolchainRoot,
     })
@@ -558,6 +565,63 @@ export async function openStudioProjectResource(
       () => previewRuntime?.close(),
     ])
   }
+}
+
+/** studioWatchmanEnvironment makes Metro use the repository-pinned Watchman even when the task shell misses it. */
+export async function studioWatchmanEnvironment(
+  options: {
+    environment?: Platform.ProcessEnv
+    isFile?: (path: string) => Promise<boolean>
+    repositoryRoot?: string
+    run?: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
+    watchRoot?: string
+  } = {},
+): Promise<Readonly<Record<string, string>>> {
+  const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
+  const profileBin = FS.resolvePath(PROFILE_BIN_PATH, repositoryRoot)
+  const executable = FS.resolvePath('watchman', profileBin)
+  const isFile = options.isFile ?? FS.isFile
+  if (!await isFile(executable)) {
+    throwWatchmanPreflightError(
+      `missing from ${PROFILE_BIN_PATH}`,
+      `Run \`./agent setup\` to materialize it, then retry Studio.`,
+    )
+  }
+  const watchRoot = options.watchRoot ?? repositoryRoot
+  const result = await (options.run ?? CLI.run)(executable, {
+    args: ['watch-project', watchRoot],
+    stdio: 'pipe',
+  })
+  if (result.error !== undefined || result.exitCode !== 0) {
+    const output = `${result.stderr}\n${result.stdout}`
+    if (output.includes('/Library/LaunchAgents/') && output.includes('Operation not permitted')) {
+      throwWatchmanPreflightError(
+        'blocked from its macOS LaunchAgent by the current task',
+        'Run Studio from an ordinary host shell where Watchman can use ~/Library/LaunchAgents.',
+      )
+    }
+    throwWatchmanPreflightError(
+      `not usable at ${executable}`,
+      `Run \`${executable} version\` to diagnose Watchman, then retry Studio.`,
+    )
+  }
+  const environment = options.environment ?? Platform.runtimeProcess.env
+  const inheritedPath = (environment['PATH'] ?? '')
+    .split(':')
+    .filter(directory => directory.length > 0 && directory !== profileBin)
+  const childEnvironment: Record<string, string> = {}
+  for (const [key, value] of Object.entries(environment)) {
+    if (value !== undefined) {
+      childEnvironment[key] = value
+    }
+  }
+  return { ...childEnvironment, PATH: [profileBin, ...inheritedPath].join(':') }
+}
+
+function throwWatchmanPreflightError(problem: string, remediation: string): never {
+  Errors.throwHostEnvironment(
+    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to Node watching and can exhaust macOS file descriptors (EMFILE). ${remediation}`,
+  )
 }
 
 function createProjectOpeners<Result>(
