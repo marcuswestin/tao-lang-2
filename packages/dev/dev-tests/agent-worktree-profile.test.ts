@@ -317,7 +317,7 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('names the denied path and dependency repair for a denied destination', async () => {
+  Test('names the denied path and an unsandboxed recovery for a denied destination', async () => {
     const testRoot = await mkTestDir('tao-agent-install-denied-')
     try {
       const outcome = await runAgentInstall(testRoot, [
@@ -333,6 +333,7 @@ Describe('agent worktree profile bootstrap', () => {
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
       Expect(outcome.result.stderr).toContain('./agent setup')
+      Expect(outcome.result.stderr).toContain('just session-unsandboxed')
     } finally {
       await FS.remove(testRoot)
     }
@@ -377,7 +378,7 @@ Describe('agent worktree profile bootstrap', () => {
     const help = await CLI.run(Repo.resolvePath('agent'), { args: ['help'], cwd: Repo.getRoot() })
     Expect(help.exitCode).toBe(0)
     Expect(help.stdout).toContain('setup')
-    Expect(help.stdout).toContain('Install dependencies and generate parser and agent adapters')
+    Expect(help.stdout).toContain('Install dependencies and generate agent adapters')
   })
 
   Test('adopts a healthy tree restored by another entry point without a second install', async () => {
@@ -436,7 +437,6 @@ Describe('agent worktree profile bootstrap', () => {
     try {
       const fakeBin = FS.resolvePath('bin', testRoot)
       const commandLog = FS.resolvePath('commands.log', testRoot)
-      const repairLog = FS.resolvePath('repairs.log', testRoot)
       const repaired = FS.resolvePath('repaired', testRoot)
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
@@ -448,15 +448,14 @@ Describe('agent worktree profile bootstrap', () => {
           '  print -r -- "dependency health: missing package output" >&2',
           '  exit 1',
           'fi',
+          'if [[ " $* " == *" --force "* ]]; then',
+          '  : > "$TAO_TEST_REPAIRED"',
+          '  exit 0',
+          'fi',
           // The first install completes but leaves the probe unhealthy, so replacement is justified.
           'exit 0',
           '',
         ].join('\n'),
-      )
-      const repairScript = FS.resolvePath('repair-dependencies.zsh', testRoot)
-      await FS.writeText(
-        repairScript,
-        '#!/bin/zsh\nprint -r -- "$*" >> "$TAO_TEST_REPAIR_LOG"\n: > "$TAO_TEST_REPAIRED"\n',
       )
       await makeExecutable(FS.resolvePath('bun', fakeBin))
 
@@ -464,12 +463,9 @@ Describe('agent worktree profile bootstrap', () => {
         `TAO_DEPENDENCY_ROOT=${JSON.stringify(testRoot)}`,
         'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
         'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
-        'TAO_DEPENDENCY_CACHE_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/cache/bun"',
         'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
         'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/dev/dev-src/doctor/DependencyHealth.ts"',
-        `TAO_DEPENDENCY_REPAIR=${JSON.stringify(repairScript)}`,
         'TAO_DEPENDENCY_ATTEMPTS=3',
-        'TAO_DEPENDENCY_INSTALL_OUTPUT=""',
         'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
         'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',
         `source ${JSON.stringify(PROFILE_SCRIPT)}`,
@@ -482,7 +478,6 @@ Describe('agent worktree profile bootstrap', () => {
         env: {
           PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
           TAO_TEST_COMMAND_LOG: commandLog,
-          TAO_TEST_REPAIR_LOG: repairLog,
           TAO_TEST_REPAIRED: repaired,
         },
       })
@@ -491,10 +486,9 @@ Describe('agent worktree profile bootstrap', () => {
       Expect((await FS.readText(commandLog)).trim().split('\n')).toEqual([
         `install --cwd ${testRoot} --frozen-lockfile`,
         'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        `install --cwd ${testRoot} --frozen-lockfile --force`,
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
       ])
-      Expect((await FS.readText(repairLog)).trim()).toBe(
-        `${testRoot} ${testRoot}/.artifacts/tmp/bun ${testRoot}/.artifacts/cache/bun`,
-      )
       Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
     } finally {
       await FS.remove(testRoot)

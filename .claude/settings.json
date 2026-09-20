@@ -115,7 +115,6 @@
         "*.expo.dev",
         "*.expo.io",
         "exp.host",
-        "repo1.maven.org",
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",

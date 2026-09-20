@@ -16,9 +16,7 @@
   monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
   2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
   a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
-  provenance alone. On 2026-09-19 merging main into an older feature worktree again failed while Git
-  replaced generated `.codex` paths; cleanup removed the files but the merge had to continue from a
-  disposable host-temporary worktree.
+  provenance alone.
 - **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
   at the same source revision and verify that its generator reports `up to date`. Focused tests that
   do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime

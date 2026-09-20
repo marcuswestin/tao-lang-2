@@ -287,14 +287,61 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
   })
 
-  Test('narrows only the suites that provably read no Tao source, app, or generated tree', () => {
-    for (const suite of ['code-editor', 'generation', 'stdlib', 'update-server']) {
+  Test('derives each audited suite dependency from only the source classes it consumes', () => {
+    for (
+      const suite of [
+        'code-editor',
+        'generation',
+        'icloud-native',
+        'performance-checks',
+        'runtime',
+        'shared',
+        'stdlib',
+        'update-server',
+      ]
+    ) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(['ts'])
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite))).toEqual(['_fix-dprint'])
     }
-    // Reading a `.tao` file while `./tao fix` rewrites it is a torn read, so the default is safe.
-    for (const suite of ['dev', 'compiler', 'validator', 'tao-apps']) {
+
+    Expect(GateCatalog.suiteReads('ast-utils')).toEqual(['gen-parser', 'ts'])
+    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ast-utils')).toSorted()).toEqual([
+      '_fix-dprint',
+      '_parser-gen',
+    ])
+
+    for (
+      const suite of [
+        'compiler',
+        'formatter',
+        'ide-extension',
+        'parser',
+        'runtime-jest',
+        'runtime-toolchain',
+        'source-actions',
+        'tao-apps',
+        'validator',
+        'workspace',
+      ]
+    ) {
+      Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'tao', 'ts'])
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_fix-dprint',
+        '_fix-tao',
+        '_parser-gen',
+      ])
+    }
+
+    // Dynamic child and generation surfaces remain at the safe default. An unclassified suite does
+    // too: reading Tao or generated output during its writer would otherwise permit a torn read.
+    for (const suite of ['dev', 'studio', 'tao-cli', 'unclassified-suite']) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(GateCatalog.DEFAULT_SUITE_READS)
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_compile-word-flower-app',
+        '_fix-dprint',
+        '_fix-tao',
+        '_parser-gen',
+      ])
     }
     Expect(GateCatalog.DEFAULT_SUITE_READS).toEqual(['gen-app', 'gen-parser', 'tao', 'ts'])
   })

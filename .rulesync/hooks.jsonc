@@ -10,9 +10,9 @@
     // first command. Worktrunk runs it from its blocking `pre-start` hook (.config/wt.toml) and
     // Cursor from its worktree setup (.cursor/worktrees.json); a worktree Claude Code or Codex
     // creates itself — `--worktree`, `isolation: "worktree"`, a background session — passes
-    // through neither, so it would start with no node_modules, no current generated parser, and no
-    // generated agent adapters, and an agent would meet a checkout where `./tao`, `bun test`, and
-    // `tsc` fail for reasons that look like product breakage. This hook gives that path the same guarantee. Hooks run as ordinary
+    // through neither, so it would start with no node_modules and no generated agent adapters,
+    // and an agent would meet a checkout where `bun test` and `tsc` fail for reasons that look
+    // like product breakage. This hook gives that path the same guarantee. Hooks run as ordinary
     // processes outside the Bash sandbox, which matters for Claude Code: its sandbox denies the
     // writes a dependency install needs under paths it protects.
     //

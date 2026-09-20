@@ -12,20 +12,15 @@ const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'ru
 const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core')
 
 // A Studio session bundles from a fresh, disposable copy of this project, which Metro keys its file
-// map and transformer cache by: no later session can ever read either cache back. Left in the OS
-// temp directory they accumulate data describing projects deleted long ago. Keeping both inside the
-// project root ties their lifetime to the root's, so removing the session's runtime directory takes
-// both caches with it. The toolchain package itself is a stable project whose caches are reused
-// across runs, and keeps Metro's shared defaults.
+// map by: no later session can ever read that map back. Left in the OS temp directory it is a couple
+// of megabytes per session that nothing removes, and hundreds of megabytes describing directories
+// deleted long ago accumulate unseen. Keeping it inside the project root ties its lifetime to the
+// root's, so removing the session's runtime directory takes the map with it. The toolchain package
+// itself is a stable project whose map is reused across runs, and keeps Metro's shared default.
 if (nodePath.resolve(runtimeToolchainSourceRoot) !== __dirname) {
   config.fileMapCacheDirectory = nodePath.resolve(__dirname, '.metro-file-map')
   // Metro writes the map without creating its directory, and only warns when the write fails.
   nodeFs.mkdirSync(config.fileMapCacheDirectory, { recursive: true })
-  // Metro materializes cache-store factories with the metro-cache version it owns. This avoids a
-  // phantom dependency from this package while installing the same FileStore Metro uses itself.
-  config.cacheStores = ({ FileStore }) => [
-    new FileStore({ root: nodePath.resolve(__dirname, '.metro-cache') }),
-  ]
 }
 
 // Worktrunk worktrees reuse the primary checkout's install through a root node_modules symlink.

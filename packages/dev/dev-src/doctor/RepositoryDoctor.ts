@@ -303,7 +303,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
       detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
       name: 'dependencies',
       remediation:
-        'Repair with: ./agent setup (the original dependency tree is retained in /private/tmp and restored if repair fails).',
+        "Repair with: ./agent setup; if a protected package path is denied, start 'just session-unsandboxed' and run './agent setup' there.",
       status: 'fail',
     }
   }
