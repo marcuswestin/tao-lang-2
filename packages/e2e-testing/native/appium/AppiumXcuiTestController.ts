@@ -13,9 +13,11 @@ import {
   type HostScreenshot,
   type HostSession,
   type HostSessionDescriptor,
+  hostSessionTargetLeaseName,
   type HostTarget,
   MachineResources,
 } from '@host-control'
+import { AppiumNoSuchElementError } from '@host-control/appium'
 import { Errors, FS, Repo, Time } from '@shared'
 
 type AppiumPhysicalSigning = Readonly<{
@@ -30,7 +32,7 @@ export type AppiumTarget =
 
 export type AppiumLocator = Readonly<{ using: 'accessibility id' | '-ios predicate string'; value: string }>
 
-type AppiumElement = Readonly<{
+export type AppiumElement = Readonly<{
   click: () => Promise<void>
   getAttribute?: (name: string) => Promise<string | undefined>
   getRect?: () => Promise<Readonly<{ height: number; width: number; x: number; y: number }>>
@@ -40,21 +42,36 @@ type AppiumElement = Readonly<{
   sendKeys: (text: string) => Promise<void>
 }>
 
+type AppiumRect = Readonly<{ height: number; width: number; x: number; y: number }>
+
 /** AppiumWebDriverSession is deliberately transport-neutral so the real WebDriver binding remains injectable. */
 export type AppiumWebDriverSession = Readonly<{
   activateApp?: (appId: string) => Promise<void>
   deleteSession: () => Promise<void>
+  /** Clears stale system UI from an earlier session without accepting future application alerts. */
+  dismissAlertIfPresent?: () => Promise<void>
   findElement: (locator: AppiumLocator) => Promise<AppiumElement>
+  findElementFrom?: (scope: AppiumElement, locator: AppiumLocator) => Promise<AppiumElement>
   findElements: (locator: AppiumLocator) => Promise<readonly AppiumElement[]>
+  findElementsFrom?: (scope: AppiumElement, locator: AppiumLocator) => Promise<readonly AppiumElement[]>
   id: string
+  /** Opens a URL through XCUITest with the explicit target bundle, avoiding Simulator's confirmation UI. */
+  openDeepLink?: (url: string, appId: string) => Promise<void>
   pressKey?: (key: string) => Promise<void>
   screenshot?: () => Promise<Uint8Array>
   scroll?: (input: Readonly<{ deltaX: number; deltaY: number; element?: AppiumElement }>) => Promise<void>
   terminateApp?: (appId: string) => Promise<void>
 }>
 
+/** AppiumXcuiTestDeepLinkSession is the narrow driver capability used only by the native test-control bridge. */
+export type AppiumXcuiTestDeepLinkSession =
+  & HostSession
+  & Readonly<{
+    openDeepLink: (url: string) => Promise<void>
+  }>
+
 /** AppiumXcuiTestClient is the only seam a real Appium server/WebDriver implementation must bind. */
-type AppiumXcuiTestClient = Readonly<{
+export type AppiumXcuiTestClient = Readonly<{
   createSession: (capabilities: AppiumXcuiTestCapabilities) => Promise<AppiumWebDriverSession>
 }>
 
@@ -98,6 +115,8 @@ export type AppiumRevisionPublisher = (
 export type AppiumXcuiTestControllerOptions = Readonly<{
   client: AppiumXcuiTestClient
   leases?: AppiumLeaseManager
+  /** A proof command may reserve the simulator before build/install. It is consumed by one session open. */
+  preheldTargetLease?: AppiumLease
   publishRevision?: AppiumRevisionPublisher
   receipts?: AppiumReceiptSink
   target: AppiumTarget
@@ -147,12 +166,14 @@ class AppiumXcuiTestController implements HostController {
   readonly #leases: AppiumLeaseManager
   readonly #receipts: AppiumReceiptSink
   readonly #publishRevision?: AppiumRevisionPublisher
+  #preheldTargetLease: AppiumLease | undefined
   readonly #sessions = new Set<AppiumXcuiTestSession>()
   readonly #target: AppiumTarget
 
   constructor(options: AppiumXcuiTestControllerOptions) {
     this.#client = options.client
     this.#leases = options.leases ?? machineLeases()
+    this.#preheldTargetLease = options.preheldTargetLease
     this.#publishRevision = options.publishRevision
     this.#receipts = options.receipts ?? fileReceipts()
     this.#target = options.target
@@ -171,7 +192,8 @@ class AppiumXcuiTestController implements HostController {
     }>,
   ): Promise<HostSession> {
     const revision = frozenRevision(options.revision)
-    const targetLease = await this.#leases.acquire(targetLeaseName(this.#target))
+    const targetLease = this.#preheldTargetLease ?? await this.#leases.acquire(iosTargetLeaseName(this.#target))
+    this.#preheldTargetLease = undefined
     let allocation: { leases: readonly AppiumLease[]; value: AppiumSessionReceipt['allocation'] } | undefined
     let receiptPath: string | undefined
     let session: AppiumWebDriverSession | undefined
@@ -194,6 +216,7 @@ class AppiumXcuiTestController implements HostController {
       }
       await writeReceipt('opening')
       session = await this.#client.createSession(appiumXcuiTestCapabilities(this.#target, allocation.value))
+      await session.dismissAlertIfPresent?.()
       await writeReceipt('open')
       const hostSession = new AppiumXcuiTestSession({
         allocationLeases: allocation.leases,
@@ -203,7 +226,7 @@ class AppiumXcuiTestController implements HostController {
           capabilities: sessionCapabilities(session),
           driver: 'appium-xcuitest',
           id: session.id,
-          lease: { generation: targetLease.generation, name: targetLeaseName(this.#target) },
+          lease: { generation: targetLease.generation, name: iosTargetLeaseName(this.#target) },
           mode: options.mode,
           revision,
           target: options.target,
@@ -231,7 +254,22 @@ class AppiumXcuiTestController implements HostController {
           version: 1,
         }).catch(() => {})
       }
-      await session?.deleteSession().catch(() => {})
+      let sessionCleanupFailed = false
+      if (session !== undefined) {
+        try {
+          await session.deleteSession()
+        } catch {
+          sessionCleanupFailed = true
+        }
+      }
+      if (sessionCleanupFailed) {
+        Errors.throwHostEnvironment(
+          `Appium session '${
+            session!.id
+          }' could not be closed after opening failed; retaining its iOS target and port leases to prevent a concurrent session from reusing live resources.`,
+          { details: { retainsTargetLease: true } },
+        )
+      }
       await releaseAll([...(allocation?.leases ?? []), targetLease])
       throw error
     }
@@ -374,6 +412,17 @@ class AppiumXcuiTestSession implements HostSession {
 
   descriptor(): HostSessionDescriptor {
     return this.#descriptor
+  }
+
+  async openDeepLink(url: string): Promise<void> {
+    await this.#serialize(async () => {
+      await this.#assertUsable()
+      if (this.#session.openDeepLink === undefined) {
+        throw new HostControlError('unsupported', 'The injected Appium client does not expose XCUITest deep links.')
+      }
+      await this.#session.openDeepLink(url, this.#target.appId)
+      this.#advanceObservationRevision()
+    })
   }
 
   async observe(request: HostObservationRequest): Promise<HostObservation> {
@@ -559,6 +608,10 @@ class AppiumXcuiTestSession implements HostSession {
   }
 
   async #findTarget(target: HostTarget): Promise<AppiumElement> {
+    if (target.kind === 'scoped') {
+      const scope = await this.#findTarget(target.scope)
+      return await this.#findTargetWithin(scope, target.target)
+    }
     const occurrence = target.occurrence ?? 1
     const locator = locatorFor(target)
     if (occurrence === 1) {
@@ -574,6 +627,72 @@ class AppiumXcuiTestSession implements HostSession {
     }
     return element
   }
+
+  async #findTargetWithin(
+    scope: AppiumElement,
+    target: HostTarget,
+  ): Promise<AppiumElement> {
+    if (target.kind === 'scoped') {
+      const nestedScope = await this.#findTargetWithin(scope, target.scope)
+      return await this.#findTargetWithin(nestedScope, target.target)
+    }
+    const occurrence = target.occurrence ?? 1
+    const locator = locatorFor(target)
+    try {
+      if (occurrence === 1) {
+        if (this.#session.findElementFrom === undefined) {
+          return unsupported('inspect', 'The Appium client does not expose element-relative native lookup.')
+        }
+        return await this.#session.findElementFrom(scope, locator)
+      }
+      if (this.#session.findElementsFrom === undefined) {
+        return unsupported('inspect', 'The Appium client does not expose element-relative native lookup.')
+      }
+      const element = (await this.#session.findElementsFrom(scope, locator))[occurrence - 1]
+      if (element === undefined) {
+        return missingScopedOccurrence(occurrence, target)
+      }
+      return element
+    } catch (error) {
+      if (!(error instanceof AppiumNoSuchElementError)) {
+        throw error
+      }
+      return await this.#findFlattenedWithin(scope, target)
+    }
+  }
+
+  async #findFlattenedWithin(
+    scope: AppiumElement,
+    target: Exclude<HostTarget, { kind: 'scoped' }>,
+  ): Promise<AppiumElement> {
+    const occurrence = target.occurrence ?? 1
+    if (scope.getRect === undefined) {
+      return missingScopedOccurrence(occurrence, target)
+    }
+    const scopeRect = await scope.getRect()
+    const contained: AppiumElement[] = []
+    for (const candidate of await this.#session.findElements(locatorFor(target))) {
+      if (candidate.getRect !== undefined && rectContainsCenter(scopeRect, await candidate.getRect())) {
+        contained.push(candidate)
+      }
+    }
+    return contained[occurrence - 1] ?? missingScopedOccurrence(occurrence, target)
+  }
+}
+
+function missingScopedOccurrence(occurrence: number, target: HostTarget): never {
+  throw new HostControlError(
+    'assertion',
+    `Appium/XCUITest did not find occurrence ${occurrence} within the requested native scope.`,
+    { occurrence, target },
+  )
+}
+
+function rectContainsCenter(container: AppiumRect, candidate: AppiumRect): boolean {
+  const centerX = candidate.x + candidate.width / 2
+  const centerY = candidate.y + candidate.height / 2
+  return centerX >= container.x && centerX <= container.x + container.width
+    && centerY >= container.y && centerY <= container.y + container.height
 }
 
 function fileReceipts(): AppiumReceiptSink {
@@ -611,6 +730,9 @@ function machineLeases(): AppiumLeaseManager {
 }
 
 function locatorFor(target: HostTarget): AppiumLocator {
+  if (target.kind === 'scoped') {
+    return unsupported('inspect', 'Appium/XCUITest resolves nested scopes before creating a leaf locator.')
+  }
   if (target.kind === 'tag') {
     return { using: 'accessibility id', value: target.value }
   }
@@ -665,8 +787,12 @@ function staleRevision(actual: HostRevision, expected: HostRevision): never {
   throw new HostControlError('staleRevision', 'Appium session revision is no longer current.', { actual, expected })
 }
 
-function targetLeaseName(target: AppiumTarget): string {
-  return `appium-ios-${target.kind}-${target.udid}`
+/** iosTargetLeaseName is shared before build/install so every iOS driver reserves the same target. */
+export function iosTargetLeaseName(target: AppiumTarget): string {
+  return hostSessionTargetLeaseName({
+    id: target.udid,
+    kind: target.kind === 'simulator' ? 'iosSimulator' : 'iosDevice',
+  })
 }
 
 function unsupported(capability: HostCapability, message: string): never {

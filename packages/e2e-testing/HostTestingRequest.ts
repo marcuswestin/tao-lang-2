@@ -36,7 +36,7 @@ export type DriverHostTestingRequest = Readonly<{
 
 export type NativeHostTestingRequest = Readonly<{
   kind: 'native'
-  mode: 'device' | 'ios'
+  mode: 'android' | 'device' | 'ios'
   subject: HostSubject
   seed: number
   browserChannel: string
@@ -75,13 +75,17 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   } as const
   if (mode === 'driver') {
     if (options.fault === true) {
-      Errors.throwUserInput('--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.')
+      Errors.throwUserInput(
+        '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+      )
     }
     return { ...common, kind: 'driver', mode }
   }
   if (mode === 'check' || mode === 'format' || mode === 'lint' || mode === 'setup' || mode === 'typecheck') {
     if (mode === 'check' && options.fault === true) {
-      Errors.throwUserInput('--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.')
+      Errors.throwUserInput(
+        '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
+      )
     }
     return { ...common, kind: 'maintenance', mode }
   }
@@ -89,7 +93,7 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   if (mode === 'prepare' || mode === 'export' || mode === 'browser') {
     return { ...common, ...(fault === undefined ? {} : { fault }), kind: 'browser', mode }
   }
-  if (mode === 'ios' || mode === 'device') {
+  if (mode === 'android' || mode === 'ios' || mode === 'device') {
     if (options.device === undefined) {
       Errors.throwUserInput('Native proofs require --device with an explicit target identifier.')
     }

@@ -1,7 +1,9 @@
 import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
+import { AppiumNoSuchElementError } from '@host-control/appium'
 import { expect, test } from '@playwright/test'
 import { Errors, FS } from '@shared'
 import {
+  type AppiumElement,
   type AppiumLease,
   type AppiumLeaseManager,
   type AppiumLocator,
@@ -12,7 +14,9 @@ import {
   type AppiumWebDriverSession,
   type AppiumXcuiTestCapabilities,
   appiumXcuiTestCapabilities,
+  type AppiumXcuiTestDeepLinkSession,
   createAppiumXcuiTestController,
+  iosTargetLeaseName,
 } from './AppiumXcuiTestController'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
@@ -38,6 +42,9 @@ test('allocates collision-free Appium resources for two simulator UDIDs', async 
   expect(firstClient.capabilities[0]?.['appium:derivedDataPath']).not.toBe(
     secondClient.capabilities[0]?.['appium:derivedDataPath'],
   )
+  expect(firstClient.capabilities[0]).not.toHaveProperty('appium:autoAcceptAlerts')
+  expect(firstClient.sessions[0]?.alertDismissals).toBe(1)
+  expect(secondClient.sessions[0]?.alertDismissals).toBe(1)
   expect(
     receipts.records.find(record => record.receipt.target.udid === 'SIM-A' && record.receipt.lifecycle === 'open')
       ?.receipt,
@@ -50,6 +57,49 @@ test('allocates collision-free Appium resources for two simulator UDIDs', async 
 
   await firstSession.close(firstSession.descriptor().lease)
   await secondSession.close(secondSession.descriptor().lease)
+})
+
+test('uses canonical iOS target names and consumes a preheld simulator lease without reacquiring it', async () => {
+  const leases = new FakeLeases()
+  const target = simulator('SIM-PREHELD')
+  const artifactRoot = await FS.mkTmpDir('tao-appium-preheld-')
+  expect(iosTargetLeaseName(target)).toBe('ios-simulator:SIM-PREHELD')
+  expect(iosTargetLeaseName({
+    appId: 'dev.tao.app',
+    kind: 'physical',
+    signing: { updatedWDABundleId: 'dev.tao.wda', xcodeOrgId: 'TEAM', xcodeSigningId: 'Apple Development' },
+    udid: 'DEVICE-PREHELD',
+  })).toBe('ios-device:DEVICE-PREHELD')
+
+  const preheldTargetLease = await leases.acquire(iosTargetLeaseName(target))
+  const session = await createAppiumXcuiTestController({
+    client: new FakeClient('preheld'),
+    leases,
+    preheldTargetLease,
+    target,
+  }).openSession({ artifactRoot, mode: 'acceptance', revision, target: 'hnreader' })
+  try {
+    expect(session.descriptor().lease).toMatchObject({ name: 'ios-simulator:SIM-PREHELD' })
+  } finally {
+    await session.close(session.descriptor().lease)
+    await FS.remove(artifactRoot)
+  }
+})
+
+test('retains target and derived-port leases when an escaped session cannot be deleted', async () => {
+  const leases = new FakeLeases()
+  const client = new FakeClient('escaped-open')
+  const receipts = new FakeReceipts()
+  receipts.failWhen('open')
+  client.sessions[0]!.failDeleteOnce()
+  const controller = appiumController(client, leases, simulator('SIM-ESCAPED-OPEN'), receipts)
+
+  await expect(open(controller)).rejects.toMatchObject({ details: { retainsTargetLease: true } })
+  expect(client.sessions[0]?.deleteAttempts).toBe(1)
+  await expect(open(appiumController(new FakeClient('competing'), leases, simulator('SIM-ESCAPED-OPEN')))).rejects
+    .toThrow(
+      "Machine resource 'ios-simulator:SIM-ESCAPED-OPEN' is busy",
+    )
 })
 
 test('writes immutable screenshot evidence for repeated captures across two sessions', async () => {
@@ -98,6 +148,65 @@ test('writes immutable screenshot evidence for repeated captures across two sess
     await first.close(first.descriptor().lease)
     await second.close(second.descriptor().lease)
     await FS.remove(artifactRoot)
+  }
+})
+
+test('resolves nested host selections through Appium element-relative lookup', async () => {
+  const client = new FakeClient('scoped')
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-SCOPED')))
+  try {
+    const observation = await session.observe({
+      expectedRevision: revision,
+      target: {
+        kind: 'scoped',
+        scope: { kind: 'tag', occurrence: 2, value: 'reading' },
+        target: { kind: 'text', value: 'Why local-first sync wins' },
+      },
+    })
+
+    expect(observation.id).toBe('entry-2-child')
+    expect(client.sessions[0]?.locators).toEqual([
+      { using: 'accessibility id', value: 'reading' },
+      { using: '-ios predicate string', value: 'label == "Why local-first sync wins"' },
+    ])
+    expect(client.sessions[0]?.scopes).toEqual(['entry-2'])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('preserves scoped Tao selection when XCUITest flattens visual children in its accessibility tree', async () => {
+  const client = new FakeClient('flattened')
+  client.sessions[0]!.flattenScopedHierarchy = true
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-FLATTENED')))
+  try {
+    const observation = await session.observe({
+      expectedRevision: revision,
+      target: {
+        kind: 'scoped',
+        scope: { kind: 'tag', occurrence: 2, value: 'reading' },
+        target: { kind: 'text', value: 'Why local-first sync wins' },
+      },
+    })
+
+    expect(observation).toMatchObject({ id: 'title-2', text: 'Why local-first sync wins' })
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('opens iOS control deep links through the current target application', async () => {
+  const client = new FakeClient('deep-link')
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-DEEP-LINK')))
+  try {
+    await (session as AppiumXcuiTestDeepLinkSession).openDeepLink('taohostpoc-run://control?advanceMs=1000')
+
+    expect(client.sessions[0]?.deepLinks).toEqual([{
+      appId: 'dev.tao.app',
+      url: 'taohostpoc-run://control?advanceMs=1000',
+    }])
+  } finally {
+    await session.close(session.descriptor().lease)
   }
 })
 
@@ -181,7 +290,7 @@ test('reports a busy target, keeps inputs isolated, and releases only the sessio
   const second = appiumController(secondClient, leases, simulator('SIM-B'))
   const firstSession = await open(first)
 
-  await expect(open(competing)).rejects.toThrow("Machine resource 'appium-ios-simulator-SIM-A' is busy")
+  await expect(open(competing)).rejects.toThrow("Machine resource 'ios-simulator:SIM-A' is busy")
 
   const secondSession = await open(second)
   const firstObservation = await firstSession.observe({
@@ -223,7 +332,7 @@ test('fences stale leases before they can mutate a session', async () => {
   }
   await expect(session.perform(wrongObservationLease)).rejects.toThrow('no longer current')
   expect(client.sessions[0]?.input).toEqual([])
-  leases.fence('appium-ios-simulator-SIM-FENCED')
+  leases.fence('ios-simulator:SIM-FENCED')
 
   await expect(session.perform(typeAction(session, observation, 'blocked'))).rejects.toThrow('is no longer current')
   expect(client.sessions[0]?.input).toEqual([])
@@ -500,14 +609,18 @@ class FakeClient {
 }
 
 class FakeSession implements AppiumWebDriverSession {
+  alertDismissals = 0
   deleted = false
   deleteAttempts = 0
   readonly id: string
   readonly input: string[] = []
+  readonly deepLinks: Array<{ appId: string; url: string }> = []
+  flattenScopedHierarchy = false
   inputAttempts = 0
   readonly inputTargets: string[] = []
   readonly keys: string[] = []
   readonly locators: AppiumLocator[] = []
+  readonly scopes: string[] = []
   visible = true
   #deferredDelete: Deferred | undefined
   #deferredInput: Deferred | undefined
@@ -530,6 +643,10 @@ class FakeSession implements AppiumWebDriverSession {
     this.deleted = true
   }
 
+  async dismissAlertIfPresent(): Promise<void> {
+    this.alertDismissals += 1
+  }
+
   deferDelete(): void {
     this.#deferredDelete = new Deferred()
   }
@@ -548,12 +665,25 @@ class FakeSession implements AppiumWebDriverSession {
 
   async findElement(locator: AppiumLocator): Promise<FakeElement> {
     this.locators.push(locator)
-    return new FakeElement(this, 'entry-1')
+    return (await this.elementsFor(locator))[0]!
+  }
+
+  async openDeepLink(url: string, appId: string): Promise<void> {
+    this.deepLinks.push({ appId, url })
   }
 
   async findElements(locator: AppiumLocator): Promise<readonly FakeElement[]> {
     this.locators.push(locator)
-    return [new FakeElement(this, 'entry-1'), new FakeElement(this, 'entry-2')]
+    return await this.elementsFor(locator)
+  }
+
+  async findElementFrom(scope: AppiumElement, locator: AppiumLocator): Promise<FakeElement> {
+    this.scopes.push(scope.id)
+    this.locators.push(locator)
+    if (this.flattenScopedHierarchy) {
+      throw new AppiumNoSuchElementError('XCUITest exposed the visual child as an accessibility sibling')
+    }
+    return new FakeElement(this, `${scope.id}-child`)
   }
 
   consumeInputFailure(): boolean {
@@ -585,21 +715,54 @@ class FakeSession implements AppiumWebDriverSession {
   async screenshot(): Promise<Uint8Array> {
     return new Uint8Array()
   }
+
+  async elementsFor(locator: AppiumLocator): Promise<readonly FakeElement[]> {
+    if (this.flattenScopedHierarchy && locator.using === 'accessibility id') {
+      return [
+        new FakeElement(this, 'row-1', 'reading', { height: 100, width: 300, x: 0, y: 0 }),
+        new FakeElement(this, 'row-2', 'reading', { height: 100, width: 300, x: 0, y: 100 }),
+      ]
+    }
+    if (this.flattenScopedHierarchy) {
+      return [
+        new FakeElement(this, 'title-1', 'Why local-first sync wins', { height: 20, width: 220, x: 10, y: 20 }),
+        new FakeElement(this, 'title-2', 'Why local-first sync wins', { height: 20, width: 220, x: 10, y: 120 }),
+      ]
+    }
+    return [new FakeElement(this, 'entry-1'), new FakeElement(this, 'entry-2')]
+  }
 }
 
 class FakeElement {
   readonly id: string
+  readonly #rect: Readonly<{ height: number; width: number; x: number; y: number }>
   readonly #session: FakeSession
+  readonly #text: string
 
-  constructor(session: FakeSession, id: string) {
+  constructor(
+    session: FakeSession,
+    id: string,
+    text = id,
+    rect: Readonly<{ height: number; width: number; x: number; y: number }> = { height: 1, width: 1, x: 0, y: 0 },
+  ) {
     this.#session = session
     this.id = id
+    this.#rect = rect
+    this.#text = text
   }
 
   async click(): Promise<void> {}
 
   async isDisplayed(): Promise<boolean> {
     return this.#session.visible
+  }
+
+  async getRect(): Promise<Readonly<{ height: number; width: number; x: number; y: number }>> {
+    return this.#rect
+  }
+
+  async getText(): Promise<string> {
+    return this.#text
   }
 
   async sendKeys(text: string): Promise<void> {
@@ -676,14 +839,23 @@ class FakeLease implements AppiumLease {
 class FakeReceipts implements AppiumReceiptSink {
   readonly #events: string[] | undefined
   readonly records: Array<{ path: string; receipt: AppiumSessionReceipt }> = []
+  #failLifecycle: AppiumSessionReceipt['lifecycle'] | undefined
 
   constructor(events?: string[]) {
     this.#events = events
   }
 
   async write(path: string, receipt: AppiumSessionReceipt): Promise<void> {
+    if (this.#failLifecycle === receipt.lifecycle) {
+      this.#failLifecycle = undefined
+      Errors.throwHostEnvironment('receipt storage stopped accepting writes')
+    }
     this.#events?.push(`receipt:${receipt.lifecycle}`)
     this.records.push({ path, receipt })
+  }
+
+  failWhen(lifecycle: AppiumSessionReceipt['lifecycle']): void {
+    this.#failLifecycle = lifecycle
   }
 }
 

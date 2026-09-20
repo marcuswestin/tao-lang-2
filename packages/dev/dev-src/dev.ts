@@ -71,7 +71,7 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, ios, device, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
       'check',
     )
     .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')

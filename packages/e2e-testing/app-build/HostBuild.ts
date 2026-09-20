@@ -168,7 +168,7 @@ export function hostEntrypoint(repositoryRoot: string): string {
     'packages/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
     repositoryRoot,
   )
-  return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType, useEffect, useState } from 'react'\nimport { Platform, Text, View } from 'react-native'\nimport { installNativeHostTestControl } from ${
+  return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType, useEffect, useState } from 'react'\nimport { Platform, SafeAreaView as View, Text } from 'react-native'\nimport { installNativeHostTestControl } from ${
     JSON.stringify(nativeControl)
   }\nimport { installRuntimeHostTestControl } from ${
     JSON.stringify(runtimeControl)

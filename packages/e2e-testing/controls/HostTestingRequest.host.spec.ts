@@ -16,6 +16,11 @@ test('dispatches maintenance, driver, browser-build, and native modes without wi
     kind: 'native',
     mode: 'device',
   })
+  expect(parseHostTestingRequest('android', { ...base, device: 'emulator-5554' })).toMatchObject({
+    device: 'emulator-5554',
+    kind: 'native',
+    mode: 'android',
+  })
 })
 
 test('requires explicit native targets and keeps application faults out of controls', () => {
@@ -23,10 +28,10 @@ test('requires explicit native targets and keeps application faults out of contr
     'Native proofs require --device with an explicit target identifier.',
   )
   expect(() => parseHostTestingRequest('check', { ...base, fault: true })).toThrow(
-    '--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.',
+    '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
   )
   expect(() => parseHostTestingRequest('driver', { ...base, fault: true })).toThrow(
-    '--fault changes an isolated compiled app; use prepare, export, browser, ios, or device.',
+    '--fault changes an isolated compiled app; use prepare, export, browser, android, ios, or device.',
   )
   expect(() => parseHostTestingRequest('unknown', base)).toThrow("Unknown host-testing mode 'unknown'.")
 })

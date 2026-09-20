@@ -1,5 +1,6 @@
 import { Errors, HCI } from '@shared'
 import type { PrepareHostAppOptions } from './app-build/HostBuild'
+import { runAppiumNativeHostProofCommand } from './AppiumNativeHostProofCommand'
 import { recordedApplicationFaultNativeReceipt } from './ApplicationFaultReceipts'
 import { recordedCommand } from './CommandReceipts'
 import type { HostTestingContext, NativeHostTestingRequest } from './HostTestingRequest'
@@ -29,10 +30,13 @@ export async function runNativeHostProofCommand(
     }
     return prepared
   }
+  if (request.mode === 'android' || request.mode === 'ios') {
+    return await runAppiumNativeHostProofCommand(request, context, build)
+  }
   const receipt = await runNativeHostProof({
     artifactRoot: context.artifactRoot,
     build,
-    device: { id: request.device, target: request.mode === 'ios' ? 'simulator' : 'device' },
+    device: { id: request.device, target: 'device' },
     runId: context.runId,
     seed: request.seed,
     subject: request.subject,
