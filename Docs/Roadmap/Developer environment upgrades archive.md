@@ -40,6 +40,8 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/Archive/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Resolved
 - [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/Archive/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Resolved
 - [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/Archive/DEVENV-016-studio-process-ownership-and-status.md>) — Resolved
+- [DEVENV-022 — Raw Error policy for failure mocks](<Developer environment upgrades/Archive/DEVENV-022-raw-error-policy-for-failure-mocks.md>) — Resolved
+- [DEVENV-023 — React Native test renderer convention](<Developer environment upgrades/Archive/DEVENV-023-react-native-test-renderer-convention.md>) — Closed
 - [DEVENV-025 — Worktree-safe CLI test roots](<Developer environment upgrades/Archive/DEVENV-025-worktree-safe-cli-test-roots.md>) — Resolved
 - [DEVENV-026 — Opt-in underlying error diagnostics](<Developer environment upgrades/Archive/DEVENV-026-opt-in-underlying-error-diagnostics.md>) — Resolved
 - [DEVENV-027 — Watchman-free package-local Jest](<Developer environment upgrades/Archive/DEVENV-027-watchman-free-package-local-jest.md>) — Resolved
@@ -56,6 +58,7 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
+- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/Archive/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Resolved
 - [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/Archive/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
@@ -72,3 +75,4 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
 - [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/Archive/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Resolved
 - [DEVENV-105 — `finalize` cannot consume the green evidence that `verify` records](<Developer environment upgrades/Archive/DEVENV-105-finalize-cannot-consume-the-green-evidence-that-verify-records.md>) — Resolved
+- [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved

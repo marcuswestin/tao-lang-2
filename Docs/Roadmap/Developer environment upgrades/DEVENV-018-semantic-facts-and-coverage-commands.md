@@ -7,7 +7,8 @@
 - **Evidence:** No fact/coverage CLI exists on the semantic-agent branch.
 - **Workaround:** Call internal modules from temporary scripts or inspect Studio output.
 - **Proposed change:** Add stable read-only CLI commands over the merged semantic model.
-- **Dependencies:** DEVENV-017. The semantic-agent implementation landed in `40be904f`.
+- **Dependencies:** DEVENV-017. The underlying Studio fact and coverage tools are present on current
+  `main`; only the stable CLI surface remains absent.
 - **Acceptance:** Commands produce versioned machine-readable output and focused tests exercise real
   project facts and coverage.
 - **Source:** 2026-09-03 semantic-agent implementation briefing.

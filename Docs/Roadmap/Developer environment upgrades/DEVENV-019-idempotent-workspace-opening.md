@@ -8,7 +8,7 @@
 - **Workaround:** Reuse one open workspace per root or close it before reopening.
 - **Proposed change:** Reproduce on merged `main`, then define and enforce reuse or explicit duplicate-open
   semantics.
-- **Dependencies:** None; the freehand and semantic-agent prerequisites landed in `13d2577c` and
-  `40be904f`. The duplicate-open lifecycle semantics and proof remain open.
+- **Dependencies:** None; the freehand and semantic-agent prerequisites are present on current `main`.
+  The duplicate-open lifecycle semantics and proof remain open.
 - **Acceptance:** A focused lifecycle test opens the same root twice without a hang or leaked service.
 - **Source:** 2026-09-03 semantic-agent implementation briefing.
