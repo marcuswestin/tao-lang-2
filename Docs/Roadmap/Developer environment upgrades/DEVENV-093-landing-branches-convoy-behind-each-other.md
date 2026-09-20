@@ -69,4 +69,7 @@
   wrong and `GreenTree.ts` deliberately keys on the whole tree for that reason; and a **documentation
   fast path** was considered and dropped. **Batch integration remains open** and is now the only
   proposed answer to N branches costing N full verifications.
+- **Progress (2026-09-20):** A blocked broad lane now names the landing-lock holder on its first
+  unsuccessful acquisition instead of remaining silent until the five-minute reminder. Periodic
+  warnings and the no-expiry safety rule remain unchanged; batch integration remains open.
 - **Source:** 2026-09-19 landing convoy, reported by Ro.
