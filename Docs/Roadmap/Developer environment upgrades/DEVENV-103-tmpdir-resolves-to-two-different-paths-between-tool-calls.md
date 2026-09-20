@@ -21,6 +21,14 @@
   every tool shell, as the session-start hook already does for `PATH`. Failing that, say in
   `AGENTS.md` that `$TMPDIR` is per-call and that anything read back later belongs under
   `.artifacts/tmp/`.
+- **Also (2026-09-20):** a Git worktree created under `$TMPDIR` cannot be typechecked. `/tmp` is a
+  symlink to `/private/tmp` on macOS, so the same file reaches TypeScript under two paths and every
+  cross-module type compares unequal to itself — `_typecheck` failed with
+  `Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`, naming
+  `/tmp/claude-501/...` and `/private/tmp/claude-501/...` as the two identities, and the same for the
+  runtime's `ActionValue`. The lane is red for a reason that has nothing to do with the branch.
+  `git worktree move` to a real path fixes it, and needs an unsandboxed shell. Create agent worktrees
+  under the repository's own worktree directory rather than under `$TMPDIR`.
 - **Dependencies:** None.
 - **Acceptance:** A file written to `$TMPDIR` in one Bash call is readable by the same spelling in
   the next, or the instruction that sends agents there is corrected.
