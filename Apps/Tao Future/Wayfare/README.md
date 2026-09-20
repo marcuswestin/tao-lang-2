@@ -19,19 +19,19 @@ described in [`../README.md`](../README.md).
 | `Trips.tao-revolution`        | the library, a new trip, the overview, travelers, invitations, joining, sharing  |
 | `Itinerary.tao-revolution`    | one day, the stop editor as a draft, the conflict conversation, Today            |
 | `Documents.tao-revolution`    | travel documents, some private to one traveler                                   |
-| `Design.tao-revolution`       | sizes, tokens, meaning, dark, the stop-kind palette, bundles, styles, patterns   |
+| `Design.tao-revolution`       | colors, sizes, shadows, text, screens, styles, and the rules that check them     |
 | `Words.tao-revolution`        | Spanish                                                                          |
-| `Scenarios.tao-revolution`    | the states this app is reviewed and audited in, and the design check             |
+| `Scenarios.tao-revolution`    | the states this app is reviewed, screenshotted, and audited in                   |
 | `Wayfare.test.tao-revolution` | the journeys                                                                     |
 | `Justfile`                    | the developer loop                                                               |
 
 ## What this app leans on hardest
 
-- **A three-pane `SplitNav`** with one authored `Compact` progression: `@trip -> @day -> @details`.
+- **A three-pane `SplitNav`** with one authored `Compact` progression: `Progression @trip, @day, @details`.
 - **A draft from a live row** — `draft Mine = Stop from Stop`, `save` answering `conflict`, `ConflictComparison(Mine)`, a durable draft with no discard dialogue.
 - **The two never overlap** — a day's title and a visited mark write through under `Conflicts fieldwise latest`; the composed stop edit goes through the draft.
 - **A seat and an invitation are one row** — `Member` starts invited and becomes a person on join; the owner invariant covers both.
 - **A conditional grant** — `read to TripFolk of Trip where PrivateTo is none; read, change, delete to PrivateTo`.
 - **`today in Trip.HomeZone`** — Today shows the day you are standing in.
-- **`Offline { … MapTiles around Trip.Days.Stops.Place within 8 km }`** — the map works where the network does not.
+- **`Offline { Days, Stops, Attachments, Documents, MapTiles for MyTrip }`** — the declared closure of what works with no network.
 - **A nested projection** — `Days { Date, Title, Stops { … } }`.

@@ -85,7 +85,7 @@ Describe('parser: view content and render injection channels', () => {
     `)
 
     Expect(Diagnostics.errorMessages(parsed.diagnostics)).toContain(
-      "Could not resolve reference to RenderSlotContract named '@missing'.",
+      "No render slot named '@missing' is in scope.",
     )
   })
 })

@@ -6,6 +6,11 @@ import {
 } from '../repository-tests/DependencyCompatibility'
 import { type LaneRecord, MachineLanes } from '../repository-tests/MachineLanes'
 import { dependencyHealthError } from './DependencyHealth'
+import {
+  type EnvironmentFingerprint,
+  environmentFingerprint,
+  readFingerprintFacts,
+} from './EnvironmentFingerprint'
 
 /**
  * The repository half of `doctor`: everything a checkout needs before any Tao command can work.
@@ -46,9 +51,15 @@ export type DoctorCheck = {
   status: CheckStatus
 }
 
-/** DoctorReport is the versioned structured result `--json` prints. */
+/**
+ * DoctorReport is the versioned structured result `--json` prints. `fingerprint` is the subset a
+ * person can paste into a report; the rest of the report names this machine and this checkout, so
+ * it stays here rather than travelling. The envelope version only moves when a field changes
+ * meaning: adding one, as `fingerprint` did, leaves every existing reader correct.
+ */
 export type DoctorReport = {
   checks: readonly DoctorCheck[]
+  fingerprint: EnvironmentFingerprint
   repositoryRoot: string
   status: CheckStatus
   version: 1
@@ -85,6 +96,8 @@ type ArtifactRoot = {
 /** DoctorFacts is the machine state the checks read, gathered once so the checks stay pure. */
 export type DoctorFacts = {
   artifactRoots: readonly ArtifactRoot[]
+  /** The pasteable half: which OS, which Tao, which toolchain, and nothing that identifies anybody. */
+  fingerprint: EnvironmentFingerprint
   /** The checked-out branch, or undefined on a detached HEAD. */
   branch?: string
   bunTempDir?: { path: string; writable: boolean }
@@ -129,7 +142,13 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
 /** doctorReport wraps the checks in the versioned envelope, with the worst status winning. */
 export function doctorReport(facts: DoctorFacts): DoctorReport {
   const checks = repositoryDoctorChecks(facts)
-  return { checks, repositoryRoot: facts.repositoryRoot, status: worstStatus(checks), version: 1 }
+  return {
+    checks,
+    fingerprint: facts.fingerprint,
+    repositoryRoot: facts.repositoryRoot,
+    status: worstStatus(checks),
+    version: 1,
+  }
 }
 
 /** worstStatus reduces a run to the single status a caller should exit on. */
@@ -456,6 +475,7 @@ export async function readDoctorFacts(
     artifactRoots,
     ports,
     dependencyIssues,
+    fingerprintFacts,
   ] = await Promise.all([
     readBranch(repositoryRoot),
     readLinkedWorktree(repositoryRoot),
@@ -466,6 +486,7 @@ export async function readDoctorFacts(
     Promise.all(ARTIFACT_ROOTS.map(path => readArtifactRoot(repositoryRoot, path))),
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
+    readFingerprintFacts(repositoryRoot),
   ])
   const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
     canonicalPath(repositoryRoot),
@@ -485,6 +506,7 @@ export async function readDoctorFacts(
     dependencyIssues,
     devenvProfileNode: await presentPath(repositoryRoot, '.devenv/profile/bin/node'),
     direnvAllowed,
+    fingerprint: environmentFingerprint(fingerprintFacts),
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),

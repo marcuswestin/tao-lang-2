@@ -186,7 +186,7 @@ Describe('validator: multiple datasources', () => {
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
       datasourceMembershipMessages.localOnlyMembership('Feed', 'Sessions'),
-      "Could not resolve reference to ListedDeclaration named 'Ghosts'.",
+      "No data entity or value named 'Ghosts' is in scope.",
     ),
   )
 

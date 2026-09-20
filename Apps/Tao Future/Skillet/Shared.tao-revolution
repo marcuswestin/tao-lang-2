@@ -1,10 +1,16 @@
 // The vocabulary every screen uses: the kitchen, the safety net, the frames, the one question, and the
 // commands that work from every tab.
 
+use Account, SignIn, SignOut from @tao/auth
+
 // -- Live handles ------------------------------------------------------------------------------------------
+//
+// Identity is a library with swappable providers, not language surface: one binding at the app root,
+// and every screen reads `Me` from here (a handle with availability — loading, none, available).
 //
 // One membership per person, so `MyKitchen` is a value and the app root can be a `when` over it. A
 // handle carries availability like a query: the root sees `loading`, `none`, or the kitchen.
+let Me = Account
 let MyMembership = exactly one Me.Memberships
 let MyKitchen = MyMembership.Household
 
@@ -15,17 +21,16 @@ let MyKitchen = MyMembership.Household
 // every read site spell five branches. A guard is availability only. Emptiness is content, not failure,
 // so it is `if X is empty` at the site that cares.
 //
-// `failed` is the safety net for effects: an outcome no `when` handled — a transaction, a sidecar, or a
-// sign-in that was rejected or errored inside an action — lands here with its sentence. (An unhandled
-// rejection of `save X` invalidates X instead, so it shows beside the draft's fields.) This is why most
-// `when` blocks below name only the outcome they do something with.
+// There is no second, write-only net and no catch-all case: effect outcomes belong to the calling site,
+// so a site that fires an effect and names no outcome gets no automatic message. (An unhandled rejection
+// of `save X` invalidates X instead, so it shows beside the draft's fields — the one write outcome with a
+// defined home.) This is why the `when do …` blocks below name the outcomes they act on.
 guard default {
    loading -> Spinner(Label: "Opening Skillet…")
    missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone in your kitchen may have removed it.")
    unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask someone in the kitchen to invite you back.")
    rejected -> Problem { Text(Problem) [caption, danger] }
    error -> Message { Text(Message) [body] }
-   failed -> Problem { present Notice(Problem) as toast (Key: "failed") }
 }
 
 // -- Frames and layouts ---------------------------------------------------------------------------------------
@@ -47,13 +52,14 @@ view Section(Title text) {
       Col [gap xs] { @@content }
 }  }
 
-// The design's `EmptyState` pattern names the slots; this view fills them.
+// `patterns { }` is not carried forward: a named arrangement with slots is an ordinary view placing
+// `@@content`, so the empty state owns its own layout.
 view EmptyState(Icon icon, Title text, Body text) {
-   render Col [pattern EmptyState] {
-      Icon(Icon) [@icon]
-      Text(Title) [@title]
-      Text(Body) [@body]
-      Col [@action] { @@content }
+   render Col [content center center, gap md, pad xl, width max 520] {
+      Icon(Icon) [size 34, ink muted, decorative]
+      Text(Title) [title, center]
+      Text(Body) [body, muted, center]
+      Col [gap sm] { @@content }
 }  }
 
 // -- Views ---------------------------------------------------------------------------------------------------
@@ -62,7 +68,7 @@ type Tone is one of Neutral, Good, Warning
 
 // A status carries a symbol as well as a colour, because the design's rules say so. `Announce` is
 // opt-in, so a badge does not become a live region by accident.
-view Status(Message text, Tone Tone (default Neutral), Announce yes / no (default no)) {
+view Status(Message text, Tone default Neutral, Announce yes / no default no) {
    let Symbol = when Tone { Neutral -> "circle"; Good -> "checkmark.circle"; Warning -> "exclamationmark.triangle" }
    render Row [content left center, gap sm, announce when Announce] {
       Icon(Symbol) [muted, ink good when Tone is Good, ink danger when Tone is Warning]
@@ -78,7 +84,7 @@ view OfflineNotice() {
 phrase Mass(Amount number) = metric "{ Amount } g" / imperial "{ Amount in ounces } oz"
 phrase Volume(Amount number) = metric "{ Amount } ml" / imperial "{ Amount in cups } cups"
 
-view Measure(Amount number (optional), Unit Unit (optional)) {
+view Measure(Amount number?, Unit?) {
    render Text(when Unit {
       none -> Amount
       "g" -> Mass(Amount)
@@ -89,24 +95,24 @@ view Measure(Amount number (optional), Unit Unit (optional)) {
    }) [caption]
 }
 
-view IngredientLine(Ingredient, Scale number (default 1)) {
-   render Row [pattern Line] {
-      Col [aisleMark(Ingredient.Aisle), @leading, decorative]
-      Measure(Ingredient.Amount * Scale, Ingredient.Unit) [@leading]
-      Text(Ingredient.Name) [body, @content]
+view IngredientLine(Ingredient, Scale number default 1) {
+   render Row [line] {
+      Col [size 10, radius pill, background aisle(Ingredient.Aisle), lead, decorative]
+      Measure(Ingredient.Amount * Scale, Ingredient.Unit) [lead]
+      Text(Ingredient.Name) [body, main]
 }  }
 
 // -- The one question ---------------------------------------------------------------------------------------
 
-// Back, tapping outside, or Cancel answers no. `stop unless ask Confirm(…)` is the idiom.
+// Back, tapping outside, or Cancel answers no. `let Sure = ask Confirm(…)` then `check Sure` is the idiom.
 view Confirm(Question text, Body text, Verb text) responds yes / no {
    render Col(Label: Question) [card, width max 480, gap md] {
       Text(Question) [sectionTitle]
       Text(Body) [body]
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond no }
+         Button("Cancel") [secondary] { on press -> { respond no } }
          #confirm
-         Button(Verb) [destructive] { on press -> respond yes }
+         Button(Verb) [destructive] { on press -> { respond yes } }
 }  }  }
 
 view Notice(Message text) {
@@ -127,10 +133,10 @@ command FindAnything() {
 }
 
 view FindSheet() {
-   Search Query
+   state Query = ""
    // One query over two fields and two entities, ranked by relevance.
    query Hits from MyKitchen.Recipes {
-      search Query in Title, Notes, Ingredients.Name
+      search Query
       order by relevance
       limit 20
    }
@@ -138,10 +144,10 @@ view FindSheet() {
       if Query is empty { Text("Search every recipe in this kitchen.") [muted, pad md] }
       guard Hits
       if Hits is empty and Query is not empty { Text("No matches.") [muted, pad md] }
-      List(Hits) {
-         Row [pattern Line] {
-            Icon("book") [@leading]
-            Col [@content, gap xxs] {
+      loop Hits / Recipe {
+         Row [line] {
+            Icon("book") [lead]
+            Col [main, gap xxs] {
                Text(Recipe.Title) [body]
                Text(Recipe.Course) [caption]
          }  }

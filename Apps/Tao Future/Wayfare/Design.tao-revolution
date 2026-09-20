@@ -1,159 +1,109 @@
-// Wayfare's design.
+// Wayfare's design. One declaration, organized as typed value blocks plus styles, screens, and rules —
+// no tokens block, no meaning layer, no dark block: a semantic role is a derived entry whose value is
+// conditional on the environment.
 
 design WayfareDesign {
-   personality clear
-   density comfortable
-   sizes { narrow below 600; medium from 600 below 900; wide from 900 }
+   colors {
+      mist #F4F6F8
+      paper #FFFFFF
+      fog #E4E9EE
+      slate #5C6B78
+      sea #1F6F8B { 30 #8FB7C5, 70 #17546A } // a family: sea, sea.30, sea.70
+      terracotta #C0653A
+      gold #B58A2A
+      moss #4F7D5A
+      alarm #A93A3A
+      ocean #1E2A33
+      night #0F161B
+      charcoal #18232B
+      graphite #223039
 
-   tokens {
-      color {
-         mist #F4F6F8
-         paper #FFFFFF
-         fog #E4E9EE
-         ink #1E2A33
-         slate #5C6B78
-         sea #1F6F8B
-         seaDeep #17546A
-         terracotta #C0653A
-         gold #B58A2A
-         moss #4F7D5A
-         danger #A93A3A
-         night #0F161B
-         charcoal #18232B
-         graphite #223039
-      }
-      space { xxs 2; xs 4; sm 8; md 12; lg 16; xl 24; xxl 40; screen 20 }
-      radius { sm 8; md 12; lg 18; pill 999 }
-      shadow {
-         sm [offset 1, blur 3, opacity 10%]
-         md [offset 6, blur 20, opacity 14%]
-      }
-      type {
-         display [size 32, weight bold, line 38]
-         title [size 22, weight semibold, line 28]
-         heading [size 17, weight semibold, line 22]
-         body [size 16, line 23]
-         label [size 15, weight medium, line 20]
-         caption [size 13, line 18]
-      }
-      motion { quick 120 ms; calm 200 ms; page 300 ms }
+      canvas    when Scheme is Dark night / not mist
+      surface   when Scheme is Dark charcoal / not paper
+      sunken    when Scheme is Dark graphite / not fog
+      inverse   when Scheme is Dark mist / not ocean
+      ink       when Scheme is Dark mist / not ocean
+      muted     when Scheme is Dark fog / not slate
+      subtle    when Scheme is Dark graphite / not fog
+      accent    sea.70
+      good      moss
+      danger    alarm
+      onAccent  paper
+
+      // Stop kinds carry a colour, keyed by the case type.
+      kind(StopKind) when StopKind { Visit -> sea, Meal -> terracotta, Stay -> gold, Travel -> moss }
    }
 
-   meaning {
-      background.canvas mist
-      background.surface paper
-      background.sunken fog
-      background.inverse ink
-      background.primary sea
-      background.danger danger
-      ink.text ink
-      ink.muted slate
-      ink.accent seaDeep
-      ink.good moss
-      ink.danger danger
-      ink.inverse mist
-      ink.onPrimary paper
-      border.subtle fog
-      border.accent sea
+   sizes {
+      xxs 2.px, xs 4.px, sm 8.px, md 12.px, lg 16.px, xl 24.px, xxl 40.px
+      screen 20.px, touch 48.px
+      pill 999.px
+      readable 1.rem
    }
 
-   dark {
-      background.canvas night
-      background.surface charcoal
-      background.sunken graphite
-      background.inverse mist
-      ink.text mist
-      ink.muted fog
-      ink.inverse ink
-      border.subtle graphite
+   shadows {
+      sm [offset 1.px, blur 3.px, opacity 10%]
+      md [offset 6.px, blur 20.px, opacity 14%]
    }
 
-   // Stop kinds carry a colour, keyed by the case type.
-   palette StopKind { Visit sea; Meal terracotta; Stay gold; Travel moss }
-
-   pageTitle [type display, ink text]
-   title [type title, ink text]
-   sectionTitle [type heading, ink text]
-   body [type body, ink text]
-   label [type label, ink text]
-   caption [type caption, ink muted]
-   muted [ink muted]
-   danger [ink danger]
-   strike [decoration strike]
-   center [align center]
-
-   screen [fill, background canvas, content top center]
-   page [fill, width max 1120, pad screen, gap lg, pad xxl when wide]
-   surface [background surface, border subtle, radius md]
-   card [surface, pad md, gap sm, shadow sm, pad lg when wide]
-   selected [background sunken, border accent]
-   chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption]
-   toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow md]
-
-   kindMark(Of) [size 10, radius pill, background StopKind.Of]
-
-   style Button {
-      base [type label, tap min 48, content center center, gap sm, radius pill, pad horizontal md vertical sm]
-      variant intent {
-         primary [background primary, ink onPrimary]
-         secondary [background surface, ink text, border subtle]
-         quiet [background none, ink text]
-         destructive [background danger, ink onPrimary]
-      }
-      state hover [overlay own ink 8%]
-      state pressed [brightness -5%, scale 0.985]
-      state disabled [opacity 45%]
-      state busy [opacity 60%]
-      default { intent secondary }
-   }
-   style TextInput {
-      base [background surface, border subtle, radius sm, pad md, type body, tap min 48]
-      state focus [border accent, ring accent]
-      state rejected [border danger]
-   }
-   style Checkbox {
-      base [size 24, radius sm, border subtle, tap min 48]
-      state checked [background primary, ink onPrimary]
-      state focus [ring accent]
+   text {
+      pageTitle [size 32.px, weight bold, line 38.px]
+      title [size 22.px, weight semibold, line 28.px]
+      sectionTitle [size 17.px, weight semibold, line 22.px]
+      body [size 16.px, line 1.44]
+      label [size 15.px, weight medium, line 20.px]
+      caption [size 13.px, line 18.px, ink muted]
    }
 
-   patterns {
-      pattern EmptyState {
-         layout [content center center, gap md, pad xl, width max 520]
-         slots {
-            icon [size 34, ink muted]
-            title [type title, align center]
-            body [type body, ink muted, align center]
-            action [primary]
-      }  }
-      pattern Line {
-         layout [content left center, gap sm, pad vertical sm, tap min 48]
-         slots {
-            leading [hug]
-            content [claim 1, compress]
-            trailing [hug, ink muted]
-      }  }
+   screens { narrow below 600.px, medium below 900.px, wide }
+
+   styles {
+      App [background canvas]
+      Text [ink ink]
+      Col [gap sm]
+      Row [gap sm]
+      Button [label, tap min touch, content center center, gap sm, radius pill,
+              pad horizontal md vertical sm, background surface, ink ink, border subtle,
+              overlay own ink 8% when hovered, brightness -5% when pressed, scale 0.985 when pressed]
+      TextInput [background surface, border subtle, radius sm, pad md, body, tap min touch,
+                 border accent when focused, ring accent when focused]
+      Checkbox [size 24.px, radius sm, border subtle, tap min touch, ring accent when focused]
+      Hint [background inverse, ink inverse, radius sm, pad horizontal sm vertical xxs, caption]
+      Overview [background surface, border subtle, radius md, pad md, gap xs, shadow md]
+
+      muted [ink muted]
+      danger [ink danger]
+      strike [decoration strike]
+      center [align center]
+
+      primary [background accent, ink onAccent]
+      secondary [background surface, ink ink, border subtle]
+      quiet [background none, ink ink]
+      destructive [background danger, ink onAccent]
+
+      screen [fill, background canvas, content top center]
+      page [fill, width max 1120.px, pad screen, gap lg, pad xxl when wide]
+      surface [background surface, border subtle, radius md]
+      card [surface, pad md, gap sm, shadow sm, pad lg when wide, pad md when TextScale > 1.6]
+      selected [background sunken, border accent]
+      chip [background sunken, radius pill, pad horizontal sm vertical xxs, caption]
+      toast [background inverse, ink inverse, radius pill, pad horizontal lg vertical md, label, shadow md]
+
+      line [content left center, gap sm, pad vertical sm, tap min touch]
+      lead [hug]
+      main [claim 1, compress]
+      trail [hug, ink muted]
    }
 
    rules {
-      contrast minimum wcag.aa
-      tapTarget minimum 44
-      rawColor allowed never
-      headingOrder required
-      accessibleName required on interactive
-      textScale upTo 200%
-      status communicates with icon and text
-      map requires ordered alternative
+      rule contrast at least wcag.aa
+      rule tap targets at least 44.px
+      rule every interactive element is named
+      rule heading order is sequential
+      rule raw visual values stay inside the design
+      rule text survives 200% scale without clipping
+      rule no horizontal overflow except maps
+      rule meaning survives without color or motion
+      rule status is carried by an icon as well as a color
    }
-
-   environment pointer touch { tapTarget minimum 48 }
-   environment pointer precise { density compact; hover visible }
-   environment motion reduced { motion none; meaning preserved }
-   environment contrast high { border stronger; ink.muted ink.text }
-   environment textScale above 160% { card [pad md, gap sm] }
-
-   platform ios { material glass }
-   platform android { dynamicColor yes; elevation tonal }
-   platform web { hover yes; focusRing visible }
-   platform macos { windowToolbar unified }
 }

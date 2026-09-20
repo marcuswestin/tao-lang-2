@@ -15,14 +15,13 @@ type Unit is one of "piece", "g", "kg", "ml", "l", "pack"
 data Accounts / Account with {
    Memberships
 
-   preference CurrentHome Home (optional)
+   preference CurrentHome Home?
    preference KeepOffline yes / no (default yes)
-   preference Language text (default device.language)
-   preference AroundRadius distance (default 8 km, device)
+   preference AroundRadius distance (default 8.km, device)
 }
 
 data Homes / Home {
-   Name text (required "Name your home")
+   Name text (required "Name your home", title)
    TimeZone timezone (default device.timeZone)
    Accent (default Moss)
    Memberships (owned)
@@ -37,7 +36,7 @@ data Homes / Home {
 
 data Memberships / Membership {
    Home
-   Person Account
+   Person (relation Accounts)
    Role (default Adult)
    JoinedAt time (default now)
 
@@ -48,19 +47,17 @@ data Memberships / Membership {
 // bound to the person it was meant for.
 data Invites / Invite {
    Home
-   Code secret (default new secret)
+   Code secret (default new secret, unique)
    Role (default Adult)
-   Email text (optional)
+   Email text?
    Used yes / Unused no
-   InvitedBy Account
-   ExpiresAt time (default now + 7 days)
-
-   unique Code
+   InvitedBy (relation Accounts)
+   ExpiresAt time (default now + 7.days)
 }
 
 data HearthLists / HearthList {
    Home
-   Name text (required "Name this list")
+   Name text (required "Name this list", title)
    Kind ListKind (default Chores)
    Color Accent (default Moss)
    Shared yes / Private no
@@ -71,24 +68,23 @@ data HearthLists / HearthList {
 
 data HearthItems / HearthItem {
    HearthList // the list this item is on
-   Title text (required "Say what needs doing")
-   Note text (default "")
-   Due time (optional)
-   Assignee Account (optional)
-   Quantity number (optional) // shopping lists fold on Title and Unit and sum this
-   Unit (optional)
-   Place Place (optional) // an errand: Around shows it on the map, nearest first
+   Title text (required "Say what needs doing", search, title)
+   Note text (default "", search)
+   Due time?
+   Assignee? (relation Accounts)
+   Quantity number? // shopping lists fold on Title and Unit and sum this
+   Unit?
+   Place? // an errand: Around shows it on the map, nearest first
    Complete yes / Open no
-   CreatedBy Account
+   CreatedBy (relation Accounts)
    CreatedAt time (default now)
-   CompletedBy Account (optional)
-   CompletedAt time (optional)
+   CompletedBy? (relation Accounts)
+   CompletedAt time?
    Comments (owned)
    Photos (owned)
 
    index Assignee
    index Due
-   search Title, Note
 
    // Who finished it and when they did are one fact: neither syncs without the other.
    together CompletedBy, CompletedAt
@@ -98,19 +94,19 @@ data HearthItems / HearthItem {
 }
 
 data Comments / Comment {
-   Item HearthItem
-   Author Account
-   Body text (required "Say something")
+   Item (relation HearthItems)
+   Author (relation Accounts)
+   Body text (required "Say something", title)
    CreatedAt time (default now)
 
    order by CreatedAt
 }
 
 data Photos / Photo {
-   Item HearthItem
+   Item (relation HearthItems)
    Image image
    Caption text (default "")
-   AddedBy Account
+   AddedBy (relation Accounts)
    AddedAt time (default now)
 
    order by AddedAt

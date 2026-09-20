@@ -2,6 +2,7 @@ import { CLI, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/source-commands'
 import {
+  checkedProjectFile,
   packageAwareCliFixture,
   packageAwareCliMainPath,
   packageAwareCliPathCases,
@@ -27,6 +28,7 @@ Describe('tao check', () => {
     'reports shipping warnings for authored and Studio generated Placeholder renders but exempts test source',
     async () => {
       await withTaoFixture({
+        ...checkedProjectFile,
         '@/studio/View1.tao':
           'use Placeholder from @tao/ui\n\npublic\nview View1() {\n   render Placeholder("View1")\n}\n',
         'App.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n',
@@ -38,15 +40,16 @@ Describe('tao check', () => {
         const generated = results.find(result => FS.basename(result.path) === 'View1.tao')
         const testSource = results.find(result => FS.basename(result.path) === 'Placeholder.test.tao')
 
-        Expect(authored?.warnings).toHaveLength(1)
-        Expect(authored?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
-        Expect(generated?.warnings).toHaveLength(1)
-        Expect(generated?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
-        Expect(testSource?.warnings).toBeUndefined()
+        Expect(authored?.diagnostics).toHaveLength(1)
+        Expect(authored?.diagnostics?.[0]?.message).toContain('Placeholder ships as an empty box in release.')
+        Expect(generated?.diagnostics).toHaveLength(1)
+        Expect(generated?.diagnostics?.[0]?.message).toContain('Placeholder ships as an empty box in release.')
+        Expect(testSource?.diagnostics).toBeUndefined()
         Expect(statusByFile(results, rootDir)).toEqual({
           '@/studio/View1.tao': 'unchanged',
           'App.tao': 'unchanged',
           'Placeholder.test.tao': 'unchanged',
+          'Project.tao': 'unchanged',
         })
       })
     },
@@ -63,10 +66,10 @@ Describe('tao check', () => {
       const generated = results.find(result => result.path.endsWith('/@/studio/View1.tao'))
       const authored = results.find(result => result.path.endsWith('/Authored.tao'))
 
-      Expect(generated?.warnings).toHaveLength(1)
-      Expect(generated?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
-      Expect(authored?.warnings).toHaveLength(1)
-      Expect(authored?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
+      Expect(generated?.diagnostics).toHaveLength(1)
+      Expect(generated?.diagnostics?.[0]?.message).toContain('Placeholder ships as an empty box in release.')
+      Expect(authored?.diagnostics).toHaveLength(1)
+      Expect(authored?.diagnostics?.[0]?.message).toContain('Placeholder ships as an empty box in release.')
     })
   })
 
@@ -91,6 +94,56 @@ Describe('tao check', () => {
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'broken.tao': 'error' })
       Expect(await FS.readText(path)).toBe('view Broken() {')
+    })
+  })
+
+  // Before this, a file that did not parse produced only the source-fix assertion's `Expected: …`
+  // text, which named neither the position nor what the parser had been looking for.
+  Test('reports a syntax error as a positioned parser diagnostic, not as an assertion message', async () => {
+    await withTaoFixture({
+      'broken.tao': 'view Broken() {\n   render Text(\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
+
+      Expect(broken?.status).toBe('error')
+      Expect(broken?.error).toBeUndefined()
+      Expect(broken?.diagnostics).toHaveLength(1)
+      Expect(broken?.diagnostics?.[0]?.severity).toBe('error')
+      Expect(broken?.diagnostics?.[0]?.source).toBe('parser')
+      Expect(broken?.diagnostics?.[0]?.filePath).toBe(FS.resolvePath('broken.tao', rootDir))
+      Expect(broken?.diagnostics?.[0]?.range?.start.line).toBe(2)
+      Expect(broken?.diagnostics?.[0]?.message).not.toContain('Expected: Tao source without syntax errors')
+    })
+  })
+
+  // The canonical newcomer mistake: rendering a view that was never declared or imported. It used
+  // to produce no output at all, because only warnings reached the command.
+  Test('reports an unresolved render target as a positioned error', async () => {
+    await withTaoFixture({
+      'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const [result] = await runCheck(rootDir)
+      const [diagnostic] = result?.diagnostics ?? []
+
+      Expect(result?.status).toBe('unchanged')
+      Expect(diagnostic?.severity).toBe('error')
+      Expect(diagnostic?.message).toBe("No view named 'NoSuchView' is in scope.")
+      Expect(diagnostic?.filePath).toBe(FS.resolvePath('App.tao', rootDir))
+      Expect(diagnostic?.range?.start).toEqual({ line: 1, character: 10 })
+    })
+  })
+
+  Test('reports errors and warnings on the same file together', async () => {
+    await withTaoFixture({
+      'App.tao':
+        'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n\nview Other() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const [result] = await runCheck(rootDir)
+      const severities = (result?.diagnostics ?? []).map(diagnostic => diagnostic.severity)
+
+      Expect(severities).toContain('error')
+      Expect(severities).toContain('warning')
     })
   })
 

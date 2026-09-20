@@ -7,6 +7,8 @@ scene DocumentsScreen() {
    Title "Documents"
    Toolbar { AddDocument }
    query TripDocuments from MyTrip.Documents { order by Kind, AddedAt }
+   // A second grouped query is how a screen groups a presentation: `loop` iterates and never groups.
+   query DocumentKinds from MyTrip.Documents { group by Kind; order by Kind }
 
    action OpenNewDocument() {
       // Visibility requires an open trip and store permission to create that person's Document.
@@ -21,7 +23,7 @@ scene DocumentsScreen() {
    }
 
    render ScrollView [screen] {
-      guard Me signed out -> { Text("Sign in to keep travel documents with the trip.") [body]; SignInPanel }
+      guard Me { none -> { Text("Sign in to keep travel documents with the trip.") [body]; SignInPanel() } }
       Col [page, width max 760] {
          when MyTrip {
             loading -> Status("Opening Wayfare…")
@@ -29,38 +31,38 @@ scene DocumentsScreen() {
             otherwise -> {
                guard TripDocuments
                if TripDocuments is empty {
-                  EmptyState(Icon: "doc.text", Title: "Nothing filed yet", Body: "Tickets, bookings, and the things you would rather not lose.") { AddDocument [primary] }
+                  EmptyState(Icon: "doc.text", Title: "Nothing filed yet", Body: "Tickets, bookings, and the things you would rather not lose.") { Button(AddDocument) [primary] }
                }
-               loop TripDocuments by Kind as Group {
-                  Section(Group.Key) {
-                     List(Group.Rows as Document) {
-                        Row [pattern Line] {
-                           Icon(if Document.File.Kind is image then "photo" else "doc") [@leading]
-                           Col [@content, gap xxs] {
+               loop DocumentKinds / KindGroup {
+                  Section(KindGroup.Kind) {
+                     loop TripDocuments / Document where Document.Kind is KindGroup.Kind {
+                        Row [line] {
+                           Icon(when Document.File.Kind is image "photo" / not "doc") [lead]
+                           Col [main, gap xxs] {
                               Text(Document.Title) [body]
-                              Text(if Document.PrivateTo is none then "Everyone on the trip" else "Only you") [caption]
+                              Text(when Document.PrivateTo is none "Everyone on the trip" / not "Only you") [caption]
                            }
-                           Button(Icon: "arrow.down.circle", Label: "Open { Document.Title }") [quiet, @trailing] { on press -> open Document.File }
-                           if can delete Document { Button(Icon: "trash", Label: "Remove { Document.Title }") [quiet, @trailing] { on press -> delete Document } }
+                           Button(Icon: "arrow.down.circle", Label: "Open { Document.Title }") [quiet, trail] { on press -> { open Document.File } }
+                           if can delete Document { Button(Icon: "trash", Label: "Remove { Document.Title }") [quiet, trail] { on press -> { delete Document } } }
 }  }  }  }  }  }  }  }  }
 
 file view NewDocumentSheet(Trip) responds Document {
    draft New = Document for new { Trip, AddedBy: Me }
    state OnlyMe = no
    action Add() runs single {
-      set New.PrivateTo = if OnlyMe then Me else none // a draft's field is a place, like state
+      set New.PrivateTo = when OnlyMe Me / not none // a draft's field is a place, like state
       when save New { saved -> Document { respond Document } }
    }
    render Col [card, width max 520, gap md] {
       Text("Add a document") [sectionTitle]
       #documentTitle
-      TextInput(Value: New.Title, Label: "What is it?", Placeholder: "Rail pass", Focus: initial)
-      Choice(Value: New.Kind, Label: "Kind")
-      FileInput(Value: New.File, Label: "File", Kinds: image, pdf)
-      Toggle(Value: OnlyMe, Label: "Only I can see this")
+      TextInput(Value: bind New.Title, Label: "What is it?", Placeholder: "Rail pass", Focus: initial)
+      Choice(Value: bind New.Kind, Label: "Kind")
+      FileInput(Value: bind New.File, Label: "File", Kinds: image, pdf)
+      Toggle(Value: bind OnlyMe, Label: "Only I can see this")
       Problems(New)
       Row [content right center, gap sm] {
-         Button("Cancel") [secondary] { on press -> respond }
+         Button("Cancel") [secondary] { on press -> { respond } }
          #addDocument
-         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+         Button("Add", Disabled: New.Incomplete) [primary, busy when Add.Running] { on press -> { do Add() } }
 }  }  }

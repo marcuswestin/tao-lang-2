@@ -11,6 +11,12 @@ needs to be installable, explorable, and honest about what it does not do yet.
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 
+An item is marked **done** here only once it is on `main`. Work in progress lives on branches, which
+this document deliberately does not name because they move faster than it does: `./agent board`
+reports every worktree, its branch, and whether it carries a merge message, which is where to look
+before starting an item so two agents do not build the same thing. As of 2026-09-19 that board shows
+branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`.
+
 ## Release blockers
 
 Without these a visitor cannot use Tao at all.
@@ -27,12 +33,23 @@ language sees.
 - Done: validation errors and parse errors reach the CLI with file, line, column, and a readable
   message; the exit code reflects failure; tests cover both kinds; the roadmap line that says
   `tao check` only reports canonicalization is corrected.
+- Landed on `feat/tao-check-error-reporting-400fde`. Every lexer, parser, linker, and validator
+  diagnostic now reaches `tao check` with its file, line, column, severity, message, and the
+  offending source line underlined; the exit code fails on any error; long `../` path prefixes are
+  gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
+  Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
+  entry graph, which is fixed.
+- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
+  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
+  of type …") is passed through unchanged.
 
 ### A2 — A standalone cross-platform `tao` executable
 
 Today `tao` is a zsh wrapper around `bun` inside this checkout's devenv profile, and every package
 is `private`. Nobody outside the repository can install Tao.
 
+- Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
+  evidence and a nine-slice sequence, and leaves eight questions to Ro.
 - Shape: `bun build --compile` binaries for macOS, Linux, and Windows on both architectures; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -41,7 +58,8 @@ is `private`. Nobody outside the repository can install Tao.
   version pin so a project selects the Tao it was written against.
 - Context: `packages/tao-cli`, `packages/runtime-toolchain` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
-- Waits on: nothing to start; code signing certificates and the tap repository come from Ro (`R2`).
+- Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
+  code signing certificates from `R8`, which owns where signing happens.
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 
@@ -122,6 +140,17 @@ The point of the release is to learn what people want. Nothing collects that tod
   do not wait.
 - Done: a frustrated visitor has an obvious, low-effort place to say so, and what they send is
   enough to reproduce.
+- Landed: `.github/` carries both issue forms, a discussion form for the open-ended half of each
+  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/dev` reports OS,
+  architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, and Xcode where
+  present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
+  parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
+  word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
+- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
+  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
+  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
+  worth adding a command to. The discussion links point at the default `ideas` and `q-a` categories
+  pending `R10`.
 
 ## Environment reach
 
@@ -184,11 +213,27 @@ WordFlower's `4 - Revolution` re-expressed in the decided dialect, with the `App
 as sibling references. Transcription against a settled decision record, with Ro reviewing the result.
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
+- Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
+  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single `guard default`,
+  §8's `check` as the action's early exit, §7's write-through `bind` and composed `draft`, §10's
+  `CollapseOrder`, `Width`, `Compact`, `reveal`, and `link`, §15's foreign action and view heads in
+  place of `unsafe ts`, and §16's `fixture`, devices, store-query assertions, and `prepare`.
+  `4 - Revolution/Open questions.md` carries the eleven things the decisions do not answer; the one
+  that costs most to defer is Q9, whether empty argument lists on containers are omitted, because
+  §9 and §10's own example disagree and `3 - MVP` inherits whichever wins. `Decisions.md` gained
+  three repairs of its own contradictions, and a fourth candidate turned out to be a decision argued
+  on merits rather than a repair, so it went to Q9 instead of being taken. `Coverage.md` rows stay
+  with `A12`, which owns that file.
 
 ### A12 — Process step 3: consolidate the Tao Future apps
 
-Skillet, Hearth, and Wayfare aligned to `Decisions.md`, with `Coverage.md` rows written during the
-port, as `Apps/Tao Future/README.md` prescribes.
+Landed. Skillet, Hearth, and Wayfare read as `Decisions.md` decides, and `Coverage.md` names a
+forcing feature for every capability — four of them `none — for Ro`, which are red flags for step 4
+rather than contrived features. What remains is not agent work: the ten spellings the port had to
+choose where `Decisions.md` is silent are listed in `Apps/Tao Future/README.md`, and the one place
+where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on Ro
+as `R14`. Step 2's rewrite settled the other one this pass reported, retiring `TabNav` for
+`SelectionNav`.
 
 - Context: `Apps/Tao Future/README.md`, `Docs/Roadmap/Tao Revolution/Coverage.md`.
 
@@ -208,14 +253,12 @@ Work with an existing plan that needs implementation rather than decision: the d
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
 
-### A15 — Studio's simulated-user lane
+### A15 — Studio's simulated-user lane — **done**
 
-The editor-ownership, source-identity, canvas geometry, pointer-release, drag-in, and sketch
-transaction defects have landed. What remains is ten consecutive reliable runs in a normal terminal
-before the lane rejoins the `verify-full` graph — a reliability gate, not a product defect.
-
-- Context: the **Make `just verify-full` pass its simulated-user lane** entry in `Roadmap.md`, the
-  `studio-hybrid-client` skill.
+Closed by `34132956`. The journey ran ten consecutive green runs in a normal terminal and
+`studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again; `VERIFY_FULL_SKIPPED`
+is empty, so the release no longer carries a quarantined lane. The editor-ownership, source-identity,
+canvas geometry, pointer-release, drag-in, and sketch transaction defects it found landed with it.
 
 ### A16 — A reachable datasource for the public demo
 

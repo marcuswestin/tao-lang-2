@@ -577,6 +577,52 @@ Test('mounted drag-one-in sees through its moved rectangle and holds capture unt
   mounted.dispose()
 })
 
+// One button means two things, and which one it means is carried by a selector that an authoritative
+// render rebuilds from scratch. A selection lost across a render therefore does not fail — it
+// silently unsnaps the whole flow, which is how a browser lane came to observe a fully unsnapped
+// sketch where it had asked for one rectangle back. Both readings are pinned here, cheaply, so the
+// contract does not rest on a lane that takes a minute and a half to say it.
+Test('Studio Unsnap acts on the selected snapped rectangles, or on every one when none is selected', () => {
+  const snappedSketch = {
+    ...testSketch(),
+    rects: [],
+    snapped: [{ rect: testRects()[0]!, target: target('back') }, { rect: testRects()[1]!, target: target('front') }],
+  }
+  const mountUnsnap = () => {
+    const dom = new SketchTestDocument()
+    const host = dom.createElement('main')
+    const rectIds: Array<readonly string[]> = []
+    const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+      onUnsnap: request => {
+        rectIds.push(request.rectIds)
+        return Promise.resolve(snapApply(catalog(2, testSketch()), 'request-unsnap', 'checkpoint-unsnap'))
+      },
+      sketches: [snappedSketch],
+      sourceVersion: 'source-1',
+    })
+    const unsnap = dom.find(host, 'taoStudioSketchUnsnap', 'sketch-1')
+    return { dom, host, mounted, rectIds, unsnap }
+  }
+
+  const whole = mountUnsnap()
+  Expect(whole.unsnap.disabled).toBe(false)
+  whole.unsnap.dispatch('click', { target: whole.unsnap, type: 'click' })
+  Expect(whole.rectIds).toEqual([['back', 'front']])
+  whole.mounted.dispose()
+
+  const one = mountUnsnap()
+  const selector = one.dom.find(one.host, 'taoStudioSketchSnapControls', 'sketch-1')
+    .descendants()
+    .find(element => element.tagName === 'select')
+  Assert.defined(selector, 'mounted snapped rectangle selector')
+  const chosen = selector.children.find(option => option.value === 'front')
+  Assert.defined(chosen, 'snapped rectangle option')
+  chosen.selected = true
+  one.unsnap.dispatch('click', { target: one.unsnap, type: 'click' })
+  Expect(one.rectIds).toEqual([['front']])
+  one.mounted.dispose()
+})
+
 Test('Studio pointer release keeps the render gate held until an asynchronous catalog commit settles', async () => {
   const persistence = Deferred<void>()
   const order: string[] = []

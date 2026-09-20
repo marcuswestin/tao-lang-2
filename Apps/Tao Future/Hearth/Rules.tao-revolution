@@ -2,14 +2,14 @@
 
 transaction CreateHome(Name text) for Me returns Home {
    let Home = create Home { Name, TimeZone: device.timeZone }
-   create Membership in Home.Memberships { Person: Me, Owner }
-   create HearthList in Home.Lists { Name: "Things to do", Chores }
-   create HearthList in Home.Lists { Name: "Shopping", Shopping }
+   create Membership { Home, Person: Me, Role: Owner }
+   create HearthList { Home, Name: "Things to do", Kind: Chores }
+   create HearthList { Home, Name: "Shopping", Kind: Shopping }
    update Me { CurrentHome: Home } // the app root follows this write
    return Home
 }
 
-transaction InviteToHome(Home, Role, Email text (optional)) for Me returns Invite {
+transaction InviteToHome(Home, Role, Email text?) for Me returns Invite {
    refuse when cannot create Invite in Home.Invites { Role } "Only an adult can invite someone."
    return create Invite { Home, Role, Email, InvitedBy: Me }
 }
@@ -20,7 +20,7 @@ transaction JoinWithInvite(Secret secret) for Me returns Home {
    refuse when Invite is Used "This invitation has already been used."
    refuse when Invite.ExpiresAt < now "This invitation has expired."
    refuse when Invite.Email is not none and Invite.Email is not Me.Email "This invitation was sent to someone else."
-   refuse when Invite.Home.Memberships has any where Person is Me "You already live here."
+   refuse when Invite.Home.Memberships[Person is Me] is not empty "You already live here."
 
    create Membership { Home: Invite.Home, Person: Me, Role: Invite.Role }
    update Invite { Used }
@@ -45,8 +45,10 @@ transaction DeleteMyAccount() for Me {
 // Completion stamps who and when — one fact, `together` on the entity — and is `runs latest per Item`
 // at the call site, so a quick tick-untick settles on the last state.
 transaction SetDone(Item HearthItem, Done yes / no) for Me {
-   if Done { update Item { Complete, CompletedBy: Me, CompletedAt: now } }
-   else { update Item { Open, CompletedBy: none, CompletedAt: none } }
+   when Done {
+      yes -> { update Item { Complete, CompletedBy: Me, CompletedAt: now } }
+      no -> { update Item { Open, CompletedBy: none, CompletedAt: none } }
+   }
 }
 
 transaction ShareList(HearthList) for Me returns SharedList {
@@ -64,14 +66,14 @@ transaction StopSharingList(HearthList) for Me {
 // A quiet reminder before something is due, for whoever is taking care of it — otherwise the adults, who
 // are keeping the home running. Provider-owned, so it reaches the assignee's devices, not the device that
 // created the item.
-automation DueSoon for HearthItem as Item {
-   schedule when Item.Due { none -> never; otherwise -> at Item.Due - 30 minutes }
-   while Item is Open
-   once per Item.Due
-   to Item.Assignee otherwise Stewards of Item.HearthList.Home
+automation DueSoon for HearthItem {
+   schedule when HearthItem.Due { none -> never; otherwise -> at HearthItem.Due - 30.minutes }
+   while HearthItem is Open
+   once per HearthItem.Due
+   to HearthItem.Assignee otherwise Stewards of HearthItem.HearthList.Home
    notify {
-      Title Item.HearthList.Name
-      Body "{ Item.Title } is due at { Item.Due.Time }"
+      Title HearthItem.HearthList.Name
+      Body "{ HearthItem.Title } is due at { HearthItem.Due.Time }"
    }
-   opens ItemLink(Item)
+   opens ItemLink(HearthItem)
 }
