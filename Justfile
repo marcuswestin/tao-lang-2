@@ -259,13 +259,14 @@ my-land *ARGS:
 
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
+[arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
 [arg('skip_all', long='skip-all', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' message_file='' abort='':
-    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='':
+    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 [group('Dev')]

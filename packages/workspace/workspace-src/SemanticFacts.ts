@@ -1,4 +1,4 @@
-// Studio agent chat: the facts an advisory answer is allowed to rest on.
+// Semantic facts: the evidence an advisory answer or CLI report may rest on.
 //
 // "What should I build next?" and "where can this app improve?" are judgment questions, but the judgment has
 // to stand on something checkable. These functions derive that something from the semantic graph: a view no

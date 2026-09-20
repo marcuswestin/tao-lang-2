@@ -30,6 +30,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
+- When other agents may write, stage only exact reviewed paths (`git add -- <path>…`); never `git add .`, `git add -A`, or a directory-wide path.
 - Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
 - The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 

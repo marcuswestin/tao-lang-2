@@ -37,5 +37,12 @@
   at `.artifacts/native-module-check/run-nK3ugj`; no simulator compilation occurred. The final fresh
   checkout reproduced the same CocoaPods boundary and retained the complete isolated host at
   `/private/tmp/tao-devenv104-after/.artifacts/native-module-check/run-4Y6F8O`.
+  A 2026-09-20 host-profile retry on `feat/devenv-host-followups` again completed isolated Expo
+  prebuild and reached CocoaPods. The task's immutable network proxy returned `403
+  blocked-by-allowlist` for the exact Hermes Maven artifact, so React Native fell back to a source
+  build and then reported missing `cmake`; target discovery and simulator compilation did not run.
+  The complete isolated host is retained at
+  `.artifacts/native-module-check/run-ouRMif`. Adding `cmake` would mask the denied prebuilt-artifact
+  path rather than prove the intended host lane, so no repository change is justified from this run.
   Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
