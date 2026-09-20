@@ -195,9 +195,9 @@ async function canonicalizeFile(
   } catch (error) {
     return inPlace.errorResult(path, error)
   }
-  const syntaxError = firstSyntaxError(parsed.diagnostics, path)
-  if (syntaxError !== undefined) {
-    return { path, status: 'error', diagnostics: [syntaxError] }
+  const syntax = reportableSyntaxErrors(parsed.diagnostics, path)
+  if (syntax.reported.length > 0) {
+    return { path, status: 'error', diagnostics: syntax.reported, unreportedDiagnostics: syntax.unreported }
   }
   const result = await inPlace.processFile(
     path,
@@ -214,12 +214,59 @@ async function canonicalizeFile(
 }
 
 /**
- * firstSyntaxError returns the file's first lexer or parser error. Only the first is reported: a
- * single misplaced token makes the parser mis-read everything after it, so the rest of the run is
- * cascade rather than a list of separate mistakes.
+ * A file reports at most this many syntax errors at once. A misplaced token makes the parser
+ * mis-read what follows, so the tail of a run is usually cascade rather than separate mistakes;
+ * three is enough to show a reader that a second, unrelated mistake exists further down without
+ * turning one broken file into a screen they have to scroll before they can start fixing it.
  */
-function firstSyntaxError(diagnostics: readonly Diagnostic[], path: string): Diagnostic | undefined {
-  return Diagnostics.errors(diagnostics, 'lexer', 'parser').find(diagnostic => diagnostic.filePath === path)
+const REPORTED_SYNTAX_ERRORS = 3
+
+/** SyntaxErrorReport declares the syntax errors one file shows and how many it held back. */
+type SyntaxErrorReport = {
+  reported: Diagnostic[]
+  unreported: number
+}
+
+/**
+ * reportableSyntaxErrors returns the file's lexer and parser errors in source order, keeping the
+ * first on each line. Cascade piles onto the token that first confused the parser — one stray word
+ * produced three messages about the same word — so one line is one mistake as far as the reader is
+ * concerned, and what survives that is a list of genuinely separate places to look.
+ */
+function reportableSyntaxErrors(diagnostics: readonly Diagnostic[], path: string): SyntaxErrorReport {
+  const inFile = Diagnostics.errors(diagnostics, 'lexer', 'parser')
+    .filter(diagnostic => diagnostic.filePath === path)
+    .sort(bySourcePosition)
+  const firstPerLine = inFile.filter((diagnostic, index) =>
+    inFile.findIndex(other => other.range?.start.line === diagnostic.range?.start.line) === index
+  )
+  return {
+    reported: firstPerLine.slice(0, REPORTED_SYNTAX_ERRORS),
+    unreported: Math.max(firstPerLine.length - REPORTED_SYNTAX_ERRORS, 0),
+  }
+}
+
+/** bySourcePosition orders syntax errors the way a reader walks the file, with a rangeless one last. */
+function bySourcePosition(left: Diagnostic, right: Diagnostic): number {
+  if (lineOf(left) !== lineOf(right)) {
+    return lineOf(left) - lineOf(right)
+  }
+  // A lexer error is a fact about the characters themselves, never a consequence of how the parser
+  // read them, so it leads its line: a character Tao cannot read explains the parse that follows it.
+  if (isLexerError(left) !== isLexerError(right)) {
+    return isLexerError(left) ? -1 : 1
+  }
+  return (left.range?.start.character ?? 0) - (right.range?.start.character ?? 0)
+}
+
+/** lineOf returns the line a diagnostic points at, sorting one with no range to the end. */
+function lineOf(diagnostic: Diagnostic): number {
+  return diagnostic.range?.start.line ?? Number.MAX_SAFE_INTEGER
+}
+
+/** isLexerError says whether a diagnostic came from the lexer rather than the parser. */
+function isLexerError(diagnostic: Diagnostic): boolean {
+  return Diagnostic.hasSource(diagnostic, 'lexer')
 }
 
 /** indexDiagnostics groups reportable diagnostics by the file they point into, keeping report order. */

@@ -3,6 +3,7 @@ import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
 import { TaoReferences } from './tao-references'
 import { TaoTokenBuilder } from './tao-token-builder'
@@ -220,6 +221,8 @@ function taoLanguageModule(packages: PackageResolver) {
       // Tao deliberately resolves token-identical configured constructors and one-field
       // unlabeled item forms from their linked owner declarations.
       ParserConfig: () => ({ skipValidations: true }),
+      LexerErrorMessageProvider: () => new TaoLexerErrorMessageProvider(),
+      ParserErrorMessageProvider: () => new TaoParserErrorMessageProvider(),
       TokenBuilder: () => new TaoTokenBuilder(),
       ValueConverter: () => new TaoValueConverter(),
     },

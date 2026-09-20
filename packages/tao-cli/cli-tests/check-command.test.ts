@@ -117,6 +117,74 @@ Describe('tao check', () => {
     })
   })
 
+  // The providers that write these sentences are registered on the language container rather than
+  // applied to the text afterwards, so this proves the wiring holds all the way out to the command:
+  // a lexer error, then a parser error whose alternatives are too many to list.
+  Test('states lexer and parser syntax errors in Tao words', async () => {
+    await withTaoFixture({
+      'stray-brace.tao': 'view Main() {\n}\n}\n',
+      'view-member.tao': 'view Broken() {\n   Text is "hi"\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const messageByFile = Object.fromEntries(
+        results.map(result => [FS.basename(result.path), result.diagnostics?.[0]?.message]),
+      )
+
+      Expect(messageByFile).toEqual({
+        'stray-brace.tao': 'Expected an open block for this `}` to close, but none is open here.',
+        'view-member.tao': 'Expected a view member here, but found `Text`.',
+      })
+    })
+  })
+
+  // One stray word makes the parser mis-read the token after it, so `Text is "hi"` alone produces
+  // three messages about the same word. Reporting the first on each line leaves the two places a
+  // reader actually has to go.
+  Test('reports each separate syntax mistake once, not the cascade behind it', async () => {
+    await withTaoFixture({
+      'broken.tao': 'view One() {\n   Text is "hi"\n}\n\nview Two {\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
+
+      Expect(broken?.diagnostics?.map(diagnostic => [diagnostic.range?.start.line, diagnostic.message])).toEqual([
+        [1, 'Expected a view member here, but found `Text`.'],
+        [4, 'Expected `(` or `=` here, but found `{`.'],
+      ])
+      Expect(broken?.unreportedDiagnostics).toBe(0)
+    })
+  })
+
+  // The parser error here sits at an earlier column than the lexer error, so source order alone
+  // would report the consequence and hide the character that caused it.
+  Test('leads a line with its lexer error even when a parser error precedes it', async () => {
+    await withTaoFixture({
+      'broken.tao': 'view Main() {\n   let x = §\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
+
+      Expect(broken?.diagnostics).toHaveLength(1)
+      Expect(broken?.diagnostics?.[0]?.source).toBe('lexer')
+      Expect(broken?.diagnostics?.[0]?.message).toContain('but found `§`.')
+    })
+  })
+
+  // Past three the list stops being something a reader starts from, so the rest is held back and
+  // counted instead of printed.
+  Test('holds back a badly broken file past the first three lines, and says how many', async () => {
+    await withTaoFixture({
+      'broken.tao': 'view Main( {\n   render Text "a"\n   render Text("b"\n   Text is 1\nview Two {\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
+
+      Expect(broken?.diagnostics).toHaveLength(3)
+      Expect(broken?.diagnostics?.map(diagnostic => diagnostic.range?.start.line)).toEqual([0, 1, 2])
+      Expect(broken?.unreportedDiagnostics).toBeGreaterThan(0)
+    })
+  })
+
   // The canonical newcomer mistake: rendering a view that was never declared or imported. It used
   // to produce no output at all, because only warnings reached the command.
   Test('reports an unresolved render target as a positioned error', async () => {

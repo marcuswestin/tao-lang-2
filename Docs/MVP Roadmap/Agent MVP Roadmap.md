@@ -39,9 +39,14 @@ language sees.
   gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
   Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
   entry graph, which is fixed.
+- Also landed on `feat/tao-error-messages-78ff65`: every lexer and parser syntax error is now Tao's
+  own sentence rather than Chevrotain's. Tao registers all six of Chevrotain's message builders on
+  `taoLanguageModule`, so `tao check`, `tao fix`, the LSP, and Studio read the same wording. A
+  seventy-line list of possible token sequences is now `Expected a view member here, but found
+  \`Text\`.`, an unreadable character names what Tao expected by example instead of a byte offset,
+  and a report shows the line above the mistake, one error per line, and at most three per file.
 - Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
-  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
-  of type …") is passed through unchanged.
+  assertion rather than a positioned diagnostic.
 
 ### A2 — A standalone cross-platform `tao` executable
 
