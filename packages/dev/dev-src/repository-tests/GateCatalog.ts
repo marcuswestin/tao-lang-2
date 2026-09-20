@@ -149,7 +149,7 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * the timings store, because a hand-written count goes stale the first time a suite grows.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { args: ['--concurrent'] }],
+  ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
   // Developer tests deliberately run concurrently and many of them spawn child processes. During
   // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
   // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
@@ -162,23 +162,29 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
   // written `--timeout=60000` that used to sit here said only what the flag already implies.
   ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
-  ['ide-extension', { args: ['--concurrent'] }],
+  ['ide-extension', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
   // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
   // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
   // empty output.
-  ['runtime-toolchain', { args: ['--timeout=60000'], cost: 2, shardCost: 2 }],
+  [
+    'runtime-toolchain',
+    { args: ['--timeout=60000'], cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 },
+  ],
   // Its tests lower and validate whole starter projects, which is seconds of real work per test.
   // Bun's five-second default was calibrated when this suite was one process beside a handful of
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
   // work for longer than that and be killed for it. The bound is a hang guard, not a budget.
   ['tao-cli', { args: ['--timeout=60000'] }],
-  ['validator', { args: ['--concurrent'] }],
+  ['validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
   // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
   // measure 19.7s, and the same files as three processes at one worker each measure 21.3s. It is
   // handed a reservation and the matching `--maxWorkers`, and left whole.
-  ['runtime-jest', { cost: 3, priority: 4, shardable: false }],
+  [
+    'runtime-jest',
+    { cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
+  ],
   // The Tao behavior tests are a `./tao test` process that loads the language services, validates
   // and compiles the apps it was given across its own compiler worker pool, and runs one Jest pass.
   // Unlike Jest's, that pool parallelizes the compile and not the run, so the suite does shard, and
@@ -194,18 +200,33 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       cost: 8,
       fixedMs: 6_000,
       priority: 5,
+      reads: ['gen-parser', 'tao', 'ts'],
       serial: false,
       // One shard still spawns a compiler worker beside its own Jest pass.
       shardCost: 2,
     },
   ],
 
-  // The four suites that reference no `.tao` source, no app, and no generated tree, and so wait
-  // for dprint alone. Verified by search; a suite that starts reading one belongs off this list.
+  // These suites reference no `.tao` source, app, or generated tree, and so wait for dprint alone.
+  // Verified by search; a suite that starts reading one belongs off this list.
   ['code-editor', { reads: ['ts'] }],
   ['generation', { reads: ['ts'] }],
+  ['icloud-native', { reads: ['ts'] }],
+  ['performance-checks', { reads: ['ts'] }],
+  ['runtime', { reads: ['ts'] }],
+  ['shared', { reads: ['ts'] }],
   ['stdlib', { reads: ['ts'] }],
   ['update-server', { reads: ['ts'] }],
+
+  // AST utilities import generated parser types but never load Tao source or app output.
+  ['ast-utils', { reads: ['gen-parser', 'ts'] }],
+
+  // These language-service suites load generated parser code and repository Tao source, including
+  // the standard library, but never consume the shared generated-app directory.
+  ['formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['parser', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['workspace', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])
 
 const TAO_CHECK_COST = 2
