@@ -34,6 +34,8 @@ export type GenerateAppOptions = {
   cwd?: string
   datasourceConfiguration?: Readonly<Record<string, string>>
   preview?: GeneratePreviewOptions
+  /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
+  publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
   runtimePackageRoot?: string
   ship?: ShipManifest
   validationMode?: 'development' | 'release'
@@ -139,6 +141,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       generatedAppRoot,
       generatedFiles,
       preview === undefined ? undefined : studioPublicationPath,
+      opts.publicationHooks,
     )
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
@@ -232,16 +235,27 @@ async function writeGeneratedFiles(
   outputRoot: string,
   files: Array<{ relativePath: string; code: string }>,
   publishLast?: string,
+  publicationHooks: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'> = {},
 ): Promise<void> {
   if (publishLast !== undefined) {
     await publishGeneratedFiles(outputRoot, files, publishLast)
     return
   }
-  for (const file of files) {
-    await writeGeneratedApp(FS.resolvePath(file.relativePath, outputRoot), file.code)
+  const stagingRoot = await FS.mkTmpDir('tao-runtime-generate-')
+  try {
+    for (const file of files) {
+      await writeGeneratedApp(FS.resolvePath(file.relativePath, stagingRoot), file.code)
+    }
+    await FS.mkdir(FS.dirname(outputRoot))
+    await FS.synchronizeDirectoryFileSets([{ fromPath: stagingRoot, toPath: outputRoot }], {
+      ...publicationHooks,
+      boundaryPath: FS.dirname(outputRoot),
+      lockPath: outputRoot,
+      sourceBoundaryPath: stagingRoot,
+    })
+  } finally {
+    await FS.remove(stagingRoot)
   }
-  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
-  await removeEmptyGeneratedDirectories(outputRoot)
 }
 
 type GeneratedFileChange = {
@@ -706,21 +720,6 @@ function canonicalSourceVersions(
     canonical[FS.resolvePath(path, project)] = version
   }
   return canonical
-}
-
-async function removeStaleGeneratedFiles(
-  outputRoot: string,
-  currentRelativePaths: ReadonlySet<string>,
-): Promise<void> {
-  if (!await FS.exists(outputRoot)) {
-    return
-  }
-  for await (const path of FS.walk(outputRoot)) {
-    const relativePath = FS.relativePath(outputRoot, path)
-    if (!currentRelativePaths.has(relativePath)) {
-      await FS.remove(path)
-    }
-  }
 }
 
 async function removeEmptyGeneratedDirectories(outputRoot: string): Promise<void> {

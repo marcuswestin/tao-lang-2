@@ -363,6 +363,56 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test('hands a successful ./dev install to ./agent without a second Bun install', async () => {
+    const testRoot = await mkTestDir('tao-dev-agent-install-stamp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      await copyBootstrapScripts(fixture.worktree)
+      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+
+      const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
+        args: ['--help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+      Expect(dev.exitCode).toBe(0)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/build/agent-dev/dev-deps.stamp', fixture.worktree))).toBe(true)
+
+      const agent = await CLI.run(FS.resolvePath('agent', fixture.worktree), {
+        args: ['help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+      Expect(agent.exitCode).toBe(0)
+
+      const commands = (await FS.readText(commandLog)).trim().split('\n')
+      Expect(commands.filter(command => command.startsWith('install '))).toEqual([
+        `install --cwd ${fixture.worktree} --frozen-lockfile`,
+      ])
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('does not publish the shared install stamp after ./dev installation fails', async () => {
+    const testRoot = await mkTestDir('tao-dev-agent-install-stamp-failure-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      await copyBootstrapScripts(fixture.worktree)
+      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+
+      const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
+        args: ['--help'],
+        env: { ...fixture.env, TAO_TEST_BUN_INSTALL_FAILURE: '1', TAO_TEST_COMMAND_LOG: commandLog },
+      })
+
+      Expect(dev.exitCode).not.toBe(0)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/build/agent-dev/dev-deps.stamp', fixture.worktree))).toBe(false)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('exposes one public setup command backed by one private installer', async () => {
     const commands = await justCommands('_setup')
     const names = await justRecipeNames()
@@ -960,6 +1010,42 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
 async function makeExecutable(path: string): Promise<void> {
   const result = await CLI.run('chmod', { args: ['+x', path] })
   Expect(result.exitCode).toBe(0)
+}
+
+async function copyBootstrapScripts(worktree: string): Promise<void> {
+  await Promise.all([
+    FS.writeText(FS.resolvePath('agent', worktree), await FS.readText(Repo.resolvePath('agent'))),
+    FS.writeText(FS.resolvePath('dev', worktree), await FS.readText(Repo.resolvePath('dev'))),
+    FS.writeText(
+      FS.resolvePath('packages/dev/dev-src/cli/agent-worktree-profile.zsh', worktree),
+      await FS.readText(PROFILE_SCRIPT),
+    ),
+    FS.writeText(
+      FS.resolvePath('packages/dev/dev-src/cli/ensure-dependencies.zsh', worktree),
+      await FS.readText(DEPENDENCY_SCRIPT),
+    ),
+  ])
+  await Promise.all([
+    makeExecutable(FS.resolvePath('agent', worktree)),
+    makeExecutable(FS.resolvePath('dev', worktree)),
+  ])
+}
+
+async function writeBootstrapBun(path: string): Promise<void> {
+  await FS.writeText(
+    path,
+    [
+      '#!/bin/zsh',
+      'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
+      'if [[ "$1" == install ]]; then',
+      '  [[ "${TAO_TEST_BUN_INSTALL_FAILURE:-}" == 1 ]] && exit 1',
+      '  mkdir -p "$3/node_modules" "$3/packages/dev/node_modules"',
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n'),
+  )
+  await makeExecutable(path)
 }
 
 async function runProfileScript(

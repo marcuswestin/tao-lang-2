@@ -263,7 +263,7 @@ separately by `P16`.
   convention" as open work — so a reader knows whether WIP means unfinished prose or unfinished
   behavior.
 
-### P14 — `Docs/Roadmap/Tao ship.md` names an unowned credential problem — Medium
+### P14 — `Docs/Archive/Explorations/Tao ship.md` names an unowned credential problem — Medium
 
 Line 240 states that deploy credentials — App Store Connect keys, Play service-account keys,
 InstantDB admin tokens — have "**No owner today**", and that `AppId` values are hardcoded in `.tao`

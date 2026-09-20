@@ -1,6 +1,7 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { inspectLandingRemote, type LandingBrokerInspection } from '../landing-broker/LandingBrokerClient'
-import { GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
+import { GeneratedEvidence } from './GeneratedEvidence'
+import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
 import { validateMergeMessage } from './MergeWithMain'
 import { VerificationLanes } from './VerificationLanes'
 
@@ -33,6 +34,12 @@ const VERIFY_LANE = VerificationLanes.VERIFY
  * no record and every branch last proved by `verify-full` was verified a second time for nothing.
  */
 const VERIFY_ACCEPTED_LANES: readonly string[] = VerificationLanes.VERIFY_OR_WIDER
+/** The ignored outputs every accepted verify lane generates before its readers run. */
+const VERIFY_GENERATED_OUTPUTS = GeneratedEvidence.outputsForGates([
+  '_parser-gen',
+  '_compile-word-flower-app',
+  '_ide-extension-build',
+])
 const MAX_SUMMARY_LENGTH = 72
 const DRAFT_PREFIX = 'DRAFT: '
 /** ROADMAP_LEDGER_PATH is the durable developer-environment ledger this brief is itself filed against. */
@@ -90,6 +97,7 @@ export type FinalizeDependencies = {
     repositoryRoot: string,
     wanted: GreenTreeKey,
     acceptedLanes: readonly string[],
+    options?: FindOptions,
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
@@ -359,7 +367,9 @@ async function verifyTree(
   lines: string[],
 ): Promise<VerificationOutcome> {
   const wanted = await dependencies.key(root)
-  const existing = await dependencies.findGreenTree(root, wanted, VERIFY_ACCEPTED_LANES)
+  const existing = await dependencies.findGreenTree(root, wanted, VERIFY_ACCEPTED_LANES, {
+    generatedOutputs: VERIFY_GENERATED_OUTPUTS,
+  })
   if (existing !== undefined) {
     lines.push(`PASS  ${GreenTree.describe(VERIFY_LANE, existing)}`)
     return { at: existing.at, lane: existing.lane, toolchain: wanted.toolchain, treeHash: wanted.treeHash }
@@ -375,7 +385,9 @@ async function verifyTree(
     throw new Errors.CommandExecutionError(verify)
   }
   const verifiedKey = await dependencies.key(root)
-  const record = await dependencies.findGreenTree(root, verifiedKey, VERIFY_ACCEPTED_LANES)
+  const record = await dependencies.findGreenTree(root, verifiedKey, VERIFY_ACCEPTED_LANES, {
+    generatedOutputs: VERIFY_GENERATED_OUTPUTS,
+  })
   const outcome: GreenTreeMatch = record ?? {
     at: dependencies.now().toISOString(),
     lane: VERIFY_LANE,

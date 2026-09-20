@@ -1,6 +1,6 @@
 # DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Area:** Sandbox
 - **Impact:** `./dev merge-with-main --dry-run` — the command an agent is supposed to run to check that
   a branch is landable — fails inside a sandboxed shell on its own remote query, so a branch cannot be
@@ -59,7 +59,10 @@
 - **Acceptance:** `just github-setup` leaves the effective and stored origin on HTTPS with the GitHub
   CLI credential helper and a running landing broker, and `./agent doctor` reports that state.
   `./dev merge-with-main --dry-run` completes inside a sandboxed shell through the broker. A test
-  proves the landing workflow performs no direct remote Git operation when the broker is available;
-  live resolution additionally requires installing the service and landing this branch from a
-  sandboxed task without exposing the GitHub credential or executing repository code outside it.
+  proves the landing workflow performs no direct remote Git operation when the broker is available.
+- **Resolution (2026-09-20):** The earlier recovery-only change was reverified from a fresh worktree
+  at `7b7dc0bc`, then superseded by the fixed-policy landing broker. Repository processes can now read
+  current refs and request one validated atomic landing without reading the GitHub credential or
+  running the mutable repository entrypoint outside the sandbox.
 - **Source:** 2026-09-19 review-findings round on `feat/work-based-test-timeouts`.
+- **Archived:** 2026-09-20

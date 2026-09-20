@@ -210,7 +210,8 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     bookmarks survive a relaunch while the feed fills again. A reference's `loading`, `missing`, and
     `error` readings and its cold fetch are proved at the runtime level; no journey forces them.
 
-[^15]: The HTTP datasource work (`Docs/Roadmap/HTTP Datasource/`) makes a live query's activation the
+[^15]: The HTTP datasource work (`Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s
+    "Http" section) makes a live query's activation the
     fetch trigger: the provider is offered each active query's descriptor, fetches through an app
     adapter, and upserts by the entity's single `(unique)` field, while the store keeps evaluating
     every query locally. `refreshing` and `stale` are advisory cases a guard may skip, so a failed

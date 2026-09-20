@@ -1,4 +1,5 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { FS, Platform } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { checkedProjectFile, checkedView, runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 Describe('tao check CLI', () => {
@@ -99,17 +100,24 @@ Describe('tao check CLI', () => {
     })
   })
 
-  // A run from a directory the files do not sit under used to render every path as a run of `../`
-  // segments longer than the path itself.
-  Test('shows a path outside the working directory without a run of parent segments', async () => {
+  Test('shows an outside diagnostic path absolutely rather than as parent traversal', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
     }, async rootDir => {
-      const result = await runTaoCliForTest(['check', rootDir])
+      const cwd = await mkTestDir('tao-cli-shallow-cwd-')
+      const previousCwd = Platform.runtimeProcess.cwd()
+      try {
+        Platform.runtimeProcess.chdir(cwd)
+        const result = await runTaoCliForTest(['check', rootDir])
 
-      Expect(result.stderr).toContain(`${rootDir}/App.tao:2:11`)
-      Expect(result.stderr).not.toContain('../..')
+        Expect(result.stderr).toContain(`${rootDir}/App.tao:2:11`)
+        // Before the fix, this shallow sibling path rendered as `../${FS.basename(rootDir)}/App.tao`.
+        Expect(result.stderr).not.toContain('../')
+      } finally {
+        Platform.runtimeProcess.chdir(previousCwd)
+        await FS.remove(cwd)
+      }
     })
   })
 })

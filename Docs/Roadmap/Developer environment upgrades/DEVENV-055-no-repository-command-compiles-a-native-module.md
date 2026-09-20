@@ -1,6 +1,6 @@
 # DEVENV-055 — No repository command compiles a native module
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Area:** Native builds
 - **Impact:** The repository now carries native code (`packages/icloud-native`, an Expo module in
   Swift), and nothing short of a full `expo run:ios` proves it compiles. An agent has to hand-assemble
@@ -18,11 +18,24 @@
   (`ios/`), never at its root.
 - **Workaround:** The three commands above, with `pod install` in a subshell and `xcodebuild`
   unsandboxed.
-- **Proposed change:** A `just native-module-check` (or `./agent native-check`) recipe that prebuilds
-  the toolchain host, installs pods from the right directory, and compiles every workspace pod target
-  for the simulator with build products under `.artifacts/`; list it beside `just session-native` as the
-  sanctioned unsandboxed native step.
+- **Proposed change:** Implemented as typed `./dev native-module-check` orchestration behind the standalone
+  `just native-module-check` host proof, with bounded phases, isolated build roots, podspec and target
+  discovery, retained failure artifacts, the canonical Maven network allowlist, and native-package
+  documentation. The mutable repository recipe deliberately remains reviewed outside the sandbox.
 - **Dependencies:** None.
-- **Acceptance:** One documented command compiles `TaoICloudNative` for the simulator from a fresh
-  worktree and fails loudly on a Swift error.
+- **Acceptance:** Eight focused orchestration tests pass, including real process timeout, phase ordering,
+  discovery, missing targets, and retained artifacts. The 2026-09-19 host run completed prebuild and
+  reached CocoaPods, then the active task's network policy blocked React Native's Hermes download from
+  `repo1.maven.org`; that required domain is now canonical but takes effect in a newly generated task.
+  A 2026-09-20 rerun from the task that generated the committed adapters reached the isolated iOS host
+  again, but the already-running task's immutable network profile still denied the same domain and
+  retained `.artifacts/native-module-check/run-q8wMIW`. This needs a newly started task or an ordinary
+  host shell; regenerating files cannot mutate the permissions of the process already running.
+  A fresh `feat/devenv-landing-followups` checkout on 2026-09-20 again completed prebuild, discovered
+  the native packages, and reached CocoaPods. The active managed shell then denied SSH host-key access;
+  Hermes fell back to source and CocoaPods reported missing `cmake`. The exact failed build is retained
+  at `.artifacts/native-module-check/run-nK3ugj`; no simulator compilation occurred. The final fresh
+  checkout reproduced the same CocoaPods boundary and retained the complete isolated host at
+  `/private/tmp/tao-devenv104-after/.artifacts/native-module-check/run-4Y6F8O`.
+  Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.

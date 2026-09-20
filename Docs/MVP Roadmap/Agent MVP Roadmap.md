@@ -39,9 +39,33 @@ language sees.
   gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
   Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
   entry graph, which is fixed.
-- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
-  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
-  of type …") is passed through unchanged.
+- `tao fmt` reporting an unparseable file through the formatter's assertion is fixed, on
+  `0ac05257`: it now returns the first lexer or parser error as the same positioned `InPlace` result
+  `check` and `fix` return, while `Formatter.formatCode` and `formatFile` keep throwing for callers
+  that parsed the source themselves and have nowhere to report.
+- Still open from this item, re-measured on `main` at `0ac05257` and worse than first recorded:
+  - Chevrotain's own wording reaches the reader unchanged, and "Expecting token of type …" is the
+    mild shape. Inside a view body the no-viable-alternative shape prints **seventy-five lines** for
+    one misplaced word — a numbered list of every possible token sequence — before naming what it
+    found. Lexer messages are raw too: `unexpected character: ->§<- at offset: 24, skipped 1
+    characters.` and `Unable to pop Lexer Mode after encountering Token ->}<- The Mode Stack is
+    empty`. Against this item's own bar — diagnostics a newcomer can act on — this is the worst
+    output the CLI produces, not a matter of polish.
+  - Both halves are one change: Langium injects `parser.ParserErrorMessageProvider` and
+    `parser.LexerErrorMessageProvider`, so registering Tao's own in `taoLanguageModule`
+    (`packages/parser/parser-src/parser.ts`) rewrites every shape at the producer rather than
+    editing strings afterwards, which is why an earlier attempt correctly declined to touch them.
+    Chevrotain has exactly six builders, so the set is closed and each can be authored deliberately.
+  - A syntax error at end of file is reported at `<path>:NaN:NaN` by `check`, `fix` and `fmt` alike —
+    `view Broken() {` with nothing after it prints
+    `B.tao:NaN:NaN error: Expecting token of type '}' but found ``.`. Chevrotain's EOF token carries
+    `NaN` for `startLine` and `startColumn` rather than leaving them undefined, so the guard in
+    `rangeFromParserError` (`packages/parser/parser-src/parser.ts:376`) lets it through. This is a
+    hole in what this item already landed, not in the formatter fix, and it belongs with the message
+    work because both live in the same file.
+- A1 closes when the wording and the `NaN` position land. Whoever lands the last of them closes this
+  item and the matching bullet under **Build the enforcement and diagnostics surface** in
+  `Roadmap.md`; neither file is owned by the slices themselves, so nothing closes it on its own.
 
 ### A2 — A standalone cross-platform `tao` executable
 
@@ -270,4 +294,4 @@ the sync demo cannot be shown to anyone outside this machine.
 
 - Waits on: Ro provisions a hosted InstantDB application (`R11`); the wiring and configuration do not.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
-  `Docs/Roadmap/InstantDB datasource provider/`.
+  `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.

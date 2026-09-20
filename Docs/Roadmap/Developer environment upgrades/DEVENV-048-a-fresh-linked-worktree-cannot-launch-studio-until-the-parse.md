@@ -10,9 +10,15 @@
   `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
   lives under `~/.local/share/direnv`.
 - **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
-- **Proposed change:** Make `setup` depend on `_parser-gen`, or have `./dev studio` generate the parser
-  when the generated tree is missing.
-- **Dependencies:** None.
-- **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
-  `./dev studio Apps/HNReader` alone.
+- **Proposed change:** Implemented: the one setup recipe now orders `deps`, `_parser-gen`, and
+  `_agent-config`, and every harness setup comment states the same bootability contract.
+- **Dependencies:** DEVENV-063 blocks the remaining Studio host proof in the managed task namespace.
+- **Acceptance:** Parser generation and the subsequent CLI check passed from the fresh integration
+  worktree on 2026-09-19. The headless Studio launch then reached Metro but failed because Watchman
+  could not write its LaunchAgent and Metro exhausted macOS file watchers, so the Studio half remains
+  open under DEVENV-063 rather than being reported as green. Reverified on 2026-09-20 from the fresh
+  `feat/devenv-landing-followups` checkout: `./agent setup` generated the parser, `./tao check
+  Apps/HNReader` completed with zero noncanonical files, and the first real-app Studio case passed.
+  The subsequent Metro-backed case again failed with Watchman denied and Node watcher `EMFILE`, so
+  the required complete Studio host proof still belongs to DEVENV-063.
 - **Source:** 2026-09-04 Studio visual design work.

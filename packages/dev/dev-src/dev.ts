@@ -435,6 +435,14 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('native-module-check')
+    .description('Compile every Tao native module for the iOS simulator in an isolated generated host.')
+    .action(async () => {
+      const { NativeModuleCheck } = await import('./native-module-check/NativeModuleCheck')
+      Platform.runtimeProcess.exit(await NativeModuleCheck.run())
+    })
+
+  commands
     .command('studio')
     .description('Launch Tao Studio against a project folder.')
     .argument('[project]', 'Tao project folder.', '.')

@@ -3,6 +3,12 @@ import { ContentionRetry } from './ContentionRetry'
 import { FlakeTolerance } from './FlakeTolerance'
 import { GateCatalog } from './GateCatalog'
 import {
+  GeneratedEvidence,
+  type GeneratedEvidence as GeneratedEvidenceRecord,
+  type GeneratedEvidenceCapture,
+  type GeneratedOutput,
+} from './GeneratedEvidence'
+import {
   GreenTree,
   type GreenTreeKey,
   type GreenTreeMatch,
@@ -63,6 +69,8 @@ export type RunGatesOptions = {
     noCache?: boolean
     /** Injected by tests; defaults to hashing the Git working tree. */
     hashTree?: (repositoryRoot: string) => Promise<string>
+    /** Injected by tests; defaults to hashing the generator-owned ignored inputs and outputs. */
+    captureGenerated?: GeneratedEvidenceCapture
     lanes: readonly string[]
   }
   jobs?: number
@@ -141,19 +149,24 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ? undefined
     : { toolchain, treeHash: startingTree.hash }
   const readsGreenTree = options.greenTree !== undefined && options.greenTree.noCache !== true
+  const generatedOutputs = GeneratedEvidence.outputsForGates(options.gates)
   // A whole-lane record may stand in for the lane only when every node in it is one the key
   // describes — exactly the nodes `isRecordable` admits, and no others. A lane holding a
-  // host-dependent node cannot be skipped wholesale, however green its record: it would be
+  // host-dependent node cannot be recorded or skipped wholesale, however green its record: it would be
   // asserting that Chrome, Electrobun, the simulator, and the window server behave here as they did
-  // on the run that wrote it, which no tree hash says. Neither can a lane holding a generator: its
-  // output is Git-ignored and so outside the hash, and `just verify && just clean && just verify`
-  // would otherwise match the record at an unchanged tree and report PASSED having generated
-  // nothing. Such a lane still skips its recordable nodes one by one below, which is the same
-  // saving without the lie, and a generator skipped that way costs its own stamp check rather than
-  // its full run.
+  // on the run that wrote it, which no tree hash says. A lane holding a generator cannot be skipped
+  // by this runner either: the generator's cheap stamp check must first restore any missing output.
+  // It can still write whole-lane evidence for finalize, provided the ignored generated inputs and
+  // outputs are captured after prepare and remain unchanged through every reader below.
   const wholeLaneSkippable = options.gates.every(name => GateCatalog.isRecordable(name))
+  const wholeLaneRecordable = options.gates.every(name =>
+    GateCatalog.isRecordable(name) || GeneratedEvidence.isWriter(name)
+  )
   if (readsGreenTree && wholeLaneSkippable && startingKey !== undefined) {
-    const match = await GreenTree.find(location.repositoryRoot, startingKey, options.greenTree!.lanes)
+    const match = await GreenTree.find(location.repositoryRoot, startingKey, options.greenTree!.lanes, {
+      captureGenerated: options.greenTree?.captureGenerated,
+      generatedOutputs,
+    })
     if (match !== undefined) {
       return greenTreeSummary(options, location.lane, match, now() - startedAt)
     }
@@ -246,7 +259,9 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // overlap freely, so the lock covers the prepare phase and is released the moment it ends.
   const prepareLease = prepareNames.size === 0 ? undefined : await acquirePrepare(location.repositoryRoot, options)
   let verifiedTree: TreeFingerprint | undefined
+  let verifiedGenerated: GeneratedEvidenceRecord | undefined
   let snapshot: Promise<TreeFingerprint | undefined> = Promise.resolve(startingTree)
+  let generatedSnapshot: Promise<GeneratedEvidenceRecord | undefined> = Promise.resolve(undefined)
 
   const { contention, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
@@ -261,10 +276,13 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       // rewrites the tree while it is still being hashed, and the hash would then describe a tree
       // that never existed.
       snapshot = fingerprintOf(location.repositoryRoot)
+      generatedSnapshot = captureGenerated(options, location.repositoryRoot, generatedOutputs)
       // Not `void snapshot.finally(...)`: that chain rejects with the snapshot and nothing is
       // listening on it, which is an unhandled rejection rather than a release. The rejection
       // itself is answered where the snapshot is awaited, below.
-      void snapshot.catch(() => undefined).then(async () => await prepareLease?.release())
+      void Promise.all([snapshot, generatedSnapshot]).catch(() => undefined).then(async () =>
+        await prepareLease?.release()
+      )
     }
     const graphResult = await WorkGraph.run(states, {
       env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true),
@@ -305,11 +323,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     // without waiting hands a peer the prepare lock mid-hash, and its fixers then rewrite the tree
     // into a hash describing a state that never existed. The early release above is what keeps the
     // lock from being held for the whole read-only phase; this one is only the backstop.
-    await snapshot.catch(() => undefined)
+    await Promise.all([snapshot, generatedSnapshot]).catch(() => undefined)
     await prepareLease?.release()
   })
 
   verifiedTree = await snapshot
+  verifiedGenerated = await generatedSnapshot
   // Reading a test node's structured report can still fail it — a node that exited zero without
   // writing its results proved nothing — so the observations are gathered before the summary
   // decides whether this lane passed, not after it has said so.
@@ -367,10 +386,21 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     summary.status = 'failed'
     summary.warnings = [...summary.warnings, STALE_PROOF_WARNING]
   }
+  if (generatedOutputs.length > 0) {
+    const finalGenerated = await captureGenerated(options, location.repositoryRoot, generatedOutputs)
+    if (
+      verifiedGenerated === undefined
+      || finalGenerated === undefined
+      || !GeneratedEvidence.equals(verifiedGenerated, finalGenerated)
+    ) {
+      summary.status = 'failed'
+      summary.warnings = [...summary.warnings, GENERATED_DRIFT_WARNING]
+    }
+  }
   // A lane record is only written when the lane's own membership is fully describable by the key,
   // for the same reason it is only read then. A lane whose nodes include a host-dependent one, or a
   // suite the flake ledger has seen flip, records its nodes and not itself.
-  const recordsLane = wholeLaneSkippable && unstable.size === 0
+  const recordsLane = wholeLaneRecordable && unstable.size === 0
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
     await recordGreen({
       canStandOnRecord,
@@ -384,6 +414,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       states,
       summary,
       verifiedTree,
+      generated: verifiedGenerated,
+      generatedOutputs,
     })
   }
   if (testPlan !== undefined && !result.interrupted && observations.length > 0) {
@@ -461,6 +493,8 @@ async function recordGreen(options: {
    * alone was guarded, which left `./dev gates <subset>` able to write exactly that record.
    */
   canStandOnRecord: (name: string) => boolean
+  generated?: GeneratedEvidenceRecord
+  generatedOutputs: readonly GeneratedOutput[]
   key?: GreenTreeKey
   /** False when this lane's own membership is not fully described by the key; its nodes still are. */
   lane: boolean
@@ -492,12 +526,14 @@ async function recordGreen(options: {
     .map(state => state.name)
     .filter(name => options.suiteOf(name) === undefined)
     .filter(options.canStandOnRecord)
+  const recordsGenerated = GeneratedEvidence.covers(options.generated, options.generatedOutputs)
   await GreenTree.record(
     location.repositoryRoot,
-    options.lane ? options.lanes[0] ?? location.lane : undefined,
+    options.lane && recordsGenerated ? options.lanes[0] ?? location.lane : undefined,
     { at: new Date().toISOString(), logRoot: location.logRoot, toolchain: key.toolchain, treeHash: verifiedTree.hash },
     [...passedGates, ...provedSuites(options.states, options.suiteOf).filter(options.canStandOnRecord)],
     {
+      laneGenerated: options.lane && recordsGenerated ? options.generated : undefined,
       neverRecord: new Set(
         options.states.filter(state => !GateCatalog.isRecordable(state.name)).map(state => state.name),
       ),
@@ -529,6 +565,10 @@ function provedSuites(
 /** Why a run that reused proofs and then rewrote the tree under them cannot report itself green. */
 const STALE_PROOF_WARNING = 'nodes were skipped on an earlier proof and the prepare phase then '
   + 'changed the tree; this run is not green evidence. Re-run with --no-cache.'
+
+/** Why ignored output that moved after its readers ran cannot back a whole-lane proof. */
+const GENERATED_DRIFT_WARNING = 'generated output changed or became unreadable while verification was running; '
+  + 'this run is not green evidence'
 
 /** driftWarning names what changed under a run, because "the tree changed" is not actionable. */
 function driftWarning(before: TreeFingerprint, after: TreeFingerprint): string {
@@ -624,6 +664,18 @@ function treeFingerprinter(options: RunGatesOptions): (repositoryRoot: string) =
     return GreenTree.fingerprint
   }
   return async repositoryRoot => ({ hash: await injected(repositoryRoot), paths: new Map() })
+}
+
+/** generated evidence uses the production hashers unless a test supplies a deterministic capture. */
+function captureGenerated(
+  options: RunGatesOptions,
+  repositoryRoot: string,
+  outputs: readonly GeneratedOutput[],
+): Promise<GeneratedEvidenceRecord | undefined> {
+  if (outputs.length === 0) {
+    return Promise.resolve(undefined)
+  }
+  return (options.greenTree?.captureGenerated ?? GeneratedEvidence.capture)(repositoryRoot, outputs)
 }
 
 /** greenTreeSummary is the rollup of a run that did not happen because its tree was already proved. */

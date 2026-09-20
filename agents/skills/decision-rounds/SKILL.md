@@ -6,7 +6,7 @@ description: >-
 
 # Decision Rounds
 
-Root `AGENTS.md` owns the boundary: Ro decides language semantics, product behavior, and roadmap priority, and agents resolve routine implementation choices from repository evidence. This skill owns how the decisions that are Ro's get found and settled: all of them first, then a handful at a time.
+Root `AGENTS.md` owns the boundary between Ro's decisions and routine implementation choices. This skill owns how the decisions that are Ro's get found and settled: all of them first, then a handful at a time.
 
 ## When
 
@@ -16,7 +16,7 @@ Root `AGENTS.md` owns the boundary: Ro decides language semantics, product behav
 ## Find every decision first
 
 1. Brainstorm wide. List every decision the task raises, grouped by area, before narrowing anything. Include the items you would default and the items you would drop.
-2. Show the whole inventory as a numbered list of areas with lettered sub-items so Ro can address any one of them. Mark each item you propose to drop or default, with the default stated in a few words.
+2. Show the whole inventory in the numbered/lettered shape root `AGENTS.md` sets for replies to Ro, marking each item you propose to drop or default with the default stated in a few words.
 3. Narrow with Ro. Ro strikes, adds, or promotes items; the survivors are the decision list.
 
 ## Settle them a handful at a time
