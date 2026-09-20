@@ -29,6 +29,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
+- When other agents may write, stage only exact reviewed paths (`git add -- <path>…`); never `git add .`, `git add -A`, or a directory-wide path.
 - Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
 - The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 
@@ -36,7 +37,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. The `environment-recovery` skill owns what to do when the sandbox is the obstacle; never widen the policy to route around one.
-- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls and the machine-wide landing lock. A direct `git push` still stops for Ro.
+- Merge onto `main` on your own judgment when the gates can prove the change, and hand the landing to Ro when they cannot; the `verification-lanes` skill owns where that line falls and the machine-wide landing lock. Landing pushes, because `merge-with-main` pushes as part of landing.
 - Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service. The one exception is a cross-vendor second opinion, which Ro must ask for in the current request and which the `second-opinion` skill bounds.
 - `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, `.rulesync/profiles.jsonc` the opt-in profiles, `.rulesync/hooks.jsonc` the agent hooks, and `agents/subagents/` the subagent profiles; every generated harness file comes from them. Never edit a generated harness file; change the source and run `./agent setup`. The `agent-instructions` skill owns which generator produces what.
 

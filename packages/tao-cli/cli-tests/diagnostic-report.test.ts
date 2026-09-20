@@ -19,9 +19,32 @@ Describe('tao CLI diagnostic rendering', () => {
   Test('renders a located headline over the source line and an underline for the span', () => {
     Expect(renderDiagnostic(diagnostic(), source)).toBe(
       "App.tao:2:11 error: No view named 'NoSuchView' is in scope.\n"
+        + '1 | view Main() {\n'
         + '2 |    render NoSuchView()\n'
         + '  |           ^^^^^^^^^^',
     )
+  })
+
+  // An underlined fragment on its own reads as an anonymous line of code; the line above it is
+  // usually the declaration header, which is what makes the reader recognize where they are.
+  Test('leads with the line above the mistake, and has none to lead with on the first line', () => {
+    const firstLine = diagnostic({ range: { start: { line: 0, character: 5 }, end: { line: 0, character: 9 } } })
+
+    Expect(renderDiagnostic(firstLine, source).split('\n')[1]).toBe('1 | view Main() {')
+    Expect(renderDiagnostic(firstLine, source).split('\n')).toHaveLength(3)
+  })
+
+  // A two-row excerpt can straddle a change of width, and a ragged gutter breaks the column the
+  // carets line up in.
+  Test('pads both line numbers to one gutter width when they differ', () => {
+    const tenLines = `${'view Main() {\n'.repeat(9)}   render NoSuchView()\n`
+    const onLineTen = diagnostic({ range: { start: { line: 9, character: 10 }, end: { line: 9, character: 20 } } })
+
+    Expect(renderDiagnostic(onLineTen, tenLines).split('\n').slice(1)).toEqual([
+      ' 9 | view Main() {',
+      '10 |    render NoSuchView()',
+      '   |           ^^^^^^^^^^',
+    ])
   })
 
   Test('names the severity so the reader does not depend on the terminal color', () => {

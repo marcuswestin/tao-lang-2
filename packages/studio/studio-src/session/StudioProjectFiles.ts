@@ -1,5 +1,6 @@
-import { Assert, FS, Repo, TaoFiles } from '@shared'
+import { Assert, FS } from '@shared'
 import SourceActions from '@source-actions'
+import { discoverProjectTaoFiles } from '@workspace'
 import type { StudioCompileDiagnostic, StudioSourceChange } from '../StudioCompileCoordinator'
 import type { StudioProjectFile, StudioProjectFileContent } from '../StudioProtocol'
 
@@ -16,11 +17,7 @@ export type StudioProjectFilesIO = {
 }
 
 const defaultIO: StudioProjectFilesIO = {
-  listTaoFiles: projectRoot =>
-    Repo.filesUnder(projectRoot, {
-      excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
-      extensions: ['.tao'],
-    }),
+  listTaoFiles: projectRoot => discoverProjectTaoFiles(projectRoot),
   readText: path => FS.readText(path),
 }
 

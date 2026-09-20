@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { loadSemanticSnapshot } from '@workspace'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
   StudioProjectSession,
@@ -53,6 +54,23 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(file.sourceVersion.startsWith('text-v1:')).toBe(true)
     Expect(file.content).toContain('app Garden')
     await Expect(session.readFile('../outside.tao')).rejects.toThrow('not a Tao file in the project')
+  })
+})
+
+Test('Studio and the CLI load ordered diagnostics through the same validated snapshot seam', async () => {
+  await withTaoFiles('tao-studio-semantic-loader-parity-', {
+    'Garden.tao': 'app Garden { view Missing }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const cli = await loadSemanticSnapshot({ appName: 'Garden', entryPath: 'Garden.tao', projectRoot: root })
+    const ordered = (diagnostics: readonly { filePath?: string; message: string; severity: string }[]) =>
+      diagnostics.map(diagnostic => [diagnostic.severity, diagnostic.filePath, diagnostic.message])
+
+    Expect(ordered((await session.semanticSnapshot()).diagnostics)).toEqual(ordered(cli.diagnostics))
   })
 })
 

@@ -31,6 +31,13 @@
   those non-import edges and table-driven tests prove edits/additions/deletions throughout the derived
   closure invalidate while an unrelated synthetic package does not, broad invalidation is the safe
   behavior. Unknown roots, unresolved aliases, or undeclared filesystem reads must disable reuse.
+  The 2026-09-20 follow-up also found that the current package closure rooted at `tao-cli` still reaches
+  nearly every package, while computed `require`, runtime sibling discovery, workspace manifests, and
+  `packages/tsconfig.base.json` remain outside `PackageGraph`'s literal TypeScript-import model. A safe
+  implementation first needs an entrypoint-level resolver that reports unknown edges and disables
+  reuse, plus an explicit checked registry for non-import filesystem inputs. Tests must cover a new
+  import, alias, manifest rename, computed require, and filesystem dependency; merely enumerating the
+  present package list cannot prove future completeness.
 - **Dependencies:** DEVENV-081 (the compiled-output memo) and the `tao check` workspace stamp both
   key on this identity.
 - **Acceptance:** an edit under `packages/<name>` invalidates only the memos whose verdict can reach

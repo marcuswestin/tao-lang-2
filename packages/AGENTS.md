@@ -11,6 +11,7 @@ Implement language features as vertical slices. Use the same focused feature nam
 
 ## TypeScript and tests
 
+- Put a disposable TypeScript diagnostic under `packages/<package>/.scratch/` and run it from the repository root with `bun run packages/<package>/.scratch/<script>.ts`. The directory is ignored, and its package location preserves that package's TypeScript aliases and workspace dependency resolution. Do not use it for tests or source that should land.
 - Use shared wrappers such as `CLI`, `FS`, `HCI`, `Platform`, `Time`, and `@shared/test` instead of direct platform or test-runner APIs. Loader-constrained config files are the narrow exception.
 - Search `@shared` for an existing helper before adding one, and put a helper two packages need in `@shared` rather than in both. Where a copy must exist because `packages/runtime` imports nothing from `@shared`, name the shared original it mirrors and keep the two in step.
 - Keep each module's public surface focused on one main concept. Export helpers only for real cross-file or package boundaries.

@@ -3,6 +3,7 @@
 // The snapshots here are built by hand from a source string so every offset is real and the assertions are
 // about placement and validation, not about what the on-device model happens to say on a given day.
 import { Describe, Expect, Test } from '@shared/test'
+import type { SemanticSnapshot, SnapshotNode } from '@workspace'
 import {
   type FeatureShape,
   lowerFeature,
@@ -10,7 +11,6 @@ import {
   type RewordShape,
   textCandidates,
 } from '../studio-src/agent-chat/FeaturePlan'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 
