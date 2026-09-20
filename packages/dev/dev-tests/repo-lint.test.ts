@@ -385,9 +385,36 @@ _bench-check:
     ])
   })
 
-  Test('reports a developer-environment file that is not named for an ID', () => {
+  Test('reports a developer-environment file that is named for neither a number nor a title', () => {
     Expect(developerEnvironmentLedgerIssues(openSide('', ['notes.md']), emptySide)).toEqual([
-      'Developer environment upgrades/notes.md must be named DEVENV-NNN-<slug>.md.',
+      'Developer environment upgrades/notes.md must be named DEVENV-NAME-WORDS-ETC.md, with the'
+      + " title's words in capitals joined by dashes.",
+    ])
+  })
+
+  Test('accepts an entry named for its title beside a numbered one', () => {
+    const index = '- [DEVENV-901 — Numbered](<Developer environment upgrades/DEVENV-901-numbered.md>) — Candidate\n'
+      + '- [DEVENV-NAMED-FOR-ITS-TITLE — Named](<Developer environment upgrades/DEVENV-NAMED-FOR-ITS-TITLE.md>)'
+      + ' — Candidate\n'
+    Expect(developerEnvironmentLedgerIssues(
+      openSide(index, ['DEVENV-901-numbered.md', 'DEVENV-NAMED-FOR-ITS-TITLE.md']),
+      emptySide,
+    )).toEqual([])
+  })
+
+  Test('reports one title claimed by both halves of the ledger', () => {
+    const index = '- [DEVENV-SAME-TITLE-TWICE — Open](<Developer environment upgrades/DEVENV-SAME-TITLE-TWICE.md>)'
+      + ' — Candidate\n'
+    const archiveIndex = '- [DEVENV-SAME-TITLE-TWICE — Done]'
+      + '(<Developer environment upgrades/Archive/DEVENV-SAME-TITLE-TWICE.md>) — Resolved\n'
+    Expect(developerEnvironmentLedgerIssues(
+      openSide(index, ['DEVENV-SAME-TITLE-TWICE.md']),
+      archivedSide(archiveIndex, ['DEVENV-SAME-TITLE-TWICE.md']),
+    )).toEqual([
+      'Developer environment upgrades: DEVENV-SAME-TITLE-TWICE is claimed by'
+      + ' Developer environment upgrades/DEVENV-SAME-TITLE-TWICE.md,'
+      + ' Developer environment upgrades/Archive/DEVENV-SAME-TITLE-TWICE.md;'
+      + ' rename the later-merged file and its index line.',
     ])
   })
 
