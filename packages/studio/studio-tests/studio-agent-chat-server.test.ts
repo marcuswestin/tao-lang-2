@@ -3,7 +3,7 @@
 // The loop and the tools have their own tests. This one exercises what a person actually reaches: the command
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, Test, until, withTaoFiles } from '@shared/test'
+import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import { loadSemanticSnapshot, Workspace } from '@workspace'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'

@@ -3,10 +3,12 @@ import { Describe, Expect, Test } from '@shared/test'
 import { checkedProjectFile, runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 Describe('tao semantic commands', () => {
-  Test('reports non-empty Studio facts and complete coverage through versioned JSON using a project-relative entry', async () => {
-    await withTaoFixture({
-      ...checkedProjectFile,
-      'App.tao': `
+  Test(
+    'reports non-empty Studio facts and complete coverage through versioned JSON using a project-relative entry',
+    async () => {
+      await withTaoFixture({
+        ...checkedProjectFile,
+        'App.tao': `
         use Button, Col, Text from @tao/ui
 
         app Demo { view Home }
@@ -20,63 +22,65 @@ Describe('tao semantic commands', () => {
           }
         }
       `,
-      'App.test.tao': `
+        'App.test.tao': `
         suite Home {
           test "shows welcome" { expect text "Welcome" }
         }
       `,
-    }, async root => {
-      const facts = await runTaoCliForTest(['facts', root, 'App.tao', 'Demo'])
-      const coverage = await runTaoCliForTest(['coverage', root, 'App.tao', 'Demo', 'Home'])
+      }, async root => {
+        const facts = await runTaoCliForTest(['facts', root, 'App.tao', 'Demo'])
+        const coverage = await runTaoCliForTest(['coverage', root, 'App.tao', 'Demo', 'Home'])
 
-      const factsJson = JSON.parse(facts.stdout) as {
-        app: string
-        diagnostics: unknown[]
-        facts: Array<{ kind: string; subject: string }>
-        format: string
-        version: number
-      }
-      const coverageJson = JSON.parse(coverage.stdout) as {
-        coverage: {
-          actions: unknown[]
-          checks: string[]
-          note: string
-          shows: Array<{ by: string; checks: string[]; text: string }>
-          view: string
+        const factsJson = JSON.parse(facts.stdout) as {
+          app: string
+          diagnostics: unknown[]
+          facts: Array<{ kind: string; subject: string }>
+          format: string
+          version: number
         }
-        diagnostics: unknown[]
-        format: string
-        version: number
-      }
+        const coverageJson = JSON.parse(coverage.stdout) as {
+          coverage: {
+            actions: unknown[]
+            checks: string[]
+            note: string
+            shows: Array<{ by: string; checks: string[]; text: string }>
+            view: string
+          }
+          diagnostics: unknown[]
+          format: string
+          version: number
+        }
 
-      Expect(facts.exitCode).toBe(0)
-      Expect(Object.keys(factsJson).sort()).toEqual(['app', 'diagnostics', 'facts', 'format', 'version'])
-      Expect(factsJson).toMatchObject({ app: 'Demo', diagnostics: [], format: 'tao-semantic-facts-v1', version: 1 })
-      Expect(factsJson.facts.length).toBeGreaterThan(0)
-      Expect(factsJson.facts).toContainEqual(Expect.objectContaining({
-        kind: 'action-never-invoked',
-        subject: 'Home.Unused',
-      }))
-      Expect(coverage.exitCode).toBe(0)
-      Expect(Object.keys(coverageJson).sort()).toEqual(['coverage', 'diagnostics', 'format', 'version'])
-      Expect(Object.keys(coverageJson.coverage).sort()).toEqual(['actions', 'checks', 'note', 'shows', 'view'])
-      Expect(coverageJson).toMatchObject({
-        coverage: {
-          actions: [],
-          checks: ['shows welcome'],
-          note: 'Matched by text, not by the compiler: a check that asserts a string this view renders is treated as exercising it. 1 of 2 texts this view shows appear in no check.',
-          shows: [
-            { by: 'exact', checks: ['shows welcome'], text: 'Welcome' },
-            { by: 'none', checks: [], text: 'Activate' },
-          ],
-          view: 'Home',
-        },
-        diagnostics: [],
-        format: 'tao-semantic-coverage-v1',
-        version: 1,
+        Expect(facts.exitCode).toBe(0)
+        Expect(Object.keys(factsJson).sort()).toEqual(['app', 'diagnostics', 'facts', 'format', 'version'])
+        Expect(factsJson).toMatchObject({ app: 'Demo', diagnostics: [], format: 'tao-semantic-facts-v1', version: 1 })
+        Expect(factsJson.facts.length).toBeGreaterThan(0)
+        Expect(factsJson.facts).toContainEqual(Expect['objectContaining']({
+          kind: 'action-never-invoked',
+          subject: 'Home.Unused',
+        }))
+        Expect(coverage.exitCode).toBe(0)
+        Expect(Object.keys(coverageJson).sort()).toEqual(['coverage', 'diagnostics', 'format', 'version'])
+        Expect(Object.keys(coverageJson.coverage).sort()).toEqual(['actions', 'checks', 'note', 'shows', 'view'])
+        Expect(coverageJson).toMatchObject({
+          coverage: {
+            actions: [],
+            checks: ['shows welcome'],
+            note:
+              'Matched by text, not by the compiler: a check that asserts a string this view renders is treated as exercising it. 1 of 2 texts this view shows appear in no check.',
+            shows: [
+              { by: 'exact', checks: ['shows welcome'], text: 'Welcome' },
+              { by: 'none', checks: [], text: 'Activate' },
+            ],
+            view: 'Home',
+          },
+          diagnostics: [],
+          format: 'tao-semantic-coverage-v1',
+          version: 1,
+        })
       })
-    })
-  })
+    },
+  )
 
   Test('rejects an invalid entry as a typed user error instead of leaking ENOENT', async () => {
     await withTaoFixture(checkedProjectFile, async root => {
@@ -135,7 +139,7 @@ Describe('tao semantic commands', () => {
         coverage: { checks: string[]; shows: Array<{ checks: string[] }> }
       }
 
-      Expect(facts.facts).toContainEqual(Expect.objectContaining({
+      Expect(facts.facts).toContainEqual(Expect['objectContaining']({
         kind: 'action-never-invoked',
         subject: 'Home.Unused',
       }))
