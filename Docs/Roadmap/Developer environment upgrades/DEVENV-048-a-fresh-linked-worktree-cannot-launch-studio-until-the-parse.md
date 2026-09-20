@@ -24,5 +24,11 @@
   the required complete Studio host proof remained unproved. On the 2026-09-20 follow-up branch,
   fresh `./agent setup` and `./tao check Apps/HNReader` passed again; the Studio smoke now stopped
   before Metro with DEVENV-063's actionable Watchman LaunchAgent diagnostic instead of `EMFILE`.
+  Reproduced again on 2026-09-20 in a fresh `feat/devenv-parser-cache-followups` linked worktree:
+  `./agent setup` generated the parser and `./tao check Apps/HNReader` reported `0 noncanonical, 5
+  unchanged, 12 warnings`. `./agent studio-smoke` then reached `Starting Metro Bundler` before failing
+  with `Your macOS system limit does not allow enough watchers for Metro` and `EMFILE: too many open
+  files, watch`. That is host-boundary evidence, not a parser regression, so the Studio acceptance
+  remains open.
   Resolve this entry only after the same smoke reaches readiness in a supported host shell.
 - **Source:** 2026-09-04 Studio visual design work.
