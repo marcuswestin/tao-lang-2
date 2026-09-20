@@ -27,16 +27,16 @@ const BOUNDED_GIT_FLAGS = new Set([
   '--quiet',
 ])
 
-export const SED_EDIT_REFUSAL =
+const SED_EDIT_REFUSAL =
   'Edit files with the Edit tool, not `sed -i` (AGENTS.md): an edit inside the worktree runs without '
   + 'review and arrives in the diff Ro reads.'
 
-export const gitPatchRefusal = (subcommand: string): string =>
+const gitPatchRefusal = (subcommand: string): string =>
   `\`git ${subcommand}\` prints the whole patch into context. Ask for the shape first (\`--stat\`, `
   + '`--name-only`, `--oneline`), or send it to a file (`git … > "$TMPDIR/patch.diff"`) and read the '
   + 'part you need.'
 
-export const shellReadRefusal = (command: string): string =>
+const shellReadRefusal = (command: string): string =>
   `Read files with the Read tool, not \`${command}\` (AGENTS.md): it takes an offset and a limit, it `
   + 'is cached across a session, and it does not pull the whole file into context.'
 
