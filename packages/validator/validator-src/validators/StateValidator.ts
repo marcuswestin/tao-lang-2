@@ -1,5 +1,6 @@
 import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { DeclarationOrder } from '../DeclarationOrder'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -68,23 +69,17 @@ function isPersistableType(
     return false
   }
   const nextSeen = nominal ? new Set([...seen, nominal]) : seen
-  if (type.kind === 'primitive') {
-    return ['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)
-  }
-  if (type.kind === 'list') {
-    return type.element === undefined || isPersistableType(type.element, nextSeen)
-  }
-  if (type.kind === 'item') {
-    return type.item !== undefined
-      && type.item.properties.every(property => isPersistableType(Type.ofProperty(property), nextSeen))
-  }
-  if (type.kind === 'enum') {
-    return true
-  }
-  if (type.kind === 'union') {
-    return type.members.every(member => isPersistableType(member, nextSeen))
-  }
-  return false
+  return Switch.kind(type, {
+    primitive: type => ['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive),
+    list: type => type.element === undefined || isPersistableType(type.element, nextSeen),
+    item: type =>
+      type.item !== undefined
+      && type.item.properties.every(property => isPersistableType(Type.ofProperty(property), nextSeen)),
+    entity: () => false,
+    enum: () => true,
+    union: type => type.members.every(member => isPersistableType(member, nextSeen)),
+    unresolved: () => false,
+  })
 }
 
 function persistableNominal(type: ASTUtils.TaoType): AST.TypeDefinition | undefined {

@@ -74,7 +74,7 @@ are retained as execution history, not current syntax or architecture.
   begins; nothing in it is for the implementer to guess.
 - **`Docs/Roadmap/Tao Revolution/Decisions.md` is authoritative.** The design summary preserves
   rationale, while `Docs/Spec/` describes the implemented contract and follows implementation rather
-  than leading it. The tranche that touches an area reconciles all three; `Docs/Roadmap/Archive/`
+  than leading it. The tranche that touches an area reconciles all three; `Docs/Archive/`
   stays frozen unless Ro asks.
 
 ## Sequence
@@ -488,7 +488,7 @@ contract — updated to what T1–T6 shipped, never ahead of it); `Docs/Tutorial
 sources themselves** — Ro ruled they follow determined decisions before anything merges to `main`, so
 `command X = Y() with { … }` and `Key "cmd+n"` there are T7's to respell; every `AGENTS.md` and
 `agents/skills/*/SKILL.md`; the design document itself (its discovery record moves to
-`Docs/Roadmap/Archive/` only if Ro asks).
+`Docs/Archive/` only if Ro asks).
 
 **Method.** Search for the retired and renamed vocabulary — `intent` as a declaration or concept
 word, `Palette all`, `Rail`, `menu Name { … }` in views, `present … as palette`, `Title` on

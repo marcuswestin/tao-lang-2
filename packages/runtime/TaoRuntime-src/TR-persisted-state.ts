@@ -4,21 +4,30 @@ import { RuntimeAssert } from './TR-assert'
 import type { TaoKeyValueStorage } from './TR-data'
 import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
 import { warnContainedFailure } from './TR-errors'
+import { runtimeRevisionStore } from './TR-listeners'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
+import RuntimeSwitch from './TR-switch'
 import { runtimeTestOverrideSlot } from './TR-test-override'
 
 type EvaluableValue<T> = Readonly<{ evaluate(): EvaluableValue<T>; jsValue: T }>
 
+type TaoPersistedStatePrimitiveName = 'boolean' | 'duration' | 'none' | 'number' | 'text' | 'time'
+
 export type TaoPersistedStateType =
   | Readonly<{ cases: readonly string[]; declaration: string; kind: 'enum' }>
   | Readonly<{ kind: 'list'; element?: TaoPersistedStateType }>
-  | Readonly<{ kind: 'primitive'; name: 'boolean' | 'duration' | 'none' | 'number' | 'text' | 'time' }>
+  | Readonly<{ kind: 'primitive'; name: TaoPersistedStatePrimitiveName }>
   | Readonly<{
     kind: 'item'
     properties: Readonly<Record<string, Readonly<{ optional: boolean; type: TaoPersistedStateType }>>>
   }>
   | Readonly<{ kind: 'union'; members: readonly TaoPersistedStateType[] }>
+
+/** What one decode attempt answers: the restored value, or the shared refusal every branch returns. */
+type PersistedDecoding = Readonly<{ ok: true; value: unknown }> | Readonly<{ ok: false }>
+
+const undecoded: PersistedDecoding = { ok: false }
 
 type PersistedEnvelope = Readonly<{
   formatVersion: 1
@@ -79,14 +88,13 @@ export function registerPersistedEnumCase(value: PersistedEnumCaseIdentity): voi
 export class RuntimePersistedState<T> implements TaoWritableState<T> {
   readonly key: string
   readonly #default: T
-  readonly #listeners = new Set<() => void>()
+  readonly #changes = runtimeRevisionStore()
   #dirtyBeforeLoad = false
   #loaded = false
   #loading: Promise<void> | undefined
   #persistQueue: Promise<void> = Promise.resolve()
   readonly #type: TaoPersistedStateType
   #value: T
-  #version = 0
 
   constructor(
     initial: EvaluableValue<T>,
@@ -104,7 +112,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     this.#type = type
     this.key = `tao.persisted-state.v1:${identity.canonical}:${name}`
     const restored = pendingRestore.get(this.key)
-    const decoded = restored === undefined ? { ok: false as const } : decodePersistedValue(restored, this.#type)
+    const decoded = restored === undefined ? undecoded : decodePersistedValue(restored, this.#type)
     if (decoded.ok) {
       this.#value = decoded.value as T
     }
@@ -140,12 +148,9 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     this.#commit(nextValue)
   }
 
-  subscribe = (listener: () => void): () => void => {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
+  subscribe = this.#changes.subscribe
 
-  snapshot = (): number => this.#version
+  snapshot = this.#changes.snapshot
 
   load(): Promise<void> {
     if (this.#loading) {
@@ -230,27 +235,16 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
 
   #replace(next: T): void {
     this.#value = next
-    this.#version += 1
-    for (const listener of this.#listeners) {
-      listener()
-    }
+    this.#changes.changed()
   }
 }
 
-function decodeEnvelope(
-  encoded: string,
-  expectedType: TaoPersistedStateType,
-): { ok: true; value: unknown } | { ok: false } {
+function decodeEnvelope(encoded: string, expectedType: TaoPersistedStateType): PersistedDecoding {
   try {
     const envelope = JSON.parse(encoded) as Partial<PersistedEnvelope>
-    if (
-      envelope === null
-      || typeof envelope !== 'object'
-      || envelope.formatVersion !== 1
-      || JSON.stringify(envelope.type) !== JSON.stringify(expectedType)
-    ) {
+    if (!isCurrentEnvelope(envelope, expectedType)) {
       warnContainedFailure('Ignored persisted state whose version or runtime type no longer matches.', undefined)
-      return { ok: false }
+      return undecoded
     }
     const decoded = decodePersistedValue(envelope.value, expectedType)
     if (!decoded.ok) {
@@ -259,139 +253,150 @@ function decodeEnvelope(
     return decoded
   } catch (error) {
     warnContainedFailure('Ignored corrupt persisted state.', error)
-    return { ok: false }
+    return undecoded
   }
+}
+
+/** An envelope is readable only when this build wrote its format and the very same runtime type. */
+function isCurrentEnvelope(envelope: Partial<PersistedEnvelope>, expectedType: TaoPersistedStateType): boolean {
+  return envelope !== null
+    && typeof envelope === 'object'
+    && envelope.formatVersion === 1
+    && JSON.stringify(envelope.type) === JSON.stringify(expectedType)
 }
 
 function matchesPersistedType(value: unknown, type: TaoPersistedStateType): boolean {
-  if (type.kind === 'enum') {
-    if (!isPlainRecord(value)) {
-      return false
-    }
-    return value['declaration'] === type.declaration
+  return RuntimeSwitch.kind(type, {
+    enum: enumeration =>
+      isPlainRecord(value)
+      && value['declaration'] === enumeration.declaration
       && typeof value['caseName'] === 'string'
-      && type.cases.includes(value['caseName'])
-      && typeof value['identity'] === 'symbol'
-  }
-  if (type.kind === 'primitive') {
-    if (type.name === 'none') {
-      return value === null
-    }
-    if (type.name === 'text') {
-      return typeof value === 'string'
-    }
-    if (type.name === 'boolean') {
-      return typeof value === 'boolean'
-    }
-    return typeof value === 'number' && Number.isFinite(value)
-  }
-  if (type.kind === 'list') {
-    return Array.isArray(value)
-      && (type.element === undefined || value.every(item => matchesPersistedType(item, type.element!)))
-  }
-  if (type.kind === 'union') {
-    return type.members.some(member => matchesPersistedType(value, member))
-  }
-  if (!isPlainRecord(value)) {
-    return false
-  }
-  return Object.keys(value).every(name => name in type.properties)
-    && Object.entries(type.properties).every(([name, property]) =>
-      (property.optional && !(name in value)) || (name in value && matchesPersistedType(value[name], property.type))
-    )
+      && enumeration.cases.includes(value['caseName'])
+      && typeof value['identity'] === 'symbol',
+    item: item =>
+      isPlainRecord(value)
+      && Object.keys(value).every(name => name in item.properties)
+      && Object.entries(item.properties).every(([name, property]) =>
+        (property.optional && !(name in value)) || (name in value && matchesPersistedType(value[name], property.type))
+      ),
+    list: list =>
+      Array.isArray(value)
+      && (list.element === undefined || value.every(item => matchesPersistedType(item, list.element!))),
+    primitive: primitive => matchesPersistedPrimitive(value, primitive.name),
+    union: union => union.members.some(member => matchesPersistedType(value, member)),
+  })
+}
+
+/**
+ * The JavaScript shape each Tao primitive persists as. `duration` and `time` are finite numbers
+ * like `number` is; naming all three keeps a primitive added later from silently joining them.
+ */
+function matchesPersistedPrimitive(value: unknown, name: TaoPersistedStatePrimitiveName): boolean {
+  const finiteNumber = (): boolean => typeof value === 'number' && Number.isFinite(value)
+  return RuntimeSwitch(name, {
+    boolean: () => typeof value === 'boolean',
+    duration: finiteNumber,
+    none: () => value === null,
+    number: finiteNumber,
+    text: () => typeof value === 'string',
+    time: finiteNumber,
+  })
 }
 
 function encodePersistedValue(value: unknown, type: TaoPersistedStateType): unknown {
-  if (type.kind === 'enum') {
-    RuntimeAssert(matchesPersistedType(value, type), 'persisted enum value matches its generated runtime type', {
-      type,
-    })
-    return { caseName: (value as PersistedEnumCaseIdentity).caseName, declaration: type.declaration }
-  }
-  if (type.kind === 'list') {
-    return type.element === undefined
-      ? value
-      : (value as unknown[]).map(item => encodePersistedValue(item, type.element!))
-  }
-  if (type.kind === 'union') {
-    const member = type.members.find(candidate => matchesPersistedType(value, candidate))
-    RuntimeAssert.defined(member, 'persisted union value matches one of its generated runtime type members', { type })
-    return encodePersistedValue(value, member)
-  }
-  if (type.kind === 'item') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([name, item]) => [
-        name,
-        encodePersistedValue(item, type.properties[name]!.type),
-      ]),
-    )
-  }
-  return value
+  return RuntimeSwitch.kind(type, {
+    enum: enumeration => {
+      RuntimeAssert(
+        matchesPersistedType(value, enumeration),
+        'persisted enum value matches its generated runtime type',
+        {
+          type,
+        },
+      )
+      return { caseName: (value as PersistedEnumCaseIdentity).caseName, declaration: enumeration.declaration }
+    },
+    item: item =>
+      Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([name, property]) => [
+          name,
+          encodePersistedValue(property, item.properties[name]!.type),
+        ]),
+      ),
+    list: list =>
+      list.element === undefined
+        ? value
+        : (value as unknown[]).map(item => encodePersistedValue(item, list.element!)),
+    primitive: () => value,
+    union: union => {
+      const member = union.members.find(candidate => matchesPersistedType(value, candidate))
+      RuntimeAssert.defined(member, 'persisted union value matches one of its generated runtime type members', { type })
+      return encodePersistedValue(value, member)
+    },
+  })
 }
 
-function decodePersistedValue(
-  value: unknown,
-  type: TaoPersistedStateType,
-): { ok: true; value: unknown } | { ok: false } {
-  if (type.kind === 'enum') {
-    if (
-      !isPlainRecord(value)
-      || value['declaration'] !== type.declaration
-      || typeof value['caseName'] !== 'string'
-      || !type.cases.includes(value['caseName'])
-    ) {
-      return { ok: false }
-    }
-    const restored = enumCases.get(type.declaration)?.get(value['caseName'])
-    return restored === undefined ? { ok: false } : { ok: true, value: restored }
-  }
-  if (type.kind === 'primitive') {
-    return matchesPersistedType(value, type) ? { ok: true, value } : { ok: false }
-  }
-  if (type.kind === 'list') {
-    if (!Array.isArray(value)) {
-      return { ok: false }
-    }
-    if (type.element === undefined) {
-      return { ok: true, value }
-    }
-    const restored: unknown[] = []
-    for (const item of value) {
-      const decoded = decodePersistedValue(item, type.element)
-      if (!decoded.ok) {
-        return decoded
+function decodePersistedValue(value: unknown, type: TaoPersistedStateType): PersistedDecoding {
+  return RuntimeSwitch.kind<TaoPersistedStateType, PersistedDecoding>(type, {
+    enum: enumeration => {
+      if (
+        !isPlainRecord(value)
+        || value['declaration'] !== enumeration.declaration
+        || typeof value['caseName'] !== 'string'
+        || !enumeration.cases.includes(value['caseName'])
+      ) {
+        return undecoded
       }
-      restored.push(decoded.value)
-    }
-    return { ok: true, value: restored }
-  }
-  if (type.kind === 'union') {
-    for (const member of type.members) {
-      const decoded = decodePersistedValue(value, member)
-      if (decoded.ok) {
-        return decoded
+      const restored = enumCases.get(enumeration.declaration)?.get(value['caseName'])
+      return restored === undefined ? undecoded : { ok: true, value: restored }
+    },
+    item: item => {
+      if (!isPlainRecord(value) || Object.keys(value).some(name => !(name in item.properties))) {
+        return undecoded
       }
-    }
-    return { ok: false }
-  }
-  if (!isPlainRecord(value) || Object.keys(value).some(name => !(name in type.properties))) {
-    return { ok: false }
-  }
-  const restored: Record<string, unknown> = {}
-  for (const [name, property] of Object.entries(type.properties)) {
-    if (!(name in value)) {
-      if (property.optional) {
-        continue
+      const restored: Record<string, unknown> = {}
+      for (const [name, property] of Object.entries(item.properties)) {
+        if (!(name in value)) {
+          if (property.optional) {
+            continue
+          }
+          return undecoded
+        }
+        const decoded = decodePersistedValue(value[name], property.type)
+        if (!decoded.ok) {
+          return decoded
+        }
+        restored[name] = decoded.value
       }
-      return { ok: false }
-    }
-    const decoded = decodePersistedValue(value[name], property.type)
-    if (!decoded.ok) {
-      return decoded
-    }
-    restored[name] = decoded.value
-  }
-  return { ok: true, value: restored }
+      return { ok: true, value: restored }
+    },
+    list: list => {
+      if (!Array.isArray(value)) {
+        return undecoded
+      }
+      if (list.element === undefined) {
+        return { ok: true, value }
+      }
+      const restored: unknown[] = []
+      for (const item of value) {
+        const decoded = decodePersistedValue(item, list.element)
+        if (!decoded.ok) {
+          return decoded
+        }
+        restored.push(decoded.value)
+      }
+      return { ok: true, value: restored }
+    },
+    primitive: primitive => matchesPersistedPrimitive(value, primitive.name) ? { ok: true, value } : undecoded,
+    union: union => {
+      for (const member of union.members) {
+        const decoded = decodePersistedValue(value, member)
+        if (decoded.ok) {
+          return decoded
+        }
+      }
+      return undecoded
+    },
+  })
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { CLI, Errors, Json, Repo } from '@shared'
+import { CLI, Errors, Json, Repo, Switch } from '@shared'
 import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -288,16 +288,17 @@ export async function startStudioSessionServer(
     port: options.port ?? 0,
     websocket: {
       close(socket) {
-        if (socket.data.kind === 'events') {
-          eventClients.get(socket.data.sessionId)?.delete(socket)
-        } else {
-          socket.data.session?.close()
-        }
+        Switch.kind<StudioSocketData, void>(socket.data, {
+          events: events => void eventClients.get(events.sessionId)?.delete(socket),
+          lsp: lsp => lsp.session?.close(),
+        })
       },
       message(socket, message) {
-        if (socket.data.kind === 'lsp') {
-          socket.data.session?.accept(message)
-        }
+        Switch.kind<StudioSocketData, void>(socket.data, {
+          // An event socket is one-way: Studio publishes, the browser never writes back.
+          events: () => {},
+          lsp: lsp => lsp.session?.accept(message),
+        })
       },
       open(socket) {
         const resource = manager.get(socket.data.sessionId)
@@ -305,19 +306,22 @@ export async function startStudioSessionServer(
           socket.close(1008, 'Studio session is not open')
           return
         }
-        if (socket.data.kind === 'events') {
-          const clients = eventClients.get(socket.data.sessionId) ?? new Set<StudioSocket>()
-          clients.add(socket)
-          eventClients.set(socket.data.sessionId, clients)
-          const sessionId = socket.data.sessionId
-          void initializeEventSocket(
-            socket,
-            resource.session,
-            deviceGateway === undefined ? undefined : () => deviceStateEvent(deviceGateway.status(sessionId)),
-          )
-        } else {
-          socket.data.session = StudioLsp.createSession(resource.session.projectRoot, socket)
-        }
+        Switch.kind<StudioSocketData, void>(socket.data, {
+          events: events => {
+            const clients = eventClients.get(events.sessionId) ?? new Set<StudioSocket>()
+            clients.add(socket)
+            eventClients.set(events.sessionId, clients)
+            const sessionId = events.sessionId
+            void initializeEventSocket(
+              socket,
+              resource.session,
+              deviceGateway === undefined ? undefined : () => deviceStateEvent(deviceGateway.status(sessionId)),
+            )
+          },
+          lsp: lsp => {
+            lsp.session = StudioLsp.createSession(resource.session.projectRoot, socket)
+          },
+        })
       },
     },
   })
@@ -400,69 +404,67 @@ async function handleDeviceRequest(
   options: StudioServerOptions,
   pathname: string,
 ): Promise<Response | undefined> {
+  const reply = (value: unknown, status?: number): Response => response(request, url, options, value, status)
   if (!pathname.startsWith(deviceRoutePrefix)) {
     return undefined
   }
   const gateway = options.deviceGateway
   if (gateway === undefined) {
-    return response(request, url, options, { error: 'This Studio service does not include the device gateway.' }, 501)
+    return reply({ error: 'This Studio service does not include the device gateway.' }, 501)
   }
   if (at(request, pathname, routes.deviceStatus)) {
-    return response(request, url, options, gateway.status(sessionId))
+    return reply(gateway.status(sessionId))
   }
   if (at(request, pathname, routes.devicePairingOpen)) {
-    return response(request, url, options, gateway.openPairing(sessionId))
+    return reply(gateway.openPairing(sessionId))
   }
   if (at(request, pathname, routes.devicePairingConfirm)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
-    return response(request, url, options, await gateway.confirmPairing(sessionId, devicePublicKey))
+    return reply(await gateway.confirmPairing(sessionId, devicePublicKey))
   }
   if (at(request, pathname, routes.devicePairingDecline)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
-    return response(request, url, options, gateway.declinePairing(sessionId, devicePublicKey))
+    return reply(gateway.declinePairing(sessionId, devicePublicKey))
   }
   if (at(request, pathname, routes.deviceRevoke)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
-    return response(request, url, options, await gateway.revoke(sessionId, devicePublicKey))
+    return reply(await gateway.revoke(sessionId, devicePublicKey))
   }
   if (at(request, pathname, routes.deviceReconnect)) {
-    return response(request, url, options, gateway.requestReconnect(sessionId))
+    return reply(gateway.requestReconnect(sessionId))
   }
   if (at(request, pathname, routes.deviceSelectCell)) {
-    return response(
-      request,
-      url,
-      options,
+    return reply(
       gateway.selectCell(sessionId, deviceCellRequest(await request.json()).cellId),
     )
   }
   if (at(request, pathname, routes.deviceCapture)) {
-    return response(request, url, options, await gateway.captureRuntime(sessionId))
+    return reply(await gateway.captureRuntime(sessionId))
   }
   if (at(request, pathname, routes.deviceHighlight)) {
     const occurrence = deviceHighlightRequest(await request.json())
-    return response(request, url, options, gateway.highlightSource(sessionId, occurrence))
+    return reply(gateway.highlightSource(sessionId, occurrence))
   }
   if (pathname === routes.deviceLaunch.path || pathname === routes.deviceLaunchOpen.path) {
     const launcher = options.deviceLauncher
     if (launcher === undefined) {
-      return response(request, url, options, {
+      return reply({
         error: 'This Studio service does not include physical-device launch tooling.',
       }, 501)
     }
     const metroOrigin = resource.previewUrl
     if (metroOrigin === undefined) {
-      return response(request, url, options, { error: 'This project has no Metro preview to launch on a device.' }, 501)
+      return reply({ error: 'This project has no Metro preview to launch on a device.' }, 501)
     }
     if (at(request, pathname, routes.deviceLaunch)) {
-      return response(request, url, options, await launcher.describe({ metroOrigin }))
+      return reply(await launcher.describe({ metroOrigin }))
     }
     if (at(request, pathname, routes.deviceLaunchOpen)) {
       const { hostId, route } = deviceLaunchOpenRequest(await request.json())
-      return response(request, url, options, await launcher.open({ hostId, metroOrigin, route }))
+      return reply(await launcher.open({ hostId, metroOrigin, route }))
     }
   }
-  return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
+  return reply({ error: 'Studio endpoint not found.' }, 404)
 }
 
 function devicePublicKeyRequest(value: unknown): { devicePublicKey: string } {
@@ -525,11 +527,9 @@ async function handleTestRequest(
   options: StudioServerOptions,
   pathname: string,
 ): Promise<Response | undefined> {
+  const reply = (value: unknown, status?: number): Response => response(request, url, options, value, status)
   if (at(request, pathname, routes.testsStatus)) {
-    return response(
-      request,
-      url,
-      options,
+    return reply(
       resource.tests?.status() ?? {
         available: false,
         reason: 'This Studio service does not include the Tao test runtime.',
@@ -539,11 +539,11 @@ async function handleTestRequest(
   }
   if (at(request, pathname, routes.testsRun)) {
     if (resource.tests === undefined) {
-      return response(request, url, options, {
+      return reply({
         error: 'This Studio service does not include the Tao test runtime.',
       }, 501)
     }
-    return response(request, url, options, await resource.tests.run())
+    return reply(await resource.tests.run())
   }
   return undefined
 }
@@ -556,18 +556,19 @@ async function handleManagerRequest(
   subscribeSession: (sessionId: string) => void,
   closeSession: (sessionId: string) => Promise<boolean>,
 ): Promise<Response | undefined> {
+  const reply = (value: unknown, status?: number): Response => response(request, url, options, value, status)
   const manage = StudioRoutes.manager
   if (at(request, url.pathname, manage.welcome) || at(request, url.pathname, manage.root)) {
     return htmlResponse(StudioWelcome.html(manager.list()))
   }
   if (at(request, url.pathname, manage.sessions)) {
-    return response(request, url, options, manager.list())
+    return reply(manager.list())
   }
   if (at(request, url.pathname, manage.openSession)) {
     const opened = await manager.open(projectOpenRequest(await request.json()))
     subscribeSession(opened.sessionId)
     const resource = manager.require(opened.sessionId)
-    return response(request, url, options, {
+    return reply({
       previewUrl: resource.previewUrl,
       session: opened,
       url: StudioSessionPath.window(opened.sessionId),
@@ -578,7 +579,7 @@ async function handleManagerRequest(
     const opened = await manager.replace(replacement['sessionId']!, projectOpenRequest(await request.json()))
     subscribeSession(opened.sessionId)
     const resource = manager.require(opened.sessionId)
-    return response(request, url, options, {
+    return reply({
       previewUrl: resource.previewUrl,
       session: opened,
       url: StudioSessionPath.window(opened.sessionId),
@@ -587,13 +588,13 @@ async function handleManagerRequest(
   if (at(request, url.pathname, manage.closeAllSessions)) {
     const ids = manager.list().current.map(item => item.sessionId)
     await Promise.all(ids.map(closeSession))
-    return response(request, url, options, { closed: ids })
+    return reply({ closed: ids })
   }
   const close = StudioRoutes.match(manage.closeSession, url.pathname)
   if (request.method === manage.closeSession.method && close !== undefined) {
     const sessionId = close['sessionId']!
     const closed = await closeSession(sessionId)
-    return response(request, url, options, { closed, sessionId }, closed ? 200 : 404)
+    return reply({ closed, sessionId }, closed ? 200 : 404)
   }
   return undefined
 }
@@ -686,6 +687,9 @@ async function handleRequest(
   tests?: StudioTestRunner,
 ): Promise<Response> {
   const pathname = url.pathname
+  const reply = (value: unknown, status?: number): Response => response(request, url, options, value, status)
+  const replyStream = (stream: ReadableStream<Uint8Array>): Response => streamResponse(request, url, options, stream)
+
   if (at(request, pathname, StudioRoutes.client)) {
     return htmlResponse(studioClientHtml(options))
   }
@@ -693,90 +697,84 @@ async function handleRequest(
     return javascriptResponse(await (options.clientAssets ?? StudioClientAssets).bundle())
   }
   if (at(request, pathname, routes.protocol)) {
-    return response(request, url, options, await session.handshake())
+    return reply(await session.handshake())
   }
   if (at(request, pathname, routes.files)) {
-    return response(request, url, options, { files: await session.files() })
+    return reply({ files: await session.files() })
   }
   if (at(request, pathname, routes.sketches)) {
-    return response(request, url, options, await session.sketchCatalog())
+    return reply(await session.sketchCatalog())
   }
   if (at(request, pathname, routes.sketchAction)) {
-    return response(request, url, options, await session.applySketchAction(await request.json()))
+    return reply(await session.applySketchAction(await request.json()))
   }
   if (at(request, pathname, routes.sketchFlowAction)) {
-    return response(request, url, options, await session.applySketchFlowAction(await request.json()))
+    return reply(await session.applySketchFlowAction(await request.json()))
   }
   if (at(request, pathname, routes.sketchSnapPropose)) {
-    return response(request, url, options, await session.proposeSketchSnap(await request.json()))
+    return reply(await session.proposeSketchSnap(await request.json()))
   }
   if (at(request, pathname, routes.sketchSnapApply)) {
-    return response(request, url, options, await session.applySketchSnap(await request.json()))
+    return reply(await session.applySketchSnap(await request.json()))
   }
   if (at(request, pathname, routes.sketchSnapUndo)) {
-    return response(request, url, options, await session.undoSketchSnap(await request.json()))
+    return reply(await session.undoSketchSnap(await request.json()))
   }
   if (at(request, pathname, routes.sketchUnsnapApply)) {
-    return response(request, url, options, await session.applySketchUnsnap(await request.json()))
+    return reply(await session.applySketchUnsnap(await request.json()))
   }
   if (at(request, pathname, routes.file)) {
-    return response(request, url, options, await session.readFile(requiredPath(url)))
+    return reply(await session.readFile(requiredPath(url)))
   }
   if (at(request, pathname, routes.fileCreate)) {
-    return response(request, url, options, await session.createFile(createFileRequest(await request.json())), 201)
+    return reply(await session.createFile(createFileRequest(await request.json())), 201)
   }
   if (at(request, pathname, routes.fileRename)) {
-    return response(request, url, options, await session.renameFile(renameFileRequest(await request.json())))
+    return reply(await session.renameFile(renameFileRequest(await request.json())))
   }
   if (at(request, pathname, routes.fileMoveGenerated)) {
-    return response(
-      request,
-      url,
-      options,
+    return reply(
       await session.moveGeneratedSource(moveGeneratedSourceRequest(await request.json())),
     )
   }
   if (at(request, pathname, routes.fileDelete)) {
-    return response(request, url, options, await session.deleteFile(deleteFileRequest(await request.json())))
+    return reply(await session.deleteFile(deleteFileRequest(await request.json())))
   }
   if (at(request, pathname, routes.fileDraft)) {
-    return response(request, url, options, await session.syncDraft(draftWriteRequest(await request.json())))
+    return reply(await session.syncDraft(draftWriteRequest(await request.json())))
   }
   if (at(request, pathname, routes.dataFill)) {
-    return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
+    return reply(await datasource.fill(dataFillRequest(await request.json())))
   }
   if (at(request, pathname, routes.languageHighlight)) {
     const input: unknown = await request.json()
     const [highlight, lens] = await Promise.all([StudioHighlight.highlight(input), StudioSyntaxLens.classify(input)])
     const analysis: StudioLanguageAnalysis = { ...highlight, lens }
-    return response(request, url, options, analysis)
+    return reply(analysis)
   }
   if (at(request, pathname, routes.shipBeta)) {
     await shipBeta(session, options.shipBeta ?? runBetaShip)
-    return response(request, url, options, {
+    return reply({
       appName: session.appName,
       message: `${session.appName} was uploaded and distributed through TestFlight.`,
     })
   }
   if (at(request, pathname, routes.sourceAction)) {
-    return response(request, url, options, await session.applySourceAction(await request.json()))
+    return reply(await session.applySourceAction(await request.json()))
   }
   if (at(request, pathname, routes.sourceActionInspect)) {
-    return response(request, url, options, await session.inspectRender(inspectRenderRequest(await request.json())))
+    return reply(await session.inspectRender(inspectRenderRequest(await request.json())))
   }
   if (at(request, pathname, routes.sourceActionPropose)) {
-    return response(request, url, options, await session.proposeSourceAction(await request.json()))
+    return reply(await session.proposeSourceAction(await request.json()))
   }
   if (at(request, pathname, routes.sourceActionUndo)) {
-    return response(request, url, options, await session.undoSourceAction(await request.json()))
+    return reply(await session.undoSourceAction(await request.json()))
   }
   const streamedChat = StudioRoutes.match(routes.agentChatStream, pathname)
   if (request.method === routes.agentChatStream.method && streamedChat !== undefined) {
     // A turn is streamed rather than awaited: the panel prints the answer as the model produces it.
-    return streamResponse(
-      request,
-      url,
-      options,
+    return replyStream(
       streamTurn(
         session,
         streamedChat['command']!,
@@ -789,10 +787,7 @@ async function handleRequest(
   }
   const chat = StudioRoutes.match(routes.agentChat, pathname)
   if (request.method === routes.agentChat.method && chat !== undefined) {
-    return response(
-      request,
-      url,
-      options,
+    return reply(
       await AgentChat.handle(
         session,
         chat['command']!,
@@ -804,46 +799,46 @@ async function handleRequest(
     )
   }
   if (at(request, pathname, routes.aiAvailability)) {
-    return response(request, url, options, await fixtureGeneration.availability())
+    return reply(await fixtureGeneration.availability())
   }
   if (at(request, pathname, routes.aiFixture)) {
     const manifest = session.previewManifest()
     if (manifest === undefined) {
-      return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
+      return reply({ error: 'Studio preview manifest is not available yet.' }, 404)
     }
-    return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
+    return reply(await fixtureGeneration.generate(manifest, await request.json()))
   }
   if (at(request, pathname, routes.previewDiagnosis)) {
-    return response(request, url, options, await previewDiagnosis(options.previewUrl))
+    return reply(await previewDiagnosis(options.previewUrl))
   }
   if (at(request, pathname, routes.previewInstance)) {
-    return response(request, url, options, session.registerPreview(await request.json()))
+    return reply(session.registerPreview(await request.json()))
   }
   if (at(request, pathname, routes.previewApplied)) {
-    return response(request, url, options, { accepted: session.acknowledgePreview(await request.json()) })
+    return reply({ accepted: session.acknowledgePreview(await request.json()) })
   }
   if (at(request, pathname, routes.previewLayoutMeasurements)) {
-    return response(request, url, options, session.recordPreviewLayoutMeasurements(await request.json()))
+    return reply(session.recordPreviewLayoutMeasurements(await request.json()))
   }
   if (at(request, pathname, routes.previewManifest)) {
     const manifest = session.previewManifest()
     return manifest === undefined
-      ? response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
-      : response(request, url, options, manifest)
+      ? reply({ error: 'Studio preview manifest is not available yet.' }, 404)
+      : reply(manifest)
   }
   if (at(request, pathname, routes.previewCell)) {
-    return response(request, url, options, session.previewCell(requiredCellId(url)))
+    return reply(session.previewCell(requiredCellId(url)))
   }
   if (at(request, pathname, routes.previewCellBootstrap)) {
-    return response(request, url, options, session.previewCellInstance(requiredPreviewInstanceId(url)))
+    return reply(session.previewCellInstance(requiredPreviewInstanceId(url)))
   }
   if (at(request, pathname, routes.previewCellInstance)) {
-    return response(request, url, options, session.registerCellPreview(await request.json()))
+    return reply(session.registerCellPreview(await request.json()))
   }
   if (at(request, pathname, routes.previewCellReconfigure)) {
-    return response(request, url, options, session.reconfigureCell(await request.json()))
+    return reply(session.reconfigureCell(await request.json()))
   }
-  return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
+  return reply({ error: 'Studio endpoint not found.' }, 404)
 }
 
 async function shipBeta(session: StudioProjectSession, ship: StudioBetaShip): Promise<void> {

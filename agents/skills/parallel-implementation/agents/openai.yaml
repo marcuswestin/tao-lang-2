@@ -1,4 +1,0 @@
-interface:
-  display_name: "Parallel Implementation"
-  short_description: "Coordinate significant work across parallel agents"
-  default_prompt: "Use $parallel-implementation to implement this multi-piece change with dependency-aware agent parallelism and integrated validation."

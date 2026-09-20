@@ -12,6 +12,7 @@ import {
   StudioDeviceProtocol,
   type TaoStudioDeviceCellCode,
   type TaoStudioDeviceCellIdentity,
+  type TaoStudioDeviceClearMessage,
   type TaoStudioDeviceCompileState,
   type TaoStudioDeviceDescription,
   type TaoStudioDeviceDeviceMessage,
@@ -35,6 +36,7 @@ import {
   type TaoStudioDeviceIdentity,
   type TaoStudioDeviceSessionKeys,
 } from './TR-studio-device-trust'
+import RuntimeSwitch from './TR-switch'
 
 /** One WebSocket-shaped connection the client drives; the transport assigns the handlers it sets. */
 export type TaoStudioDeviceSocket = {
@@ -562,63 +564,67 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     }
   }
 
+  /**
+   * The sealed control plane's one dispatch point. The table is keyed by the Studio-to-device
+   * union, so a message Studio starts sending fails to compile here until this device answers it.
+   */
   const receiveStudioMessage = (attempt: Attempt, message: TaoStudioDeviceStudioMessage): void => {
-    if (message.type === 'studio.pairingPending') {
-      RuntimeAssert.defined(attempt.keys, 'session keys exist before pairing starts')
-      update({ code: StudioDeviceTrust.formatCode(attempt.keys.code), phase: 'pairing' })
-    } else if (message.type === 'studio.welcome') {
-      receiveWelcome(attempt, message)
-    } else if (message.type === 'studio.manifest') {
-      update({ manifest: message.manifest })
-      if (snapshot.selectedCellId === undefined && snapshot.assignment === undefined) {
-        selectDefaultCell(attempt)
-      }
-    } else if (message.type === 'studio.compileState') {
-      update({
-        compile: {
-          appliedRevision: message.appliedRevision,
-          compileRevision: message.compileRevision,
-          message: message.message,
-          status: message.status,
-        },
-      })
-    } else if (message.type === 'studio.cellAssigned') {
+    RuntimeSwitch.type(message, {
+      'studio.appliedAck': ack =>
+        update({ appliedAck: { accepted: ack.accepted, compileRevision: ack.compileRevision } }),
+      'studio.captureRuntime': request => sendCapture(attempt, request.requestId),
       // Remember the cell whoever chose it, not only the on-device sheet: a reconnect asks for
       // `selectedCellId` and otherwise falls back to the manifest's first scenario, so without this
       // a cell chosen from the workbench is forgotten the moment the client redials — which the
       // background/foreground pause now does routinely.
-      update({
-        assignment: { identity: message.identity, runtime: message.runtime },
-        cellUnavailable: undefined,
-        selectedCellId: message.identity.cellId,
-      })
-    } else if (message.type === 'studio.cellUnavailable') {
-      update({ cellUnavailable: { cellId: message.cellId, code: message.code, message: message.message } })
-    } else if (message.type === 'studio.appliedAck') {
-      update({ appliedAck: { accepted: message.accepted, compileRevision: message.compileRevision } })
-    } else if (message.type === 'studio.captureRuntime') {
-      sendCapture(attempt, message.requestId)
-    } else if (message.type === 'studio.highlightSource') {
-      update({ highlight: message.occurrence })
-    } else if (message.type === 'studio.sourceActionResult') {
-      update({
-        sourceAction: {
-          ...(message.error === undefined ? {} : { error: message.error }),
-          ok: message.ok,
-          requestId: message.requestId,
-        },
-      })
-    } else if (message.type === 'studio.reconnect') {
-      redial(attempt)
-    } else if (message.type === 'studio.revoked') {
-      failed(attempt, 'revoked', message.reason, { halt: true })
-    } else if (message.type === 'studio.pong') {
-      if (attempt.heartbeat !== undefined) {
-        attempt.heartbeat.pending = 0
-      }
-    } else {
-      update({ lastError: { code: message.code, message: message.message } })
-    }
+      'studio.cellAssigned': assigned =>
+        update({
+          assignment: { identity: assigned.identity, runtime: assigned.runtime },
+          cellUnavailable: undefined,
+          selectedCellId: assigned.identity.cellId,
+        }),
+      'studio.cellUnavailable': unavailable =>
+        update({
+          cellUnavailable: { cellId: unavailable.cellId, code: unavailable.code, message: unavailable.message },
+        }),
+      'studio.compileState': compile =>
+        update({
+          compile: {
+            appliedRevision: compile.appliedRevision,
+            compileRevision: compile.compileRevision,
+            message: compile.message,
+            status: compile.status,
+          },
+        }),
+      'studio.error': error => update({ lastError: { code: error.code, message: error.message } }),
+      'studio.highlightSource': highlight => update({ highlight: highlight.occurrence }),
+      'studio.manifest': announced => {
+        update({ manifest: announced.manifest })
+        if (snapshot.selectedCellId === undefined && snapshot.assignment === undefined) {
+          selectDefaultCell(attempt)
+        }
+      },
+      'studio.pairingPending': () => {
+        RuntimeAssert.defined(attempt.keys, 'session keys exist before pairing starts')
+        update({ code: StudioDeviceTrust.formatCode(attempt.keys.code), phase: 'pairing' })
+      },
+      'studio.pong': () => {
+        if (attempt.heartbeat !== undefined) {
+          attempt.heartbeat.pending = 0
+        }
+      },
+      'studio.reconnect': () => redial(attempt),
+      'studio.revoked': revoked => failed(attempt, 'revoked', revoked.reason, { halt: true }),
+      'studio.sourceActionResult': result =>
+        update({
+          sourceAction: {
+            ...(result.error === undefined ? {} : { error: result.error }),
+            ok: result.ok,
+            requestId: result.requestId,
+          },
+        }),
+      'studio.welcome': welcome => receiveWelcome(attempt, welcome),
+    })
   }
 
   const receiveSealed = (attempt: Attempt, frame: TaoStudioDeviceSealedFrame): void => {
@@ -661,23 +667,31 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     const message = StudioDeviceProtocol.parseClearMessage(parsed.value)
     if (message === undefined) {
       failed(attempt, 'malformed', 'Tao Studio sent a frame this device does not recognize.')
-    } else if (message.type === 'studio.rejected') {
-      receiveRejected(attempt, message)
-    } else if (message.type === 'studio.hello') {
-      if (attempt.keys === undefined) {
-        receiveStudioHello(attempt, message)
-      } else {
-        failed(attempt, 'malformed', 'Tao Studio repeated its hello after the handshake finished.')
-      }
-    } else if (message.type === 'sealed') {
-      if (attempt.keys === undefined) {
-        failed(attempt, 'malformed', 'Tao Studio sealed a frame before the handshake finished.')
-      } else {
-        receiveSealed(attempt, message)
-      }
-    } else {
-      failed(attempt, 'malformed', `Tao Studio sent a device frame '${message.type}'.`)
+      return
     }
+    /** A frame only a device ever sends is Studio speaking the wrong half of the protocol. */
+    const wrongDirection = (frame: TaoStudioDeviceClearMessage): void => {
+      failed(attempt, 'malformed', `Tao Studio sent a device frame '${frame.type}'.`)
+    }
+    RuntimeSwitch.type(message, {
+      'device.confirm': wrongDirection,
+      'device.hello': wrongDirection,
+      'sealed': frame => {
+        if (attempt.keys === undefined) {
+          failed(attempt, 'malformed', 'Tao Studio sealed a frame before the handshake finished.')
+          return
+        }
+        receiveSealed(attempt, frame)
+      },
+      'studio.hello': hello => {
+        if (attempt.keys !== undefined) {
+          failed(attempt, 'malformed', 'Tao Studio repeated its hello after the handshake finished.')
+          return
+        }
+        receiveStudioHello(attempt, hello)
+      },
+      'studio.rejected': rejected => receiveRejected(attempt, rejected),
+    })
   }
 
   const opened = (attempt: Attempt): void => {

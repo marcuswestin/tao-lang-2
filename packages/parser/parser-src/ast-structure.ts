@@ -187,38 +187,17 @@ export function findRoot(node: AST.Node): AST.Node {
 
 /** findOwningFixture returns the fixture containing `node`, if any. */
 export function findOwningFixture(node: AST.Node): AST.FixtureDeclaration | undefined {
-  let current: AST.Node | undefined = node
-  while (current) {
-    if (AST.isFixtureDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isFixtureDeclaration, true)
 }
 
 /** findOwningScenario returns the scenario containing `node`, if any. */
 export function findOwningScenario(node: AST.Node): AST.ScenarioDeclaration | undefined {
-  let current: AST.Node | undefined = node
-  while (current) {
-    if (AST.isScenarioDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isScenarioDeclaration, true)
 }
 
 /** findOwningScenarioGroup returns the scenario group containing `node`, if any. */
 export function findOwningScenarioGroup(node: AST.Node): AST.ScenarioGroupDeclaration | undefined {
-  let current: AST.Node | undefined = node
-  while (current) {
-    if (AST.isScenarioGroupDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isScenarioGroupDeclaration, true)
 }
 
 /** scenarioDeclarations returns the authored entries in one scenario group. */
@@ -414,14 +393,7 @@ export function configurationEntryName(entry: AST.ConfigurationEntry): string | 
 
 /** owningCommand returns the command declaration containing `node`, if any. */
 export function owningCommand(node: AST.Node): AST.CommandDeclaration | undefined {
-  let current: AST.Node | undefined = node
-  while (current) {
-    if (AST.isCommandDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isCommandDeclaration, true)
 }
 
 /** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
@@ -1116,8 +1088,13 @@ export function findOwningFromExpression(node: AST.Node): AST.FromExpression | u
   return findAncestor(node, AST.isFromExpression)
 }
 
-function findAncestor<NodeT extends AST.Node>(node: AST.Node, predicate: NodePredicate<NodeT>): NodeT | undefined {
-  let current = node.$container
+/** findAncestor walks `node`'s containers for the nearest match, optionally testing `node` itself first. */
+function findAncestor<NodeT extends AST.Node>(
+  node: AST.Node,
+  predicate: NodePredicate<NodeT>,
+  includeSelf = false,
+): NodeT | undefined {
+  let current: AST.Node | undefined = includeSelf ? node : node.$container
   while (current) {
     if (predicate(current)) {
       return current

@@ -1,4 +1,4 @@
-import { Assert } from '@shared/core'
+import { Assert, Switch } from '@shared/core'
 import type {
   StudioComponentKind,
   StudioLayoutAlignment,
@@ -440,18 +440,12 @@ function projectViewSnippet(viewName: string, parameters: readonly StudioParamet
 }
 
 function parameterPlaceholder(parameter: StudioParameterSchema): string {
-  if (parameter.type.kind === 'boolean') {
-    return 'false'
-  }
-  if (parameter.type.kind === 'number') {
-    return '0'
-  }
-  if (parameter.type.kind === 'time') {
-    return 'now'
-  }
-  if (parameter.type.kind === 'choice') {
-    const first = parameter.type.values[0]
-    return typeof first === 'string' ? first : String(first ?? 'none')
-  }
-  return parameter.type.kind === 'text' ? '"text"' : 'none'
+  return Switch.kind<StudioParameterSchema['type'], string>(parameter.type, {
+    boolean: () => 'false',
+    choice: ({ values }) => typeof values[0] === 'string' ? values[0] : String(values[0] ?? 'none'),
+    json: () => 'none',
+    number: () => '0',
+    text: () => '"text"',
+    time: () => 'now',
+  })
 }

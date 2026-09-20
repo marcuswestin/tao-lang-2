@@ -7,7 +7,7 @@
 //
 // Nothing here does cryptography. `Cipher` is the seam to `age`, which owns all of it.
 
-import { Errors } from '@shared'
+import { Errors, Json } from '@shared'
 
 /** Cipher is the encryption boundary. The real one shells out to `age`; a test supplies its own. */
 export type Cipher = {
@@ -56,15 +56,15 @@ export function parseStore(text: string): SecretStore {
       `The secret store is not valid JSONC: ${String(error instanceof Error ? error.message : error)}`,
     )
   }
-  if (typeof parsed !== 'object' || parsed === null) {
+  if (!Json.isRecord(parsed)) {
     Errors.throwUserInput('The secret store must be a JSON object.')
   }
   const record = parsed as { recipients?: unknown; secrets?: unknown }
   const recipients = Array.isArray(record.recipients) ? record.recipients.map(String) : []
   const secrets: Record<string, SecretEntry> = {}
-  const rawSecrets = typeof record.secrets === 'object' && record.secrets !== null ? record.secrets : {}
-  for (const [name, entry] of Object.entries(rawSecrets as Record<string, unknown>)) {
-    if (typeof entry !== 'object' || entry === null) {
+  const rawSecrets = Json.isRecord(record.secrets) ? record.secrets : {}
+  for (const [name, entry] of Object.entries(rawSecrets)) {
+    if (!Json.isRecord(entry)) {
       Errors.throwUserInput(`Secret '${name}' is not an object.`)
     }
     const value = (entry as { value?: unknown }).value

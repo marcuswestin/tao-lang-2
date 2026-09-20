@@ -24,7 +24,8 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 4. Propose the top five projects from the audit, plus other focuses the numbers suggest, and settle
    them with Ro through `decision-rounds`.
 5. Write the plan: decisions, fences, projects, waves with exclusive path ownership and a model
-   tier per agent, and a ledger. `parallel-implementation` owns the fan-out mechanics.
+   tier per agent, and a ledger. `delegation`'s `references/parallel-implementation.md` owns the
+   fan-out mechanics.
 6. Execute on one branch. `./agent verify` gates each slice; a deep-tier `reviewer` reads each
    wave's seams. Package moves and alias renames go last, after merging `main`, in one mechanical
    commit.

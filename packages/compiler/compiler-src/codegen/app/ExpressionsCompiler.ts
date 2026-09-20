@@ -644,7 +644,7 @@ function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
     }
     return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
   }
-  return Assert.never(type as never, 'validated configured patch targets nav, datasource, or app')
+  return Assert.never(type as never, 'validated configured patch targets nav, datasource, or an item')
 }
 
 function compileConfiguredTypeObject(

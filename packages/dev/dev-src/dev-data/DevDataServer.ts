@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
 import { DevDataProtocol } from './DevDataBootstrap'
 
 /** The capability-authenticated, filesystem-serialized authority behind the `Dev` datasource. */
@@ -279,9 +279,7 @@ async function withFileLock<Value>(lockPath: string, work: () => Promise<Value>)
 }
 
 function errorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code)
-    : undefined
+  return Json.isRecord(error) && 'code' in error ? String(error['code']) : undefined
 }
 
 async function reclaimStaleLock(lockPath: string): Promise<void> {

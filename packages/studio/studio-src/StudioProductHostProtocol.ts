@@ -1,4 +1,4 @@
-import { Assert, Errors } from '@shared/core'
+import { Assert, Errors, Switch } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { StudioApiError } from './client/StudioApiClient'
 import type { StudioProductHostPanels } from './client/StudioPanelProjection'
@@ -323,46 +323,23 @@ async function requestConflictAction(action: StudioProductHostRequest, message: 
 }
 
 async function execute(actions: StudioProductHostActions, action: StudioProductHostRequest): Promise<void> {
-  switch (action.kind) {
-    case 'apply-inspector-action':
-      await actions.applyInspectorAction(action.action, action.proposed)
-      return
-    case 'apply-active-cell-environment':
-      await actions.applyActiveCellEnvironment(action.identity, action.environment)
-      return
-    case 'create-file':
-      await actions.createFile(action.path)
-      return
-    case 'delete-file':
-      await actions.deleteFile(action.path, action.sourceVersion)
-      return
-    case 'insert-component':
-      actions.insertComponent(action.component)
-      return
-    case 'insert-project-view':
-      actions.insertProjectView(action.viewName)
-      return
-    case 'move-generated-source':
-      await actions.moveGeneratedSource(action.path, action.sourceVersion, action.targetPackage)
-      return
-    case 'open-file':
-      await actions.openFile(action.path)
-      return
-    case 'open-screen':
-      await actions.openScreen(action.subjectId)
-      return
-    case 'open-source':
-      await actions.openSource(action.path, action.sourceVersion, action.start)
-      return
-    case 'product-panel-action':
-      await actions.productPanelAction(action.name, action.payload)
-      return
-    case 'rename-file':
-      await actions.renameFile(action.path, action.sourceVersion, action.targetPath)
-      return
-    case 'undo-inspector-action':
-      await actions.undoInspectorAction()
-  }
+  await Switch.kind<StudioProductHostRequest, Promise<void>>(action, {
+    'apply-active-cell-environment': async applied =>
+      await actions.applyActiveCellEnvironment(applied.identity, applied.environment),
+    'apply-inspector-action': async applied => await actions.applyInspectorAction(applied.action, applied.proposed),
+    'create-file': async created => await actions.createFile(created.path),
+    'delete-file': async removed => await actions.deleteFile(removed.path, removed.sourceVersion),
+    'insert-component': async inserted => actions.insertComponent(inserted.component),
+    'insert-project-view': async inserted => actions.insertProjectView(inserted.viewName),
+    'move-generated-source': async moved =>
+      await actions.moveGeneratedSource(moved.path, moved.sourceVersion, moved.targetPackage),
+    'open-file': async opened => await actions.openFile(opened.path),
+    'open-screen': async opened => await actions.openScreen(opened.subjectId),
+    'open-source': async opened => await actions.openSource(opened.path, opened.sourceVersion, opened.start),
+    'product-panel-action': async invoked => await actions.productPanelAction(invoked.name, invoked.payload),
+    'rename-file': async renamed => await actions.renameFile(renamed.path, renamed.sourceVersion, renamed.targetPath),
+    'undo-inspector-action': async () => await actions.undoInspectorAction(),
+  })
 }
 
 function assertNonEmptyProductHostIdentity(value: string, label: string): void {

@@ -297,7 +297,8 @@ type MessageParsers<MessageT> = Readonly<Record<string, (value: Record<string, u
 /** dispatch looks the frame's `type` up in a parser table; an unknown type is simply not a message. */
 function dispatch<MessageT>(parsers: MessageParsers<MessageT>, value: Record<string, unknown>): MessageT | undefined {
   const type = value['type']
-  const parse = typeof type === 'string' ? parsers[type] : undefined
+  // Own keys only: `constructor` would resolve to `Object`, which returns the frame unvalidated.
+  const parse = typeof type === 'string' && Object.hasOwn(parsers, type) ? parsers[type] : undefined
   return parse === undefined ? undefined : parse(value)
 }
 

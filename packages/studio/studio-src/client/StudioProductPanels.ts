@@ -8,7 +8,7 @@ export {
   StudioPanelModels,
 } from './StudioPanelProjection'
 
-type StudioCommandTarget =
+export type StudioCommandTarget =
   | { kind: 'command'; command: 'compile' | 'data' | 'problems' | 'reload' | 'toggle-mode' }
   | { kind: 'file'; path: string }
   | { kind: 'insert-component'; component: (typeof studioPaletteComponents)[number] }
