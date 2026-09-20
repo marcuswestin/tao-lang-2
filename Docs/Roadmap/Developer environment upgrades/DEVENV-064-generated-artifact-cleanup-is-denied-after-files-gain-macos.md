@@ -16,7 +16,9 @@
   monotonic-versus-epoch age comparison prevented Studio from recognizing it as stale. On
   2026-09-17 an ordinary unsandboxed desktop shell on the same machine removed that directory with
   a plain `rmdir`, so the denial belongs to the managed task namespace, not to the checkout or its
-  provenance alone.
+  provenance alone. On 2026-09-19 merging main into an older feature worktree again failed while Git
+  replaced generated `.codex` paths; cleanup removed the files but the merge had to continue from a
+  disposable host-temporary worktree.
 - **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
   at the same source revision and verify that its generator reports `up to date`. Focused tests that
   do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
@@ -29,6 +31,9 @@
   root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
   failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
   task namespace prevents directory lifecycle operations.
+- **Change made:** The Studio preview-runtime tests now pass test-owned host-temporary artifact roots,
+  so their disposable copies can be removed in the managed task namespace without moving Studio's
+  production preview root out of the repository.
 - **Dependencies:** None.
 - **Acceptance:** `verify-changed` and `verify --complete` can recursively clean the IDE, runtime,
   and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
