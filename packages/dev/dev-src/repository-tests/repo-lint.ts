@@ -1,6 +1,8 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { AgentConfigFreshness } from '../agent-config/AgentConfigFreshness'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
+import { instructionBudget, instructionLineCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
@@ -356,16 +358,16 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  */
 const RAW_ERROR_ALLOWLIST = [
   // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts:232',
-  'packages/dev/dev-src/studio/StudioCdp.ts:283',
-  'packages/dev/dev-src/studio/StudioCdp.ts:293',
-  'packages/dev/dev-src/studio/StudioCdp.ts:330',
-  'packages/dev/dev-src/studio/StudioCdp.ts:341',
-  'packages/dev/dev-src/studio/StudioCdp.ts:373',
-  'packages/dev/dev-src/studio/StudioCdp.ts:533',
-  'packages/dev/dev-src/studio/StudioCdp.ts:561',
-  'packages/dev/dev-src/studio/StudioCdp.ts:730',
-  'packages/dev/dev-src/studio/StudioCdp.ts:880',
+  'packages/dev/dev-src/studio/StudioCdp.ts:231',
+  'packages/dev/dev-src/studio/StudioCdp.ts:282',
+  'packages/dev/dev-src/studio/StudioCdp.ts:292',
+  'packages/dev/dev-src/studio/StudioCdp.ts:329',
+  'packages/dev/dev-src/studio/StudioCdp.ts:340',
+  'packages/dev/dev-src/studio/StudioCdp.ts:372',
+  'packages/dev/dev-src/studio/StudioCdp.ts:532',
+  'packages/dev/dev-src/studio/StudioCdp.ts:560',
+  'packages/dev/dev-src/studio/StudioCdp.ts:729',
+  'packages/dev/dev-src/studio/StudioCdp.ts:879',
   'packages/dev/dev-src/studio/StudioElectrobun.ts:100',
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:235',
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:367',
@@ -444,40 +446,31 @@ const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must e
  *
  * An entry that survives a sweep is one of two things, and says which: emitted text — a script body
  * rendered into a string, a bundler `define` key, a test asserting on generated source, a jest test
- * silencing the global it captures — or a seam no wrapper covers yet. `node:crypto` hashing and
- * signing, `node:net` sockets, and the stream classes a test constructs are the open seams; a new
- * use of one goes behind `Platform` rather than onto the list. A type-only `node:` import names a
+ * silencing the global it captures — or a seam no wrapper covers yet. `node:net` sockets and the
+ * stream classes a test constructs are the open seams; a new use of one goes behind `Platform`
+ * rather than onto the list. Hashing, signing, and random ids have their `Platform` functions. A type-only `node:` import names a
  * shape, not a behavior, and is outside the import rule.
  */
 const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 
 const NODE_IMPORT_ALLOWLIST = [
-  // `node:crypto` hashing, until a `Platform` digest seam exists.
-  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts:1',
+  // `node:crypto` in the fenced verification runner, which moves to `Platform.sha256Hex` with it,
+  // and other `node:` imports that follow them in the same files.
   'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
   'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
   'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
   'packages/dev/dev-src/studio/StudioCdp.ts:2',
-  'packages/dev/dev-src/studio/StudioCdp.ts:3',
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:541',
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:543',
   'packages/dev/dev-src/studio/StudioNative.ts:4',
-  'packages/dev/dev-src/studio/StudioNative.ts:5',
-  'packages/dev/dev-src/studio/StudioReview.ts:2',
   'packages/dev/dev-tests/studio-review.test.ts:3',
-  'packages/tao-cli/cli-src/ship-executor.ts:3',
-  'packages/tao-cli/cli-src/ship-model.ts:2',
-  'packages/update-server/update-server-src/main.ts:3',
-  'packages/update-server/update-server-src/update-service.ts:2',
   'packages/update-server/update-server-tests/update-server.test.ts:3',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-src/app-store-connect-auth.ts:2',
   'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
   // `node:net` port probes and socket connections.
   'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
-  'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/dev/dev-tests/repo-lint.test.ts:545',
   'packages/dev/dev-tests/repo-lint.test.ts:546',
@@ -683,6 +676,17 @@ const KIND_CHAIN_ALLOWLIST = [
   'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
   'packages/validator/validator-src/validators/types-validator.ts',
 ]
+
+/** instructionBudgetIssues reports instruction files over their line budget; detail belongs in a skill's `references/`. */
+export function instructionBudgetIssues(files: readonly SourceFile[]): string[] {
+  return files.flatMap(file => {
+    const budget = instructionBudget(file.path)
+    const lines = instructionLineCount(file.source)
+    return budget !== undefined && lines > budget
+      ? [`${file.path} is ${lines} lines, over its ${budget}-line budget; move detail into a reference file or a gate.`]
+      : []
+  }).sort()
+}
 
 /** kindChainIssues reports discriminant chains in non-test package source, which `Switch` would check for exhaustiveness. */
 export function kindChainIssues(
@@ -901,6 +905,10 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
   issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
   issues.push(...await readDelegationIssues(repoRoot))
+  issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
+  if (await FS.isFile(FS.resolvePath('.rulesync/rulesync.jsonc', repoRoot))) {
+    issues.push(...await AgentConfigFreshness.staleIssues(repoRoot))
+  }
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
   // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
@@ -934,6 +942,24 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   return issues
+}
+
+async function readInstructionFiles(repoRoot: string): Promise<SourceFile[]> {
+  const paths = ['AGENTS.md']
+  const skillsPath = FS.resolvePath('agents/skills', repoRoot)
+  if (await FS.isDirectory(skillsPath)) {
+    for (const name of await FS.listDir(skillsPath)) {
+      paths.push(`agents/skills/${name}/SKILL.md`)
+    }
+  }
+  const files: SourceFile[] = []
+  for (const path of paths) {
+    const absolutePath = FS.resolvePath(path, repoRoot)
+    if (await FS.isFile(absolutePath)) {
+      files.push({ path, source: await FS.readText(absolutePath) })
+    }
+  }
+  return files
 }
 
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
