@@ -8,7 +8,7 @@ type LocalSocketServer = {
   close: () => Promise<void>
 }
 
-export type LocalSocketEndpoint = string | { host: string; port: number }
+type LocalSocketEndpoint = string | { host: string; port: number }
 
 /** request sends one JSON value and reads one JSON response from a Unix-domain socket. */
 export async function request<ResponseT>(
