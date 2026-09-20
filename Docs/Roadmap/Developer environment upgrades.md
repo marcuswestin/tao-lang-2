@@ -88,7 +88,6 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound](<Developer environment upgrades/DEVENV-078-a-peer-s-exclusive-confirmation-blocks-every-other-lane-with.md>) — Candidate
 - [DEVENV-082 — No pseudo-terminal inside the agent sandbox](<Developer environment upgrades/DEVENV-082-no-pseudo-terminal-inside-the-agent-sandbox.md>) — Candidate
 - [DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo](<Developer environment upgrades/DEVENV-086-the-compiled-app-fingerprint-hashes-all-of-packages.md>) — Candidate
-- [DEVENV-089 — `finalize` overwrites a reviewed merge message](<Developer environment upgrades/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Candidate
 - [DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself](<Developer environment upgrades/DEVENV-090-a-stale-generated-parser-fails-runtime-jest-without-naming-i.md>) — Candidate
 - [DEVENV-091 — A dependency tree can be unusable while every health check passes](<Developer environment upgrades/DEVENV-091-a-dependency-tree-can-be-unusable-while-every-health-check-p.md>) — Candidate
 - [DEVENV-094 — Simultaneous worktree finalizations collapse verification throughput](<Developer environment upgrades/DEVENV-094-simultaneous-finalizations-collapse-verification-throughput.md>) — Candidate
@@ -98,7 +97,6 @@ adding an entry, and count both when choosing an ID.
 - [DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox](<Developer environment upgrades/DEVENV-101-fix-dprint-cannot-format-a-skill-file-inside-the-sandbox.md>) — Candidate
 - [DEVENV-102 — No gate parses `.tao-revolution` spec sources](<Developer environment upgrades/DEVENV-102-no-gate-parses-tao-revolution-spec-sources.md>) — Candidate
 - [DEVENV-103 — `$TMPDIR` resolves to two different paths between tool calls](<Developer environment upgrades/DEVENV-103-tmpdir-resolves-to-two-different-paths-between-tool-calls.md>) — Candidate
-- [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Candidate
 - [DEVENV-109 — The dev-data cross-process test times out under a full lane](<Developer environment upgrades/DEVENV-109-dev-data-cross-process-test-times-out-under-a-full-lane.md>) — Candidate
 - [DEVENV-110 — Concurrent writers in one worktree fail the pre-test app compile](<Developer environment upgrades/DEVENV-110-concurrent-writers-in-one-worktree-fail-the-pre-test-app-compile.md>) — Candidate
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — Candidate
