@@ -4,7 +4,10 @@ Implement significant multi-piece or multi-step changes with dependency-aware ag
 explicit path ownership, integration checkpoints, progressive validation, and commits. Use when two
 or more substantial workstreams can proceed concurrently without sharing mutable seams. Owns dividing
 one outcome between agents that write at the same time, and putting the pieces back together, once
-`delegation`'s own rules have said to delegate at all.
+`delegation`'s own rules have said to delegate at all. All of it assumes agents writing into your
+worktree, which is what makes ownership the thing keeping them safe; a fan-out Ro will run from
+printed briefs is the other case, where each agent takes a worktree of its own and there is no
+integration owner, and `delegation` says what changes.
 
 ## Build the execution graph
 
