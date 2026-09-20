@@ -163,6 +163,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-bash-guard.zsh\" || true"
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {

@@ -42,6 +42,18 @@
     //
     // Claude Code renamed this tool from `Task` to `Agent`; the matcher follows the current name.
     "preToolUse": [
+      // Two rules root `AGENTS.md` states in prose, enforced where prose was not enough: a command
+      // may not open with `cd`, `export`, or an assignment, and a command may not pull a whole file
+      // or a whole patch into context when a bounded tool would do. A week of transcripts put the
+      // first at 16% of Bash calls after the rule was written, and the second at 42% of every
+      // character this repository's agents read through Bash. `BashCommandGuard.ts` holds the rules,
+      // the reasons an agent is shown, and the escape hatches; it refuses rather than warns, because
+      // a refusal is corrected in the same turn and a warning is read after the tokens are spent.
+      {
+        "type": "command",
+        "matcher": "Bash",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-bash-guard.zsh\" || true",
+      },
       {
         "type": "command",
         "matcher": "Agent",
