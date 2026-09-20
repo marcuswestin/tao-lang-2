@@ -1,4 +1,5 @@
-import { CLI, FS } from '@shared'
+import * as CLI from '@shared/CLI'
+import * as FS from '@shared/FS'
 
 /** Writes the repository's warn-only Git hooks into the hooks directory a checkout's worktrees
  * share. The entry script it writes asks the committing worktree for its own copy of the shim and

@@ -54,8 +54,13 @@ export const dirname = (inputPath: string) => nodePath.dirname(inputPath)
 export const basename = (inputPath: string, suffix?: string) => nodePath.basename(inputPath, suffix)
 /** extname returns the extension for a path. */
 export const extname = (inputPath: string) => nodePath.extname(inputPath)
+/** isAbsolute reports whether a path is already grounded at the host filesystem root. */
+export const isAbsolute = (inputPath: string) => nodePath.isAbsolute(normalizePathPart(inputPath))
 /** relativePath returns the slash-separated path from `fromPath` to `toPath`. */
 export const relativePath = (fromPath: string, toPath: string) => slashPath(nodePath.relative(fromPath, toPath))
+/** matchesGlob matches a path using the host's standard glob syntax, including brace alternatives. */
+export const matchesGlob = (inputPath: string, pattern: string) =>
+  nodePath.matchesGlob(normalizePathPart(inputPath), normalizePathPart(pattern))
 /** pathIsWithin returns whether `path` is `directoryPath` or a path inside it. */
 export function pathIsWithin(path: string, directoryPath: string): boolean {
   const relative = relativePath(directoryPath, path)

@@ -1,4 +1,19 @@
+import {
+  type AcquireResourceOptions,
+  MachineResourceBusyError,
+  type MachineResourceLease as HostMachineResourceLease,
+  type MachineResourceOwner,
+  MachineResources,
+  type ProcessIdentity,
+  type ResourceOptions,
+} from '@host-control'
 import { CLI, Errors, FS, Platform, Time } from '@shared'
+
+export { MachineResourceBusyError }
+export type { MachineResourceOwner, ProcessIdentity }
+
+/** Compatibility facade for existing lane callers; new host drivers use the fenced package lease. */
+export type MachineResourceLease = Pick<HostMachineResourceLease, 'owner' | 'release'>
 
 /** LaneRecord is the live, machine-wide accounting record for one top-level lane. */
 export type LaneRecord = {
@@ -32,26 +47,6 @@ export type MachineSlotReservation = {
 /** MachineExclusiveLease blocks new admissions and waits for peer reservations to drain. */
 export type MachineExclusiveLease = {
   release: () => Promise<void>
-}
-
-/** MachineResourceLease prevents another worktree from claiming the same named host resource. */
-export type MachineResourceLease = {
-  /** The identity written to the machine-wide registry for diagnostics and safe release. */
-  readonly owner: MachineResourceOwner
-  release: () => Promise<void>
-}
-
-/** MachineResourceOwner identifies the worktree operation holding one named host resource. */
-export type MachineResourceOwner = {
-  command: string
-  id: string
-  name: string
-  pid: number
-  /** OS process start identity, when the host can report it, protects against PID reuse. */
-  processStartedAt?: string
-  repositoryRoot: string
-  /** Lease acquisition time. A lease past its resource's staleness bound is prunable. */
-  startedAt: string
 }
 
 /** MachineLane is one top-level lane's registration and dynamic admission broker. */
@@ -95,41 +90,11 @@ export type AcquireOptions = {
   repositoryRoot: string
 }
 
-export type ResourceOptions = {
-  /** Command or lane shown to a second worktree when this resource is busy. */
-  command?: string
-  /** Injected by tests. */
-  lockTimeoutMs?: number
-  /**
-   * How old a lease may get before it is prunable regardless of its process identity. Defaults to
-   * `MAX_LEASE_AGE_MS`; pass `Infinity` for a resource an interactive session may validly hold all
-   * day, where only process identity may retire the lease.
-   */
-  maxAgeMs?: number
-  name: string
-  /** Injected by tests. */
-  processIdentity?: (pid: number) => Promise<ProcessIdentity>
-  registryRoot?: string
-  repositoryRoot?: string
-}
-
-export type AcquireResourceOptions = ResourceOptions & {
-  command: string
-  repositoryRoot: string
-  /** Maximum bounded wait before reporting the current owner. */
-  waitTimeoutMs?: number
-}
-
 type ExclusiveRecord = {
   id: string
   laneId: string
   pid: number
   startedAt: string
-}
-
-export type ProcessIdentity = {
-  evidence: 'alive' | 'gone' | 'unknown'
-  startedAt?: string
 }
 
 type MutexRecord = {
@@ -149,22 +114,6 @@ export type LaneInspection = {
 
 class RegistryLockTimeoutError extends Errors.HostEnvironmentError {}
 
-/** MachineResourceBusyError keeps native-host contention distinct from CPU-lane contention. */
-export class MachineResourceBusyError extends Errors.HostEnvironmentError {
-  readonly failureKind = 'native-host-busy'
-  readonly owner: MachineResourceOwner
-
-  constructor(owner: MachineResourceOwner) {
-    super(
-      `Machine resource '${owner.name}' is busy: ${owner.command} in ${owner.repositoryRoot} `
-        + `(PID ${owner.pid}), held since ${owner.startedAt}. Wait for that session to finish or stop it, then retry.`,
-      { details: { failureKind: 'native-host-busy', owner } },
-    )
-    this.owner = owner
-  }
-}
-
-const REGISTRY_DIRECTORY = 'tao/machine-lanes'
 const SAMPLE_INTERVAL_MS = 3_000
 const ADMISSION_POLL_MS = 25
 const MAX_ADMISSION_POLL_MS = 500
@@ -172,17 +121,13 @@ const CONTENDED_LOAD_RATIO = 1.5
 const MAX_LEASE_AGE_MS = 6 * 60 * 60 * 1_000
 const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
-const RESOURCE_WAIT_TIMEOUT_MS = 10_000
-const RESOURCE_POLL_MS = 100
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
 const LANE_ID_ENV_KEY = 'TAO_MACHINE_LANE_ID'
 
 /** registryRoot resolves the machine-wide directory shared by every worktree. */
 function registryRoot(): string {
-  const cacheHome = Platform.runtimeProcess.env['XDG_CACHE_HOME']
-  const base = cacheHome !== undefined && cacheHome.length > 0 ? cacheHome : FS.resolvePath('.cache', FS.homeDir())
-  return FS.resolvePath(REGISTRY_DIRECTORY, base)
+  return MachineResources.registryRoot()
 }
 
 /** activeLanes returns all live registrations, pruning crashed processes unless asked not to. */
@@ -590,87 +535,12 @@ async function liveExclusive(root: string): Promise<ExclusiveRecord | undefined>
   return record
 }
 
-/**
- * acquireResource waits briefly for a named host resource, then reports the exact owning worktree
- * and command. Native callers use this rather than folding host contention into lane contention.
- */
 async function acquireResource(options: AcquireResourceOptions): Promise<MachineResourceLease> {
-  const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
-  const deadline = Time.nowMs() + waitTimeoutMs
-  while (true) {
-    const outcome = await claimResource(options)
-    if (outcome.lease !== undefined) {
-      return outcome.lease
-    }
-    if (Time.nowMs() >= deadline) {
-      throw new MachineResourceBusyError(outcome.owner)
-    }
-    await Time.sleep(Math.min(RESOURCE_POLL_MS, Math.max(1, deadline - Time.nowMs())))
-  }
+  return await MachineResources.acquire(options)
 }
 
-/** tryAcquireResource atomically claims a named host resource across all worktrees. */
 async function tryAcquireResource(options: ResourceOptions): Promise<MachineResourceLease | undefined> {
-  return (await claimResource(options)).lease
-}
-
-async function claimResource(
-  options: ResourceOptions,
-): Promise<{ lease?: MachineResourceLease; owner: MachineResourceOwner }> {
-  const root = options.registryRoot ?? registryRoot()
-  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
-  const path = resourcePath(root, options.name)
-  const processIdentity = options.processIdentity ?? inspectProcessIdentity
-  const maxAgeMs = options.maxAgeMs ?? MAX_LEASE_AGE_MS
-  const owner: MachineResourceOwner = {
-    command: options.command ?? options.name,
-    id,
-    name: options.name,
-    pid: Platform.runtimeProcess.pid,
-    processStartedAt: (await ownProcessIdentity(processIdentity)).startedAt,
-    repositoryRoot: options.repositoryRoot ?? Platform.runtimeProcess.cwd(),
-    startedAt: new Date().toISOString(),
-  }
-  let existingOwner: MachineResourceOwner | undefined
-  try {
-    const acquired = await withRegistryLock(root, async () => {
-      const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-      if (
-        existing !== undefined
-        && !leaseExpired(existing, maxAgeMs)
-        && await resourceOwnerIsLive(existing, processIdentity)
-      ) {
-        existingOwner = existing
-        return false
-      }
-      await FS.remove(path).catch(() => {})
-      await atomicWriteJson(path, owner)
-      return true
-    }, options.lockTimeoutMs)
-    if (!acquired) {
-      return { owner: existingOwner ?? owner }
-    }
-  } catch (error) {
-    Errors.throwHostEnvironment(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
-  }
-
-  let released = false
-  const lease: MachineResourceLease = {
-    owner,
-    release: async () => {
-      if (released) {
-        return
-      }
-      await withRegistryLock(root, async () => {
-        const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-        if (existing?.id === id) {
-          await FS.remove(path)
-        }
-      }, options.lockTimeoutMs)
-      released = true
-    },
-  }
-  return { lease, owner }
+  return await MachineResources.tryAcquire(options)
 }
 
 function unregisteredLane(capacity: number): MachineLane {
@@ -875,11 +745,6 @@ async function mutexTarget(linkPath: string): Promise<string | undefined> {
     : undefined
 }
 
-/** ownerIsLive reports whether a recorded resource owner still runs as the process that took the lease. */
-async function ownerIsLive(owner: MachineResourceOwner): Promise<boolean> {
-  return await resourceOwnerIsLive(owner, inspectProcessIdentity)
-}
-
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
   try {
@@ -948,120 +813,12 @@ function normalizeLaneRecord(
   }
 }
 
-function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefined {
-  if (typeof value !== 'object' || value === null) {
-    return undefined
-  }
-  const record = value as Partial<MachineResourceOwner>
-  const valid = typeof record.id === 'string'
-    && typeof record.name === 'string'
-    && Number.isInteger(record.pid)
-    && (record.pid ?? 0) > 0
-    && typeof record.startedAt === 'string'
-    && Number.isFinite(Date.parse(record.startedAt))
-    && (record.processStartedAt === undefined || typeof record.processStartedAt === 'string')
-    && (record.command === undefined || typeof record.command === 'string')
-    && (record.repositoryRoot === undefined || typeof record.repositoryRoot === 'string')
-  if (!valid) {
-    return undefined
-  }
-  return {
-    command: record.command ?? record.name!,
-    id: record.id!,
-    name: record.name!,
-    pid: record.pid!,
-    processStartedAt: record.processStartedAt,
-    repositoryRoot: record.repositoryRoot ?? '<unknown worktree>',
-    startedAt: record.startedAt!,
-  }
-}
-
-/**
- * leaseExpired applies a resource's staleness bound. Most leases are short-lived lane leases whose
- * holder may have died without a reachable process identity, so age alone retires them; a resource
- * that opts out with an infinite bound (interactive native Studio) is retired only by identity.
- */
-function leaseExpired(owner: MachineResourceOwner, maxAgeMs: number): boolean {
-  if (!Number.isFinite(maxAgeMs)) {
-    return false
-  }
-  const timestamp = Date.parse(owner.startedAt)
-  return Number.isFinite(timestamp) && Time.nowMs() - timestamp > maxAgeMs
-}
-
-let ownIdentity: { pid: number; identity: Promise<ProcessIdentity> } | undefined
-
-/**
- * ownProcessIdentity reads this process's start identity once: it cannot change, and a contended
- * lease is claimed in a tight poll loop that must not spawn `ps` on every attempt.
- */
-function ownProcessIdentity(inspect: (pid: number) => Promise<ProcessIdentity>): Promise<ProcessIdentity> {
-  const pid = Platform.runtimeProcess.pid
-  if (inspect !== inspectProcessIdentity) {
-    return inspect(pid)
-  }
-  if (ownIdentity === undefined || ownIdentity.pid !== pid) {
-    ownIdentity = { identity: inspect(pid), pid }
-  }
-  return ownIdentity.identity
-}
-
-/**
- * resourceOwnerIsLive requires evidence that the recorded process identity disappeared or changed
- * before pruning a lease inside its staleness bound: an unreadable process table is uncertainty
- * rather than staleness.
- */
-async function resourceOwnerIsLive(
-  owner: MachineResourceOwner,
-  inspect: (pid: number) => Promise<ProcessIdentity>,
-): Promise<boolean> {
-  const identity = await inspect(owner.pid)
-  if (identity.evidence === 'gone') {
-    return false
-  }
-  if (
-    identity.evidence === 'alive'
-    && owner.processStartedAt !== undefined
-    && identity.startedAt !== undefined
-    && owner.processStartedAt !== identity.startedAt
-  ) {
-    return false
-  }
-  return true
-}
-
-/** inspectProcessIdentity reads the OS start time that distinguishes a live PID from its reuse. */
-async function inspectProcessIdentity(pid: number): Promise<ProcessIdentity> {
-  try {
-    // `lstart` follows locale and time zone; pin both so every process compares the same spelling.
-    const result = await CLI.run('ps', {
-      args: ['-o', 'lstart=', '-p', String(pid)],
-      env: { LC_ALL: 'C', TZ: 'UTC' },
-      stdio: 'pipe',
-    })
-    const startedAt = result.stdout.trim()
-    if (result.error === undefined && result.exitCode === 0 && startedAt.length > 0) {
-      return { evidence: 'alive', startedAt }
-    }
-    if (result.error === undefined && !Platform.processIsAlive(pid)) {
-      return { evidence: 'gone' }
-    }
-  } catch {
-    // Fall through to the weaker kernel liveness probe. Unknown identity must remain owned.
-  }
-  return Platform.processIsAlive(pid) ? { evidence: 'unknown' } : { evidence: 'gone' }
-}
-
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && 'code' in error ? String(error.code) : undefined
 }
 
 function lanePath(root: string, id: string): string {
   return FS.resolvePath(`${id}.lane.json`, root)
-}
-
-function resourcePath(root: string, name: string): string {
-  return FS.resolvePath(`resource-${name.replaceAll(/[^a-zA-Z0-9._-]/g, '_')}.lease`, root)
 }
 
 /** MachineLanes owns atomic CPU and named-resource coordination across repository worktrees. */
@@ -1076,7 +833,7 @@ export const MachineLanes = {
   describeContention,
   fairAllocations,
   inspectLanes,
-  ownerIsLive,
+  ownerIsLive: MachineResources.ownerIsLive,
   registryRoot,
   tryAcquireResource,
   withRegistryLock,

@@ -199,7 +199,10 @@ function startCommand(
       if (stream === 'stdout') {
         HCI.write(buffer)
       } else {
-        HCI.writeError(buffer)
+        // stderr names the file descriptor, not the severity. Git and many other tools write
+        // ordinary progress there, so preserve the child's own presentation and let the caller's
+        // final verdict carry success or error color.
+        HCI.writeStderr(buffer)
       }
     } else if (prefixedOutput) {
       prefixedOutput.write(stream, buffer)
@@ -384,7 +387,7 @@ function runSync(command: string, spec: CommandSyncSpec = {}): CommandResult {
 
   if (stdio.streamOutput) {
     HCI.write(stdout)
-    HCI.writeError(stderr)
+    HCI.writeStderr(stderr)
   }
 
   return {

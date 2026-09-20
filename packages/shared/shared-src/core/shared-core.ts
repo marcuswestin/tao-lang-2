@@ -1,3 +1,4 @@
+import { Arrays, Effects } from '@tao/runtime/core'
 import { Assert } from './Assert'
 import { Diagnostic, Diagnostics } from './Diagnostics'
 import * as Errors from './Errors'
@@ -14,9 +15,11 @@ export type {
 } from './Diagnostics'
 
 export {
+  Arrays,
   Assert,
   Diagnostic,
   Diagnostics,
+  Effects,
   Errors,
   Http,
   Json,

@@ -24,7 +24,9 @@ The Expo module package behind Tao's Apple datasources. Two Swift modules share 
   zone boundary, `cloudKitZonesOver`, and `loadCloudKitZones`, on the same terms.
 - `plugins/with-tao-icloud.cjs` (`app.plugin.js`) — the config plugin granting the iCloud
   entitlements: `containers` default to `iCloud.<bundle identifier>`, `services` to
-  `CloudDocuments`; pass `CloudKit` for the CloudKit datasource.
+  `CloudDocuments`; pass `CloudKit` for the CloudKit datasource. For CloudKit it also records
+  those containers in the app's Info.plist, so the native module can reject an unconfigured build
+  before asking CloudKit for a default container.
 
 ## Building
 

@@ -2,6 +2,7 @@ import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const PROFILE_SCRIPT = Repo.resolvePath('packages/dev/dev-src/cli/agent-worktree-profile.zsh')
+const DEPENDENCY_SCRIPT = Repo.resolvePath('packages/dev/dev-src/cli/ensure-dependencies.zsh')
 
 type ProfileFixture = {
   commonGitDir: string
@@ -24,6 +25,9 @@ Describe('agent worktree profile bootstrap', () => {
           'tao_activate_devenv_profile "$2" "$3"',
           'command -v node',
           'node --version',
+          'print -r -- "$ANDROID_HOME"',
+          'print -r -- "$ANDROID_SDK_ROOT"',
+          'print -r -- "$ANDROID_USER_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -33,6 +37,9 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(result.stdout.trim().split('\n')).toEqual([
         FS.resolvePath('bin/node', profile),
         'v24.test',
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('libexec/android-sdk', profile),
+        FS.resolvePath('.android', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
@@ -331,6 +338,7 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
+      Expect(outcome.result.stderr).toContain('./agent setup')
       Expect(outcome.result.stderr).toContain('just session-unsandboxed')
     } finally {
       await FS.remove(testRoot)
@@ -384,7 +392,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       const commands = (await FS.readText(commandLog)).trim().split('\n')
       Expect(commands.filter(command => command.startsWith('install '))).toEqual([
-        `install --cwd ${fixture.worktree}`,
+        `install --cwd ${fixture.worktree} --frozen-lockfile`,
       ])
     } finally {
       await FS.remove(testRoot)
@@ -411,37 +419,73 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('installs dependencies from repository-local Bun storage and repairs an incomplete graph', async () => {
-    const commands = await justCommands('deps')
+  Test('exposes one public setup command backed by one private installer', async () => {
+    const commands = await justCommands('_setup')
+    const names = await justRecipeNames()
 
-    Expect(commands).toContain(`${Repo.getRoot()}/.artifacts/tmp/bun`)
-    Expect(commands).toContain(`${Repo.getRoot()}/.artifacts/cache/bun`)
-    Expect(commands).toContain('bun install --frozen-lockfile')
-    Expect(commands).toContain('--force')
-    // One probe module owns what "healthy" means, so the recipe and `./dev doctor` cannot drift.
-    Expect(await justCommands('_dependency-health')).toContain(
-      'packages/dev/dev-src/doctor/DependencyHealth.ts',
-    )
+    Expect(commands).toContain('packages/dev/dev-src/cli/ensure-dependencies.zsh')
+    Expect(commands).toContain('--health')
+    Expect(commands).not.toContain('bun install')
+    Expect(names).not.toContain('deps')
+    Expect(names).not.toContain('setup')
+    for (const entrypoint of ['agent', 'dev']) {
+      Expect(await FS.readText(Repo.resolvePath(entrypoint))).toContain('ensure-dependencies.zsh')
+    }
+    const help = await CLI.run(Repo.resolvePath('agent'), { args: ['help'], cwd: Repo.getRoot() })
+    Expect(help.exitCode).toBe(0)
+    Expect(help.stdout).toContain('setup')
+    Expect(help.stdout).toContain('Install dependencies and generate agent adapters')
   })
 
-  Test('a healthy dependency install runs the health probe once', async () => {
-    const repair = (await justCommands('deps')).trim().split('\n')[2]
-    Expect(repair).toBeDefined()
-    const result = await CLI.run('zsh', {
-      args: [
-        '-c',
+  Test('adopts a healthy tree restored by another entry point without a second install', async () => {
+    const testRoot = await mkTestDir('tao-dependency-adopt-')
+    try {
+      const fakeBin = FS.resolvePath('bin', testRoot)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      await FS.mkdir(FS.resolvePath('node_modules', testRoot))
+      await FS.writeText(
+        FS.resolvePath('bun', fakeBin),
         [
-          'typeset -i calls=0',
-          'function just() { (( calls += 1 )); return 0 }',
-          'function bun() { return 99 }',
-          repair!,
-          'print -r -- "$calls"',
+          '#!/bin/zsh',
+          'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
+          '[[ "$1" == run ]]',
+          '',
         ].join('\n'),
-      ],
-    })
+      )
+      await makeExecutable(FS.resolvePath('bun', fakeBin))
 
-    Expect(result.exitCode).toBe(0)
-    Expect(result.stdout.trim()).toBe('1')
+      const script = [
+        `TAO_DEPENDENCY_ROOT=${JSON.stringify(testRoot)}`,
+        'TAO_DEPENDENCY_DEV="$TAO_DEPENDENCY_ROOT/packages/dev"',
+        'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
+        'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
+        'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_DEV/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_MODE=""',
+        'TAO_DEPENDENCY_ATTEMPTS=3',
+        'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
+        'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',
+        `source ${JSON.stringify(PROFILE_SCRIPT)}`,
+        dependencyFunctionSource(await FS.readText(DEPENDENCY_SCRIPT)),
+        'tao_ensure_dependencies_locked',
+      ].join('\n')
+      const result = await CLI.run('zsh', {
+        args: ['-c', script],
+        cwd: testRoot,
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_COMMAND_LOG: commandLog,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).trim()).toBe(
+        `run ${FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot)}`,
+      )
+      Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
   })
 
   Test('repairs a damaged dependency graph before the agent CLI build can consume it', async () => {
@@ -464,26 +508,25 @@ Describe('agent worktree profile bootstrap', () => {
           '  : > "$TAO_TEST_REPAIRED"',
           '  exit 0',
           'fi',
-          'exit 2',
+          // The first install completes but leaves the probe unhealthy, so replacement is justified.
+          'exit 0',
           '',
         ].join('\n'),
       )
       await makeExecutable(FS.resolvePath('bun', fakeBin))
 
       const script = [
-        `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
-        'DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"',
-        'AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"',
-        'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
-        'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
-        'INSTALL_LOCK="$SCRIPT_DIR/install.lock"',
-        'DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"',
-        'typeset -a BUN_INSTALL_ARGS',
-        'BUN_INSTALL_ARGS=(install --cwd "$SCRIPT_DIR")',
-        'INSTALL_ATTEMPTS=3',
+        `TAO_DEPENDENCY_ROOT=${JSON.stringify(testRoot)}`,
+        'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
+        'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
+        'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/dev/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_ATTEMPTS=3',
+        'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
+        'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',
         `source ${JSON.stringify(PROFILE_SCRIPT)}`,
-        agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
-        'ensure_dev_dependency_health',
+        dependencyFunctionSource(await FS.readText(DEPENDENCY_SCRIPT)),
+        'tao_repair_dependencies',
       ].join('\n')
       const result = await CLI.run('zsh', {
         args: ['-c', script],
@@ -497,13 +540,8 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(commandLog)).trim().split('\n')).toEqual([
-        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
-        // The lock owner rechecks after waiting in case another bootstrap repaired the graph.
-        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
-        // A plain install is tried first: it writes what is missing without relinking what is
-        // healthy, which is what an unhealthy tree needs. This fixture's install fails, so the
-        // repair escalates; the test below covers the case where the plain install is enough.
         `install --cwd ${testRoot} --frozen-lockfile`,
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
         `install --cwd ${testRoot} --frozen-lockfile --force`,
         'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
       ])
@@ -542,19 +580,17 @@ Describe('agent worktree profile bootstrap', () => {
       await makeExecutable(FS.resolvePath('bun', fakeBin))
 
       const script = [
-        `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
-        'DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"',
-        'AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"',
-        'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
-        'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
-        'INSTALL_LOCK="$SCRIPT_DIR/install.lock"',
-        'DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"',
-        'typeset -a BUN_INSTALL_ARGS',
-        'BUN_INSTALL_ARGS=(install --cwd "$SCRIPT_DIR")',
-        'INSTALL_ATTEMPTS=3',
+        `TAO_DEPENDENCY_ROOT=${JSON.stringify(testRoot)}`,
+        'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
+        'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
+        'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/dev/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_ATTEMPTS=3',
+        'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
+        'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',
         `source ${JSON.stringify(PROFILE_SCRIPT)}`,
-        agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
-        'ensure_dev_dependency_health',
+        dependencyFunctionSource(await FS.readText(DEPENDENCY_SCRIPT)),
+        'tao_repair_dependencies',
       ].join('\n')
       const result = await CLI.run('zsh', {
         args: ['-c', script],
@@ -582,7 +618,7 @@ Describe('agent worktree profile bootstrap', () => {
 
     // The graph generates the parser inside `./dev gates`, so the ordering visible to a dry run is
     // the install first and the one gates invocation that names `_parser-gen` after it.
-    const install = commands.indexOf('bun install --frozen-lockfile')
+    const install = commands.indexOf('ensure-dependencies.zsh')
     const graph = commands.indexOf('./dev gates')
     Expect(install).toBeGreaterThanOrEqual(0)
     Expect(graph).toBeGreaterThan(install)
@@ -593,7 +629,7 @@ Describe('agent worktree profile bootstrap', () => {
     for (const scope of ['verify', 'verify-changed']) {
       const commands = await justCommands(scope)
 
-      const install = commands.indexOf('bun install --frozen-lockfile')
+      const install = commands.indexOf('ensure-dependencies.zsh')
       const graph = commands.indexOf('./dev gates')
       Expect(install).toBeGreaterThanOrEqual(0)
       Expect(graph).toBeGreaterThan(install)
@@ -644,7 +680,7 @@ Describe('agent worktree profile bootstrap', () => {
     const sandbox = await justCommands('verify-full-sandbox')
     Expect(sandbox).toContain('--skip-unsandboxed')
     Expect(await justCommands('verify-full')).not.toContain('--skip-unsandboxed')
-    Expect(sandbox).not.toContain('bun install --frozen-lockfile')
+    Expect(sandbox).not.toContain('ensure-dependencies.zsh')
   })
 
   Test('check runs no test suite and takes the same --no-cache flag the gate lanes take', async () => {
@@ -725,6 +761,16 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('merge-with-main', '--skip-verify-full')).toContain('--skip-verify-full')
     Expect(await justCommands('merge-with-main', '--skip-verify')).toContain('--skip-verify')
     Expect(await justCommands('merge-with-main')).not.toContain('--skip-')
+  })
+
+  Test('GitHub setup standardizes HTTPS, the credential helper, and this origin', async () => {
+    const commands = await justCommands('github-setup')
+
+    Expect(commands).toContain('url.https://github.com/.insteadOf')
+    Expect(commands).toContain('gh auth login --hostname github.com --git-protocol https --web')
+    Expect(commands).toContain('gh auth setup-git --hostname github.com')
+    Expect(commands).toContain('git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git')
+    Expect(commands).toContain('git ls-remote --exit-code origin refs/heads/main')
   })
 
   Test('the human landing recipe exposes the read-only dry run', async () => {
@@ -881,16 +927,16 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   await makeExecutable(FS.resolvePath('bun', fakeBin))
 
   const script = [
-    `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
-    `AGENT_TEMP_DIR=${JSON.stringify(scratch)}`,
-    'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
-    'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
-    'typeset -a BUN_INSTALL_ARGS',
-    'BUN_INSTALL_ARGS=(install)',
-    'INSTALL_ATTEMPTS=3',
+    `TAO_DEPENDENCY_ROOT=${JSON.stringify(testRoot)}`,
+    `TAO_DEPENDENCY_TEMP_ROOT=${JSON.stringify(scratch)}`,
+    'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
+    'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
+    'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
+    'TAO_DEPENDENCY_INSTALL_ARGS=(install)',
+    'TAO_DEPENDENCY_ATTEMPTS=3',
     `source ${JSON.stringify(PROFILE_SCRIPT)}`,
-    agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
-    'install_dev_deps',
+    dependencyFunctionSource(await FS.readText(DEPENDENCY_SCRIPT)),
+    'tao_run_bun_install',
   ].join('\n')
 
   const result = await CLI.run('zsh', {
@@ -906,10 +952,10 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   return { attempts: log.split('\n').filter(Boolean).length, result }
 }
 
-/** Extracts `./agent`'s dependency functions so the tests exercise the shipped implementation. */
-function agentFunctionSource(source: string): string {
-  const start = source.indexOf('function report_install_failure()')
-  const end = source.indexOf('function needs_build()')
+/** Extracts the dependency functions without running the script's real repository bootstrap. */
+function dependencyFunctionSource(source: string): string {
+  const start = source.indexOf('function tao_dependency_state()')
+  const end = source.lastIndexOf('tao_run_with_lock "$TAO_DEPENDENCY_LOCK"')
   Expect(start).toBeGreaterThan(0)
   Expect(end).toBeGreaterThan(start)
   return source.slice(start, end)
@@ -950,6 +996,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
+    await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
     await makeExecutable(primaryNode)
   }
@@ -985,6 +1032,10 @@ async function copyBootstrapScripts(worktree: string): Promise<void> {
     FS.writeText(
       FS.resolvePath('packages/dev/dev-src/cli/agent-worktree-profile.zsh', worktree),
       await FS.readText(PROFILE_SCRIPT),
+    ),
+    FS.writeText(
+      FS.resolvePath('packages/dev/dev-src/cli/ensure-dependencies.zsh', worktree),
+      await FS.readText(DEPENDENCY_SCRIPT),
     ),
   ])
   await Promise.all([

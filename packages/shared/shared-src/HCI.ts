@@ -113,6 +113,11 @@ export function writeErrorLine(message = '', options: OutputOptions = {}): void 
   writeError(`${message}\n`, options)
 }
 
+/** writeStderr preserves child-process stderr without assigning error severity or adding color. */
+export function writeStderr(message: string | Uint8Array, options: OutputOptions = {}): void {
+  ;(options.output ?? runtimeProcess.stderr).write(message)
+}
+
 /** writeSuccess writes human-readable success output to stdout or the provided output stream. */
 export function writeSuccess(message: string | Uint8Array, options: OutputOptions = {}): void {
   write(green(formatOutputMessage(message)), options)
@@ -127,7 +132,7 @@ export function logProcessInfo(processName: string, message: string): void {
 export function logProcessOutput(processName: string, message: string, options: { stderr?: boolean } = {}): void {
   const line = `${formatProcessPrefix(processName)} ${dim(message)}\n`
   if (options.stderr) {
-    writeErrorRaw(line)
+    writeStderr(line)
   } else {
     write(line)
   }
@@ -135,12 +140,12 @@ export function logProcessOutput(processName: string, message: string, options: 
 
 /** logProcessWarn writes a prefixed warning process line. */
 export function logProcessWarn(processName: string, message: string): void {
-  writeErrorRaw(`${formatProcessPrefix(processName)} ${yellow(message)}\n`)
+  writeStderr(`${formatProcessPrefix(processName)} ${yellow(message)}\n`)
 }
 
 /** logProcessError writes a prefixed error process line. */
 export function logProcessError(processName: string, message: string): void {
-  writeErrorRaw(`${formatProcessPrefix(processName)} ${red(message)}\n`)
+  writeStderr(`${formatProcessPrefix(processName)} ${red(message)}\n`)
 }
 
 /** formatProcessPrefix returns a colored process prefix. */
@@ -516,10 +521,6 @@ function assertChoices<ValueT extends string>(options: ChoicePromptOptions<Value
 
 function writeOutput(options: TerminalStreams, message: string): void {
   ;(options.output ?? runtimeProcess.stdout).write(message)
-}
-
-function writeErrorRaw(message: string | Uint8Array, options: OutputOptions = {}): void {
-  ;(options.output ?? runtimeProcess.stderr).write(message)
 }
 
 function formatOutputMessage(message: string | Uint8Array): string {

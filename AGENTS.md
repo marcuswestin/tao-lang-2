@@ -6,7 +6,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Commands
 
-- `./agent` is the front door for setup, fixing, testing, verifying, and diagnosing. Run `./agent help` before the first such command in a session and use what it lists rather than assembling your own invocation. When something in that domain is missing from `./agent`, tell Ro so it can be added instead of working around it.
+- `./agent` is the front door for setup, fixing, testing, verifying, and diagnosing. `./agent setup` is the only dependency-install command; it installs dependencies and generates harness adapters. Never run `bun install` directly. Run `./agent help` before the first such command in a session and use what it lists rather than assembling your own invocation: `./agent test-file <path>` runs one test file, where a bare `bun test` on a relative path silently corrupts its own run. When something in that domain is missing from `./agent`, tell Ro so it can be added instead of working around it.
+- If setup reports a protected-path `PermissionDenied` or `EEXIST: failed to link package`, start an unsandboxed session with `just session-unsandboxed` and run `./agent setup` there.
 - Everything outside that domain stays direct: `git`, `rg`, `./tao` for Tao CLI commands, and ordinary shell commands. `Justfile` is the human menu and holds what `./agent` deliberately does not expose.
 - Run commands from the worktree root with paths relative to it, search with `rg`, and never judge a command through a pipe; the shell-habits hook says why when a command breaks one of these. Change files with the harness's edit tool rather than shell heredocs or `sed -i`.
 - When a repository command fails, read what it printed: `./agent`, `./agent doctor`, and each lane's `summary.json` name the denied operation, the failing gate, and the recovery. The `environment-recovery` skill owns what needs more than that.
@@ -29,8 +30,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Safety
 
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
-- Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
-- When other agents may write, stage only exact reviewed paths (`git add -- <path>…`); never `git add .`, `git add -A`, or a directory-wide path.
+- Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request. When other agents may write, stage only exact reviewed paths (`git add -- <path>…`); never `git add .`, `git add -A`, or a directory-wide path.
 - Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
 - The `git-workflow` skill owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
 

@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataSchemaDefinition } from './TR-data'
 import { valueMatchesKind } from './TR-data-definition'
@@ -133,8 +134,8 @@ function validatePersistedRelations(rows: Record<string, StoredRow[]>, definitio
 }
 
 function sameNames(actual: readonly string[], expected: readonly string[]): boolean {
-  const sortedActual = [...actual].sort()
-  const sortedExpected = [...expected].sort()
+  const sortedActual = Arrays.sorted(actual)
+  const sortedExpected = Arrays.sorted(expected)
   return sortedActual.length === sortedExpected.length
     && sortedActual.every((name, index) => name === sortedExpected[index])
 }

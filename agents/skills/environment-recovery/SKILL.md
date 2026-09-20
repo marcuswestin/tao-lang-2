@@ -29,11 +29,13 @@ output is not enough, or when you need the reasoning behind it.
 ## Denied installs
 
 - A few npm packages ship `.idea/` and `.gitmodules`, which an agent sandbox protects inside the
-  working directory and no setting exempts; a sandboxed install that must write one fails as
-  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent doctor` names the broken
-  install and its remediation — follow that rather than diagnosing the two by hand.
-- Never name a Bun install backend to work around this. `--backend=copyfile` makes `bun install`
-  unrunnable sandboxed rather than fixing it.
+  working directory and no setting exempts. A sandboxed install that must write one fails as
+  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
+  denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
+  install and the same remediation. Only the tempdir case is resumable. For either protected-path
+  failure, start an unsandboxed session with `just session-unsandboxed` and run `./agent setup`.
+- Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
+  file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 
 ## Sandbox or host
 

@@ -72,7 +72,7 @@ function reactSingletonIssues(facts: DependencyFacts): string[] {
     return [
       "The installed Expo SDK's bundled versions could not be read from "
       + 'expo/bundledNativeModules.json, so no runtime version could be checked at all. '
-      + 'Install dependencies with: just deps',
+      + 'Install dependencies with: ./agent setup',
     ]
   }
   for (const name of REACT_PACKAGES) {
@@ -211,7 +211,7 @@ function unresolvedDependencyIssues(facts: DependencyFacts): string[] {
       }
       issues.push(
         `${manifest.name} declares ${name} ${declared}, which is not installed. The lockfile and `
-          + `${manifest.path} disagree; run: just deps`,
+          + `${manifest.path} disagree; run: ./agent setup`,
       )
     }
   }
