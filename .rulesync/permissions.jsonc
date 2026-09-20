@@ -119,6 +119,17 @@
     "mcp__claude-in-chrome__*": {
       "*": "allow",
     },
+    // Agent-to-agent messaging is Ro's to approve, one message at a time (see AGENTS.md and the
+    // `delegation` skill). A subagent's own return carries its report, so gating these costs
+    // delegation nothing; what they add is a way to start an exchange Ro never saw. As with the
+    // force-unlock rules above, Codex gets no equivalent gate, because
+    // `CodexConfigGenerator.renderCodexRules` emits only `allow` entries.
+    "SendMessage": {
+      "*": "ask",
+    },
+    "mcp__ccd_session_mgmt__send_message": {
+      "*": "ask",
+    },
   },
   "claudecode": {
     "sandbox": {
