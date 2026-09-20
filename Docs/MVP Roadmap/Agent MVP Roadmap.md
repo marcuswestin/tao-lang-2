@@ -45,8 +45,9 @@ language sees.
   seventy-line list of possible token sequences is now `Expected a view member here, but found
   \`Text\`.`, an unreadable character names what Tao expected by example instead of a byte offset,
   and a report shows the line above the mistake, one error per line, and at most three per file.
-- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
-  assertion rather than a positioned diagnostic.
+- Nothing is open from this item. The last piece, `tao fmt` reporting an unparseable file through
+  the formatter's own assertion, landed separately as `Report a file tao fmt cannot parse the way
+  tao check does`; `fmt` now reports the same positioned list as `check` and `fix`.
 
 ### A2 — A standalone cross-platform `tao` executable
 
