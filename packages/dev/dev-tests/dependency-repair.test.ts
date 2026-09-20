@@ -183,7 +183,9 @@ Describe('dependency tree repair', () => {
 
     Expect(result.exitCode).toBe(0)
     Expect(`${result.stdout}${result.stderr}`.trim()).toBe(
-      `zsh "${REPAIR_SCRIPT}" "${Repo.getRoot()}" "${Repo.resolvePath('.artifacts/tmp/bun')}" "${Repo.resolvePath('.artifacts/cache/bun')}"`,
+      `zsh "${REPAIR_SCRIPT}" "${Repo.getRoot()}" "${Repo.resolvePath('.artifacts/tmp/bun')}" "${
+        Repo.resolvePath('.artifacts/cache/bun')
+      }"`,
     )
   })
 
