@@ -33,12 +33,12 @@
   intermittent rather than a stable child-versus-shell property. The hazard is that the common
   spelling `ps … 2>/dev/null | rg <pid>` renders a denial as empty output — byte-identical to "that
   process is gone" — so an agent judging a lock owner's liveness can conclude the opposite of the
-  truth and force-release a live holder. `DEVENV-110` is where that decision is actually demanded.
-  Until this is fixed, prove the tool works (`ps -axo pid= | wc -l` returning a plausible count) and
-  never suppress its stderr before trusting silence.
+  truth. Until this is fixed, prove the tool works (`ps -axo pid= | wc -l` returning a plausible
+  count) and never suppress its stderr before trusting silence. This does **not** apply to the
+  landing lock: that lock is held by a worktree and is deliberately never liveness-checked, and
+  scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-110`.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
-  the adjacent host process-visibility constraints. `DEVENV-110` depends on this one for a liveness
-  check it can trust.
+  the adjacent host process-visibility constraints.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
 - **Source:** 2026-09-17 process-teardown implementation.

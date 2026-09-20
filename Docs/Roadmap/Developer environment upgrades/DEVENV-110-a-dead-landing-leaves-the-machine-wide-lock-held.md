@@ -1,33 +1,35 @@
-# DEVENV-110 — A dead landing leaves the machine-wide landing lock held
+# DEVENV-110 — The guidance invites agents to force-release a lock the design reserves for a person
 
 - **Status:** Candidate
 - **Area:** Landing and merge workflow
-- **Impact:** The landing lock is never reclaimed automatically. When a landing or a `verify` lane
-  dies — killed, crashed, or ended with its harness — the lock stays held under a PID that no longer
-  exists, and every other worktree queues behind it indefinitely. The machine stops landing until a
-  person notices and forces the lock. This is distinct from `DEVENV-093` and `DEVENV-094`, which are
-  about contention making landings slow: this one stops them entirely, and no amount of waiting
-  resolves it.
-- **Evidence:** On 2026-09-19 two locks went stale inside one hour while landing
-  `feat/publication-audit-report-d93f40`. `align-tao-apps-dialect-243197` (PID 86672, taken
-  22:33:29Z) held it for over thirteen minutes across two `./agent finalize` attempts, which printed
-  `Still waiting 5m` and `Still waiting 10m`; PID 86672 did not exist. After
-  `./dev land-unlock --force`, finalize acquired the lock immediately and completed a full
-  verification without interference, which confirms nothing else held it.
-  `wordflower-revolution-rewrite-deaf54` (PID 96689, taken 23:01:22Z) went stale the same way
-  shortly after. The warning text is accurate and names the remedy, but only a human reading it acts
-  on it.
-- **Workaround:** `./dev land-unlock --force`, after confirming the named PID is gone. Confirming it
-  is itself unreliable in a sandboxed shell — see `DEVENV-068`, whose intermittent `ps` denial makes
-  a dead PID and an unreadable process table look identical.
-- **Proposed change:** Have the lock record the holder's process-start identity, not just its PID,
-  and treat a lock whose holder is provably absent as reclaimable, so a waiter can take it without a
-  human. The Darwin libproc path `DEVENV-068` already prefers supplies exactly that identity, and
-  `StudioDeviceTrustStore` already solved the same problem for its own lock. Failing that, have the
-  waiter print a single actionable line naming the force command once, rather than repeating a
-  five-minute warning that reads as "still working".
-- **Dependencies:** `DEVENV-068` — a liveness check that cannot run is what makes the manual remedy
-  unsafe.
-- **Acceptance:** A landing whose process is killed mid-run leaves a lock that the next waiter
-  reclaims on its own, and no agent needs `--force` for a holder that is provably gone.
-- **Source:** Observed while landing `feat/publication-audit-report-d93f40` on 2026-09-19.
+- **Impact:** `LandingLock.ts` is explicit that the lock is never reclaimed automatically, that a
+  dead PID does not mean a released lock because the acquiring process is *expected* to exit while
+  the lock is still held, and that "a stuck lock is therefore a person's problem on purpose". The
+  instructions an agent actually reads say something weaker. Root `AGENTS.md` ends its lock
+  paragraph with "`./agent land-unlock --force` is the deliberate way past one", and the waiter's own
+  warning repeats "if that landing is no longer running, release it with `./dev land-unlock --force`"
+  every five minutes. Neither says the judgment belongs to a person. An agent that reads them does
+  what they suggest: check whether the named PID exists, find it gone, and force. That is the one
+  act the design forbids, because handing one agent a lock another still believes it holds is the
+  failure that can corrupt `main`.
+- **Evidence:** On 2026-09-19, landing `feat/publication-audit-report-d93f40`, an agent force-released
+  the lock twice on exactly that reasoning — `align-tao-apps-dialect-243197` (PID 86672) and
+  `wordflower-revolution-rewrite-deaf54` (PID 96689) — after confirming neither PID existed. Both
+  releases followed the printed remedy and the `AGENTS.md` sentence, and both were unsound: the PID
+  check proves nothing about a worktree-held lock, and each holder may have been an agent whose
+  session still held a durable claim across commands. Nothing visibly broke, which is the problem —
+  the same reasoning corrupts `main` the first time the other agent is mid-landing rather than
+  between commands.
+- **Workaround:** Treat a held lock as a live landing and wait; `./agent board` names the holder.
+  Ask Ro before forcing.
+- **Proposed change:** Make the two pieces of guidance say what the code says. In `AGENTS.md`, state
+  that a wedged lock is a person's call and that an agent asks rather than forces. In the waiter's
+  warning, name `./agent board` and the person, rather than handing out the `--force` command as the
+  next step. Optionally make `--force` refuse without a terminal, the way `--skip-all` already does,
+  so the safe path is the reachable one non-interactively.
+- **Dependencies:** None. This is a documentation and affordance defect, not a lock defect — the lock
+  behaves as designed.
+- **Acceptance:** An agent following `AGENTS.md` and the printed warning waits or escalates, and
+  nothing in either text presents force-releasing as the agent's own next step.
+- **Source:** Observed while landing `feat/publication-audit-report-d93f40` on 2026-09-19, and
+  corrected on 2026-09-20 after reading `packages/dev/dev-src/repository-tests/LandingLock.ts`.
