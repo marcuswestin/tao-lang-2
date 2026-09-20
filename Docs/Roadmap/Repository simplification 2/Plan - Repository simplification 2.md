@@ -208,3 +208,25 @@ Five implementers, one file set each, measured on net lines removed rather than 
 - Leads not taken: the `#studio_rect_` tag codec spelled in both `source-actions` and
   `StudioProjectSession.ts`; `chainFrom` in `Type.ts` as a shared parent walk; exporting the parser's
   `findAncestor` and `FS.commonPathAncestor`.
+
+### Documentation merges and the second instruction pass
+
+- The six groups of the merge list are merged, with Ro's sign-off: live documents for those groups
+  fell from about 10,500 lines to 8,200, and every absorbed source is kept under `Docs/Archive/`.
+  No pair of sources needed an "Unreconciled" heading. Two stale claims in the Tao ship material
+  were corrected while merging: Electron to Electrobun, and a slice requirement that has landed.
+- Left live for Ro: `Exploration - Studio server hot reload.md`, which the list counted but never
+  placed; `Roadmap - Studio review and refinement.md`; and `Component kits`.
+- The second instruction pass cut 54 lines and 8.5% of the words, to 1,379 lines against a target
+  near 880. It removed ten duplicated or gate-covered rules. What remains is one rule per line, so
+  the count falls only when a rule goes, and the rest is not enforced by code and not inferable.
+  Halving would mean cutting rules rather than prose, which is Ro's call rule by rule.
+- Package consolidation is safe once deprecated duplicates of the old aliases stay in
+  `packages/tsconfig.base.json` for one cycle; aliases resolve only through its `paths`. The
+  branches it would hurt are `feat/misc-changes` and `feat/multiple-datasources-plan-ab9e5f`, which
+  add new files under directories that move, and `feat/real-host-testing-prototype`, which edits
+  every shared config file the move rewrites.
+- JSX in the runtime is viable and not recommended inside this pass: the runtime's `tsconfig` names
+  the classic transform while every consumer applies the automatic one, a dev hook behind
+  `createReactElement` would stop firing, nine files including the `TR.ts` entry would be renamed,
+  and the rewrite of about 280 call sites lands on the package with the most unlanded work.
