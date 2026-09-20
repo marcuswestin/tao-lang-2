@@ -10,7 +10,6 @@
       "./dev *": "allow",
       "./tao *": "allow",
       "just *": "allow",
-      "just native-module-check": "allow",
       "bun install *": "allow",
       "bun run *": "allow",
       "bun test *": "allow",
@@ -149,9 +148,6 @@
         "git merge *",
         "git reset --merge",
         "git reset --hard HEAD",
-        // Expo prebuild, CocoaPods, and xcodebuild need native host services and writable caches.
-        // The exact recipe stays standalone and never joins ordinary verification.
-        "just native-module-check",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
@@ -200,7 +196,8 @@
           "*.expo.io",
           "exp.host",
           // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the sanctioned native-module compiler proof.
+          // during the native-module compiler proof. The command still requires explicit host
+          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
           "repo1.maven.org",
           "cache.nixos.org",
           "*.cachix.org",

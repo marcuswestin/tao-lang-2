@@ -175,6 +175,18 @@ Describe('dependency tree repair', () => {
     }
   })
 
+  Test('the public repair recipe passes every required scratch root to the standalone helper', async () => {
+    const result = await CLI.run(await FS.realPath(Repo.resolvePath('.devenv/profile/bin/just')), {
+      args: ['--dry-run', 'repair-deps'],
+      cwd: Repo.getRoot(),
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(`${result.stdout}${result.stderr}`.trim()).toBe(
+      `zsh "${REPAIR_SCRIPT}" "${Repo.getRoot()}" "${Repo.resolvePath('.artifacts/tmp/bun')}" "${Repo.resolvePath('.artifacts/cache/bun')}"`,
+    )
+  })
+
   Test('the deps recipe reaches automatic replacement after every in-place Bun attempt fails', async () => {
     const testRoot = await mkTestDir('tao-dependency-recipe-')
     const fakeBin = FS.resolvePath('bin', testRoot)

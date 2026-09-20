@@ -34,7 +34,6 @@
       "Bash(head *)",
       "Bash(jq *)",
       "Bash(just *)",
-      "Bash(just native-module-check)",
       "Bash(ls *)",
       "Bash(lsof -nP -iTCP:* -sTCP:LISTEN -t)",
       "Bash(plutil -lint *)",
@@ -84,8 +83,7 @@
       "git worktree *",
       "git merge *",
       "git reset --merge",
-      "git reset --hard HEAD",
-      "just native-module-check"
+      "git reset --hard HEAD"
     ],
     "filesystem": {
       "allowWrite": [

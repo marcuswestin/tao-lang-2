@@ -157,7 +157,7 @@ deps:
 # Replace an unhealthy dependency tree atomically, retaining the original under /private/tmp
 [group('Setup')]
 repair-deps:
-    zsh "{{ justfile_directory() }}/packages/dev/dev-src/cli/repair-dependencies.zsh" "{{ justfile_directory() }}" "{{ BUN_TMP_DIR }}"
+    zsh "{{ justfile_directory() }}/packages/dev/dev-src/cli/repair-dependencies.zsh" "{{ justfile_directory() }}" "{{ BUN_TMP_DIR }}" "{{ BUN_CACHE_DIR }}"
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]

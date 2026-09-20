@@ -20,7 +20,8 @@
   unsandboxed.
 - **Proposed change:** Implemented as typed `./dev native-module-check` orchestration behind the standalone
   `just native-module-check` host proof, with bounded phases, isolated build roots, podspec and target
-  discovery, retained failure artifacts, generated permissions, and native-package documentation.
+  discovery, retained failure artifacts, the canonical Maven network allowlist, and native-package
+  documentation. The mutable repository recipe deliberately remains reviewed outside the sandbox.
 - **Dependencies:** None.
 - **Acceptance:** Eight focused orchestration tests pass, including real process timeout, phase ordering,
   discovery, missing targets, and retained artifacts. The 2026-09-19 host run completed prebuild and
