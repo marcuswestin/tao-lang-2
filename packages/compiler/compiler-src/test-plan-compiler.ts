@@ -234,6 +234,8 @@ type TaoTestSuite = {
 
 /** TaoTestPlan declares compiled v0 Tao tests for a test entry file. */
 export type TaoTestPlan = {
+  /** Version makes this serialized, host-neutral test-plan contract safely extensible. */
+  version: 1
   sourcePath: string
   suites: TaoTestSuite[]
 }
@@ -243,6 +245,7 @@ export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerConte
   const errors = Diagnostics.errorMessages(input.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao tests with validation errors: ${errors.join('; ')}`, { errors })
   return {
+    version: 1,
     sourcePath: input.entry.path,
     suites: input.entry.ast.statements.filter(AST.isTestDeclaration).map(compileSuite),
   }

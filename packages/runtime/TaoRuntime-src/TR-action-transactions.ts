@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug-journal'
 import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure, TaoActionFailure } from './TR-errors'
 
@@ -94,7 +95,7 @@ class ActionTransaction {
       }
       this.committed = true
     } catch (error) {
-      for (const resource of committed.reverse()) {
+      for (const resource of Arrays.reversed(committed)) {
         resource.rollbackCommit?.(resource.value)
       }
       throw error

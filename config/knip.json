@@ -55,6 +55,16 @@
         "studio-smoke/**/*.{ts,tsx}"
       ]
     },
+    "packages/e2e-testing": {
+      "entry": [
+        "playwright.config.ts",
+        "**/*.host.spec.ts",
+        "fixtures/**/*.{ts,tsx}"
+      ],
+      "project": [
+        "**/*.{ts,tsx}"
+      ]
+    },
     "packages/generation": {
       "entry": [
         "generation-tests/**/*.test.{ts,tsx}",
@@ -64,6 +74,34 @@
         "generation-src/**/*.{ts,tsx}",
         "generation-tests/**/*.{ts,tsx}",
         "generation-live/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/host-control": {
+      "entry": [
+        "host-control-src/host-control.ts",
+        "host-control-tests/**/*.test.ts"
+      ],
+      "project": [
+        "host-control-src/**/*.ts",
+        "host-control-tests/**/*.ts"
+      ]
+    },
+    "packages/host-control-playwright": {
+      "entry": [
+        "host-control-playwright-src/host-control-playwright.ts"
+      ],
+      "project": [
+        "host-control-playwright-src/**/*.ts"
+      ]
+    },
+    "packages/host-control-appium": {
+      "entry": [
+        "appium-src/appium.ts",
+        "appium-tests/**/*.test.ts"
+      ],
+      "project": [
+        "appium-src/**/*.ts",
+        "appium-tests/**/*.ts"
       ]
     },
     "packages/ide-extension": {
@@ -81,6 +119,8 @@
     },
     "packages/runtime": {
       "entry": [
+        "TaoRuntime-src/host-testing/RuntimeHostTestControl.ts",
+        "TaoRuntime-src/host-testing/NativeHostTestControl.ts",
         "TR-tests/**/*.test.{ts,tsx}"
       ],
       "project": [

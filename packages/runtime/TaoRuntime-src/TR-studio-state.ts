@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
 import {
@@ -231,7 +232,7 @@ function validateCodec(codec: TaoStudioStateDomainCodec<unknown>): void {
 function canonicalDataState(snapshots: Readonly<Record<string, string>>): TaoStudioStateSeed {
   return Object.freeze({
     snapshots: Object.freeze(
-      Object.fromEntries(Object.entries(snapshots).toSorted(([left], [right]) => left.localeCompare(right))),
+      Object.fromEntries(Arrays.sorted(Object.entries(snapshots), ([left], [right]) => left.localeCompare(right))),
     ),
     version: studioStateSeedVersion,
   })

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type {
   TaoNavDescriptor,
@@ -425,7 +426,7 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   private backHosted(): boolean {
     // Later mounts first, the order the app itself uses for its auxiliaries.
-    for (const mount of this.hostedNavigations().toReversed()) {
+    for (const mount of Arrays.reversed(this.hostedNavigations())) {
       if (!mount.canGoBack) {
         continue
       }

@@ -164,7 +164,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
   // written `--timeout=60000` that used to sit here said only what the flag already implies.
   ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
-  ['ide-extension', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
   // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
   // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
   // empty output.
@@ -213,8 +213,9 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Verified by search; a suite that starts reading one belongs off this list.
   ['code-editor', { reads: ['ts'] }],
   ['generation', { reads: ['ts'] }],
+  ['host-control', { reads: ['ts'] }],
   ['icloud-native', { reads: ['ts'] }],
-  ['performance-checks', { reads: ['ts'] }],
+  ['performance-checks', { reads: ['gen-parser', 'ts'] }],
   ['runtime', { reads: ['ts'] }],
   ['shared', { reads: ['ts'] }],
   ['stdlib', { reads: ['ts'] }],
@@ -340,7 +341,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ['_doctor-json', { reads: ['ts'] }],
     [
       '_ide-extension-build',
-      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], writes: ['gen-ide'] },
+      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
     ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
     // `packages/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
