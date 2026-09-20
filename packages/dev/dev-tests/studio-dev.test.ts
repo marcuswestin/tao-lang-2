@@ -717,7 +717,7 @@ Describe('Studio smoke resource isolation', () => {
     })).rejects.toThrow('ordinary host shell')
   })
 
-  Test('stops before Metro when Watchman cannot pass Metro\'s no-spawn capability check', async () => {
+  Test("stops before Metro when Watchman cannot pass Metro's no-spawn capability check", async () => {
     await Expect(StudioDev.testing.studioWatchmanEnvironment({
       isFile: async () => true,
       repositoryRoot: '/repo',
@@ -736,7 +736,7 @@ Describe('Studio smoke resource isolation', () => {
     })).rejects.toThrow('missing Metro capability')
   })
 
-  Test('stops before Metro when Watchman omits Metro\'s required version field', async () => {
+  Test("stops before Metro when Watchman omits Metro's required version field", async () => {
     await Expect(StudioDev.testing.studioWatchmanEnvironment({
       isFile: async () => true,
       repositoryRoot: '/repo',

@@ -1,4 +1,9 @@
 export { LSPWorkspace } from './LSPWorkspace'
+export {
+  discoverProjectTaoFiles,
+  type ProjectTaoSource,
+  readProjectTaoSources,
+} from './ProjectSources'
 export { parseChecks, type TestCheck, type ViewCoverage, viewCoverage } from './SemanticCoverage'
 export {
   type AgentChatFact,
@@ -25,9 +30,4 @@ export {
   resolveProjectRoot,
   type SemanticSnapshotRequest,
 } from './SemanticSnapshotLoader'
-export {
-  discoverProjectTaoFiles,
-  readProjectTaoSources,
-  type ProjectTaoSource,
-} from './ProjectSources'
 export { default, Workspace } from './Workspace'

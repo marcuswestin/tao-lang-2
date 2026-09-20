@@ -61,7 +61,11 @@ Test('Studio and the CLI load ordered diagnostics through the same validated sna
   await withTaoFiles('tao-studio-semantic-loader-parity-', {
     'Garden.tao': 'app Garden { view Missing }\n',
   }, async (paths, root) => {
-    const session = await StudioProjectSession.open({ async compile() {}, entryPath: paths['Garden.tao'], projectRoot: root })
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
     const cli = await loadSemanticSnapshot({ appName: 'Garden', entryPath: 'Garden.tao', projectRoot: root })
     const ordered = (diagnostics: readonly { filePath?: string; message: string; severity: string }[]) =>
       diagnostics.map(diagnostic => [diagnostic.severity, diagnostic.filePath, diagnostic.message])

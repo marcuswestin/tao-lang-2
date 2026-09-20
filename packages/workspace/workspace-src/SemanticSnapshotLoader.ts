@@ -1,5 +1,5 @@
-import { Assert, FS } from '@shared'
 import type { ParseResult } from '@parser'
+import { Assert, FS } from '@shared'
 import { buildSemanticSnapshot, type SemanticSnapshot } from './SemanticSnapshot'
 import { Workspace } from './Workspace'
 
