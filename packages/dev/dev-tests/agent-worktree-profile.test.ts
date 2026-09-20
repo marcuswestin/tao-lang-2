@@ -733,6 +733,12 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('merge-with-main')).not.toContain('--skip-')
   })
 
+  Test('the human landing recipe exposes the read-only dry run', async () => {
+    const command = await justCommands('merge-with-main', '--dry-run')
+    Expect(command).toContain('./dev merge-with-main')
+    Expect(command).toContain('--dry-run')
+  })
+
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('verify-full')
 
