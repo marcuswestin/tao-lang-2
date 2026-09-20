@@ -24,6 +24,13 @@
   already builds is the obvious input. The risk to weigh is the opposite error: a package left out
   of the set is a stale input nothing notices, which is strictly worse than a cache that misses too
   often, so the narrowing should be derived from the graph rather than hand-listed.
+- **Missing proof (2026-09-20):** The current `PackageGraph` extracts TypeScript import strings, but a
+  compile also reaches sibling packages through filesystem operations. In particular, `TaoAppModules`
+  locates and links `packages/runtime` without a TypeScript import, and the compile stamp separately
+  names stdlib, runtime-toolchain, manifests, and the lockfile. Until the dependency model declares
+  those non-import edges and table-driven tests prove edits/additions/deletions throughout the derived
+  closure invalidate while an unrelated synthetic package does not, broad invalidation is the safe
+  behavior. Unknown roots, unresolved aliases, or undeclared filesystem reads must disable reuse.
 - **Dependencies:** DEVENV-081 (the compiled-output memo) and the `tao check` workspace stamp both
   key on this identity.
 - **Acceptance:** an edit under `packages/<name>` invalidates only the memos whose verdict can reach

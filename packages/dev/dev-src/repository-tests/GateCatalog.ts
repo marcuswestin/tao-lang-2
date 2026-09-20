@@ -18,7 +18,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * ones it `reads`, and `node` turns that into edges: a reader waits for exactly the writers of the
  * classes it reads, and for nothing else. That is the whole of the old `mutatesTree` barrier, which
  * made every reader in a lane wait for every fixer in it — including the 5s `./tao fix`, which the
- * TypeScript gates have no relationship with at all. Five class names, no globs, and a graph that
+ * TypeScript gates have no relationship with at all. Six class names, no globs, and a graph that
  * still fits on a screen.
  *
  * Every recipe-backed node implicitly reads `just`, because it starts by parsing the Justfile, which
@@ -32,12 +32,14 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  */
 
 /**
- * SourceClass names one class of files, coarse enough that five names cover the repository. A class
+ * SourceClass names one class of files, coarse enough that six names cover the repository. A class
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
   /** `packages/runtime-toolchain/_gen_tao-app*`, filled by the WordFlower compile. */
   | 'gen-app'
+  /** The extension bundles and syntax tree filled by the IDE extension build. */
+  | 'gen-ide'
   /** The generated Langium parser under `packages/parser/parser-src`. */
   | 'gen-parser'
   /** The Justfile itself, which every recipe-backed node parses on its way up. */
@@ -104,7 +106,7 @@ export type GateMetadata =
   }
 
 /** A gate nobody has tuned occupies one slot, reads the whole tree, and waits for every writer. */
-const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-parser', 'tao', 'ts'] }
+const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 'gen-parser', 'tao', 'ts'] }
 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
@@ -137,7 +139,7 @@ export type SuiteTuning = {
  * cannot affect you is wasted time, but reading a `.tao` file while `./tao fix` rewrites it is a
  * torn read, so the default is the safe one and each narrowing is an assertion about that suite.
  */
-const DEFAULT_SUITE_READS: readonly SourceClass[] = ['gen-app', 'gen-parser', 'tao', 'ts']
+const DEFAULT_SUITE_READS: readonly SourceClass[] = ['gen-app', 'gen-ide', 'gen-parser', 'tao', 'ts']
 /** Bun's own startup plus this repository's module graph, measured on a warm cache. */
 const BUN_SUITE_FIXED_MS = 600
 /** The published `./tao test` sizes itself to the machine unless a lane hands it a width. */
@@ -336,7 +338,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // a bridged export out of its report; reading one mid-rewrite would report live code as dead.
     ['dead-exports', { reads: ['tao', 'ts'] }],
     ['_doctor-json', { reads: ['ts'] }],
-    ['_ide-extension-build', { reads: ['gen-parser', 'ts'] }],
+    [
+      '_ide-extension-build',
+      { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'ts'], writes: ['gen-ide'] },
+    ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
     // `packages/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
     // `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
@@ -441,7 +446,7 @@ function isRecordable(name: string): boolean {
  * the tree hash a green record is keyed by says nothing about whether they exist or are current — a
  * fresh checkout hashes identically to one that has them.
  */
-const GENERATED_CLASSES: readonly SourceClass[] = ['gen-app', 'gen-parser']
+const GENERATED_CLASSES: readonly SourceClass[] = ['gen-app', 'gen-ide', 'gen-parser']
 
 /**
  * unrunGeneratedReads names the generated classes a node reads whose writer this lane does not run.

@@ -11,7 +11,8 @@ records why it is built the way it is and what comes next.
 - **Creation is a conversation, not a template.** A person says what they are making in a sentence.
   A model names the shape — app name, entities, fields, colors, sample rows — and Tao derives the
   code and decides every placement. The model never writes Tao. This is the semantic-agent lesson
-  (`Tao Studio AI/Exploration - Semantic agent proof of concept.md`, SAI-D020) applied at birth.
+  (`Docs/Archive/Explorations/Exploration - Semantic agent proof of concept.md`, SAI-D020) applied at
+  birth.
 - **Born in the canonical shape.** Every project gets the `Decisions.md` §1 decomposition as far as
   the toolchain runs it: App, Data, Chrome, Design, one folder per feature, Scenarios, tests.
   Access, Rules, and Words join as their tranches land. Design is always written.

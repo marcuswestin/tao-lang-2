@@ -320,7 +320,8 @@ decided.
 ### Final exploration - Native device as a Studio canvas
 
 Design exploration completed on 2026-08-30 in
-`Exploration - Native device as Studio canvas.md`. It finds an authenticated Expo development-build
+`Docs/Archive/Explorations/Exploration - Native device as Studio canvas.md`. It finds an authenticated
+Expo development-build
 renderer feasible, an internal preview build feasible with signed-update/runtime-version limits, and
 unrestricted live compilation in an App Store production build unacceptable. No native transport was
 implemented, no physical iPhone was available for validation, and the required real-device spike remains
