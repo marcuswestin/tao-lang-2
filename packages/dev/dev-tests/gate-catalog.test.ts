@@ -343,6 +343,7 @@ Describe('gate catalog metadata', () => {
         '_compile-word-flower-app',
         '_fix-dprint',
         '_fix-tao',
+        '_ide-extension-build',
         '_parser-gen',
       ])
     }
