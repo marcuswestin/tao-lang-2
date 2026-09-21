@@ -308,9 +308,18 @@ Product and codebase backlog, unordered.
 - [ ] Finish simulation mode in Tao Studio
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
-    Remaining: review the exact server-produced capture diff, load captured state in tests, and finish browser
-    proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls and
-    reactive per-cell Scheme resolution exist; the remaining proof is the external browser interaction gate.
+    The capture review is proven: the server proposal returns the exact diff without writing, the client
+    shows it before applying, and cancel or a failed proposal applies nothing.
+  - The browser proof of observable delay, offline, declared failure, and cross-cell isolation exists
+    as `packages/dev/studio-smoke/studio-network-simulation.test.ts`, driven through the
+    Environment and scenario panel, and is an explicit lane rather than a `verify-full` gate because
+    it found a defect it should keep showing: about one run in six, a scenario cell over an
+    `Http`-backed entity mounts with its heading and nothing else — no loading state, no error, no
+    rows — or throws `Entity handle 'Item-1' belongs to an inactive provider generation`. The suspect
+    is a second `RuntimeDataSchema.configure()` after the first fill, which empties committed data and
+    retires every handle. Make it a gate once it is green ten times running.
+  - Loading captured state in tests stays deferred with the fixture-through-action result and handle
+    semantics (`Docs/Spec/Tao Studio.md`).
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
   - Part 1 of the simplification plan removed the dead subpath exports and de-exported the
     internal-only symbols; the export/rename sweep that answers the namespace question is Part 5.1
