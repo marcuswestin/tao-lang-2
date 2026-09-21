@@ -90,6 +90,22 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   /**
+   * parseFiles parses several entry files with one build. Each result holds the graph its entry alone
+   * reaches, exactly as `parse` would give it, but a file several entries share is read, parsed, and
+   * linked once rather than once per entry. The results describe the workspace as this call built
+   * it: a later `parse`, `parseSource`, or `parseFiles` rebuilds the documents and leaves them stale.
+   */
+  async parseFiles(entryFiles: readonly string[]): Promise<readonly ParseResult[]> {
+    const entryPaths = [...new Set(entryFiles.map(entryFile => this.resolveEntryFile(entryFile)))]
+    Assert(entryPaths.length > 0, 'workspace parse has at least one entry file')
+    return await Parser.parseEntries(
+      this.parserContext(),
+      entryPaths.map(entryPath => Langium.URI.file(entryPath)),
+      { validation: false },
+    )
+  }
+
+  /**
    * validateFiles validates every entry graph with its own entry-sensitive context, then unions
    * results. Project identity is the exception: it belongs to the project root rather than to what
    * one entry imports, so every graph is judged against the whole batch. A Studio-generated view
@@ -97,14 +113,14 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * project at all.
    */
   async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
-    const entryPaths = [...new Set(entryFiles.map(entryFile => this.resolveEntryFile(entryFile)))]
-    Assert(entryPaths.length > 0, 'workspace validation has at least one entry file')
+    return await this.validateParsedFiles(await this.parseFiles(entryFiles))
+  }
 
-    const parsedByEntry = new Map<string, ParseResult>()
+  /** validateParsedFiles validates what one `parseFiles` call returned; see `validateFiles`. */
+  async validateParsedFiles(parsedEntries: readonly ParseResult[]): Promise<ValidationResult> {
+    Assert(parsedEntries.length > 0, 'workspace validation has at least one entry file')
     const filesByPath = new Map<string, ParseResult['entry']>()
-    for (const entryPath of entryPaths) {
-      const parsed = await this.parse(entryPath)
-      parsedByEntry.set(entryPath, parsed)
+    for (const parsed of parsedEntries) {
       for (const file of parsed.files) {
         filesByPath.set(file.path, file)
       }
@@ -112,7 +128,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     const batchFiles = [...filesByPath.values()]
 
     const diagnostics: Diagnostic[] = []
-    for (const parsed of parsedByEntry.values()) {
+    for (const parsed of parsedEntries) {
       const validation = await Validator.validateParseResult(
         parsed,
         this.validatorContext(parsed, batchFiles.map(file => file.ast)),
@@ -120,11 +136,9 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
       diagnostics.push(...validation.diagnostics)
     }
 
-    const entry = filesByPath.get(entryPaths[0]!)
-    Assert.defined(entry, 'workspace batch entry exists in parsed files', { entryPath: entryPaths[0] })
     return {
       diagnostics: Diagnostics.unique(diagnostics),
-      entry,
+      entry: parsedEntries[0]!.entry,
       files: batchFiles,
     }
   }
