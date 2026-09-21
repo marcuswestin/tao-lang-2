@@ -4,7 +4,7 @@ The Expo development build that renders a Tao project on a real iPhone or iPad w
 on the Mac. It is a shell: Studio's own Metro serves the bundle, Studio's device gateway carries
 control, and nothing in this package knows about either. Its identity (`Tao Companion`,
 `tao-studio-companion`, `taostudiocompanion://`, `dev.tao-lang.studio.companion`) is fixed in
-`packages/dev/dev-src/studio/StudioCompanionIdentity.ts`; `app.json` repeats the same values and a
+`packages/ides/studio-tooling/studio-tooling-src/StudioCompanionIdentity.ts`; `app.json` repeats the same values and a
 test keeps them equal.
 
 ## Install once

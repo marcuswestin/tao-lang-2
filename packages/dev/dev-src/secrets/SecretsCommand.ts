@@ -4,8 +4,7 @@
 // machine and never per worktree. Decrypting asks for a fingerprint because the kernel asks, not because
 // this code does; nothing here ever sees or stores a passphrase.
 
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
-import { ENV_PATH, LOCAL_PATH } from './SecretsFile'
+import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
 import {
   type Cipher,
   formatStore,
@@ -164,13 +163,13 @@ async function decryptSecrets(environment: SecretsEnvironment): Promise<number> 
     return 0
   }
   const values = await decryptedValues(store, environment.cipher)
-  const path = Repo.resolvePath(ENV_PATH)
+  const path = Repo.resolvePath(SecretsFile.ENV_PATH)
   // The plaintext store is owner-only. `mode` applies to a fresh file and this command rewrites an
   // existing one every run, so the mode is asserted afterwards as well.
   await FS.writeText(path, renderEnvFile(values, { generatedAt: environment.now() }), { mode: 0o600 })
   await FS.chmod(path, 0o600)
-  HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${ENV_PATH}.\n`)
-  HCI.writeLine(`Anything you maintain by hand belongs in ${LOCAL_PATH}, which this never writes.`)
+  HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${SecretsFile.ENV_PATH}.\n`)
+  HCI.writeLine(`Anything you maintain by hand belongs in ${SecretsFile.LOCAL_PATH}, which this never writes.`)
   return 0
 }
 
@@ -204,7 +203,7 @@ async function addSecret(name: string, environment: SecretsEnvironment, note?: s
   await writeStore(withSecret(store, key, armor, { now: environment.now(), ...(note === undefined ? {} : { note }) }))
   const replaced = store.secrets[key] !== undefined
   HCI.writeSuccess(`${replaced ? 'Replaced' : 'Added'} ${key} in ${STORE_PATH}.\n`)
-  HCI.writeLine(`Run \`just secrets\` to write it into ${ENV_PATH}.`)
+  HCI.writeLine(`Run \`just secrets\` to write it into ${SecretsFile.ENV_PATH}.`)
   return 0
 }
 

@@ -1,7 +1,7 @@
+import type { ExpoFetch } from '@expo-host/dev-loop/expo-runner/metro'
 import { CLI, Errors, FS, type Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import type { StudioDeviceLaunchDiagnostic } from '@studio'
-import type { ExpoFetch } from '../dev-src/expo-dev-loop/expo-runner/metro'
 import {
   companionDeviceNameFromArgument,
   companionInstallArgs,
@@ -17,8 +17,8 @@ import {
   type StudioCompanionDevice,
   studioDeviceFailureLayer,
   throwStudioDeviceFailure,
-} from '../dev-src/studio/StudioCompanionDevice'
-import { StudioCompanionIdentity } from '../dev-src/studio/StudioCompanionIdentity'
+} from '@studio-tooling/StudioCompanionDevice'
+import { StudioCompanionIdentity } from '@studio-tooling/StudioCompanionIdentity'
 import {
   companionSimulatorInstallCommand,
   companionSimulatorNameFromArgument,
@@ -28,7 +28,7 @@ import {
   simulatorRuntimeName,
   simulatorsFromSimctl,
   type StudioCompanionSimulator,
-} from '../dev-src/studio/StudioCompanionSimulator'
+} from '@studio-tooling/StudioCompanionSimulator'
 import {
   companionDevClientUrl,
   createStudioDeviceLauncher,
@@ -38,7 +38,7 @@ import {
   metroHostFromDevClientUrl,
   metroPortOf,
   orderMetroHostCandidates,
-} from '../dev-src/studio/StudioDeviceLaunch'
+} from '@studio-tooling/StudioDeviceLaunch'
 
 const PHONE_UDID = '00008140-00163CD81481801C'
 const PHONE_IDENTIFIER = 'E4795A5B-C1B6-55BB-A855-1E96A66F15CF'

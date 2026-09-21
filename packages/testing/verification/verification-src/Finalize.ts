@@ -58,6 +58,7 @@ const ROADMAP_LEDGER_PATH = 'Docs/Roadmap/Developer environment upgrades.md'
 const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
   'Apps/',
   'packages/ides/studio/',
+  'packages/ides/studio-tooling/',
   'packages/providers/icloud/',
   'packages/ides/studio-companion-app/',
   'packages/apps/expo-host/',
@@ -951,6 +952,7 @@ async function adviseOnDiff(
       path.startsWith('packages/dev/')
       || path.startsWith('packages/cli/cli-kit/')
       || path.startsWith('packages/testing/verification/')
+      || path.startsWith('packages/ides/studio-tooling/')
       || path === 'Justfile'
     )
     && !roadmapTouched.includes(ROADMAP_LEDGER_PATH)

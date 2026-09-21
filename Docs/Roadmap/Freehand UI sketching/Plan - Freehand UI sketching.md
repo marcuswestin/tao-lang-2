@@ -466,7 +466,7 @@ the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundat
 roadmap's first two targets (Record journey, `tao review`).
 
 Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, has
-rejoined `verify-full` (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
+rejoined `verify-full` (`just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
 and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
 source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
 including a real pointer-release drag-one-in target; no remaining failure has been attributed to the

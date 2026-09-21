@@ -4,27 +4,19 @@
   "type": "module",
   "module": "dev-src/dev.ts",
   "exports": {
-    ".": "./dev-src/dev.ts",
-    "./studio-review": "./dev-src/studio/StudioReview.ts"
+    ".": "./dev-src/dev.ts"
   },
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",
-    "better-opn": "^3.0.2",
-    "chokidar": "^5.0.0",
     "commander": "^15.0.0",
-    "ink": "^7.1.1",
-    "react": "^19.2.8",
     "tao-cli-kit": "workspace:*",
     "tao-e2e-testing": "workspace:*",
-    "tao-generation": "workspace:*",
-    "tao-host-control": "workspace:*",
-    "tao-appium-driver": "workspace:*",
+    "tao-expo-host": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-studio": "workspace:*",
+    "tao-studio-tooling": "workspace:*",
     "tao-verification": "workspace:*"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18",
     "tao-compiler": "workspace:*",
     "tao-formatter": "workspace:*"
   }

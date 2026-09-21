@@ -3,8 +3,8 @@
 How to run, inspect, and recover Tao Studio during development. `Docs/Spec/Tao Studio.md` owns what
 Studio _is_ as an implemented product contract; this package README owns the operational guide
 around it — launch modes, ports, artifact roots, manifests, diagnostics, smoke lanes, and release
-steps. Launch, doctor, smoke, and packaging commands live in `packages/dev` and the Justfile; they
-are documented here because they are how this package is exercised.
+steps. Launch, doctor, smoke, and packaging commands live in `packages/ides/studio-tooling` and the
+Justfile; they are documented here because they are how this package is exercised.
 
 ## Launch modes
 
@@ -357,7 +357,7 @@ bun test packages/ides/studio/studio-tests/studio-feed-examples.test.ts packages
 The existing real browser-shell smoke entry point is:
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
 ```
 
 It must run on a host where Chrome can expose DevTools. Its Draw path creates a 360 by 76 sketch and
@@ -380,7 +380,7 @@ stderr: ... open .../Chrome/Crashpad/settings.dat: Operation not permitted
 ```
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-real-app.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
 ```
 
 ```bash
@@ -401,7 +401,7 @@ owned, stops it through the manifest, and confirms nothing is left. It skips wit
 a host that will not report on its own processes, because ownership cannot be established there.
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts
 ```
 
 The other smoke files build a session in-process and do not exercise the CLI.
@@ -434,7 +434,7 @@ and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
 canary are serialized on a `gui` resource so they never overlap each other while the browser lanes
 run beside them. The simulated-user browser lane is an ordinary member of the graph again, and closed
 DEVENV-042 on 2026-09-20 with ten consecutive green normal-terminal runs;
-`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
+`just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
 appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
 `just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the
 smoke lanes need an unsandboxed shell (Chrome cannot create its socket and Crashpad directories
@@ -442,8 +442,8 @@ under the agent sandbox). Checks that need a person live in `just studio-manual-
 never part of any lane.
 
 The Justfile decides which gates belong to which lane; `./dev gates` runs them and reports, and
-`GateCatalog.ts` in `packages/dev` holds each gate's scheduling shape (dependencies, width,
-resources, timeouts).
+`GateCatalog.ts` in `packages/testing/verification` holds each gate's scheduling shape
+(dependencies, width, resources, timeouts).
 
 ## Native canary
 
@@ -552,8 +552,9 @@ These variable names are Electrobun's, not Apple's own tooling's; see
 
 **A blank Studio.** Almost always two React copies in one bundle. `./dev studio-doctor` reports the
 React singleton directly, and `./agent verify` fails on it before Studio can start. The versions the
-installed Expo SDK pins are the contract; `packages/dev` is allowed its own React only because Ink's
-peer range starts above Expo's pin, and its copy never reaches a bundle.
+installed Expo SDK pins are the contract; `packages/cli/cli-kit` and `packages/testing/verification`
+are allowed their own React only because Ink's peer range starts above Expo's pin, and their copy
+never reaches a bundle.
 
 **A stale session URL.** Session IDs are per launch. `./dev studio-ps` distinguishes live launches
 from stale manifests; `./dev studio-stop --all` clears the stale ones — from an ordinary shell, so

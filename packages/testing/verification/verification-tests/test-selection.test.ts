@@ -7,10 +7,11 @@ import { type SuiteInventory, TestSelection } from '../verification-src/TestSele
  * A small workspace with the shapes the real one has: a leaf everything imports (`shared`), a
  * chain (`language/parser` -> `compiler` -> `workspace`), the CLI the Tao behavior tests run
  * through, the dev-tooling chain that reaches it (`dev` -> `testing/verification` ->
- * `cli/cli-kit`, with `cli/tao-cli` also importing `cli/cli-kit` directly), and a package nothing
- * imports (`studio`). The grouped packages — `apps/runtime`, `apps/expo-host`, `apps/stdlib`,
- * `cli/tao-cli`, `cli/cli-kit`, `testing/verification`, `language/formatter`, `language/parser` —
- * keep the real two-segment ids, because `TestSelection`'s own `TAO_APPS_PACKAGES` and
+ * `cli/cli-kit`, with `cli/tao-cli` also importing `cli/cli-kit` directly and, lazily, only for
+ * `studio-review`, `ides/studio-tooling`), and a package nothing imports (`studio`). The grouped
+ * packages — `apps/runtime`, `apps/expo-host`, `apps/stdlib`, `cli/tao-cli`, `cli/cli-kit`,
+ * `testing/verification`, `ides/studio-tooling`, `language/formatter`, `language/parser` — keep
+ * the real two-segment ids, because `TestSelection`'s own `TAO_APPS_PACKAGES` and
  * `LANGUAGE_PERFORMANCE_PACKAGES` match on those exact ids.
  */
 const graph: PackageGraph = {
@@ -24,9 +25,10 @@ const graph: PackageGraph = {
     ['shared', new Set()],
     ['apps/stdlib', new Set(['shared'])],
     ['studio', new Set(['shared', 'workspace'])],
-    ['cli/tao-cli', new Set(['dev', 'workspace', 'cli/cli-kit'])],
+    ['cli/tao-cli', new Set(['dev', 'workspace', 'cli/cli-kit', 'ides/studio-tooling'])],
     ['cli/cli-kit', new Set(['shared'])],
     ['testing/verification', new Set(['shared', 'cli/cli-kit'])],
+    ['ides/studio-tooling', new Set(['shared', 'testing/verification'])],
     ['workspace', new Set(['compiler'])],
   ]),
   packages: [
@@ -42,6 +44,7 @@ const graph: PackageGraph = {
     'cli/tao-cli',
     'cli/cli-kit',
     'testing/verification',
+    'ides/studio-tooling',
     'workspace',
   ],
 }
@@ -63,6 +66,7 @@ const inventory: SuiteInventory = {
     'cli/tao-cli',
     'cli/cli-kit',
     'testing/verification',
+    'ides/studio-tooling',
     'workspace',
   ],
 }
@@ -243,6 +247,16 @@ Describe('changed suite plan', () => {
     ])
 
     Expect(result.taoAppPaths).toEqual(['Apps/Test Apps', 'Apps/WordFlower'])
+  })
+
+  Test('an ides/studio-tooling-only change selects cli/tao-cli but not the Tao apps', () => {
+    // cli/tao-cli depends on studio-tooling only for the lazy `studio-review` command; without the
+    // exclusion, every studio-tooling edit would select every Tao app suite.
+    const result = plan(['packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts'])
+
+    Expect(result.selected.get('ides/studio-tooling')).toBe('changed directly')
+    Expect(result.selected.get('cli/tao-cli')).toBe('imports ides/studio-tooling')
+    Expect(result.selected.has('tao-apps')).toBe(false)
   })
 
   Test('root dependency and toolchain files widen to every suite', () => {
