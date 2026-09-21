@@ -438,7 +438,8 @@ async function runCompiledTaoTests(
  * They are generated per run rather than per compile because how many there are is the run's worker
  * budget, and a reused run root was compiled under whatever budget its own run happened to have.
  * The manifest is read back for the same reason: on the reused path it is the only description of
- * the run this process holds.
+ * the run this process holds. They are written beside the run root rather than into it, so the
+ * directory Jest is configured with stays put across compiles; `TestHarnessFiles.write` owns why.
  */
 async function writeJourneyEntrypoints(
   manifestPath: string,
@@ -446,7 +447,11 @@ async function writeJourneyEntrypoints(
   namePattern: string | undefined,
 ): Promise<RuntimeTesting.TestHarnessFiles.Generated> {
   const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(manifestPath)
-  return await RuntimeTesting.TestHarnessFiles.write(runRoot, selectableFiles(manifest, namePattern), maxTestWorkers())
+  return await RuntimeTesting.TestHarnessFiles.write(
+    FS.dirname(runRoot),
+    selectableFiles(manifest, namePattern),
+    maxTestWorkers(),
+  )
 }
 
 /**

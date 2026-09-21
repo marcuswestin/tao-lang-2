@@ -40,7 +40,16 @@ type Partition = {
   entryFiles: string[]
   /** The recorded warnings a warm stamp replayed, or undefined when this workspace was checked. */
   replayed?: readonly CheckCacheDiagnostic[]
+  /**
+   * Each file's parse from the one build its workspace was given, by path. It is dropped the moment
+   * any file of the workspace is found changed or is parsed again, because either rebuilds or
+   * outdates the documents the rest were linked against.
+   */
+  parsed?: Map<string, ParsedFile>
 }
+
+/** ParsedFile is one entry file's parse: the entry and the graph it reaches. */
+type ParsedFile = Awaited<ReturnType<Workspace['parse']>>
 
 /** runCheck checks canonical source and reports syntax and validation diagnostics without writing. */
 export async function runCheck(path: string, options: CheckOptions = {}): Promise<InPlace.Result[]> {
@@ -107,8 +116,12 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
     options.onWorkspace?.({ resolution: 'checked', workspaceRoot })
     const workspace = await Workspace.open(workspaceRoot)
     workspaces.set(workspaceRoot, workspace)
+    const parsedFiles = await parseWorkspaceFiles(workspace, partition.entryFiles)
+    partition.parsed = parsedFiles
     if (options.validate === true) {
-      const diagnostics = (await workspace.validateFiles(partition.entryFiles)).diagnostics
+      const diagnostics = parsedFiles === undefined
+        ? (await workspace.validateFiles(partition.entryFiles)).diagnostics
+        : (await workspace.validateParsedFiles([...parsedFiles.values()])).diagnostics
       mergeDiagnostics(diagnosticsByFile, indexDiagnostics(diagnostics))
       if (!Diagnostics.hasError(diagnostics)) {
         // Offered for stamping, and withdrawn below by any file this workspace cannot report clean.
@@ -134,9 +147,12 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
     if (workspace === undefined) {
       continue
     }
-    const result = await canonicalizeFile(workspace, file.path, options.write, diagnostics)
+    const result = await canonicalizeFile(workspace, file.path, options.write, diagnostics, partition)
     if (result.status !== 'unchanged') {
       cleared.delete(file.workspaceRoot)
+      // Whatever this file became, the build the rest of its workspace was parsed in no longer
+      // describes it, so the files after it are parsed afresh the way they always were.
+      delete partition.parsed
     }
     results.push(result)
   }
@@ -156,6 +172,22 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
     )
   }
   return results
+}
+
+/**
+ * parseWorkspaceFiles parses a workspace's files with one build, keyed by path, or returns nothing
+ * when the batch cannot be parsed together — one file that cannot be read fails the whole build, and
+ * each file then reports for itself through its own parse.
+ */
+async function parseWorkspaceFiles(
+  workspace: Workspace,
+  entryFiles: readonly string[],
+): Promise<Map<string, ParsedFile> | undefined> {
+  try {
+    return new Map((await workspace.parseFiles(entryFiles)).map(parsed => [parsed.entry.path, parsed]))
+  } catch {
+    return undefined
+  }
 }
 
 /** mergeDiagnostics folds one workspace's indexed diagnostics into the run's map. */
@@ -218,10 +250,11 @@ async function canonicalizeFile(
   path: string,
   write: boolean,
   diagnostics: readonly Diagnostic[],
+  partition: Partition,
 ): Promise<InPlace.Result> {
-  let parsed: Awaited<ReturnType<Workspace['parse']>>
+  let parsed: ParsedFile
   try {
-    parsed = await workspace.parse(path)
+    parsed = partition.parsed?.get(path) ?? await workspace.parse(path)
   } catch (error) {
     return inPlace.errorResult(path, error)
   }
@@ -234,6 +267,8 @@ async function canonicalizeFile(
     async () => {
       return await SourceActions.fixSource(parsed.entry.document, {
         parseUpdatedDocument: async (document, text) => {
+          // Parsing the rewritten text rebuilds the workspace around this one file.
+          delete partition.parsed
           return (await workspace.parseSource(text, document.uri)).entry.document
         },
       })
