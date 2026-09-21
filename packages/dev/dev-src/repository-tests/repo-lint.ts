@@ -2,7 +2,7 @@ import { CLI, FS, HCI, Platform, Repo } from '@shared'
 import { AgentConfigFreshness } from '../agent-config/AgentConfigFreshness'
 import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
-import { instructionBudget, instructionLineCount } from '../simplify-audit/InstructionBudgets'
+import { instructionBudget, instructionCharacterCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 
@@ -761,13 +761,17 @@ const KIND_CHAIN_ALLOWLIST = [
   'packages/validator/validator-src/validators/types-validator.ts',
 ]
 
-/** instructionBudgetIssues reports instruction files over their line budget; detail belongs in a skill's `references/`. */
+/** instructionBudgetIssues reports instruction files over their budget; detail belongs in a skill's `references/`. */
 export function instructionBudgetIssues(files: readonly SourceFile[]): string[] {
   return files.flatMap(file => {
     const budget = instructionBudget(file.path)
-    const lines = instructionLineCount(file.source)
-    return budget !== undefined && lines > budget
-      ? [`${file.path} is ${lines} lines, over its ${budget}-line budget; move detail into a reference file or a gate.`]
+    const characters = instructionCharacterCount(file.source)
+    return budget !== undefined && characters > budget
+      ? [
+        `${file.path} is ${characters} characters, over its ${budget}-character budget; move detail `
+        + 'into a reference file or a gate. Folding one bullet into another does not help — the '
+        + 'budget counts what an agent carries, not how many lines it is spread over.',
+      ]
       : []
   }).sort()
 }
