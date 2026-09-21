@@ -15,3 +15,6 @@
   shared `Errors` classes and `Assert` the way `TR-switch.ts` mirrors `Switch`; keep the two in step.
   `TR-errors.ts` owns the vocabulary, action-failure history, unowned-failure reporting, redaction,
   and contained-failure warnings, and `TR.Errors` exposes that whole surface rather than a subset.
+- Build every element with `createElement` from `TR-create-element` (public `TR.createElement`), never
+  `React.createElement` or JSX/TSX syntax; `repo-lint` enforces it. Compiler-generated app code is exempt.
+  `React.cloneElement` of an already-built element is fine — it is not building a new element from scratch.

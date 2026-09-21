@@ -1,5 +1,6 @@
 import React from 'react'
 import { currentExternalEffectRevision } from './TR-action-transactions'
+import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
 import { isRedactedKey, warnContainedFailure } from './TR-errors'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
@@ -80,10 +81,10 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
   override render(): React.ReactNode {
     if (this.state.phase === 'healthy') {
       this.#effectRevision = currentExternalEffectRevision()
-      return React.createElement(React.Fragment, { key: this.state.revision }, this.props.children)
+      return createElement(React.Fragment, { key: this.state.revision }, this.props.children)
     }
     if (this.state.phase === 'diagnostic') {
-      return React.createElement(
+      return createElement(
         DiagnosticPass,
         {
           key: `diagnostic-${this.state.revision}`,
@@ -94,9 +95,9 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
       )
     }
     if (this.state.phase === 'escalate') {
-      return React.createElement(EscalationThrower, { error: this.state.error })
+      return createElement(EscalationThrower, { error: this.state.error })
     }
-    return React.createElement(FailureSurface, {
+    return createElement(FailureSurface, {
       app: this.props.app,
       confirmReset: this.state.confirmReset === true,
       failure: this.state.failure,
@@ -233,20 +234,20 @@ function FailureSurface(props: {
   const message = errorShape(props.failure.error).message
   const controls = [
     !props.stopped && props.failure.retryEligible
-      ? React.createElement(RecoveryButton, { key: 'retry', label: 'Try again', onPress: props.onRetry })
+      ? createElement(RecoveryButton, { key: 'retry', label: 'Try again', onPress: props.onRetry })
       : null,
     props.app
-      ? React.createElement(RecoveryButton, { key: 'restart', label: 'Restart app', onPress: props.onRestart })
+      ? createElement(RecoveryButton, { key: 'restart', label: 'Restart app', onPress: props.onRestart })
       : null,
     props.app && DataControls.CanResetAll()
-      ? React.createElement(RecoveryButton, {
+      ? createElement(RecoveryButton, {
         key: 'reset',
         label: props.confirmReset ? 'Confirm reset app data' : 'Reset app data',
         onPress: props.onResetData,
       })
       : null,
     canCopyFailureCapture()
-      ? React.createElement(RecoveryButton, {
+      ? createElement(RecoveryButton, {
         key: 'copy-capture',
         label: 'Copy failure capture',
         onPress: () => {
@@ -255,20 +256,20 @@ function FailureSurface(props: {
       })
       : null,
   ]
-  return React.createElement(RN.View, {
+  return createElement(RN.View, {
     accessibilityLabel: props.stopped ? 'App error retry stopper' : `${props.level} error`,
     accessibilityViewIsModal: props.level === 'app',
-    children: React.createElement(
+    children: createElement(
       RN.View,
       { style: styles.panel },
-      React.createElement(
+      createElement(
         RN.Text,
         { style: styles.title },
         props.stopped ? 'This keeps failing' : "Couldn't render this view",
       ),
-      React.createElement(RN.Text, { style: styles.message }, message),
+      createElement(RN.Text, { style: styles.message }, message),
       props.failure.recoveryError
-        ? React.createElement(
+        ? createElement(
           RN.Text,
           { accessibilityRole: 'alert', style: styles.message },
           props.failure.recoveryError,
@@ -282,10 +283,10 @@ function FailureSurface(props: {
 
 function RecoveryButton(props: { label: string; onPress(): void }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
-  return React.createElement(RN.Pressable, {
+  return createElement(RN.Pressable, {
     accessibilityLabel: props.label,
     accessibilityRole: 'button',
-    children: React.createElement(RN.Text, { style: styles.buttonText }, props.label),
+    children: createElement(RN.Text, { style: styles.buttonText }, props.label),
     onPress: props.onPress,
     style: styles.button,
   })

@@ -12,6 +12,7 @@ import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { accessibilityStateProps } from './TR-accessibility'
 import { requireSafeAreaContext } from './TR-app-shell'
+import { createElement } from './TR-create-element'
 import { errorMessage, errorStack, onUnownedFailure } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
 import { resetNavigationRuntime } from './TR-navigation-registry'
@@ -607,22 +608,22 @@ export function StudioDeviceHost(props: StudioDeviceHostProps): React.JSX.Elemen
     RN.LogBox?.ignoreAllLogs(true)
   }, [RN.LogBox])
   if (client === undefined || resolution.kind === 'missing') {
-    return React.createElement(
+    return createElement(
       RN.View,
       { style: overlayStyle, testID: 'tao-studio-device-overlay' },
-      React.createElement(
+      createElement(
         RN.Text,
         { style: overlayTitleStyle, testID: 'tao-studio-device-overlay-title' },
         'Tao Studio device host cannot start',
       ),
-      React.createElement(
+      createElement(
         RN.Text,
         { selectable: true, style: overlayMessageStyle, testID: 'tao-studio-device-overlay-message' },
         (resolution.kind === 'missing' ? resolution.missing : []).map(item => `• ${item}`).join('\n'),
       ),
     )
   }
-  return React.createElement(ConnectedDeviceHost, { ...props, client })
+  return createElement(ConnectedDeviceHost, { ...props, client })
 }
 
 function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDeviceClient }): React.JSX.Element {
@@ -832,7 +833,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   }))
 
   const content = presentation.kind === 'cell'
-    ? React.createElement(StudioDeviceCell, {
+    ? createElement(StudioDeviceCell, {
       App: props.App,
       assignment: presentation.assignment,
       cellRuntime: props.cellRuntime,
@@ -840,31 +841,31 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       manifest: props.manifest,
       onError: handleCellError,
     })
-    : React.createElement(DeviceOverlay, { client, presentation })
+    : createElement(DeviceOverlay, { client, presentation })
   // One provider for the whole host: the badge and sheet are its siblings, not descendants, of
   // `content`, so they need their own path to real insets too — see DeviceBadge and DeviceSheet.
   const safeArea = requireSafeAreaContext()
-  return React.createElement(
+  return createElement(
     safeArea.SafeAreaProvider,
     // Without the startup metrics this provider is the outermost element with no parent insets, so
     // it would withhold the whole host — connecting overlay and pairing code included — until the
     // native side reports insets for the first time.
     { initialMetrics: safeArea.initialWindowMetrics ?? null },
-    React.createElement(
+    createElement(
       RN.View,
       { style: rootStyle, testID: 'tao-studio-device-host' },
       content,
       presentation.kind === 'cell' && !inspecting
-        ? React.createElement(DeviceRemoteHighlight, { rects: remoteHighlight })
+        ? createElement(DeviceRemoteHighlight, { rects: remoteHighlight })
         : null,
       presentation.kind === 'cell' && inspecting
-        ? React.createElement(DeviceInspectOverlay, {
+        ? createElement(DeviceInspectOverlay, {
           onSelect: selectSource,
           ...(sourceActionOutcome === undefined ? {} : { outcome: sourceActionOutcome }),
           selection,
         })
         : null,
-      React.createElement(DeviceNotices, {
+      createElement(DeviceNotices, {
         notices: [
           ...deviceNotice(
             'failure',
@@ -883,14 +884,14 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
         ],
       }),
       presentation.kind === 'cell'
-        ? React.createElement(DeviceBadge, {
+        ? createElement(DeviceBadge, {
           actions: menuActions,
           onPress: () => setMenuOpen(open => !open),
           open: menuOpen,
         })
         : null,
       sheetOpen
-        ? React.createElement(DeviceSheet, { client, onClose: () => setSheetOpen(false), state })
+        ? createElement(DeviceSheet, { client, onClose: () => setSheetOpen(false), state })
         : null,
     ),
   )
@@ -904,10 +905,10 @@ function StudioDeviceCell(props: {
   onError: (error: unknown) => void
 }): React.JSX.Element {
   const { onError, ...content } = props
-  return React.createElement(
+  return createElement(
     StudioPreview.ErrorBoundary,
     { onError },
-    React.createElement(StudioDeviceCellContent, content),
+    createElement(StudioDeviceCellContent, content),
   )
 }
 
@@ -932,15 +933,15 @@ function StudioDeviceCellContent(props: {
     props.manifest,
     runtime,
   ])
-  return React.createElement(
+  return createElement(
     StudioPreview.ReplayHost,
     cell.replay === undefined ? {} : { replay: cell.replay },
-    React.createElement(StudioEnvironmentControls.Host, {
+    createElement(StudioEnvironmentControls.Host, {
       cell,
-      children: React.createElement(
+      children: createElement(
         DeviceCellFrame,
         { bareView: cell.scenario.kind === 'view', testID: 'tao-studio-device-cell' },
-        React.createElement(props.App),
+        createElement(props.App),
       ),
     }),
   )
@@ -964,7 +965,7 @@ function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode;
     paddingRight: insets.right,
     paddingTop: insets.top,
   }
-  return React.createElement(
+  return createElement(
     RN.View,
     { style: props.bareView ? [rootStyle, padding] : rootStyle, testID: props.testID },
     props.children,
@@ -1003,11 +1004,11 @@ function DeviceNotices(props: { notices: readonly DeviceNotice[] }): React.JSX.E
   if (props.notices.length === 0) {
     return null
   }
-  return React.createElement(
+  return createElement(
     RN.View,
     { style: { ...noticeLayerStyle, paddingTop: insets.top } },
     ...props.notices.map(notice =>
-      React.createElement(
+      createElement(
         RN.Pressable,
         {
           accessibilityLabel: `Dismiss: ${notice.message}`,
@@ -1017,8 +1018,8 @@ function DeviceNotices(props: { notices: readonly DeviceNotice[] }): React.JSX.E
           style: noticeToneStyles[notice.tone].panel,
           testID: notice.testID,
         },
-        React.createElement(RN.Text, { style: noticeToneStyles[notice.tone].eyebrow }, notice.eyebrow),
-        React.createElement(
+        createElement(RN.Text, { style: noticeToneStyles[notice.tone].eyebrow }, notice.eyebrow),
+        createElement(
           RN.Text,
           { numberOfLines: 4, style: noticeToneStyles[notice.tone].body },
           notice.message,
@@ -1034,28 +1035,28 @@ function DeviceOverlay(props: {
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const { presentation } = props
-  return React.createElement(
+  return createElement(
     RN.View,
     { accessibilityRole: 'alert', style: overlayStyle, testID: 'tao-studio-device-overlay' },
-    React.createElement(RN.Text, { style: overlayEyebrowStyle }, 'Tao Studio'),
-    React.createElement(
+    createElement(RN.Text, { style: overlayEyebrowStyle }, 'Tao Studio'),
+    createElement(
       RN.Text,
       { style: overlayTitleStyle, testID: 'tao-studio-device-overlay-title' },
       presentation.title,
     ),
     presentation.code === undefined
       ? null
-      : React.createElement(
+      : createElement(
         RN.Text,
         { selectable: true, style: codeStyle, testID: 'tao-studio-device-code' },
         presentation.code,
       ),
-    React.createElement(
+    createElement(
       RN.Text,
       { selectable: true, style: overlayMessageStyle, testID: 'tao-studio-device-overlay-message' },
       presentation.message,
     ),
-    React.createElement(DeviceActions, { actions: presentation.actions, client: props.client }),
+    createElement(DeviceActions, { actions: presentation.actions, client: props.client }),
   )
 }
 
@@ -1067,11 +1068,11 @@ function DeviceActions(props: {
   if (props.actions.length === 0) {
     return null
   }
-  return React.createElement(
+  return createElement(
     RN.View,
     { style: actionsRowStyle },
     ...props.actions.map(action =>
-      React.createElement(
+      createElement(
         RN.Pressable,
         {
           accessibilityRole: 'button',
@@ -1080,7 +1081,7 @@ function DeviceActions(props: {
           style: deviceActionButtons[action].style,
           testID: `tao-studio-device-${action}`,
         },
-        React.createElement(RN.Text, { style: actionTextStyle }, deviceActionButtons[action].label),
+        createElement(RN.Text, { style: actionTextStyle }, deviceActionButtons[action].label),
       )
     ),
   )
@@ -1239,24 +1240,24 @@ function DeviceInspectOverlay(props: {
     props.onSelect(hit === undefined ? undefined : { hit, hits })
   }, [props])
   const selected = props.selection
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
-    React.createElement(RN.Pressable, {
+    createElement(RN.Pressable, {
       accessibilityLabel: 'Tao Studio inspect',
       onPress: onTap,
       style: inspectOverlayStyle,
       testID: 'tao-studio-device-inspect-overlay',
     }),
-    selected === undefined ? null : React.createElement(
+    selected === undefined ? null : createElement(
       RN.View,
       {
         style: outlineStyle(inspectHighlightStyle, selected.hit.rect),
         testID: 'tao-studio-device-inspect-highlight',
       },
-      React.createElement(RN.Text, { style: inspectLabelStyle }, occurrenceLabel(selected.hit.identity)),
+      createElement(RN.Text, { style: inspectLabelStyle }, occurrenceLabel(selected.hit.identity)),
     ),
-    React.createElement(
+    createElement(
       RN.Text,
       { style: { ...inspectHintStyle, top: 12 + insets.top } },
       props.outcome !== undefined
@@ -1276,11 +1277,11 @@ function DeviceRemoteHighlight(props: { rects: readonly StudioInspectRect[] }): 
   if (props.rects.length === 0) {
     return null
   }
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
     ...props.rects.map((rect, index) =>
-      React.createElement(RN.View, {
+      createElement(RN.View, {
         key: `${rect.x}:${rect.y}:${index}`,
         style: outlineStyle(inspectRemoteHighlightStyle, rect),
         testID: 'tao-studio-device-remote-highlight',
@@ -1329,7 +1330,7 @@ function DeviceBadge(
   const dragStart = React.useRef<
     { bottom: number; moved: boolean; pageX: number; pageY: number; right: number } | undefined
   >(undefined)
-  const badge = React.createElement(
+  const badge = createElement(
     RN.Pressable,
     {
       accessibilityLabel: 'Tao Studio device menu',
@@ -1366,7 +1367,7 @@ function DeviceBadge(
       style: { ...badgeStyle, bottom: position.bottom, right: position.right },
       testID: 'tao-studio-device-badge',
     },
-    React.createElement(RN.Text, { style: badgeTextStyle }, 'Tao'),
+    createElement(RN.Text, { style: badgeTextStyle }, 'Tao'),
   )
   if (!props.open || props.actions.length === 0) {
     return badge
@@ -1376,12 +1377,12 @@ function DeviceBadge(
     itemCount: props.actions.length,
     maxBottom: bounds.maxBottom,
   })
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
     badge,
     ...props.actions.map((action, index) =>
-      React.createElement(
+      createElement(
         RN.Pressable,
         {
           accessibilityLabel: action.label,
@@ -1399,7 +1400,7 @@ function DeviceBadge(
           },
           testID: `tao-studio-device-menu-${action.id}`,
         },
-        React.createElement(RN.Text, { style: menuItemTextStyle }, action.label),
+        createElement(RN.Text, { style: menuItemTextStyle }, action.label),
       )
     ),
   )
@@ -1497,10 +1498,10 @@ function DeviceSheet(props: {
     viewportLine(assigned, screenSize(RN)),
     `Last error: ${state.lastError === undefined ? 'none' : `${state.lastError.code} — ${state.lastError.message}`}`,
   ]
-  return React.createElement(
+  return createElement(
     RN.View,
     { style: sheetBackdropStyle, testID: 'tao-studio-device-sheet' },
-    React.createElement(
+    createElement(
       RN.Pressable,
       {
         accessibilityLabel: 'Close',
@@ -1509,17 +1510,17 @@ function DeviceSheet(props: {
         testID: 'tao-studio-device-sheet-close',
       },
     ),
-    React.createElement(
+    createElement(
       RN.View,
       { style: [sheetPanelStyle, { paddingBottom: Math.max(sheetPanelStyle.paddingBottom, 16 + insets.bottom) }] },
-      React.createElement(RN.Text, { style: sheetTitleStyle }, 'Scenarios'),
-      React.createElement(
+      createElement(RN.Text, { style: sheetTitleStyle }, 'Scenarios'),
+      createElement(
         RN.ScrollView,
         { style: sheetListStyle },
         scenarios.length === 0
-          ? React.createElement(RN.Text, { style: sheetStatusStyle }, 'No scenarios yet.')
+          ? createElement(RN.Text, { style: sheetStatusStyle }, 'No scenarios yet.')
           : scenarios.map(scenario =>
-            React.createElement(
+            createElement(
               RN.Pressable,
               {
                 accessibilityRole: 'button',
@@ -1531,8 +1532,8 @@ function DeviceSheet(props: {
                 style: scenario.cellId === state.assignment?.identity.cellId ? scenarioSelectedStyle : scenarioRowStyle,
                 testID: `tao-studio-device-scenario-${scenario.cellId}`,
               },
-              React.createElement(RN.Text, { style: scenarioLabelStyle }, scenario.label),
-              React.createElement(
+              createElement(RN.Text, { style: scenarioLabelStyle }, scenario.label),
+              createElement(
                 RN.Text,
                 { style: scenarioDetailStyle },
                 `${scenario.group} · ${scenario.viewport.width}×${scenario.viewport.height}`,
@@ -1540,14 +1541,14 @@ function DeviceSheet(props: {
             )
           ),
       ),
-      React.createElement(
+      createElement(
         RN.View,
         { style: sheetStatusBlockStyle, testID: 'tao-studio-device-status' },
         ...statusLines.map((line, index) =>
-          React.createElement(RN.Text, { key: index, selectable: true, style: sheetStatusStyle }, line)
+          createElement(RN.Text, { key: index, selectable: true, style: sheetStatusStyle }, line)
         ),
       ),
-      React.createElement(DeviceActions, { actions: ['reconnect', 'forget'], client }),
+      createElement(DeviceActions, { actions: ['reconnect', 'forget'], client }),
     ),
   )
 }

@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import type { TaoLayoutDirection, TaoLayoutProps } from './TR-layout'
 
 type ProviderProps = {
@@ -21,8 +22,8 @@ export const ParentDirectionContext = {
 
 function ParentDirectionProvider(props: ProviderProps): React.ReactElement {
   return props.direction
-    ? React.createElement(ReactParentDirectionContext.Provider, { value: props.direction }, props.children)
-    : React.createElement(React.Fragment, null, props.children)
+    ? createElement(ReactParentDirectionContext.Provider, { value: props.direction }, props.children)
+    : createElement(React.Fragment, null, props.children)
 }
 
 function use(): TaoLayoutDirection | undefined {
@@ -52,7 +53,7 @@ function appendCallerProps(props: TaoLayoutProps | undefined, callerProps: TaoLa
 function childrenForLayoutParent(children: React.ReactNode, style: unknown): React.ReactNode {
   const direction = directionFromStyle(style)
   return direction
-    ? React.createElement(ParentDirectionProvider, { direction }, children)
+    ? createElement(ParentDirectionProvider, { direction }, children)
     : children
 }
 

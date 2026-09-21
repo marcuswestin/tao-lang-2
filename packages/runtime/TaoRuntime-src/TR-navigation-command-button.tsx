@@ -1,5 +1,6 @@
 import React from 'react'
 import { accessibilityStateProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { createElement } from './TR-create-element'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   type TaoInteractionOccurrence,
@@ -56,7 +57,7 @@ export function NavigationCommandButton(props: {
     props.onInvoke?.()
     return props.command.invoke()
   })
-  return React.createElement(
+  return createElement(
     runtime.Pressable,
     {
       accessibilityLabel: props.command.label,
@@ -77,11 +78,11 @@ export function NavigationCommandButton(props: {
       style: [designStyle, { opacity: props.command.enabled ? 1 : 0.5 }],
       testID: props.testID,
     },
-    React.createElement(
+    createElement(
       runtime.View,
       { style: commandContentStyle },
       icon
-        ? React.createElement(Icon!, {
+        ? createElement(Icon!, {
           accessible: false,
           color: designStyle?.['color'],
           name: icon.glyph as any,
@@ -89,7 +90,7 @@ export function NavigationCommandButton(props: {
           testID: navigationCommandIconTestId(icon.source),
         })
         : fallbackGlyph
-        ? React.createElement(runtime.Text, {
+        ? createElement(runtime.Text, {
           accessible: false,
           children: fallbackGlyph,
           style: textStyle,
@@ -98,7 +99,7 @@ export function NavigationCommandButton(props: {
         : null,
       props.iconOnly && (icon || fallbackGlyph)
         ? null
-        : React.createElement(runtime.Text, { accessible: false, style: textStyle }, props.command.label),
+        : createElement(runtime.Text, { accessible: false, style: textStyle }, props.command.label),
     ),
   )
 }

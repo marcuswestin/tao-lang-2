@@ -3,6 +3,7 @@ import { Arrays } from './core/RuntimeCore'
 import { accessibilityStateProps } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import { UserInputError } from './TR-errors'
 import { OutlineRegionScope, regionNativeProps, selectionItemRegion, splitPaneRegion } from './TR-interaction-regions'
 import { mountedDesignStyle } from './TR-mounted-design'
@@ -101,7 +102,7 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
   }
 
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
-    return React.createElement(SplitNavSurface, { navigation: this, taoProps })
+    return createElement(SplitNavSurface, { navigation: this, taoProps })
   }
 
   protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
@@ -146,9 +147,9 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
     const region = splitPaneRegion(props.navigation.name, key, () => (widths[index] ?? 0) > 0)
-    children.push(React.createElement(runtime.View, {
+    children.push(createElement(runtime.View, {
       ...regionNativeProps(region),
-      children: React.createElement(
+      children: createElement(
         OutlineRegionScope,
         { region },
         renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
@@ -178,7 +179,7 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
         })
       }
     }
-    children.push(React.createElement(runtime.View, {
+    children.push(createElement(runtime.View, {
       accessibilityLabel: `Resize ${key}`,
       accessibilityRole: 'adjustable',
       key: `${key}-resize`,
@@ -216,7 +217,7 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
       style: { cursor: 'col-resize', width: 8 },
     }))
   })
-  return React.createElement(runtime.View, { children, style: { flex: 1, flexDirection: 'row' } })
+  return createElement(runtime.View, { children, style: { flex: 1, flexDirection: 'row' } })
 }
 
 function numericWidth(width: SplitWidthBinding): number {
@@ -335,8 +336,8 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
       taoProps: navigationProps(ownProps, this),
     }
     return this.surface === 'native'
-      ? React.createElement(NativeStackSurface, props)
-      : React.createElement(BasicStackSurface, props)
+      ? createElement(NativeStackSurface, props)
+      : createElement(BasicStackSurface, props)
   }
 
   /** reconcileNativeDismissal applies a gesture once; a prior Tao/header Back makes it a no-op. */
@@ -758,12 +759,12 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
         return native
       }
     }
-    return React.createElement(runtime.View, {
+    return createElement(runtime.View, {
       children: [
-        React.createElement(runtime.View, {
+        createElement(runtime.View, {
           accessibilityRole: 'tablist',
           children: this.items.map(item =>
-            React.createElement(
+            createElement(
               React.Fragment,
               { key: item.key },
               Views.Pressable(
@@ -795,13 +796,13 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
             mountedDesignStyle(taoProps, 'NavigationTabs', display === 'drawer' ? 'column' : 'row'),
           ],
         }),
-        React.createElement(runtime.View, {
+        createElement(runtime.View, {
           children: this.items.map(item =>
-            React.createElement(
+            createElement(
               OutlineRegionScope,
               { key: item.key, region: this.itemRegion(item) },
               item.entries.map((entry, index) =>
-                React.createElement(NavigationLevel, {
+                createElement(NavigationLevel, {
                   children: renderPresentable(
                     entry.presentable,
                     entry.arguments,
@@ -848,10 +849,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
       && !(activePresentable !== undefined
         && isNavigation(activePresentable)
         && activePresentable.contentIsCovered())
-    return React.createElement(runtime.View, {
+    return createElement(runtime.View, {
       children: [
         ...this.items.map(item =>
-          React.createElement(runtime.View, {
+          createElement(runtime.View, {
             accessibilityElementsHidden: item !== active,
             children: this.itemEntryLevels(item, {
               ...taoProps,
@@ -864,7 +865,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
           })
         ),
         observable
-          ? React.createElement(SelectionToggleBar, {
+          ? createElement(SelectionToggleBar, {
             back: () => {
               this.back()
             },
@@ -910,7 +911,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
    */
   private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps, nativeInsets = true): React.ReactNode {
     const { navigationBottomInset, navigationChrome, ...entryTaoProps } = this.entryTaoProps(item, taoProps)
-    return React.createElement(
+    return createElement(
       OutlineRegionScope,
       { region: this.itemRegion(item) },
       item.entries.map((entry, index) => {
@@ -921,14 +922,14 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
         const presentableTaoProps = stack
           ? { ...entryTaoProps, navigationBottomInset, navigationChrome }
           : entryTaoProps
-        const level = React.createElement(NavigationLevel, {
+        const level = createElement(NavigationLevel, {
           children: renderPresentable(entry.presentable, entry.arguments, presentableTaoProps),
           fill: ownsWindow,
           hidden: index !== item.entries.length - 1,
           ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
           region: presentedOccurrenceRegion(this, entry, 'content'),
         })
-        return ownsWindow ? level : React.createElement(AppSurfaceFrame, {
+        return ownsWindow ? level : createElement(AppSurfaceFrame, {
           bottomInset: navigationBottomInset,
           children: level,
           key: `${item.key}-${entry.instanceId}`,

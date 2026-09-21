@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import {
   occurrenceRegion,
   OutlineRegionScope,
@@ -28,10 +29,10 @@ export function NavigationLevel(props: {
   const region = props.region === undefined
     ? undefined
     : { ...props.region, active: () => !props.hidden, primary: !props.hidden }
-  return React.createElement(
+  return createElement(
     OutlineRegionScope,
     { region },
-    React.createElement(runtime.View, {
+    createElement(runtime.View, {
       ...regionNativeProps(region),
       accessibilityElementsHidden: props.hidden,
       children: props.children,
@@ -150,10 +151,10 @@ function modalSheet(
   const dismiss = () => dismissOverlay(navigation, taoProps)
   if (!modal) {
     // Without a modal host the sheet renders inline; the enclosing level hides it when covered.
-    return React.createElement(
+    return createElement(
       runtime.View,
       { style: sheetInlineScrimStyle },
-      React.createElement(
+      createElement(
         runtime.View,
         {
           ...modalAccessibilityProps(navigation, taoProps, visible),
@@ -166,7 +167,7 @@ function modalSheet(
   // The modal is a portal above the overlay lane, so covering it cannot rely on the enclosing
   // level: `visible` must track whether this entry is the top of the overlay stack. The native
   // presentation supplies the sheet card and dimming itself, and `pageSheet` rejects transparency.
-  return React.createElement(
+  return createElement(
     modal,
     {
       allowSwipeDismissal: true,
@@ -175,7 +176,7 @@ function modalSheet(
       presentationStyle: 'pageSheet',
       visible,
     },
-    React.createElement(
+    createElement(
       runtime.View,
       {
         ...modalAccessibilityProps(navigation, taoProps, visible),
@@ -196,7 +197,7 @@ export function NavigationSurface(props: {
   const runtime = requireReactNativeRuntime()
   const contentHidden = props.overlays.some(modalOverlay)
   const overlays = props.overlays.length > 0
-    ? React.createElement(runtime.View, {
+    ? createElement(runtime.View, {
       children: props.overlays.map((entry, index) => {
         const visible = index === props.overlays.length - 1
         const content = entry.presentable.render(
@@ -205,7 +206,7 @@ export function NavigationSurface(props: {
             ? askProps(props.taoProps, props.navigation, entry.response)
             : navigationProps(props.taoProps, props.navigation),
         )
-        return React.createElement(NavigationLevel, {
+        return createElement(NavigationLevel, {
           children: entry.response
             ? modalAsk(content, props.navigation, props.taoProps, visible)
             : entry.sheet
@@ -224,7 +225,7 @@ export function NavigationSurface(props: {
       style: overlayLayerStyle,
     })
     : null
-  return React.createElement(
+  return createElement(
     runtime.View,
     {
       style: [
@@ -233,7 +234,7 @@ export function NavigationSurface(props: {
         pointerTransparentStyle,
       ],
     },
-    React.createElement(runtime.View, {
+    createElement(runtime.View, {
       accessibilityElementsHidden: contentHidden,
       children: props.content,
       importantForAccessibility: contentHidden ? 'no-hide-descendants' : 'auto',
@@ -259,10 +260,10 @@ function modalAsk(
   visible: boolean,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
-  return React.createElement(
+  return createElement(
     runtime.View,
     { style: askScrimStyle },
-    React.createElement(
+    createElement(
       runtime.View,
       {
         ...modalAccessibilityProps(navigation, taoProps, visible),
