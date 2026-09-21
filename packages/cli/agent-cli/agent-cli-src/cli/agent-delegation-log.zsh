@@ -21,7 +21,7 @@ set -u
 
 EVENT="${1:-unknown}"
 SCRIPT_DIR="${0:A:h}"
-REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
+REPO_ROOT="${SCRIPT_DIR:h:h:h:h:h}"
 EVENTS_DIR="$REPO_ROOT/.artifacts/delegation/events"
 
 # Newlines are only formatting inside a JSON document: a newline within a string arrives escaped, so

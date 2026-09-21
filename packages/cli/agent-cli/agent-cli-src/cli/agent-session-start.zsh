@@ -11,7 +11,7 @@ emulate zsh
 set -e
 
 SCRIPT_DIR="${0:A:h}"
-REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
+REPO_ROOT="${SCRIPT_DIR:h:h:h:h:h}"
 PROFILE_BIN="$REPO_ROOT/.devenv/profile/bin"
 
 "$REPO_ROOT/agent" setup
