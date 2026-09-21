@@ -5,30 +5,36 @@ diagnostic, and host-environment improvements. Product defects belong in their p
 an entry here may link one when the developer workflow is also affected.
 
 Every entry is its own file under [`Developer environment upgrades/`](<Developer environment upgrades/>),
-named `DEVENV-NNN-<slug>.md`. This page is the index: one line per entry, in its section, with the
-status the entry itself records. `_repo-lint` fails when an entry file is missing from this index,
-when the index names a file that does not exist, or when two files claim the same ID.
+named `DEVENV-NAME-WORDS-ETC.md` after its own title. This page is the index: one line per entry, in
+its section, with the status the entry itself records. `_repo-lint` fails when an entry file is
+missing from this index, when the index names a file that does not exist, or when two files claim
+the same id.
 
 This page indexes **open** work only. An addressed entry moves to
 [`Developer environment upgrades archive.md`](<Developer environment upgrades archive.md>) and its file
 to `Developer environment upgrades/Archive/`, in the change that addressed it. Search both before
-adding an entry, and count both when choosing an ID.
+adding an entry.
 
 ## Agent entry rules
 
-- Search by ID, symptom, command, and area before adding an entry. Update the existing entry instead
-  of appending a duplicate.
+- Search by name, symptom, command, and area before adding an entry. Update the existing entry
+  instead of appending a duplicate.
 - The owning agent consolidates updates once after delegated findings return; subagents do not edit
   this backlog independently. Keep evidence concise: an entry file is private to its branch, but this
   index is shared, so every entry still costs exactly one shared line.
-- A new entry is a new file. Write `Developer environment upgrades/DEVENV-NNN-<slug>.md` with the
-  entry as its `# DEVENV-NNN — Title` heading and body, and add its one line to the section below.
-  Never renumber an existing entry: its ID is quoted from other documents and from commit messages.
-- Choose `NNN` as one past the highest ID that exists on `main` across this index and the archive,
-  not one past the highest in your own worktree — a branch that has been open a while is behind. Two branches can still choose the same
-  number, and because each entry is its own file that collision merges silently; `_repo-lint` is what
-  catches it. Whoever resolves it renames the **later-merged** file and its index line, and fixes any
-  reference written in that same branch. Nothing else moves.
+- A new entry is a new file named after its own title: take the title's distinguishing words, put
+  them in capitals, and join them with dashes. Write
+  `Developer environment upgrades/DEVENV-NAME-WORDS-ETC.md` with the entry as its
+  `# DEVENV-NAME-WORDS-ETC — Title` heading and body, and add its one line to the section below.
+  Four to eight words is usually enough to be unmistakable; drop articles and prepositions rather
+  than truncating the meaning.
+- **Do not number a new entry.** Numbered entries predate this scheme and keep their numbers, which
+  are quoted from other documents and from commit messages; nothing renumbers them. The number was
+  itself the collision: every open branch read the same highest id and chose the same successor, so
+  two branches shipped the same number, the files merged silently, and the ledger renumbered on
+  nearly every merge. A name taken from the title collides only when two branches record genuinely
+  the same finding — which is a duplicate worth catching, and is resolved by merging the two entries
+  rather than by renaming one.
 - Record only observed problems or credible improvements with concrete evidence; ordinary product
   failures do not belong here.
 - Record: **Status**, **Area**, **Impact**, **Evidence**, **Workaround**, **Proposed change**,
