@@ -260,6 +260,31 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test('keeps every flag after --refresh-lockfile rather than dropping it on the floor', async () => {
+    const run = async (...args: string[]) =>
+      await CLI.run('zsh', {
+        args: [
+          '-c',
+          'source "$1"\ntao_agent_command_args "${@:2}"\nprint -rl -- "${reply[@]}"',
+          'args-test',
+          PROFILE_SCRIPT,
+          ...args,
+        ],
+      })
+
+    const refreshed = await run('setup', '--refresh-lockfile', '--json')
+    Expect(refreshed.exitCode).toBe(0)
+    Expect(refreshed.stdout.trim().split('\n')).toEqual(['setup', '--json'])
+
+    const refreshedBare = await run('setup', '--refresh-lockfile')
+    Expect(refreshedBare.exitCode).toBe(0)
+    Expect(refreshedBare.stdout.trim().split('\n')).toEqual(['setup'])
+
+    const untouched = await run('board', '--verbose')
+    Expect(untouched.exitCode).toBe(0)
+    Expect(untouched.stdout.trim().split('\n')).toEqual(['board', '--verbose'])
+  })
+
   Test('times out under contention and reacquires after the holder exits', async () => {
     const testRoot = await mkTestDir('tao-agent-lock-')
     try {
@@ -860,7 +885,7 @@ Describe('agent worktree profile bootstrap', () => {
     const fullVerify = await justCommands('verify-full')
     const sandbox = await justCommands('verify-full-sandbox')
 
-    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full"')
+    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full"')
     for (const commands of [verify, fullVerify, sandbox]) {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')

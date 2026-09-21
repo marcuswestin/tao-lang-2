@@ -218,7 +218,9 @@ Describe('directory-rooted Tao workspace pipeline', () => {
               Workspace.open(rootDir),
               Workspace.open(FS.resolvePath('.', rootDir)),
             ]),
-          { description: 'two independent workspaces for the same root', timeoutMs: 2_000 },
+          // The budget is for a busy host, not for a slow open: both opens finish in well under a
+          // second alone, and two seconds lost twice in one day to lanes sharing the machine.
+          { description: 'two independent workspaces for the same root', timeoutMs: 10_000 },
         )
 
         Expect(first).not.toBe(second)

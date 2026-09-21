@@ -1,54 +1,18 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { CLI, Platform, Repo } from '@shared'
+import { Platform } from '@shared'
+import { JUST_COMMANDS, recipeFor } from './AgentCommands'
 import { registerAgentHelpCommand } from './cli/agent-help'
+import { runAgentCommand } from './runner/AgentRunner'
 
-const JUST_COMMANDS = [
-  'admission-experiment',
-  'bench',
-  'board',
-  'capabilities',
-  'check',
-  'delegation-report',
-  'doctor',
-  'finalize',
-  'fix',
-  // The one recovery for a gate the sandbox denied: each harness write-protects its own skills,
-  // hooks, and settings against shell commands, so formatting and regeneration need a command the
-  // policy excludes. An agent has to be able to reach it by the name the failure prints.
-  'fix-agent-config',
-  'fmt',
-  // The landing lock is the turn-taking primitive every broad lane and the landing itself go
-  // through, so an agent has to be able to claim and return it by the same spelling it reads in
-  // AGENTS.md rather than dropping to `just`.
-  'land-lock',
-  'land-unlock',
-  // Whether a branch landed is a fact in the repository, not an inference from a command's output:
-  // a wrapper that was stopped, a task marked failed by the shell it piped into, or a summary read
-  // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
-  'landed',
-  'reclaim',
-  // One report rather than two: flakes and slowest read the same ledger and are consulted together.
-  'report-test-stats',
-  'setup',
-  'simplify-audit',
-  // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
-  // requires them before a branch that touches Studio is called ready. They stayed reachable only
-  // as `just` recipes, which left the one instruction an agent follows split across two spellings.
-  'studio-proof-real-app',
-  'studio-smoke',
-  'test',
-  'test-all',
-  'test-changed',
-  'test-file',
-  'test-host',
-  'test-retry',
-  // Each verification scope is its own name rather than a flag on one name, so an agent reaches it
-  // the same way a developer does: by completing a prefix, not by recalling which flag it took.
-  'verify',
-  'verify-changed',
-  'verify-full',
-  'verify-full-sandbox',
-] as const
+/**
+ * A front-door flag (`--verbose`, `--json`, `--max-lines`) only means something after the command
+ * name: `AgentFlags` reads it out of that command's own argument list. Given first, Commander itself
+ * rejects it as an unknown top-level option before a command is even chosen; this appends the hint
+ * rather than accepting the flags in both positions, which would let their meaning depend on which
+ * command's parser saw them first.
+ */
+const FRONT_DOOR_FLAG_HINT = 'Front-door flags (--verbose, --json, --max-lines) go after the command, not before it: '
+  + '`./agent <command> --verbose`.'
 
 /** Agent-facing CLI entrypoint: expose only the repository workflows intended for `./agent`. */
 await runWithCommands(commands => {
@@ -57,6 +21,14 @@ await runWithCommands(commands => {
     .helpOption(false)
     .helpCommand(false)
     .enablePositionalOptions()
+    .configureOutput({
+      outputError: (message, write) => {
+        write(message)
+        if (message.startsWith('error: unknown option')) {
+          write(`${FRONT_DOOR_FLAG_HINT}\n`)
+        }
+      },
+    })
 
   registerAgentHelpCommand(commands, JUST_COMMANDS)
   for (const command of JUST_COMMANDS) {
@@ -66,12 +38,13 @@ await runWithCommands(commands => {
       .helpOption(false)
       .passThroughOptions()
       .action(async (args: string[] = []) => {
-        const result = await CLI.run('just', {
-          args: [command === 'setup' ? '_setup' : command, ...args],
-          cwd: Repo.getRoot(),
-          stdio: 'inherit',
+        const exitCode = await runAgentCommand({
+          args,
+          command,
+          spawnArgs: [recipeFor(command)],
+          spawnCommand: 'just',
         })
-        Platform.runtimeProcess.setExitCode(result.error === undefined ? result.exitCode ?? 1 : 1)
+        Platform.runtimeProcess.setExitCode(exitCode)
       })
   }
 })

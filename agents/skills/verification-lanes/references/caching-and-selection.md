@@ -12,7 +12,7 @@ generator (its output is Git-ignored), a host-dependent verdict (Studio smokes, 
 bundle proof), a test the ledger has seen flip without the file changing, and a reader of a generated
 tree in a lane that does not run that tree's generator; a fixer is recordable anyway, because it
 additionally checks the prepare phase left the tree byte-identical. The backstop for what a tree
-can't describe is a scheduled `just verify-full --no-cache` on `main`, never a record time-to-live.
+can't describe is a scheduled `./agent verify-full --no-cache` on `main`, never a record time-to-live.
 Nothing verifies the same bytes twice: a `verify-full` after `verify --complete` at the same tree
 runs only the host-dependent gates, and the merge command compares against the tree `verify-full`
 already proved rather than running a second lane.

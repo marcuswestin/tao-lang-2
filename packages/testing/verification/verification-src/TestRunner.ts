@@ -331,7 +331,7 @@ async function printSlowest(limit = 20, repositoryRoot = Shared.Repo.getRoot()):
     .filter(record => !isConcurrentSuite(record.suite))
     .slice(0, Number.isInteger(limit) && limit > 0 ? limit : 20)
   if (records.length === 0) {
-    Shared.HCI.writeLine('No per-test timings recorded yet; run just test first.')
+    Shared.HCI.writeLine('No per-test timings recorded yet; run ./agent test first.')
     return 0
   }
   Shared.HCI.writeLine('Slowest tests:')
@@ -715,7 +715,7 @@ function taoAppsObservationName(roots: readonly string[]): string {
 function printRetryHonesty(prepared: PreparedRun): void {
   const stamp = prepared.retryStamp ?? 'no recorded full run (cold checkout)'
   Shared.HCI.writeLine(
-    `skipping ${prepared.retryGreenTestCount ?? 0} tests green as of ${stamp} — run 'just test' before merging.`,
+    `skipping ${prepared.retryGreenTestCount ?? 0} tests green as of ${stamp} — run './agent test' before merging.`,
   )
 }
 
@@ -830,8 +830,8 @@ async function testFile(inputPath: string, repositoryRoot = Shared.Repo.getRoot(
     return { file, suite: owner.name }
   }
   throw new Shared.Errors.UserInputError(
-    `Unsupported test file: ${file}. Use 'just test <name>' for package test names, './tao test' for Tao files, or `
-      + "'just studio-smoke' for Studio smoke files.",
+    `Unsupported test file: ${file}. Use './agent test <name>' for package test names, './tao test' for Tao `
+      + "files, or './agent studio-smoke' for Studio smoke files.",
   )
 }
 

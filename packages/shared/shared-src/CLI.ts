@@ -50,6 +50,15 @@ export type CommandSpec = {
   env?: Platform.ProcessEnv
   /** `test` policy only: stop the tree once the child has printed nothing for this long. */
   idleOutputMs?: number
+  /**
+   * Inherits the caller's stdin (fd 0) under `pipe` or `stream` stdio, instead of leaving it closed.
+   * `inherit` stdio already inherits stdin on its own; this is for a child whose own prompts need a
+   * real stream to read from while its stdout still goes through the ordinary capture. Inheriting
+   * stdin alone does not make the child interactive — `HCI.isInteractive` reads stdin AND stdout, so
+   * a child whose stdout is piped still sees no TTY; pair this with `inherit` stdio for a prompt that
+   * must both show and read.
+   */
+  inheritStdin?: boolean
   onOutput?: (stream: CommandOutputStream, chunk: Buffer) => void
   prefixedOutput?: PrefixedOutputOptions
   /** How this child is supervised. `tool` is the default; `server` opts out of every bound. */
@@ -456,12 +465,12 @@ function isCommandStdioMode(stdio: CommandStdio | undefined): stdio is 'inherit'
 }
 
 function resolveCommandStdio(
-  spec: Pick<CommandSpec, 'stdin' | 'stdio'>,
+  spec: Pick<CommandSpec, 'inheritStdin' | 'stdin' | 'stdio'>,
   options: { captureOutput: boolean; prefixedOutput: boolean },
 ): ResolvedCommandStdio {
   const stdioMode = isCommandStdioMode(spec.stdio) ? spec.stdio : undefined
   const customStdio = stdioMode ? undefined : spec.stdio as Platform.SpawnOptions['stdio'] | undefined
-  const inheritStdin = stdioMode === 'inherit' && spec.stdin === undefined
+  const inheritStdin = spec.stdin === undefined && (stdioMode === 'inherit' || spec.inheritStdin === true)
   const inheritOutput = stdioMode === 'inherit' && !options.prefixedOutput
   const streamOutput = stdioMode === 'stream' && !options.prefixedOutput
   const pipeOutput = options.captureOutput || streamOutput || options.prefixedOutput || stdioMode === 'pipe'
