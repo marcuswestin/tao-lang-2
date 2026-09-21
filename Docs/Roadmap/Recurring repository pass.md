@@ -60,7 +60,9 @@ notes after each completed pass; Git history is the longer record.
    read-only until their findings have been checked and reconciled; use a later implementation phase
    for any accepted fixes included in the approved pass.
 4. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
-   from host or external acceptance that was not exercised.
+   from host or external acceptance that was not exercised. For each unresolved dependency advisory,
+   keep a short live record of its disposition, owner, review-by date, and primary evidence; close
+   it explicitly when resolved.
 5. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.

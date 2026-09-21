@@ -7,6 +7,16 @@ installed nested links now match `bun.lock`; the linked
 [developer-environment entry](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>)
 records the stale-link reproduction and repair.
 
+## Open advisory register
+
+| Item | Disposition | Owner | Review by |
+| --- | --- | --- | --- |
+| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases. | Ro, until delegated | 2026-09-28 |
+| Nixpkgs glibc input | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices. | Ro, until delegated | 2026-09-28 |
+
+At each review, record the new evidence and either close the item or set a new review date and
+owner. A review date schedules reassessment; it does not claim the advisory is fixed.
+
 ## Bun/npm graph
 
 - **Remaining: `uuid@7.0.3` through `@expo/config-plugins → xcode@3.0.1`.**
@@ -18,7 +28,7 @@ records the stale-link reproduction and repair.
   configuration path. Revisit when Expo or xcode changes that dependency, or if another caller of
   this installed `uuid` version appears. Do not force an incompatible `uuid` major for the sake of
   an empty audit result.
-- **Resolved in the proposed branch:** The other 42 records covered `baseline-browser-mapping`,
+- **Resolved by this change:** The other 42 records covered `baseline-browser-mapping`,
   `brace-expansion`, `browserslist`, `fast-uri`, `form-data`, `hono`, `js-yaml`, `linkify-it`, `qs`,
   `shell-quote`, and `undici`. The `brace-expansion` and `js-yaml` lock entries were moved to
   patched releases within their existing major versions, with package dependencies, binary paths,
