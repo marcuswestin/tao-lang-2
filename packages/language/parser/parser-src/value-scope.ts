@@ -12,8 +12,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
    * An answer depends on which documents the workspace holds, so it may outlive nothing that changes
    * them. `Parser.parse` replaces every document it builds, which retires their use statements and
    * these entries with them; that is why the keys are held weakly. The editor instead updates
-   * documents in place and relinks the ones a change may have moved, so the table is dropped
-   * whenever an update starts.
+   * documents in place and relinks the ones a change may have moved, so the table is dropped when
+   * an update starts and again when any build finishes parsing, which is after the last syntax tree
+   * is replaced and before the first reference is linked against it.
    */
   private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
 
@@ -22,9 +23,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     private readonly packages: PackageResolver,
   ) {
     super(coreServices)
-    coreServices.shared.workspace.DocumentBuilder.onUpdate(() => {
+    const forgetUseTargets = (): void => {
       this.useTargets = new WeakMap()
-    })
+    }
+    const builder = coreServices.shared.workspace.DocumentBuilder
+    builder.onUpdate(forgetUseTargets)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetUseTargets)
   }
 
   /** getScope returns Tao values visible to a value reference. */
