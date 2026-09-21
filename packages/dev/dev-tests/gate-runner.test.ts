@@ -477,12 +477,8 @@ Describe('gate runner under a shared machine', () => {
       },
     })
 
-    // `settle` counted event-loop turns, and a fixed wall-clock sleep is still a guess about how long
-    // the prologue (timings load, lease, `MachineLanes.acquire` registration) and the first admission
-    // attempt take under load. `WorkGraph` emits a `waiting` event (`WorkGraph.ts:444`) the moment an
-    // admission attempt is declined, and the only pending work here is this lane's own three gates, so
-    // that event is this lane's own first declined attempt — an observed fact instead of a guess about
-    // timing.
+    // The broker's `waiting` event is the lane's first refused admission: an observed fact, where a
+    // turn count or a sleep would be a guess about how long registration takes on a busy host.
     await until(() => declined, {
       description: 'this run to report its first declined admission attempt',
     })
@@ -504,15 +500,8 @@ Describe('gate runner under a shared machine', () => {
     Expect(summary.status).toBe('passed')
     // The wait itself is reported rather than swallowed; what the broker said about it — the
     // position and the lanes ahead — is asserted where the broker forms it, in `machine-lanes`.
-    // Deterministic rather than load-sensitive: the `waiting` event observed above proves this lane's
-    // first `tryAcquire` already found itself unadmitted and fell into its own `QUEUED_POLL_MS` sleep
-    // before either neighbour record was touched, so the graph's next scan is guaranteed to credit
-    // that whole slice as a wait — comfortably over the 250ms noise floor
-    // (`RunSummary.reportableWaits`, `WorkSchedule.WAIT_NOISE_MS`) regardless of host load. (It lands
-    // under the `capacity` kind rather than `machine`: `WorkGraph.blockingReason` only reports
-    // `machine` once a node's `reason` was already set by an earlier admission attempt, and this is
-    // credited from the first one — kind is incidental here, so the assertion checks only that a wait
-    // was recorded.)
+    // A refused lane sleeps one whole poll before it asks again, so the wait clears the reporting
+    // noise floor on any host. Its kind is incidental, so only its presence is asserted.
     Expect(summary.gates.flatMap(gate => gate.waits ?? []).length).toBeGreaterThan(0)
     await FS.remove(root)
     await FS.remove(registryRoot)
