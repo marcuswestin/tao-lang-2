@@ -287,6 +287,19 @@ function ModalSheetContent(props: {
 
 const sheetModalKeyboardStyle = { flex: 1 } as const
 
+/**
+ * OverlayInsets hands an ask scrim or an inline sheet the live insets it must add. A navigator that
+ * does not own its window renders inside an AppSurfaceFrame, whose content is already padded by the
+ * live insets — its overlay lane sits inside that same padded content, so those surfaces must not add
+ * the insets again. A window-owning navigator's overlay lane is a sibling of its per-entry frames and
+ * fills the true window, so there they must. It is a component so the reads stay out of
+ * NavigationSurface, which a plain overlay never needs them for.
+ */
+function OverlayInsets(props: { children: (insets: SafeAreaInsets) => React.ReactNode }): React.ReactNode {
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  return props.children(AppSurfaceInsetContext.use() ? zeroInsets : insets)
+}
+
 /** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
 export function NavigationSurface(props: {
   content?: React.ReactNode
@@ -295,15 +308,6 @@ export function NavigationSurface(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
-  // Read once per render rather than inside the overlay loop below: the loop's iteration count
-  // varies with the overlay stack, and a Hook call must not.
-  const insets = requireSafeAreaContext().useSafeAreaInsets()
-  // A navigator that does not own its window renders inside an AppSurfaceFrame, whose content is
-  // already padded by the live insets — this overlay lane sits inside that same padded content, so
-  // the ask scrim and an inline sheet must not add the insets again. A window-owning navigator's
-  // overlay lane is a sibling of its per-entry frames and fills the true window, so there it must.
-  const alreadyInset = AppSurfaceInsetContext.use()
-  const overlayInsets = alreadyInset ? zeroInsets : insets
   const contentHidden = props.overlays.some(modalOverlay)
   const overlays = props.overlays.length > 0
     ? createElement(runtime.View, {
@@ -317,9 +321,13 @@ export function NavigationSurface(props: {
         )
         return createElement(NavigationLevel, {
           children: entry.response
-            ? modalAsk(content, props.navigation, props.taoProps, visible, overlayInsets)
+            ? createElement(OverlayInsets, {
+              children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
+            })
             : entry.sheet
-            ? modalSheet(content, props.navigation, props.taoProps, visible, overlayInsets)
+            ? createElement(OverlayInsets, {
+              children: insets => modalSheet(content, props.navigation, props.taoProps, visible, insets),
+            })
             : content,
           fill: true,
           hidden: !visible,
