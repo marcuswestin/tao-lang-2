@@ -11,6 +11,10 @@ const JUST_COMMANDS = [
   'doctor',
   'finalize',
   'fix',
+  // The one recovery for a gate the sandbox denied: each harness write-protects its own skills,
+  // hooks, and settings against shell commands, so formatting and regeneration need a command the
+  // policy excludes. An agent has to be able to reach it by the name the failure prints.
+  'fix-agent-config',
   'fmt',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
