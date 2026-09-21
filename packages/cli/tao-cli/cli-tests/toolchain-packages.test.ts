@@ -11,7 +11,12 @@ import { VERDICT_IRRELEVANT_GROUPS, verdictPackageFiles } from '../cli-src/toolc
  */
 
 type Packages = {
-  /** Workspace package name to the first folder under `packages/` that holds it. */
+  /**
+   * Workspace package name to the key a denylist entry can match: the first folder under
+   * `packages/` when the package sits directly under it, or `group/package` when it sits inside a
+   * group — the granularity `cli/dev-cli` and `cli/agent-cli` need, since their group `cli` also
+   * holds verdict-relevant packages.
+   */
   groupOf: Map<string, string>
   /** Workspace package name to the workspace dependencies it declares. */
   dependenciesOf: Map<string, string[]>
@@ -37,10 +42,7 @@ async function readPackages(): Promise<Packages> {
     if (parsed.name === undefined) {
       continue
     }
-    // The same reading the file filter uses: the first folder under `packages/`, whether the
-    // package sits inside a group or directly under it. `packages/dev` is its own first folder, so
-    // naming `dev` excludes it exactly as naming `testing` excludes the group of that name.
-    groupOf.set(parsed.name, segments[0] as string)
+    groupOf.set(parsed.name, segments.length === 3 ? `${segments[0]}/${segments[1]}` : segments[0] as string)
     dependenciesOf.set(
       parsed.name,
       Object.entries(parsed.dependencies ?? {}).filter(([, range]) => range.startsWith('workspace:')).map(([name]) =>
@@ -67,7 +69,10 @@ Describe('the package groups left out of the toolchain identity', () => {
   Test('are unreachable from every package a verdict depends on', async () => {
     const packages = await readPackages()
     const excluded = new Set(VERDICT_IRRELEVANT_GROUPS)
-    const isExcluded = (name: string) => excluded.has(packages.groupOf.get(name) ?? '')
+    const isExcluded = (name: string) => {
+      const key = packages.groupOf.get(name)
+      return key !== undefined && (excluded.has(key) || excluded.has(key.split('/')[0]!))
+    }
     const verdictPackages = [...packages.groupOf.keys()].filter(name => !isExcluded(name))
     Expect(verdictPackages.length).toBeGreaterThan(5)
 
@@ -110,9 +115,15 @@ Describe('the package groups left out of the toolchain identity', () => {
     const packagesRoot = FS.resolvePath('packages', Repo.getRoot())
     const files = await verdictPackageFiles(packagesRoot)
     const groups = new Set(files.map(path => FS.relativePath(packagesRoot, path).split('/')[0]))
+    const groupPackages = new Set(
+      files.map(path => {
+        const [group, groupPackage] = FS.relativePath(packagesRoot, path).split('/')
+        return groupPackage === undefined ? group : `${group}/${groupPackage}`
+      }),
+    )
 
-    for (const group of VERDICT_IRRELEVANT_GROUPS) {
-      Expect(groups.has(group)).toBe(false)
+    for (const excluded of VERDICT_IRRELEVANT_GROUPS) {
+      Expect(groups.has(excluded) || groupPackages.has(excluded)).toBe(false)
     }
     // The groups a verdict genuinely depends on are still hashed, which is the half of this that
     // keeps the cache honest rather than merely fast.
@@ -120,7 +131,12 @@ Describe('the package groups left out of the toolchain identity', () => {
     Expect(groups.has('compiler')).toBe(true)
     Expect(groups.has('apps')).toBe(true)
     Expect(groups.has('shared')).toBe(true)
-    // A denylist, so a group nobody has thought about is hashed rather than skipped.
+    // A denylist, so a group nobody has thought about is hashed rather than skipped; `cli` holds
+    // both an excluded package-scoped entry and the two verdict-relevant packages that keep it in.
     Expect(groups.has('cli')).toBe(true)
+    Expect(groupPackages.has('cli/tao-cli')).toBe(true)
+    Expect(groupPackages.has('cli/cli-kit')).toBe(true)
+    Expect(groupPackages.has('cli/dev-cli')).toBe(false)
+    Expect(groupPackages.has('cli/agent-cli')).toBe(false)
   })
 })
