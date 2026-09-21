@@ -39,7 +39,7 @@ export type TaoDebugEvent =
   | Readonly<{ kind: 'resumed' }>
   | Readonly<{ kind: 'reset' }>
 
-/** Mirrored by `journalLimit` in `packages/studio/studio-src/client/matrix/StudioDebugEvents.ts`;
+/** Mirrored by `journalLimit` in `packages/ides/studio/studio-src/client/matrix/StudioDebugEvents.ts`;
  * the runtime imports nothing, so the two are kept in step by hand. */
 const journalLimit = 200
 

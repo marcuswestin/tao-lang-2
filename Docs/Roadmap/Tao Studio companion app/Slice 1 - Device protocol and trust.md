@@ -191,14 +191,14 @@ physical-device launcher from `packages/dev`; a packaged Studio without it answe
 
 | Concern                                           | Module                                                                            |
 | ------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Wire types, limits, codes, parsers                | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-protocol.ts`                    |
-| Identity, transcript, keys, code, seal/open       | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-trust.ts`                       |
+| Wire types, limits, codes, parsers                | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-protocol.ts`               |
+| Identity, transcript, keys, code, seal/open       | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-trust.ts`                  |
 | Device client state machine and native host       | `TR-studio-device-client.ts`, `TR-studio-device-host.tsx`, `TR.Studio.DeviceHost` |
-| Gateway, trust store, status snapshot             | `packages/ides/studio/studio-src/device/*`                                             |
-| Loopback routes and `device-state` events         | `packages/ides/studio/studio-src/StudioServer.ts`                                      |
-| Workbench button/popover                          | `packages/ides/studio/studio-src/client/StudioDevicePanel.ts`                          |
+| Gateway, trust store, status snapshot             | `packages/ides/studio/studio-src/device/*`                                        |
+| Loopback routes and `device-state` events         | `packages/ides/studio/studio-src/StudioServer.ts`                                 |
+| Workbench button/popover                          | `packages/ides/studio/studio-src/client/StudioDevicePanel.ts`                     |
 | Physical-device discovery, install, open, URL, QR | `packages/dev/dev-src/studio/StudioCompanionDevice.ts`, `StudioDeviceLaunch.ts`   |
-| Companion shell                                   | `packages/ides/studio-companion-app/`                                                  |
+| Companion shell                                   | `packages/ides/studio-companion-app/`                                             |
 | Process wiring and preview-runtime manifest       | `packages/dev/dev-src/studio/StudioDev.ts`, `StudioPreviewRuntime.ts`             |
 
 ## Proof record - 2026-09-03

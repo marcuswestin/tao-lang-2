@@ -1,3 +1,4 @@
+import { AppiumNoSuchElementError } from '@appium-driver'
 import {
   type HostAction,
   HostControlError,
@@ -8,7 +9,6 @@ import {
   type HostSession,
   type HostTarget,
 } from '@host-control'
-import { AppiumNoSuchElementError } from '@appium-driver'
 import { expect, test } from '@playwright/test'
 import { Errors, FS } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'

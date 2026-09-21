@@ -74,7 +74,7 @@ const NO_CACHE_ENV_KEYS: readonly string[] = ['TAO_CHECK_NO_CACHE', 'TAO_TEST_NO
 const MAX_ENTRIES = 512
 
 /** Where Langium's generated parser is written; Git ignores it, so it is walked rather than listed. */
-const GENERATED_PARSER_ROOT = 'packages/parser/parser-src/_gen_tao-parser'
+const GENERATED_PARSER_ROOT = 'packages/language/parser/parser-src/_gen_tao-parser'
 
 /**
  * CheckCacheDiagnostic is one recorded warning, reduced to what survives a replay. The path is

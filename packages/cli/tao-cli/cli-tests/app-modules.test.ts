@@ -34,21 +34,21 @@ const PINNED_PROJECT_TSCONFIG = `{
 
 Describe('Tao app TypeScript modules', () => {
   Test('bundles @tao/runtime as a live link to the runtime package', async () => {
-    Expect(await FS.realPath(TaoAppModules.runtimeRoot())).toBe(Repo.resolvePath('packages/runtime'))
+    Expect(await FS.realPath(TaoAppModules.runtimeRoot())).toBe(Repo.resolvePath('packages/apps/runtime'))
     Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', TaoAppModules.runtimeRoot()))).toBe(true)
   })
 
   Test('packages a real runtime into a relocated CLI artifact, and says so when it carries none', async () => {
     const root = await mkTestDir('tao-cli-relocated-')
     try {
-      // A CLI tree with no sibling `packages/runtime`: everything in-repo resolves through that sibling,
-      // so this is the only way the packaged path is exercised at all.
+      // A CLI tree with no sibling `packages/apps/runtime`: everything in-repo resolves through that
+      // sibling, so this is the only way the packaged path is exercised at all.
       const cliRoot = FS.resolvePath('tao-cli', root)
       await FS.writeText(FS.resolvePath('cli-src/tao-cli.ts', cliRoot), '')
 
       await Expect(async () => TaoAppModules.runtimeRoot(cliRoot)).toThrow('has no @tao/runtime module')
 
-      const runtimeSource = Repo.resolvePath('packages/runtime')
+      const runtimeSource = Repo.resolvePath('packages/apps/runtime')
       const carried = await TaoAppModules.packageRuntime(cliRoot, runtimeSource)
       Expect(TaoAppModules.runtimeRoot(cliRoot)).toBe(carried)
       Expect(await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', carried))).toBe(
@@ -92,7 +92,7 @@ Describe('Tao app TypeScript modules', () => {
       await FS.writeText(FS.resolvePath('tsconfig.json', created), PROJECT_TSCONFIG)
       await TaoAppModules.ensureProject(created)
       const linkedRuntime = FS.resolvePath('node_modules/@tao/runtime', created)
-      Expect(await FS.realPath(linkedRuntime)).toBe(Repo.resolvePath('packages/runtime'))
+      Expect(await FS.realPath(linkedRuntime)).toBe(Repo.resolvePath('packages/apps/runtime'))
       Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', linkedRuntime))).toBe(true)
 
       const untouched = FS.resolvePath('bare', root)

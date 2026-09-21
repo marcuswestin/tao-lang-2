@@ -101,10 +101,12 @@ function packageNameAndRest(path: string, packages: readonly string[]): { name: 
 /**
  * packageTestSuite mirrors the package-suite registry's exact test-file shape. A group's package
  * nests one level deeper (`packages/<group>/<package>/...`), which the optional inner segment
- * matches only when it is immediately followed by that package's own `-tests` directory.
+ * matches only when it is immediately followed by that package's own `-tests` directory. The test
+ * file itself may nest further inside that `-tests` directory (`studio-tests/code-editor/*.test.ts`,
+ * `compiler-tests/workspace/*.test.ts`), so the tail after it is any path ending in `.test.ts`.
  */
 function packageTestSuite(path: string): string | undefined {
-  const match = /^packages\/([^/]+)\/(?:([^/]+)\/)?[^/]+-tests\/[^/]+\.test\.ts$/.exec(path)
+  const match = /^packages\/([^/]+)\/(?:([^/]+)\/)?[^/]+-tests\/.+\.test\.ts$/.exec(path)
   if (match === null) {
     return undefined
   }

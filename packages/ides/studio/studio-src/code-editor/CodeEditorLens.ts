@@ -18,7 +18,7 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemir
  * marker when it was more than a line, and nothing at all when it was not.
  */
 
-export type CodeEditorLensRange = Readonly<{ from: number; to: number }>
+type CodeEditorLensRange = Readonly<{ from: number; to: number }>
 
 export type CodeEditorLensNode = Readonly<{
   body?: CodeEditorLensRange

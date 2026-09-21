@@ -4,6 +4,7 @@ import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
 import { instructionBudget, instructionCharacterCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
+import { PackageGraph } from './PackageGraph'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 import { runtimeElementConventionIssues } from './RuntimeElementConventions'
 
@@ -813,12 +814,13 @@ export function langiumImportIssues(files: readonly SourceFile[]): string[] {
 /** crossPackageSourceImportIssues reports relative imports that reach into another package's source. */
 export function crossPackageSourceImportIssues(
   files: readonly SourceFile[],
+  packages: readonly string[],
   allowlist: readonly string[] = CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST,
 ): string[] {
   const matches = files.flatMap(file =>
     [...file.source.matchAll(RELATIVE_IMPORT_PATTERN)].flatMap(match => {
       const target = importTargetPath(file.path, match[1]!)
-      if (!crossesPackages(file.path, target) || !PACKAGE_SOURCE_DIRECTORY_PATTERN.test(target)) {
+      if (!crossesPackages(file.path, target, packages) || !PACKAGE_SOURCE_DIRECTORY_PATTERN.test(target)) {
         return []
       }
       return [{
@@ -996,15 +998,19 @@ function lineNumber(source: string, index: number | undefined): number {
   return source.slice(0, index ?? 0).split('\n').length
 }
 
-function crossesPackages(fromPath: string, toPath: string): boolean {
-  const fromPackage = packageName(fromPath)
-  const toPackage = packageName(toPath)
+function crossesPackages(fromPath: string, toPath: string, packages: readonly string[]): boolean {
+  const fromPackage = packageName(fromPath, packages)
+  const toPackage = packageName(toPath, packages)
   return fromPackage !== undefined && toPackage !== undefined && fromPackage !== toPackage
 }
 
-function packageName(path: string): string | undefined {
-  const [root, name] = path.split('/')
-  return root === 'packages' ? name : undefined
+/** packageName resolves a repository path to its package directory name, which nests one level
+ * deeper for a grouped package (`packages/<group>/<package>/...`) than for a top-level one. */
+function packageName(path: string, packages: readonly string[]): string | undefined {
+  if (!path.startsWith('packages/')) {
+    return undefined
+  }
+  return PackageGraph.ownerFromRelativePath(path.slice('packages/'.length), packages)
 }
 
 function importTargetPath(fromPath: string, specifier: string): string {
@@ -1051,7 +1057,8 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   }
   issues.push(...kindChainIssues(packageFiles))
   issues.push(...langiumImportIssues(packageFiles))
-  issues.push(...crossPackageSourceImportIssues(packageFiles))
+  const packages = await PackageGraph.packageDirectories(FS.resolvePath('packages', repoRoot))
+  issues.push(...crossPackageSourceImportIssues(packageFiles, packages))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   issues.push(...runtimeArrayConventionIssues(packageFiles))
   issues.push(...runtimeElementConventionIssues(packageFiles))

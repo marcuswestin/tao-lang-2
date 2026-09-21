@@ -161,11 +161,11 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
 }
 export function hostEntrypoint(repositoryRoot: string): string {
   const nativeControl = FS.resolvePath(
-    'packages/runtime/TaoRuntime-src/host-testing/NativeHostTestControl.ts',
+    'packages/apps/runtime/TaoRuntime-src/host-testing/NativeHostTestControl.ts',
     repositoryRoot,
   )
   const runtimeControl = FS.resolvePath(
-    'packages/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
+    'packages/apps/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
     repositoryRoot,
   )
   return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType, useEffect, useState } from 'react'\nimport { Platform, SafeAreaView as View, Text } from 'react-native'\nimport { installNativeHostTestControl } from ${

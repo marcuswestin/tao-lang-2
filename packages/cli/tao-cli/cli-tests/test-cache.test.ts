@@ -196,12 +196,15 @@ Describe('tao test compiled-output fingerprint', () => {
   // nowhere.
   Test('changes when the toolchain that compiled the output changes', async () => {
     await withTaoFixture(
-      { ...fixture, 'toolchain/packages/parser/parser-src/Parse.ts': 'export const v = 1\n' },
+      { ...fixture, 'toolchain/packages/language/parser/parser-src/Parse.ts': 'export const v = 1\n' },
       async rootDir => {
         const toolchainRoot = FS.resolvePath('toolchain', rootDir)
         const request = { ...requestFor(rootDir), toolchainRoot }
         const before = await fingerprintOf(request)
-        await FS.writeText(FS.resolvePath('packages/parser/parser-src/Parse.ts', toolchainRoot), 'export const v = 2\n')
+        await FS.writeText(
+          FS.resolvePath('packages/language/parser/parser-src/Parse.ts', toolchainRoot),
+          'export const v = 2\n',
+        )
 
         Expect(await fingerprintOf(request)).not.toBe(before)
       },

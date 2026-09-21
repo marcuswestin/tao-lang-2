@@ -267,15 +267,15 @@ required, none optional:
 
 Existing seams to reuse unchanged or nearly so:
 
-| Seam                                                                                                                    | Where                                                       | Used by                                                       |
-| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| Seam                                                                                                                    | Where                                                            | Used by                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- |
 | Semantic snapshot and queries (`overview`, `inspect`, `trace`, `fieldStory`, `resolveTarget`, literal texts on renders) | `packages/ides/studio/studio-src/agent-chat/SemanticSnapshot.ts` | all stories                                                   |
-| Checkpointed multi-file apply and undo                                                                                  | `session.applyAgentFiles`, `session.undoAgentFiles`         | stories 2, 3                                                  |
-| Typed feature planner and lowering, reword guardrail                                                                    | `agent-chat/FeaturePlan.ts`                                 | story 3 as tools                                              |
-| Before/after test verdict with duplicate-record folding                                                                 | `agent-chat/FeatureVerdict.ts`, `StudioTestRunner`          | stories 2, 3                                                  |
-| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/ai/generation`         | story 2                                                       |
-| Preview manifest (scenarios, fixtures, cells) and grid refresh                                                          | `StudioPreviewManifest.ts`, `/api/preview/*`                | story 2                                                       |
-| Source-action bus (versioned, undoable, conflict-checked edits)                                                         | `/api/source-action/*`                                      | stories 2, 3 (implementer's choice against `applyAgentFiles`) |
+| Checkpointed multi-file apply and undo                                                                                  | `session.applyAgentFiles`, `session.undoAgentFiles`              | stories 2, 3                                                  |
+| Typed feature planner and lowering, reword guardrail                                                                    | `agent-chat/FeaturePlan.ts`                                      | story 3 as tools                                              |
+| Before/after test verdict with duplicate-record folding                                                                 | `agent-chat/FeatureVerdict.ts`, `StudioTestRunner`               | stories 2, 3                                                  |
+| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/ai/generation`           | story 2                                                       |
+| Preview manifest (scenarios, fixtures, cells) and grid refresh                                                          | `StudioPreviewManifest.ts`, `/api/preview/*`                     | story 2                                                       |
+| Source-action bus (versioned, undoable, conflict-checked edits)                                                         | `/api/source-action/*`                                           | stories 2, 3 (implementer's choice against `applyAgentFiles`) |
 
 New for this slice, suggested as `packages/ides/studio/studio-src/agent-chat/`:
 

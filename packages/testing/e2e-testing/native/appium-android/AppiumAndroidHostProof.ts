@@ -1,3 +1,4 @@
+import { AppiumNoSuchElementError } from '@appium-driver'
 import {
   HostControlError,
   type HostController,
@@ -6,7 +7,6 @@ import {
   type HostSession,
   type HostTarget,
 } from '@host-control'
-import { AppiumNoSuchElementError } from '@appium-driver'
 import { Errors, FS, Switch, Time } from '@shared'
 import {
   type HostJourney,

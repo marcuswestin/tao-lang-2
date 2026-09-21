@@ -171,4 +171,4 @@ function affected(graph: PackageGraph, changed: Iterable<string>): AffectedPacka
 }
 
 /** PackageGraph owns the workspace import graph the changed-files lane selects suites from. */
-export const PackageGraph = { affected, load, packageDirectories } as const
+export const PackageGraph = { affected, load, ownerFromRelativePath, packageDirectories } as const

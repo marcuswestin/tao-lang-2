@@ -17,7 +17,7 @@
  * complaint about the seam, and it would fire in whichever check happened to restore first rather
  * than in the one that overlapped.
  *
- * `packages/runtime` imports nothing from the toolchain's shared package, so this mirrors
+ * `packages/apps/runtime` imports nothing from the toolchain's shared package, so this mirrors
  * `packages/shared/shared-src/testing/TestOverride.ts` the way `TR-switch.ts` mirrors `Switch`. Keep
  * the two in step.
  */

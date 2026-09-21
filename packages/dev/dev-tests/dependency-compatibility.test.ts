@@ -10,7 +10,6 @@ const PACKAGE_PATHS: Record<string, string> = {
   'tao-dev': 'packages/dev/package.json',
   'tao-expo-host': 'packages/apps/expo-host/package.json',
   'tao-studio': 'packages/ides/studio/package.json',
-  'tao-workspace': 'packages/workspace/package.json',
 }
 
 const INSTALLED_WORKSPACE: Record<string, Record<string, string>> = {

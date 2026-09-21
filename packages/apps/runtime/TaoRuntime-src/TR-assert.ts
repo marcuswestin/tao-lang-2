@@ -3,7 +3,7 @@ import { type ErrorDetails, UnexpectedBehaviorError, UserInputError } from './TR
 /*
  * RuntimeAssert is the one way the runtime writes a guarded failure, mirroring the toolchain's
  * shared `Assert` without importing it — the same sanctioned duplication `TR-switch.ts` makes of the
- * shared `Switch`, because `packages/runtime` ships to the device and depends on no Tao package.
+ * shared `Switch`, because `packages/apps/runtime` ships to the device and depends on no Tao package.
  *
  * Its default entry point states an invariant Tao itself owns, so it raises
  * `UnexpectedBehaviorError` and reads as `Expected: <expected>`; `RuntimeAssert.input` states a

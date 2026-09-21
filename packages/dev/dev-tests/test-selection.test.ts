@@ -229,3 +229,20 @@ Describe('changed suite plan', () => {
     ])
   })
 })
+
+Describe('package test suite name', () => {
+  Test("a test file nested inside a grouped package's -tests directory names the group/package pair", () => {
+    Expect(TestSelection.packageTestSuite('packages/ides/studio/studio-tests/code-editor/code-editor-lens.test.ts'))
+      .toBe('ides/studio')
+  })
+
+  Test("a test file nested inside a top-level package's -tests directory names that package alone", () => {
+    Expect(TestSelection.packageTestSuite('packages/compiler/compiler-tests/workspace/workspace.test.ts'))
+      .toBe('compiler')
+  })
+
+  Test('a test file directly inside a -tests directory still resolves, grouped or not', () => {
+    Expect(TestSelection.packageTestSuite('packages/shared/shared-tests/FS.test.ts')).toBe('shared')
+    Expect(TestSelection.packageTestSuite('packages/apps/runtime/TR-tests/TR.test.ts')).toBe('apps/runtime')
+  })
+})

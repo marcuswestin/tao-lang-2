@@ -65,6 +65,11 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
+  ./agent setup --refresh-lockfile
+
+setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
+changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
+bun.lock.
 
 test takes one optional target and decides by whether it exists on disk: an existing file or
 directory is a path, anything else is a test-name pattern. It prints which reading it chose. A bare

@@ -40,7 +40,7 @@ export const PROJECT_TSCONFIG = `{
 /**
  * TaoAppModules locates the `@tao/*` TypeScript packages the CLI hands to a project and links them in.
  *
- * In-repo runs resolve the workspace's `packages/runtime`; distributable CLI assembly calls
+ * In-repo runs resolve the workspace's `packages/apps/runtime`; distributable CLI assembly calls
  * `packageRuntime` to carry the same package as a real directory under `modules/@tao/runtime`.
  */
 export const TaoAppModules = {
@@ -49,10 +49,10 @@ export const TaoAppModules = {
 
   /**
    * runtimeRoot is the runtime package this CLI ships. `cliPackageRoot` exists so the relocated case --
-   * a CLI tree with no `../runtime` beside it -- is reachable from a test rather than only in the field.
+   * a CLI tree with no `../../apps/runtime` beside it -- is reachable from a test rather than only in the field.
    */
   runtimeRoot(cliPackageRoot: string = CLI_PACKAGE_ROOT): string {
-    const sibling = FS.resolvePath('../runtime', cliPackageRoot)
+    const sibling = FS.resolvePath('../../apps/runtime', cliPackageRoot)
     if (FS.existsSync(FS.resolvePath('TaoRuntime-src/TR.ts', sibling))) {
       return sibling
     }

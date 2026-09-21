@@ -197,7 +197,14 @@ async function runParserGenerateLocked(
         return 1
       }
 
-      await synchronizeGeneratedOutputs(stagingParserRoot, parserRoot, inputs, options)
+      await synchronizeGeneratedOutputs(
+        stagingParserRoot,
+        stagingRepositoryRoot,
+        parserRoot,
+        repositoryRoot,
+        inputs,
+        options,
+      )
       if (await parserGenerateInputHash(parserRoot) !== inputs) {
         Errors.throwUnexpected('Parser generation inputs changed before stamp publication; refusing stale metadata.')
       }
@@ -309,13 +316,14 @@ type GeneratedPublicationPlan = {
 /** synchronizeGeneratedOutputs publishes every declared output as one rollback-capable file transaction. */
 async function synchronizeGeneratedOutputs(
   stagingParserRoot: string,
+  stagingRepositoryRoot: string,
   parserRoot: string,
+  repositoryRoot: string,
   expectedInputs: string,
   options: ParserGenerateOptions,
 ): Promise<void> {
-  const plan = await generatedPublicationPlan(stagingParserRoot, parserRoot)
+  const plan = await generatedPublicationPlan(stagingParserRoot, stagingRepositoryRoot, parserRoot, repositoryRoot)
   const transactionRoot = await FS.mkTmpDir('tao-parser-publish-')
-  const repositoryRoot = FS.resolvePath('../..', parserRoot)
   const publicationScratchRoot = FS.resolvePath('.artifacts', repositoryRoot)
   const stagedFiles = new Map<string, string>()
   const backups = new Map<string, string>()
@@ -474,10 +482,10 @@ async function validatePublicationPrecommit(
 /** generatedPublicationPlan rejects shape and symlink hazards before collecting any publication work. */
 async function generatedPublicationPlan(
   stagingParserRoot: string,
+  stagingRepositoryRoot: string,
   parserRoot: string,
+  repositoryRoot: string,
 ): Promise<GeneratedPublicationPlan> {
-  const stagingRepositoryRoot = FS.resolvePath('../..', stagingParserRoot)
-  const repositoryRoot = FS.resolvePath('../..', parserRoot)
   const stagedOutputs = await declaredOutputPaths(stagingParserRoot)
   const outputs = await declaredOutputPaths(parserRoot)
   if (stagedOutputs.length !== outputs.length) {

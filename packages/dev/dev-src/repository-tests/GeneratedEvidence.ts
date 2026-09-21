@@ -80,7 +80,10 @@ async function captureOutput(repositoryRoot: string, output: GeneratedOutput): P
   }
   if (output === 'ide-extension') {
     const packageRoot = FS.resolvePath('packages/ides/ide-extension', repositoryRoot)
-    const wasmPath = FS.resolvePath('packages/language/formatter/node_modules/@dprint/typescript/plugin.wasm', repositoryRoot)
+    const wasmPath = FS.resolvePath(
+      'packages/language/formatter/node_modules/@dprint/typescript/plugin.wasm',
+      repositoryRoot,
+    )
     return {
       inputs: await FS.filesIdentity([['dprint-typescript/plugin.wasm', wasmPath]]),
       outputs: await directorySetsIdentity(packageRoot, [

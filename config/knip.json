@@ -22,7 +22,6 @@
     },
     "packages/*": {
       "entry": [
-        "cli-src/subprocess-test-api.ts",
         "*-tests/**/*.{test,jest,live}.{ts,tsx}",
         "*-tests/**/*-fixture.{ts,tsx}"
       ],

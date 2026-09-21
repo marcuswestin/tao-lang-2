@@ -6,8 +6,14 @@ test('glob expansion discovers new source files in deterministic order', async (
   const root = await FS.mkTmpDir('tao-e2e-source-registry-')
   try {
     await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/Zeta.ts', root), 'export const zeta = true\n')
-    await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/nested/Alpha.ts', root), 'export const alpha = true\n')
-    await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/nested/View.tsx', root), 'export const view = true\n')
+    await FS.writeText(
+      FS.resolvePath('packages/testing/e2e-testing/nested/Alpha.ts', root),
+      'export const alpha = true\n',
+    )
+    await FS.writeText(
+      FS.resolvePath('packages/testing/e2e-testing/nested/View.tsx', root),
+      'export const view = true\n',
+    )
 
     const expansion = await expandHostTestSourcePatterns(root, ['packages/testing/e2e-testing/**/*.{ts,tsx}'])
 
@@ -24,7 +30,10 @@ test('glob expansion discovers new source files in deterministic order', async (
 test('glob expansion excludes generated and dependency trees', async () => {
   const root = await FS.mkTmpDir('tao-e2e-source-exclusions-')
   try {
-    await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/Included.ts', root), 'export const included = true\n')
+    await FS.writeText(
+      FS.resolvePath('packages/testing/e2e-testing/Included.ts', root),
+      'export const included = true\n',
+    )
     await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/_gen_output/Generated.ts', root), 'throw 1\n')
     await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/node_modules/Foreign.ts', root), 'throw 1\n')
     await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/.artifacts/Output.ts', root), 'throw 1\n')
@@ -40,14 +49,17 @@ test('glob expansion excludes generated and dependency trees', async () => {
 test('each unexpectedly empty registered pattern fails with its own pattern', async () => {
   const root = await FS.mkTmpDir('tao-e2e-source-empty-')
   try {
-    await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/Included.ts', root), 'export const included = true\n')
+    await FS.writeText(
+      FS.resolvePath('packages/testing/e2e-testing/Included.ts', root),
+      'export const included = true\n',
+    )
 
     await expect(expandHostTestSourcePatterns(root, [])).rejects.toThrow('needs at least one pattern')
     await expect(expandHostTestSourcePatterns(root, [
       'packages/testing/e2e-testing/**/*.ts',
-      'packages/runtime/TaoRuntime-src/host-testing/**/*.ts',
+      'packages/apps/runtime/TaoRuntime-src/host-testing/**/*.ts',
     ])).rejects.toThrow(
-      'Host-testing source pattern matched no files: packages/runtime/TaoRuntime-src/host-testing/**/*.ts',
+      'Host-testing source pattern matched no files: packages/apps/runtime/TaoRuntime-src/host-testing/**/*.ts',
     )
   } finally {
     await FS.remove(root)

@@ -23,7 +23,7 @@ Test('Studio dialog scope teardown cancels its answer and restores its live back
 
   const build = await Bun.build({
     entrypoints: [
-      FS.resolvePath('packages/studio/studio-tests/fixtures/studio-dialog-browser.ts', repositoryRoot),
+      FS.resolvePath('packages/ides/studio/studio-tests/fixtures/studio-dialog-browser.ts', repositoryRoot),
     ],
     minify: false,
     target: 'browser',

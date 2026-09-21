@@ -351,7 +351,7 @@ transaction, entity/field drop wiring, and scenario relocation during Move to pa
 Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:
 
 ```bash
-bun test packages/studio/studio-tests/studio-feed-examples.test.ts packages/studio/studio-tests/studio-feed-inventory.test.ts packages/studio/studio-tests/studio-shared-fixture-source.test.ts packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-projection.test.ts packages/studio/studio-tests/studio-sketch-snap.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
+bun test packages/ides/studio/studio-tests/studio-feed-examples.test.ts packages/ides/studio/studio-tests/studio-feed-inventory.test.ts packages/ides/studio/studio-tests/studio-shared-fixture-source.test.ts packages/ides/studio/studio-tests/studio-sketch-catalog.test.ts packages/ides/studio/studio-tests/studio-sketch-source.test.ts packages/ides/studio/studio-tests/studio-sketch-geometry.test.ts packages/ides/studio/studio-tests/studio-sketch-projection.test.ts packages/ides/studio/studio-tests/studio-sketch-snap.test.ts packages/ides/studio/studio-tests/studio-sketch-session.test.ts packages/ides/studio/studio-tests/studio-sketch-view.test.ts
 ```
 
 The existing real browser-shell smoke entry point is:

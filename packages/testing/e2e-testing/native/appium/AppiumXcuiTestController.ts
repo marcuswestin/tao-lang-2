@@ -1,3 +1,4 @@
+import { AppiumNoSuchElementError } from '@appium-driver'
 import {
   assertHostLease,
   type HostAction,
@@ -17,7 +18,6 @@ import {
   type HostTarget,
   MachineResources,
 } from '@host-control'
-import { AppiumNoSuchElementError } from '@appium-driver'
 import { Errors, FS, Repo, Time } from '@shared'
 
 type AppiumPhysicalSigning = Readonly<{

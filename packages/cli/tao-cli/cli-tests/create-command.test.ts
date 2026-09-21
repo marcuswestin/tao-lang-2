@@ -115,7 +115,7 @@ Describe('tao create command', () => {
       Expect(await FS.readText(FS.resolvePath('App.tao', result.directory))).toContain('id "a-notebook-for"')
       Expect(await FS.readText(FS.resolvePath('tsconfig.json', result.directory))).toContain('"@tao/runtime"')
       Expect(await FS.realPath(FS.resolvePath('node_modules/@tao/runtime', result.directory))).toBe(
-        Repo.resolvePath('packages/runtime'),
+        Repo.resolvePath('packages/apps/runtime'),
       )
     })
   })

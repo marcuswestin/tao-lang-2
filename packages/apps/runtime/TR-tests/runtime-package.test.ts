@@ -57,7 +57,7 @@ Describe('tao-runtime package boundary', () => {
   Test('does not import Tao toolchain packages', async () => {
     const sourceRoot = FS.resolvePath('TaoRuntime-src', runtimePackageRoot)
     const forbiddenAliasImport =
-      /(?:from\s+|import\(|require\()\s*['"]@(?:ast-utils|compiler|expo-host|formatter|parser|shared|source-actions|validator|workspace)(?:\/|['"])/
+      /(?:from\s+|import\(|require\()\s*['"]@(?:ast-utils|compiler|expo-host|formatter|parser|shared|source-actions|validator)(?:\/|['"])/
     const forbiddenPackageImport = /(?:from\s+|import\(|require\()\s*['"]tao-[^'"]+['"]/
 
     for await (const path of FS.walk(sourceRoot, { extensions: ['.ts', '.tsx'] })) {

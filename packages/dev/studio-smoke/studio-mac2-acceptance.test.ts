@@ -1,4 +1,3 @@
-import { MachineResources } from '@host-control'
 import {
   type AppiumPortReservation,
   type AppiumPortReservations,
@@ -6,6 +5,7 @@ import {
   type Mac2HostController,
   startAppiumServer,
 } from '@appium-driver'
+import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { StudioNative } from '../dev-src/studio/StudioNative'

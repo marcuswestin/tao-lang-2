@@ -7,15 +7,7 @@ import { basicSetup } from 'codemirror'
 import React from 'react'
 import { CodeEditorLens, type CodeEditorLensConfig, type CodeEditorLensMap } from './CodeEditorLens'
 
-export {
-  CodeEditorLens,
-  type CodeEditorLensConfig,
-  type CodeEditorLensFacet,
-  type CodeEditorLensMap,
-  type CodeEditorLensNode,
-  type CodeEditorLensRange,
-  type CodeEditorLensSpan,
-} from './CodeEditorLens'
+export { type CodeEditorLensFacet, type CodeEditorLensMap } from './CodeEditorLens'
 
 /** CodeEditorLsp connects one editor document to Studio's existing JSON-over-WebSocket LSP transport. */
 export type CodeEditorLsp = {
@@ -26,13 +18,13 @@ export type CodeEditorLsp = {
   transport: Transport | Promise<Transport>
 }
 
-export type CodeEditorHighlightToken = Readonly<{
+type CodeEditorHighlightToken = Readonly<{
   color?: string
   from: number
   to: number
 }>
 
-export type CodeEditorEditorDocument = { lineAt(position: number): { from: number; text: string } }
+type CodeEditorEditorDocument = { lineAt(position: number): { from: number; text: string } }
 
 /**
  * Optional drag-and-drop insertion. `accepts` is checked against `dataTransfer.types` during
@@ -61,7 +53,7 @@ export type CodeEditorLensProps =
     refoldRevision?: number
   }>
 
-export type CodeEditorDocumentChange = Readonly<{
+type CodeEditorDocumentChange = Readonly<{
   content: string
   selection: Readonly<{ anchor: number; head: number }>
 }>

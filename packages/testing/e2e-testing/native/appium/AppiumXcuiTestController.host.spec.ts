@@ -1,5 +1,5 @@
-import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
 import { AppiumNoSuchElementError } from '@appium-driver'
+import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
 import { expect, test } from '@playwright/test'
 import { Errors, FS } from '@shared'
 import {

@@ -346,8 +346,8 @@ Describe('Studio device trust store', () => {
 
   Test('keeps one identity and every trust decision across independent processes', async () => {
     await withRoot(async root => {
-      const modulePath = Repo.resolvePath('packages/studio/studio-src/device/StudioDeviceTrustStore.ts')
-      const trustPath = Repo.resolvePath('packages/runtime/TaoRuntime-src/TR-studio-device-trust.ts')
+      const modulePath = Repo.resolvePath('packages/ides/studio/studio-src/device/StudioDeviceTrustStore.ts')
+      const trustPath = Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-studio-device-trust.ts')
       const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
       const workers = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
         const script = `

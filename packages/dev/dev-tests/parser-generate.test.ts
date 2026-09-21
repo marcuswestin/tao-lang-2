@@ -12,7 +12,7 @@ const CONFIG = {
     fileExtensions: ['tao'],
     grammar: './parser-grammar/tao-grammar.langium',
     id: 'tao-lang',
-    textMate: { out: '../ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json' },
+    textMate: { out: '../../ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json' },
   }],
   out: './parser-src/_gen_tao-parser',
   projectName: 'TaoLang',
@@ -28,8 +28,14 @@ const GENERATED = [
 async function repository(): Promise<string> {
   const root = await mkTestDir('tao-parser-generate-')
   await FS.writeJson(FS.resolvePath('packages/language/parser/langium-config.json', root), CONFIG)
-  await FS.writeText(FS.resolvePath('packages/language/parser/parser-grammar/tao-grammar.langium', root), 'grammar TaoLang\n')
-  await FS.writeText(FS.resolvePath('packages/language/parser/parser-grammar/views.langium', root), 'ViewDeclaration: "view";\n')
+  await FS.writeText(
+    FS.resolvePath('packages/language/parser/parser-grammar/tao-grammar.langium', root),
+    'grammar TaoLang\n',
+  )
+  await FS.writeText(
+    FS.resolvePath('packages/language/parser/parser-grammar/views.langium', root),
+    'ViewDeclaration: "view";\n',
+  )
   return root
 }
 
@@ -38,7 +44,7 @@ function generator(outcome: Partial<ParserGenerateOutcome> = {}) {
   const calls: string[] = []
   const generate = async (parserRoot: string): Promise<ParserGenerateOutcome> => {
     calls.push(parserRoot)
-    const root = FS.resolvePath('../..', parserRoot)
+    const root = FS.resolvePath('../../..', parserRoot)
     for (const path of GENERATED) {
       await FS.writeText(FS.resolvePath(path, root), `generated ${calls.length}\n`)
     }
@@ -69,7 +75,10 @@ Describe('parser generate staleness stamp', () => {
       Expect(await FS.isFile(FS.resolvePath('parser-src/_gen_tao-parser/ast.ts', parserRoot))).toBe(true)
       Expect(
         await FS.isFile(
-          FS.resolvePath('packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', root),
+          FS.resolvePath(
+            'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+            root,
+          ),
         ),
       ).toBe(true)
     } finally {
@@ -83,7 +92,9 @@ Describe('parser generate staleness stamp', () => {
     const parserRoot = FS.resolvePath('packages/language/parser', root)
     const sentinel = FS.resolvePath('sentinel.txt', externalRoot)
     try {
-      const config = await FS.readJson<Record<string, unknown>>(Repo.resolvePath('packages/language/parser/langium-config.json'))
+      const config = await FS.readJson<Record<string, unknown>>(
+        Repo.resolvePath('packages/language/parser/langium-config.json'),
+      )
       await FS.writeJson(FS.resolvePath('langium-config.json', parserRoot), { ...config, out: externalRoot })
       await FS.copyDirectory(
         Repo.resolvePath('packages/language/parser/parser-grammar'),
@@ -246,7 +257,7 @@ Describe('parser generate staleness stamp', () => {
         generate: async parserRoot => {
           await FS.writeText(FS.resolvePath(${JSON.stringify(`entered-${id}`)}, root), '')
           ${hold ? `while (!await FS.exists(${JSON.stringify(releasePath)})) await Time.sleep(5)` : ''}
-          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          const stagingRoot = FS.resolvePath('../../..', parserRoot)
           for (const path of ${JSON.stringify(GENERATED)}) {
             await FS.writeText(FS.resolvePath(path, stagingRoot), ${JSON.stringify(`generated-${id}\n`)})
           }
@@ -298,7 +309,7 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await runParserGenerate({
           generate: async parserRoot => {
-            const stagingRoot = FS.resolvePath('../..', parserRoot)
+            const stagingRoot = FS.resolvePath('../../..', parserRoot)
             await FS.writeText(
               FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser/ast.ts', stagingRoot),
               'partial failed generation\n',
@@ -387,7 +398,7 @@ Describe('parser generate staleness stamp', () => {
       await Expect(runParserGenerate({
         generate: async parserRoot => {
           const result = await langium.generate(parserRoot)
-          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          const stagingRoot = FS.resolvePath('../../..', parserRoot)
           const stagedAst = FS.resolvePath(
             'packages/language/parser/parser-src/_gen_tao-parser/ast.ts',
             stagingRoot,
@@ -634,7 +645,7 @@ Describe('parser generate staleness stamp', () => {
         },
         generate: async parserRoot => {
           const result = await langium.generate(parserRoot)
-          const stagingRoot = FS.resolvePath('../..', parserRoot)
+          const stagingRoot = FS.resolvePath('../../..', parserRoot)
           await FS.writeText(
             FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser/new.ts', stagingRoot),
             'new generated bytes\n',

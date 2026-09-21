@@ -61,11 +61,11 @@ and the `repo-lint` convention table. Its Documentation and Command-surface part
 
 ## Fences: concurrent branches
 
-| Branch                             | Do not edit                                                                                                                                                                                           |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                             | Do not edit                                                                                                                                                                                                                |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `feat/real-host-testing-prototype` | `packages/testing/e2e-testing`, `packages/testing/host-control*`, `packages/apps/runtime/TaoRuntime-src/core`, the test compiler, `MachineLanes.ts`, `Docs/Roadmap/Real-host testing*`, `Tao host control architecture.md` |
-| `feat/landing-pool-lock`           | `repository-tests/` (but see 1.a), `doctor/Board.ts`, `Docs/Roadmap/Parallel agents on one machine.md`                                                                                                |
-| both                               | the developer-environment ledger and its entries                                                                                                                                                      |
+| `feat/landing-pool-lock`           | `repository-tests/` (but see 1.a), `doctor/Board.ts`, `Docs/Roadmap/Parallel agents on one machine.md`                                                                                                                     |
+| both                               | the developer-environment ledger and its entries                                                                                                                                                                           |
 
 Shared-edit files (`AGENTS.md`, `Justfile`, `dev.ts`, `agent-dev.ts`, `tsconfig.base.json`,
 `config/knip.json`, `bun.lock`) are edited by the orchestrator only, after merging `main`.

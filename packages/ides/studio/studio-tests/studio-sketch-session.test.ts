@@ -521,7 +521,7 @@ Describe('Studio sketch session protocol', () => {
       })
       await flowCompileEntered.promise
       const marker = FS.resolvePath('independent-flow-create-finished', root)
-      const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+      const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
       const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
       const independent = CLI.run('bun', {
         args: [
@@ -862,7 +862,7 @@ Describe('Studio sketch session protocol', () => {
         await compileEntered.promise
         const marker = FS.resolvePath('independent-create-finished', root)
         const started = FS.resolvePath('independent-create-started', root)
-        const sessionModule = Repo.resolvePath('packages/studio/studio-src/StudioProjectSession.ts')
+        const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
         const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
         const independent = CLI.run('bun', {
           args: [

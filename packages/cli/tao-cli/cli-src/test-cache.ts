@@ -141,7 +141,7 @@ async function toolchainIdentity(toolchainRoot: string): Promise<string> {
  * directory, so Git ignores it and the tracked traversal above does not see it at all.
  */
 async function generatedParserIdentity(toolchainRoot: string): Promise<string> {
-  const generatedRoot = FS.resolvePath('packages/parser/parser-src/_gen_tao-parser', toolchainRoot)
+  const generatedRoot = FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser', toolchainRoot)
   const files: string[] = []
   if (await FS.isDirectory(generatedRoot)) {
     for await (const path of FS.walk(generatedRoot, { includeHidden: true })) {

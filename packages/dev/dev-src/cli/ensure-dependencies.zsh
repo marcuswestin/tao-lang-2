@@ -132,7 +132,9 @@ function tao_ensure_dependencies_locked() {
 
   # A healthy tree installed by another entry point is proof enough. Adopting it creates the same
   # stamp instead of making Bun perform a redundant install over an already populated tree.
-  if [[ "$state" == unproven ]] && tao_dependency_health >/dev/null 2>&1; then
+  if [[ "$state" == unproven && "$TAO_DEPENDENCY_MODE" != --refresh-lockfile ]] &&
+    tao_dependency_health >/dev/null 2>&1
+  then
     touch "$TAO_DEPENDENCY_STAMP"
     return 0
   fi

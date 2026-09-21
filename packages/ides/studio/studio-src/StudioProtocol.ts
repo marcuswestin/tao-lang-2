@@ -18,7 +18,7 @@ import type { StudioSketchSnapTree } from './StudioSketchSnap'
 
 /**
  * The capability a browser cell reports: it follows the page's color scheme as it changes. Mirrors
- * `reactiveBrowserSchemeCapability` in packages/runtime/TaoRuntime-src/TR-scheme.ts; a runtime value
+ * `reactiveBrowserSchemeCapability` in packages/apps/runtime/TaoRuntime-src/TR-scheme.ts; a runtime value
  * import here would pull React Native into the packaged Studio service bundle.
  */
 export const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability

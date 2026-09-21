@@ -12,7 +12,7 @@ registerRuntimeE2ELifecycle()
 /**
  * The device host decides whether to acknowledge a cell from a ref that `componentDidCatch` writes
  * during commit, before the acknowledging effect reads it. That ordering is a React internals
- * property, so it cannot be pinned by the pure-function tests in `packages/runtime`: removing the
+ * property, so it cannot be pinned by the pure-function tests in `packages/apps/runtime`: removing the
  * boundary's `onError` wiring leaves every one of those green while restoring the whole defect.
  * These tests mount the real host against a stub client instead.
  */

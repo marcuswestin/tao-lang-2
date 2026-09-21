@@ -80,7 +80,7 @@ type TaoResolvedDesignSpec = Readonly<{
 /** TaoDesignCondition reads occurrence-local interaction state during mounted design resolution. */
 export type TaoDesignCondition = (subject: string, value: string | undefined) => boolean
 
-// Mirrors `layoutHeads` in packages/ast-utils/ast-utils-src/design.ts.
+// Mirrors `layoutHeads` in packages/language/ast-utils/ast-utils-src/design.ts.
 const layoutHeads = new Set<TaoLayoutEntry[0]>([
   'aligned',
   'centered',

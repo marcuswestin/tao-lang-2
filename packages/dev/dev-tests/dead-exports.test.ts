@@ -509,7 +509,10 @@ Describe('recorded kept exports', () => {
     const packages = await FS.listDir(Repo.resolvePath('packages'))
     const nestedPackages: string[] = []
     for (const name of packages) {
-      if (!await FS.isFile(Repo.resolvePath(`packages/${name}/package.json`))) {
+      if (
+        !await FS.isFile(Repo.resolvePath(`packages/${name}/package.json`))
+        && await FS.isDirectory(Repo.resolvePath(`packages/${name}`))
+      ) {
         for (const nested of await FS.listDir(Repo.resolvePath(`packages/${name}`))) {
           nestedPackages.push(`${name}/${nested}`)
         }
@@ -543,7 +546,7 @@ Describe('recorded kept exports', () => {
       Repo.resolvePath('config/knip.json'),
     )
 
-    Expect(config.workspaces['packages/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
+    Expect(config.workspaces['packages/*/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
     Expect(FS.existsSync(Repo.resolvePath('packages/cli/tao-cli/cli-src/subprocess-test-api.ts'))).toBe(true)
   })
 })

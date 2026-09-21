@@ -51,8 +51,8 @@ async function runFormat(context: HostTestingContext): Promise<void> {
       'fmt',
       '--incremental=false',
       'packages/testing/e2e-testing/**',
-      'packages/runtime/TaoRuntime-src/host-testing/**',
-      'packages/runtime/TaoRuntime-src/core/**',
+      'packages/apps/runtime/TaoRuntime-src/host-testing/**',
+      'packages/apps/runtime/TaoRuntime-src/core/**',
       'packages/providers/icloud/plugins/with-tao-icloud.cjs',
     ],
   }, context.artifactRoot)

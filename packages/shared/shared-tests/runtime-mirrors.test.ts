@@ -2,7 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { Assert, FS, Repo } from '../shared-src/shared'
 
 /*
- * `packages/runtime` ships to the device and imports nothing from `@shared`, so it keeps hand
+ * `packages/apps/runtime` ships to the device and imports nothing from `@shared`, so it keeps hand
  * copies of a few shared modules. These checks read each pair from disk and compare the mirrored
  * code itself — comments stripped, the runtime's naming prefix removed — so a change to one side
  * that is not made to the other fails here rather than going unnoticed.
@@ -11,7 +11,7 @@ import { Assert, FS, Repo } from '../shared-src/shared'
  * `Switch_TypeSafe.ts` with a precompiled-table entry point.
  */
 
-const runtimeSrc = 'packages/runtime/TaoRuntime-src'
+const runtimeSrc = 'packages/apps/runtime/TaoRuntime-src'
 const sharedSrc = 'packages/shared/shared-src'
 
 Describe('runtime mirrors of shared code', () => {
@@ -59,7 +59,7 @@ Describe('runtime mirrors of shared code', () => {
 
   Test('layoutHeads lists exactly layoutHeads in design', async () => {
     const shared = quotedWords(
-      await sourceOf('packages/ast-utils/ast-utils-src/design.ts'),
+      await sourceOf('packages/language/ast-utils/ast-utils-src/design.ts'),
       /layoutHeads = \[([^\]]*)\]/,
     )
     const runtime = quotedWords(

@@ -2,8 +2,8 @@ import { Errors, FS } from '@shared'
 
 const HOST_TEST_SOURCE_PATTERNS = [
   'packages/testing/e2e-testing/**/*.{ts,tsx}',
-  'packages/runtime/TaoRuntime-src/host-testing/**/*.{ts,tsx}',
-  'packages/runtime/TaoRuntime-src/core/**/*.{ts,tsx}',
+  'packages/apps/runtime/TaoRuntime-src/host-testing/**/*.{ts,tsx}',
+  'packages/apps/runtime/TaoRuntime-src/core/**/*.{ts,tsx}',
 ] as const
 
 export type HostTestSourceExpansion = Readonly<{

@@ -60,8 +60,9 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
     'ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json',
     packageRoot,
   )
-  const dprintTypescriptWasm = FS.resolvePath('../formatter/node_modules/@dprint/typescript/plugin.wasm', packageRoot)
-  const stdlibSourceRoot = FS.resolvePath('../stdlib/@tao', packageRoot)
+  const formatterPackageRoot = FS.resolvePath('..', Bun.resolveSync('tao-formatter/package.json', packageRoot))
+  const dprintTypescriptWasm = Bun.resolveSync('@dprint/typescript/plugin.wasm', formatterPackageRoot)
+  const stdlibSourceRoot = FS.resolvePath('../../apps/stdlib/@tao', packageRoot)
   const stagingBundledStdlibRoot = FS.resolvePath('_gen_ide-extension/@tao', stagingPackageRoot)
 
   const ctx = await context({

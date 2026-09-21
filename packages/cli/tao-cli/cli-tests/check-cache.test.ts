@@ -88,10 +88,10 @@ Describe('tao check per-workspace stamp', () => {
 
   Test('re-checks every workspace when the Tao stdlib changed', async () => {
     await withTaoFixture(
-      { ...TWO_WORKSPACES, 'packages/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n' },
+      { ...TWO_WORKSPACES, 'packages/apps/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n' },
       async rootDir => {
         await checkedWorkspaces(rootDir)
-        await FS.writeText(FS.resolvePath('packages/stdlib/@tao/ui/Shell.ts', rootDir), 'export const shell = 2\n')
+        await FS.writeText(FS.resolvePath('packages/apps/stdlib/@tao/ui/Shell.ts', rootDir), 'export const shell = 2\n')
 
         Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
       },
@@ -99,7 +99,7 @@ Describe('tao check per-workspace stamp', () => {
   })
 
   Test('re-checks every workspace when the generated parser changed', async () => {
-    const generated = 'packages/parser/parser-src/_gen_tao-parser/grammar.ts'
+    const generated = 'packages/language/parser/parser-src/_gen_tao-parser/grammar.ts'
     await withTaoFixture({ ...TWO_WORKSPACES, [generated]: 'export const grammar = 1\n' }, async rootDir => {
       await checkedWorkspaces(rootDir)
       await FS.writeText(FS.resolvePath(generated, rootDir), 'export const grammar = 2\n')
@@ -228,8 +228,8 @@ Describe('tao check toolchain identity', () => {
     'bun.lock': '{}\n',
     'package.json': '{ "name": "toolchain" }\n',
     'packages/language/formatter/formatter-src/Formatter.ts': 'export const format = 1\n',
-    'packages/parser/parser-src/_gen_tao-parser/grammar.ts': 'export const grammar = 1\n',
-    'packages/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n',
+    'packages/language/parser/parser-src/_gen_tao-parser/grammar.ts': 'export const grammar = 1\n',
+    'packages/apps/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n',
   } as const
 
   for (const changed of Object.keys(TOOLCHAIN_FILES)) {
@@ -283,7 +283,7 @@ Describe('tao check toolchain identity', () => {
       Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = FS.resolvePath('elsewhere', rootDir)
       try {
         Expect(await CheckCache.toolchainIdentity(rootDir)).toBeUndefined()
-        Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = FS.resolvePath('packages/stdlib', rootDir)
+        Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = FS.resolvePath('packages/apps/stdlib', rootDir)
         Expect(await CheckCache.toolchainIdentity(rootDir)).toBeDefined()
       } finally {
         if (previous === undefined) {

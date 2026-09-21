@@ -793,7 +793,7 @@ Test(
       const staleOwner = `${lockPath}.owner-stale`
       await FS.writeJson(staleOwner, { pid: 2 ** 30 })
       await FS.symlink(await FS.realPath(staleOwner), lockPath)
-      const modulePath = Repo.resolvePath('packages/studio/studio-src/StudioSketchCatalog.ts')
+      const modulePath = Repo.resolvePath('packages/ides/studio/studio-src/StudioSketchCatalog.ts')
       const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
       const workers = await Promise.all(Array.from({ length: 4 }, async (_, index) => {
         const script = `
@@ -958,7 +958,7 @@ Test('Studio sketch restore cannot erase a newer independent-process revision', 
     const transaction = new StudioSketchCatalog(root)
     const before = await transaction.read()
     await transaction.apply(createSketchRequest(0))
-    const modulePath = Repo.resolvePath('packages/studio/studio-src/StudioSketchCatalog.ts')
+    const modulePath = Repo.resolvePath('packages/ides/studio/studio-src/StudioSketchCatalog.ts')
     const worker = await CLI.run('bun', {
       args: [
         '-e',

@@ -734,6 +734,7 @@ Describe('repo lint conventions', () => {
         path: 'packages/dev/dev-src/studio/Packaged.ts',
         source: importFrom('../../../cli/tao-cli/cli-src/test-command'),
       }],
+      ['dev', 'cli/tao-cli'],
       [],
     )).toEqual([
       'packages/dev/dev-src/studio/Packaged.ts:1 imports `packages/cli/tao-cli/cli-src/test-command` from another package;'
@@ -741,16 +742,49 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports a relative import that reaches a grouped package from another group', () => {
+    Expect(crossPackageSourceImportIssues(
+      [{
+        path: 'packages/apps/expo-host/expo-host-tests/data-e2e.jest-test.tsx',
+        source: importFrom('../../runtime/TaoRuntime-src/TR'),
+      }],
+      ['apps/expo-host', 'apps/runtime'],
+      [],
+    )).toEqual([
+      'packages/apps/expo-host/expo-host-tests/data-e2e.jest-test.tsx:1 imports'
+      + ' `packages/apps/runtime/TaoRuntime-src/TR` from another package;'
+      + " import that package's entry instead.",
+    ])
+  })
+
   Test('accepts a relative import inside one package', () => {
     Expect(crossPackageSourceImportIssues(
       [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('../repository-tests/repo-lint') }],
+      ['dev'],
       [],
     )).toEqual([])
+  })
+
+  Test('reports a relative import between two different packages nested inside the same group', () => {
+    // Both packages share their group's first path segment ("language"); the owner computation must
+    // still tell them apart by their full two-segment names rather than conflating them as one package.
+    Expect(crossPackageSourceImportIssues(
+      [{
+        path: 'packages/language/validator/validator-src/Rules.ts',
+        source: importFrom('../../parser/parser-src/langium-exports'),
+      }],
+      ['language/parser', 'language/validator'],
+      [],
+    )).toEqual([
+      'packages/language/validator/validator-src/Rules.ts:1 imports `packages/language/parser/parser-src/langium-exports`'
+      + " from another package; import that package's entry instead.",
+    ])
   })
 
   Test('reports an allowlisted file that no longer imports another package source', () => {
     Expect(crossPackageSourceImportIssues(
       [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('@tao-cli') }],
+      ['dev'],
       ['packages/dev/dev-src/studio/Packaged.ts'],
     )).toEqual([
       "packages/dev/dev-src/studio/Packaged.ts no longer imports another package's source;"

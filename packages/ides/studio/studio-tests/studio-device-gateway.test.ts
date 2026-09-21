@@ -201,7 +201,7 @@ Describe('Studio device gateway handshake', () => {
   Test('observes a revocation committed by an independent Studio process', async () => {
     await withGateway({ trustRefreshMs: 20 }, async env => {
       const device = await pairedDevice(env)
-      const modulePath = Repo.resolvePath('packages/studio/studio-src/device/StudioDeviceTrustStore.ts')
+      const modulePath = Repo.resolvePath('packages/ides/studio/studio-src/device/StudioDeviceTrustStore.ts')
       const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
       const result = await CLI.run('bun', {
         args: [
