@@ -490,8 +490,8 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:78',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:355',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:626',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3043',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:627',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3301',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
