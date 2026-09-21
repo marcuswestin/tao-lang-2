@@ -120,6 +120,18 @@
         "tao-shared": "workspace:*",
       },
     },
+    "packages/cli/cli-kit": {
+      "name": "tao-cli-kit",
+      "dependencies": {
+        "ink": "^7.1.1",
+        "react": "^19.2.8",
+        "tao-shared": "workspace:*",
+        "wrap-ansi": "^10.0.1",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.18",
+      },
+    },
     "packages/cli/tao-cli": {
       "name": "tao-cli",
       "bin": {
@@ -130,6 +142,7 @@
         "@commander-js/extra-typings": "^15.0.0",
         "commander": "^15.0.0",
         "tao-ast-utils": "workspace:*",
+        "tao-cli-kit": "workspace:*",
         "tao-compiler": "workspace:*",
         "tao-dev": "workspace:*",
         "tao-expo-host": "workspace:*",
@@ -161,12 +174,13 @@
         "ink": "^7.1.1",
         "react": "^19.2.8",
         "tao-appium-driver": "workspace:*",
+        "tao-cli-kit": "workspace:*",
         "tao-e2e-testing": "workspace:*",
         "tao-generation": "workspace:*",
         "tao-host-control": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-studio": "workspace:*",
-        "wrap-ansi": "^10.0.1",
+        "tao-verification": "workspace:*",
       },
       "devDependencies": {
         "@types/react": "^19.2.18",
@@ -359,6 +373,19 @@
         "playwright": "1.63.0",
         "tao-host-control": "workspace:*",
         "tao-shared": "workspace:*",
+      },
+    },
+    "packages/testing/verification": {
+      "name": "tao-verification",
+      "dependencies": {
+        "ink": "^7.1.1",
+        "react": "^19.2.8",
+        "tao-cli-kit": "workspace:*",
+        "tao-host-control": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.18",
       },
     },
   },
@@ -2804,6 +2831,8 @@
 
     "tao-cli": ["tao-cli@workspace:packages/cli/tao-cli"],
 
+    "tao-cli-kit": ["tao-cli-kit@workspace:packages/cli/cli-kit"],
+
     "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
 
     "tao-dev": ["tao-dev@workspace:packages/dev"],
@@ -2841,6 +2870,8 @@
     "tao-update-server": ["tao-update-server@workspace:packages/services/update-server"],
 
     "tao-validator": ["tao-validator@workspace:packages/language/validator"],
+
+    "tao-verification": ["tao-verification@workspace:packages/testing/verification"],
 
     "tar-fs": ["tar-fs@2.1.4", "", { "dependencies": { "chownr": "^1.1.1", "mkdirp-classic": "^0.5.2", "pump": "^3.0.0", "tar-stream": "^2.1.4" } }, "sha512-mDAjwmZdh7LTT6pNleZ05Yt65HC3E+NiQzl672vQG38jIrehtJk/J3mNwIg+vShQPcLF/LV7CMnDW6vjj6sfYQ=="],
 

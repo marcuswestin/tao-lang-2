@@ -1,7 +1,7 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { GreenTree, type GreenTreeRecord } from '../repository-tests/GreenTree'
-import { LandingLock, type LandingLockRecord } from '../repository-tests/LandingLock'
-import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
+import { GreenTree, type GreenTreeRecord } from '@verification/GreenTree'
+import { LandingLock, type LandingLockRecord } from '@verification/LandingLock'
+import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
 import { formatReminders, readDueReminders, type Reminder } from './Reminders'
 
 /**

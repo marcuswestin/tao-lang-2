@@ -1,6 +1,6 @@
 import { CLI, Errors, FS, Repo } from '@shared'
+import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
 import { type PortReservation, Ports } from '../expo-dev-loop/expo-runner/Ports'
-import { MachineLanes, type MachineResourceLease } from '../repository-tests/MachineLanes'
 
 const basePort = 42_000
 const portsPerShard = 128
@@ -212,7 +212,7 @@ async function requireGeneratedParser(): Promise<void> {
   if (!await FS.exists(generated)) {
     Errors.throwHostEnvironment(
       'The generated Tao parser is missing, so no smoke lane can start. Run `just fix` (or '
-        + '`bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts`) in this worktree first.',
+        + '`bun run packages/testing/verification/verification-src/ParserGenerate.ts`) in this worktree first.',
     )
   }
 }

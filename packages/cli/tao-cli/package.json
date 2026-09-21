@@ -14,6 +14,7 @@
     "@commander-js/extra-typings": "^15.0.0",
     "commander": "^15.0.0",
     "tao-ast-utils": "workspace:*",
+    "tao-cli-kit": "workspace:*",
     "tao-dev": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-generation": "workspace:*",

@@ -1,7 +1,7 @@
 # What `./agent simplify-audit` measures
 
-`packages/dev/dev-src/simplify-audit/` owns it. Source counts cover tracked package TypeScript and
-exclude tests, declaration files, and generated `_gen_*` trees.
+`packages/testing/verification/verification-src/simplify-audit/` owns it. Source counts cover
+tracked package TypeScript and exclude tests, declaration files, and generated `_gen_*` trees.
 
 1. Source lines per package, and every file over 800 lines.
 2. `Switch` calls, native `switch` statements, and chains of three or more branches over one

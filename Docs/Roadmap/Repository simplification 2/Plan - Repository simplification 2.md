@@ -27,8 +27,8 @@ and the `repo-lint` convention table. Its Documentation and Command-surface part
 
 1. Scope
    - a. No test code is touched: `*.test.*`, test helpers, `*-tests/`, Test Apps, the test compiler,
-     and all of `packages/dev/dev-src/repository-tests/` except `repo-lint.ts`, which is the
-     enforcement point this pass extends.
+     and all of `packages/testing/verification/verification-src/` except `repo-lint.ts`, which is
+     the enforcement point this pass extends.
    - b. Defects a slice exposes are fixed in that slice and named in its commit.
    - c. Under `Apps/`, documentation only.
    - d. Emitted TSX may change shape.

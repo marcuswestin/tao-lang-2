@@ -4,7 +4,7 @@ import {
   MachineResourceBusyError,
   type MachineResourceLease,
   type MachineResourceOwner,
-} from '../dev-src/repository-tests/MachineLanes'
+} from '@verification/MachineLanes'
 import type { StoredLaunch, StudioLaunchManifest } from '../dev-src/studio/StudioLaunchManifest'
 import type { StopReport } from '../dev-src/studio/StudioLifecycle'
 import { StudioNative } from '../dev-src/studio/StudioNative'
