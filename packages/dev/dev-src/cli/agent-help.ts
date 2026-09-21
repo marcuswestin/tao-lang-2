@@ -74,8 +74,9 @@ test-all runs every suite, and takes an optional name pattern of its own.
 
 Each verification scope is its own command rather than a flag: verify-changed runs the gates plus
 the test suites the branch diff reaches (iterate with it); verify runs every suite (the gate before
-a reviewed commit or a merge); verify-full adds the browser, native, and bundle lanes and needs the
-machine to itself; verify-full-sandbox runs that same membership in a managed shell without
+a reviewed commit or a merge); verify-full adds the browser, native, and bundle lanes, two of which
+take a machine-wide lease on the window server for as long as they run; verify-full-sandbox runs
+that same membership in a managed shell without
 claiming its host-only lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway.
 Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
