@@ -199,6 +199,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const main = loaded.find(document => document.uri.path === paths['Main.tao'])?.parseResult.value
         Expect.Is(main, AST.isTaoFile)
         const project = main.statements.find(AST.isProjectDeclaration)
+        Expect.Is(project, AST.isProjectDeclaration)
         const named = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })
           .map(defaultApp => defaultApp.app.ref?.name)
 
