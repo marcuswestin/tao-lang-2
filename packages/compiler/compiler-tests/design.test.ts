@@ -1,5 +1,5 @@
+import { Workspace } from '@compiler/workspace'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 import { TestCompiler } from './test-compile'
 
 Describe('compiler: minimal design', () => {

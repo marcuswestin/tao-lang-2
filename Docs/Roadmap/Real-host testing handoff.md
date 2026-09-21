@@ -45,7 +45,7 @@ removed; Appium is the sole native journey path.
 
 ### Agreed cleanup after prototype review
 
-The follow-up places real-host orchestration and its dedicated fixtures in `packages/e2e-testing`.
+The follow-up places real-host orchestration and its dedicated fixtures in `packages/testing/e2e-testing`.
 The developer command is a thin lazy package entry, while scoped globs register source and test
 coverage. Expanded source coverage is retained in each effect-boundary receipt; empty registrations
 are failures. Existing suites and their gate membership remain unchanged.
@@ -63,13 +63,13 @@ exactly by the Appium seam. At that milestone no real Appium transport had run t
 retained Maestro YAML was the simulator acceptance proof. The current evidence above supersedes that
 limitation with XCUITest and UiAutomator2 journeys.
 
-`packages/host-control` owns the neutral session, revision, target and fencing contract plus the
+`packages/testing/host-control` owns the neutral session, revision, target and fencing contract plus the
 machine-wide named-resource lease extracted from developer automation. Live owners are never evicted
-solely by age. `packages/host-control-playwright` owns fresh Playwright library contexts; five real
+solely by age. `packages/testing/playwright-driver` owns fresh Playwright library contexts; five real
 Chrome tests in the opt-in `./agent test-host driver` lane prove concurrent
 storage/input/artifact isolation, concrete observed-target binding, development revision publication,
 stale-revision rejection and immutable acceptance without entering cacheable host-free verification. At that milestone
-the bounded Appium XCUITest seam under `packages/e2e-testing/native/appium` had eleven fake-client proofs for
+the bounded Appium XCUITest seam under `packages/testing/e2e-testing/native/appium` had eleven fake-client proofs for
 target and port isolation, signing inputs, exact tag occurrence, serialized input, displayed-state
 inspection, retryable receipt-first cleanup and revision fencing, but had not started Appium,
 WebDriverAgent or a simulator session. Physical-device UI acceptance remains incomplete.
@@ -303,7 +303,7 @@ Use the existing worktree `/Users/ro/.codex/worktrees/40f2/tao-lang-2`. All chan
 the index and branch refs were not changed. Preserve them. Do not commit, stage, merge, or replace
 the worktree until Ro asks. Existing test suites and merge-gate membership are unchanged.
 
-Read [the prototype README](../../packages/e2e-testing/README.md) and
+Read [the prototype README](../../packages/testing/e2e-testing/README.md) and
 [the roadmap](Real-host%20testing%20prototype.md). Ro wants real browser/native/device evidence,
 explicitly registered new tests, and no imported legacy test infrastructure except HNReader as the
 initial existing subject. Clockwork is a new minimal harness fixture.

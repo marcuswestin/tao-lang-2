@@ -5,8 +5,8 @@
 Research and repository inspection on 2026-09-19 support one Tao-owned API for interactive development
 and real-host testing, with target-specific drivers underneath. Ro delegated the recommendation using
 simplicity, maintainability, ease of use, debugging, and parallel development as the priorities.
-The additive first implementation now lives in `packages/host-control`,
-`packages/host-control-playwright`, and `packages/e2e-testing/journey`; existing coverage remains.
+The additive first implementation now lives in `packages/testing/host-control`,
+`packages/testing/playwright-driver`, and `packages/testing/e2e-testing/journey`; existing coverage remains.
 
 “Tao CDP” describes the desired control surface here; it does not mean implementing Chrome DevTools
 Protocol on every host. The existing `StudioCdp` is a Chrome driver, not the source-aware contract.
@@ -51,7 +51,7 @@ without test callbacks; its caller must close contexts and arrange tracing and w
 Test for the current browser proofs without making it Tao's universal scheduler or host-free test
 runner. [Library documentation](https://playwright.dev/docs/library).
 
-Prefer a browser launched under the adapter's ownership. Attaching over CDP is Chromium-only and
+Prefer a browser launched under the driver's ownership. Attaching over CDP is Chromium-only and
 documented as lower fidelity than a Playwright-protocol connection. Report reduced capabilities
 instead of pretending an attached human browser has a fresh isolated context.
 [Connection documentation](https://playwright.dev/docs/api/class-browsertype).
@@ -81,9 +81,9 @@ Relevant owners:
 
 - `packages/dev/dev-src/studio/StudioCdp.ts`
 - `packages/compiler/compiler-src/codegen/app/TaoPropsCompiler.ts`
-- `packages/runtime/TaoRuntime-src/TR-interaction-outline.ts`
-- `packages/runtime/TaoRuntime-src/TR-studio-device-inspect.ts`
-- `packages/studio/studio-src/device/StudioDeviceGateway.ts`
+- `packages/apps/runtime/TaoRuntime-src/TR-interaction-outline.ts`
+- `packages/apps/runtime/TaoRuntime-src/TR-studio-device-inspect.ts`
+- `packages/ides/studio/studio-src/device/StudioDeviceGateway.ts`
 
 A semantic target needs both authored identity and a concrete rendered occurrence, scoped to session,
 build/source revision and preview cell where applicable. Source offsets alone cannot distinguish
@@ -101,7 +101,7 @@ private source paths or development control endpoints.
 
 - One mutable controller per target lease; multiple observers may consume serialized snapshots and
   events. A simulator and a physical device are exclusive targets. A browser context can be an
-  independent target when the adapter owns its storage and lifecycle.
+  independent target when the driver owns its storage and lifecycle.
 - Use a machine-wide lease registry across worktrees, with owner liveness, a generation/fencing
   token, explicit handoff and safe recovery. Expiry alone must not authorize killing an active app.
   Do not import the existing repository-test lease implementation into production; extract a small

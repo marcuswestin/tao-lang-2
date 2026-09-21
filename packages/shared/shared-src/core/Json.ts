@@ -1,5 +1,5 @@
 /**
- * Shape guards for values that arrived as JSON. `packages/runtime` keeps its own copies because it
+ * Shape guards for values that arrived as JSON. `packages/apps/runtime` keeps its own copies because it
  * imports nothing from `@shared`; keep them in step with these.
  */
 

@@ -25,13 +25,14 @@ _gen_*
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/
+packages/*/*/.scratch/
 
 .expo
-packages/runtime-toolchain/ios
-packages/runtime-toolchain/android
+packages/apps/expo-host/ios
+packages/apps/expo-host/android
 
-packages/studio-companion-app/ios
-packages/studio-companion-app/android
+packages/ides/studio-companion-app/ios
+packages/ides/studio-companion-app/android
 
 # Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
 .env.secrets

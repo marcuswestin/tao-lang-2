@@ -11,10 +11,10 @@
     "noEmit": true,
     "paths": {
       "@tao/*": [
-        "../packages/tao-cli/modules/@tao/*"
+        "../packages/cli/tao-cli/modules/@tao/*"
       ],
       "@tao/runtime": [
-        "../packages/runtime/TaoRuntime-src/TR.ts"
+        "../packages/apps/runtime/TaoRuntime-src/TR.ts"
       ]
     },
     "skipLibCheck": true,

@@ -32,14 +32,14 @@ async function stepping(
 Describe('cleaning a checkout', () => {
   Test('removes exactly what the recipes removed, in the order they removed it', () => {
     Expect(CleanCommand.stepsFor('checkout').map(commandLine)).toEqual([
-      'rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo'
-      + ' packages/runtime-toolchain/_gen_tao-app packages/runtime-toolchain/_gen_tao-app-test',
+      'rm -rf .artifacts/build .artifacts/dev packages/apps/expo-host/.expo'
+      + ' packages/apps/expo-host/_gen_tao-app packages/apps/expo-host/_gen_tao-app-test',
       // Pruned rather than descended: `find` must not walk into a tree it is about to delete.
       'find . -name node_modules -type d -prune -exec rm -rf {} +',
     ])
     Expect(CleanCommand.stepsFor('all').map(commandLine)).toEqual([
       ...CleanCommand.stepsFor('checkout').map(commandLine),
-      'rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android',
+      'rm -rf .artifacts packages/apps/expo-host/ios packages/apps/expo-host/android',
     ])
   })
 
@@ -69,8 +69,8 @@ Describe('cleaning a checkout', () => {
     Expect(output).toContain('Removing installed node_modules trees ... Failed (0ms), exit 3')
     Expect(output).not.toContain('Removing every remaining artifact')
     Expect(ran).toEqual([
-      'rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo'
-      + ' packages/runtime-toolchain/_gen_tao-app packages/runtime-toolchain/_gen_tao-app-test',
+      'rm -rf .artifacts/build .artifacts/dev packages/apps/expo-host/.expo'
+      + ' packages/apps/expo-host/_gen_tao-app packages/apps/expo-host/_gen_tao-app-test',
       'find . -name node_modules -type d -prune -exec rm -rf {} +',
     ])
     Expect(result).toBe(3)

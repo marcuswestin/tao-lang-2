@@ -6,7 +6,7 @@ to preserve.
 
 ## What reloads today, and what does not
 
-`startStudioClientDevReload` watches `packages/studio/studio-src` and `packages/code-editor/code-editor-src`
+`startStudioClientDevReload` watches `packages/ides/studio/studio-src` (which now holds the code editor too)
 for `.tao`, `.ts` and `.tsx` changes, rebuilds the browser bundle in a subprocess, and publishes it only when
 the build completes. The page polls `/studio-dev/revision` and reloads itself. That covers everything bundled
 into the client: the editor, the matrix view, the agent panel.

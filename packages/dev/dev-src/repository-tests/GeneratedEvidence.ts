@@ -72,15 +72,18 @@ async function capture(
 
 async function captureOutput(repositoryRoot: string, output: GeneratedOutput): Promise<GeneratedOutputEvidence> {
   if (output === 'parser') {
-    const parserRoot = FS.resolvePath('packages/parser', repositoryRoot)
+    const parserRoot = FS.resolvePath('packages/language/parser', repositoryRoot)
     return {
       inputs: await parserGenerateInputHash(parserRoot),
       outputs: await parserGenerateOutputHash(parserRoot),
     }
   }
   if (output === 'ide-extension') {
-    const packageRoot = FS.resolvePath('packages/ide-extension', repositoryRoot)
-    const wasmPath = FS.resolvePath('packages/formatter/node_modules/@dprint/typescript/plugin.wasm', repositoryRoot)
+    const packageRoot = FS.resolvePath('packages/ides/ide-extension', repositoryRoot)
+    const wasmPath = FS.resolvePath(
+      'packages/language/formatter/node_modules/@dprint/typescript/plugin.wasm',
+      repositoryRoot,
+    )
     return {
       inputs: await FS.filesIdentity([['dprint-typescript/plugin.wasm', wasmPath]]),
       outputs: await directorySetsIdentity(packageRoot, [
@@ -89,7 +92,7 @@ async function captureOutput(repositoryRoot: string, output: GeneratedOutput): P
       ]),
     }
   }
-  const outputRoot = FS.resolvePath('packages/runtime-toolchain/_gen_tao-app', repositoryRoot)
+  const outputRoot = FS.resolvePath('packages/apps/expo-host/_gen_tao-app', repositoryRoot)
   return {
     // CompileApp's repository inputs are already covered by the enclosing visible-tree hash. The
     // declared stdlib is the one input allowed to live outside that tree.

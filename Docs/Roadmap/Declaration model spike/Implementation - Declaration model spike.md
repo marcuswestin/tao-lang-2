@@ -89,7 +89,7 @@ operator declarations to the language. The prelude documents the shape of every 
 arithmetic as the one honest gap.
 
 The prelude above is the spike's original sketch. It is now a real, parsed, validated file at
-`packages/stdlib/tao/Prelude.tao`, carrying the fuller hierarchy WordFlower Tranche 4 settled
+`packages/apps/stdlib/tao/Prelude.tao`, carrying the fuller hierarchy WordFlower Tranche 4 settled
 (`visual`, `presentable`, `view`, `layout`, `frame`, `ui`, `nav`, `datasource`, `app`, `design`
 alongside the scalar roots) and later collapsed further (the unified view tranche folded `visual`,
 `presentable`, `ui`, `layout`, and `frame` into one `view` primitive, with `nav` refining `view`).
@@ -150,7 +150,7 @@ sidecar file, it did not move anything that ships today; see Q9 in the open ques
 
 ## What already exists
 
-Verified in `packages/parser/parser-grammar/` at the spike's start (2026-08-14). More of this was
+Verified in `packages/language/parser/parser-grammar/` at the spike's start (2026-08-14). More of this was
 built than the dialogue assumed, which shaped the plan below into a narrowing rather than a
 from-scratch grammar.
 
@@ -220,7 +220,7 @@ declarations used it), with a compiler-emitted `.d.ts` for the config shape — 
 binding; see _Sidecar implementations_ above for the landed mechanics.
 
 **9. The prelude.** As a real `.tao` file the validator reads primitive slots from, not a prose
-appendix — otherwise it drifts. Landed at `packages/stdlib/tao/Prelude.tao`; see _Primitives_ above
+appendix — otherwise it drifts. Landed at `packages/apps/stdlib/tao/Prelude.tao`; see _Primitives_ above
 for where the hierarchy stands now.
 
 Deliberately not in this historical build list: the later Next work for the visual/presentable

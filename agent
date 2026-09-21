@@ -72,7 +72,12 @@ function ensure_agent_build() {
 # `./agent setup` is the one public dependency command and continues into the Justfile setup recipe
 # for an explicit health proof plus generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"
-if needs_build; then
+# `./agent setup --refresh-lockfile` is how a change to the workspace set or to a package.json
+# reaches `bun.lock`; every other call installs frozen.
+if [[ "${1:-}" == setup && "${2:-}" == --refresh-lockfile ]]; then
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --refresh-lockfile
+  set -- setup
+elif needs_build; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --health
 else
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR"

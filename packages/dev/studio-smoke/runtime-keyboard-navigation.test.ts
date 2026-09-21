@@ -19,7 +19,7 @@ Test('generated keyboard navigation works in a real browser', async () => {
   const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/runtime-keyboard-navigation/local', repositoryRoot)
   const artifactRoot = FS.resolvePath('interaction-authority', artifactBase)
-  const runtimeToolchainRoot = FS.resolvePath('packages/runtime-toolchain', repositoryRoot)
+  const runtimeToolchainRoot = FS.resolvePath('packages/apps/expo-host', repositoryRoot)
   const projectRoot = FS.resolvePath(
     'packages/dev/studio-smoke/fixtures/runtime-keyboard-navigation',
     repositoryRoot,
@@ -206,7 +206,7 @@ Test('generated WordFlower keyboard navigation works in a real browser', async (
   const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/runtime-keyboard-navigation/local', repositoryRoot)
   const artifactRoot = FS.resolvePath('wordflower-existing', artifactBase)
-  const runtimeToolchainRoot = FS.resolvePath('packages/runtime-toolchain', repositoryRoot)
+  const runtimeToolchainRoot = FS.resolvePath('packages/apps/expo-host', repositoryRoot)
   const projectRoot = FS.resolvePath('Apps/WordFlower/1 - Current', repositoryRoot)
   let browser: StudioCdp | undefined
   let exportRoot: string | undefined

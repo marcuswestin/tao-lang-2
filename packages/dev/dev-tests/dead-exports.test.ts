@@ -507,12 +507,27 @@ Describe('recorded kept exports', () => {
     )
 
     const packages = await FS.listDir(Repo.resolvePath('packages'))
+    const nestedPackages: string[] = []
+    for (const name of packages) {
+      if (
+        !await FS.isFile(Repo.resolvePath(`packages/${name}/package.json`))
+        && await FS.isDirectory(Repo.resolvePath(`packages/${name}`))
+      ) {
+        for (const nested of await FS.listDir(Repo.resolvePath(`packages/${name}`))) {
+          nestedPackages.push(`${name}/${nested}`)
+        }
+      }
+    }
     const unresolved: string[] = []
     for (const [workspace, { entry = [] }] of Object.entries(config.workspaces)) {
       if (!workspace.startsWith('packages/')) {
         continue
       }
-      const covered = workspace === 'packages/*' ? packages : [workspace.slice('packages/'.length)]
+      const covered = workspace === 'packages/*'
+        ? packages
+        : workspace === 'packages/*/*'
+        ? nestedPackages
+        : [workspace.slice('packages/'.length)]
       for (const pattern of entry) {
         if (/[*?{}[\]]/.test(pattern)) {
           continue
@@ -531,8 +546,8 @@ Describe('recorded kept exports', () => {
       Repo.resolvePath('config/knip.json'),
     )
 
-    Expect(config.workspaces['packages/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
-    Expect(FS.existsSync(Repo.resolvePath('packages/tao-cli/cli-src/subprocess-test-api.ts'))).toBe(true)
+    Expect(config.workspaces['packages/*/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
+    Expect(FS.existsSync(Repo.resolvePath('packages/cli/tao-cli/cli-src/subprocess-test-api.ts'))).toBe(true)
   })
 })
 

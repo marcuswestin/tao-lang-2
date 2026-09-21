@@ -4,6 +4,7 @@ import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
 import { instructionBudget, instructionCharacterCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
+import { PackageGraph } from './PackageGraph'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 import { runtimeElementConventionIssues } from './RuntimeElementConventions'
 
@@ -364,12 +365,12 @@ const NATIVE_SWITCH_ALLOWLIST: readonly string[] = []
 const BUN_TEST_IMPORT_ALLOWLIST = [
   'packages/shared/shared-src/testing/Test-Bun.ts',
   // Both close with plan item 2.6, when they adopt `MockModule` and `reactNativeStubs`.
-  'packages/runtime/TR-tests/TR-selectable-loop.test.ts',
-  'packages/runtime/TR-tests/TR-views.test.ts',
+  'packages/apps/runtime/TR-tests/TR-selectable-loop.test.ts',
+  'packages/apps/runtime/TR-tests/TR-views.test.ts',
 ]
 
 /** Langium stays behind the parser package; every other package consumes `AST` from `@parser`. */
-const LANGIUM_PARSER_PREFIX = 'packages/parser/'
+const LANGIUM_PARSER_PREFIX = 'packages/language/parser/'
 
 /**
  * Relative escapes into another package's source. Both close with the "Repository simplification"
@@ -377,7 +378,7 @@ const LANGIUM_PARSER_PREFIX = 'packages/parser/'
  */
 const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioPackagedTestCommand.ts',
-  'packages/runtime-toolchain/runtime-toolchain-tests/studio-scenario-e2e.jest-test.tsx',
+  'packages/apps/expo-host/expo-host-tests/studio-scenario-e2e.jest-test.tsx',
 ]
 
 /*
@@ -385,7 +386,7 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
  * is a ratchet rather than a near-empty exception set: it names every file that still throws a raw
  * `Error` today, and a package's entries go stale — and must be deleted — as that package is swept
  * onto `Assert` and `Errors`. `packages/shared` is deliberately absent; it was swept first and must
- * stay clean. `packages/runtime` imports nothing from `@shared` by design, so its entries are
+ * stay clean. `packages/apps/runtime` imports nothing from `@shared` by design, so its entries are
  * swept against `TR-assert.ts`, which mirrors the shared `Assert` the way `TR-switch.ts` already
  * mirrors the shared `Switch`.
  *
@@ -401,7 +402,7 @@ const RAW_THROW_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/studio-smoke/studio-real-app.test.ts',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts',
-  'packages/studio/studio-src/StudioWelcome.ts',
+  'packages/ides/studio/studio-src/StudioWelcome.ts',
 ]
 
 /*
@@ -412,7 +413,7 @@ const RAW_THROW_ALLOWLIST = [
 /**
  * The three leaf modules construct the classes because they are the helpers everyone else calls;
  * everywhere else a Tao error is thrown through `Errors.throw*`, which returns `never` and narrows.
- * `packages/runtime` keeps its own `TR-errors` vocabulary and is outside this rule.
+ * `packages/apps/runtime` keeps its own `TR-errors` vocabulary and is outside this rule.
  */
 const CONSTRUCTED_THROW_ALLOWLIST = [
   'packages/shared/shared-src/core/Assert.ts',
@@ -481,15 +482,15 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1408',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1450',
   'packages/dev/studio-smoke/studio-simulated-user.test.ts:1476',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:56',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:78',
-  'packages/runtime/TR-tests/TR-studio-preview.test.ts:355',
-  'packages/studio/studio-src/StudioWelcome.ts:83',
-  'packages/studio/studio-tests/studio-client.test.ts:626',
-  'packages/studio/studio-tests/studio-client.test.ts:3043',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:56',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:78',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:355',
+  'packages/ides/studio/studio-src/StudioWelcome.ts:83',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:626',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3043',
   // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/icloud-native/plugins/with-tao-icloud.cjs:32',
-  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
+  'packages/providers/icloud/plugins/with-tao-icloud.cjs:32',
+  'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
@@ -500,23 +501,23 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-tests/codex-config-generation.test.ts:214',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
-  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
-  'packages/runtime/TR-tests/TR-async.test.ts:43',
-  'packages/runtime/TR-tests/TR-async.test.ts:57',
-  'packages/runtime/TR-tests/TR-data.test.ts:387',
-  'packages/runtime/TR-tests/TR-data.test.ts:616',
-  'packages/runtime/TR-tests/TR-data.test.ts:963',
-  'packages/runtime/TR-tests/TR-data.test.ts:981',
-  'packages/runtime/TR-tests/TR-error-containment.test.ts:40',
-  'packages/runtime/TR-tests/TR-error-containment.test.ts:46',
-  'packages/runtime/TR-tests/TR-error-containment.test.ts:67',
-  'packages/runtime/TR-tests/TR-error-containment.test.ts:69',
-  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:489',
-  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:510',
-  'packages/runtime/TR-tests/TR-studio-device-client.test.ts:511',
+  'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:232',
+  'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
+  'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
+  'packages/apps/runtime/TR-tests/TR-data.test.ts:387',
+  'packages/apps/runtime/TR-tests/TR-data.test.ts:616',
+  'packages/apps/runtime/TR-tests/TR-data.test.ts:963',
+  'packages/apps/runtime/TR-tests/TR-data.test.ts:981',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:40',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:46',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:67',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:69',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:489',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:510',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:511',
   'packages/shared/shared-tests/test-helpers.test.ts:45',
-  'packages/stdlib/stdlib-tests/data-providers.test.ts:86',
-  'packages/studio/studio-tests/studio-server-datasource.test.ts:204',
+  'packages/apps/stdlib/stdlib-tests/data-providers.test.ts:86',
+  'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 
 const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must exist rather than be thrown,'
@@ -527,7 +528,7 @@ const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must e
  * Platform-wrapper conventions. Code reaches the host through the shared `CLI`, `FS`, `HCI`,
  * `Platform`, and `Time` wrappers rather than `node:` modules, the global console, the process
  * object, or Bun's convenience APIs. `packages/shared` is the wrappers themselves and
- * `packages/runtime` imports nothing from `@shared`, so both are outside these rules rather than
+ * `packages/apps/runtime` imports nothing from `@shared`, so both are outside these rules rather than
  * allowlisted. Each list is a ratchet like the raw-throw list: it names every file that still
  * reaches past a wrapper today, and an entry goes stale — and must be deleted — when its file is
  * swept.
@@ -539,7 +540,7 @@ const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must e
  * rather than onto the list. Hashing, signing, and random ids have their `Platform` functions. A type-only `node:` import names a
  * shape, not a behavior, and is outside the import rule.
  */
-const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
+const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/apps/runtime/']
 
 const NODE_IMPORT_ALLOWLIST = [
   // `node:crypto` in the fenced verification runner, which moves to `Platform.sha256Hex` with it,
@@ -551,51 +552,51 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioNative.ts',
   'packages/dev/dev-tests/studio-review.test.ts',
-  'packages/update-server/update-server-tests/update-server.test.ts',
+  'packages/services/update-server/update-server-tests/update-server.test.ts',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
+  'packages/cli/tao-cli/cli-tests/app-store-connect-auth.test.ts',
   // `node:net` port probes and socket connections.
   'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
   'packages/dev/dev-tests/expo-dev-loop.test.ts',
-  'packages/generation/generation-live/apple-foundation-models.live.ts',
+  'packages/ai/generation/generation-live/apple-foundation-models.live.ts',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/dev/dev-tests/repo-lint.test.ts',
   'packages/dev/dev-tests/work-graph.test.ts',
   // Stream classes a test constructs to stand in for a terminal.
-  'packages/tao-cli/cli-tests/compile-command.test.ts',
-  'packages/tao-cli/cli-tests/create-command.test.ts',
-  'packages/tao-cli/cli-tests/dev-command.test.ts',
-  'packages/tao-cli/cli-tests/test-cli-files.ts',
+  'packages/cli/tao-cli/cli-tests/compile-command.test.ts',
+  'packages/cli/tao-cli/cli-tests/create-command.test.ts',
+  'packages/cli/tao-cli/cli-tests/dev-command.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-cli-files.ts',
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
-  'packages/studio/studio-src/StudioClientAssets.ts:3',
-  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
+  'packages/ides/studio/studio-src/StudioClientAssets.ts:3',
+  'packages/ides/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
-  'packages/runtime-toolchain/app-config.cjs:1',
-  'packages/runtime-toolchain/app-config.cjs:2',
-  'packages/runtime-toolchain/metro.config.cjs:2',
-  'packages/runtime-toolchain/metro.config.cjs:3',
-  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:1',
-  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:2',
+  'packages/apps/expo-host/app-config.cjs:1',
+  'packages/apps/expo-host/app-config.cjs:2',
+  'packages/apps/expo-host/metro.config.cjs:2',
+  'packages/apps/expo-host/metro.config.cjs:3',
+  'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:1',
+  'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:2',
   // A test proves the packaged CommonJS entry can resolve its generated dependency.
-  'packages/icloud-native/icloud-native-tests/icloud-native.test.ts:210',
+  'packages/providers/icloud/icloud-tests/icloud-native.test.ts:210',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
   // Browser code, where `HCI` has no stream to write to.
-  'packages/code-editor/code-editor-src/CodeEditor.tsx',
-  'packages/studio/studio-src/TaoStudioProductHost.tsx',
-  'packages/studio/studio-src/product-host/StudioEditorSurface.tsx',
+  'packages/ides/studio/studio-src/code-editor/CodeEditor.tsx',
+  'packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+  'packages/ides/studio/studio-src/product-host/StudioEditorSurface.tsx',
   // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
-  'packages/stdlib/@tao/data/providers/icloud/ICloud.ts',
+  'packages/apps/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
   'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
   'packages/dev/dev-src/studio/StudioWatchHealth.ts',
-  'packages/runtime-toolchain/runtime-toolchain-tests/release-bundle-proof.test.ts',
-  'packages/update-server/update-server-tests/update-server.test.ts',
+  'packages/apps/expo-host/expo-host-tests/release-bundle-proof.test.ts',
+  'packages/services/update-server/update-server-tests/update-server.test.ts',
   // Tests that capture or silence the global a library writes through.
-  'packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx',
-  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
-  'packages/tao-cli/cli-tests/completion-command.test.ts',
+  'packages/apps/expo-host/expo-host-tests/runtime-containment.jest-test.tsx',
+  'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx',
+  'packages/cli/tao-cli/cli-tests/completion-command.test.ts',
 ]
 
 const PROCESS_ACCESS_ALLOWLIST = [
@@ -608,13 +609,13 @@ const PROCESS_ACCESS_ALLOWLIST = [
   'packages/dev/dev-tests/studio-electrobun.test.ts',
   'packages/dev/dev-tests/studio-port-lease.test.ts',
   'packages/dev/dev-tests/test-ledger.test.ts',
-  'packages/runtime-toolchain/runtime-toolchain-tests/injections-e2e.jest-test.tsx',
-  'packages/runtime-toolchain/runtime-toolchain-tests/runtime.test.ts',
-  'packages/tao-cli/cli-tests/test-command-cli.test.ts',
+  'packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx',
+  'packages/apps/expo-host/expo-host-tests/runtime.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-command-cli.test.ts',
   // Studio's environment reads close with its own sweep onto `Platform.runtimeProcess`.
-  'packages/studio/studio-src/agent-chat/AgentChatProvider.ts',
-  'packages/studio/studio-src/agent-chat/AgentChatServer.ts',
-  'packages/studio/studio-tests/studio-agent-chat-server.test.ts',
+  'packages/ides/studio/studio-src/agent-chat/AgentChatProvider.ts',
+  'packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts',
+  'packages/ides/studio/studio-tests/studio-agent-chat-server.test.ts',
 ]
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
@@ -678,7 +679,7 @@ export const CONVENTION_RULES = {
   constructedThrow: {
     allowlist: CONSTRUCTED_THROW_ALLOWLIST,
     detail: CONSTRUCTED_THROW_DETAIL,
-    excludePathPrefixes: ['packages/runtime/'],
+    excludePathPrefixes: ['packages/apps/runtime/'],
     pattern: CONSTRUCTED_THROW_PATTERN,
     staleDetail: 'no longer constructs a Tao error to throw it; drop its repo lint allowlist entry.',
   },
@@ -758,8 +759,8 @@ export function conventionRuleIssues(
  */
 const KIND_CHAIN_ALLOWLIST = [
   'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
-  'packages/icloud-native/icloud-native-src/cloudkit-native.ts',
-  'packages/validator/validator-src/validators/types-validator.ts',
+  'packages/providers/icloud/icloud-src/cloudkit-native.ts',
+  'packages/language/validator/validator-src/validators/types-validator.ts',
 ]
 
 /** instructionBudgetIssues reports instruction files over their budget; detail belongs in a skill's `references/`. */
@@ -813,12 +814,13 @@ export function langiumImportIssues(files: readonly SourceFile[]): string[] {
 /** crossPackageSourceImportIssues reports relative imports that reach into another package's source. */
 export function crossPackageSourceImportIssues(
   files: readonly SourceFile[],
+  packages: readonly string[],
   allowlist: readonly string[] = CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST,
 ): string[] {
   const matches = files.flatMap(file =>
     [...file.source.matchAll(RELATIVE_IMPORT_PATTERN)].flatMap(match => {
       const target = importTargetPath(file.path, match[1]!)
-      if (!crossesPackages(file.path, target) || !PACKAGE_SOURCE_DIRECTORY_PATTERN.test(target)) {
+      if (!crossesPackages(file.path, target, packages) || !PACKAGE_SOURCE_DIRECTORY_PATTERN.test(target)) {
         return []
       }
       return [{
@@ -839,7 +841,7 @@ export function crossPackageSourceImportIssues(
 /*
  * `./dev`'s lane commands must be able to start in a checkout that has never generated the parser,
  * so the entry loads its Studio and Expo command modules with `await import(...)` inside each
- * action. A static import pulls `@studio` — and through it `packages/parser/parser-src/_gen_tao-parser`
+ * action. A static import pulls `@studio` — and through it `packages/language/parser/parser-src/_gen_tao-parser`
  * — into `gates`, `test`, `doctor`, and `agent-config` at startup, so the very graph that generates
  * the parser could never run; it also turns any top-level fault in Studio code into a failure of the
  * gate runner itself rather than of one node.
@@ -996,15 +998,19 @@ function lineNumber(source: string, index: number | undefined): number {
   return source.slice(0, index ?? 0).split('\n').length
 }
 
-function crossesPackages(fromPath: string, toPath: string): boolean {
-  const fromPackage = packageName(fromPath)
-  const toPackage = packageName(toPath)
+function crossesPackages(fromPath: string, toPath: string, packages: readonly string[]): boolean {
+  const fromPackage = packageName(fromPath, packages)
+  const toPackage = packageName(toPath, packages)
   return fromPackage !== undefined && toPackage !== undefined && fromPackage !== toPackage
 }
 
-function packageName(path: string): string | undefined {
-  const [root, name] = path.split('/')
-  return root === 'packages' ? name : undefined
+/** packageName resolves a repository path to its package directory name, which nests one level
+ * deeper for a grouped package (`packages/<group>/<package>/...`) than for a top-level one. */
+function packageName(path: string, packages: readonly string[]): string | undefined {
+  if (!path.startsWith('packages/')) {
+    return undefined
+  }
+  return PackageGraph.ownerFromRelativePath(path.slice('packages/'.length), packages)
 }
 
 function importTargetPath(fromPath: string, specifier: string): string {
@@ -1051,7 +1057,8 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   }
   issues.push(...kindChainIssues(packageFiles))
   issues.push(...langiumImportIssues(packageFiles))
-  issues.push(...crossPackageSourceImportIssues(packageFiles))
+  const packages = await PackageGraph.packageDirectories(FS.resolvePath('packages', repoRoot))
+  issues.push(...crossPackageSourceImportIssues(packageFiles, packages))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   issues.push(...runtimeArrayConventionIssues(packageFiles))
   issues.push(...runtimeElementConventionIssues(packageFiles))

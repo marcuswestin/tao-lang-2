@@ -140,7 +140,7 @@ Describe('gate catalog metadata', () => {
   })
 
   Test('waits for the compiled WordFlower app in everything that reads it', () => {
-    // `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, where the compile writes.
+    // `packages/apps/expo-host/tsconfig.json` compiles `_gen_tao-app/**`, where the compile writes.
     Expect(nodeOf('_typecheck').needs).toContain('_compile-word-flower-app')
     // A test node with the default suite reads sits at the end of that same chain.
     Expect(GateCatalog.testDependencies(GateCatalog.DEFAULT_SUITE_READS)).toContain('_compile-word-flower-app')
@@ -261,11 +261,11 @@ Describe('gate catalog metadata', () => {
     // Shard counts are derived per checkout; these widths are what one unsharded process reserves.
     Expect(GateCatalog.suiteTuning('tao-apps').cost).toBe(8)
     Expect(GateCatalog.suiteTuning('runtime-jest').cost).toBe(3)
-    Expect(GateCatalog.suiteTuning('runtime-toolchain').cost).toBe(2)
+    Expect(GateCatalog.suiteTuning('apps/expo-host').cost).toBe(2)
     // The developer suite's own tests start child runners and whole lanes, so one of its processes
     // is not one core either; it says so rather than letting the graph assume otherwise.
     Expect(GateCatalog.suiteTuning('dev').cost).toBe(2)
-    Expect(GateCatalog.suiteTuning('parser').cost).toBeUndefined()
+    Expect(GateCatalog.suiteTuning('language/parser').cost).toBeUndefined()
     Expect(nodeOf('_typecheck').cost).toBe(GateCatalog.TYPECHECK_COST)
     Expect(nodeOf('_tao-check').cost).toBe(GateCatalog.TAO_CHECK_COST)
     // One graph and one budget: the test gate used to reserve `cpuCount - 6` for a scheduler the
@@ -294,21 +294,20 @@ Describe('gate catalog metadata', () => {
   Test('derives each audited suite dependency from only the source classes it consumes', () => {
     for (
       const suite of [
-        'code-editor',
-        'generation',
-        'host-control',
-        'icloud-native',
-        'runtime',
+        'ai/generation',
+        'testing/host-control',
+        'providers/icloud',
+        'apps/runtime',
         'shared',
-        'stdlib',
-        'update-server',
+        'apps/stdlib',
+        'services/update-server',
       ]
     ) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(['ts'])
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite))).toEqual(['_fix-dprint'])
     }
 
-    for (const suite of ['ast-utils', 'performance-checks']) {
+    for (const suite of ['language/ast-utils', 'performance-checks']) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'ts'])
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
         '_fix-dprint',
@@ -316,8 +315,8 @@ Describe('gate catalog metadata', () => {
       ])
     }
 
-    Expect(GateCatalog.suiteReads('ide-extension')).toEqual(['gen-ide', 'gen-parser', 'tao', 'ts'])
-    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ide-extension')).toSorted()).toEqual([
+    Expect(GateCatalog.suiteReads('ides/ide-extension')).toEqual(['gen-ide', 'gen-parser', 'tao', 'ts'])
+    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ides/ide-extension')).toSorted()).toEqual([
       '_fix-dprint',
       '_fix-tao',
       '_ide-extension-build',
@@ -327,14 +326,13 @@ Describe('gate catalog metadata', () => {
     for (
       const suite of [
         'compiler',
-        'formatter',
-        'parser',
+        'language/formatter',
+        'language/parser',
         'runtime-jest',
-        'runtime-toolchain',
-        'source-actions',
+        'apps/expo-host',
+        'language/source-actions',
         'tao-apps',
-        'validator',
-        'workspace',
+        'language/validator',
       ]
     ) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'tao', 'ts'])
@@ -347,7 +345,7 @@ Describe('gate catalog metadata', () => {
 
     // Dynamic child and generation surfaces remain at the safe default. An unclassified suite does
     // too: reading Tao or generated output during its writer would otherwise permit a torn read.
-    for (const suite of ['dev', 'studio', 'tao-cli', 'unclassified-suite']) {
+    for (const suite of ['dev', 'ides/studio', 'cli/tao-cli', 'unclassified-suite']) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(GateCatalog.DEFAULT_SUITE_READS)
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
         '_compile-word-flower-app',

@@ -17,14 +17,14 @@
     "tao-e2e-testing": "workspace:*",
     "tao-generation": "workspace:*",
     "tao-host-control": "workspace:*",
-    "tao-host-control-appium": "workspace:*",
+    "tao-appium-driver": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-studio": "workspace:*",
     "wrap-ansi": "^10.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
-    "tao-formatter": "workspace:*",
-    "tao-workspace": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "tao-formatter": "workspace:*"
   }
 }

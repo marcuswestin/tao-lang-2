@@ -104,7 +104,7 @@ Useful existing material: `packages/shared/shared-src/core/Errors.ts` already se
 `UserInputError` / `UnexpectedBehaviorError` / `CommandExecutionError` with `formatForUser` and
 `formatForLog`. The error taxonomy exists; this rendering path does not use it.
 
-Scope this to `packages/tao-cli`, `packages/shared/shared-src/core/Errors.ts`, and the parser's error
+Scope this to `packages/cli/tao-cli`, `packages/shared/shared-src/core/Errors.ts`, and the parser's error
 plumbing.
 
 What to work out: whether `check` gains semantic reporting or a distinct command appears, and what

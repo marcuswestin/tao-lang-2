@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "stdlib-src/**/*",
+    "stdlib-tests/**/*",
+    "@tao/data/**/*.ts",
+    "@tao/linking/**/*.ts"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  }
+}

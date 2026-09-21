@@ -375,7 +375,7 @@ testers, and the summary. No Android, no EAS, no `eas.json`. The InstantDB varia
 against a hosted Instant app whose id is provided through the lock rather than edited into
 source.
 
-Tests, in `packages/tao-cli/cli-tests/ship-command.test.ts` and the toolchain suite:
+Tests, in `packages/cli/tao-cli/cli-tests/ship-command.test.ts` and the toolchain suite:
 
 - Derivation is pure and tested by table: declaration in, `ship.json` out, including the name and
   identifier rules for primary apps versus variants.
@@ -567,7 +567,7 @@ here.
 
 Not started. The hardest unsolved question in the language. First, the ground truth, verified in
 code: **today, any change to any `data` declaration is fatal to all existing data.** The runtime's
-`parseEnvelope` (`packages/runtime/TaoRuntime-src/TR-data-persistence.ts`) demands _exact_ equality
+`parseEnvelope` (`packages/apps/runtime/TaoRuntime-src/TR-data-persistence.ts`) demands _exact_ equality
 between the persisted shape's `schemaVersion` and the compiled shape's — entity sets and per-row
 field sets must match by name; even a purely additive field trips it on the first row. `schemaVersion`
 is wired end-to-end through the envelope but still hardcoded to `1` by the compiler; it has never once

@@ -146,7 +146,7 @@ Describe('Studio Electrobun project', () => {
     const generated = StudioElectrobun.sources({ ...options, packagedService: true })
 
     Expect(generated.config).toContain("copy: { 'service/payload': 'service' }")
-    Expect(generated.main).toContain("import.meta.dir + '/../service/packages/runtime-toolchain'")
+    Expect(generated.main).toContain("import.meta.dir + '/../service/packages/apps/expo-host'")
     Expect(generated.main).toContain("studioClientBundlePath: import.meta.dir + '/../service/studio.js'")
     Expect(generated.main).toContain('event.response = { allow: false }')
     Expect(generated.main).toContain('quitting ??= packagedService.stop()')

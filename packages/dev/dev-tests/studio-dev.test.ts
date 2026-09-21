@@ -114,7 +114,7 @@ Describe('Studio native wrapper foundation', () => {
 
   Test('runs packaged Expo through the shipped Node runtime instead of host bunx', () => {
     Expect(packagedExpoCommand({
-      runtimeToolchainRoot: '/Applications/Tao Studio.app/Contents/Resources/service/packages/runtime-toolchain',
+      runtimeToolchainRoot: '/Applications/Tao Studio.app/Contents/Resources/service/packages/apps/expo-host',
       testNodePath: '/Applications/Tao Studio.app/Contents/Resources/service/bin/node',
     })).toEqual({
       argsPrefix: ['/Applications/Tao Studio.app/Contents/Resources/service/node_modules/expo/bin/cli'],
@@ -568,7 +568,7 @@ Describe('Studio native wrapper foundation', () => {
           'install',
           '--production',
           '--frozen-lockfile',
-          '--filter=tao-runtime-toolchain',
+          '--filter=tao-expo-host',
           '--linker=hoisted',
           '--backend=copyfile',
         ],
@@ -598,13 +598,13 @@ Describe('Studio smoke resource isolation', () => {
     // does not have yet fails confusingly, so anything the server loads has to say "restart" out loud.
     const { isStudioServerSource } = StudioClientDevReload.testing
 
-    Expect(isStudioServerSource('packages/studio/studio-src/StudioServer.ts')).toBe(true)
-    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/AgentChatServer.ts')).toBe(true)
+    Expect(isStudioServerSource('packages/ides/studio/studio-src/StudioServer.ts')).toBe(true)
+    Expect(isStudioServerSource('packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts')).toBe(true)
     // The panel and everything under client/ are bundled into the page, so a rebuild is enough for them.
-    Expect(isStudioServerSource('packages/studio/studio-src/client/StudioApiClient.ts')).toBe(false)
-    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/StudioAgentChatPanel.ts')).toBe(false)
+    Expect(isStudioServerSource('packages/ides/studio/studio-src/client/StudioApiClient.ts')).toBe(false)
+    Expect(isStudioServerSource('packages/ides/studio/studio-src/agent-chat/StudioAgentChatPanel.ts')).toBe(false)
     // The editor package is not the Studio server.
-    Expect(isStudioServerSource('packages/code-editor/code-editor-src/Editor.ts')).toBe(false)
+    Expect(isStudioServerSource('packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(false)
   })
 
   Test('publishes only complete rebuilt Studio browser clients', async () => {
@@ -1033,7 +1033,7 @@ Describe('Studio smoke resource isolation', () => {
   })
 
   Test('creates disjoint preview runtime roots backed by the installed toolchain', async () => {
-    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const sourceRoot = Repo.resolvePath('packages/apps/expo-host')
     const artifactRoot = await mkTestDir('studio-preview-artifacts-')
     await FS.symlink(Repo.resolvePath('node_modules'), FS.resolvePath('node_modules', artifactRoot))
     let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
@@ -1065,7 +1065,7 @@ Describe('Studio smoke resource isolation', () => {
   })
 
   Test('keeps the bundler file map inside the preview runtime it describes', async () => {
-    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const sourceRoot = Repo.resolvePath('packages/apps/expo-host')
     const artifactRoot = await mkTestDir('studio-preview-file-map-')
     const runtime = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
     try {
@@ -1106,7 +1106,7 @@ Describe('Studio smoke resource isolation', () => {
   })
 
   Test('gives the preview project the companion scheme and gateway bootstrap fact only', async () => {
-    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const sourceRoot = Repo.resolvePath('packages/apps/expo-host')
     const artifactRoot = await mkTestDir('studio-preview-companion-')
     const runtime = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot, deviceGatewayPort: 43_210 })
     let plain: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined

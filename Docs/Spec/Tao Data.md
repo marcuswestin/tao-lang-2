@@ -329,7 +329,7 @@ device rewrites it, and iCloud's conflict versions collapse to the newest one, s
 are last-snapshot-wins exactly as with InstantDB. iCloud keeps a local copy, so an offline launch
 loads the last synced document and an offline save uploads on reconnect. Like InstantDB it grants no
 `reset`, because the document is shared with the account's other devices. The provider is native
-code (`tao-icloud-native`, an Expo module with its own entitlement config plugin, which the ship
+code (`tao-icloud`, an Expo module with its own entitlement config plugin, which the ship
 pipeline applies from the manifest's `icloud` section), so it needs a development or release build
 rather than Expo Go, runs only on Apple platforms, and fails a mount elsewhere with a
 host-environment error; an app that also targets Android or the web binds another datasource in a
@@ -371,7 +371,7 @@ A change-set's records are sent as one atomic batch per zone. `CKSyncEngine` own
 offline queue on the device; fetched changes are held durably on the device until the fold has
 checkpointed them; a server-side conflict comes back with the server's copy and merges fieldwise
 before the record is sent again. The declaration is `StorageKey text?` (the zone name, defaulting
-to the schema name) and `Container text?`. It shares the `tao-icloud-native` module and
+to the schema name) and `Container text?`. It shares the `tao-icloud` module and
 entitlement plugin with `ICloud`, needs iOS 17 or later, and has the same platform limits: native
 code, Apple only. Elsewhere the store still mounts from its local checkpoint and edits queue, and
 the missing native side surfaces as the recoverable sync error. Like the snapshot-family `ICloud`
@@ -421,7 +421,7 @@ A development build finds the server through the host its bundle loaded from —
 the bundle URL on a device, which is where Expo's dev server already lives — and the port and app
 key the dev server writes into the Expo manifest as `expo.extra.taoDevData`. The wire contract,
 `tao-dev-data-v1`, lives beside the client in `@tao/data/providers/dev/Dev.ts`; the server in
-`packages/dev` mirrors it. `packages/studio/README.md` owns the operational side: ports, the
+`packages/dev` mirrors it. `packages/ides/studio/README.md` owns the operational side: ports, the
 storage root, and how to inspect or clear it.
 
 ## Queries

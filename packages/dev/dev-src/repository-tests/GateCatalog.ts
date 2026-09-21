@@ -36,11 +36,11 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
-  /** `packages/runtime-toolchain/_gen_tao-app*`, filled by the WordFlower compile. */
+  /** `packages/apps/expo-host/_gen_tao-app*`, filled by the WordFlower compile. */
   | 'gen-app'
   /** The extension bundles and syntax tree filled by the IDE extension build. */
   | 'gen-ide'
-  /** The generated Langium parser under `packages/parser/parser-src`. */
+  /** The generated Langium parser under `packages/language/parser/parser-src`. */
   | 'gen-parser'
   /** The Justfile itself, which every recipe-backed node parses on its way up. */
   | 'just'
@@ -172,20 +172,20 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // time from the file's shared start, so every concurrent suite is bounded that way and the hand-
   // written `--timeout=60000` that used to sit here said only what the flag already implies.
   ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
-  ['ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
-  // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
-  // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
-  // empty output.
+  ['ides/ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
+  // expo-host tests spawn full tsc typechecks per test; under parallel suite load these exceed
+  // Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its empty
+  // output.
   [
-    'runtime-toolchain',
+    'apps/expo-host',
     { args: ['--timeout=60000'], cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 },
   ],
   // Its tests lower and validate whole starter projects, which is seconds of real work per test.
   // Bun's five-second default was calibrated when this suite was one process beside a handful of
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
   // work for longer than that and be killed for it. The bound is a hang guard, not a budget.
-  ['tao-cli', { args: ['--timeout=60000'] }],
-  ['validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['cli/tao-cli', { args: ['--timeout=60000'] }],
+  ['language/validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
   // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
@@ -219,25 +219,23 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
 
   // These suites reference no `.tao` source, app, or generated tree, and so wait for dprint alone.
   // Verified by search; a suite that starts reading one belongs off this list.
-  ['code-editor', { reads: ['ts'] }],
-  ['generation', { reads: ['ts'] }],
-  ['host-control', { reads: ['ts'] }],
-  ['icloud-native', { reads: ['ts'] }],
+  ['ai/generation', { reads: ['ts'] }],
+  ['testing/host-control', { reads: ['ts'] }],
+  ['providers/icloud', { reads: ['ts'] }],
   ['performance-checks', { reads: ['gen-parser', 'ts'] }],
-  ['runtime', { reads: ['ts'] }],
+  ['apps/runtime', { reads: ['ts'] }],
   ['shared', { reads: ['ts'] }],
-  ['stdlib', { reads: ['ts'] }],
-  ['update-server', { reads: ['ts'] }],
+  ['apps/stdlib', { reads: ['ts'] }],
+  ['services/update-server', { reads: ['ts'] }],
 
   // AST utilities import generated parser types but never load Tao source or app output.
-  ['ast-utils', { reads: ['gen-parser', 'ts'] }],
+  ['language/ast-utils', { reads: ['gen-parser', 'ts'] }],
 
   // These language-service suites load generated parser code and repository Tao source, including
   // the standard library, but never consume the shared generated-app directory.
-  ['formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['parser', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['workspace', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['language/formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['language/parser', { reads: ['gen-parser', 'tao', 'ts'] }],
+  ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])
 
 const TAO_CHECK_COST = 2
@@ -371,8 +369,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
     ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
-    // `packages/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
-    // `packages/runtime-toolchain/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
+    // `packages/language/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
+    // `packages/apps/expo-host/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
     // compile writes, so the typechecker reads both generated trees.
     ['_typecheck', { cost: TYPECHECK_COST, reads: ['gen-app', 'gen-parser', 'ts'] }],
     [

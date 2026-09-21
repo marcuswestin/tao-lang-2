@@ -1,6 +1,6 @@
+import { Workspace } from '@compiler/workspace'
 import { Assert, Errors } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 import Compiler, { type CompiledFile } from '../compiler-src/compiler'
 import { TestCompiler } from './test-compile'
 

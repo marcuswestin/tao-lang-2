@@ -199,8 +199,8 @@ export function mainSource(): string {
     const externalStudioUrl = process.env.TAO_STUDIO_URL
     const packagedService = externalStudioUrl === undefined
       ? await startStudioPackagedService({
-        runtimeToolchainRoot: import.meta.dir + '/../service/packages/runtime-toolchain',
-        stdlibRoot: import.meta.dir + '/../service/packages/stdlib',
+        runtimeToolchainRoot: import.meta.dir + '/../service/packages/apps/expo-host',
+        stdlibRoot: import.meta.dir + '/../service/packages/apps/stdlib',
         testCommandPath: import.meta.dir + '/../service/test-command.js',
         testNodePath: import.meta.dir + '/../service/bin/node',
         studioClientBundlePath: import.meta.dir + '/../service/studio.js',

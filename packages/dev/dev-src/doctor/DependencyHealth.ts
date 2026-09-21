@@ -29,13 +29,13 @@ type DependencyHealthDependencies = {
 
 const PROBES: readonly Probe[] = [
   // Node resolution for the Expo toolchain, which the runtime package's jest harness needs.
-  { modules: ['expo/metro-config', 'jest-expo/jest-preset'], node: true, packageDir: 'packages/runtime-toolchain' },
+  { modules: ['expo/metro-config', 'jest-expo/jest-preset'], node: true, packageDir: 'packages/apps/expo-host' },
   // What `./dev` loads before it can render a work graph or watch a tree.
   { modules: ['ink', 'react', 'commander', '@commander-js/extra-typings', 'chokidar'], packageDir: 'packages/dev' },
   // What `./tao` loads to build its command surface and completions.
-  { modules: ['@bomb.sh/tab'], packageDir: 'packages/tao-cli' },
+  { modules: ['@bomb.sh/tab'], packageDir: 'packages/cli/tao-cli' },
   // What the parser loads before any Tao source can be read.
-  { modules: ['langium'], packageDir: 'packages/parser' },
+  { modules: ['langium'], packageDir: 'packages/language/parser' },
 ]
 
 /**

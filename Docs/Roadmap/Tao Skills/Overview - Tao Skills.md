@@ -28,7 +28,7 @@ Each entry: purpose, then what the body must contain. Derive content from `Docs/
 4. `tao-visibility`
    - Declaration visibility: file-local by default, `folder`, `project`, exported package surface; what `use X from ./Feature` sees and why an "unknown name" diagnostic usually means a missing `folder` keyword or `use`. The `@tao/*` package aliases and what each provides (`@tao/nav`, `@tao/data/providers/*`, …); the generated project package `@/`; using another Tao project.
 5. `tao-layout`
-   - The view family, layout properties (alignment, distribution, sizing, spacing, wrapping, scroll, overflow, layers), text layout, adaptive panes. `references/flexbox-mapping.md`: table from each Tao sizing/spacing/alignment keyword to the React Native style it resolves to, derived from `packages/runtime/TaoRuntime-src/layout-engine/LayoutResolve.ts` and `LayoutMerge.ts`, so an agent that knows Flexbox can predict rendering.
+   - The view family, layout properties (alignment, distribution, sizing, spacing, wrapping, scroll, overflow, layers), text layout, adaptive panes. `references/flexbox-mapping.md`: table from each Tao sizing/spacing/alignment keyword to the React Native style it resolves to, derived from `packages/apps/runtime/TaoRuntime-src/layout-engine/LayoutResolve.ts` and `LayoutMerge.ts`, so an agent that knows Flexbox can predict rendering.
 6. `tao-design`
    - `Design.tao`: what the implemented first slice supports (tokens, colors, how a design is applied to an app and to views), how to restyle without touching layout, and what is explicitly not yet supported so agents do not invent syntax. Source: `Tao Design - WIP.md` §Implemented First Slice and `Apps/Starters/*/Design.tao`.
 7. `tao-data`

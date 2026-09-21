@@ -4,7 +4,8 @@
   "type": "module",
   "module": "compiler-src/compiler.ts",
   "exports": {
-    ".": "./compiler-src/compiler.ts"
+    ".": "./compiler-src/compiler.ts",
+    "./workspace": "./compiler-src/workspace/index.ts"
   },
   "dependencies": {
     "tao-ast-utils": "workspace:*",

@@ -28,14 +28,14 @@ records why it is built the way it is and what comes next.
 
 - **The plan is the seam.** `creation-plan.ts` owns a typed `CreationPlan`, its JSON schemas, and
   the validation that says exactly why a plan cannot be lowered. `creation-lowering.ts` turns a valid
-  plan into files; `creation-pipeline.ts` fills a plan through the `packages/generation` provider
+  plan into files; `creation-pipeline.ts` fills a plan through the `packages/ai/generation` provider
   seam, one whole answer for a wide window and one small question per part for a narrow one, each
   answer validated, re-asked once with the problems named, then replaced by a plain default.
 - **Deterministic first.** `creation-brief.ts` reads what the description points at before any model
   runs: web pages become text, images become a palette (through `sips`, so macOS only for now). An
   image palette outranks a model's color choice. Agent CLIs may additionally read the images and
   pages themselves.
-- **Providers live in `packages/generation`.** `OllamaGenerationProvider` uses Ollama's schema-
+- **Providers live in `packages/ai/generation`.** `OllamaGenerationProvider` uses Ollama's schema-
   constrained chat format and stays in the portable entry. `AgentCliGenerationProvider` drives
   `claude -p --json-schema` or `codex exec --output-schema` and sits behind the `./agent-cli`
   subpath because it spawns processes. Apple reuses the supervised helper service.

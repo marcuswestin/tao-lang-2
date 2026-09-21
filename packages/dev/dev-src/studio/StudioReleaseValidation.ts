@@ -31,7 +31,7 @@ export type ReleaseValidation = {
 const NON_PORTABLE_MARKERS = [
   { marker: 'bunx ', reason: 'runs bunx, which the installing machine is not required to have' },
   { marker: '/.devenv/profile/', reason: "points at this checkout's devenv profile" },
-  { marker: '/packages/runtime-toolchain/', reason: 'points at a repository path' },
+  { marker: '/packages/apps/expo-host/', reason: 'points at a repository path' },
 ]
 
 /** PayloadInventory is what the staged service payload actually contains. */

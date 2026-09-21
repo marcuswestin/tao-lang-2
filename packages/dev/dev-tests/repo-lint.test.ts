@@ -77,10 +77,10 @@ _bench-check:
       `function run(reject: (e: unknown) => void) {\n  const failure = ${'new Error'}('nope')\n  reject(failure)\n}`
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawError,
-      [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
+      [{ path: 'packages/ides/studio/studio-src/StudioNew.ts', source }],
       [],
     )).toEqual([
-      'packages/studio/studio-src/StudioNew.ts:2 constructs a raw `Error`; where an error object must exist rather than'
+      'packages/ides/studio/studio-src/StudioNew.ts:2 constructs a raw `Error`; where an error object must exist rather than'
       + ' be thrown, build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
       + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
       + ' `Errors.abortError(...)`.',
@@ -94,7 +94,7 @@ _bench-check:
   })
 
   Test('a line-keyed node-import entry blesses only its own site', () => {
-    const path = 'packages/runtime-toolchain/runtime-toolchain-tests/shipped.test.ts'
+    const path = 'packages/apps/expo-host/expo-host-tests/shipped.test.ts'
     const source = "import 'node:path'\nconst x = 1\nimport 'node:fs'\n"
     Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`]))
       .toEqual([
@@ -114,15 +114,15 @@ _bench-check:
   Test('reports a raw-error allowlist entry that no longer builds one', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawError,
-      [{ path: 'packages/studio/studio-src/Clean.ts', source: 'export const clean = 1\n' }],
-      ['packages/studio/studio-src/Clean.ts'],
+      [{ path: 'packages/ides/studio/studio-src/Clean.ts', source: 'export const clean = 1\n' }],
+      ['packages/ides/studio/studio-src/Clean.ts'],
     )).toEqual([
-      'packages/studio/studio-src/Clean.ts no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
+      'packages/ides/studio/studio-src/Clean.ts no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
     ])
   })
 
   Test('a raw-error exemption allows one site rather than its whole file', () => {
-    const path = 'packages/runtime/TR-tests/failure.test.ts'
+    const path = 'packages/apps/runtime/TR-tests/failure.test.ts'
     const source = `${rawError('first')}\n${rawError('second')}\n`
     Expect(conventionRuleIssues(CONVENTION_RULES.rawError, [{ path, source }], [`${path}:1`])).toEqual([
       `${path}:2 constructs a raw \`Error\`; where an error object must exist rather than be thrown,`
@@ -273,13 +273,14 @@ _bench-check:
       )
       const source = `const failure = ${rawError('unclassified')}\n`
       await FS.writeText(FS.resolvePath('Apps/Sample/Adapter.ts', root), source)
-      await FS.writeText(FS.resolvePath('packages/runtime/TR-tests/failure.test.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/apps/runtime/TR-tests/failure.test.ts', root), source)
       await FS.writeText(FS.resolvePath('packages/plugin/config.cjs', root), source)
 
       Expect(await repoLintIssues(root)).toEqual([
         rawErrorIssue('Apps/Sample/Adapter.ts'),
+        // Executable files are walked in path order; `apps/runtime` now sorts before `plugin`.
+        rawErrorIssue('packages/apps/runtime/TR-tests/failure.test.ts'),
         rawErrorIssue('packages/plugin/config.cjs'),
-        rawErrorIssue('packages/runtime/TR-tests/failure.test.ts'),
       ])
     } finally {
       await FS.remove(root)
@@ -513,28 +514,28 @@ Describe('repo lint conventions', () => {
   Test('reports a native switch outside the allowlist', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.nativeSwitch,
-      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
-      ['packages/studio/studio-src/Allowed.ts'],
+      [{ path: 'packages/ides/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
+      ['packages/ides/studio/studio-src/Allowed.ts'],
     )).toEqual([
-      'packages/studio/studio-src/Dispatch.ts:2 uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
+      'packages/ides/studio/studio-src/Dispatch.ts:2 uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
     ])
   })
 
   Test('accepts a native switch in an allowlisted file', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.nativeSwitch,
-      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
-      ['packages/studio/studio-src/Dispatch.ts'],
+      [{ path: 'packages/ides/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
+      ['packages/ides/studio/studio-src/Dispatch.ts'],
     )).toEqual([])
   })
 
   Test('reports an allowlisted file that no longer uses a native switch', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.nativeSwitch,
-      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'const run = Switch.kind(action, {})' }],
-      ['packages/studio/studio-src/Dispatch.ts'],
+      [{ path: 'packages/ides/studio/studio-src/Dispatch.ts', source: 'const run = Switch.kind(action, {})' }],
+      ['packages/ides/studio/studio-src/Dispatch.ts'],
     )).toEqual([
-      'packages/studio/studio-src/Dispatch.ts no longer uses a native `switch`; drop its repo lint allowlist entry.',
+      'packages/ides/studio/studio-src/Dispatch.ts no longer uses a native `switch`; drop its repo lint allowlist entry.',
     ])
   })
 
@@ -543,10 +544,10 @@ Describe('repo lint conventions', () => {
     const source = `function run() {\n  ${['throw', 'new'].join(' ')} Errors.UserInputError('Pick a Tao file.')\n}`
     Expect(conventionRuleIssues(
       CONVENTION_RULES.constructedThrow,
-      [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
+      [{ path: 'packages/ides/studio/studio-src/StudioNew.ts', source }],
       [],
     )).toEqual([
-      'packages/studio/studio-src/StudioNew.ts:2 constructs a Tao error only to throw it; call'
+      'packages/ides/studio/studio-src/StudioNew.ts:2 constructs a Tao error only to throw it; call'
       + ' `Errors.throwUserInput(...)`, `Errors.throwUnexpected(...)`, or `Errors.throwHostEnvironment(...)` instead,'
       + ' which also narrow control flow.',
     ])
@@ -558,7 +559,7 @@ Describe('repo lint conventions', () => {
     } UnexpectedBehaviorError('design resolution must not mount navigation')`
     Expect(conventionRuleIssues(
       CONVENTION_RULES.constructedThrow,
-      [{ path: 'packages/runtime/TR-tests/TR-views.test.ts', source }],
+      [{ path: 'packages/apps/runtime/TR-tests/TR-views.test.ts', source }],
       [],
     )).toEqual([])
   })
@@ -566,10 +567,10 @@ Describe('repo lint conventions', () => {
   Test('reports a bun:test import outside the allowlist', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.bunTestImport,
-      [{ path: 'packages/runtime/TR-tests/TR-new.test.ts', source: importFrom('bun:test') }],
+      [{ path: 'packages/apps/runtime/TR-tests/TR-new.test.ts', source: importFrom('bun:test') }],
       ['packages/shared/shared-src/testing/Test-Bun.ts'],
     )).toEqual([
-      'packages/runtime/TR-tests/TR-new.test.ts:1 imports `bun:test`; use `@shared/test` instead.',
+      'packages/apps/runtime/TR-tests/TR-new.test.ts:1 imports `bun:test`; use `@shared/test` instead.',
     ])
   })
 
@@ -584,10 +585,10 @@ Describe('repo lint conventions', () => {
   Test('reports a raw Error throw outside the allowlist', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawThrow,
-      [{ path: 'packages/studio/studio-src/StudioNew.ts', source: `function run() {\n  ${rawThrow('nope')}\n}` }],
-      ['packages/studio/studio-src/Allowed.ts'],
+      [{ path: 'packages/ides/studio/studio-src/StudioNew.ts', source: `function run() {\n  ${rawThrow('nope')}\n}` }],
+      ['packages/ides/studio/studio-src/Allowed.ts'],
     )).toEqual([
-      'packages/studio/studio-src/StudioNew.ts:2 throws a raw `Error`; use `Assert(...)` for invariants,'
+      'packages/ides/studio/studio-src/StudioNew.ts:2 throws a raw `Error`; use `Assert(...)` for invariants,'
       + " `Assert.input(...)` or `Errors.throwUserInput(...)` for the author's mistakes,"
       + ' and `Errors.throwHostEnvironment(...)` for host and environment failures.',
     ])
@@ -596,18 +597,18 @@ Describe('repo lint conventions', () => {
   Test('accepts a raw Error throw in an allowlisted file', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawThrow,
-      [{ path: 'packages/runtime/TaoRuntime-src/TR-data.ts', source: rawThrow('runtime invariant') }],
-      ['packages/runtime/TaoRuntime-src/TR-data.ts'],
+      [{ path: 'packages/apps/runtime/TaoRuntime-src/TR-data.ts', source: rawThrow('runtime invariant') }],
+      ['packages/apps/runtime/TaoRuntime-src/TR-data.ts'],
     )).toEqual([])
   })
 
   Test('reports an allowlisted file that no longer throws a raw Error', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawThrow,
-      [{ path: 'packages/studio/studio-src/StudioSwept.ts', source: "Errors.throwUserInput('Pick a Tao file.')" }],
-      ['packages/studio/studio-src/StudioSwept.ts'],
+      [{ path: 'packages/ides/studio/studio-src/StudioSwept.ts', source: "Errors.throwUserInput('Pick a Tao file.')" }],
+      ['packages/ides/studio/studio-src/StudioSwept.ts'],
     )).toEqual([
-      'packages/studio/studio-src/StudioSwept.ts no longer throws a raw `Error`;'
+      'packages/ides/studio/studio-src/StudioSwept.ts no longer throws a raw `Error`;'
       + ' drop its repo lint allowlist entry.',
     ])
   })
@@ -657,7 +658,7 @@ Describe('repo lint conventions', () => {
     const source = `${typeImport}\n${importFrom('@shared')}`
     Expect(conventionRuleIssues(
       CONVENTION_RULES.nodeImport,
-      [{ path: 'packages/tao-cli/cli-src/compile-command.ts', source }],
+      [{ path: 'packages/cli/tao-cli/cli-src/compile-command.ts', source }],
       [],
     )).toEqual([])
   })
@@ -706,7 +707,7 @@ Describe('repo lint conventions', () => {
         rule,
         [
           { path: 'packages/shared/shared-src/Platform.ts', source },
-          { path: 'packages/runtime/TaoRuntime-src/TR-data.ts', source },
+          { path: 'packages/apps/runtime/TaoRuntime-src/TR-data.ts', source },
         ],
         [],
       )).toEqual([])
@@ -715,15 +716,15 @@ Describe('repo lint conventions', () => {
 
   Test('reports a langium import outside the parser package', () => {
     Expect(langiumImportIssues([
-      { path: 'packages/validator/validator-src/Rules.ts', source: importFrom('langium/lsp') },
+      { path: 'packages/language/validator/validator-src/Rules.ts', source: importFrom('langium/lsp') },
     ])).toEqual([
-      'packages/validator/validator-src/Rules.ts:1 imports `langium` outside packages/parser/; use `AST` from `@parser` instead.',
+      'packages/language/validator/validator-src/Rules.ts:1 imports `langium` outside packages/language/parser/; use `AST` from `@parser` instead.',
     ])
   })
 
   Test('accepts a langium import inside the parser package', () => {
     Expect(langiumImportIssues([
-      { path: 'packages/parser/parser-src/langium-exports.ts', source: importFrom('langium') },
+      { path: 'packages/language/parser/parser-src/langium-exports.ts', source: importFrom('langium') },
     ])).toEqual([])
   })
 
@@ -731,11 +732,27 @@ Describe('repo lint conventions', () => {
     Expect(crossPackageSourceImportIssues(
       [{
         path: 'packages/dev/dev-src/studio/Packaged.ts',
-        source: importFrom('../../../tao-cli/cli-src/test-command'),
+        source: importFrom('../../../cli/tao-cli/cli-src/test-command'),
       }],
+      ['dev', 'cli/tao-cli'],
       [],
     )).toEqual([
-      'packages/dev/dev-src/studio/Packaged.ts:1 imports `packages/tao-cli/cli-src/test-command` from another package;'
+      'packages/dev/dev-src/studio/Packaged.ts:1 imports `packages/cli/tao-cli/cli-src/test-command` from another package;'
+      + " import that package's entry instead.",
+    ])
+  })
+
+  Test('reports a relative import that reaches a grouped package from another group', () => {
+    Expect(crossPackageSourceImportIssues(
+      [{
+        path: 'packages/apps/expo-host/expo-host-tests/data-e2e.jest-test.tsx',
+        source: importFrom('../../runtime/TaoRuntime-src/TR'),
+      }],
+      ['apps/expo-host', 'apps/runtime'],
+      [],
+    )).toEqual([
+      'packages/apps/expo-host/expo-host-tests/data-e2e.jest-test.tsx:1 imports'
+      + ' `packages/apps/runtime/TaoRuntime-src/TR` from another package;'
       + " import that package's entry instead.",
     ])
   })
@@ -743,13 +760,31 @@ Describe('repo lint conventions', () => {
   Test('accepts a relative import inside one package', () => {
     Expect(crossPackageSourceImportIssues(
       [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('../repository-tests/repo-lint') }],
+      ['dev'],
       [],
     )).toEqual([])
+  })
+
+  Test('reports a relative import between two different packages nested inside the same group', () => {
+    // Both packages share their group's first path segment ("language"); the owner computation must
+    // still tell them apart by their full two-segment names rather than conflating them as one package.
+    Expect(crossPackageSourceImportIssues(
+      [{
+        path: 'packages/language/validator/validator-src/Rules.ts',
+        source: importFrom('../../parser/parser-src/langium-exports'),
+      }],
+      ['language/parser', 'language/validator'],
+      [],
+    )).toEqual([
+      'packages/language/validator/validator-src/Rules.ts:1 imports `packages/language/parser/parser-src/langium-exports`'
+      + " from another package; import that package's entry instead.",
+    ])
   })
 
   Test('reports an allowlisted file that no longer imports another package source', () => {
     Expect(crossPackageSourceImportIssues(
       [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('@tao-cli') }],
+      ['dev'],
       ['packages/dev/dev-src/studio/Packaged.ts'],
     )).toEqual([
       "packages/dev/dev-src/studio/Packaged.ts no longer imports another package's source;"

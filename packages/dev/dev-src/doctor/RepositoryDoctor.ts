@@ -33,7 +33,7 @@ const CONVENTIONAL_PORTS = [
 ] as const
 
 /** Where Langium's generator is configured, and the modules every language command imports. */
-const LANGIUM_CONFIG = 'packages/parser/langium-config.json'
+const LANGIUM_CONFIG = 'packages/language/parser/langium-config.json'
 const GENERATED_PARSER_MODULES = ['ast.ts', 'grammar.ts', 'module.ts']
 
 /** Commands this repository actually starts on its conventional ports. */

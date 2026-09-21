@@ -299,7 +299,7 @@ ship of WordFlower:
 | `update.serverUrl`                  | `https://updates.tao-lang.dev`, a host Ro operates                          |
 
 None of these is a secret on its own, and the matching `.p8` private key is **not** committed —
-`packages/tao-cli/cli-src/ship-command.ts:335` resolves it from a path outside the repository, and no
+`packages/cli/tao-cli/cli-src/ship-command.ts:335` resolves it from a path outside the repository, and no
 `.p8`, `.cer`, or `.mobileprovision` file has ever been tracked. The InstantDB `AppId` is a public
 client value by design (`P14`). So this is not a credential leak.
 
@@ -320,12 +320,12 @@ Ro's physical iPhone is named on 76 lines across 12 tracked files:
 
 - `packages/dev/dev-src/studio/StudioCompanionDevice.ts:261–262` — in a source comment, as the
   worked example of the recipe's argument quoting.
-- `packages/studio/README.md:46` and `Docs/Tutorials/Tao now - two-week walkthrough.md:149` — as the
+- `packages/ides/studio/README.md:46` and `Docs/Tutorials/Tao now - two-week walkthrough.md:149` — as the
   documented command a reader is shown: `just studio-companion-install device="roPhone"`.
 - 66 further lines across eight test files, as fixture data.
 
 The README and tutorial cases are the real problem: they instruct a public reader to install onto a
-device that does not exist for them. `packages/studio-companion-app/README.md:13` already gets this
+device that does not exist for them. `packages/ides/studio-companion-app/README.md:13` already gets this
 right with `device="<name>"`, which shows the fix.
 
 - **Recommendation:** replace every documentation and source-comment occurrence with the
@@ -358,7 +358,7 @@ about.
 `~/.docker/run/docker.sock`; the expansion happens during generation.
 
 Three test files also embed absolute paths, but only one is personal:
-`packages/studio/studio-tests/studio-sketch-session.test.ts:590` uses
+`packages/ides/studio/studio-tests/studio-sketch-session.test.ts:590` uses
 `/Users/ro/.codex/worktrees/...`. The others use neutral placeholders (`/Users/me`, `/Users/dev`,
 `/Users/someone`) and need no change.
 
@@ -445,10 +445,10 @@ and the sandbox layer.
 ### P23 — AGPL-3.0 reaches inside every app built with Tao — High, and `R1`'s decision
 
 `LICENSE` is the GNU Affero General Public License v3 and it covers the whole repository, including
-`packages/runtime` and `packages/stdlib`. The mechanism by which that reaches an end user's app is
-concrete, not theoretical: `packages/runtime-toolchain/metro.config.cjs:76` resolves `@runtime/TR`
+`packages/apps/runtime` and `packages/apps/stdlib`. The mechanism by which that reaches an end user's app is
+concrete, not theoretical: `packages/apps/expo-host/metro.config.cjs:76` resolves `@runtime/TR`
 and `@tao/runtime` to the runtime's own TypeScript source, so Metro bundles AGPL-licensed code
-directly into the shipped application. `packages/runtime-toolchain/package.json:45` depends on
+directly into the shipped application. `packages/apps/expo-host/package.json:45` depends on
 `tao-runtime` as a workspace package.
 
 So a developer who builds a product with Tao ships AGPL code inside it, and AGPL §13's
@@ -460,7 +460,7 @@ work, and the audience `A3` is written for is precisely that group.
   the toolchain with a permissive runtime and stdlib — is well matched to what the code actually
   does, because the split falls exactly where the Metro resolver does. The audit adds only this: the
   decision must be made **before** the first public push, not after. A permissive relicensing of
-  `packages/runtime` and `packages/stdlib` is trivial while Ro is the sole copyright holder across
+  `packages/apps/runtime` and `packages/apps/stdlib` is trivial while Ro is the sole copyright holder across
   all 1,451 commits, and becomes a consent-gathering exercise the moment there is a second
   contributor.
 

@@ -1,5 +1,5 @@
 import { Errors, Platform } from '@shared'
-import { runTestCommand } from '../../../tao-cli/cli-src/test-command'
+import { runTestCommand } from '../../../cli/tao-cli/cli-src/test-command'
 
 const projectRoot = Platform.runtimeProcess.argv[2]
 if (projectRoot === undefined) {

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "playwright-driver-src/**/*"
+  ],
+  "compilerOptions": {
+    "types": [
+      "node",
+      "bun"
+    ],
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}

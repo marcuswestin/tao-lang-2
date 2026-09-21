@@ -9,11 +9,11 @@ infrastructure other than the HNReader subject. Keep existing suites and merge g
 commit until requested. Ro subsequently authorized completing review and committing this milestone
 in chunks on 2026-09-19, then authorized landing it on `main` on 2026-09-20.
 
-Implementation and commands: [E2E testing README](../../packages/e2e-testing/README.md).
+Implementation and commands: [E2E testing README](../../packages/testing/e2e-testing/README.md).
 
 ## Accepted package and authoring boundaries
 
-`packages/e2e-testing` owns the additive real-host orchestration, control checks, browser/native
+`packages/testing/e2e-testing` owns the additive real-host orchestration, control checks, browser/native
 journeys and dedicated Clockwork fixture. HNReader stays with its application; existing package tests
 stay with their packages. `./agent test-host` remains the opt-in command. Scoped source/test globs
 register coverage without file-by-file inventories; effect lint records the expanded files and fails
@@ -109,7 +109,7 @@ evidence still comes from coordinated single-target runs. A simultaneous multi-s
 required before claiming that capacity. Same-target driving remains serialized by design.
 
 Ro recalls an earlier decision against Playwright that has not yet been located. The subsequent
-research recommends its library behind the Tao browser adapter to reduce locator/wait/debugging
+research recommends its library behind the Tao browser test driver to reduce locator/wait/debugging
 maintenance, while preserving existing direct-CDP callers and keeping raw CDP a narrow diagnostic
 or attach capability. This does not select Playwright Test as the universal runner; its use for
 host-free controls is still prototype-only. See the recommendation for the evidence and tradeoffs.

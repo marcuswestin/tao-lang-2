@@ -1,4 +1,5 @@
 import { FS, HCI, Platform, Repo } from '@shared'
+import { PackageGraph } from './PackageGraph'
 
 /**
  * A React copy reaching a bundle it does not own produces a Studio that starts and renders
@@ -8,10 +9,10 @@ import { FS, HCI, Platform, Repo } from '@shared'
  */
 
 /** Packages whose code is bundled into Tao Studio or a compiled Tao app. */
-const BUNDLED_PACKAGES = ['@tao/code-editor', 'tao-runtime', 'tao-runtime-toolchain', 'tao-studio'] as const
+const BUNDLED_PACKAGES = ['tao-runtime', 'tao-expo-host', 'tao-studio'] as const
 
 /** The package the Studio browser bundle resolves React through (its singleton anchor). */
-const REACT_SINGLETON_ANCHOR = 'tao-runtime-toolchain'
+const REACT_SINGLETON_ANCHOR = 'tao-expo-host'
 
 /**
  * Packages allowed their own React because they never reach a bundle. `tao-dev` renders the
@@ -107,7 +108,7 @@ function bundledReactIssues(facts: DependencyFacts): string[] {
     return []
   }
   // Every React package, not just `react`: a second react-dom in one bundle is the same blank
-  // Studio, and packages/studio declares react-dom in its own right.
+  // Studio, and packages/ides/studio declares react-dom in its own right.
   return BUNDLED_PACKAGES.flatMap(name =>
     REACT_PACKAGES.flatMap(reactPackage => {
       const anchorVersion = facts.resolvedByPackage[REACT_SINGLETON_ANCHOR]?.[reactPackage]
@@ -238,7 +239,7 @@ export async function readDependencyFacts(repoRoot = Repo.getRoot()): Promise<De
     }
     resolvedByPackage[manifest.name] = resolved
   }
-  const anchorBase = FS.resolvePath('packages/runtime-toolchain', repoRoot)
+  const anchorBase = FS.resolvePath('packages/apps/expo-host', repoRoot)
   return {
     expoBundledVersions: await readJsonOrEmpty(anchorBase, 'expo/bundledNativeModules.json'),
     manifests,
@@ -253,7 +254,10 @@ export async function readDependencyFacts(repoRoot = Repo.getRoot()): Promise<De
 async function readWorkspaceManifests(repoRoot: string): Promise<PackageManifest[]> {
   const packagesRoot = FS.resolvePath('packages', repoRoot)
   const manifests: PackageManifest[] = []
-  for (const name of (await FS.listDir(packagesRoot)).sort()) {
+  // A grouped package nests one level deeper than its group folder (`packages/<group>/<package>`),
+  // which is what `PackageGraph.packageDirectories` already resolves; a depth-one directory listing
+  // here would silently find none of them, because a group folder has no `package.json` of its own.
+  for (const name of await PackageGraph.packageDirectories(packagesRoot)) {
     const path = `packages/${name}/package.json`
     const absolutePath = FS.resolvePath(path, repoRoot)
     if (!await FS.isFile(absolutePath)) {

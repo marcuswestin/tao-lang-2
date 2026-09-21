@@ -39,14 +39,14 @@ Describe('Studio watch health', () => {
   Test('fails when an edit in a workspace package could never reach the preview', () => {
     const withoutStudio = facts({
       metroWatchFolders: WATCHED_SOURCE_ROOTS
-        .filter(path => path !== 'packages/studio/studio-src')
+        .filter(path => path !== 'packages/ides/studio/studio-src')
         .map(path => FS.resolvePath(path, repositoryRoot)),
     })
 
-    Expect(unwatchedSourceRoots(withoutStudio)).toEqual(['packages/studio/studio-src'])
+    Expect(unwatchedSourceRoots(withoutStudio)).toEqual(['packages/ides/studio/studio-src'])
     const coverage = check(studioWatchChecks(withoutStudio), 'studio watch coverage')
     Expect(coverage?.status).toBe('fail')
-    Expect(coverage?.detail).toContain('packages/studio/studio-src')
+    Expect(coverage?.detail).toContain('packages/ides/studio/studio-src')
   })
 
   Test('counts a source root covered by an enclosing watch folder', () => {
@@ -56,10 +56,12 @@ Describe('Studio watch health', () => {
   })
 
   Test('reports a nested watch folder as redundant work, not as a failure', () => {
-    const nested = facts({ metroWatchFolders: ['/w/packages/runtime', '/w/packages/runtime/TaoRuntime-src'] })
+    const nested = facts({
+      metroWatchFolders: ['/w/packages/apps/runtime', '/w/packages/apps/runtime/TaoRuntime-src'],
+    })
 
     Expect(overlappingWatchFolders(nested.metroWatchFolders)).toEqual([
-      { inside: '/w/packages/runtime', nested: '/w/packages/runtime/TaoRuntime-src' },
+      { inside: '/w/packages/apps/runtime', nested: '/w/packages/apps/runtime/TaoRuntime-src' },
     ])
     // Studio compiles from its own watch of the project root, so this cannot double a compile.
     const duplication = check(studioWatchChecks(nested), 'studio watch duplication')
@@ -102,8 +104,8 @@ Describe('Studio watch health', () => {
     // and nothing worse — Studio compiles from its own watch of the project root — so it is
     // recorded here rather than removed. Growing this list is a regression worth seeing.
     Expect(overlaps).toEqual([
-      'packages/runtime-toolchain/node_modules inside packages/runtime-toolchain',
-      'packages/runtime/TaoRuntime-src inside packages/runtime',
+      'packages/apps/expo-host/node_modules inside packages/apps/expo-host',
+      'packages/apps/runtime/TaoRuntime-src inside packages/apps/runtime',
       'packages/shared/shared-src/core inside packages/shared',
     ])
   })

@@ -1,11 +1,11 @@
-import { MachineResources } from '@host-control'
 import {
   type AppiumPortReservation,
   type AppiumPortReservations,
   createStudioMac2AcceptanceFactory,
   type Mac2HostController,
   startAppiumServer,
-} from '@host-control/appium'
+} from '@appium-driver'
+import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { StudioNative } from '../dev-src/studio/StudioNative'
@@ -122,7 +122,7 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
 }, 300_000)
 
 async function provisionMac2DriverHome(home: string): Promise<void> {
-  const source = await FS.realPath(Repo.resolvePath('packages/host-control-appium/node_modules/appium-mac2-driver'))
+  const source = await FS.realPath(Repo.resolvePath('packages/testing/appium-driver/node_modules/appium-mac2-driver'))
   const destination = FS.resolvePath('node_modules/appium-mac2-driver', home)
   await FS.mkdir(FS.dirname(destination))
   if (!await FS.exists(destination)) {
@@ -143,7 +143,7 @@ async function provisionMac2DriverHome(home: string): Promise<void> {
 }
 
 function appiumCommand(): string {
-  return Repo.resolvePath('packages/host-control-appium/node_modules/.bin/appium')
+  return Repo.resolvePath('packages/testing/appium-driver/node_modules/.bin/appium')
 }
 
 function appiumPortReservations(runId: string): AppiumPortReservations {

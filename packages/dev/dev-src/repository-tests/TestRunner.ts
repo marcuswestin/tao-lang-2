@@ -133,7 +133,7 @@ const QUIET_FAILURE_OUTPUT_LINES = 40
 const PERFORMANCE_CHECKS = 'performance-checks'
 const PERFORMANCE_CHECK_FILE = 'packages/dev/performance-checks/language-performance.test.ts'
 const RUNTIME_JEST = 'runtime-jest'
-const RUNTIME_JEST_TESTS = 'packages/runtime-toolchain/runtime-toolchain-tests'
+const RUNTIME_JEST_TESTS = 'packages/apps/expo-host/expo-host-tests'
 const TAO_APPS = 'tao-apps'
 
 /**
@@ -800,7 +800,7 @@ async function runtimeJestTestFiles(repositoryRoot: string): Promise<string[]> {
 
 /**
  * testFilesAt routes one path to the registry files it selects. A directory selects every test file
- * the registry owns beneath it, so `just test packages/studio` and `just test <one file>` are the
+ * the registry owns beneath it, so `just test packages/ides/studio` and `just test <one file>` are the
  * same request at two widths; anything else routes to the one file that path names.
  */
 async function testFilesAt(inputPath: string, repositoryRoot = Shared.Repo.getRoot()): Promise<TestFile[]> {
@@ -1006,7 +1006,7 @@ function runtimeJestSuite(
       '--silent',
     ],
     command: Shared.FS.resolvePath('.devenv/profile/bin/node', repositoryRoot),
-    cwd: Shared.FS.resolvePath('packages/runtime-toolchain', repositoryRoot),
+    cwd: Shared.FS.resolvePath('packages/apps/expo-host', repositoryRoot),
     files,
     testReport,
   }
@@ -1031,17 +1031,14 @@ function nativeReport(
 async function packageTestFilesByPackage(repositoryRoot: string): Promise<Map<string, string[]>> {
   const packageRoot = Shared.FS.resolvePath('packages', repositoryRoot)
   const testFilesByPackage = new Map<string, string[]>()
-  for (
-    const testFile of (await Shared.Repo.filesUnder(packageRoot, { extensions: ['.ts'] })).filter(path =>
-      TestSelection.packageTestSuite(repositoryRelative(path, repositoryRoot)) !== undefined
-    )
-  ) {
-    const packageName = Shared.FS.relativePath(packageRoot, testFile).split('/')[0]
-    if (packageName === undefined || packageName.length === 0) {
+  for (const testFile of await Shared.Repo.filesUnder(packageRoot, { extensions: ['.ts'] })) {
+    const relativePath = repositoryRelative(testFile, repositoryRoot)
+    const packageName = TestSelection.packageTestSuite(relativePath)
+    if (packageName === undefined) {
       continue
     }
     const packageTestFiles = testFilesByPackage.get(packageName) ?? []
-    packageTestFiles.push(repositoryRelative(testFile, repositoryRoot))
+    packageTestFiles.push(relativePath)
     testFilesByPackage.set(packageName, packageTestFiles)
   }
   for (const testFiles of testFilesByPackage.values()) {

@@ -14,7 +14,7 @@
       ]
     }
   ],
-  "langium.config": "packages/parser/langium-config.json",
+  "langium.config": "packages/language/parser/langium-config.json",
   // WordFlower target files use alternate extensions to stay out of Tao discovery.
   "files.associations": {
     "*.tao-next": "tao",
@@ -38,7 +38,7 @@
   /////////////////////////////
   // File and search exclusions
   // Gitignored `_gen_*` dirs are hidden from Quick Open by default; use files.exclude
-  // (with an App.tsx exception) instead so compiled `packages/runtime/_gen_tao-app/App.tsx` is findable.
+  // (with an App.tsx exception) instead so compiled `packages/apps/runtime/_gen_tao-app/App.tsx` is findable.
   "explorer.excludeGitIgnore": false,
   "search.exclude": {
     "**/bun.lock": true,
@@ -64,7 +64,7 @@
     "devenv.yaml": true,
     "**/tsconfig.tsbuildinfo": true,
     "local.properties": true,
-    // "packages/runtime/android": true,
-    // "packages/runtime/ios": true
+    // "packages/apps/runtime/android": true,
+    // "packages/apps/runtime/ios": true
   }
 }

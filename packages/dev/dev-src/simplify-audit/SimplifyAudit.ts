@@ -41,8 +41,15 @@ function matchCount(source: string, pattern: RegExp): number {
   return [...source.matchAll(pattern)].length
 }
 
+// A top-level `packages/*` entry is either a package or a group of packages one level deeper; a
+// moved package's name is then `<group>/<package>`, matching PackageGraph's own depth-two rule.
+const PACKAGE_GROUPS = new Set(['ai', 'apps', 'cli', 'ides', 'language', 'providers', 'services', 'testing'])
+
 function packageOf(path: string): string {
-  return path.split('/')[1] ?? ''
+  const segments = path.split('/')
+  const first = segments[1] ?? ''
+  const second = segments[2]
+  return PACKAGE_GROUPS.has(first) && second !== undefined ? `${first}/${second}` : first
 }
 
 function packageAudits(sources: readonly AuditFile[]): PackageAudit[] {

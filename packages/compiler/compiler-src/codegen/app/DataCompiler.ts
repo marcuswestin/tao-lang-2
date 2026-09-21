@@ -9,7 +9,7 @@ import { compileDeclarationIdentity } from './declaration-identity'
 /**
  * The stdlib Local declaration's own canonical identity, restated here because the compiler emits
  * this datasource without the source ever naming it. It must stay equal to what compiling
- * `packages/stdlib/@tao/data/providers/local/Local.tao` produces; `compiler.test.ts` pins that.
+ * `packages/apps/stdlib/@tao/data/providers/local/Local.tao` produces; `compiler.test.ts` pins that.
  */
 const localDatasourceIdentity = [
   'tao.declaration',

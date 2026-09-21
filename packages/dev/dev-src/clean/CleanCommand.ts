@@ -46,9 +46,9 @@ const CHECKOUT_STEPS: readonly CleanStep[] = [
       '-rf',
       '.artifacts/build',
       '.artifacts/dev',
-      'packages/runtime-toolchain/.expo',
-      'packages/runtime-toolchain/_gen_tao-app',
-      'packages/runtime-toolchain/_gen_tao-app-test',
+      'packages/apps/expo-host/.expo',
+      'packages/apps/expo-host/_gen_tao-app',
+      'packages/apps/expo-host/_gen_tao-app-test',
     ],
     command: 'rm',
     name: 'Removing build and dev artifacts',
@@ -63,7 +63,7 @@ const CHECKOUT_STEPS: readonly CleanStep[] = [
 /** What `clean-all` removes on top of `clean`: the whole artifact root and the native projects. */
 const ALL_STEPS: readonly CleanStep[] = [
   {
-    args: ['-rf', '.artifacts', 'packages/runtime-toolchain/ios', 'packages/runtime-toolchain/android'],
+    args: ['-rf', '.artifacts', 'packages/apps/expo-host/ios', 'packages/apps/expo-host/android'],
     command: 'rm',
     name: 'Removing every remaining artifact and native project',
   },

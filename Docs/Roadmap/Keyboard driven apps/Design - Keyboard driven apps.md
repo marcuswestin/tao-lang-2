@@ -219,7 +219,7 @@ reference.
 ### Statically known at compile time
 
 - The exact `EntityDataField` behind any member-path binding — `Type.dataFieldOfMemberAccess`
-  (`packages/ast-utils/ast-utils-src/Type.ts`). "Which entity field does this `Text` display" is
+  (`packages/language/ast-utils/ast-utils-src/Type.ts`). "Which entity field does this `Text` display" is
   already answerable.
 - The entity behind any query, loop collection, or view parameter — `Type.queryEntity`,
   `Type.entityOfReference`, `Type.ofExpression`.

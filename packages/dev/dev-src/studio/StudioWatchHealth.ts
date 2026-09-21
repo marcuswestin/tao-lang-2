@@ -14,12 +14,11 @@ import type { DoctorCheck } from '../doctor/RepositoryDoctor'
 
 /** Workspace sources an edit must invalidate: Studio's preview bundle is built from all of them. */
 export const WATCHED_SOURCE_ROOTS = [
-  'packages/runtime/TaoRuntime-src',
-  'packages/runtime-toolchain/runtime-toolchain-src',
+  'packages/apps/runtime/TaoRuntime-src',
+  'packages/apps/expo-host/expo-host-src',
   'packages/shared/shared-src/core',
-  'packages/stdlib',
-  'packages/studio/studio-src',
-  'packages/code-editor/code-editor-src',
+  'packages/apps/stdlib',
+  'packages/ides/studio/studio-src',
 ] as const
 
 /** WatchFacts is what the checks read about the machine and Metro's configuration. */
@@ -110,7 +109,7 @@ function metroCoverageCheck(facts: WatchFacts): DoctorCheck {
   return {
     detail: `Metro does not watch ${unwatched.join(', ')}, so edits there never reach the preview`,
     name: 'studio watch coverage',
-    remediation: 'Add the root to watchFolders in packages/runtime-toolchain/metro.config.cjs.',
+    remediation: 'Add the root to watchFolders in packages/apps/expo-host/metro.config.cjs.',
     status: 'fail',
   }
 }
@@ -175,7 +174,7 @@ async function watchmanRoots(): Promise<string[] | undefined> {
 
 /** Reads Metro's own configuration, so the check cannot drift from what Metro actually watches. */
 async function metroWatchFolders(repositoryRoot: string): Promise<string[]> {
-  const configPath = FS.resolvePath('packages/runtime-toolchain/metro.config.cjs', repositoryRoot)
+  const configPath = FS.resolvePath('packages/apps/expo-host/metro.config.cjs', repositoryRoot)
   if (!await FS.isFile(configPath)) {
     return []
   }
@@ -184,7 +183,7 @@ async function metroWatchFolders(repositoryRoot: string): Promise<string[]> {
       '-e',
       `console.log(JSON.stringify(require(${JSON.stringify(configPath)}).watchFolders ?? []))`,
     ],
-    cwd: FS.resolvePath('packages/runtime-toolchain', repositoryRoot),
+    cwd: FS.resolvePath('packages/apps/expo-host', repositoryRoot),
   })
   try {
     return JSON.parse(result.stdout.trim()) as string[]

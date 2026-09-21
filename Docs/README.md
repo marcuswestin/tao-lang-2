@@ -8,7 +8,7 @@ Written material about Tao, in five folders.
   it.
 - **`Spec/`** — the authoritative contract for what the toolchain implements today. If the code and
   a spec page disagree, one of them is a bug. Operational how-to for a product or package (launch,
-  ports, doctor, release) lives next to that package — for Studio, `packages/studio/README.md` —
+  ports, doctor, release) lives next to that package — for Studio, `packages/ides/studio/README.md` —
   not under Spec.
 - **`Roadmap/`** — where Tao is going: `Tao Revolution/` owns the decided language and the program
   that reaches it, the remaining folders are per-workstream notes. `../Roadmap.md` at the repository

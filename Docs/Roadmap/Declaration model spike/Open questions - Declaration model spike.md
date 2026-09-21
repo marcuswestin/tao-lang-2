@@ -206,7 +206,7 @@ landed together on `feat/declaration-model`. These are what they left unfinished
 
 ### FOLLOW-DECL-001: Make the prelude the authority, not a mirror — resolved
 
-`packages/stdlib/tao/Prelude.tao` existed as real parsed, validated Tao, and drift between it and the
+`packages/apps/stdlib/tao/Prelude.tao` existed as real parsed, validated Tao, and drift between it and the
 compiler was caught. But the direction of authority ran backwards from the intent:
 `prelude-validator.ts` checked the prelude _against_ a hardcoded `expectedPrimitives` list, with
 hardcoded slot expectations for `nav`, `datasource`, and `app`. Nothing read slot contracts _from_
