@@ -13,6 +13,7 @@ claudecode:
   model: opus
   effort: xhigh
   permissionMode: plan
+  tools: Bash, Read, Skill
 cursor:
   model: claude-opus-5[effort=high]
   readonly: true

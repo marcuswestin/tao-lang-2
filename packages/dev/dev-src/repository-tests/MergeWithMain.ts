@@ -1,5 +1,11 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { isSandboxDenial } from '../doctor/AgentCapabilities'
+import {
+  inspectLandingRemote,
+  type LandingBrokerInspection,
+  type LandingBrokerPush,
+  pushLandingRemote,
+} from '../landing-broker/LandingBrokerClient'
 import { LandingLock, LandingLockBusyError } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 
@@ -86,6 +92,7 @@ export type MergeSnapshot = {
   phase: MergePhase
   remoteFeatureHead?: string
   remoteMainHead: string
+  remoteTransport?: RemoteTransport
   snapshotPath: string
   version: typeof SNAPSHOT_VERSION
 }
@@ -104,6 +111,7 @@ export type MergePreflight = {
   remoteFeatureBehind: boolean
   remoteMainHead: string
   remoteMergedHead?: string
+  remoteTransport: RemoteTransport
   warnings: string[]
 }
 
@@ -126,14 +134,16 @@ export type MergeWithMainDependencies = {
   askConfirm: (message: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
+  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   move: (fromPath: string, toPath: string) => Promise<void>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
+  pushRemote?: (repositoryRoot: string, push: LandingBrokerPush) => Promise<LandingBrokerInspection | undefined>
   writeJson: (path: string, value: unknown) => Promise<void>
-  writeLine: (line: string) => void
+  writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
 }
 
@@ -143,6 +153,8 @@ type Worktree = {
   path: string
 }
 
+type RemoteTransport = 'broker' | 'direct'
+
 const defaultDependencies: MergeWithMainDependencies = {
   // Forwarded rather than referenced, because the adapter is declared with the landing code it
   // belongs beside rather than up here with the rest of the injected effects.
@@ -150,14 +162,22 @@ const defaultDependencies: MergeWithMainDependencies = {
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
+  inspectRemote: inspectLandingRemote,
   move: FS.move,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
   remove: FS.remove,
   run: CLI.run,
+  pushRemote: pushLandingRemote,
   writeJson: FS.writeJson,
-  writeLine: HCI.writeLine,
+  writeLine: (line, kind) => {
+    if (kind === 'success') {
+      HCI.writeSuccess(`${line}\n`)
+    } else {
+      HCI.writeLine(line)
+    }
+  },
   writeText: FS.writeText,
 }
 
@@ -296,7 +316,8 @@ export async function inspectMergePreflight(
   const mainHead = localMain.stdout.trim()
   const mirrorRoots = await readMirrorRoots(dependencies, worktrees, mainHead)
 
-  const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
+  const remote = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
+  const remoteRefs = remote.refs
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
   if (!remoteMainHead) {
     Errors.throwHostEnvironment(`Remote '${REMOTE}' did not report refs/heads/main.`)
@@ -357,6 +378,7 @@ export async function inspectMergePreflight(
     remoteFeatureBehind,
     remoteMainHead,
     remoteMergedHead,
+    remoteTransport: remote.transport,
     warnings,
   }
 }
@@ -430,7 +452,7 @@ export const MergeWithMainCommand = {
         `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
-      writeLines(dependencies, completed)
+      writeLines(dependencies, completed, 'success')
       return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
     } finally {
       await lease.release()
@@ -499,11 +521,7 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
     // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
     // way the wait ever reaches a person.
     onWaiting: (holder, waitedMs) => {
-      HCI.writeLine(
-        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. Nothing will take it away on a timer; if that landing is `
-          + 'no longer running, release it with `./dev land-unlock --force`.',
-      )
+      HCI.writeLine(LandingLock.describeWaiting(holder, waitedMs))
     },
     repositoryRoot,
     ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
@@ -693,6 +711,7 @@ async function createSnapshot(
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
     remoteMainHead: preflight.remoteMainHead,
+    remoteTransport: preflight.remoteTransport,
     snapshotPath,
     version: SNAPSHOT_VERSION,
   }
@@ -707,9 +726,7 @@ async function stabilizeAndVerify(
 ): Promise<void> {
   for (let pass = 1; pass <= MAX_STABILIZATION_PASSES; pass += 1) {
     await assertExpectedLocalState(snapshot, dependencies)
-    await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
-    const fetchedMain = (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`]))
-      .stdout.trim()
+    const fetchedMain = await refreshRemoteMain(snapshot, dependencies)
     const featureHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
     const ancestor = await dependencies.run('git', {
       args: ['merge-base', '--is-ancestor', fetchedMain, featureHead],
@@ -719,7 +736,7 @@ async function stabilizeAndVerify(
       await runAndSnapshot(
         snapshot,
         'git',
-        ['merge', '--no-edit', `${REMOTE}/${MAIN_BRANCH}`],
+        ['merge', '--no-edit', fetchedMain],
         snapshot.featureRoot,
         'feature-integrated',
         dependencies,
@@ -755,7 +772,9 @@ async function stabilizeAndVerify(
       await advanceSnapshot(snapshot, 'feature-verified', dependencies)
     }
 
-    const remoteMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    const remoteMain = (
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], snapshot.remoteTransport)
+    ).refs.get(MAIN_BRANCH)
     if (!remoteMain) {
       Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting refs/heads/main.`)
     }
@@ -784,6 +803,24 @@ async function stabilizeAndVerify(
         + `(pass ${pass + 1}/${MAX_STABILIZATION_PASSES}).`,
     )
   }
+}
+
+async function refreshRemoteMain(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<string> {
+  if (snapshot.remoteTransport === 'broker') {
+    const inspection = await dependencies.inspectRemote?.(snapshot.featureRoot, [MAIN_BRANCH])
+    const main = inspection?.refs.get(MAIN_BRANCH)
+    if (main === undefined) {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+    return main
+  }
+  await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
+  return (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
 }
 
 /**
@@ -981,6 +1018,85 @@ async function pushArchiveAndPreserve(
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await advanceSnapshot(snapshot, 'push-started', dependencies)
+  await pushRemoteRefs(snapshot, dependencies)
+
+  // Keep the invoking directory usable after success. Detaching at the verified feature tip leaves
+  // its tree unchanged while allowing the local feature ref to be deleted after the remote archive
+  // has made that tip durable.
+  await runChecked(
+    dependencies,
+    'git',
+    ['switch', '--detach', snapshot.currentFeatureHead],
+    snapshot.featureRoot,
+    true,
+  )
+  const detached = await dependencies.run('git', {
+    args: ['symbolic-ref', '--quiet', 'HEAD'],
+    cwd: snapshot.featureRoot,
+    stdio: 'pipe',
+  })
+  if (
+    detached.exitCode !== 1
+    || detached.error !== undefined
+    || detached.signal !== null
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree did not enter detached HEAD state.')
+  }
+  const preservedState = await readLocalState(snapshot, dependencies)
+  assertMainMatches(snapshot, preservedState)
+  if (
+    preservedState.featureHead !== snapshot.currentFeatureHead
+    || preservedState.featureStatus !== ''
+    || preservedState.featureDiff !== ''
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree changed while detaching its archived tip.')
+  }
+  adoptLocalState(snapshot, preservedState)
+  await persistSnapshot(snapshot, dependencies)
+
+  // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
+  // after the remote is safely archived. The preceding push/archive phases make this forced local
+  // deletion deliberate and recoverable.
+  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.featureRoot, true)
+  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.featureRoot, true)
+  snapshot.phase = 'complete'
+  snapshot.currentMainHead = await readMainRef(snapshot, dependencies)
+  await persistSnapshot(snapshot, dependencies)
+}
+
+async function pushRemoteRefs(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (snapshot.remoteTransport === 'broker') {
+    const landedHead = snapshot.landedHead
+    if (landedHead === undefined) {
+      Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
+    }
+    const pushed = await dependencies.pushRemote?.(snapshot.featureRoot, {
+      branch: snapshot.branch,
+      expectedRemoteFeatureHead: snapshot.remoteFeatureHead ?? null,
+      expectedRemoteMainHead: snapshot.remoteMainHead,
+      featureHead: snapshot.currentFeatureHead,
+      landedHead,
+    })
+    if (pushed === undefined) {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+    if (
+      pushed.refs.get(MAIN_BRANCH) !== landedHead
+      || pushed.refs.get(archiveName(snapshot.branch)) !== snapshot.currentFeatureHead
+      || snapshot.remoteFeatureHead !== undefined && pushed.refs.has(snapshot.branch)
+    ) {
+      Errors.throwHostEnvironment('The landing broker returned refs that do not match the requested landing.')
+    }
+    await advanceSnapshot(snapshot, 'pushed', dependencies)
+    await advanceSnapshot(snapshot, 'archived', dependencies)
+    return
+  }
+
   const pushMain = await dependencies.run('git', {
     args: [
       'push',
@@ -992,7 +1108,9 @@ async function pushArchiveAndPreserve(
     stdio: 'stream',
   })
   if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
-    const observedMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    const observedMain = (
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], 'direct')
+    ).refs.get(MAIN_BRANCH)
     if (observedMain === snapshot.currentMainHead) {
       // A transport can report failure after the remote accepted the update. The exact remote ref
       // is stronger evidence than the process result, so recovery must stay on the irreversible side.
@@ -1037,49 +1155,6 @@ async function pushArchiveAndPreserve(
     )
   }
   await advanceSnapshot(snapshot, 'archived', dependencies)
-
-  // Keep the invoking directory usable after success. Detaching at the verified feature tip leaves
-  // its tree unchanged while allowing the local feature ref to be deleted after the remote archive
-  // has made that tip durable.
-  await runChecked(
-    dependencies,
-    'git',
-    ['switch', '--detach', snapshot.currentFeatureHead],
-    snapshot.featureRoot,
-    true,
-  )
-  const detached = await dependencies.run('git', {
-    args: ['symbolic-ref', '--quiet', 'HEAD'],
-    cwd: snapshot.featureRoot,
-    stdio: 'pipe',
-  })
-  if (
-    detached.exitCode !== 1
-    || detached.error !== undefined
-    || detached.signal !== null
-  ) {
-    Errors.throwUnexpected('The preserved feature worktree did not enter detached HEAD state.')
-  }
-  const preservedState = await readLocalState(snapshot, dependencies)
-  assertMainMatches(snapshot, preservedState)
-  if (
-    preservedState.featureHead !== snapshot.currentFeatureHead
-    || preservedState.featureStatus !== ''
-    || preservedState.featureDiff !== ''
-  ) {
-    Errors.throwUnexpected('The preserved feature worktree changed while detaching its archived tip.')
-  }
-  adoptLocalState(snapshot, preservedState)
-  await persistSnapshot(snapshot, dependencies)
-
-  // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
-  // after the remote is safely archived. The preceding push/archive phases make this forced local
-  // deletion deliberate and recoverable.
-  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.featureRoot, true)
-  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.featureRoot, true)
-  snapshot.phase = 'complete'
-  snapshot.currentMainHead = await readMainRef(snapshot, dependencies)
-  await persistSnapshot(snapshot, dependencies)
 }
 
 async function abortMerge(
@@ -1162,6 +1237,7 @@ async function readSnapshot(path: string, dependencies: MergeWithMainDependencie
     || typeof value.messageFile !== 'string'
     || !isMergePhase(value.phase)
     || typeof value.remoteMainHead !== 'string'
+    || value.remoteTransport !== undefined && value.remoteTransport !== 'broker' && value.remoteTransport !== 'direct'
     || typeof value.snapshotPath !== 'string'
   ) {
     Errors.throwUserInput(`Merge snapshot has an unsupported shape: ${path}`)
@@ -1288,7 +1364,19 @@ async function remoteHeads(
   dependencies: MergeWithMainDependencies,
   cwd: string,
   branches: readonly string[],
-): Promise<Map<string, string>> {
+  requiredTransport?: RemoteTransport,
+): Promise<{ refs: Map<string, string>; transport: RemoteTransport }> {
+  if (requiredTransport !== 'direct') {
+    const broker = await dependencies.inspectRemote?.(cwd, branches)
+    if (broker !== undefined) {
+      return { refs: new Map(broker.refs), transport: 'broker' }
+    }
+    if (requiredTransport === 'broker') {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker is unavailable. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+  }
   const result = await dependencies.run('git', {
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
@@ -1296,7 +1384,7 @@ async function remoteHeads(
   if (isSandboxDenial(result)) {
     Errors.throwHostEnvironment(
       `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
-        + 'Retry the merge-with-main command from an unsandboxed shell.',
+        + "Install the credential-isolated service with 'just landing-setup' in a normal terminal, then retry.",
       {
         cause: new Errors.CommandExecutionError(result),
         details: { command: result.command, stderr: result.stderr },
@@ -1311,7 +1399,7 @@ async function remoteHeads(
       refs.set(match[2]!, match[1]!)
     }
   }
-  return refs
+  return { refs, transport: 'direct' }
 }
 
 async function status(dependencies: MergeWithMainDependencies, cwd: string): Promise<string> {
@@ -1420,8 +1508,12 @@ function shortSha(sha: string): string {
   return sha.slice(0, 12)
 }
 
-function writeLines(dependencies: MergeWithMainDependencies, lines: readonly string[]): void {
+function writeLines(
+  dependencies: MergeWithMainDependencies,
+  lines: readonly string[],
+  kind?: 'success',
+): void {
   for (const line of lines) {
-    dependencies.writeLine(line)
+    dependencies.writeLine(line, kind)
   }
 }

@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type {
   TaoDataConnection,
@@ -482,8 +483,9 @@ class SyncState {
     const ordered: StoredData = { nextId: data.nextId, rows: {} }
     for (const entity of Object.keys(this.schema.entities)) {
       // Numeric-aware, so `Note-2` stays before `Note-10` and an unordered query keeps its shape.
-      ordered.rows[entity] = [...(data.rows[entity] ?? [])].sort((left, right) =>
-        left.Id.localeCompare(right.Id, undefined, { numeric: true })
+      ordered.rows[entity] = Arrays.sorted(
+        data.rows[entity] ?? [],
+        (left, right) => left.Id.localeCompare(right.Id, undefined, { numeric: true }),
       )
     }
     return JSON.stringify(envelope(ordered, this.schema))

@@ -3,6 +3,12 @@
 `git-workflow` owns the underlying Git commands; this covers what `just merge-with-main` does, its
 flags, its message format, and how a red lane is classified.
 
+Remote inspection and push automatically use the host-owned landing broker when installed. If the
+command says it is unavailable, ask Ro to run `just landing-setup` in a normal terminal; never grant
+the repository access to `~/.config/gh` and never run mutable repository code wholesale outside the
+sandbox. The broker exposes only this repository's fixed HTTPS remote and an atomic, lease-checked
+main/archive update, not a general Git or credential API.
+
 ## `just merge-with-main`
 
 The plain invocation verifies, squashes, commits, and pushes — no flag needed. It touches no checkout
@@ -13,15 +19,13 @@ may have `main` checked out while landing; a mirror worktree showing `main` is d
 every landing moves it forward itself — treat it as read-only, and give it a branch before working in
 it.
 
-Flags only remove work: `--skip-verify-full` runs `verify --complete` on the branch instead of
-`verify-full`; `--skip-verify` omits that fallback too; `--skip-all` implies both, defaults to No, and
-needs a terminal, so there is no way to land unverified non-interactively. The tree assertion still
-runs under every combination, because the landed commit must carry the tree that was verified.
-`--dry-run` reports the plan and changes nothing. Preflight requires local `main` to equal
-`origin/main` and to be merged into the branch, which is what makes the squash the feature tree; a
-remote feature branch behind the worktree is pushed forward during execution, and only one holding
-commits the worktree lacks stops the landing. Success leaves the feature worktree clean and detached
-at the archived tip, and deletes the local feature branch.
+Flags only remove work (`merge-with-main --help` lists them); `--skip-all` still defaults to No and
+needs a terminal, so there is no way to land unverified non-interactively, and the tree assertion
+still runs under every combination, because the landed commit must carry the tree that was verified.
+Preflight requires local `main` to equal `origin/main` and to be merged into the branch, which is
+what makes the squash the feature tree; a remote feature branch behind the worktree is pushed forward
+during execution, and only one holding commits the worktree lacks stops the landing. Success leaves
+the feature worktree clean and detached at the archived tip, and deletes the local feature branch.
 
 `--abort <snapshot>` restores only command-owned local state while the snapshot still matches. Once a
 snapshot says `push-started`, the remote result may be ambiguous and automatic rewriting is forbidden

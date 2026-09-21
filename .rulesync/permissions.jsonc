@@ -19,7 +19,9 @@
       "./dev *": "allow",
       "./tao *": "allow",
       "just *": "allow",
-      "bun install *": "allow",
+      // One owner prevents concurrent or redundant Bun installs from colliding in node_modules.
+      // The generated harness rules reject this directly and point agents to `./agent setup`.
+      "bun install *": "deny",
       "bun run *": "allow",
       "bun test *": "allow",
       "direnv exec . *": "allow",
@@ -119,6 +121,17 @@
     "mcp__claude-in-chrome__*": {
       "*": "allow",
     },
+    // Agent-to-agent messaging is Ro's to approve, one message at a time (see AGENTS.md and the
+    // `delegation` skill). A subagent's own return carries its report, so gating these costs
+    // delegation nothing; what they add is a way to start an exchange Ro never saw. As with the
+    // force-unlock rules above, Codex gets no equivalent gate, because
+    // `CodexConfigGenerator.renderCodexRules` emits only `allow` entries.
+    "SendMessage": {
+      "*": "ask",
+    },
+    "mcp__ccd_session_mgmt__send_message": {
+      "*": "ask",
+    },
   },
   "claudecode": {
     "sandbox": {
@@ -136,9 +149,10 @@
         "gh *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
-        // inherits git's sandbox, so networked git failed with a misleading
-        // "could not read Username for 'https://github.com'". Excluding these fixes fetch,
-        // push, and ls-remote while the credential deny still binds every other command.
+        // inherits git's sandbox, so networked git fails with a misleading
+        // "could not read Username for 'https://github.com'". These exclusions make direct
+        // top-level Git commands eligible for host review; they cannot lift a nested Git command
+        // such as merge-with-main's own preflight out of the sandbox.
         "git fetch origin *",
         "git ls-remote origin *",
         "git ls-remote --heads origin *",
@@ -204,6 +218,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
+          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
+          // during the native-module compiler proof. The command still requires explicit host
+          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          "repo1.maven.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

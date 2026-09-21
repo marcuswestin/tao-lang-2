@@ -24,6 +24,27 @@
   already builds is the obvious input. The risk to weigh is the opposite error: a package left out
   of the set is a stale input nothing notices, which is strictly worse than a cache that misses too
   often, so the narrowing should be derived from the graph rather than hand-listed.
+- **Missing proof (2026-09-20):** The current `PackageGraph` extracts TypeScript import strings, but a
+  compile also reaches sibling packages through filesystem operations. In particular, `TaoAppModules`
+  locates and links `packages/runtime` without a TypeScript import, and the compile stamp separately
+  names stdlib, runtime-toolchain, manifests, and the lockfile. Until the dependency model declares
+  those non-import edges and table-driven tests prove edits/additions/deletions throughout the derived
+  closure invalidate while an unrelated synthetic package does not, broad invalidation is the safe
+  behavior. Unknown roots, unresolved aliases, or undeclared filesystem reads must disable reuse.
+  The 2026-09-20 follow-up also found that the current package closure rooted at `tao-cli` still reaches
+  nearly every package, while computed `require`, runtime sibling discovery, workspace manifests, and
+  `packages/tsconfig.base.json` remain outside `PackageGraph`'s literal TypeScript-import model. A safe
+  implementation first needs an entrypoint-level resolver that reports unknown edges and disables
+  reuse, plus an explicit checked registry for non-import filesystem inputs. Tests must cover a new
+  import, alias, manifest rename, computed require, and filesystem dependency; merely enumerating the
+  present package list cannot prove future completeness.
+  Re-audited on 2026-09-20 on `feat/devenv-parser-cache-followups`: the current `PackageGraph` closure
+  rooted at `tao-cli` contains 18 of the repository's 20 packages, so it would save almost no hashing
+  even before correctness guards. The graph still derives edges only from literal TypeScript import
+  strings, while `TaoAppModules.runtimeRoot` discovers `packages/runtime` by testing the filesystem.
+  The missing proof is a fail-closed dependency model for those non-import reads, followed by one
+  table-driven invalidation matrix shared by `TestCache` and `CheckCache`; the present cache suites
+  prove broad invalidation only.
 - **Dependencies:** DEVENV-081 (the compiled-output memo) and the `tao check` workspace stamp both
   key on this identity.
 - **Acceptance:** an edit under `packages/<name>` invalidates only the memos whose verdict can reach

@@ -5,7 +5,10 @@ import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
+import { LandingBrokerInstaller } from './landing-broker/LandingBrokerInstaller'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
 import { FinalizeCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
@@ -65,6 +68,24 @@ const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui o
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('test-host')
+    .description('Run the opt-in real-host testing prototype, independently of existing suites.')
+    .argument(
+      '[mode]',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
+      'check',
+    )
+    .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
+    .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
+    .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
+    .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
+    .action(async (mode, options) => {
+      const { runHostTesting } = await import('@e2e-testing')
+      await runHostTesting(mode, options)
+    })
 
   commands
     .command('test')
@@ -139,12 +160,7 @@ await runWithCommands(commands => {
           durable: true,
           label: options.label ?? `landing from ${FS.basename(repositoryRoot)}`,
           onWaiting: (holder, waitedMs) => {
-            HCI.writeErrorLine(
-              `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-                + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and `
-                + "waiting this long is normal. Forcing it is Ro's call — bring the output of "
-                + '`./agent board` to Ro rather than clearing it yourself.',
-            )
+            HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
           },
           repositoryRoot,
           ...(options.wait === false ? { waitTimeoutMs: 0 } : {}),
@@ -289,6 +305,25 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('landing-broker-install')
+    .description('Install or update the host-owned GitHub landing broker for this repository.')
+    .action(async () => {
+      await runExitCommand(async () => {
+        await LandingBrokerInstaller.install()
+        return 0
+      })
+    })
+
+  commands
+    .command('landing-broker-status')
+    .description('Check whether the host-owned GitHub landing broker is available.')
+    .action(async () => {
+      const ready = await landingBrokerIsReady()
+      HCI.writeLine(ready ? 'PASS  Tao landing broker is ready.' : 'FAIL  Tao landing broker is not available.')
+      Platform.runtimeProcess.exit(ready ? 0 : 1)
+    })
+
+  commands
     .command('my-branch')
     .argument('[name]', 'Branch name or suffix; defaults to $TAO_DEV_BRANCH, then your Git identity.')
     .description('Switch this checkout to your own dev/* branch, creating it from main the first time.')
@@ -327,10 +362,15 @@ await runWithCommands(commands => {
     .command('finalize')
     .description('Bring a feature branch to the state where merge-with-main can run; safe to re-run.')
     .option('--check', 'Report without mutating anything: no merge, no verification lane, no file written.')
-    .option('--fresh', 'Ignore the recorded finalize state and redraft the merge message.')
-    .action(async (options: { check?: boolean; fresh?: boolean } = {}) => {
+    .option('--fresh', 'Ignore the recorded finalize state.')
+    .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft.')
+    .action(async (options: { check?: boolean; fresh?: boolean; redraft?: boolean } = {}) => {
       try {
-        const outcome = await FinalizeCommand.run({ check: options.check === true, fresh: options.fresh === true })
+        const outcome = await FinalizeCommand.run({
+          check: options.check === true,
+          fresh: options.fresh === true,
+          redraft: options.redraft === true,
+        })
         Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -392,6 +432,19 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('reclaim')
+    .description(
+      'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
+    )
+    .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
+    .option('--json', 'Print a versioned structured report instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(
+        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+      )
+    })
+
+  commands
     .command('secrets')
     .description('Decrypt the repository secrets into .env.secrets, or add, list, or set up.')
     .argument('[action]', 'add <KEY> [note], list, or setup. Omit to decrypt everything.')
@@ -416,6 +469,14 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('native-module-check')
+    .description('Compile every Tao native module for the iOS simulator in an isolated generated host.')
+    .action(async () => {
+      const { NativeModuleCheck } = await import('./native-module-check/NativeModuleCheck')
+      Platform.runtimeProcess.exit(await NativeModuleCheck.run())
     })
 
   commands
@@ -712,12 +773,7 @@ async function holdingLandingLock<T>(lane: string, work: () => Promise<T>): Prom
   return await LandingLock.holdingForLane({
     lane,
     onWaiting: (holder, waitedMs) => {
-      HCI.writeErrorLine(
-        `WARN  Still waiting ${LandingLock.describeDuration(waitedMs)} for the landing lock, held by `
-          + `${LandingLock.describe(holder)}. A dead PID would not mean it was released, and waiting `
-          + "this long is normal. Forcing it is Ro's call — bring the output of `./agent board` to Ro "
-          + 'rather than clearing it yourself.',
-      )
+      HCI.writeErrorLine(LandingLock.describeWaiting(holder, waitedMs))
     },
     repositoryRoot: Repo.getRoot(),
   }, work)

@@ -13,13 +13,10 @@ SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
 BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
-INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
-INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
 BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
-DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"
-INSTALL_ATTEMPTS=3
+DEPENDENCY_SCRIPT="$DEV_PACKAGE_DIR/dev-src/cli/ensure-dependencies.zsh"
 
 source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
 
@@ -34,136 +31,6 @@ function enter_devenv_if_needed() {
 enter_devenv_if_needed
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
-typeset -a BUN_INSTALL_ARGS
-tao_bun_install_args "$SCRIPT_DIR"
-BUN_INSTALL_ARGS=("${reply[@]}")
-
-function needs_install() {
-  [[ ! -d "$SCRIPT_DIR/node_modules" ]] && return 0
-  [[ ! -f "$INSTALL_STAMP" ]] && return 0
-  [[ "$SCRIPT_DIR/package.json" -nt "$INSTALL_STAMP" ]] && return 0
-  [[ "$SCRIPT_DIR/bun.lock" -nt "$INSTALL_STAMP" ]] && return 0
-  [[ "$DEV_PACKAGE_DIR/package.json" -nt "$INSTALL_STAMP" ]] && return 0
-  return 1
-}
-
-# Explain a failed install in terms of the operation that was actually denied, because the
-# two denials Bun reports here need opposite responses: a temporary-directory denial resumes
-# after the scratch is reclaimed, while a denied destination path repeats forever.
-function report_install_failure() {
-  local install_output="$1"
-  echo "Bun could not install dependencies in $SCRIPT_DIR." >&2
-  echo "Bun temporary directory: $BUN_TEMP_DIR" >&2
-
-  if [[ "$install_output" == *"unable to write files to tempdir"* ]]; then
-    echo "Denied operation: writing Bun's install scratch." >&2
-    echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
-    return
-  fi
-
-  if [[ "$install_output" =~ 'PermissionDenied: ([a-z ]+) (.+)' ]]; then
-    echo "Denied operation: ${match[1]} ${match[2]}" >&2
-    echo "The host sandbox denies writes to that path itself, not to the temporary directory," >&2
-    echo "so reinstalling inside the sandbox will fail the same way. Some npm packages ship" >&2
-    echo "files under paths an agent sandbox protects, such as .gitmodules or .idea/." >&2
-    echo "Recover from an unsandboxed shell: bun install --cwd \"$SCRIPT_DIR\"" >&2
-    echo "or start a session with the sandbox off: just session-unsandboxed" >&2
-    return
-  fi
-
-  # The same protected-path denial reported from the other side: rather than refusing the write,
-  # the sandbox leaves the existing copy in place and Bun fails to link over it. The generic
-  # scratch advice below is wrong for this one — the scratch is fine and the partial tree is not —
-  # so it needs its own branch or the reader is sent to clean the wrong thing.
-  if [[ "$install_output" == *EEXIST*"failed to link package"* ]]; then
-    echo "Denied operation: replacing a package that is already linked." >&2
-    echo "A sandboxed install cannot overwrite the few packages shipping .idea/ or .gitmodules," >&2
-    echo "which the sandbox protects and no setting exempts, so the link fails on a package that" >&2
-    echo "is already present. Retrying sandboxed fails identically, and the partial tree must go." >&2
-    echo "Recover from an unsandboxed shell:" >&2
-    echo "  rm -rf \"$SCRIPT_DIR/node_modules\" && bun install --cwd \"$SCRIPT_DIR\" --frozen-lockfile" >&2
-    return
-  fi
-
-  echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
-}
-
-function install_dev_deps() {
-  local install_output
-  local attempt
-  for (( attempt = 1; attempt <= INSTALL_ATTEMPTS; attempt++ )); do
-    if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"; then
-      touch "$INSTALL_STAMP"
-      return
-    fi
-
-    # Only a temporary-directory denial leaves a resumable partial install. Every other failure
-    # repeats identically, so retrying it costs minutes and more abandoned scratch.
-    [[ "$install_output" == *"unable to write files to tempdir"* ]] || break
-    tao_prune_bootstrap_scratch "$AGENT_TEMP_DIR"
-  done
-
-  echo "$install_output" >&2
-  report_install_failure "$install_output"
-  exit 1
-}
-
-function install_dev_deps_if_needed() {
-  needs_install || return 0
-  install_dev_deps
-}
-
-function ensure_dev_deps() {
-  needs_install || return 0
-  tao_run_with_lock "$INSTALL_LOCK" 30 install_dev_deps_if_needed
-}
-
-function dependency_health() {
-  TMPDIR="$BUN_TEMP_DIR" bun run "$DEPENDENCY_HEALTH"
-}
-
-# A successful Bun install stamp is not proof that every package was extracted: a sandbox denial
-# can leave package directories present but incomplete, and the agent CLI build then fails before
-# the Justfile repair lane can run. Probe and repair at this bootstrap level whenever a build needs
-# the installed graph.
-function repair_dev_deps_if_unhealthy() {
-  local health_output
-  if health_output="$(dependency_health 2>&1)"; then
-    return 0
-  fi
-
-  # Repair without --force first. --force re-links every package, including the few shipping .idea/
-  # or .gitmodules that a sandbox protects, so a forced repair fails on packages that were healthy —
-  # and fails partway, leaving the tree worse than the unhealthy one it was called to fix. A plain
-  # frozen-lockfile install writes only what is missing, which is what an unhealthy tree needs.
-  local install_output
-  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" --frozen-lockfile 2>&1)"; then
-    touch "$INSTALL_STAMP"
-    if health_output="$(dependency_health 2>&1)"; then
-      return 0
-    fi
-  fi
-
-  # Only a tree still unhealthy after that has anything to gain from replacing packages wholesale.
-  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" --frozen-lockfile --force 2>&1)"; then
-    echo "$install_output" >&2
-    report_install_failure "$install_output"
-    return 1
-  fi
-  touch "$INSTALL_STAMP"
-
-  if health_output="$(dependency_health 2>&1)"; then
-    return 0
-  fi
-  echo "$health_output" >&2
-  echo "Bun repaired dependencies, but the repository dependency probe still fails." >&2
-  return 1
-}
-
-function ensure_dev_dependency_health() {
-  dependency_health >/dev/null 2>&1 && return 0
-  tao_run_with_lock "$INSTALL_LOCK" 30 repair_dev_deps_if_unhealthy
-}
 
 function needs_build() {
   [[ ! -f "$BUILD_OUTPUT" ]] && return 0
@@ -201,15 +68,14 @@ function ensure_agent_build() {
   tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
-# Every `./agent` call bootstraps: dependencies, then the CLI build. `./agent setup` is the one
-# setup entry every harness reaches — Worktrunk's pre-start hook (.config/wt.toml), the Claude
-# Code and Codex session-start hooks (.rulesync/hooks.jsonc), and Cursor's worktree setup
-# (.cursor/worktrees.json) — and it continues into the Justfile `setup` recipe for the
-# frozen-lockfile install, its health check, and the generated harness adapters.
+# Every `./agent` call bootstraps through the shared dependency owner before building the CLI.
+# `./agent setup` is the one public dependency command and continues into the Justfile setup recipe
+# for an explicit health proof plus generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"
-ensure_dev_deps
 if needs_build; then
-  ensure_dev_dependency_health
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --health
+else
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR"
 fi
 ensure_agent_build
 

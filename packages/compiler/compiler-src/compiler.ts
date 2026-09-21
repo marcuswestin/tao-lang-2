@@ -43,6 +43,8 @@ const compiledSourceOutputPathMessage = 'compiled source output path exists'
 // module imports that provider as a sidecar exactly as a declared datasource would.
 const localProviderStdlibPath = '@tao/data/providers/local/Local.ts'
 const localProviderExportName = 'LocalProvider'
+/** The companion catalog's bindings travel together: its schema and the datasource an app mounts. */
+const localCatalogBindings = [LocalDataBindings.catalog, LocalDataBindings.datasource] as const
 
 /** CompiledFile declares one generated TypeScript output file. */
 export type CompiledFile = {
@@ -54,6 +56,12 @@ export type CompiledFile = {
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
   scopeBindings: Map<string, string>
+}
+
+/** ImportTarget is one workspace file an import path reaches, and what it may name in it. */
+type ImportTarget = {
+  declarationsNamed: (name: string) => AST.Declaration[]
+  path: string
 }
 
 type DataCatalogPlan = {
@@ -68,16 +76,14 @@ type DataCatalogPlan = {
   userPaths: ReadonlySet<string>
 }
 
-type PlannedSidecar = {
-  binding: string
-  exportName: string
+type PlannedSidecarCopy = {
   sourcePath: string
   relativePath: string
 }
 
-type PlannedSidecarCopy = {
-  sourcePath: string
-  relativePath: string
+type PlannedSidecar = PlannedSidecarCopy & {
+  binding: string
+  exportName: string
 }
 
 type PlannedSourceOutputs = {
@@ -454,7 +460,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
-  if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
+  // A studio preview renders any view of the app, so its root reads the catalog whether or not
+  // this file names a query of its own.
+  const readsCatalogRows = dataCatalog !== undefined
+    && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)
+  if (dataCatalog && !ownsDataCatalog && readsCatalogRows) {
     for (const binding of syncedCatalogBindings(dataCatalog)) {
       addResolvedImport(imports, dataCatalog.ownerPath, binding)
     }
@@ -473,8 +483,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const usesLocalDataCatalog = dataCatalog?.localOnly === true
     && (ownsDataCatalog || dataCatalog.localUserPaths.has(file.path))
   if (usesLocalDataCatalog && !ownsDataCatalog) {
-    addResolvedImport(imports, dataCatalog.ownerPath, LocalDataBindings.catalog)
-    addResolvedImport(imports, dataCatalog.ownerPath, LocalDataBindings.datasource)
+    for (const binding of localCatalogBindings) {
+      addResolvedImport(imports, dataCatalog.ownerPath, binding)
+    }
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
@@ -497,26 +508,18 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     .filter(AST.isExportableDeclaration)
     .filter(declarationEmitsRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
-    .map((declaration: AST.Declaration) => {
-      const binding = isRuntimeConfigurableDeclaration(declaration)
-        ? configurationRuntimeBindingName(declaration)
-        : declaration.name
-      return { exported: binding, binding }
-    })
+    .map((declaration: AST.Declaration) => exportedBinding(runtimeBindingName(declaration)))
   if (ownsDataCatalog) {
-    for (const binding of syncedCatalogBindings(dataCatalog)) {
-      exportedBindings.push({ exported: binding, binding })
-    }
+    exportedBindings.push(...syncedCatalogBindings(dataCatalog).map(exportedBinding))
     if (dataCatalog.localOnly) {
-      exportedBindings.push({ exported: LocalDataBindings.catalog, binding: LocalDataBindings.catalog })
-      exportedBindings.push({ exported: LocalDataBindings.datasource, binding: LocalDataBindings.datasource })
+      exportedBindings.push(...localCatalogBindings.map(exportedBinding))
     }
   }
 
-  const module: CompiledFile = {
-    sourcePath: file.path,
-    relativePath: planned.modulePath,
-    code: withDataStorePlan(
+  const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
+  const module = emitted(
+    planned.modulePath,
+    withDataStorePlan(
       dataCatalog?.stores,
       () =>
         withDeclarationIdentityContext(identityProjects, () =>
@@ -545,22 +548,15 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                 })),
           )),
     ),
-  }
-  const declarations: CompiledFile[] = planned.declarationsPath === undefined
-    ? []
-    : [{
-      sourcePath: file.path,
-      relativePath: planned.declarationsPath,
-      code: RuntimeGen.ConfigurationDeclarations(
-        file.ast,
-        configurationAliasImportLines(file, planned.declarationsPath, outputPaths),
-      ),
-    }]
-  const injections: CompiledFile[] = planned.injections.map(injection => ({
-    sourcePath: file.path,
-    relativePath: injection.relativePath,
-    code: RuntimeGen.InjectionBoundary(injection.node),
-  }))
+  )
+  const declarationsPath = planned.declarationsPath
+  const declarations = declarationsPath === undefined ? [] : [emitted(
+    declarationsPath,
+    RuntimeGen.ConfigurationDeclarations(file.ast, configurationAliasImportLines(file, declarationsPath, outputPaths)),
+  )]
+  const injections = planned.injections.map(injection =>
+    emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))
+  )
   const copiedSidecars = new Map<string, CompiledFile>()
   for (const sidecar of planned.sidecarCopies) {
     // A synthetic in-memory source has no directory to copy from. Real compiles still assert,
@@ -572,8 +568,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       sourcePath: sidecar.sourcePath,
     })
     copiedSidecars.set(sidecar.relativePath, {
-      sourcePath: sidecar.sourcePath,
-      relativePath: sidecar.relativePath,
+      ...sidecar,
       code: rewriteSidecarTaoImports(
         FS.readTextSync(sidecar.sourcePath),
         sidecar.sourcePath,
@@ -645,7 +640,7 @@ function relativeModuleSpecifiers(source: string): SidecarSpecifier[] {
   }
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]
-    if (token?.kind !== 'identifier' || (token.value !== 'import' && token.value !== 'export')) {
+    if (!isModuleKeyword(token)) {
       continue
     }
     const next = tokens[index + 1]
@@ -675,6 +670,11 @@ function relativeModuleSpecifiers(source: string): SidecarSpecifier[] {
     }
   }
   return [...firstByValue.values()]
+}
+
+/** isModuleKeyword identifies the keyword that can begin a module specifier: `import` or `export`. */
+function isModuleKeyword(token: SidecarToken | undefined): token is SidecarToken {
+  return token?.kind === 'identifier' && (token.value === 'import' || token.value === 'export')
 }
 
 function sidecarSourceRange(source: string, start: number, end: number): {
@@ -711,37 +711,14 @@ function sidecarTokens(source: string): SidecarToken[] {
       index = close < 0 ? source.length : close + 2
       continue
     }
-    if (current === '"' || current === "'") {
+    if (current === '"' || current === "'" || current === '`') {
       const start = index
-      const quote = current
-      let value = ''
-      index += 1
-      while (index < source.length && source[index] !== quote) {
-        if (source[index] === '\\' && index + 1 < source.length) {
-          value += source[index + 1]
-          index += 2
-        } else {
-          value += source[index]
-          index += 1
-        }
-      }
-      index += index < source.length ? 1 : 0
-      tokens.push({ end: index, kind: 'string', start, value })
-      continue
-    }
-    if (current === '`') {
-      // Module specifiers are string literals. Skipping the complete template also prevents its
-      // prose and interpolation text from manufacturing graph edges.
-      index += 1
-      while (index < source.length) {
-        if (source[index] === '\\') {
-          index += 2
-        } else if (source[index] === '`') {
-          index += 1
-          break
-        } else {
-          index += 1
-        }
+      const literal = quotedLiteralAt(source, index)
+      index = literal.end
+      // Module specifiers are string literals. Reading the complete template too, and emitting no
+      // token for it, prevents its prose and interpolation text from manufacturing graph edges.
+      if (current !== '`') {
+        tokens.push({ end: index, kind: 'string', start, value: literal.value })
       }
       continue
     }
@@ -759,6 +736,23 @@ function sidecarTokens(source: string): SidecarToken[] {
     index += 1
   }
   return tokens
+}
+
+/** quotedLiteralAt reads the quoted or template literal starting at `start`, resolving its escapes. */
+function quotedLiteralAt(source: string, start: number): { end: number; value: string } {
+  const quote = source[start]
+  let value = ''
+  let index = start + 1
+  while (index < source.length && source[index] !== quote) {
+    if (source[index] === '\\' && index + 1 < source.length) {
+      value += source[index + 1]
+      index += 2
+    } else {
+      value += source[index]
+      index += 1
+    }
+  }
+  return { end: index + (index < source.length ? 1 : 0), value }
 }
 
 function resolveRelativeSidecarImport(sourcePath: string, specifier: string): string | undefined {
@@ -886,29 +880,22 @@ function configurationAliasImportLines(
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
   const entities = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isEntityDataDeclaration))
   const datasources = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isDatasourceDeclaration))
-  const directUserPaths = new Set(
-    sourceFiles
-      .filter(fileUsesDataCatalog)
-      .map(file => file.path),
-  )
+  const pathsOf = (matches: (file: ParsedFile) => boolean) => new Set(sourceFiles.filter(matches).map(f => f.path))
+  const directUserPaths = pathsOf(fileUsesDataCatalog)
   if (entities.length === 0 && directUserPaths.size === 0) {
     return undefined
   }
   const userPaths = new Set([
     ...directUserPaths,
-    ...sourceFiles
-      .filter(file => AST.appValueDeclarationsInFile(file.ast).some(appUsesDatasource))
-      .map(file => file.path),
+    ...pathsOf(file => AST.appValueDeclarationsInFile(file.ast).some(appUsesDatasource)),
   ])
   const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
   // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
   // module every user imports from and a single sidecar copy of the local provider. An app root
   // binds the companion catalog whether or not it configures a Datasource, so a file that declares
   // an app is a companion user even when it never names the catalog itself.
-  const localUserPaths = new Set(
-    sourceFiles
-      .filter(file => fileUsesDataCatalog(file) || AST.appValueDeclarationsInFile(file.ast).length > 0)
-      .map(file => file.path),
+  const localUserPaths = pathsOf(file =>
+    fileUsesDataCatalog(file) || AST.appValueDeclarationsInFile(file.ast).length > 0
   )
   return {
     entities,
@@ -964,10 +951,27 @@ function appUsesDatasource(app: AST.AppValueDeclaration): boolean {
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {
-  const names = imports.bySource.get(sourcePath) ?? new Set<string>()
-  names.add(binding)
-  imports.bySource.set(sourcePath, names)
+  addImportedName(imports.bySource, sourcePath, binding)
   imports.scopeBindings.set(binding, binding)
+}
+
+function addImportedName(bySource: Map<string, Set<string>>, sourcePath: string, name: string): void {
+  const names = bySource.get(sourcePath) ?? new Set<string>()
+  names.add(name)
+  bySource.set(sourcePath, names)
+}
+
+/** exportedBinding re-exports one generated binding under its own name. */
+function exportedBinding(binding: string): { exported: string; binding: string } {
+  return { exported: binding, binding }
+}
+
+/** runtimeBindingName is the binding a declaration is emitted under, which a configurable
+ * declaration renames so its own name can stay the configured value. */
+function runtimeBindingName(declaration: AST.Declaration): string {
+  return isRuntimeConfigurableDeclaration(declaration)
+    ? configurationRuntimeBindingName(declaration)
+    : declaration.name
 }
 
 function importLinesForCompiledFile(
@@ -1028,6 +1032,25 @@ function resolveImports(
   const bySource = new Map<string, Set<string>>()
   const scopeBindings = new Map<string, string>()
   const sourcePaths = new Set(sourceByPath.keys())
+  // Both `use` and a package alias name their target the same way: resolve the import path, keep
+  // the workspace files it matches, and take the declarations each of them lets that name reach.
+  const importTargets = (importPath: string | undefined): ImportTarget[] => {
+    const resolution = Packages.resolve(packagesContext, { importPath, fromFilePath: filePath })
+    if (resolution.relation === 'invalid') {
+      return []
+    }
+    return [...sourceByPath.values()]
+      .filter(candidate =>
+        Packages.targetMatches(resolution, { filePath: candidate.path, workspaceFilePaths: sourcePaths })
+      )
+      .map(candidate => ({
+        declarationsNamed: (name: string) =>
+          candidate.ast.statements.filter(declarationEmitsRuntimeBinding).filter(declaration =>
+            declaration.name === name && Packages.declarationIsImportableFromUse(declaration, resolution)
+          ),
+        path: candidate.path,
+      }))
+  }
   // A `folder` declaration is in scope without a `use` statement, so the generated module still
   // has to import it by name from the sibling file that declares it.
   const currentDirectory = FS.dirname(filePath)
@@ -1046,12 +1069,8 @@ function resolveImports(
       ) {
         continue
       }
-      const binding = isRuntimeConfigurableDeclaration(declaration)
-        ? configurationRuntimeBindingName(declaration)
-        : declaration.name
-      const names = bySource.get(candidate.path) ?? new Set<string>()
-      names.add(binding)
-      bySource.set(candidate.path, names)
+      const binding = runtimeBindingName(declaration)
+      addImportedName(bySource, candidate.path, binding)
       scopeBindings.set(binding, binding)
     }
   }
@@ -1073,83 +1092,30 @@ function resolveImports(
     if (!namespaceStatement) {
       continue
     }
-    const resolution = Packages.resolve(packagesContext, {
-      importPath: namespaceStatement.importPath,
-      fromFilePath: filePath,
-    })
-    if (resolution.relation === 'invalid') {
-      continue
-    }
     const memberName = aliasTarget.member.$refText
-    const target = [...sourceByPath.values()].filter(candidate =>
-      Packages.targetMatches(resolution, {
-        filePath: candidate.path,
-        workspaceFilePaths: sourcePaths,
-      })
-    ).find(candidate =>
-      candidate.ast.statements.some(statement =>
-        declarationEmitsRuntimeBinding(statement)
-        && statement.name === memberName
-        && Packages.declarationIsImportableFromUse(statement, resolution)
-      )
-    )
-    if (!target) {
+    const imported = importTargets(namespaceStatement.importPath)
+      .flatMap(target => target.declarationsNamed(memberName).map(found => ({ path: target.path, found })))[0]
+    if (!imported) {
       continue
     }
-    const targetDeclaration = target.ast.statements.find(statement =>
-      declarationEmitsRuntimeBinding(statement)
-      && statement.name === memberName
-      && Packages.declarationIsImportableFromUse(statement, resolution)
-    )
-    if (!targetDeclaration) {
-      continue
-    }
-    const targetBinding = isRuntimeConfigurableDeclaration(targetDeclaration)
-      ? configurationRuntimeBindingName(targetDeclaration)
-      : memberName
-    const aliasBinding = isRuntimeConfigurableDeclaration(declaration)
-      ? configurationRuntimeBindingName(declaration)
-      : declaration.name
     const localBinding = `__tao_package_${namespaceName}_${memberName}`
-    const names = bySource.get(target.path) ?? new Set<string>()
-    names.add(`${targetBinding} as ${localBinding}`)
-    bySource.set(target.path, names)
-    scopeBindings.set(aliasBinding, localBinding)
+    addImportedName(bySource, imported.path, `${runtimeBindingName(imported.found)} as ${localBinding}`)
+    scopeBindings.set(runtimeBindingName(declaration), localBinding)
   }
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    const resolution = Packages.resolve(packagesContext, {
-      importPath: useStatement.importPath,
-      fromFilePath: filePath,
-    })
-    if (resolution.relation === 'invalid') {
-      continue
-    }
-    const targets = [...sourceByPath.values()].filter(candidate =>
-      Packages.targetMatches(resolution, {
-        filePath: candidate.path,
-        workspaceFilePaths: sourcePaths,
-      })
-    )
+    const targets = importTargets(useStatement.importPath)
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-      for (const target of targets) {
-        const declarations = target.ast.statements.filter(statement =>
-          declarationEmitsRuntimeBinding(statement)
-          && statement.name === importedName
-          && Packages.declarationIsImportableFromUse(statement, resolution)
-        )
-        if (declarations.length === 0) {
-          continue
-        }
-        const names = bySource.get(target.path) ?? new Set<string>()
-        for (const declaration of declarations) {
-          const binding = isRuntimeConfigurableDeclaration(declaration)
-            ? configurationRuntimeBindingName(declaration)
-            : importedName
-          names.add(binding)
-          scopeBindings.set(binding, binding)
-        }
-        bySource.set(target.path, names)
-        break
+      // The first target that declares the name wins; a later one would bind the same name twice.
+      const target = targets
+        .map(candidate => ({ declarations: candidate.declarationsNamed(importedName), path: candidate.path }))
+        .find(candidate => candidate.declarations.length > 0)
+      if (!target) {
+        continue
+      }
+      for (const declaration of target.declarations) {
+        const binding = runtimeBindingName(declaration)
+        addImportedName(bySource, target.path, binding)
+        scopeBindings.set(binding, binding)
       }
     }
   }

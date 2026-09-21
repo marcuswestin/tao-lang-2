@@ -1,5 +1,7 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
-import { GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
+import { inspectLandingRemote, type LandingBrokerInspection } from '../landing-broker/LandingBrokerClient'
+import { GeneratedEvidence } from './GeneratedEvidence'
+import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
 import { validateMergeMessage } from './MergeWithMain'
 import { VerificationLanes } from './VerificationLanes'
 
@@ -10,17 +12,21 @@ import { VerificationLanes } from './VerificationLanes'
  * agent's own re-entry after a background job reports. `finalize` makes the sequence a command and
  * records enough evidence to make a re-entry cheap.
  *
- * Only one step here trusts recorded state to decide whether to skip work: drafting the merge
- * message, gated on whether `.artifacts/merge/<branch>.msg` was already written for the exact HEAD
- * finalize is looking at. Main integration and verification never do: integration re-asks Git
- * whether main is already an ancestor (a single cheap command), and verification is gated entirely
- * by `GreenTree`, whose records are keyed by tree content, not by anything this file writes. A
- * missing, unreadable, malformed, or older-version state file therefore degrades to doing the full
- * work — it can only ever cause a redraft, never a skipped integration or a skipped proof.
+ * Only one step here trusts recorded state, and it no longer trusts it with anything destructive:
+ * the merge message is written only when none exists, or when `--redraft` explicitly asks for a new
+ * one. Recorded state now decides one thing — whether a kept message is *proved* to cover the HEAD
+ * finalize is looking at, or whether the report has to ask the author to confirm it. Main
+ * integration and verification never trust it: integration re-asks Git whether main is already an
+ * ancestor (a single cheap command), and verification is gated entirely by `GreenTree`, whose
+ * records are keyed by tree content, not by anything this file writes. A missing, unreadable,
+ * malformed, or older-version state file therefore degrades to keeping the message and saying it
+ * could not be proved current — never to a replaced message, a skipped integration, or a skipped
+ * proof.
  */
 
 /** Bumped because `verifiedToolchain` is a new required field; an older-version file therefore
- * always degrades to redrafting rather than being read as if the field were absent. */
+ * degrades to keeping an existing merge message unproved rather than being read as if the field
+ * were absent. */
 const STATE_VERSION = 2
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
@@ -32,6 +38,12 @@ const VERIFY_LANE = VerificationLanes.VERIFY
  * no record and every branch last proved by `verify-full` was verified a second time for nothing.
  */
 const VERIFY_ACCEPTED_LANES: readonly string[] = VerificationLanes.VERIFY_OR_WIDER
+/** The ignored outputs every accepted verify lane generates before its readers run. */
+const VERIFY_GENERATED_OUTPUTS = GeneratedEvidence.outputsForGates([
+  '_parser-gen',
+  '_compile-word-flower-app',
+  '_ide-extension-build',
+])
 const MAX_SUMMARY_LENGTH = 72
 const DRAFT_PREFIX = 'DRAFT: '
 /** ROADMAP_LEDGER_PATH is the durable developer-environment ledger this brief is itself filed against. */
@@ -65,10 +77,16 @@ const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
 export type FinalizeOptions = {
   /** Report without mutating anything: no merge, no verification lane, no file written. */
   check?: boolean
-  /** Ignore the recorded finalize state, mirroring `verify --fresh`. */
+  /**
+   * Ignore the recorded finalize state, mirroring `verify --fresh`. It never replaces an existing
+   * merge message: without the record, finalize keeps the message and reports that nothing proves
+   * which HEAD it was written for. `--redraft` is the only thing that replaces a message.
+   */
   fresh?: boolean
   /** Override `.artifacts/merge/<branch>.msg`, principally for tests. */
   messageFile?: string
+  /** Explicitly ask for a fresh mechanical draft, replacing any merge message already on disk. */
+  redraft?: boolean
   /** Override the current repository root, principally for tests. */
   repositoryRoot?: string
 }
@@ -89,9 +107,11 @@ export type FinalizeDependencies = {
     repositoryRoot: string,
     wanted: GreenTreeKey,
     acceptedLanes: readonly string[],
+    options?: FindOptions,
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
+  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   run: FinalizeCommandRunner
@@ -103,6 +123,7 @@ export type FinalizeDependencies = {
 const defaultDependencies: FinalizeDependencies = {
   exists: FS.exists,
   findGreenTree: GreenTree.find,
+  inspectRemote: inspectLandingRemote,
   key: GreenTree.key,
   now: () => new Date(),
   readJson: FS.readJson,
@@ -114,12 +135,15 @@ const defaultDependencies: FinalizeDependencies = {
 
 /**
  * FinalizeState is evidence about specific inputs, never a "done" flag. A re-entry recomputes the
- * current inputs (the branch's HEAD, the tree hash, main's sha) and skips only the one step — the
- * merge message — whose recorded input is byte-identical to the current one.
+ * current inputs (the branch's HEAD, the tree hash, main's sha) and reports the merge message as
+ * current only when its recorded input is byte-identical to the current one. Nothing here authorizes
+ * overwriting a file.
  */
 export type FinalizeState = {
   headSha: string
   mainIntegratedSha: string
+  /** The HEAD the merge message on disk is known to cover — the HEAD it was drafted for, or the
+   * HEAD at which finalize last kept and reported it. Never a licence to replace the file. */
   messageHeadSha: string
   updatedAt: string
   verifiedAt: string
@@ -143,9 +167,18 @@ type VerificationOutcome = {
   treeHash: string
 }
 
+/** Which of the three things finalize did to `.artifacts/merge/<branch>.msg` on this run. */
+type MessageDecision = 'drafted' | 'kept' | 'redrafted'
+
 type MessageOutcome = {
-  drafted: boolean
+  decision: MessageDecision
   messageHeadSha: string
+  /**
+   * Why a kept message is not proved to cover this HEAD — empty when it is proved, or when the
+   * message was drafted or redrafted. Only the author can settle this, so it becomes remaining work
+   * rather than being resolved here.
+   */
+  unconfirmedReason: string
 }
 
 type DraftCommit = {
@@ -182,11 +215,10 @@ export const FinalizeCommand = {
       integration.mainSha,
       integration.headSha,
       check,
+      options.redraft === true,
       lines,
     )
-    if (message.drafted) {
-      remaining.push(`Review the drafted merge message before landing: ${FS.displayPath(messageFile)}`)
-    }
+    remaining.push(...messageRemaining(message, messageFile))
 
     // Advisory judgments never gate finalize's own exit code — the brief is explicit that this list
     // is advisory, not a gate. They are printed in their own section so a person can weigh them
@@ -230,7 +262,7 @@ function summaryLines(
         ? 'no record covers this tree yet'
         : `stood on ${verification.lane} at ${verification.at}`
     }`,
-    `3. Merge message: ${message.drafted ? 'drafted or redrafted — needs review' : 'already current for this HEAD'}`,
+    `3. Merge message: ${messageSummary(message)}`,
     remaining.length === 0
       ? '4. Remaining: none'
       : `4. Remaining:\n${remaining.map(item => `   - ${item}`).join('\n')}`,
@@ -240,6 +272,35 @@ function summaryLines(
       ? '5. Advisory (not a gate): none'
       : `5. Advisory (not a gate):\n${advisories.map(item => `   - ${item}`).join('\n')}`,
   ]
+}
+
+/**
+ * The summary always names which of the three things happened — kept, drafted, or redrafted — so no
+ * run can leave a reader guessing whether a file they wrote is still the file that will land.
+ */
+function messageSummary(message: MessageOutcome): string {
+  if (message.decision === 'drafted') {
+    return 'drafted — needs review'
+  }
+  if (message.decision === 'redrafted') {
+    return 'redrafted on request, replacing what was there — needs review'
+  }
+  return message.unconfirmedReason === ''
+    ? 'kept — recorded as written for this HEAD'
+    : `kept — ${message.unconfirmedReason}; only the author can confirm it still describes this branch`
+}
+
+function messageRemaining(message: MessageOutcome, messageFile: string): string[] {
+  const path = FS.displayPath(messageFile)
+  if (message.decision === 'drafted') {
+    return [`Review the drafted merge message before landing: ${path}`]
+  }
+  if (message.decision === 'redrafted') {
+    return [`Review the redrafted merge message before landing; it replaced the previous one: ${path}`]
+  }
+  return message.unconfirmedReason === ''
+    ? []
+    : [`Confirm the kept merge message still describes this branch (${message.unconfirmedReason}): ${path}`]
 }
 
 async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
@@ -268,9 +329,9 @@ async function assertCleanWorktree(dependencies: FinalizeDependencies, root: str
 }
 
 /**
- * Integrate main when the branch does not already contain it. `origin` is preferred, but
- * `git fetch origin` fails inside this repository's sandbox, so the local `main` branch is the
- * ordinary fallback here, not a degraded path — it is reported as progress, never as a warning.
+ * Integrate main when the branch does not already contain it. The installed broker fetches the
+ * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
+ * machines that have not installed it working, with local main as the final offline fallback.
  */
 async function integrateMain(
   dependencies: FinalizeDependencies,
@@ -278,17 +339,24 @@ async function integrateMain(
   check: boolean,
   lines: string[],
 ): Promise<MainIntegration> {
-  const fetch = await dependencies.run('git', {
-    args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  const remoteReachable = fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null
-  const mainSha = remoteReachable
-    ? (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    : await localMainSha(dependencies, root)
+  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
+  const brokerMain = broker?.refs.get(MAIN_BRANCH)
+  let directMain: string | undefined
+  if (brokerMain === undefined) {
+    const fetch = await dependencies.run('git', {
+      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
+      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    }
+  }
+  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
   lines.push(
-    remoteReachable
+    brokerMain !== undefined
+      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
+      : directMain !== undefined
       ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
       : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
   )
@@ -307,18 +375,80 @@ async function integrateMain(
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
 
+  const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
   const merge = await dependencies.run('git', { args: ['merge', '--no-edit', mainSha], cwd: root, stdio: 'pipe' })
   if (merge.exitCode !== 0 || merge.error !== undefined || merge.signal !== null) {
-    const conflicts = (await git(dependencies, root, ['diff', '--name-only', '--diff-filter=U']))
-      .stdout.trim().split('\n').filter(Boolean)
-    Errors.throwUserInput(
-      `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. Conflicting paths:\n`
-        + conflicts.map(path => `- ${path}`).join('\n'),
-    )
+    Errors.throwUserInput(failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root)))
   }
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
   return { headSha, integratedNow: true, mainSha }
+}
+
+/**
+ * mergeTreeConflicts asks what an integration would conflict on without touching the worktree.
+ * `git merge-tree --write-tree` writes only into the object database, so it answers even where the
+ * merge itself cannot run — which is the case this exists for: a sandboxed shell denies writes to
+ * the paths the policy protects, the merge stops partway, and the index it would have recorded the
+ * conflicts in was never written. Asking first means a failure can always name paths.
+ */
+async function mergeTreeConflicts(
+  dependencies: FinalizeDependencies,
+  root: string,
+  branchHead: string,
+  mainSha: string,
+): Promise<string[]> {
+  const preview = await dependencies.run('git', {
+    args: ['merge-tree', '--write-tree', '--name-only', branchHead, mainSha],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (preview.exitCode === 0 || preview.error !== undefined || preview.signal !== null) {
+    return []
+  }
+  // The first line is the tree this merge would produce; the conflicted paths follow, then a blank
+  // line and git's own messages about them.
+  const [, ...rest] = preview.stdout.split('\n')
+  return rest.slice(0, rest.indexOf('')).map(line => line.trim()).filter(Boolean)
+}
+
+/** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */
+async function unmergedPaths(dependencies: FinalizeDependencies, root: string): Promise<string[]> {
+  const unmerged = await dependencies.run('git', {
+    args: ['diff', '--name-only', '--diff-filter=U'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return unmerged.stdout.trim().split('\n').filter(Boolean)
+}
+
+/**
+ * failedIntegrationReport separates the two failures that used to read identically. A merge that
+ * conflicted leaves unmerged entries and is resolved by hand; a merge that never completed leaves
+ * none, and telling its reader to resolve a conflict sends them looking for something that is not
+ * there. The second case names what `merge-tree` says would conflict, and says the recovery, because
+ * a grandchild `git` inherits the sandbox its top-level command is excluded from.
+ */
+function failedIntegrationReport(
+  merge: { stderr?: string },
+  wouldConflict: readonly string[],
+  unmerged: readonly string[],
+): string {
+  const list = (paths: readonly string[]): string => paths.map(path => `- ${path}`).join('\n')
+  if (unmerged.length > 0) {
+    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. `
+      + `Conflicting paths:\n${list(unmerged)}`
+  }
+  const reason = (merge.stderr ?? '').trim()
+  return `Integrating ${MAIN_BRANCH} did not complete, and it is not a conflict: the merge recorded no `
+    + 'unmerged paths, so the worktree may hold a partly written tree that no Git command describes.\n'
+    + (reason === '' ? '' : `Git said:\n${reason}\n`)
+    + (wouldConflict.length === 0
+      ? 'Nothing would have conflicted.\n'
+      : `These paths would conflict:\n${list(wouldConflict)}\n`)
+    + `Run \`git merge ${MAIN_BRANCH}\` yourself as a top-level command and resolve it there. A `
+    + 'sandboxed shell denies the writes this merge needs under the paths the policy protects, and a '
+    + 'grandchild `git` inherits a sandbox that its top-level command is excluded from (DEVENV-111).'
 }
 
 async function localMainSha(dependencies: FinalizeDependencies, root: string): Promise<string> {
@@ -349,7 +479,9 @@ async function verifyTree(
   lines: string[],
 ): Promise<VerificationOutcome> {
   const wanted = await dependencies.key(root)
-  const existing = await dependencies.findGreenTree(root, wanted, VERIFY_ACCEPTED_LANES)
+  const existing = await dependencies.findGreenTree(root, wanted, VERIFY_ACCEPTED_LANES, {
+    generatedOutputs: VERIFY_GENERATED_OUTPUTS,
+  })
   if (existing !== undefined) {
     lines.push(`PASS  ${GreenTree.describe(VERIFY_LANE, existing)}`)
     return { at: existing.at, lane: existing.lane, toolchain: wanted.toolchain, treeHash: wanted.treeHash }
@@ -365,7 +497,9 @@ async function verifyTree(
     throw new Errors.CommandExecutionError(verify)
   }
   const verifiedKey = await dependencies.key(root)
-  const record = await dependencies.findGreenTree(root, verifiedKey, VERIFY_ACCEPTED_LANES)
+  const record = await dependencies.findGreenTree(root, verifiedKey, VERIFY_ACCEPTED_LANES, {
+    generatedOutputs: VERIFY_GENERATED_OUTPUTS,
+  })
   const outcome: GreenTreeMatch = record ?? {
     at: dependencies.now().toISOString(),
     lane: VERIFY_LANE,
@@ -378,10 +512,19 @@ async function verifyTree(
 }
 
 /**
- * The merge message is drafted fresh whenever it is absent, or the recorded state does not prove it
- * was written for the exact HEAD finalize is looking at now — including when that state cannot be
- * read at all, which is the only way this file lets a missing record turn into repeated work rather
- * than a wrongly skipped one.
+ * The merge message is the one artifact finalize cannot regenerate: it is what an author wrote and
+ * what Ro may have read. So an existing message is never replaced except on an explicit `--redraft`,
+ * and a message is drafted only when none exists. Recorded state decides nothing about writing any
+ * more — it decides only whether the report can say the kept message is proved to cover this HEAD,
+ * or has to hand that judgment to the author. This is deliberately asymmetric: finalize may keep a
+ * message it should have redrafted, and must never replace one it should have kept.
+ *
+ * `check` reaches the same decision from the same inputs as a real run, so `--check` can no longer
+ * describe the message differently from the run that follows it.
+ *
+ * A kept-but-unproved message is recorded against this HEAD once the run ends, so the confirmation
+ * is asked for once rather than on every re-run of the landing convoy. The file itself is untouched
+ * either way.
  */
 async function draftOrKeepMessage(
   dependencies: FinalizeDependencies,
@@ -391,31 +534,56 @@ async function draftOrKeepMessage(
   mainSha: string,
   headSha: string,
   check: boolean,
+  redraft: boolean,
   lines: string[],
 ): Promise<MessageOutcome> {
   const messageExists = await dependencies.exists(messageFile)
-  if (priorState !== undefined && priorState.messageHeadSha === headSha && messageExists) {
-    lines.push(`PASS  Merge message is current for ${shortSha(headSha)}: ${FS.displayPath(messageFile)}`)
-    return { drafted: false, messageHeadSha: headSha }
+  if (messageExists && !redraft) {
+    const unconfirmedReason = keptMessageReason(priorState, headSha)
+    lines.push(
+      `PASS  Kept the existing merge message; ${
+        unconfirmedReason === ''
+          ? `it is recorded as written for ${shortSha(headSha)}`
+          : unconfirmedReason
+      }: ${FS.displayPath(messageFile)}`,
+    )
+    return { decision: 'kept', messageHeadSha: headSha, unconfirmedReason }
   }
 
+  const decision: MessageDecision = messageExists ? 'redrafted' : 'drafted'
   if (check) {
     lines.push(
       messageExists
-        ? `PLAN  Redraft the merge message; it is not recorded as written for ${shortSha(headSha)}.`
+        ? `PLAN  Redraft the merge message on request, replacing ${FS.displayPath(messageFile)}.`
         : 'PLAN  Draft the merge message; none exists yet.',
     )
-    return { drafted: true, messageHeadSha: headSha }
+    return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
   }
 
   const commits = await readFeatureCommits(dependencies, root, mainSha, headSha)
   const draft = assertDraftValidates(draftMergeMessage(commits))
   await dependencies.writeText(messageFile, `${draft}\n`)
   lines.push(
-    `PASS  Drafted the merge message from ${commits.length} commit(s); review it before landing: `
+    `PASS  ${messageExists ? 'Redrafted' : 'Drafted'} the merge message from ${commits.length} commit(s)`
+      + `${messageExists ? ', replacing what was there' : ''}; review it before landing: `
       + FS.displayPath(messageFile),
   )
-  return { drafted: true, messageHeadSha: headSha }
+  return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
+}
+
+/**
+ * Why a kept message cannot be called current, in the author's terms: either nothing records which
+ * HEAD it was written for (it was written by hand, or the record was discarded by `--fresh`), or it
+ * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
+ * record proves it covers this HEAD.
+ */
+function keptMessageReason(priorState: FinalizeState | undefined, headSha: string): string {
+  if (priorState === undefined) {
+    return 'nothing records which HEAD it was written for'
+  }
+  return priorState.messageHeadSha === headSha
+    ? ''
+    : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
 }
 
 async function readFeatureCommits(

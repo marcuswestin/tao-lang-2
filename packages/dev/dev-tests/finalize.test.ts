@@ -5,19 +5,41 @@ import {
   type FinalizeDependencies,
   type FinalizeState,
 } from '../dev-src/repository-tests/Finalize'
+import {
+  GeneratedEvidence,
+  type GeneratedEvidence as GeneratedEvidenceRecord,
+} from '../dev-src/repository-tests/GeneratedEvidence'
 import { validateMergeMessage } from '../dev-src/repository-tests/MergeWithMain'
 
-type GreenTreeRecord = { at: string; logRoot: string; toolchain: string; treeHash: string }
+type GreenTreeRecord = {
+  at: string
+  generated?: GeneratedEvidenceRecord
+  logRoot: string
+  toolchain: string
+  treeHash: string
+}
 
 /** A fixed resolved-toolchain stand-in: fakes agree on this value everywhere a real run would read
  * `.devenv/profile`, so a test opts into a *different* value only when it means to prove that a
  * toolchain mismatch, not a tree change, is what should force a real run. */
 const FAKE_TOOLCHAIN = 'fake-toolchain-abc'
+const FAKE_GENERATED: GeneratedEvidenceRecord = {
+  outputs: {
+    'compiled-app': { inputs: 'compiled-inputs', outputs: 'compiled-outputs' },
+    'ide-extension': { inputs: 'ide-inputs', outputs: 'ide-outputs' },
+    parser: { inputs: 'parser-inputs', outputs: 'parser-outputs' },
+  },
+  version: 1,
+}
 
 type FakeRepository = {
   branch: string
   conflictOnMerge?: boolean
+  /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
+  deniedMergeStderr?: string
   diffPaths?: string[]
+  /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
+  mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
   headSha: string
   localMainSha?: string
@@ -27,8 +49,8 @@ type FakeRepository = {
   verifyExitCode?: number
 }
 
-function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0) {
-  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr: '', stdout }
+function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0, stderr = '') {
+  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr, stdout }
 }
 
 function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
@@ -76,7 +98,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       const mainShaUsed = repository.remoteReachable ? repository.mainSha : repository.localMainSha
       return result(args, spec.cwd, '', mainShaUsed === headAfterMerge || mainShaUsed === repository.headSha ? 0 : 1)
     }
+    if (args[0] === 'merge-tree' && args[1] === '--write-tree') {
+      const conflicts = repository.mergeTreeConflicts ?? []
+      return conflicts.length === 0
+        ? result(args, spec.cwd, 'treeoid0000000000000000000000000000000000\n')
+        : result(args, spec.cwd, `treeoid0000000000000000000000000000000000\n${conflicts.join('\n')}\n\nCONFLICT\n`, 1)
+    }
     if (args[0] === 'merge' && args[1] === '--no-edit') {
+      if (repository.deniedMergeStderr !== undefined) {
+        return result(args, spec.cwd, '', 1, repository.deniedMergeStderr)
+      }
       if (repository.conflictOnMerge === true) {
         return result(args, spec.cwd, '', 1)
       }
@@ -84,7 +115,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       return result(args, spec.cwd)
     }
     if (joined === 'diff --name-only --diff-filter=U') {
-      return result(args, spec.cwd, 'conflicted.ts\n')
+      return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
       return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
@@ -105,6 +136,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       if ((repository.verifyExitCode ?? 0) === 0) {
         greenTreeRecords.set('verify', {
           at: '2026-09-17T10:00:00.000Z',
+          generated: FAKE_GENERATED,
           logRoot: '/logs/verify',
           toolchain: FAKE_TOOLCHAIN,
           treeHash,
@@ -117,10 +149,17 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const dependencies: FinalizeDependencies = {
     exists: async path => states.has(path) || files.has(path),
-    findGreenTree: async (_root, wanted, acceptedLanes) => {
+    findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
-        if (record !== undefined && record.treeHash === wanted.treeHash && record.toolchain === wanted.toolchain) {
+        const requested = options.generatedOutputs ?? []
+        if (
+          record !== undefined
+          && record.treeHash === wanted.treeHash
+          && record.toolchain === wanted.toolchain
+          && GeneratedEvidence.covers(record.generated, requested)
+          && GeneratedEvidence.equals(record.generated, requested.length === 0 ? undefined : FAKE_GENERATED)
+        ) {
           return { ...record, lane }
         }
       }
@@ -209,6 +248,40 @@ Describe('finalize', () => {
     Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
   })
 
+  Test('calls a denied integration what it is, rather than a conflict with nothing to resolve', async () => {
+    const fake = fakeDependencies({
+      deniedMergeStderr: "error: unable to unlink old 'agents/skills/delegation/SKILL.md': Operation not permitted",
+      mergeTreeConflicts: ['agents/skills/delegation/SKILL.md'],
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    const message = String(failure)
+    Expect(message.includes('did not complete, and it is not a conflict')).toBe(true)
+    Expect(message.includes('Operation not permitted')).toBe(true)
+    Expect(message.includes('agents/skills/delegation/SKILL.md')).toBe(true)
+    Expect(message.includes('DEVENV-111')).toBe(true)
+    Expect(message.includes('resolve it by hand and finalize again')).toBe(false)
+  })
+
+  Test('names what would conflict even when the merge recorded nothing to resolve', async () => {
+    const fake = fakeDependencies({ deniedMergeStderr: 'denied', mergeTreeConflicts: [] })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    Expect(String(failure).includes('Nothing would have conflicted.')).toBe(true)
+  })
+
+  Test('asks what would conflict before attempting the merge, not after it has failed', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true, mergeTreeConflicts: ['conflicted.ts'] })
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
+
+    const preview = fake.calls.findIndex(call => call.args[0] === 'merge-tree')
+    const merge = fake.calls.findIndex(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')
+    Expect(preview).toBeGreaterThanOrEqual(0)
+    Expect(preview < merge).toBe(true)
+  })
+
   Test('runs just verify --complete only when no accepted lane already covers this tree', async () => {
     const fake = fakeDependencies()
     // `verify-full`, the lane's real name. This test used to register `full-verify`, which is not
@@ -216,6 +289,7 @@ Describe('finalize', () => {
     // with each other and with nothing else, and the re-verification bug stayed invisible.
     fake.greenTreeRecords.set('verify-full', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/full',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -233,6 +307,7 @@ Describe('finalize', () => {
       const fake = fakeDependencies()
       fake.greenTreeRecords.set('full-verify', {
         at: '2026-09-17T09:00:00.000Z',
+        generated: FAKE_GENERATED,
         logRoot: '/logs/full',
         toolchain: 'a-different-toolchain',
         treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -323,6 +398,7 @@ Describe('finalize', () => {
     fake.states.set(statePath, state)
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
@@ -331,62 +407,97 @@ Describe('finalize', () => {
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by Ro.\n')
-    Expect(outcome.lines.some(line => line.includes('Merge message is current'))).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('3. Merge message: kept — recorded as written for this HEAD')))
+      .toBe(true)
+    Expect(outcome.ok).toBe(true)
   })
 
-  Test('redrafts when the recorded head sha no longer matches the current HEAD', async () => {
-    const fake = fakeDependencies()
-    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Stale draft\n\n- From an earlier HEAD.\n')
-    const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-    fake.states.set(
-      statePath,
-      {
-        headSha: 'someoldhead0000000000000000000000000000000',
-        mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
-        messageHeadSha: 'someoldhead0000000000000000000000000000000',
-        updatedAt: '2026-09-17T09:00:00.000Z',
-        verifiedAt: '2026-09-17T09:00:00.000Z',
-        verifiedLane: 'verify',
-        verifiedToolchain: FAKE_TOOLCHAIN,
-        verifiedTreeHash: 'some-old-tree',
-        version: 2,
-      } satisfies FinalizeState,
-    )
+  Test(
+    'keeps the message and says the branch gained commits when the recorded head sha no longer matches',
+    async () => {
+      const fake = fakeDependencies()
+      const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+      const written = 'Land example\n\n- Written when the branch was one commit shorter.\n'
+      fake.files.set(messagePath, written)
+      const statePath = '/repo/.artifacts/merge/feat/example.state.json'
+      fake.states.set(
+        statePath,
+        {
+          headSha: 'someoldhead0000000000000000000000000000000',
+          mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
+          messageHeadSha: 'someoldhead0000000000000000000000000000000',
+          updatedAt: '2026-09-17T09:00:00.000Z',
+          verifiedAt: '2026-09-17T09:00:00.000Z',
+          verifiedLane: 'verify',
+          verifiedToolchain: FAKE_TOOLCHAIN,
+          verifiedTreeHash: 'some-old-tree',
+          version: 2,
+        } satisfies FinalizeState,
+      )
 
-    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+      const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).not.toBe('Stale draft\n\n- From an earlier HEAD.\n')
-  })
+      Expect(fake.files.get(messagePath)).toBe(written)
+      Expect(outcome.lines.some(line =>
+        line.includes(
+          'Kept the existing merge message; the branch has gained commits since it was recorded for '
+            + 'someoldhead0',
+        )
+      )).toBe(true)
+      Expect(
+        outcome.lines.some(line =>
+          line.includes('3. Merge message: kept — the branch has gained commits since it was recorded for someoldhead0')
+          && line.includes('only the author can confirm it still describes this branch')
+        ),
+      ).toBe(true)
+      // Only the author can tell whether the new commits changed what the branch is for, so it is work
+      // that remains, not a resolved step.
+      Expect(outcome.lines.some(line => line.includes('Confirm the kept merge message still describes this branch')))
+        .toBe(true)
+      Expect(outcome.ok).toBe(false)
+    },
+  )
 
-  Test('a missing state file degrades to redrafting even when a matching message file already exists', async () => {
+  Test('a missing state file keeps a hand-written message and says nothing records which HEAD it covers', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Written by hand before finalize ever ran.\n'
+    fake.files.set(messagePath, written)
 
-    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    // No state exists to prove the file was written for this HEAD, so finalize cannot skip the step.
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    // No state proves which HEAD this file covers, and a missing record is never a licence to
+    // replace what an author wrote.
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Kept the existing merge message; nothing records which HEAD it was written for')
+      ),
+    ).toBe(true)
+    Expect(outcome.ok).toBe(false)
   })
 
-  Test('a malformed or older-version state file degrades to redrafting rather than failing the run', async () => {
+  Test('a malformed or older-version state file keeps the message rather than replacing it', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(statePath, { headSha: 'mainsha00000000000000000000000000000000000', version: 0 })
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(outcome.lines.some(line => line.includes('nothing records which HEAD it was written for'))).toBe(true)
     Expect(outcome.ok).toBe(false)
   })
 
-  Test('an unreadable state file (bad JSON) degrades to redrafting rather than throwing', async () => {
+  Test('an unreadable state file (bad JSON) keeps the message rather than throwing or replacing it', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(statePath, statePath) // exists() sees it; readJson will "succeed" oddly, so force a throw instead:
     fake.dependencies.readJson = async () => {
@@ -395,8 +506,67 @@ Describe('finalize', () => {
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(fake.files.get(messagePath)).toBe(written)
     Expect(outcome.ok).toBe(false)
+  })
+
+  Test('run twice over a hand-written merge message leaves it byte-identical and reports keeping it', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    const written = 'Land the example workflow\n\n- One bullet an author actually wrote.\n'
+    fake.files.set(messagePath, written)
+
+    const first = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const second = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(first.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(second.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(second.lines.some(line => line.includes('3. Merge message: kept'))).toBe(true)
+    Expect([...fake.files.keys()].filter(path => path.endsWith('.msg'))).toEqual([messagePath])
+    // The first run asks the author to confirm a message it has no record of; having reported that
+    // and recorded this HEAD, the second run stands on it instead of asking again.
+    Expect(first.ok).toBe(false)
+    Expect(second.ok).toBe(true)
+  })
+
+  Test('--redraft replaces an existing merge message and says it replaced it', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(messagePath, 'Land example\n\n- Written by hand, and explicitly thrown away.\n')
+
+    const outcome = await FinalizeCommand.run({ redraft: true, repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Redrafted the merge message from 1 commit(s), replacing what was there')
+      ),
+    ).toBe(true)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('3. Merge message: redrafted on request, replacing what was there — needs review')
+      ),
+    ).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Review the redrafted merge message before landing'))).toBe(true)
+    Expect(outcome.ok).toBe(false)
+  })
+
+  Test('--check describes a hand-written message exactly as the run that follows it does', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    const written = 'Land example\n\n- Written by hand.\n'
+    fake.files.set(messagePath, written)
+
+    const checked = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    const ran = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    // `--check` used to call a hand-written file current for this HEAD while the run that followed
+    // replaced it. Both now reach the same decision from the same inputs.
+    const messageLine = (lines: readonly string[]) => lines.find(line => line.startsWith('3. Merge message:'))
+    Expect(messageLine(checked.lines)).toBe(messageLine(ran.lines))
+    Expect(messageLine(checked.lines)).toContain('kept — nothing records which HEAD it was written for')
+    Expect(fake.files.get(messagePath)).toBe(written)
   })
 
   Test(
@@ -430,6 +600,7 @@ Describe('finalize', () => {
     const fake = fakeDependencies()
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mergedhead000000000000000000000000000000000',
@@ -438,6 +609,35 @@ Describe('finalize', () => {
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
+  Test('--check consumes verify evidence only while its generated inputs and outputs still match', async () => {
+    const headSha = 'mainsha00000000000000000000000000000000000'
+    const fake = fakeDependencies({ headSha })
+    fake.greenTreeRecords.set('verify', {
+      at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
+      logRoot: '/logs/verify',
+      toolchain: FAKE_TOOLCHAIN,
+      treeHash: `tree-of-${headSha}`,
+    })
+
+    const covered = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(covered.lines.some(line => line.includes('tree unchanged since the green run'))).toBe(true)
+    Expect(covered.lines.some(line => line.includes('Run just verify --complete'))).toBe(false)
+
+    fake.greenTreeRecords.set('verify', {
+      ...fake.greenTreeRecords.get('verify')!,
+      generated: {
+        ...FAKE_GENERATED,
+        outputs: {
+          ...FAKE_GENERATED.outputs,
+          parser: { inputs: 'changed-inputs', outputs: 'parser-outputs' },
+        },
+      },
+    })
+    const stale = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(stale.lines).toContain('PLAN  Run just verify --complete; no record already covers this tree.')
   })
 
   Test('--check reports without integrating main, running a lane, or writing any file', async () => {
@@ -452,10 +652,11 @@ Describe('finalize', () => {
     Expect(outcome.ok).toBe(false)
   })
 
-  Test('--fresh ignores matching recorded state and redrafts anyway', async () => {
+  Test('--fresh ignores the recorded state but never replaces an existing merge message', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(
       statePath,
@@ -473,14 +674,30 @@ Describe('finalize', () => {
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
     })
 
-    await FinalizeCommand.run({ fresh: true, repositoryRoot: '/repo' }, fake.dependencies)
+    const outcome = await FinalizeCommand.run({ fresh: true, repositoryRoot: '/repo' }, fake.dependencies)
+
+    // `--fresh` discards the record, which used to guarantee the overwrite. It now costs the run its
+    // proof that the message is current, and nothing else.
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Kept the existing merge message; nothing records which HEAD it was written for')
+      ),
+    ).toBe(true)
+
+    const redrafted = await FinalizeCommand.run(
+      { fresh: true, redraft: true, repositoryRoot: '/repo' },
+      fake.dependencies,
+    )
 
     Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(redrafted.lines.some(line => line.includes('Redrafted the merge message'))).toBe(true)
   })
 
   Test(
@@ -509,6 +726,7 @@ Describe('finalize', () => {
       )
       fake.greenTreeRecords.set('verify', {
         at: '2026-09-17T09:00:00.000Z',
+        generated: FAKE_GENERATED,
         logRoot: '/logs/verify',
         toolchain: FAKE_TOOLCHAIN,
         treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
@@ -546,6 +764,7 @@ Describe('finalize', () => {
     )
     fake.greenTreeRecords.set('verify', {
       at: '2026-09-17T09:00:00.000Z',
+      generated: FAKE_GENERATED,
       logRoot: '/logs/verify',
       toolchain: FAKE_TOOLCHAIN,
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',

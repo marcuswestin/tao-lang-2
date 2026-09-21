@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
@@ -18,6 +19,7 @@ import {
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
+import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 import { Clock } from './TR-units'
 
@@ -113,60 +115,51 @@ type StudioPreviewOverlay = StudioPreviewElement & {
   style: Record<string, string>
 }
 
+/** The document events this bridge listens for; registration and removal name the same set. */
+type StudioPreviewDocumentEvent =
+  | 'blur'
+  | 'click'
+  | 'input'
+  | 'keydown'
+  | 'mousedown'
+  | 'mouseleave'
+  | 'mousemove'
+  | 'mouseover'
+  | 'mouseout'
+  | 'mouseup'
+  | 'wheel'
+
+type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
+
+type StudioPreviewDocumentListener = (
+  type: StudioPreviewDocumentEvent,
+  listener: (event: StudioPreviewPointerEvent) => void,
+  capture?: boolean,
+) => void
+
+type StudioPreviewWindowListener = (
+  type: StudioPreviewWindowEvent,
+  listener: (event: StudioPreviewMessageEvent) => void,
+) => void
+
 export type StudioPreviewHost = {
   console?: Partial<Record<StudioPreviewLogLevel, (...arguments_: unknown[]) => void>>
   document: {
-    addEventListener(
-      type:
-        | 'blur'
-        | 'click'
-        | 'input'
-        | 'keydown'
-        | 'mousedown'
-        | 'mouseleave'
-        | 'mousemove'
-        | 'mouseover'
-        | 'mouseout'
-        | 'mouseup'
-        | 'wheel',
-      listener: (event: StudioPreviewPointerEvent) => void,
-      capture?: boolean,
-    ): void
+    addEventListener: StudioPreviewDocumentListener
     body?: {
       appendChild(element: StudioPreviewOverlay): void
       getBoundingClientRect?(): StudioPreviewRect
     }
     createElement(name: 'div'): StudioPreviewOverlay
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
-    removeEventListener(
-      type:
-        | 'blur'
-        | 'click'
-        | 'input'
-        | 'keydown'
-        | 'mousedown'
-        | 'mouseleave'
-        | 'mousemove'
-        | 'mouseover'
-        | 'mouseout'
-        | 'mouseup'
-        | 'wheel',
-      listener: (event: StudioPreviewPointerEvent) => void,
-      capture?: boolean,
-    ): void
+    removeEventListener: StudioPreviewDocumentListener
   }
   parent: {
     postMessage(message: unknown, targetOrigin: string): void
   }
   window: {
-    addEventListener(
-      type: 'blur' | 'message' | 'resize' | 'scroll',
-      listener: (event: StudioPreviewMessageEvent) => void,
-    ): void
-    removeEventListener(
-      type: 'blur' | 'message' | 'resize' | 'scroll',
-      listener: (event: StudioPreviewMessageEvent) => void,
-    ): void
+    addEventListener: StudioPreviewWindowListener
+    removeEventListener: StudioPreviewWindowListener
   }
 }
 
@@ -495,27 +488,25 @@ async function findJourneyTarget(
   return match
 }
 
+/** Every journey selector but `text` is one attribute on the element; `text` is its content. */
+const journeySelectorAttributes = {
+  label: 'aria-label',
+  placeholder: 'placeholder',
+  tag: 'data-testid',
+} as const
+
 function findJourneyTargets(
   host: StudioPreviewHost,
   selector: TaoJourneySelector,
   target: string,
   scope?: StudioPreviewElement,
 ): StudioPreviewElement[] {
-  const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element => {
-    if (scope !== undefined && element !== scope && !elementIsWithin(element, scope)) {
-      return false
-    }
-    if (selector === 'tag') {
-      return element.getAttribute('data-testid') === target
-    }
-    if (selector === 'label') {
-      return element.getAttribute('aria-label') === target
-    }
-    if (selector === 'placeholder') {
-      return element.getAttribute('placeholder') === target
-    }
-    return element.textContent?.trim() === target
-  })
+  const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element =>
+    (scope === undefined || element === scope || elementIsWithin(element, scope))
+    && (selector === 'text'
+      ? element.textContent?.trim() === target
+      : element.getAttribute(journeySelectorAttributes[selector]) === target)
+  )
   const matches = selector === 'text'
     ? candidates.filter(candidate =>
       !candidates.some(other => other !== candidate && elementIsWithin(other, candidate))
@@ -551,49 +542,45 @@ function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEve
     MouseEvent?: new(type: string, init?: unknown) => object
     PointerEvent?: new(type: string, init?: unknown) => object
   }
-  if (event === 'enter') {
-    RuntimeAssert.input(value !== undefined, 'A Tao Studio enter journey step must carry text.')
-    setJourneyInputValue(target, value)
-    dispatchBrowserEvent(target, 'input', browser.Event, { bubbles: true, cancelable: true })
-    return
-  }
-  if (event === 'submit') {
-    dispatchBrowserEvent(target, 'keydown', browser.KeyboardEvent ?? browser.Event, {
+  const mouse = (type: string, buttons: number): void =>
+    dispatchBrowserEvent(target, type, browser.MouseEvent ?? browser.Event, {
       bubbles: true,
+      button: 0,
+      buttons,
       cancelable: true,
-      code: 'Enter',
-      key: 'Enter',
     })
-    return
-  }
-  if (event === 'hover') {
-    const PointerConstructor = browser.PointerEvent ?? browser.MouseEvent ?? browser.Event
-    const pointer = browser.PointerEvent === undefined ? 'mouse' : 'pointer'
-    dispatchBrowserEvent(target, `${pointer}over`, PointerConstructor, {
-      bubbles: true,
-      cancelable: true,
-      pointerType: 'mouse',
-    })
-    // A text selector resolves to the innermost matching node, which for a pressable is its nested
-    // label, while react-native-web listens for `enter` on the pressable itself. A real pointer
-    // entering the label enters every ancestor too, so the synthetic event bubbles to reach them.
-    dispatchBrowserEvent(target, `${pointer}enter`, PointerConstructor, {
-      bubbles: true,
-      cancelable: true,
-      pointerType: 'mouse',
-    })
-    return
-  }
-  const type = event === 'pressDown'
-    ? 'mousedown'
-    : event === 'pressUp'
-    ? 'mouseup'
-    : 'click'
-  dispatchBrowserEvent(target, type, browser.MouseEvent ?? browser.Event, {
-    bubbles: true,
-    button: 0,
-    buttons: event === 'pressDown' ? 1 : 0,
-    cancelable: true,
+  const pointer = (suffix: 'enter' | 'over'): void =>
+    dispatchBrowserEvent(
+      target,
+      `${browser.PointerEvent === undefined ? 'mouse' : 'pointer'}${suffix}`,
+      browser.PointerEvent ?? browser.MouseEvent ?? browser.Event,
+      { bubbles: true, cancelable: true, pointerType: 'mouse' },
+    )
+  RuntimeSwitch<TaoJourneyEvent, void>(event, {
+    enter: () => {
+      RuntimeAssert.input(value !== undefined, 'A Tao Studio enter journey step must carry text.')
+      setJourneyInputValue(target, value)
+      dispatchBrowserEvent(target, 'input', browser.Event, { bubbles: true, cancelable: true })
+    },
+    // A target without `focus` is a plain element, which a click is the honest approximation of.
+    focus: () => mouse('click', 0),
+    hover: () => {
+      pointer('over')
+      // A text selector resolves to the innermost matching node, which for a pressable is its
+      // nested label, while react-native-web listens for `enter` on the pressable itself. A real
+      // pointer entering the label enters every ancestor too, so this one bubbles to reach them.
+      pointer('enter')
+    },
+    press: () => mouse('click', 0),
+    pressDown: () => mouse('mousedown', 1),
+    pressUp: () => mouse('mouseup', 0),
+    submit: () =>
+      dispatchBrowserEvent(target, 'keydown', browser.KeyboardEvent ?? browser.Event, {
+        bubbles: true,
+        cancelable: true,
+        code: 'Enter',
+        key: 'Enter',
+      }),
   })
 }
 
@@ -770,10 +757,10 @@ export function mountStudioPreviewBridge(
         },
     )
   }
-  const startOrStopRecording = (event: StudioPreviewMessageEvent): boolean => {
-    const control = recordingControlFromMessage(event, config, host.parent)
+  const startOrStopRecording = (message: Record<string, unknown>) => {
+    const control = recordingControl(message, config)
     if (control === undefined) {
-      return false
+      return
     }
     if (control.active) {
       if (recording !== undefined) {
@@ -794,7 +781,6 @@ export function mountStudioPreviewBridge(
       recording = undefined
       postRecordingState(stoppedRecording, 'stopped')
     }
-    return true
   }
   const onRecordedInput = (event: StudioPreviewPointerEvent) => {
     if (event.taoStudioJourney === true || recording === undefined) {
@@ -977,50 +963,64 @@ export function mountStudioPreviewBridge(
     postedHoverKey = undefined
     redrawOverlay()
   }
-  const onMessage = (event: StudioPreviewMessageEvent) => {
-    if (startOrStopRecording(event)) {
-      return
-    }
-    const requestedCanvasOwnership = canvasGestureOwnershipFromMessage(event, config, host.parent)
-    if (requestedCanvasOwnership !== undefined) {
-      canvasGesturesOwned = requestedCanvasOwnership
-      return
-    }
-    const requestedMode = interactionModeFromMessage(event, config, host.parent)
-    if (requestedMode !== undefined) {
-      interactionMode = requestedMode
-      if (interactionMode === 'run') {
+  /** Every frame this preview acts on, by the `type` the Studio wire addresses it with. */
+  const inboundMessages: Readonly<Record<string, (message: Record<string, unknown>) => void>> = {
+    'capture-fixture': message => {
+      const requestId = studioRequestId(message)
+      if (requestId === undefined || captureFixture === undefined) {
+        return
+      }
+      void captureFixture().then(
+        fixture => postToStudio(host, config, 'preview-fixture-captured', { fixture, requestId }),
+        error => postCaptureFailure(host, config, 'preview-fixture-capture-failed', requestId, error),
+      )
+    },
+    'capture-runtime': message => {
+      const requestId = studioRequestId(message)
+      if (requestId === undefined) {
+        return
+      }
+      void captureRuntime().then(
+        capture => postToStudio(host, config, 'preview-runtime-captured', { capture, requestId }),
+        error => postCaptureFailure(host, config, 'preview-runtime-capture-failed', requestId, error),
+      )
+    },
+    'debug-command': applyDebugCommand,
+    'highlight-source': message => {
+      const selection = highlightSelection(message, config)
+      if (selection === undefined) {
+        return
+      }
+      sourceTarget = selection.range === undefined
+        ? undefined
+        : sourceHighlightTarget(host, selection.path, selection.range)
+      redrawOverlay()
+    },
+    'set-canvas-gestures': message => {
+      if (typeof message['owned'] === 'boolean') {
+        canvasGesturesOwned = message['owned']
+      }
+    },
+    'set-interaction-mode': message => {
+      const mode = message['mode']
+      if (mode !== 'edit' && mode !== 'run') {
+        return
+      }
+      interactionMode = mode
+      if (mode === 'run') {
         clearEditSelection()
       }
-      return
+    },
+    'set-journey-recording': startOrStopRecording,
+  }
+  const onMessage = (event: StudioPreviewMessageEvent) => {
+    // A frame this preview has no handler for is Studio talking to someone else, not an error, so
+    // the table is read for an own key rather than dispatched exhaustively.
+    const message = studioMessage(event, config, host.parent)
+    const type = message?.['type']
+    if (message !== undefined && typeof type === 'string' && Object.hasOwn(inboundMessages, type)) {
+      inboundMessages[type]!(message)
     }
-    if (applyDebugCommand(event, config, host.parent)) {
-      return
-    }
-    const captureRequestId = captureRequestFromMessage(event, config, host.parent)
-    if (captureRequestId !== undefined && captureFixture !== undefined) {
-      void captureFixture().then(
-        fixture => postCapturedFixture(host, config, captureRequestId, fixture),
-        error => postCaptureFailure(host, config, 'preview-fixture-capture-failed', captureRequestId, error),
-      )
-      return
-    }
-    const runtimeCaptureRequestId = runtimeCaptureRequestFromMessage(event, config, host.parent)
-    if (runtimeCaptureRequestId !== undefined) {
-      void captureRuntime().then(
-        capture => postRuntimeCapture(host, config, runtimeCaptureRequestId, capture),
-        error => postCaptureFailure(host, config, 'preview-runtime-capture-failed', runtimeCaptureRequestId, error),
-      )
-      return
-    }
-    const selection = highlightSelectionFromMessage(event, config, host.parent)
-    if (selection === undefined) {
-      return
-    }
-    sourceTarget = selection.range === undefined
-      ? undefined
-      : sourceHighlightTarget(host, selection.path, selection.range)
-    redrawOverlay()
   }
 
   // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
@@ -1051,7 +1051,10 @@ export function mountStudioPreviewBridge(
   for (const [type, listener] of windowListeners) {
     host.window.addEventListener(type, listener)
   }
-  postAppliedRevision(host, config)
+  postToStudio(host, config, 'preview-applied', {
+    appliedRevision: config.compileRevision,
+    compileRevision: config.compileRevision,
+  })
   scheduleLayoutMeasurements()
   const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
   const restoreConsole = forwardPreviewConsole(host, config)
@@ -1162,15 +1165,7 @@ function blockAppPointerEvent(event: StudioPreviewPointerEvent): void {
 }
 
 /** applyDebugCommand runs one Studio debugger command against this preview's controller. */
-function applyDebugCommand(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): boolean {
-  const message = studioMessageFor(event, config, parent, 'debug-command')
-  if (message === undefined) {
-    return false
-  }
+function applyDebugCommand(message: Record<string, unknown>): void {
   const steps = Array.isArray(message['steps']) ? message['steps'] : []
   const actions = Array.isArray(message['actions']) ? message['actions'] : []
   const commands: Record<string, () => void> = {
@@ -1185,12 +1180,10 @@ function applyDebugCommand(
     'step-out': () => Debug.Step('out'),
     'step-over': () => Debug.Step('over'),
   }
-  const run = commands[String(message['command'])]
-  if (run === undefined) {
-    return false
+  const command = String(message['command'])
+  if (Object.hasOwn(commands, command)) {
+    commands[command]!()
   }
-  run()
-  return true
 }
 
 function isDebugStepValue(value: unknown): value is TaoDebugStep {
@@ -1203,34 +1196,11 @@ function isDebugStepValue(value: unknown): value is TaoDebugStep {
     || (typeof declaration === 'string' && typeof statement === 'string')
 }
 
-function canvasGestureOwnershipFromMessage(
-  event: StudioPreviewMessageEvent,
+function recordingControl(
+  message: Record<string, unknown>,
   config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): boolean | undefined {
-  const message = studioMessageFor(event, config, parent, 'set-canvas-gestures')
-  return message !== undefined && typeof message['owned'] === 'boolean' ? message['owned'] : undefined
-}
-
-function interactionModeFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): 'edit' | 'run' | undefined {
-  const mode = studioMessageFor(event, config, parent, 'set-interaction-mode')?.['mode']
-  return mode === 'edit' || mode === 'run' ? mode : undefined
-}
-
-function recordingControlFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
 ): Readonly<{ active: boolean; captureSensitiveText: boolean; recordingId: string }> | undefined {
   if (config.cellId === undefined || config.cellRevision === undefined || config.manifestRevision === undefined) {
-    return undefined
-  }
-  const message = studioMessageFor(event, config, parent, 'set-journey-recording')
-  if (message === undefined) {
     return undefined
   }
   const identity = message['identity']
@@ -1254,12 +1224,7 @@ function recordingControlFromMessage(
 }
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
-  const target = event.target
-  return isObject(target)
-      && typeof target['getAttribute'] === 'function'
-      && typeof target['getBoundingClientRect'] === 'function'
-    ? target as unknown as StudioPreviewElement
-    : undefined
+  return isStudioElement(event.target) ? event.target : undefined
 }
 
 function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {
@@ -1291,23 +1256,10 @@ function recordedJourneyTarget(
 ): StudioRecordedJourneyTarget | undefined {
   let element: StudioPreviewElement | null | undefined = startingElement
   while (element !== undefined && element !== null) {
-    const candidates: StudioRecordedJourneyTarget[] = []
-    const tag = element.getAttribute('data-testid')?.trim()
-    if (tag !== undefined && /^[A-Za-z0-9_]+$/.test(tag)) {
-      candidates.push({ selector: 'tag', target: tag })
-    }
-    const label = element.getAttribute('aria-label')?.trim()
-    if (label !== undefined && label !== '') {
-      candidates.push({ selector: 'label', target: label })
-    }
-    const placeholder = element.getAttribute('placeholder')?.trim()
-    if (placeholder !== undefined && placeholder !== '') {
-      candidates.push({ selector: 'placeholder', target: placeholder })
-    }
-    const text = element.textContent?.trim()
-    if (text !== undefined && text !== '') {
-      candidates.push({ selector: 'text', target: text })
-    }
+    const source = element
+    const candidates = (['tag', 'label', 'placeholder', 'text'] as const)
+      .map(selector => ({ selector, target: recordedSelectorValue(source, selector) }))
+      .filter((candidate): candidate is StudioRecordedJourneyTarget => candidate.target !== undefined)
     const unique = candidates.find(candidate =>
       findJourneyTargets(host, candidate.selector, candidate.target).length === 1
     )
@@ -1317,6 +1269,18 @@ function recordedJourneyTarget(
     element = element.parentElement
   }
   return undefined
+}
+
+/** A recorded selector has to be spellable in a Tao journey later: a tag is an identifier, and an
+ * empty value identifies nothing. */
+function recordedSelectorValue(element: StudioPreviewElement, selector: TaoJourneySelector): string | undefined {
+  const value = selector === 'text'
+    ? element.textContent?.trim()
+    : element.getAttribute(journeySelectorAttributes[selector])?.trim()
+  if (selector === 'tag') {
+    return value !== undefined && /^[A-Za-z0-9_]+$/.test(value) ? value : undefined
+  }
+  return value === undefined || value === '' ? undefined : value
 }
 
 function isSensitiveJourneyInput(element: StudioPreviewElement): boolean {
@@ -1340,49 +1304,9 @@ function unresolvedRecordedStep(action: 'enter' | 'press' | 'submit'): Readonly<
   }
 }
 
-function captureRequestFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): string | undefined {
-  return captureRequestIdFor(event, config, parent, 'capture-fixture')
-}
-
-function runtimeCaptureRequestFromMessage(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-): string | undefined {
-  return captureRequestIdFor(event, config, parent, 'capture-runtime')
-}
-
 /** Both capture requests are one addressed frame carrying one request id. */
-function captureRequestIdFor(
-  event: StudioPreviewMessageEvent,
-  config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
-  type: 'capture-fixture' | 'capture-runtime',
-): string | undefined {
-  const requestId = studioMessageFor(event, config, parent, type)?.['requestId']
-  return nonEmptyValue(requestId) ? requestId : undefined
-}
-
-function postRuntimeCapture(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  capture: TaoRuntimeCaptureArtifact,
-): void {
-  postToStudio(host, config, 'preview-runtime-captured', { capture, requestId })
-}
-
-function postCapturedFixture(
-  host: StudioPreviewHost,
-  config: StudioPreviewConfig,
-  requestId: string,
-  fixture: TaoStudioFixturePlan,
-): void {
-  postToStudio(host, config, 'preview-fixture-captured', { fixture, requestId })
+function studioRequestId(message: Record<string, unknown>): string | undefined {
+  return nonEmptyValue(message['requestId']) ? message['requestId'] : undefined
 }
 
 /** A runtime capture and a fixture capture fail the same way; only the type names which one. */
@@ -1454,13 +1378,6 @@ function exactWebOrigin(value: string): boolean {
   } catch {
     return false
   }
-}
-
-function postAppliedRevision(host: StudioPreviewHost, config: StudioPreviewConfig): void {
-  postToStudio(host, config, 'preview-applied', {
-    appliedRevision: config.compileRevision,
-    compileRevision: config.compileRevision,
-  })
 }
 
 /** An occurrence-bearing frame names the render it is about on the preview identity itself. */
@@ -1555,15 +1472,14 @@ function postToStudio(
 }
 
 /**
- * studioMessageFor answers the one question every inbound handler asks first: did the Studio
- * window this preview belongs to send this frame, on this protocol, of this type, naming this
- * preview? Each parser is then left with only the fields its own message carries.
+ * studioMessage answers the one question every inbound frame raises first: did the Studio window
+ * this preview belongs to send it, on this protocol, naming this preview? The handler table is then
+ * left with only the fields its own message carries.
  */
-function studioMessageFor(
+function studioMessage(
   event: StudioPreviewMessageEvent,
   config: StudioPreviewConfig,
   parent: StudioPreviewHost['parent'],
-  type: string,
 ): Record<string, unknown> | undefined {
   if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
     return undefined
@@ -1573,7 +1489,6 @@ function studioMessageFor(
   if (
     message['channel'] !== studioProtocolChannel
     || message['protocolVersion'] !== studioProtocolVersion
-    || message['type'] !== type
     || !isObject(identity)
     || identity['appName'] !== config.appName
     || identity['project'] !== config.project
@@ -1608,16 +1523,14 @@ function previewIdentity(config: StudioPreviewConfig): {
   }
 }
 
-function highlightSelectionFromMessage(
-  event: StudioPreviewMessageEvent,
+function highlightSelection(
+  message: Record<string, unknown>,
   config: StudioPreviewConfig,
-  parent: StudioPreviewHost['parent'],
 ): { path: string; range: StudioSourceRange | undefined } | undefined {
-  const message = studioMessageFor(event, config, parent, 'highlight-source')
-  if (message === undefined || !isObject(message['identity'])) {
+  const identity = message['identity']
+  if (!isObject(identity)) {
     return undefined
   }
-  const identity = message['identity']
   if (
     !nonEmptyValue(identity['path'])
     || !nonEmptyValue(identity['sourceVersion'])
@@ -1634,11 +1547,13 @@ function sourceHighlightTarget(
   sourcePath: string,
   range: StudioSourceRange,
 ): StudioRenderTarget | undefined {
-  return Array.from(host.document.querySelectorAll(studioRenderSelector))
-    .map(renderTargetFromElement)
-    .filter((target): target is StudioRenderTarget => target !== undefined)
-    .filter(target => sourceRangeMatches(sourcePath, range, target.identity))
-    .sort((left, right) => sourceSpan(left.identity) - sourceSpan(right.identity))[0]
+  return Arrays.sorted(
+    Array.from(host.document.querySelectorAll(studioRenderSelector))
+      .map(renderTargetFromElement)
+      .filter((target): target is StudioRenderTarget => target !== undefined)
+      .filter(target => sourceRangeMatches(sourcePath, range, target.identity)),
+    (left, right) => sourceSpan(left.identity) - sourceSpan(right.identity),
+  )[0]
 }
 
 function renderTargetFromEvent(event: StudioPreviewPointerEvent): StudioRenderTarget | undefined {
@@ -1757,46 +1672,36 @@ function positionOverlay(overlay: StudioPreviewOverlay, rect: StudioPreviewRect)
   })
 }
 
+/**
+ * The drop indicator is one thin line drawn across the flow: along the flow it sits between the
+ * anchors it is offered between — or at the open end when there is only one — and across the flow
+ * it spans the longer of them. Both axes are the same rule with `horizontal` naming which is which.
+ */
 function positionDropOverlay(overlay: StudioPreviewOverlay, gap: StudioRenderGap): void {
   const after = gap.after?.element.getBoundingClientRect()
   const before = gap.before?.element.getBoundingClientRect()
-  if (after === undefined || before === undefined) {
-    const reference = after ?? before
-    if (reference === undefined) {
-      overlay.style['display'] = 'none'
-      return
-    }
-    if (gap.horizontal) {
-      showOverlayBox(overlay, {
-        height: Math.max(reference.height, dropIndicatorMinimumLength.across),
-        left: after === undefined ? reference.left : reference.left + reference.width,
-        top: reference.top,
-        width: dropIndicatorThickness,
-      })
-      return
-    }
-    showOverlayBox(overlay, {
-      height: dropIndicatorThickness,
-      left: reference.left,
-      top: after === undefined ? reference.top : reference.top + reference.height,
-      width: Math.max(reference.width, dropIndicatorMinimumLength.along),
-    })
+  const anchors = [after, before].filter((rect): rect is StudioPreviewRect => rect !== undefined)
+  const first = anchors[0]
+  if (first === undefined) {
+    overlay.style['display'] = 'none'
     return
   }
-  if (gap.horizontal) {
-    showOverlayBox(overlay, {
-      height: Math.max(after.height, before.height, dropIndicatorMinimumLength.across),
-      left: after.left + after.width + (before.left - after.left - after.width) / 2,
-      top: Math.min(after.top, before.top),
-      width: dropIndicatorThickness,
-    })
-    return
-  }
+  const { horizontal } = gap
+  const along = after === undefined
+    ? renderStart(first, horizontal)
+    : before === undefined
+    ? renderEnd(after, horizontal)
+    : (renderEnd(after, horizontal) + renderStart(before, horizontal)) / 2
+  const acrossStart = Math.min(...anchors.map(rect => renderStart(rect, !horizontal)))
+  const acrossLength = Math.max(
+    ...anchors.map(rect => horizontal ? rect.height : rect.width),
+    horizontal ? dropIndicatorMinimumLength.across : dropIndicatorMinimumLength.along,
+  )
   showOverlayBox(overlay, {
-    height: dropIndicatorThickness,
-    left: Math.min(after.left, before.left),
-    top: after.top + after.height + (before.top - after.top - after.height) / 2,
-    width: Math.max(after.width, before.width, dropIndicatorMinimumLength.along),
+    height: horizontal ? acrossLength : dropIndicatorThickness,
+    left: horizontal ? along : acrossStart,
+    top: horizontal ? acrossStart : along,
+    width: horizontal ? dropIndicatorThickness : acrossLength,
   })
 }
 
@@ -1830,32 +1735,32 @@ function bestRenderGap(
       continue
     }
     const horizontal = renderFlowIsHorizontal(candidates)
-    const sorted = candidates.toSorted((left, right) =>
-      renderCenter(left.element.getBoundingClientRect(), horizontal)
-      - renderCenter(right.element.getBoundingClientRect(), horizontal)
+    const sorted = Arrays.sorted(
+      candidates,
+      (left, right) =>
+        renderCenter(left.element.getBoundingClientRect(), horizontal)
+        - renderCenter(right.element.getBoundingClientRect(), horizontal),
     )
-    const first = sorted[0]!
-    best = nearerGap(best, {
-      before: first,
-      distance: Math.abs((horizontal ? x : y) - renderStart(first.element.getBoundingClientRect(), horizontal)),
-      horizontal,
-    })
-    for (let index = 0; index < sorted.length - 1; index += 1) {
-      const after = sorted[index]!
-      const before = sorted[index + 1]!
-      const midpoint = (
-        renderCenter(after.element.getBoundingClientRect(), horizontal)
-        + renderCenter(before.element.getBoundingClientRect(), horizontal)
-      ) / 2
-      const distance = Math.abs((horizontal ? x : y) - midpoint)
-      best = nearerGap(best, { after, before, distance, horizontal })
+    // One gap for every boundary between the siblings, including the two open ends: the ends are
+    // measured to the edge they open onto, the inner ones to the midpoint between two centres.
+    for (let index = 0; index <= sorted.length; index += 1) {
+      const after = sorted[index - 1]
+      const before = sorted[index]
+      const edge = after === undefined
+        ? renderStart(before!.element.getBoundingClientRect(), horizontal)
+        : before === undefined
+        ? renderEnd(after.element.getBoundingClientRect(), horizontal)
+        : (
+          renderCenter(after.element.getBoundingClientRect(), horizontal)
+          + renderCenter(before.element.getBoundingClientRect(), horizontal)
+        ) / 2
+      best = nearerGap(best, {
+        ...(after === undefined ? {} : { after }),
+        ...(before === undefined ? {} : { before }),
+        distance: Math.abs((horizontal ? x : y) - edge),
+        horizontal,
+      })
     }
-    const last = sorted.at(-1)!
-    best = nearerGap(best, {
-      after: last,
-      distance: Math.abs((horizontal ? x : y) - renderEnd(last.element.getBoundingClientRect(), horizontal)),
-      horizontal,
-    })
   }
   return best
 }

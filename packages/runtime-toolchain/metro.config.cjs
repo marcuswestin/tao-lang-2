@@ -66,6 +66,12 @@ const optionalHostModules = new Set([
 ])
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === '@tao/runtime/core') {
+    return {
+      type: 'sourceFile',
+      filePath: nodePath.resolve(runtimeSourceRoot, 'core', 'RuntimeCore.ts'),
+    }
+  }
   if (optionalHostModules.has(moduleName)) {
     try {
       return context.resolveRequest(context, moduleName, platform)

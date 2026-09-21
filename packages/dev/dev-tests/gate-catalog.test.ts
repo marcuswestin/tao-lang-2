@@ -31,6 +31,7 @@ const PREPARE_GATES = [
   '_parser-gen',
   '_fix-tao',
   '_compile-word-flower-app',
+  '_ide-extension-build',
 ]
 /** Every writer, for the edge set an untuned gate that reads the whole tree waits on. */
 const EVERY_WRITER = [...PREPARE_GATES].toSorted()
@@ -164,6 +165,7 @@ Describe('gate catalog metadata', () => {
     // The Tao gates do read `.tao` sources, so they still wait for the fixer that rewrites them.
     Expect(nodeOf('_tao-check').needs).toContain('_fix-tao')
     Expect(nodeOf('_compile-word-flower-app').needs).toContain('_fix-tao')
+    Expect(nodeOf('_ide-extension-build').needs).toContain('_fix-tao')
     // `dead-exports` is a TypeScript gate that reads `.tao` too: a `.tao` binding is what keeps a
     // bridged export out of its report, so a torn read of one would fail the lane on live code.
     Expect(nodeOf('dead-exports').needs).toContain('_fix-tao')
@@ -202,6 +204,7 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.metadata('_fix-tao').writes).toEqual(['tao'])
     Expect(GateCatalog.metadata('_parser-gen').writes).toEqual(['gen-parser'])
     Expect(GateCatalog.metadata('_compile-word-flower-app').writes).toEqual(['gen-app'])
+    Expect(GateCatalog.metadata('_ide-extension-build').writes).toEqual(['gen-ide'])
     for (const name of PREPARE_GATES) {
       Expect(GateCatalog.isPrepare(name)).toBe(true)
       // Exhaustive rather than a hand-written list: a writer added later is non-recordable until it
@@ -211,7 +214,7 @@ Describe('gate catalog metadata', () => {
     // A generator's output is derived state no tree hash describes, so a record can never stand for
     // it: proving it again is the only way to know its output is present. A fresh checkout and a
     // reclaimed `.artifacts` hash identically to a checkout that has the generated trees.
-    for (const name of ['_parser-gen', '_compile-word-flower-app']) {
+    for (const name of ['_parser-gen', '_compile-word-flower-app', '_ide-extension-build']) {
       Expect(GateCatalog.isRecordable(name)).toBe(false)
     }
     // A fixer's output is the tracked tree itself, which the hash does describe. A record is keyed
@@ -221,13 +224,14 @@ Describe('gate catalog metadata', () => {
     for (const name of ['_fix-just-fmt', '_fix-dprint', '_fix-tao']) {
       Expect(GateCatalog.isRecordable(name)).toBe(true)
     }
-    for (const name of ['_typecheck', '_repo-lint', '_tao-check', '_ide-extension-build', 'dead-exports']) {
+    for (const name of ['_typecheck', '_repo-lint', '_tao-check', 'dead-exports']) {
       Expect(GateCatalog.metadata(name).writes).toBeUndefined()
       Expect(GateCatalog.isPrepare(name)).toBe(false)
       Expect(GateCatalog.isRecordable(name)).toBe(true)
     }
     // Exactly one writer per class is what makes the derived edges unambiguous.
     Expect(GateCatalog.writerOf('gen-app')).toBe('_compile-word-flower-app')
+    Expect(GateCatalog.writerOf('gen-ide')).toBe('_ide-extension-build')
     Expect(GateCatalog.writerOf('gen-parser')).toBe('_parser-gen')
     Expect(GateCatalog.writerOf('just')).toBe('_fix-just-fmt')
     Expect(GateCatalog.writerOf('tao')).toBe('_fix-tao')
@@ -292,8 +296,8 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'code-editor',
         'generation',
+        'host-control',
         'icloud-native',
-        'performance-checks',
         'runtime',
         'shared',
         'stdlib',
@@ -304,9 +308,19 @@ Describe('gate catalog metadata', () => {
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite))).toEqual(['_fix-dprint'])
     }
 
-    Expect(GateCatalog.suiteReads('ast-utils')).toEqual(['gen-parser', 'ts'])
-    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ast-utils')).toSorted()).toEqual([
+    for (const suite of ['ast-utils', 'performance-checks']) {
+      Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'ts'])
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_fix-dprint',
+        '_parser-gen',
+      ])
+    }
+
+    Expect(GateCatalog.suiteReads('ide-extension')).toEqual(['gen-ide', 'gen-parser', 'tao', 'ts'])
+    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ide-extension')).toSorted()).toEqual([
       '_fix-dprint',
+      '_fix-tao',
+      '_ide-extension-build',
       '_parser-gen',
     ])
 
@@ -314,7 +328,6 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'compiler',
         'formatter',
-        'ide-extension',
         'parser',
         'runtime-jest',
         'runtime-toolchain',
@@ -340,10 +353,11 @@ Describe('gate catalog metadata', () => {
         '_compile-word-flower-app',
         '_fix-dprint',
         '_fix-tao',
+        '_ide-extension-build',
         '_parser-gen',
       ])
     }
-    Expect(GateCatalog.DEFAULT_SUITE_READS).toEqual(['gen-app', 'gen-parser', 'tao', 'ts'])
+    Expect(GateCatalog.DEFAULT_SUITE_READS).toEqual(['gen-app', 'gen-ide', 'gen-parser', 'tao', 'ts'])
   })
 
   Test('schedules the real ship bundle proof as a bounded slow lane under its public recipe', () => {

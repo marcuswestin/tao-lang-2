@@ -9,11 +9,11 @@ developer tooling first, then an invited-project beta, feedback, and collaborati
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.
 
-Implementation handoff: [Prompt - Implement Tao Studio companion Slice 1](./Prompt%20-%20Implement%20Slice%201.md).
+Implementation handoff (archived, Slice 1 landed): `Docs/Archive/Plans/Prompt - Implement Slice 1.md`.
 
 Existing boundaries remain authoritative:
 
-- [Native device as a Studio canvas](../Tao%20Studio%20v1/Exploration%20-%20Native%20device%20as%20Studio%20canvas.md)
+- [Native device as a Studio canvas](../../Archive/Explorations/Exploration%20-%20Native%20device%20as%20Studio%20canvas.md)
   owns the two-plane protocol, source authority, revision identity, security, and real-device proof.
 - [Tao Studio](../../Spec/Tao%20Studio.md) owns the implemented workbench, semantic source actions,
   scenario cells, capture, design inspection, tests, and multi-project sessions.

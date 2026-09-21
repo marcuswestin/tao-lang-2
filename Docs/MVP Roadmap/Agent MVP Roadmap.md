@@ -39,9 +39,34 @@ language sees.
   gone; and an unresolved reference is stated in Tao's words rather than by the grammar type
   Langium names. Surfacing errors also exposed two validators judging project-wide facts against one
   entry graph, which is fixed.
-- Still open from this item: `tao fmt` reports a file it cannot parse through the formatter's own
-  assertion rather than a positioned diagnostic, and Chevrotain's parser wording ("Expecting token
-  of type …") is passed through unchanged.
+- `tao fmt` reporting an unparseable file through the formatter's assertion is fixed, on
+  `0ac05257`: it now returns the first lexer or parser error as the same positioned `InPlace` result
+  `check` and `fix` return, while `Formatter.formatCode` and `formatFile` keep throwing for callers
+  that parsed the source themselves and have nowhere to report.
+- The wording and the `NaN` position both landed on `feat/tao-error-messages-78ff65`, which closes
+  this item:
+  - Every lexer and parser syntax error is Tao's own sentence. Tao registers all six of Chevrotain's
+    message builders in `taoLanguageModule`, which reaches the core parser, the language server, and
+    every workspace or session built on either, so `tao check`, `tao fix`, the LSP, and Studio read
+    one set of sentences. Past three deduplicated alternatives a diagnostic names the construct it
+    was parsing rather than listing what could start it, so the seventy-five-line list becomes one
+    sentence. The four shapes now read:
+
+    ```
+    Expected a view member here, but found `Text`.
+    Expected `(` or `=` here, but found `{`.
+    Expected a name like `Greeting`, a value like `"hello"`, or a keyword like `render` here, but found `§`.
+    Expected an open block for this `}` to close, but none is open here.
+    ```
+  - A report is also easier to read: an excerpt leads with the line above the mistake, and a file
+    reports the first error on each line — its lexer error first, since a character Tao cannot read
+    explains the parse that follows — capped at three with the rest counted.
+  - The `NaN:NaN` position is fixed at its cause. `isPlaced` now rejects a non-finite position as
+    well as a missing one, and an error against Chevrotain's end-of-file token is placed at the end
+    of the source, so `view Broken() {` reports `a.tao:1:15` under the unclosed brace instead of
+    `NaN:NaN` followed by the formatter's assertion.
+- **Done.** The matching bullet under **Build the enforcement and diagnostics surface** in
+  `Roadmap.md` is closed with it.
 
 ### A2 — A standalone cross-platform `tao` executable
 
@@ -270,4 +295,4 @@ the sync demo cannot be shown to anyone outside this machine.
 
 - Waits on: Ro provisions a hosted InstantDB application (`R11`); the wiring and configuration do not.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
-  `Docs/Roadmap/InstantDB datasource provider/`.
+  `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.

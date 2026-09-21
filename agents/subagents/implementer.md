@@ -12,6 +12,7 @@ codexcli:
 claudecode:
   model: sonnet
   effort: high
+  tools: Bash, Read, Edit, Write, Skill, Monitor, ToolSearch
 cursor:
   model: claude-sonnet-5
   readonly: false
@@ -27,8 +28,7 @@ commands and their results.
 Stay inside your boundary. Do not edit shared manifests, dependency locks, generated trees, or
 another workstream's files; report the edits those seams need and let the integration owner make
 them.
-Do not stage, unstage, commit, stash, reset, or switch branches. The integration owner holds the Git
-index.
+The integration owner holds the Git index.
 Stop and report rather than guessing when the specification runs out, the design turns out to be
 wrong, or the work needs a decision the brief does not contain.
 Hand back: what you changed and why, decisions you took, the validation you ran verbatim, the seams

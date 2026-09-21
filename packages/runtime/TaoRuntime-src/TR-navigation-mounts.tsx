@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from './core/RuntimeCore'
 import { accessibilityStateProps } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
@@ -65,7 +66,7 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
   }
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    const target = [...Object.values(this.descriptor.config.items)].reverse()
+    const target = Arrays.reversed(Object.values(this.descriptor.config.items))
       .map(item => item.content).find(isNavigation)
     target ? target.present(presentable, arguments_) : this.presentOverlay(presentable, arguments_)
   }
@@ -82,7 +83,7 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
   }
 
   protected backContent(): boolean {
-    const target = [...Object.values(this.descriptor.config.items)].reverse()
+    const target = Arrays.reversed(Object.values(this.descriptor.config.items))
       .map(item => item.content).find(item => isNavigation(item) && item.canGoBack)
     return target && isNavigation(target) ? target.back() : false
   }
