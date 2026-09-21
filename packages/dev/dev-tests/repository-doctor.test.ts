@@ -364,5 +364,4 @@ Describe('repository doctor', () => {
     const checks = repositoryDoctorChecks(facts())
     Expect(checks.find(candidate => candidate.name === 'worktree path')?.status).toBe('pass')
   })
-
 })
