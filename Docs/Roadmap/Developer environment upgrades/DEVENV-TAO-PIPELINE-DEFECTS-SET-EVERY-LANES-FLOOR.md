@@ -14,16 +14,19 @@
   [`Tao tooling performance.md`](<../Tao tooling performance.md>) sections 4 and 5. In short: 88.6%
   of a `tao check` profile was `realpathSync` from the symlink guard in `Packages.targetMatches`,
   **fixed in the change that added this entry** (check 22s to about 2.3s, fix 9s to 1.2s, compile
-  3.2s to 0.8s). Still open: scope resolution recomputes every import per reference
-  (`packages/language/parser/parser-src/value-scope.ts:645-708`); every entry file rebuilds the whole
-  graph from disk (`packages/language/parser/parser-src/parser.ts:266-291`,
-  `packages/compiler/compiler-src/workspace/Workspace.ts:99-111`); each `tao test` compile lands in
-  fresh paths and misses Babel's cache.
+  3.2s to 0.8s). Fixed since: the scope provider remembers what each `use` statement resolves to; a
+  workspace's entries are built once rather than once per entry, and `check` and `fix` read that
+  build (WordFlower check 1.22s, fix 0.80s); `tao test` writes its Jest entrypoints beside the run
+  roots, so a compile no longer moves a directory Jest hashes into every cache key — counted on
+  WordFlower, a run after an edit re-transformed all 2,135 modules it loads and now re-transforms
+  650. Still open: those 650 are eight near-identical copies of the compiled app, one per test
+  variant, in paths that change with every compile; validation runs once per entry over that
+  entry's whole graph; and opening a workspace costs 0.10-0.15s in `Packages.createContext`.
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
-- **Proposed change:** The rest of Phase 0 of the linked report: a cached per-document import table, one build for the union of a workspace's entries, and stable
-  content-addressed test output paths. Then give `./agent bench` a budget it asserts, since it
-  reports today and fails nothing.
+- **Proposed change:** The rest of Phase 0 of the linked report: compile what test variants share
+  once per run, a version-keyed cache for a packaged CLI, and a budget `./agent bench` asserts,
+  since it reports today and fails nothing.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
   with them.
 - **Acceptance:** Uncached `tao check "Apps/WordFlower/1 - Current"` under 1s and `tao fix` of the

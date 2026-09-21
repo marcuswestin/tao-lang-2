@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
 import { TestRunRoot } from '../expo-host-src/testing/test-run-root'
 
 const HOUR_MS = 60 * 60 * 1000
@@ -445,6 +446,26 @@ Describe('reusing a generated test run root', () => {
 
       const cacheRoot = FS.resolvePath(`${TestRunRoot.DIRECTORY_NAME}/tao-test-command/.cache`, runtimePackageRoot)
       Expect(await FS.listDir(cacheRoot)).toEqual([])
+    })
+  })
+
+  // Entrypoint plans live beside the run roots so that Jest's configuration does not move from
+  // compile to compile; a run rewrites the plan it uses, so one left alone for a week is unwanted.
+  Test('retires an entrypoint plan no run has written in a week and keeps one in use', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      await writeRunRoot(runtimePackageRoot, 'tao-test-command', 0)
+      const plansRoot = FS.resolvePath(
+        `${TestRunRoot.DIRECTORY_NAME}/tao-test-command/${TestHarnessFiles.DIRECTORY_NAME}`,
+        runtimePackageRoot,
+      )
+      const abandoned = FS.resolvePath('1-abandoned', plansRoot)
+      await FS.writeText(FS.resolvePath('1-in-use/shard-1-of-1.jest.tsx', plansRoot), '')
+      await FS.writeText(FS.resolvePath('shard-1-of-1.jest.tsx', abandoned), '')
+      await FS.setModifiedTimeMs(abandoned, Date.now() - TestRunRoot.RETAINED_CACHE_AGE_MS - HOUR_MS)
+
+      await TestRunRoot.prune({ runtimePackageRoot })
+
+      Expect(await FS.listDir(plansRoot)).toEqual(['1-in-use'])
     })
   })
 
