@@ -42,6 +42,13 @@ function startDebouncedWatcher(
     {
       debounceMs: WATCH_DEBOUNCE_MS,
       onEvent: (event, path) => DevLoopTUI.logDevLoop('watch', `${spec.label} ${event}: ${path}`),
+      shouldDrop: () => {
+        if (!CommandRunner.isCommandRunning()) {
+          return false
+        }
+        DevLoopTUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
+        return true
+      },
     },
   )
 }

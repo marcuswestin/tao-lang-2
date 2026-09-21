@@ -44,6 +44,46 @@ Describe('startDebouncedWatcher', () => {
       await FS.remove(root)
     }
   })
+
+  // Pins `tao dev`'s original behavior: an event that arrives while `shouldDrop` is true never
+  // schedules a fire, and it cancels whatever fire an earlier event had already scheduled. Two
+  // separate files stand in for two separate events, since chokidar coalesces rapid repeated writes
+  // to the very same path into one event, which would leave this pinning nothing distinguishable.
+  Test('drops a scheduled fire when a later event arrives while shouldDrop is true', async () => {
+    const root = await mkTestDir('tao-debounced-watcher-drop-')
+    const firstPath = FS.resolvePath('First.tao', root)
+    const secondPath = FS.resolvePath('Second.tao', root)
+    await FS.writeText(firstPath, 'first\n')
+    await FS.writeText(secondPath, 'first\n')
+    let changeCount = 0
+    let dropping = false
+    const watcher = startDebouncedWatcher([root], () => {
+      changeCount += 1
+    }, {
+      debounceMs: 50,
+      shouldDrop: () => dropping,
+    })
+    try {
+      await Time.sleep(200)
+
+      // Schedules a fire for +50ms, then a second event on a different file before it fires cancels
+      // it because `shouldDrop` is now true — the pending timer must not survive to fire late.
+      await FS.writeText(firstPath, 'second\n')
+      await Time.sleep(20)
+      dropping = true
+      await FS.writeText(secondPath, 'second\n')
+      await Time.sleep(150)
+      Expect(changeCount).toBe(0)
+
+      // Once no longer dropping, a fresh event schedules and fires normally.
+      dropping = false
+      await FS.writeText(firstPath, 'third\n')
+      await waitUntil(() => changeCount === 1)
+    } finally {
+      await watcher.close()
+      await FS.remove(root)
+    }
+  })
 })
 
 Describe('shouldIgnoreWatchPath', () => {

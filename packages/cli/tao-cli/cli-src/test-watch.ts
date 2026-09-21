@@ -1,12 +1,12 @@
 import { Packages } from '@ast-utils'
 import { minimalWatchRoots, startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-dev-loop'
-import { FS, HCI, Platform } from '@shared'
+import { Errors, FS, HCI, Platform } from '@shared'
 import { findTaoTestFiles, runTestCommandOnce, type TestCommandOptions, type TestRunOutcome } from './test-command'
 
 /** DebouncedWatcher is the small shape `runTestWatchLoop` needs from any watcher it is given. */
 type DebouncedWatcher = { close: () => Promise<void> }
 
-/** TestWatchDeps lets a test inject the watcher, the run function, and the stop signal. */
+/** TestWatchDeps lets a test inject the watcher, the run function, the error reporter, and the stop signal. */
 export type TestWatchDeps = {
   /** Runs the selected test set once; called immediately, then again after every debounced change. */
   runOnce: () => Promise<TestRunOutcome>
@@ -16,13 +16,18 @@ export type TestWatchDeps = {
   signal: AbortSignal
   /** Prints the between-runs status line naming what is being watched. */
   reportWaiting: () => void
+  /** Reports a run that threw, the way the one-shot `tao test` reports an uncaught error. */
+  reportError: (error: unknown) => void
 }
 
 /**
  * runTestWatchLoop runs `deps.runOnce` once, then again after every debounced change `deps.startWatcher`
  * reports, until `deps.signal` aborts. Runs are serialized: a change that arrives while a run is still
  * in progress queues exactly one rerun rather than starting a second run alongside the first or
- * queuing one per change. A failing run is reported by `runOnce` itself and never stops the loop.
+ * queuing one per change. A run that returns a failing outcome is reported by `runOnce` itself; a run
+ * that throws — a preflight `--name` mismatch, a torn read, a worker crash — is caught here and
+ * reported through `deps.reportError` instead of becoming an unhandled rejection. Either way the loop
+ * keeps watching.
  */
 export async function runTestWatchLoop(deps: TestWatchDeps): Promise<void> {
   let running = false
@@ -34,6 +39,8 @@ export async function runTestWatchLoop(deps: TestWatchDeps): Promise<void> {
     return (async () => {
       try {
         await deps.runOnce()
+      } catch (error) {
+        deps.reportError(error)
       } finally {
         running = false
         if (deps.signal.aborted) {
@@ -80,12 +87,17 @@ export type TestWatchCommandDeps = {
   runOnce?: () => Promise<TestRunOutcome>
   startWatcher?: (onChange: () => void) => DebouncedWatcher
   signal?: AbortSignal
+  reportError?: (error: unknown) => void
 }
 
 /**
  * runTestWatchCommand runs `tao test --watch`: the selected set once, then again on any change under
  * the selected paths or the selected tests' project roots, until Ctrl-C. Every rerun bypasses the
  * compiled-output cache, because a watch loop exists to show a fresh run, not a replayed green.
+ *
+ * A path with no Tao tests under it today still joins the watch set rather than ending the command:
+ * the whole point of watching the selected directories is to notice a test file that does not exist
+ * yet, and the run body reports "no tests found" for itself on every run that still finds none.
  */
 export async function runTestWatchCommand(
   paths: string | readonly string[],
@@ -93,7 +105,6 @@ export async function runTestWatchCommand(
   overrides: TestWatchCommandDeps = {},
 ): Promise<void> {
   const roots = (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
-  const displayRoots = roots.map(root => FS.displayPath(root)).join(', ')
   const found = new Set<string>()
   for (const root of roots) {
     for (const testPath of await findTaoTestFiles(root)) {
@@ -101,10 +112,6 @@ export async function runTestWatchCommand(
     }
   }
   const testPaths = [...found].sort()
-  if (testPaths.length === 0) {
-    HCI.writeLine(`No Tao tests found under ${displayRoots}`)
-    return
-  }
 
   const { describeWatch, watchRoots } = await watchSetFor(roots, testPaths)
 
@@ -120,6 +127,7 @@ export async function runTestWatchCommand(
 
   try {
     await runTestWatchLoop({
+      reportError: overrides.reportError ?? (error => HCI.writeErrorLine(Errors.formatForUser(error))),
       reportWaiting: () => HCI.logProcessInfo('test', describeWatch),
       runOnce: overrides.runOnce ?? (() => runTestCommandOnce(paths, options)),
       signal,

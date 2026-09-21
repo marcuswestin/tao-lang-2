@@ -15,13 +15,26 @@ export type DebouncedWatcherOptions = {
   debounceMs: number
   /** Called for every raw chokidar event before it is debounced, for a caller's own logging. */
   onEvent?: (event: string, path: string) => void
+  /**
+   * Consulted on every raw event, before it would (re)start the debounce timer. Returning true drops
+   * the event: any pending timer is cleared and none is scheduled, so a busy caller does not queue a
+   * rerun for the moment it becomes free again. `onChange` itself still runs the same fire-time check
+   * a caller needs for the run that was already scheduled before it became busy.
+   */
+  shouldDrop?: () => boolean
+  /**
+   * Forces chokidar's polling backend instead of native filesystem events. Unset everywhere this
+   * package uses it — native events are what a real dev machine wants — but a test running inside a
+   * sandbox whose native events do not reliably report a brand-new file can ask for it explicitly.
+   */
+  usePolling?: boolean
 }
 
 /**
  * startDebouncedWatcher watches `paths` with chokidar and calls `onChange` once per quiet period
- * after a change settles. It carries no policy about what to do while a previous `onChange` is
- * still being acted on — a caller that must skip, queue, or serialize decides that itself inside
- * `onChange`, since it runs synchronously when the debounce timer fires.
+ * after a change settles. Beyond `shouldDrop`, it carries no policy about what to do while a previous
+ * `onChange` is still being acted on — a caller that must queue or serialize decides that itself
+ * inside `onChange`, since it runs synchronously when the debounce timer fires.
  */
 export function startDebouncedWatcher(
   paths: readonly string[],
@@ -32,11 +45,16 @@ export function startDebouncedWatcher(
   const watcher = chokidar.watch([...paths], {
     ignoreInitial: true,
     ignored: shouldIgnoreWatchPath,
+    usePolling: options.usePolling,
   })
   watcher.on('all', (event, path) => {
     options.onEvent?.(event, path)
     if (timer) {
       clearTimeout(timer)
+      timer = undefined
+    }
+    if (options.shouldDrop?.()) {
+      return
     }
     timer = setTimeout(() => {
       timer = undefined

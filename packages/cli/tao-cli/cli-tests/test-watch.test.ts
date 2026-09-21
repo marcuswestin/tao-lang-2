@@ -1,3 +1,4 @@
+import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-dev-loop'
 import { Errors, FS, Time } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTestWatchCommand, runTestWatchLoop, type TestWatchDeps } from '../cli-src/test-watch'
@@ -30,6 +31,9 @@ type FakeWatch = {
   startWatcher: TestWatchDeps['startWatcher']
 }
 
+/** noopReportError is the error reporter for a test whose scenario is not about error reporting. */
+const noopReportError = (): void => {}
+
 function fakeWatch(): FakeWatch {
   const state: FakeWatch = {
     closed: false,
@@ -56,6 +60,7 @@ Describe('runTestWatchLoop', () => {
     let calls = 0
 
     const loop = runTestWatchLoop({
+      reportError: noopReportError,
       reportWaiting: () => waits.push(calls),
       runOnce: async () => {
         calls += 1
@@ -84,6 +89,7 @@ Describe('runTestWatchLoop', () => {
     let firstRun = deferred<void>()
 
     const loop = runTestWatchLoop({
+      reportError: noopReportError,
       reportWaiting: () => {},
       runOnce: async () => {
         calls += 1
@@ -122,6 +128,7 @@ Describe('runTestWatchLoop', () => {
     let calls = 0
 
     const loop = runTestWatchLoop({
+      reportError: noopReportError,
       reportWaiting: () => {},
       runOnce: async () => {
         calls += 1
@@ -153,6 +160,7 @@ Describe('runTestWatchLoop', () => {
     const firstRun = deferred<void>()
 
     const loop = runTestWatchLoop({
+      reportError: noopReportError,
       reportWaiting: () => {},
       runOnce: async () => {
         calls += 1
@@ -183,6 +191,7 @@ Describe('runTestWatchLoop', () => {
     const waits: string[] = []
 
     const loop = runTestWatchLoop({
+      reportError: noopReportError,
       reportWaiting: () => waits.push('waiting'),
       runOnce: async () => ({ failed: false }),
       signal: controller.signal,
@@ -192,6 +201,84 @@ Describe('runTestWatchLoop', () => {
     await Promise.resolve()
     await Promise.resolve()
     Expect(waits).toEqual(['waiting'])
+
+    controller.abort()
+    await loop
+  })
+
+  Test('reports a throwing first run once, keeps watching, and still reruns on a later change', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    const errors: unknown[] = []
+    const waits: number[] = []
+    let calls = 0
+
+    const loop = runTestWatchLoop({
+      reportError: error => errors.push(error),
+      reportWaiting: () => waits.push(calls),
+      runOnce: async () => {
+        calls += 1
+        if (calls === 1) {
+          throw new Errors.UserInputError('no journey matches --name')
+        }
+        return { failed: false }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(1)
+    Expect(errors.length).toBe(1)
+    Expect(waits).toEqual([1])
+
+    watch.fireChange()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(2)
+    Expect(errors.length).toBe(1)
+
+    controller.abort()
+    await loop
+  })
+
+  Test('reports a throwing rerun once and keeps the loop alive', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    const errors: unknown[] = []
+    let calls = 0
+
+    const loop = runTestWatchLoop({
+      reportError: error => errors.push(error),
+      reportWaiting: () => {},
+      runOnce: async () => {
+        calls += 1
+        if (calls === 2) {
+          throw new Errors.UserInputError('a worker crashed')
+        }
+        return { failed: false }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(1)
+
+    watch.fireChange()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(2)
+    Expect(errors.length).toBe(1)
+
+    // The loop is still alive: a further change still triggers a run.
+    watch.fireChange()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(3)
+    Expect(errors.length).toBe(1)
 
     controller.abort()
     await loop
@@ -226,6 +313,41 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
       await Time.sleep(200)
 
       await FS.writeText(FS.resolvePath('Two/Sample.test.tao', rootDir), 'test "Sample" { }\n// touched\n')
+
+      await waitUntil(() => calls === 2)
+
+      controller.abort()
+      await loop
+
+      Expect(calls).toBe(2)
+    })
+  })
+
+  // The whole point of watching the selected directory is to notice a test file that does not exist
+  // yet, so finding none at startup must not end the command. Polling is forced here because a
+  // brand-new file's native "add" event is not reliable inside this suite's sandbox; an edit to an
+  // already-known file (the case the test above covers) is unaffected and needs no such override.
+  Test('keeps watching a selected directory with no tests yet, and reruns once one is added', async () => {
+    await withTaoFixture({
+      'Project.tao': 'project { id "watch-empty" name "Watch Empty" }\n',
+    }, async rootDir => {
+      let calls = 0
+      const controller = new AbortController()
+
+      const loop = runTestWatchCommand([rootDir], {}, {
+        runOnce: async () => {
+          calls += 1
+          return { failed: false }
+        },
+        signal: controller.signal,
+        startWatcher: onChange =>
+          startDebouncedWatcher([rootDir], onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
+      })
+
+      await waitUntil(() => calls === 1)
+      await Time.sleep(200)
+
+      await FS.writeText(FS.resolvePath('New.test.tao', rootDir), 'test "New" { }\n')
 
       await waitUntil(() => calls === 2)
 
