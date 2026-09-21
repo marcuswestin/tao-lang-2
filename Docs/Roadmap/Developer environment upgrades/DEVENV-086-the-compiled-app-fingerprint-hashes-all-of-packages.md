@@ -17,6 +17,24 @@
   (~1,900 new files per run) and took 28.8 / 29.8 / 29.9s rather than the expected ~4.7s, because
   another agent was editing `packages/dev`; warm readings were only obtainable during a lull. Two
   `./tao check` runs 40s apart missed entirely for the same reason.
+- **Narrowed 2026-09-21, by denylist rather than by derived closure.** `packages/cli/tao-cli/cli-src/toolchain-packages.ts`
+  now leaves three groups out of both identities — `packages/dev`, `packages/ides/*`, `packages/testing/*` —
+  and both `CheckCache` and `TestCache.fingerprint` hash the rest. The shape is deliberately the
+  opposite of what this entry first proposed: naming the _irrelevant_ groups means a new, renamed or
+  unconsidered package is hashed by default and the cache merely misses, where naming the relevant
+  ones would silently exclude anything new and an excluded input a verdict depends on is a stale
+  green. `toolchain-packages.test.ts` proves the promise rather than asserting it — it walks the real
+  manifests and fails on any dependency edge from a verdict-relevant package into an excluded group,
+  and separately pins that the CLI's one edge into `tao-dev` stays a single lazy import inside
+  `studio-review`. Measured after: editing `packages/dev` costs **0.53s** against 34.4s before, while
+  editing `packages/language/ast-utils` still costs 35.9s, which is the half that matters.
+- **Still open.** The derived closure this entry asked for is not built, because `PackageGraph` models
+  only literal TypeScript imports and cannot see the non-import edges — `TaoAppModules` locating
+  `packages/apps/runtime` by filesystem test, `TAO_STDLIB_ROOT`, the workspace manifests,
+  `packages/tsconfig.base.json`. The denylist does not need those edges to be safe, because it
+  excludes only groups nothing reaches; a closure narrow enough to exclude `packages/ai` or
+  `packages/providers` still would, and both are reached by real manifest edges today
+  (`packages/compiler` depends on `tao-generation`, `packages/apps/stdlib` on `tao-icloud`).
 - **Measured impact (2026-09-21):** on a quiet machine, the lane cost of one invalidation is 34.4s.
   A single comment added to `packages/dev/dev-src/performance/admission-experiment.ts` — a file no
   Tao verdict can depend on — made `just check` re-check all 126 Tao files, against 0.5s for a warm

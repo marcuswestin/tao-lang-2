@@ -201,6 +201,48 @@ Describe('test shard counts', () => {
   })
 })
 
+/**
+ * A suite can run whole for two opposite reasons, and they read alike in `reason`: because a
+ * measurement said one shard is cheapest, or because there was no measurement at all. Only the
+ * second is worth a word to anyone, so only the second carries a cause. This is the distinction the
+ * package restructure needed and did not have: every suite id changed at once, every suite lost its
+ * recorded duration, and every one of them ran whole while the lane printed an ordinary green.
+ */
+Describe('a suite that ran whole for want of a measurement', () => {
+  Test('marks a suite with no recorded duration, so a lane can say the sharding was lost', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    const result = plan({ files, measuredMs: undefined })
+
+    Expect(result.shards.length).toBe(1)
+    Expect(result.unshardedCause).toBe('no-recorded-duration')
+  })
+
+  Test('leaves every measured reason for running whole unmarked', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    // Under the published 8.0s floor: one shard because splitting costs more than it saves.
+    Expect(plan({ files, measuredMs: 5_000 }).unshardedCause).toBeUndefined()
+    // Declared unshardable: a deliberate catalog decision, not missing data.
+    Expect(plan({ files, measuredMs: 40_000, shardable: false }).unshardedCause).toBeUndefined()
+    // A single unit cannot be split however long it took.
+    Expect(plan({ files: [files[0] as string], measuredMs: 40_000 }).unshardedCause).toBeUndefined()
+  })
+
+  Test('does not mark a suite it actually sharded', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    const result = plan({
+      fileCostMs: costsOf(files.map(file => ({ costMs: 1_000, file }))),
+      files,
+      measuredMs: 40_000,
+    })
+
+    Expect(result.shards.length).toBeGreaterThan(1)
+    Expect(result.unshardedCause).toBeUndefined()
+  })
+})
+
 Describe('per-file costs from the test ledger', () => {
   Test("sums one suite's recorded test durations per file and ignores every other suite", () => {
     const ledger = ledgerOf([
