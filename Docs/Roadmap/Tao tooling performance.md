@@ -173,9 +173,9 @@ evaluating Langium and building the parser, not finding files. It is paid:
 
 - once per `tao check`, `fix`, `compile` — tolerable alone;
 - on **every save** under `tao dev`, which spawns a new `tao compile` process per change and
-  recompiles the whole app (`packages/dev/dev-src/expo-dev-loop/Run.ts:75-79`) — today 3s before
-  Metro sees a byte, 0.8s with the memos, against roughly 0.2s for an in-process incremental
-  recompile;
+  recompiles the whole app (`packages/apps/expo-host/expo-host-src/dev-loop/Run.ts:74-78`) — 3s
+  before Metro saw a byte when measured, about 0.8s with 5.1 fixed, against roughly 0.2s for an
+  in-process incremental recompile;
 - several times per `tao test`: the CLI, a Bun worker per test directory, then Node and Jest.
 
 ### 5.5 `tao test` pays Jest, Babel, and React Native on every run
@@ -385,9 +385,10 @@ core (7.2), each opened only by its named trigger.
 1. **Is a lower-fidelity inner test loop acceptable?** Option C runs journeys against a stub of
    React Native. Recommended: yes, as the default for `tao test` while iterating, with the Jest run
    as the gate that proves a journey against real React Native JavaScript.
-2. **May the CLI rely on a resident process?** Recommended: watch modes and the dev loop first, which
-   need no daemon; a shared background service only if cold one-shot commands still feel slow after
-   Phase 0, because daemons cost lifecycle bugs.
+2. **May the CLI rely on a resident process?** Decided by Ro on 2026-09-21: yes, it may. The order
+   stays watch modes and the in-process dev loop first, which need no daemon, and a shared background
+   service only if cold one-shot commands still feel slow after Phase 0, because daemons cost
+   lifecycle bugs.
 3. **Does the runtime stay React-shaped after MVP?** The hybrid core is the only option here that
    improves the loop _and_ opens native renderers. Recommended: decide nothing now; open a
    time-boxed spike after MVP, informed by what Phase 2's headless runner had to stub.
