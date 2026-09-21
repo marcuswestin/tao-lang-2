@@ -2,8 +2,14 @@
 
 ## Budgets, enforced by `repo-lint`
 
-- Root `AGENTS.md` at most 60 lines. Each `SKILL.md` at most 80 lines, with detail in reference
-  files loaded on demand. Each pass aims to cut total instruction lines, never to grow them.
+- Root `AGENTS.md` at most 11,500 characters, `packages/AGENTS.md` 6,000, each `SKILL.md` 12,000,
+  with detail in reference files loaded on demand. Each pass aims to cut total instruction size,
+  never to grow it.
+- The budget counts characters, not lines, because these files are long paragraph bullets: a line
+  budget caps how many bullets there are and says nothing about how much each one carries. At the
+  old 80-line budget `delegation/SKILL.md` held 11,594 characters and `verification-lanes/SKILL.md`
+  5,894 — both compliant, one twice the size of the other. Folding two bullets together no longer
+  clears a budget.
 
 ## Removing
 

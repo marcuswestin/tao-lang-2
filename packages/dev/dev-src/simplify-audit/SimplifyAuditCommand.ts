@@ -74,9 +74,10 @@ function writeReport(report: SimplifyAuditReport): void {
     report.imports.map(edge => `${edge.from} → ${edge.to} (${edge.count})`),
   )
   writeSection(
-    'Instruction files (over budget marked !):',
+    'Instruction files:  chars   lines (over budget marked !):',
     report.instructions.map(file =>
-      `${pad(file.lines)}${file.budget !== undefined && file.lines > file.budget ? ' !' : '  '} ${file.path}`
+      `${pad(file.characters)}${pad(file.lines)}`
+      + `${file.budget !== undefined && file.characters > file.budget ? ' !' : '  '} ${file.path}`
     ),
   )
   writeSection(

@@ -44,11 +44,26 @@ Describe('simplify audit', () => {
   })
 
   Test('reports an instruction file over its budget and leaves reference files alone', () => {
-    Expect(instructionBudgetIssues([
-      { path: 'AGENTS.md', source: 'rule\n'.repeat(61) },
-      { path: 'agents/skills/git-workflow/SKILL.md', source: 'rule\n'.repeat(80) },
-      { path: 'agents/skills/git-workflow/references/landing.md', source: 'rule\n'.repeat(200) },
-    ])).toEqual(['AGENTS.md is 61 lines, over its 60-line budget; move detail into a reference file or a gate.'])
+    const issues = instructionBudgetIssues([
+      { path: 'AGENTS.md', source: 'x'.repeat(11_501) },
+      { path: 'packages/AGENTS.md', source: 'x'.repeat(6_001) },
+      { path: 'agents/skills/git-workflow/SKILL.md', source: 'x'.repeat(12_000) },
+      { path: 'agents/skills/git-workflow/references/landing.md', source: 'x'.repeat(50_000) },
+    ])
+
+    Expect(issues.length).toEqual(2)
+    Expect(issues[0]).toContain('AGENTS.md is 11501 characters, over its 11500-character budget')
+    Expect(issues[1]).toContain('packages/AGENTS.md is 6001 characters, over its 6000-character budget')
+  })
+
+  Test('counts what an agent carries, so folding one bullet into another does not clear the budget', () => {
+    // A line budget is why this mattered: on 2026-09-21 AGENTS.md went over by a line and was brought
+    // back under by merging two bullets, leaving the file the same size and the budget satisfied.
+    const spreadOut = { path: 'AGENTS.md', source: `${'x'.repeat(11_600)}\n`.replace(/(.{50})/g, '$1\n') }
+    const folded = { path: 'AGENTS.md', source: 'x'.repeat(11_600) }
+
+    Expect(instructionBudgetIssues([spreadOut]).length).toEqual(1)
+    Expect(instructionBudgetIssues([folded]).length).toEqual(1)
   })
 
   Test('measures source, constants, instructions, and docs from the files it is given', () => {
@@ -66,7 +81,7 @@ Describe('simplify audit', () => {
     Expect(report.duplicatedConstants).toEqual([
       { name: 'LIMIT', paths: ['packages/runtime/TaoRuntime-src/TR-new.ts', chainPath], value: '200' },
     ])
-    Expect(report.instructions).toEqual([{ budget: 60, lines: 61, path: 'AGENTS.md' }])
+    Expect(report.instructions).toEqual([{ budget: 11_500, characters: 304, lines: 61, path: 'AGENTS.md' }])
     Expect(report.docs).toEqual([{ files: 1, lines: 2, subtree: 'Docs/Roadmap/Topic' }])
   })
 })
