@@ -7,6 +7,7 @@ import {
 } from './landing-broker/LandingBrokerClient'
 import { LandingLock, LandingLockBusyError, type LandingPhaseName } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
+import { extractLaneReport } from './RunSummary'
 
 const SNAPSHOT_VERSION = 1
 const LANDING_RESOURCE_NAME = 'merge-with-main-landing'
@@ -905,15 +906,7 @@ async function stabilizeAndVerify(
       // in two as soon as `GateRunner` can say when it does.
       await beginPhase(snapshot.featureRoot, 'repository tests', dependencies)
       const verifiedHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-      await runAndSnapshot(
-        snapshot,
-        'just',
-        ['verify-full'],
-        snapshot.featureRoot,
-        'feature-verified',
-        dependencies,
-        { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-      )
+      await runVerificationLane(snapshot, ['verify-full'], 'feature-verified', dependencies)
       if (
         snapshot.currentFeatureHead !== verifiedHead
         || snapshot.currentFeatureStatus !== ''
@@ -1033,15 +1026,7 @@ async function runBarrier(
     )
     return
   }
-  await runAndSnapshot(
-    snapshot,
-    'just',
-    [LAND_BARRIER_LANE],
-    snapshot.featureRoot,
-    snapshot.phase,
-    dependencies,
-    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-  )
+  await runVerificationLane(snapshot, [LAND_BARRIER_LANE], snapshot.phase, dependencies)
 }
 
 async function refreshRemoteMain(
@@ -1089,15 +1074,7 @@ async function verifyLandingSubject(
     await advanceSnapshot(snapshot, 'main-verified', dependencies)
   } else if (stagedVerifySkip === undefined) {
     // Nothing has verified this branch yet, so this is where it happens.
-    await runAndSnapshot(
-      snapshot,
-      'just',
-      ['verify', '--complete'],
-      snapshot.featureRoot,
-      'main-verified',
-      dependencies,
-      { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-    )
+    await runVerificationLane(snapshot, ['verify', '--complete'], 'main-verified', dependencies)
   } else {
     writeLines(dependencies, [
       `WARN  Skipped just verify --complete on feature tree ${shortSha(featureTree)} because `
@@ -1711,6 +1688,43 @@ async function runAndSnapshot(
   await persistSnapshot(snapshot, dependencies)
   assertCommandSucceeded(result)
   return result
+}
+
+/**
+ * runVerificationLane runs one of this landing's own `just` verification lanes — full verify, the
+ * cheap-gate barrier, or the staged verify — the way `runAndSnapshot` always has for a human at a
+ * terminal, and differently for a non-interactive one.
+ *
+ * `stdio: 'stream'` used to run either way: an interactive caller wants the lane's live progress, but
+ * a non-interactive one — an agent's landing, most of the time — got the exact same flood forwarded
+ * to its own stdout as the lane ran, ending on nothing more than `Command failed: just verify-full`
+ * once it failed, with no test name in sight. `pipe` still captures every byte; a non-interactive
+ * caller is shown only the lane's own verdict, its `Failed:` block, and where its logs live —
+ * `extractLaneReport` reads them back out of the captured output — printed once when the lane finishes
+ * and, on failure, repeated from the thrown error's own captured output so the last screen a reader
+ * sees still names the tests.
+ */
+async function runVerificationLane(
+  snapshot: MergeSnapshot,
+  args: readonly string[],
+  successPhase: MergePhase,
+  dependencies: MergeWithMainDependencies,
+): Promise<CLI.CommandResult> {
+  const interactive = dependencies.isInteractive()
+  try {
+    const result = await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+      stdio: interactive ? 'inherit' : 'pipe',
+    })
+    if (!interactive) {
+      writeLines(dependencies, extractLaneReport(result.stdout))
+    }
+    return result
+  } catch (error) {
+    if (!interactive && error instanceof Errors.CommandExecutionError) {
+      writeLines(dependencies, extractLaneReport(error.result.stdout))
+    }
+    throw error
+  }
 }
 
 async function captureFailedMutation(

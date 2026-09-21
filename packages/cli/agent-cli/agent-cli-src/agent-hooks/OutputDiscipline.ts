@@ -17,6 +17,7 @@
  * rule wrongly catches; `HookOverrides` records each use so the rules can be tuned against what
  * actually misfires rather than against argument. */
 
+import { EXPOSED_RECIPES } from '../AgentCommands'
 import { isGateInvocation, OUTPUT_FILTERS } from './ShellHabits'
 
 /** Flags that make a Git command report a summary instead of a full patch. */
@@ -65,9 +66,14 @@ const RIPGREP_FOLLOW_REFUSAL =
 
 const gatePipeRefusal = (gate: string): string =>
   `A pipeline reports its last stage's status, so \`${gate}\` piped into a filter reads as success `
-  + 'when the gate failed. Gates here are already terse — a passing single-file run is 15 lines, and '
-  + 'every lane writes `.artifacts/logs/<lane>/latest/summary.json`, which names the first failing '
-  + 'gate and its log. Run it plain, or capture it: `cmd > out 2>&1; echo "EXIT=$?"`.'
+  + "when the gate failed. `./agent` already bounds a gate's output and writes the full run to "
+  + '`.artifacts/logs/agent/<command>/latest.log`, so there is nothing left to filter for. Run it '
+  + 'plain, or capture it: `cmd > out 2>&1; echo "EXIT=$?"`.'
+
+const justRecipeRefusal = (recipe: string, agentCommand: string): string =>
+  `\`just ${recipe}\` is reachable through \`./agent ${agentCommand}\`, which captures the run, bounds `
+  + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
+  + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`
 
 const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts its own run (AGENTS.md). Use `./agent '
   + 'test-file <path>` for one file or directory, or pass `--cwd` when the target is another worktree.'
@@ -316,6 +322,24 @@ function gatePipeDenial(stage: Stage, next: Stage | undefined): string | undefin
   return gatePipeRefusal(subcommand === undefined ? command : `${command} ${subcommand}`)
 }
 
+/**
+ * justRecipeDenial catches a raw `just <recipe>` call for a recipe `./agent` already wraps.
+ * `gatePipeDenial` is checked first by the caller, so a piped gate keeps its own more specific
+ * refusal rather than being told twice to use the front door.
+ */
+function justRecipeDenial(stage: Stage): string | undefined {
+  const [command, ...rest] = stage.words
+  if (command !== 'just') {
+    return undefined
+  }
+  const recipe = rest.find(word => !isFlag(word))
+  if (recipe === undefined) {
+    return undefined
+  }
+  const agentCommand = EXPOSED_RECIPES.get(recipe)
+  return agentCommand === undefined ? undefined : justRecipeRefusal(recipe, agentCommand)
+}
+
 /** bunDenial catches the two Bun invocations this repository routes through `./agent` instead. */
 function bunDenial(stage: Stage): string | undefined {
   const [command, ...rest] = stage.words
@@ -403,7 +427,7 @@ export function refusalIgnoringOverride(command: string): string | undefined {
   const statusIsRead = STATUS_IS_READ.test(command)
   for (const [index, stage] of stages.entries()) {
     const piped = statusIsRead ? undefined : gatePipeDenial(stage, stages[index + 1])
-    const denial = shellReadDenial(stage) ?? searchDenial(stage) ?? piped
+    const denial = shellReadDenial(stage) ?? searchDenial(stage) ?? piped ?? justRecipeDenial(stage)
       ?? bunDenial(stage) ?? gitIndexDenial(stage) ?? treeWriteDenial(stage) ?? gitDumpDenial(stage)
     if (denial !== undefined) {
       return denial

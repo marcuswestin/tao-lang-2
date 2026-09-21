@@ -8,7 +8,7 @@ description: >-
 
 The open backlog is `Docs/Roadmap/Developer environment upgrades.md`; the closed record is
 `Docs/Roadmap/Developer environment upgrades archive.md`. **Both are generated** by
-`just _fix-ledger-index` from the entry files under `Developer environment upgrades/` (and its
+`./agent ledger-index` from the entry files under `Developer environment upgrades/` (and its
 `Archive/`) — never hand-edit either index. This skill owns which entries to take next and how a
 task leaves both halves.
 

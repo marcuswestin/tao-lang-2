@@ -162,6 +162,42 @@ Describe('output discipline', () => {
     Expect(isAllowed("jq . <<'EOF'\n{}\nEOF")).toEqual(true)
   })
 
+  Test('refuses a raw `just` call for a recipe `./agent` already wraps', () => {
+    Expect(refusalFor('just verify').includes('./agent verify')).toEqual(true)
+    Expect(refusalFor('just check --no-cache').includes('./agent check')).toEqual(true)
+    Expect(refusalFor('just dead-exports').includes('./agent dead-exports')).toEqual(true)
+    Expect(refusalFor('just _typecheck').includes('./agent typecheck')).toEqual(true)
+    Expect(refusalFor('just _parser-gen').includes('./agent parser-gen')).toEqual(true)
+    Expect(refusalFor('just _fix-ledger-index').includes('./agent ledger-index')).toEqual(true)
+    Expect(refusalFor('just board').includes('./agent board')).toEqual(true)
+  })
+
+  Test('leaves landing on its own spellings: an agent proposes a landing rather than making one', () => {
+    Expect(isAllowed('just land')).toEqual(true)
+    Expect(isAllowed('just merge-with-main')).toEqual(true)
+    Expect(isAllowed('./dev land')).toEqual(true)
+    Expect(isAllowed('./dev merge-with-main')).toEqual(true)
+    Expect(isAllowed('just land-barrier')).toEqual(true)
+    Expect(isAllowed('just landing-setup')).toEqual(true)
+  })
+
+  Test('leaves a `just` recipe `./agent` does not expose, and land-unlock, which keeps its own rule', () => {
+    Expect(isAllowed('just studio-smoke-native')).toEqual(true)
+    Expect(isAllowed('just keyboard-navigation-smoke')).toEqual(true)
+    Expect(isAllowed('just studio-canary')).toEqual(true)
+    Expect(isAllowed('just ship-bundle-proof')).toEqual(true)
+    Expect(isAllowed('just native-module-check')).toEqual(true)
+    Expect(isAllowed('just studio-manual-checks')).toEqual(true)
+    Expect(isAllowed('just session-unsandboxed')).toEqual(true)
+    Expect(isAllowed('just dev Apps/HNReader')).toEqual(true)
+    Expect(isAllowed('just land-unlock --force')).toEqual(true)
+    Expect(isAllowed('just --list')).toEqual(true)
+  })
+
+  Test('overrides the `just` recipe redirect the same way as every other refusal', () => {
+    Expect(isAllowed('just verify # hook-ok: measuring the raw recipe path on purpose')).toEqual(true)
+  })
+
   Test('reads the justification an agent attaches to work a rule wrongly catches', () => {
     Expect(hookOverrideReason('grep -r x . # hook-ok: the ignored trees are the subject here'))
       .toEqual('the ignored trees are the subject here')
