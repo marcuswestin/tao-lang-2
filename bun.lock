@@ -122,9 +122,21 @@
         "tao-shared": "workspace:*",
       },
     },
+    "packages/cli/agent-cli": {
+      "name": "tao-agent-cli",
+      "dependencies": {
+        "tao-cli-kit": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@commander-js/extra-typings": "^15.0.0",
+      },
+    },
     "packages/cli/cli-kit": {
       "name": "tao-cli-kit",
       "dependencies": {
+        "@commander-js/extra-typings": "^15.0.0",
+        "commander": "^15.0.0",
         "ink": "^7.1.1",
         "react": "^19.2.8",
         "tao-shared": "workspace:*",
@@ -132,6 +144,22 @@
       },
       "devDependencies": {
         "@types/react": "^19.2.18",
+      },
+    },
+    "packages/cli/dev-cli": {
+      "name": "tao-dev-cli",
+      "dependencies": {
+        "tao-agent-cli": "workspace:*",
+        "tao-cli-kit": "workspace:*",
+        "tao-e2e-testing": "workspace:*",
+        "tao-expo-host": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-studio-tooling": "workspace:*",
+        "tao-verification": "workspace:*",
+      },
+      "devDependencies": {
+        "tao-compiler": "workspace:*",
+        "tao-formatter": "workspace:*",
       },
     },
     "packages/cli/tao-cli": {
@@ -169,23 +197,6 @@
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-validator": "workspace:*",
-      },
-    },
-    "packages/dev": {
-      "name": "tao-dev",
-      "dependencies": {
-        "@commander-js/extra-typings": "^15.0.0",
-        "commander": "^15.0.0",
-        "tao-cli-kit": "workspace:*",
-        "tao-e2e-testing": "workspace:*",
-        "tao-expo-host": "workspace:*",
-        "tao-shared": "workspace:*",
-        "tao-studio-tooling": "workspace:*",
-        "tao-verification": "workspace:*",
-      },
-      "devDependencies": {
-        "tao-compiler": "workspace:*",
-        "tao-formatter": "workspace:*",
       },
     },
     "packages/ides/ide-extension": {
@@ -2840,6 +2851,8 @@
 
     "tagged-tag": ["tagged-tag@1.0.0", "", {}, "sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng=="],
 
+    "tao-agent-cli": ["tao-agent-cli@workspace:packages/cli/agent-cli"],
+
     "tao-appium-driver": ["tao-appium-driver@workspace:packages/testing/appium-driver"],
 
     "tao-ast-utils": ["tao-ast-utils@workspace:packages/language/ast-utils"],
@@ -2850,7 +2863,7 @@
 
     "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
 
-    "tao-dev": ["tao-dev@workspace:packages/dev"],
+    "tao-dev-cli": ["tao-dev-cli@workspace:packages/cli/dev-cli"],
 
     "tao-e2e-testing": ["tao-e2e-testing@workspace:packages/testing/e2e-testing"],
 

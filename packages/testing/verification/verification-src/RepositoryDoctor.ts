@@ -38,6 +38,15 @@ const GENERATED_PARSER_MODULES = ['ast.ts', 'grammar.ts', 'module.ts']
 /** Commands this repository actually starts on its conventional ports. */
 const TAO_PROCESS_COMMANDS = new Set(['bun', 'node', 'hutch', 'watchman'])
 
+/**
+ * The commit-msg and pre-commit entry scripts `GitHooksInstaller.ts` writes into the hooks
+ * directory every worktree on this machine shares. Duplicated here rather than imported: `verify`
+ * builds on this package, not the reverse, so this doctor check reads the installed file's own
+ * text instead of depending on the installer that wrote it.
+ */
+const GIT_HOOK_MARKER = '# tao-warn-only-git-hook'
+const GIT_HOOK_EVENTS = ['commit-msg', 'pre-commit'] as const
+
 /** Scratch trees whose size is worth reporting, because a failed install can leave gigabytes. */
 const ARTIFACT_ROOTS = ['.artifacts/tmp', '.artifacts/cache', '.artifacts/build', '.artifacts/logs']
 
@@ -93,6 +102,23 @@ type ArtifactRoot = {
   writable: boolean
 }
 
+/**
+ * GitHookInstallation records what the shared hooks directory holds for one event: whether a file
+ * is there at all, whether this repository wrote it, and whether any script path it names actually
+ * resolves in this worktree. The directory is shared by every worktree on the machine and rewritten
+ * last-writer-wins, so a worktree on an older layout can leave paths here that only exist elsewhere.
+ */
+export type GitHookInstallation = {
+  event: string
+  /** True when the file carries this repository's marker; a foreign hook is left unexamined. */
+  ours: boolean
+  present: boolean
+  /** True when at least one named script path is an executable file in this worktree. */
+  resolvesHere: boolean
+  /** Every `$worktree/<path>` script path the file names, in the order it tries them. */
+  scriptPaths: readonly string[]
+}
+
 /** GitHubTransport records the configured URL, its effective rewrite, and HTTPS credential wiring. */
 type GitHubTransport = {
   configuredOriginUrl?: string
@@ -117,6 +143,7 @@ export type DoctorFacts = {
   direnvAllowed?: boolean
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
   githubTransport: GitHubTransport
+  gitHooks: readonly GitHookInstallation[]
   linkedWorktree: boolean
   lockfilePresent: boolean
   machine: MachineState
@@ -146,6 +173,7 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     dependencyInstallationCheck(facts),
     dependencyCompatibilityCheck(facts),
     githubTransportCheck(facts),
+    ...gitHooksChecks(facts),
     watchmanCheck(facts),
     machineLanesCheck(facts),
     parserArtifactCheck(facts),
@@ -425,6 +453,44 @@ function githubTransportCheck(facts: DoctorFacts): DoctorCheck {
   }
 }
 
+/**
+ * The hooks directory is shared by every worktree, and last-writer-wins: a worktree on an older
+ * layout rewrites it with a script path that does not exist here, and the entry script exits 0
+ * silently, so nothing else reports that the branch-name and commit-message guards stopped running.
+ */
+function gitHooksChecks(facts: DoctorFacts): DoctorCheck[] {
+  return facts.gitHooks.map(hook => {
+    if (!hook.present) {
+      return {
+        detail: `${hook.event} is not installed; the branch-name and commit-message guards do not run`,
+        name: 'git hooks',
+        remediation: 'Install with: ./agent setup',
+        status: 'warn' as const,
+      }
+    }
+    if (!hook.ours) {
+      return { detail: `${hook.event} was not written by this repository`, name: 'git hooks', status: 'pass' as const }
+    }
+    if (hook.resolvesHere) {
+      return {
+        detail: `${hook.event} resolves its script in this worktree`,
+        name: 'git hooks',
+        status: 'pass' as const,
+      }
+    }
+    const named = hook.scriptPaths.length === 0
+      ? 'no script path this doctor recognises'
+      : hook.scriptPaths.join(' and ')
+    return {
+      detail: `${hook.event} names ${named}, none of which is an executable file in this worktree; the `
+        + 'branch-name and commit-message guards are silently skipped',
+      name: 'git hooks',
+      remediation: 'Reinstall with: ./agent setup',
+      status: 'warn' as const,
+    }
+  })
+}
+
 function watchmanCheck(facts: DoctorFacts): DoctorCheck {
   if (facts.watchmanVersion === undefined) {
     return {
@@ -577,6 +643,7 @@ export async function readDoctorFacts(
     dependencyIssues,
     fingerprintFacts,
     githubTransport,
+    gitHooks,
   ] = await Promise.all([
     readBranch(repositoryRoot),
     readLinkedWorktree(repositoryRoot),
@@ -589,6 +656,7 @@ export async function readDoctorFacts(
     readDependencyIssues(),
     readFingerprintFacts(repositoryRoot),
     readGitHubTransport(repositoryRoot),
+    readGitHooks(repositoryRoot),
   ])
   // The working directory reported by the runtime is already symlink-resolved, so it can never
   // reveal one; the shell's `PWD` keeps the logical path the command was actually invoked
@@ -617,6 +685,7 @@ export async function readDoctorFacts(
     fingerprint: environmentFingerprint(fingerprintFacts),
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
     githubTransport,
+    gitHooks,
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
     machine: {
@@ -664,6 +733,47 @@ function successfulLine(result: CLI.CommandResult): string | undefined {
   }
   const line = result.stdout.trim().split('\n')[0]?.trim()
   return line === '' ? undefined : line
+}
+
+/**
+ * Reads what the shared hooks directory holds for each event, honouring `core.hooksPath` through
+ * `git rev-parse` rather than reimplementing that resolution.
+ */
+async function readGitHooks(repositoryRoot: string): Promise<GitHookInstallation[]> {
+  const resolved = await CLI.run('git', {
+    args: ['rev-parse', '--path-format=absolute', '--git-path', 'hooks'],
+    cwd: repositoryRoot,
+  })
+  const hooksDir = resolved.exitCode === 0 ? resolved.stdout.trim() : undefined
+  return await Promise.all(GIT_HOOK_EVENTS.map(event => readGitHookInstallation(repositoryRoot, hooksDir, event)))
+}
+
+async function readGitHookInstallation(
+  repositoryRoot: string,
+  hooksDir: string | undefined,
+  event: string,
+): Promise<GitHookInstallation> {
+  const path = hooksDir === undefined ? undefined : FS.resolvePath(event, hooksDir)
+  if (path === undefined || !await FS.isFile(path)) {
+    return { event, ours: false, present: false, resolvesHere: false, scriptPaths: [] }
+  }
+  const content = await FS.readText(path)
+  const ours = content.split('\n').slice(0, 3).join('\n').includes(GIT_HOOK_MARKER)
+  if (!ours) {
+    return { event, ours: false, present: true, resolvesHere: false, scriptPaths: [] }
+  }
+  const scriptPaths = [...content.matchAll(/\$worktree\/([^"]+)"/gu)].map(match => match[1]!)
+  const resolutions = await Promise.all(
+    scriptPaths.map(scriptPath => isExecutableFile(FS.resolvePath(scriptPath, repositoryRoot))),
+  )
+  return { event, ours, present: true, resolvesHere: resolutions.some(Boolean), scriptPaths }
+}
+
+async function isExecutableFile(path: string): Promise<boolean> {
+  if (!await FS.isFile(path)) {
+    return false
+  }
+  return ((await FS.fileMode(path)) & 0o111) !== 0
 }
 
 async function canonicalPath(path: string): Promise<string> {

@@ -15,9 +15,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo, TaoStdlib } from '@shared'
  * `./tao compile` is the published product surface, which is why the stamp lives here rather than
  * in the CLI: a user compiling their own project gets a compile, and this repository's build gets a
  * repository build stamp on top of it. `packages/testing/verification` does not depend on
- * `tao-cli` (`tao-cli` depends on `tao-dev`, which depends on this package, so the reverse would
- * cycle), so the compile is delegated as a child process rather than imported; on a stamp miss the
- * ~2.7s of compiling dwarfs the spawn, and on a hit nothing is spawned at all.
+ * `tao-cli` (`tao-cli` depends on `tao-dev-cli`, which depends on this package, so the reverse
+ * would cycle), so the compile is delegated as a child process rather than imported; on a stamp
+ * miss the ~2.7s of compiling dwarfs the spawn, and on a hit nothing is spawned at all.
  */
 
 /**

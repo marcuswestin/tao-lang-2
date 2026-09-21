@@ -160,13 +160,13 @@ The point of the release is to learn what people want. Nothing collects that tod
   confused me"; `tao doctor --json` extended into a `tao bug-report` that attaches an environment
   fingerprint (OS, architecture, Tao version, toolchain hashes, Xcode version) so environment-shaped
   reports are diagnosable.
-- Context: `packages/dev` doctor output, `.github/` (absent today).
+- Context: `packages/cli/dev-cli` doctor output, `.github/` (absent today).
 - Waits on: the channel decision (`R10`) for where discussion happens; templates and the fingerprint
   do not wait.
 - Done: a frustrated visitor has an obvious, low-effort place to say so, and what they send is
   enough to reproduce.
 - Landed: `.github/` carries both issue forms, a discussion form for the open-ended half of each
-  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/dev` reports OS,
+  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/cli/dev-cli` reports OS,
   architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, and Xcode where
   present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
   parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
@@ -195,7 +195,7 @@ sizes and licenses before it downloads anything.
   acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
   automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
   the same graph without installing.
-- Context: `packages/dev` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
+- Context: `packages/cli/dev-cli` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.
 - Done: `tao run android` on a bare machine explains what it needs, asks, installs it, and works;
   nothing it installs requires `sudo` except the Xcode steps that inherently do.

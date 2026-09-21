@@ -264,7 +264,7 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.suiteTuning('apps/expo-host').cost).toBe(2)
     // The developer suite's own tests start child runners and whole lanes, so one of its processes
     // is not one core either; it says so rather than letting the graph assume otherwise.
-    Expect(GateCatalog.suiteTuning('dev').cost).toBe(2)
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').cost).toBe(2)
     Expect(GateCatalog.suiteTuning('language/parser').cost).toBeUndefined()
     Expect(nodeOf('_typecheck').cost).toBe(GateCatalog.TYPECHECK_COST)
     Expect(nodeOf('_tao-check').cost).toBe(GateCatalog.TAO_CHECK_COST)
@@ -278,7 +278,7 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.suiteTuning('tao-apps').budgetEnvKeys).toEqual([GateCatalog.TAO_TEST_BUDGET_KEY])
     Expect(GateCatalog.TAO_TEST_BUDGET_KEY).toBe(WorkGraph.BUDGET_ENV_KEYS.taoTest)
     // Every other runner is bounded by the graph itself — a shard's one slot, or `--maxWorkers`.
-    Expect(GateCatalog.suiteTuning('dev').budgetEnvKeys).toBeUndefined()
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').budgetEnvKeys).toBeUndefined()
     Expect(GateCatalog.suiteTuning('runtime-jest').budgetEnvKeys).toBeUndefined()
     // Its startup dominates, so it declares the measured startup; a Bun suite starts far faster and
     // uses the shared default.
@@ -287,7 +287,7 @@ Describe('gate catalog metadata', () => {
     // Jest's own pool already parallelizes its whole run, so splitting it only adds startups.
     Expect(GateCatalog.suiteTuning('runtime-jest').shardable).toBe(false)
     Expect(GateCatalog.suiteTuning('tao-apps').shardable).toBeUndefined()
-    Expect(GateCatalog.suiteTuning('dev').fixedMs).toBeUndefined()
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').fixedMs).toBeUndefined()
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
   })
 
@@ -345,7 +345,7 @@ Describe('gate catalog metadata', () => {
 
     // Dynamic child and generation surfaces remain at the safe default. An unclassified suite does
     // too: reading Tao or generated output during its writer would otherwise permit a torn read.
-    for (const suite of ['dev', 'ides/studio', 'cli/tao-cli', 'unclassified-suite']) {
+    for (const suite of ['cli/dev-cli', 'ides/studio', 'cli/tao-cli', 'unclassified-suite']) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(GateCatalog.DEFAULT_SUITE_READS)
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
         '_compile-word-flower-app',

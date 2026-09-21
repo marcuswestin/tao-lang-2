@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "agent-cli-src/**/*",
+    "agent-cli-tests/**/*"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  }
+}

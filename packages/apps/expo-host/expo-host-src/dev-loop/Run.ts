@@ -39,7 +39,7 @@ type CompileAppOptions = {
 async function runTests(repoRoot: string): Promise<void> {
   await runJust(['_compile-word-flower-app'])
   const result = await CLI.run('bun', {
-    args: ['run', Repo.resolvePath('packages/dev/dev-src/dev.ts'), 'test', '--output', 'lines'],
+    args: ['run', Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev.ts'), 'test', '--output', 'lines'],
     cwd: repoRoot,
     onOutput: DevLoopOutput.devLoopOutputHandler('test'),
   })

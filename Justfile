@@ -415,12 +415,12 @@ simplify-audit *ARGS:
 # Benchmark cold and steady-state language-service performance
 [group('Report')]
 bench iterations="10":
-    bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
+    bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
 # Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
-    bun run packages/dev/dev-src/performance/admission-experiment.ts {{ ARGS }}
+    bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
 [group('Run')]
@@ -437,12 +437,12 @@ install-ide-extension: _ide-extension-package
 # Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
 [group('Run')]
 android: _compile-word-flower-app _android-emulator _android-expo-go
-    bun run packages/dev/dev-src/dev.ts expo-android
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts expo-android
 
 # Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
 [group('Setup')]
 clean-scratch:
-    zsh -c 'source "{{ justfile_directory() }}/packages/dev/dev-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
+    zsh -c 'source "{{ justfile_directory() }}/packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
 
 # Clean run dependencies and build artifacts
 [group('Setup')]
@@ -524,10 +524,10 @@ _agent-config:
     ./dev agent-config
 
 _deps:
-    zsh packages/dev/dev-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+    zsh packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
 
 _git-hooks:
-    ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
+    ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
     bun run packages/testing/verification/verification-src/DependencyHealth.ts
@@ -585,7 +585,7 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/dev/dev-src/repo-lint-entry.ts
+    bun run packages/cli/dev-cli/dev-cli-src/repo-lint-entry.ts
 
 # TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
@@ -598,13 +598,13 @@ _typecheck:
 # suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
 # `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
-    bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts test "{{ PATTERN }}"
 
 _android-emulator:
-    bun run packages/dev/dev-src/dev.ts android-emulator
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-emulator
 
 _android-expo-go:
-    bun run packages/dev/dev-src/dev.ts android-expo-go
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-expo-go
 
 _parser-gen:
     bun run packages/testing/verification/verification-src/ParserGenerate.ts

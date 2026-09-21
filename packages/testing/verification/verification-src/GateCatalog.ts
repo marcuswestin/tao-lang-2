@@ -172,7 +172,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // reports each test's duration as the time from the file's shared start, so every concurrent
   // suite is bounded that way and the hand-written `--timeout=60000` that used to sit here said
   // only what the flag already implies.
-  ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['cli/dev-cli', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['cli/agent-cli', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['testing/verification', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ides/studio-tooling', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ides/ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
