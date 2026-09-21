@@ -53,8 +53,18 @@ an error rather than an empty passing run, unless `--pass-with-no-tests` says an
 an expected answer — which is what a scheduler handing one pattern to every suite it knows about
 needs, and which a person typing a pattern does not. A file-level test is a suite, and a suite
 declares its checks as the tests nested inside it: written as a leaf journey it would compile to a
-suite of no checks and run nothing, so the validator rejects that shape. Watch, JSON, artifacts,
-retries, and alternate device adapters remain future work.
+suite of no checks and run nothing, so the validator rejects that shape. JSON, artifacts, retries,
+and alternate device adapters remain future work.
+
+`tao test --watch` composes with paths, `--name`, `--output`, and `--pass-with-no-tests`: it runs the
+selected set once, then reruns the whole selected set on any change under the selected paths or the
+project roots of the selected tests, until Ctrl-C. Changes are debounced the way `tao dev`
+debounces a recompile, and a change that arrives while a run is still in progress queues exactly one
+rerun rather than starting one per change. Every rerun compiles from source, bypassing the compiled-
+output cache a plain `tao test` reuses, because a watch loop exists to show a fresh run. A failing
+run is reported the same way a one-shot `tao test` reports it and does not stop the loop; between
+runs the command prints one line naming what it is watching and that it is waiting for the next
+change.
 
 ## Tags and selectors
 

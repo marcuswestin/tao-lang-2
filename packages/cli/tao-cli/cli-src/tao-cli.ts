@@ -285,21 +285,39 @@ function createCommands(): Command {
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
         + ' pattern. For a scheduler running one pattern across many suites.',
     )
+    .option(
+      '--watch',
+      'Run the selected tests, then rerun them on any change under the selected paths or the project'
+        + ' roots of the selected tests, until Ctrl-C. Every rerun compiles from source; a failing run'
+        + ' keeps watching.',
+    )
     .description('Run Tao tests declared in .tao files at or under the given paths.')
-    .action(async (paths: string[], options: { name?: string; output?: string; passWithNoTests?: boolean }) => {
-      try {
-        const { TestOutput } = await import('./test-output')
-        const { runTestCommand } = await import('./test-command')
-        await runTestCommand(paths.length > 0 ? paths : ['.'], {
-          name: options.name,
-          output: TestOutput.resolveMode(options.output),
-          passWithNoTests: options.passWithNoTests,
-        })
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
+    .action(
+      async (
+        paths: string[],
+        options: { name?: string; output?: string; passWithNoTests?: boolean; watch?: boolean },
+      ) => {
+        try {
+          const { TestOutput } = await import('./test-output')
+          const testPaths = paths.length > 0 ? paths : ['.']
+          const testOptions = {
+            name: options.name,
+            output: TestOutput.resolveMode(options.output),
+            passWithNoTests: options.passWithNoTests,
+          }
+          if (options.watch) {
+            const { runTestWatchCommand } = await import('./test-watch')
+            await runTestWatchCommand(testPaths, testOptions)
+            return
+          }
+          const { runTestCommand } = await import('./test-command')
+          await runTestCommand(testPaths, testOptions)
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
+      },
+    )
 
   commands
     .command('completion')

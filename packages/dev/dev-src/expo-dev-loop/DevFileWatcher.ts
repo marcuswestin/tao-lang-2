@@ -1,13 +1,11 @@
-import { FS, Repo } from '@shared'
-import chokidar from 'chokidar'
+import { Repo } from '@shared'
 import CommandRunner from './CommandRunner'
+import {
+  type DebouncedWatcher,
+  startDebouncedWatcher as startGenericDebouncedWatcher,
+  WATCH_DEBOUNCE_MS,
+} from './DebouncedWatcher'
 import { DevLoopTUI } from './DevLoopTUI'
-
-const WATCH_DEBOUNCE_MS = 250
-
-type DebouncedWatcher = {
-  close: () => Promise<void>
-}
 
 type DevWatcherSpec = {
   label: string
@@ -32,38 +30,20 @@ function startDebouncedWatcher(
   spec: DevWatcherSpec,
   onChange: (shouldRunParserGen: boolean) => void,
 ): DebouncedWatcher {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const watcher = chokidar.watch(spec.paths, {
-    ignoreInitial: true,
-    ignored: shouldIgnoreWatchPath,
-  })
-  watcher.on('all', (event, path) => {
-    DevLoopTUI.logDevLoop('watch', `${spec.label} ${event}: ${path}`)
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
-    if (CommandRunner.isCommandRunning()) {
-      DevLoopTUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
-      return
-    }
-    timer = setTimeout(() => {
+  return startGenericDebouncedWatcher(
+    spec.paths,
+    () => {
       if (CommandRunner.isCommandRunning()) {
         DevLoopTUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
         return
       }
       onChange(spec.shouldRunParserGen)
-    }, WATCH_DEBOUNCE_MS)
-  })
-  return {
-    async close() {
-      if (timer) {
-        clearTimeout(timer)
-        timer = undefined
-      }
-      await watcher.close()
     },
-  }
+    {
+      debounceMs: WATCH_DEBOUNCE_MS,
+      onEvent: (event, path) => DevLoopTUI.logDevLoop('watch', `${spec.label} ${event}: ${path}`),
+    },
+  )
 }
 
 function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
@@ -98,22 +78,4 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
       shouldRunParserGen: false,
     },
   ]
-}
-
-function shouldIgnoreWatchPath(path: string): boolean {
-  const normalized = FS.slashPath(path)
-  return normalized.includes('/node_modules/')
-    || normalized.endsWith('/node_modules')
-    || normalized.includes('/.git/')
-    || normalized.endsWith('/.git')
-    || normalized.includes('/.artifacts/')
-    || normalized.endsWith('/.artifacts')
-    || normalized.includes('/.expo/')
-    || normalized.endsWith('/.expo')
-    || normalized.includes('/_gen_')
-    || normalized.endsWith('.tsbuildinfo')
-    || normalized.endsWith('/ios')
-    || normalized.includes('/ios/')
-    || normalized.endsWith('/android')
-    || normalized.includes('/android/')
 }

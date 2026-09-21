@@ -175,7 +175,10 @@ tests written in Tao, green in Current, for every construct introduced.
     up front — findings feed back through the tranche process. Context:
     `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 commands).
 - [ ] Harden `tao test`
-  - Filters, watch, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - Richer failure reporting and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - Filters and watch have landed: path arguments and `--name <pattern>` select journeys, and
+    `--watch` reruns the selected set on any change under the selected paths or the selected tests'
+    project roots, serialized and always compiled from source, until Ctrl-C.
   - The output half landed with the verification-orchestration plan: the Jest child streams live,
     `--output lines|quiet` defaults by terminal, a quiet run keeps the full output in
     `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
@@ -373,7 +376,6 @@ Product and codebase backlog, unordered.
 - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines.
 - Formatter: drop redundant `render` keywords once the language makes `render` optional in view bodies.
 - Compiler: add codegen tracing and source maps when needed.
-- Dev loop: watch resolved relative import roots outside the selected app folder.
 
 ## Records
 

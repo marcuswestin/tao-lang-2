@@ -1,0 +1,238 @@
+import { Errors, FS, Time } from '@shared'
+import { Describe, Expect, Test } from '@shared/test'
+import { runTestWatchCommand, runTestWatchLoop, type TestWatchDeps } from '../cli-src/test-watch'
+import { withTaoFixture } from './test-cli-files'
+
+/** waitUntil polls `condition` until it is true or `timeoutMs` elapses. */
+async function waitUntil(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const start = Date.now()
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      Errors.throwUnexpected('waitUntil timed out waiting for a test-watch condition.')
+    }
+    await Time.sleep(10)
+  }
+}
+
+/** deferred returns a promise a test resolves from the outside, at exactly the moment it chooses. */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(res => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
+/** FakeWatch captures the loop's onChange callback so a test can fire it whenever it chooses. */
+type FakeWatch = {
+  closed: boolean
+  fireChange: () => void
+  startWatcher: TestWatchDeps['startWatcher']
+}
+
+function fakeWatch(): FakeWatch {
+  const state: FakeWatch = {
+    closed: false,
+    // Replaced with the real callback as soon as `startWatcher` runs, which `runTestWatchLoop` does
+    // synchronously before anything can call `fireChange`.
+    fireChange: () => {},
+    startWatcher: onChange => {
+      state.fireChange = onChange
+      return {
+        close: async () => {
+          state.closed = true
+        },
+      }
+    },
+  }
+  return state
+}
+
+Describe('runTestWatchLoop', () => {
+  Test('runs the selected set once on start, then stops cleanly on abort', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    const waits: number[] = []
+    let calls = 0
+
+    const loop = runTestWatchLoop({
+      reportWaiting: () => waits.push(calls),
+      runOnce: async () => {
+        calls += 1
+        return { failed: false }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    // The controller's first run resolves synchronously (a microtask), so give it a turn.
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(calls).toBe(1)
+    Expect(waits).toEqual([1])
+
+    controller.abort()
+    await loop
+
+    Expect(watch.closed).toBe(true)
+  })
+
+  Test('collapses every change that arrives during a run into exactly one queued rerun', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    let calls = 0
+    let firstRun = deferred<void>()
+
+    const loop = runTestWatchLoop({
+      reportWaiting: () => {},
+      runOnce: async () => {
+        calls += 1
+        if (calls === 1) {
+          await firstRun.promise
+        }
+        return { failed: false }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    Expect(calls).toBe(1)
+
+    // Three changes arrive while the first run is still in flight.
+    watch.fireChange()
+    watch.fireChange()
+    watch.fireChange()
+    firstRun.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Exactly one rerun, not three, and not zero.
+    Expect(calls).toBe(2)
+
+    controller.abort()
+    await loop
+  })
+
+  Test('keeps watching after a failing run instead of stopping the loop', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    const outcomes: boolean[] = []
+    let calls = 0
+
+    const loop = runTestWatchLoop({
+      reportWaiting: () => {},
+      runOnce: async () => {
+        calls += 1
+        const failed = calls === 1
+        outcomes.push(failed)
+        return { failed }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(outcomes).toEqual([true])
+
+    watch.fireChange()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(outcomes).toEqual([true, false])
+
+    controller.abort()
+    await loop
+  })
+
+  Test('starts no rerun once aborted, even when one was already queued', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    let calls = 0
+    const firstRun = deferred<void>()
+
+    const loop = runTestWatchLoop({
+      reportWaiting: () => {},
+      runOnce: async () => {
+        calls += 1
+        if (calls === 1) {
+          await firstRun.promise
+        }
+        return { failed: false }
+      },
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    Expect(calls).toBe(1)
+
+    watch.fireChange()
+    controller.abort()
+    firstRun.resolve()
+    await loop
+
+    Expect(calls).toBe(1)
+    Expect(watch.closed).toBe(true)
+  })
+
+  Test('prints the waiting status once a run settles with nothing queued', async () => {
+    const watch = fakeWatch()
+    const controller = new AbortController()
+    const waits: string[] = []
+
+    const loop = runTestWatchLoop({
+      reportWaiting: () => waits.push('waiting'),
+      runOnce: async () => ({ failed: false }),
+      signal: controller.signal,
+      startWatcher: watch.startWatcher,
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(waits).toEqual(['waiting'])
+
+    controller.abort()
+    await loop
+  })
+})
+
+Describe('runTestWatchCommand real watch-set wiring', () => {
+  // The run function is faked so this stays fast; the watch set, the watcher, and the debounce are
+  // all real, so this proves the watched roots actually cover both selected projects.
+  Test('reruns on a change in either selected project, not only the first', async () => {
+    await withTaoFixture({
+      'One/Project.tao': 'project { id "watch-one" name "Watch One" }\n',
+      'One/Sample.test.tao': 'test "Sample" { }\n',
+      'Two/Project.tao': 'project { id "watch-two" name "Watch Two" }\n',
+      'Two/Sample.test.tao': 'test "Sample" { }\n',
+    }, async rootDir => {
+      const oneRoot = FS.resolvePath('One', rootDir)
+      const twoRoot = FS.resolvePath('Two', rootDir)
+      let calls = 0
+      const controller = new AbortController()
+
+      const loop = runTestWatchCommand([oneRoot, twoRoot], {}, {
+        runOnce: async () => {
+          calls += 1
+          return { failed: false }
+        },
+        signal: controller.signal,
+      })
+
+      await waitUntil(() => calls === 1)
+      // A watcher needs a moment to finish its initial scan before it reports later writes.
+      await Time.sleep(200)
+
+      await FS.writeText(FS.resolvePath('Two/Sample.test.tao', rootDir), 'test "Sample" { }\n// touched\n')
+
+      await waitUntil(() => calls === 2)
+
+      controller.abort()
+      await loop
+
+      Expect(calls).toBe(2)
+    })
+  })
+})

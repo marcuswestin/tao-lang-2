@@ -9,6 +9,12 @@ import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
 import Run from './Run'
 
+// Re-exported so a caller outside this package — `tao test --watch` is the first — can reuse the
+// generic debounced watcher and the watch-root reduction without a second `@expo-dev-loop/*` path
+// alias. `packages/tsconfig.base.json` maps only the single-file `@expo-dev-loop` entry point.
+export { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from './DebouncedWatcher'
+export { minimalWatchRoots } from './WatchRoots'
+
 /** DevAppSelection identifies the exact app declaration selected by the Tao CLI. */
 export type DevAppSelection = {
   appName: string
