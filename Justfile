@@ -416,7 +416,7 @@ simplify-audit *ARGS:
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 
-# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and one disposable checkout per lane
+# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
     bun run packages/dev/dev-src/performance/admission-experiment.ts {{ ARGS }}

@@ -31,8 +31,11 @@
   builds on DEVENV-001 rather than replacing it.
 - **Acceptance:** With ten lanes requested at once, the median completion time of the first three is
   within 1.5x of the uncontended median, and no lane fails a gate it passes alone. `just
-  admission-experiment <checkout>…` measures exactly this and refuses to run on a machine that is not
-  quiet. The second clause replaces "total wall time for all ten beats today's fair-share behavior",
+  admission-experiment --provision 10 --lane verify` measures exactly this: it makes its own ten
+  checkouts, runs the lane alone first for a baseline, runs all ten at once, removes what it made,
+  and refuses to start on a machine that is not quiet. It must run outside the agent sandbox, which
+  cannot write the checkouts it creates, and the lane must be a broad one — a narrow lane is admitted
+  immediately and never touches the queue this measures. The second clause replaces "total wall time for all ten beats today's fair-share behavior",
   which can no longer be measured because fair share no longer exists to compare against — and which
   measured the wrong thing anyway: the starved hang guards, not the seconds, are what made contention
   expensive.

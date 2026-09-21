@@ -3,6 +3,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import {
   type AdmissionExperimentDependencies,
   assertMachineQuiet,
+  positionalRoots,
   renderAdmissionReport,
   runAdmissionExperiment,
 } from '../dev-src/performance/admission-experiment'
@@ -140,6 +141,15 @@ Describe('admission experiment', () => {
     Expect(report.trial.unmeasured).toBe(2)
     Expect(report.acceptanceMet).toBe(false)
     Expect(renderAdmissionReport(report)).toContain('nothing here is a measurement')
+  })
+
+  // Filtering only on a leading `--` left `verify` from `--lane verify` looking exactly like a
+  // checkout path, so it joined the list and the run measured a different number of lanes than it
+  // was asked for. Found by reading the smoke test's arguments back.
+  Test('does not mistake a flag value for a checkout path', () => {
+    Expect(positionalRoots(['/repo/a', '--lane', 'verify', '--lanes', '10', '--repeats', '3'])).toEqual(['/repo/a'])
+    Expect(positionalRoots(['--provision', '10'])).toEqual([])
+    Expect(positionalRoots(['--allow-busy-machine', '/repo/a'])).toEqual(['/repo/a'])
   })
 
   Test('refuses to start without one checkout per lane', async () => {

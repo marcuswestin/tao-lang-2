@@ -1,5 +1,11 @@
 import { Assert, CLI, Errors, FS, HCI, Platform } from '@shared'
 import { MachineLanes } from '../repository-tests/MachineLanes'
+import {
+  defaultWorktreeDependencies,
+  type ProvisionedWorktrees,
+  provisionWorktrees,
+  removeWorktrees,
+} from './admission-worktrees'
 import { type PerformanceSampleSummary, summarizeSamples } from './language-performance'
 
 /*
@@ -311,28 +317,71 @@ function seconds(milliseconds: number): string {
   return `${(milliseconds / 1_000).toFixed(1)}s`
 }
 
+/** Flags that consume the token after them, so a value is never mistaken for a checkout path. */
+const VALUE_FLAGS = new Set(['--lane', '--lanes', '--provision', '--repeats'])
+
 /**
- * The checkouts are given rather than discovered, and never provisioned here.
+ * positionalRoots reads the checkout paths, skipping flags and the values they take.
+ *
+ * Filtering only on a leading `--` is not enough and was wrong here first: `--lane verify` left
+ * `verify` looking exactly like a path, so it joined the checkout list and the run measured a
+ * different number of lanes than it was asked for.
+ */
+export function positionalRoots(argv: readonly string[]): string[] {
+  const roots: string[] = []
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index] ?? ''
+    if (argument.startsWith('--')) {
+      if (VALUE_FLAGS.has(argument)) {
+        index += 1
+      }
+      continue
+    }
+    roots.push(argument)
+  }
+  return roots
+}
+
+/**
+ * The checkouts are either provisioned by this run or named by the caller, and never discovered.
  *
  * `git worktree list` routinely shows more than thirty checkouts on this machine, worked in
  * concurrently by other agents and by Ro, and running a lane inside one of them would write another
- * agent's tree. So the experiment refuses to guess: the caller names the checkouts it owns, and
- * making them is a deliberate step taken by someone who knows they are disposable.
+ * agent's tree. `--provision` makes its own under one run-scoped root and removes exactly those;
+ * anything else has to be named by someone who knows it is disposable.
  */
 async function run(): Promise<void> {
+  let provisioned: ProvisionedWorktrees | undefined
   try {
     const argv = Platform.runtimeProcess.argv.slice(2)
-    const roots = argv.filter(argument => !argument.startsWith('--'))
-    if (roots.length === 0) {
+    const named = positionalRoots(argv)
+    const provision = valueOf(argv, '--provision')
+    if (provision !== undefined && named.length > 0) {
+      Errors.throwUserInput('Pass either --provision <count> or explicit checkout paths, not both.')
+    }
+    if (provision === undefined && named.length === 0) {
       Errors.throwUserInput(
-        'Name the checkouts to run lanes in, one per lane: just admission-experiment <root> <root> …\n'
-          + "They must be checkouts you own and can throw away — never another agent's worktree.",
+        'Name the checkouts to run lanes in, one per lane, or let the run make its own:\n'
+          + '  just admission-experiment --provision 10\n'
+          + '  just admission-experiment <root> <root> …\n'
+          + "A named checkout must be one you own and can throw away — never another agent's worktree.",
       )
     }
-    const lane = valueOf(argv, '--lane') ?? 'verify'
+
+    // Quiet is established before provisioning, so a busy machine is not paid for with ten
+    // checkouts' worth of `agent setup` before the refusal arrives.
+    const allowBusyMachine = argv.includes('--allow-busy-machine')
+    if (!allowBusyMachine) {
+      await assertMachineQuiet()
+    }
+
+    if (provision !== undefined) {
+      provisioned = await provisionWorktrees(Number(provision), defaultWorktreeDependencies)
+    }
+    const roots = provisioned?.repositoryRoots ?? named
     const report = await runAdmissionExperiment({
-      allowBusyMachine: argv.includes('--allow-busy-machine'),
-      lane,
+      allowBusyMachine: true,
+      lane: valueOf(argv, '--lane') ?? 'verify',
       lanes: Number(valueOf(argv, '--lanes') ?? roots.length),
       repeats: Number(valueOf(argv, '--repeats') ?? 3),
       repositoryRoots: roots,
@@ -344,6 +393,18 @@ async function run(): Promise<void> {
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
     Platform.runtimeProcess.setExitCode(1)
+  } finally {
+    // Removal is in `finally` because a failed experiment leaves checkouts just as surely as a
+    // successful one, and a leaked one is worse than a lost measurement: nothing that runs later can
+    // tell it from a worktree somebody is working in. What could not be removed is named, not
+    // swallowed, so the paths can be cleared by hand.
+    if (provisioned !== undefined) {
+      const left = await removeWorktrees(provisioned, defaultWorktreeDependencies)
+      if (left.length > 0) {
+        HCI.writeErrorLine(`Could not remove ${left.length} experiment checkout(s): ${left.join(', ')}`)
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    }
   }
 }
 
