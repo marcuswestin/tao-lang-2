@@ -114,6 +114,7 @@ export type FinalizeDependencies = {
   inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
+  readText: (path: string) => Promise<string>
   run: FinalizeCommandRunner
   writeJson: (path: string, value: unknown) => Promise<void>
   writeLine: (line: string) => void
@@ -127,6 +128,7 @@ const defaultDependencies: FinalizeDependencies = {
   key: GreenTree.key,
   now: () => new Date(),
   readJson: FS.readJson,
+  readText: FS.readText,
   run: CLI.run,
   writeJson: FS.writeJson,
   writeLine: HCI.writeLine,
@@ -172,6 +174,13 @@ type MessageDecision = 'drafted' | 'kept' | 'redrafted'
 
 type MessageOutcome = {
   decision: MessageDecision
+  /**
+   * Why the landing will reject a kept message outright — empty when it will accept it. A drafted
+   * or redrafted message is validated as it is written, so only a hand-edited one can be malformed,
+   * and finding out at the landing means a round trip through preflight for a summary one character
+   * too long.
+   */
+  malformed: string
   messageHeadSha: string
   /**
    * Why a kept message is not proved to cover this HEAD — empty when it is proved, or when the
@@ -409,9 +418,13 @@ function messageSummary(message: MessageOutcome): string {
   if (message.decision === 'redrafted') {
     return 'redrafted on request, replacing what was there — needs review'
   }
+  if (message.malformed !== '') {
+    return `kept — the landing will reject it: ${message.malformed}`
+  }
   return message.unconfirmedReason === ''
     ? 'kept — recorded as written for this HEAD'
-    : `kept — ${message.unconfirmedReason}; only the author can confirm it still describes this branch`
+    : `kept — ${message.unconfirmedReason}; only the author can confirm it still describes this branch, `
+      + 'by reading it and re-running finalize'
 }
 
 function messageRemaining(message: MessageOutcome, messageFile: string): string[] {
@@ -422,9 +435,30 @@ function messageRemaining(message: MessageOutcome, messageFile: string): string[
   if (message.decision === 'redrafted') {
     return [`Review the redrafted merge message before landing; it replaced the previous one: ${path}`]
   }
+  if (message.malformed !== '') {
+    return [`Fix the kept merge message, which the landing will reject (${message.malformed}): ${path}`]
+  }
   return message.unconfirmedReason === ''
     ? []
-    : [`Confirm the kept merge message still describes this branch (${message.unconfirmedReason}): ${path}`]
+    : [
+      `Confirm the kept merge message still describes this branch (${message.unconfirmedReason}), `
+      + `by reading it and re-running finalize: ${path}`,
+    ]
+}
+
+/**
+ * keptMessageDefect reports why the landing would reject a hand-written merge message, in its own
+ * words, or empty when it would accept it. `validateMergeMessage` is the landing's own rule, reused
+ * here so the two cannot drift: finalize already validates what it drafts, and a message the author
+ * wrote or edited is the only one that reaches the landing unchecked.
+ */
+function keptMessageDefect(source: string): string {
+  try {
+    validateMergeMessage(source)
+    return ''
+  } catch (error) {
+    return Errors.messageOf(error)
+  }
 }
 
 async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
@@ -673,6 +707,11 @@ async function draftOrKeepMessage(
 ): Promise<MessageOutcome> {
   const messageExists = await dependencies.exists(messageFile)
   if (messageExists && !redraft) {
+    const malformed = keptMessageDefect(await dependencies.readText(messageFile))
+    if (malformed !== '') {
+      lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
+      return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
+    }
     const unconfirmedReason = keptMessageReason(priorState, headSha)
     lines.push(
       `PASS  Kept the existing merge message; ${
@@ -681,7 +720,7 @@ async function draftOrKeepMessage(
           : unconfirmedReason
       }: ${FS.displayPath(messageFile)}`,
     )
-    return { decision: 'kept', messageHeadSha: headSha, unconfirmedReason }
+    return { decision: 'kept', malformed: '', messageHeadSha: headSha, unconfirmedReason }
   }
 
   const decision: MessageDecision = messageExists ? 'redrafted' : 'drafted'
@@ -691,7 +730,7 @@ async function draftOrKeepMessage(
         ? `PLAN  Redraft the merge message on request, replacing ${FS.displayPath(messageFile)}.`
         : 'PLAN  Draft the merge message; none exists yet.',
     )
-    return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
+    return { decision, malformed: '', messageHeadSha: headSha, unconfirmedReason: '' }
   }
 
   const commits = await readFeatureCommits(dependencies, root, mainSha, headSha)
@@ -702,7 +741,7 @@ async function draftOrKeepMessage(
       + `${messageExists ? ', replacing what was there' : ''}; review it before landing: `
       + FS.displayPath(messageFile),
   )
-  return { decision, messageHeadSha: headSha, unconfirmedReason: '' }
+  return { decision, malformed: '', messageHeadSha: headSha, unconfirmedReason: '' }
 }
 
 /**
