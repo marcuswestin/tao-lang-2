@@ -1,6 +1,9 @@
 # DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split
 
-- **Status:** Candidate
+- **Status:** Candidate, re-measured 2026-09-21 after `bfa09d9d`. The shard fell from 34.8s to
+  **19.6s** with the rest of the Tao pipeline, so the cost is smaller but the shape is unchanged:
+  the file is still indivisible and still sets the suite's floor. It is no longer the third-longest
+  node in a lane — `cli/tao-cli#1` at 37.5s and `tao-apps#1` at 28.4s are both ahead of it.
 - **Section:** External
 - **Area:** Test performance
 - **Impact:** The Expo-host suite shards by whole file, so a file whose cost exceeds every sibling
