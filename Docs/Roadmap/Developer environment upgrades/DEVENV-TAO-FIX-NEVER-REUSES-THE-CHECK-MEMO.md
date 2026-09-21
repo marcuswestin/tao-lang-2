@@ -1,6 +1,12 @@
 # DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository
 
-- **Status:** Candidate
+- **Status:** Candidate, largely overtaken 2026-09-21 — the cost this entry is about fell by two
+  thirds when import resolution stopped calling `realpath` per reference (`bfa09d9d`). `./tao fix`
+  over the whole repository measured **5.5s** after it against 17.1s before, and `_fix-tao` is no
+  longer what the verify lanes wait on: the serial floor now runs through `cli/tao-cli`, and a
+  20-second node has become a 5-second one. Scoping the fixer to the diff was the proposed change
+  and is no longer worth the plumbing; what remains of this entry is the asymmetry itself, which is
+  still true and still worth fixing if the fix path ever becomes expensive again.
 - **Section:** External
 - **Area:** Verification performance
 - **Impact:** `CheckCache` is opened only for a run that validates and does not write, so `tao check`

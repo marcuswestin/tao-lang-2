@@ -29,6 +29,14 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
     duplicated per worktree for no reason, and where a single orchestrator does and does not help
     live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
+## Tao tooling performance
+
+- [ ] Make the `tao` commands interactive-grade.
+  - An uncached `tao check` of WordFlower takes 20-27s against 14ms of actual parsing; the causes are
+    product defects that also set the floor of every verification lane. Measurements, root causes,
+    the floor of the current stack, the phased fix, and the stack alternatives considered live in
+    [`Docs/Roadmap/Tao tooling performance.md`](Docs/Roadmap/Tao%20tooling%20performance.md).
+
 ## Real-host testing
 
 - [ ] Prove the additive [real-host testing prototype](Docs/Roadmap/Real-host%20testing%20prototype.md)

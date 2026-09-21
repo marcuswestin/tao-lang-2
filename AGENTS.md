@@ -25,7 +25,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Lead with the answer or outcome and stop there. Write for the pull rather than the push: a short answer Ro can ask into beats a complete one Ro has to wade through. Surface what Ro would act on — a decision you took that they may want to confirm, something unexpected, something needing their judgment — and let the rest wait to be asked for. Work that did what it was supposed to needs a sentence, not an inventory.
 - Shape a response as a numbered list, bulleted sub-items where needed, at most three levels deep, lettered so "elaborate 2.b" lands. One point per item. Error text and command output go verbatim in code blocks.
-- Depart from this when a root-cause walkthrough or a design argument serves Ro better. It covers what Ro reads; subagent and agent-to-agent text is exempt.
+- Depart from this when a root-cause walkthrough or a design argument serves Ro better. This section governs what Ro reads and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
 - Close a turn that finished a meaningful chunk with two one-line recommendations: that this is a good point to run `/compact`, and the next slice you propose. Refresh `.artifacts/checkpoint/<branch>.md` first, so a compaction costs nothing.
 
 ## Safety

@@ -124,8 +124,11 @@ Describe('changed suite plan', () => {
     Expect(result.selected.get('compiler')).toBe('changed directly')
     Expect(result.selected.get('workspace')).toBe('imports compiler')
     Expect(result.selected.get('studio')).toBe('imports workspace')
-    // The CLI compiles the Tao behavior tests, so a change reaching it reaches every app.
-    Expect(result.taoAppPaths).toEqual(['Apps'])
+    // The CLI compiles the Tao behaviour tests, so a change reaching it does reach every app — but
+    // reaching it through the graph is true of nearly every package, and selecting all sixteen apps
+    // on that made this lane as wide as the full one. The language test apps exercise the same
+    // compile-and-render pipeline at a fraction of the cost; `verify` still runs them all.
+    Expect(result.taoAppPaths).toEqual(['Apps/Test Apps'])
     Expect(result.skipped).toContain('runtime-jest')
     Expect(result.skipped).toContain('cli/dev-cli')
     Expect(result.everything).toBeUndefined()
@@ -208,7 +211,42 @@ Describe('changed suite plan', () => {
     Expect(result.selected.get('cli/cli-kit')).toBe('changed directly')
     Expect(result.selected.get('cli/tao-cli')).toBe('imports cli/cli-kit')
     Expect(result.selected.has('tao-apps')).toBe(true)
-    Expect(result.taoAppPaths).toEqual(['Apps'])
+    // Reached through `cli/tao-cli` rather than by editing it, so the language test apps run.
+    Expect(result.taoAppPaths).toEqual(['Apps/Test Apps'])
+  })
+
+  // The distinction the narrow lane turns on, stated on its own: editing one of the packages every
+  // app is compiled by or runs on selects every app, while merely depending on one of them does not.
+  Test('separates editing a package every app runs on from depending on one', () => {
+    for (
+      const path of [
+        'packages/apps/runtime/TaoRuntime-src/TR.ts',
+        'packages/apps/stdlib/stdlib-src/Text.tao',
+        'packages/cli/tao-cli/cli-src/compile-command.ts',
+      ]
+    ) {
+      Expect(plan([path]).taoAppPaths).toEqual(['Apps'])
+    }
+    for (
+      const path of [
+        'packages/language/parser/parser-src/Parser.ts',
+        'packages/compiler/compiler-src/Compile.ts',
+        'packages/shared/shared-src/FS.ts',
+      ]
+    ) {
+      Expect(plan([path]).taoAppPaths).toEqual(['Apps/Test Apps'])
+    }
+  })
+
+  // A directly changed app still runs its own behaviour tests, and still does when a language
+  // package changed in the same commit: the sample replaces the widening, never a named app.
+  Test('keeps a directly changed app beside the sampled ones', () => {
+    const result = plan([
+      'Apps/WordFlower/1 - Current/Design.tao',
+      'packages/language/parser/parser-src/Parser.ts',
+    ])
+
+    Expect(result.taoAppPaths).toEqual(['Apps/Test Apps', 'Apps/WordFlower'])
   })
 
   Test('an ides/studio-tooling-only change selects cli/tao-cli but not the Tao apps', () => {

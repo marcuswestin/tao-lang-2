@@ -206,10 +206,48 @@ Describe('Tao package discovery', () => {
       })
       Expect(await Packages.candidateFilePaths(resolution)).toEqual([])
       const escapedFile = FS.resolvePath('escaped/Secret.tao', packageRoot)
-      Expect(Packages.targetMatches(resolution, {
+      Expect(Packages.targetMatches(context, resolution, {
         filePath: escapedFile,
         workspaceFilePaths: new Set([escapedFile]),
       })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('asks the file system only about files an import names, and never remembers a miss', async () => {
+    const root = await mkTestDir('tao-packages-physical-paths-')
+    try {
+      const projectRoot = FS.resolvePath('Project', root)
+      const packageRoot = FS.resolvePath('@data', projectRoot)
+      const seed = FS.resolvePath('Seed.tao', packageRoot)
+      const later = FS.resolvePath('Later.tao', packageRoot)
+      const elsewhere = FS.resolvePath('Elsewhere.tao', projectRoot)
+      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(seed, '')
+      await FS.writeText(elsewhere, '')
+      const context = await Packages.createContext(projectRoot)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '@data',
+      })
+      const workspaceFilePaths = new Set([seed, later, elsewhere])
+
+      // A file the import path does not name is turned away by string comparison alone.
+      Expect(Packages.targetMatches(context, resolution, { filePath: elsewhere, workspaceFilePaths })).toBe(false)
+      Expect(context.physicalPaths.size).toBe(0)
+
+      // The linker asks about the same file once per reference; the file system hears it once.
+      Expect(Packages.targetMatches(context, resolution, { filePath: seed, workspaceFilePaths })).toBe(true)
+      const remembered = new Map(context.physicalPaths)
+      Expect([...remembered.keys()].toSorted()).toEqual([packageRoot, seed].toSorted())
+      Expect(Packages.targetMatches(context, resolution, { filePath: seed, workspaceFilePaths })).toBe(true)
+      Expect(context.physicalPaths).toEqual(remembered)
+
+      // An unsaved editor buffer has no physical path yet; it must match once it is written.
+      Expect(Packages.targetMatches(context, resolution, { filePath: later, workspaceFilePaths })).toBe(false)
+      await FS.writeText(later, '')
+      Expect(Packages.targetMatches(context, resolution, { filePath: later, workspaceFilePaths })).toBe(true)
     } finally {
       await FS.remove(root)
     }
@@ -258,7 +296,7 @@ Describe('Tao package discovery', () => {
       })).toMatchObject({ invalidReason: 'project-boundary', relation: 'invalid' })
       const bareResolution = Packages.resolve(context, { fromFilePath: packageMain })
       Expect(await Packages.candidateFilePaths(bareResolution)).toEqual([packageMain])
-      Expect(Packages.targetMatches(bareResolution, {
+      Expect(Packages.targetMatches(context, bareResolution, {
         filePath: nestedFile,
         workspaceFilePaths: new Set([packageMain, nestedFile]),
       })).toBe(false)
@@ -362,7 +400,7 @@ Describe('Tao package discovery', () => {
         '@cards/Apps/Foo/@/Nested.tao',
         '@cards/Main.tao',
       ])
-      Expect(Packages.targetMatches(resolution, {
+      Expect(Packages.targetMatches(context, resolution, {
         filePath: FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
         workspaceFilePaths: new Set([
           mainPath,
@@ -370,7 +408,7 @@ Describe('Tao package discovery', () => {
           FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
         ]),
       })).toBe(true)
-      Expect(Packages.targetMatches(resolution, {
+      Expect(Packages.targetMatches(context, resolution, {
         filePath: FS.resolvePath('@/studio/Generated.tao', root),
         workspaceFilePaths: new Set(),
       })).toBe(false)
