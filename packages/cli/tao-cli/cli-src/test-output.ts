@@ -39,8 +39,8 @@ const LOG_FILE_NAME = 'test-output.log'
 /**
  * SUMMARY_LINE matches the test runner's result summary block. Those lines are printed in every
  * mode: the repository test runner counts Tao behavior tests by scraping the `Tests:` line out of
- * this command's output (`parseJestTestSummary` in packages/dev), so a quiet run must still carry
- * it.
+ * this command's output (`parseJestTestSummary` in `tao-verification`), so a quiet run must still
+ * carry it.
  */
 const SUMMARY_LINE = /^(?:Test Suites|Tests|Snapshots|Time|Ran all test suites)\b/
 

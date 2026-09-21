@@ -321,12 +321,16 @@ external automation tool (Appium, Playwright) for `host-control`; **service** is
 process that answers requests; **TypeScript implementation** is the TypeScript file behind a
 stdlib `.tao` declaration.
 
+**CLI restructure landed**, stepwise rather than in one slice: `packages/cli/cli-kit` and
+`packages/testing/verification` extracted first, then `packages/ides/studio-tooling`, then the Expo
+dev loop moved into `packages/apps/expo-host` behind an injected `DevLoopReporter`, and finally what
+remained of `packages/dev` split into `packages/cli/dev-cli` and `packages/cli/agent-cli` —
+dissolving `dev` for good.
+
 Later slices, in order:
 
-1. **CLI restructure**, dissolving `dev` into `packages/cli/{cli-kit,dev-cli,agent-cli}` and
-   `packages/testing/verification`.
-2. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
+1. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
    package next to `core`, with a surface snapshot test and a gate that apps import only the SDK,
    never runtime internals.
-3. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
-4. **A vocabulary pass on "host"**, which today names more than one thing.
+2. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
+3. **A vocabulary pass on "host"**, which today names more than one thing.

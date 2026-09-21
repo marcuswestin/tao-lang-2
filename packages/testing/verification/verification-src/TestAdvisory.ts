@@ -4,8 +4,13 @@ import type { ChangedSelection } from './TestSelection'
 /** fullRunReason returns only the highest-priority reason a complete verification is prudent. */
 function fullRunReason(selection: ChangedSelection, ledger: TestLedgerStore): string | undefined {
   const paths = selection.changedPaths
-  if (paths.some(path => path.startsWith('packages/dev/') || path === 'agent' || path === 'dev' || path === 'tao')) {
-    return 'packages/dev changed since the comparison point'
+  if (
+    paths.some(path =>
+      path.startsWith('packages/cli/dev-cli/') || path.startsWith('packages/cli/agent-cli/')
+      || path === 'agent' || path === 'dev' || path === 'tao'
+    )
+  ) {
+    return 'the developer or agent CLI changed since the comparison point'
   }
   if (paths.some(path => path === 'Justfile' || path.endsWith('/GateCatalog.ts'))) {
     return 'verification gate definitions changed since the comparison point'
@@ -43,7 +48,7 @@ function fullRunReason(selection: ChangedSelection, ledger: TestLedgerStore): st
 
 function line(selection: ChangedSelection, ledger: TestLedgerStore): string | undefined {
   const reason = fullRunReason(selection, ledger)
-  return reason === undefined ? undefined : `Note: ${reason} — 'just verify --complete' is worth a pass.`
+  return reason === undefined ? undefined : `Note: ${reason} — './agent verify --complete' is worth a pass.`
 }
 
 /** TestAdvisory owns the one-line, non-gating complete-run recommendation. */

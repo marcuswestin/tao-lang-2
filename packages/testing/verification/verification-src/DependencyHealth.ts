@@ -32,12 +32,14 @@ type DependencyHealthDependencies = {
 const PROBES: readonly Probe[] = [
   // Node resolution for the Expo toolchain, which the runtime package's jest harness needs.
   { modules: ['expo/metro-config', 'jest-expo/jest-preset'], node: true, packageDir: 'packages/apps/expo-host' },
-  // What `./dev` loads before it can build its command surface.
-  { modules: ['commander', '@commander-js/extra-typings'], packageDir: 'packages/dev' },
-  // The shared terminal UI used by the developer commands.
-  { modules: ['ink', 'react'], packageDir: 'packages/cli/cli-kit' },
-  // Studio's watcher runs from its own package after the tooling split.
-  { modules: ['chokidar'], packageDir: 'packages/ides/studio-tooling' },
+  // What `./dev` loads before it can render a work graph, through the package that actually
+  // declares the terminal UI framework rather than the CLI package that only imports it.
+  {
+    modules: ['ink', 'react', 'commander', '@commander-js/extra-typings'],
+    packageDir: 'packages/cli/cli-kit',
+  },
+  // What `./dev` loads before it can watch a tree, through the dev loop that owns the watcher.
+  { modules: ['chokidar'], packageDir: 'packages/apps/expo-host' },
   // What `./tao` loads to build its command surface and completions.
   { modules: ['@bomb.sh/tab'], packageDir: 'packages/cli/tao-cli' },
   // What the parser loads before any Tao source can be read.

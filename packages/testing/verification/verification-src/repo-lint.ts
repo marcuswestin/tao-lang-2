@@ -398,6 +398,7 @@ const RAW_THROW_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
   'packages/ides/studio/studio-src/StudioWelcome.ts',
@@ -471,6 +472,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:877',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:898',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:901',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:235',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:347',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:355',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:368',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:128',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:264',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:292',
@@ -490,21 +495,21 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:78',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:355',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:626',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3043',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:627',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3301',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
-  'packages/dev/dev-tests/agent-config-generation.test.ts:44',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
-  'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:214',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:44',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:84',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:107',
+  'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
+  'packages/cli/agent-cli/agent-cli-tests/codex-config-generation.test.ts:214',
   'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts:343',
-  'packages/dev/dev-tests/studio-companion-device.test.ts:560',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:560',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:232',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
@@ -850,7 +855,7 @@ export function crossPackageSourceImportIssues(
  * the parser could never run; it also turns any top-level fault in Studio code into a failure of the
  * gate runner itself rather than of one node.
  */
-const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
+export const DEV_ENTRY_PATH = 'packages/cli/dev-cli/dev-cli-src/dev.ts'
 /**
  * Package aliases the entry must reach only behind `await import(...)`. `@studio` pulls in the
  * generated parser; `@studio-tooling`, `@expo-host` (its bare root, not only `/dev-loop`), and
@@ -866,6 +871,7 @@ const DEV_LAZY_IMPORT_SPECIFIERS = ['@studio', '@studio-tooling', '@expo-host', 
  * themselves route through; a general tsconfig-paths resolver is not worth it for this lint.
  */
 const ALIAS_SOURCE_ROOTS: Record<string, string> = {
+  '@agent-cli': 'packages/cli/agent-cli/agent-cli-src',
   '@cli-kit': 'packages/cli/cli-kit/cli-kit-src',
   '@verification': 'packages/testing/verification/verification-src',
 }
@@ -878,6 +884,16 @@ export function devLazyStudioImportIssues(
   entryPath: string = DEV_ENTRY_PATH,
 ): string[] {
   const byPath = new Map(files.map(file => [file.path, file]))
+  if (!byPath.has(entryPath)) {
+    // A file map built from the real repository always carries its own entry; one that does not
+    // means `DEV_ENTRY_PATH` moved out from under this rule, which would otherwise vacate it
+    // silently — the entry stops being traced and every static Studio or Expo import inside it
+    // stops being caught.
+    return [
+      `${entryPath}:1 does not exist, so this rule is not watching the \`./dev\` entry at all; update`
+      + ' `DEV_ENTRY_PATH` in packages/testing/verification/verification-src/repo-lint.ts to its new path.',
+    ]
+  }
   const queue: Array<{ chain: readonly string[]; path: string }> = [{ chain: [entryPath], path: entryPath }]
   const visited = new Set<string>()
   const issues: Array<{ detail: string; line: number; path: string }> = []

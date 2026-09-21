@@ -5,9 +5,12 @@
   "module": "cli-kit-src/cli-kit.ts",
   "exports": {
     ".": "./cli-kit-src/cli-kit.ts",
-    "./OutputText": "./cli-kit-src/OutputText.ts"
+    "./OutputText": "./cli-kit-src/OutputText.ts",
+    "./RunWithCommands": "./cli-kit-src/RunWithCommands.ts"
   },
   "dependencies": {
+    "@commander-js/extra-typings": "^15.0.0",
+    "commander": "^15.0.0",
     "ink": "^7.1.1",
     "react": "^19.2.8",
     "tao-shared": "workspace:*",

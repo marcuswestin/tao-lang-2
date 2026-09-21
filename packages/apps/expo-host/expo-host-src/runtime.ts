@@ -511,11 +511,18 @@ function StudioBrowserApp() {
         || !isRuntimeUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
       ) return
       setBootstrapError(undefined)
-      setAppliedRuntime({
+      const next = {
         cell: event.data.runtime,
         manifest: TaoStudioManifest,
         publication: TaoStudioPublication,
-      })
+      }
+      // A new cell object here rebuilds the provider overlay below (studioCellRuntime, then
+      // TR.Studio.Environment.Host) and clears its committed data and handles, so it can only be
+      // safe together with a subtree remount. The ErrorBoundary below remounts on exactly these four
+      // values, so an update whose tuple repeats what is already applied must not replace the
+      // previous object: keeping the previous reference is what keeps the memoized cell — and so the
+      // provider overlay — from rebuilding without a remount to justify it.
+      setAppliedRuntime((previous: any) => sameRuntimeIdentity(previous, next) ? previous : next)
     }
     window.addEventListener('message', receiveRuntime)
     return () => window.removeEventListener('message', receiveRuntime)
@@ -652,6 +659,22 @@ function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
     && runtimeIdentity?.compileRevision === identity.compileRevision
     && runtimeIdentity?.manifestRevision === identity.manifestRevision
     && runtimeIdentity?.project === identity.project
+}
+
+/**
+ * sameRuntimeIdentity compares the same values \`TR.Studio.ErrorBoundary resetKey\` remounts on:
+ * compileRevision, cellRevision, and manifestRevision. previewInstanceId is the fourth resetKey
+ * value but is not part of either side here — \`isRuntimeUpdate\` already requires it to equal this
+ * tab's fixed bootstrap value before a message reaches this comparison, so it cannot discriminate.
+ */
+function sameRuntimeIdentity(previous: any, next: any) {
+  const previousIdentity = previous?.cell?.identity
+  const nextIdentity = next?.cell?.identity
+  return previousIdentity !== undefined
+    && nextIdentity !== undefined
+    && previousIdentity.compileRevision === nextIdentity.compileRevision
+    && previousIdentity.cellRevision === nextIdentity.cellRevision
+    && previousIdentity.manifestRevision === nextIdentity.manifestRevision
 }
 
 function studioPreviewBootstrap(href: string) {

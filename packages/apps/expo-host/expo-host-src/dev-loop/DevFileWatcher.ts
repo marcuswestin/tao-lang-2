@@ -1,13 +1,11 @@
-import { FS, Repo } from '@shared'
-import chokidar from 'chokidar'
+import { Repo } from '@shared'
 import CommandRunner from './CommandRunner'
+import {
+  type DebouncedWatcher,
+  startDebouncedWatcher as startGenericDebouncedWatcher,
+  WATCH_DEBOUNCE_MS,
+} from './DebouncedWatcher'
 import { DevLoopOutput } from './DevLoopOutput'
-
-const WATCH_DEBOUNCE_MS = 250
-
-type DebouncedWatcher = {
-  close: () => Promise<void>
-}
 
 type DevWatcherSpec = {
   label: string
@@ -32,38 +30,27 @@ function startDebouncedWatcher(
   spec: DevWatcherSpec,
   onChange: (shouldRunParserGen: boolean) => void,
 ): DebouncedWatcher {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const watcher = chokidar.watch(spec.paths, {
-    ignoreInitial: true,
-    ignored: shouldIgnoreWatchPath,
-  })
-  watcher.on('all', (event, path) => {
-    DevLoopOutput.logDevLoop('watch', `${spec.label} ${event}: ${path}`)
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
-    if (CommandRunner.isCommandRunning()) {
-      DevLoopOutput.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
-      return
-    }
-    timer = setTimeout(() => {
+  return startGenericDebouncedWatcher(
+    spec.paths,
+    () => {
       if (CommandRunner.isCommandRunning()) {
         DevLoopOutput.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
         return
       }
       onChange(spec.shouldRunParserGen)
-    }, WATCH_DEBOUNCE_MS)
-  })
-  return {
-    async close() {
-      if (timer) {
-        clearTimeout(timer)
-        timer = undefined
-      }
-      await watcher.close()
     },
-  }
+    {
+      debounceMs: WATCH_DEBOUNCE_MS,
+      onEvent: (event, path) => DevLoopOutput.logDevLoop('watch', `${spec.label} ${event}: ${path}`),
+      shouldDrop: () => {
+        if (!CommandRunner.isCommandRunning()) {
+          return false
+        }
+        DevLoopOutput.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
+        return true
+      },
+    },
+  )
 }
 
 function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
@@ -86,7 +73,10 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
         Repo.resolvePath('Justfile'),
         Repo.resolvePath('packages/language/ast-utils'),
         Repo.resolvePath('packages/compiler'),
-        Repo.resolvePath('packages/dev'),
+        // `tao dev`'s own reporter and command wiring, which this loop runs through
+        // (`@expo-host/dev-loop/expo-dev-loop` is called only from `packages/cli/tao-cli`); the
+        // dev loop's own code under `packages/apps/expo-host` is already covered below.
+        Repo.resolvePath('packages/cli/tao-cli/cli-src/dev'),
         Repo.resolvePath('packages/language/parser/parser-src'),
         Repo.resolvePath('packages/apps/runtime'),
         Repo.resolvePath('packages/apps/expo-host'),
@@ -98,22 +88,4 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
       shouldRunParserGen: false,
     },
   ]
-}
-
-function shouldIgnoreWatchPath(path: string): boolean {
-  const normalized = FS.slashPath(path)
-  return normalized.includes('/node_modules/')
-    || normalized.endsWith('/node_modules')
-    || normalized.includes('/.git/')
-    || normalized.endsWith('/.git')
-    || normalized.includes('/.artifacts/')
-    || normalized.endsWith('/.artifacts')
-    || normalized.includes('/.expo/')
-    || normalized.endsWith('/.expo')
-    || normalized.includes('/_gen_')
-    || normalized.endsWith('.tsbuildinfo')
-    || normalized.endsWith('/ios')
-    || normalized.includes('/ios/')
-    || normalized.endsWith('/android')
-    || normalized.includes('/android/')
 }

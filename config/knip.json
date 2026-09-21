@@ -41,22 +41,31 @@
         "*-tests/**/*.{ts,tsx}"
       ]
     },
-    "packages/dev": {
+    "packages/cli/agent-cli": {
       "entry": [
-        "dev-src/dev.ts",
-        "dev-src/agent-dev.ts",
-        "dev-src/cli/agent-help.ts",
-        "dev-src/agent-hooks/ShellHabitsEntry.ts",
-        "dev-src/agent-hooks/SubagentBriefEntry.ts",
-        "dev-src/agent-hooks/GitHooksEntry.ts",
-        "dev-src/performance/language-performance.ts",
-        "dev-src/repo-lint-entry.ts",
-        "dev-tests/**/*.test.{ts,tsx}",
+        "agent-cli-src/agent-dev.ts",
+        "agent-cli-src/cli/agent-help.ts",
+        "agent-cli-src/agent-hooks/ShellHabitsEntry.ts",
+        "agent-cli-src/agent-hooks/SubagentBriefEntry.ts",
+        "agent-cli-src/agent-hooks/GitHooksEntry.ts",
+        "agent-cli-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "agent-cli-src/**/*.{ts,tsx}",
+        "agent-cli-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/cli/dev-cli": {
+      "entry": [
+        "dev-cli-src/dev.ts",
+        "dev-cli-src/performance/language-performance.ts",
+        "dev-cli-src/repo-lint-entry.ts",
+        "dev-cli-tests/**/*.test.{ts,tsx}",
         "performance-checks/**/*.test.{ts,tsx}"
       ],
       "project": [
-        "dev-src/**/*.{ts,tsx}",
-        "dev-tests/**/*.{ts,tsx}",
+        "dev-cli-src/**/*.{ts,tsx}",
+        "dev-cli-tests/**/*.{ts,tsx}",
         "performance-checks/**/*.{ts,tsx}"
       ]
     },

@@ -195,7 +195,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const unsandboxedSkips = options.skipUnsandboxed === true
     ? options.gates
       .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
-      .map(name => `${name}=requires unsandboxed host capabilities; run just verify-full outside the sandbox`)
+      .map(name => `${name}=requires unsandboxed host capabilities; run ./agent verify-full outside the sandbox`)
     : []
 
   const recipeGates = runnableGates.filter(name => !isTestGate(name))
