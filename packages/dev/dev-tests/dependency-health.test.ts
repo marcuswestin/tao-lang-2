@@ -1,5 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { dependencyHealthError } from '../dev-src/doctor/DependencyHealth'
+import { dependencyHealthError } from '@verification/DependencyHealth'
 
 Describe('dependency health probes', () => {
   /*

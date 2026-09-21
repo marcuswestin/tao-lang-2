@@ -460,7 +460,7 @@ Describe('agent worktree profile bootstrap', () => {
         'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
         'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
         'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
-        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_DEV/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/testing/verification/verification-src/DependencyHealth.ts"',
         'TAO_DEPENDENCY_MODE=""',
         'TAO_DEPENDENCY_ATTEMPTS=3',
         'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
@@ -480,7 +480,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(commandLog)).trim()).toBe(
-        `run ${FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot)}`,
+        `run ${FS.resolvePath('packages/testing/verification/verification-src/DependencyHealth.ts', testRoot)}`,
       )
       Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
     } finally {
@@ -520,7 +520,7 @@ Describe('agent worktree profile bootstrap', () => {
         'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
         'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
         'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
-        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/dev/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/testing/verification/verification-src/DependencyHealth.ts"',
         'TAO_DEPENDENCY_ATTEMPTS=3',
         'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
         'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',
@@ -541,9 +541,9 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(commandLog)).trim().split('\n')).toEqual([
         `install --cwd ${testRoot} --frozen-lockfile`,
-        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        'run ' + FS.resolvePath('packages/testing/verification/verification-src/DependencyHealth.ts', testRoot),
         `install --cwd ${testRoot} --frozen-lockfile --force`,
-        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        'run ' + FS.resolvePath('packages/testing/verification/verification-src/DependencyHealth.ts', testRoot),
       ])
       Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
     } finally {
@@ -584,7 +584,7 @@ Describe('agent worktree profile bootstrap', () => {
         'TAO_DEPENDENCY_TEMP_ROOT="$TAO_DEPENDENCY_ROOT/.artifacts/tmp"',
         'TAO_DEPENDENCY_TEMP="$TAO_DEPENDENCY_TEMP_ROOT/"',
         'TAO_DEPENDENCY_STAMP="$TAO_DEPENDENCY_ROOT/install.stamp"',
-        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/dev/dev-src/doctor/DependencyHealth.ts"',
+        'TAO_DEPENDENCY_HEALTH="$TAO_DEPENDENCY_ROOT/packages/testing/verification/verification-src/DependencyHealth.ts"',
         'TAO_DEPENDENCY_ATTEMPTS=3',
         'typeset -a TAO_DEPENDENCY_INSTALL_ARGS',
         'TAO_DEPENDENCY_INSTALL_ARGS=(install --cwd "$TAO_DEPENDENCY_ROOT" --frozen-lockfile)',

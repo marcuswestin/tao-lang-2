@@ -174,6 +174,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // only what the flag already implies.
   ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['testing/verification', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['ides/studio-tooling', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ides/ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
   // expo-host tests spawn full tsc typechecks per test; under parallel suite load these exceed
   // Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its empty
@@ -390,26 +391,32 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // The browser smokes are parallel-safe on the worker indices the pool hands them; the native
     // shell and the canary contend on the window server, which is what `gui` names. Each smoke
     // gate is named for the public recipe that runs the same file by hand.
-    ['studio-smoke', studioSmoke('studio-smoke', 'packages/dev/studio-smoke/studio-launch.test.ts')],
+    ['studio-smoke', studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts')],
     [
       'studio-proof-real-app',
-      studioSmoke('studio-proof-real-app', 'packages/dev/studio-smoke/studio-real-app.test.ts'),
+      studioSmoke('studio-proof-real-app', 'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts'),
     ],
     [
       'studio-smoke-simulated-user',
-      studioSmoke('studio-smoke-simulated-user', 'packages/dev/studio-smoke/studio-simulated-user.test.ts'),
+      studioSmoke(
+        'studio-smoke-simulated-user',
+        'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+      ),
     ],
     [
       'keyboard-navigation-smoke',
-      studioSmoke('keyboard-navigation-smoke', 'packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts'),
+      studioSmoke(
+        'keyboard-navigation-smoke',
+        'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
+      ),
     ],
     [
       'studio-dialog-browser',
-      studioSmoke('studio-dialog-browser', 'packages/dev/studio-smoke/studio-dialog-browser.test.ts'),
+      studioSmoke('studio-dialog-browser', 'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts'),
     ],
     [
       'studio-agent-browser',
-      studioSmoke('studio-agent-browser', 'packages/dev/studio-smoke/studio-agent-browser.test.ts'),
+      studioSmoke('studio-agent-browser', 'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts'),
     ],
     // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
     // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
@@ -419,10 +426,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       'studio-smoke-native',
       {
-        ...studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
-          native: true,
-          resources: [GUI_RESOURCE],
-        }),
+        ...studioSmoke(
+          'studio-smoke-native',
+          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+          {
+            native: true,
+            resources: [GUI_RESOURCE],
+          },
+        ),
         priority: GUI_PRIORITY,
       },
     ],

@@ -51,15 +51,16 @@ const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
  */
 const TAO_APPS_PACKAGES = new Set(['apps/runtime', 'apps/expo-host', 'apps/stdlib', 'cli/tao-cli'])
 /**
- * Dev-tooling packages `dev` and `testing/verification` reach `cli/tao-cli` through a workflow
- * dependency — a gate catalog, a scheduler — rather than through anything a compiled app ships.
- * Their own changes must not widen a `tao-apps` run to every app, so they are excluded as seeds
- * for `appAffectedPackages` below; `PackageGraph.affected` still visits them as *dependents* of
+ * Dev-tooling packages `dev`, `testing/verification`, and `ides/studio-tooling` reach
+ * `cli/tao-cli` through a workflow dependency — a gate catalog, a scheduler, the lazy
+ * `studio-review` command — rather than through anything a compiled app ships. Their own changes
+ * must not widen a `tao-apps` run to every app, so they are excluded as seeds for
+ * `appAffectedPackages` below; `PackageGraph.affected` still visits them as *dependents* of
  * whatever else changed, which is the propagation this exclusion leaves alone. `cli/cli-kit` is
  * not in this set: `tao-cli` ships its `OutputText` helper, which shapes the `Tests:` summary
  * line the repository runner scrapes, so a `cli/cli-kit` change must still select the Tao apps.
  */
-const APP_UNAFFECTING_TOOLING_PACKAGES = new Set(['dev', 'testing/verification'])
+const APP_UNAFFECTING_TOOLING_PACKAGES = new Set(['dev', 'testing/verification', 'ides/studio-tooling'])
 /**
  * Repository workflow files whose behavior the `dev` and `testing/verification` packages' tests
  * are the proof of: `dev` for `./agent`/`./dev` wiring, `testing/verification` for the gate

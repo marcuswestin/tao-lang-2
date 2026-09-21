@@ -53,11 +53,11 @@ async function readPackages(): Promise<Packages> {
 
 /**
  * The one declared edge from a verdict-relevant package into an excluded group. `tao-cli` depends on
- * `tao-dev` for a single lazily imported command, which runs no part of a check or a compile. The
+ * `tao-studio-tooling` for a single lazily imported command, which runs no part of a check or a compile. The
  * test below pins that it stays single and stays lazy; a second import, or a top-level one, means
  * the CLI now loads the developer tooling on every run and the exclusion no longer holds.
  */
-const ALLOWED_EDGE = { from: 'tao-cli', to: 'tao-dev' } as const
+const ALLOWED_EDGE = { from: 'tao-cli', to: 'tao-studio-tooling' } as const
 
 Describe('the package groups left out of the toolchain identity', () => {
   // Direct edges from every verdict-relevant package, which is the whole closure question: a path
@@ -103,7 +103,7 @@ Describe('the package groups left out of the toolchain identity', () => {
     Expect(references).toHaveLength(1)
     // Lazy: inside an action, so nothing outside `studio-review` loads it. A bare `import ... from`
     // at the top of a module would be the regression this catches.
-    Expect(references[0]).toContain("await import('tao-dev/studio-review')")
+    Expect(references[0]).toContain("await import('tao-studio-tooling/studio-review')")
   })
 
   Test('leaves out exactly the named groups and keeps everything else', async () => {

@@ -7,7 +7,7 @@ import {
   formatCheck,
   readDoctorFacts,
   repositoryDoctorChecks,
-} from '../dev-src/doctor/RepositoryDoctor'
+} from '@verification/RepositoryDoctor'
 import { RepositoryDoctorCommand } from '../dev-src/doctor/RepositoryDoctorCommand'
 
 function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {

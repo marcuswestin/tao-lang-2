@@ -301,7 +301,7 @@ Never delete the shared registry while another worktree may be using it.
   skipping the five active host-only browser and native UI gates. Only `just verify-full` from an
   unsandboxed shell proves those five gates. The simulated editor journey is an ordinary member of
   both full-verification lanes again, and remains individually runnable as
-  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`. It closed DEVENV-042
+  `just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts`. It closed DEVENV-042
   on 2026-09-20 with ten consecutive green normal-terminal runs.
 
 `./dev test` chooses suites from one registry in `TestRunner.ts`: a Bun suite per package with a
