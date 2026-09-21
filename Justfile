@@ -416,6 +416,11 @@ simplify-audit *ARGS:
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 
+# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
+[group('Report')]
+admission-experiment *ARGS:
+    bun run packages/dev/dev-src/performance/admission-experiment.ts {{ ARGS }}
+
 # Compile a Tao app path relative to the invocation directory into the local runtime host
 [group('Run')]
 compile-app app_path: _parser-gen
