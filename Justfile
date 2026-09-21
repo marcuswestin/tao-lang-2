@@ -319,6 +319,22 @@ fmt: _parser-gen
     ./tao fmt
     just --fmt
 
+# Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
+# commands, while allowing the harness's own edit tools, so that a change to an agent's instructions
+# reaches a diff somebody reads. A sandboxed `_fix-dprint` therefore fails outright on an unformatted
+# skill file (DEVENV-101), and `_agent-config` cannot rewrite generated settings (DEVENV-062). This
+# recipe is excluded from the sandbox in `.rulesync/permissions.jsonc` so those two can succeed.
+#
+# It stays safe to exclude because it takes no paths and writes no content of its own: it formats
+# files already in the tree and regenerates files from `.rulesync`, which is reviewed. Neither
+# produces instruction text that was not reviewed, which is what the protection is actually for.
+# Keep it that way — nothing that runs tests, reaches the network, or takes an argument belongs here.
+# Fix the files a sandboxed shell may not write: skill formatting and generated harness config
+[group('Dev')]
+fix-agent-config:
+    dprint fmt --incremental=false --allow-no-files "agents/skills/**/*"
+    ./dev agent-config
+
 # Apply every auto-fix, writing to the tree: dprint formatting, Tao source fixes, Justfile formatting
 [group('Dev')]
 fix: _parser-gen
@@ -512,7 +528,19 @@ _dependency-health:
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:
-    dprint fmt --incremental=false --excludes "@/" "**/@/**"
+    #!/usr/bin/env zsh
+    # A sandboxed shell may not write a harness's own agent configuration, so an unformatted skill
+    # file fails this gate with `Operation not permitted` and nothing saying what to do (DEVENV-101).
+    # The denial is named here rather than left for the reader to recognise.
+    set -e -o pipefail
+    # `status` is read-only in zsh, being its own name for `?`.
+    out="$(dprint fmt --incremental=false --excludes "@/" "**/@/**" 2>&1)" && code=0 || code=$?
+    print -r -- "$out"
+    if [[ $code -ne 0 && "$out" == *"Operation not permitted"* ]]; then
+      print -u2 -r -- "The sandbox write-protects the paths above, which is why formatting them failed."
+      print -u2 -r -- "Run \`just fix-agent-config\` (excluded from the sandbox) and re-run this gate."
+    fi
+    [[ $code -eq 0 ]]
     dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
 
 _fix-tao: _parser-gen

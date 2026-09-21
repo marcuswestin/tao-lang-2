@@ -190,6 +190,16 @@
         // all — `JUST_COMMANDS` in `agent-dev.ts` stops at `land-lock`, `land-unlock` and `landed`,
         // because an agent proposes a landing rather than making one — so an `./agent land` entry
         // here would be a rule that looks like coverage and matches nothing.
+        // Formatting and regenerating the agent configuration each harness write-protects against
+        // shell commands. Without this, an unformatted skill file fails `_fix-dprint` outright
+        // (DEVENV-101) and `_agent-config` leaves generated settings stale (DEVENV-062), with no
+        // recovery a Codex agent can reach — `dangerouslyDisableSandbox` is Claude Code's alone.
+        // The recipe takes no paths and writes no content of its own: it formats files already in
+        // the tree and regenerates from `.rulesync`, which is reviewed, so excluding it does not
+        // widen what an agent can put into its own instructions. Keep the recipe that narrow.
+        "./agent fix-agent-config",
+        "./dev agent-config",
+        "just fix-agent-config",
         "./dev land",
         "./dev land *",
         "./dev merge-with-main",
