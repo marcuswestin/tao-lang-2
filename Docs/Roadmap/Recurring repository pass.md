@@ -16,10 +16,11 @@ notes after each completed pass; Git history is the longer record.
   recorded lock graph; and the Nixpkgs tracker and upstream notices for pinned `devenv.lock` inputs.
 - **Outcome and limits:** remediation on `feat/recurring-repository-pass` addresses the confirmed
   CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
-  workflow defects. The Appium graph still pins advisory-affected `@xmldom/xmldom@0.9.10` and
-  `morgan@1.11.0`; the pinned Linux Nixpkgs glibc remains tracker-affected. A cold dprint cache can
-  still trigger a plugin download in sandbox-excluded agent-config recovery, recorded in the
-  developer-environment backlog. This pass did not establish physical-device, real CloudKit,
+  workflow defects. The lock graph resolves Appium's `@xmldom/xmldom@0.9.12`, Expo's compatible
+  `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; the other 43 Bun audit records predate this range
+  and remain to triage. The pinned Linux Nixpkgs glibc remains tracker-affected. Agent-config
+  recovery now resolves dprint plugins from installed local packages, including with a cold cache.
+  This pass did not establish physical-device, real CloudKit,
   installed-binary OTA, signed Studio, or distribution acceptance, and did not review later `main`.
 
 ## Consider next time
@@ -27,9 +28,11 @@ notes after each completed pass; Git history is the longer record.
 - Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
   entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
   and current risks rather than repeating every category.
-- Recheck the Appium transitive advisory pins and Linux Nixpkgs glibc status. Exercise the
-  agent-config recovery boundary on a cold cache after its network path is narrowed, and use real
-  host or device evidence before claiming external acceptance.
+- Recheck the Appium transitive pins when its Base Driver publishes `morgan@1.12.0`; remove the
+  override when it can resolve without one. Triage the older Bun audit records and Linux Nixpkgs
+  glibc status. Check dependency installation against the locked graph after version changes; this
+  worktree retained one old transitive link even after setup. Use real host or device evidence before
+  claiming external acceptance.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes and
   research current advisories or security releases from primary sources:
   - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run

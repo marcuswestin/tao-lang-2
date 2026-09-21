@@ -73,8 +73,8 @@ const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts
   + 'test-file <path>` for one file or directory, or pass `--cwd` when the target is another worktree.'
 
 const BUN_INSTALL_REFUSAL =
-  '`./agent setup` is the only dependency-install command here (AGENTS.md): it installs and then '
-  + 'generates the harness adapters a bare `bun install` leaves stale.'
+  '`bun install` skips repository adapter generation. Run `./agent setup` for routine installs. '
+  + 'Ask Ro before adding or updating packages, then use the approved update command and run `./agent setup`.'
 
 const GIT_ADD_WIDE_REFUSAL =
   'Stage exact reviewed paths — `git add -- <path>…` — never `.`, `-A`, or `-u` (AGENTS.md). Ro and '

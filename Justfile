@@ -328,9 +328,8 @@ fmt: _parser-gen
 # It stays safe to exclude because it takes no paths and writes no content of its own: it formats
 # files already in the tree and regenerates files from `.rulesync`, which is reviewed. Neither
 # produces instruction text that was not reviewed, which is what the protection is actually for.
-# Keep it that way — nothing that runs tests or takes an argument belongs here. A cold dprint cache
-# can still fetch the pinned formatter plugins; the recovery boundary remains tracked in the
-# developer-environment backlog until that fetch is made impossible outside the sandbox.
+# Keep it that way — nothing that runs tests or takes an argument belongs here. The formatter
+# plugins resolve from installed local packages, including when dprint's cache is cold.
 # Fix the files a sandboxed shell may not write: skill formatting and generated harness config
 [group('Dev')]
 fix-agent-config:
