@@ -6,7 +6,7 @@
 - **Impact:** A worktree can report a current dependency tree while executing a transitive version
   older than `bun.lock`. Tests in that worktree then do not exercise the graph a fresh install would
   resolve, and an advisory can remain exploitable locally after its lockfile fix.
-- **Evidence:** On 2026-09-21 in `feat/recurring-repository-pass`, `bun.lock` resolved
+- **Evidence:** On 2026-09-21 in `feat/recurring-repository-pass-september-catchup`, `bun.lock` resolved
   `@expo/plist/@xmldom/xmldom` to `0.8.15` and root `@xmldom/xmldom` to `0.9.12`. After
   `./agent setup` exited successfully and refreshed `.artifacts/build/agent-dev/dev-deps.stamp`,
   `node_modules/.bun/@expo+plist@0.8.1/node_modules/@xmldom/xmldom` still linked to

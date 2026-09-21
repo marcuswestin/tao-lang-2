@@ -14,7 +14,7 @@ notes after each completed pass; Git history is the longer record.
 - **Covered:** changed language/CLI, Studio and native host control, developer automation, and
   verification seams; focused reproductions and tests for accepted defects; `bun audit` on the
   recorded lock graph; and the Nixpkgs tracker and upstream notices for pinned `devenv.lock` inputs.
-- **Outcome and limits:** remediation on `feat/recurring-repository-pass` addresses the confirmed
+- **Outcome and limits:** remediation on `feat/recurring-repository-pass-september-catchup` addresses the confirmed
   CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
   workflow defects. The lock graph resolves Appium's `@xmldom/xmldom@0.9.12`, Expo's compatible
   `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; the other 43 Bun audit records predate this range
