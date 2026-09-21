@@ -171,6 +171,22 @@
         "git merge *",
         "git reset --merge",
         "git reset --hard HEAD",
+        // The landing itself, because none of the entries above can reach inside it. The sandbox
+        // matches the top-level command string, so a landing spawns its Git, its gates, and its
+        // gates' children all sandboxed however many Git exclusions are listed here. What that
+        // costs is not subtle: measured 2026-09-21, `./dev land` sandboxed failed every Studio and
+        // browser gate in 1.5-9.9s — Studio exits before reporting readiness — and the same gates
+        // passed in the same tree moments later unsandboxed. The landing is already an approval
+        // boundary that `verification-lanes` owns and `./dev *` already allows, so naming it here
+        // makes it one reviewed unit rather than a command that half-runs and blames the branch.
+        // `land-unlock --force` keeps its own `ask` rule above; excluding a command from the
+        // sandbox never grants it permission.
+        "./dev land",
+        "./dev land *",
+        "./agent land",
+        "./agent land *",
+        "just land",
+        "just my-land",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
