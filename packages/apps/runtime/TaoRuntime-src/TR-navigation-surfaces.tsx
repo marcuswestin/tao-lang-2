@@ -1,4 +1,5 @@
 import React from 'react'
+import { AppSurfaceInsetContext, requireSafeAreaContext, type SafeAreaInsets } from './TR-app-shell'
 import { createElement } from './TR-create-element'
 import {
   occurrenceRegion,
@@ -89,20 +90,33 @@ const overlayLayerStyle = {
 } as const
 const hiddenNavigationLevelStyle = { display: 'none' } as const
 const visibleOverlayLevelStyle = { flex: 1 } as const
+const zeroInsets: SafeAreaInsets = { bottom: 0, left: 0, right: 0, top: 0 }
 
 // An asked view is modal: it dims what it covers and sits centred over it, rather than rendering as
-// another full-bleed layer on top of the content it is supposed to interrupt.
-const askScrimStyle = {
+// another full-bleed layer on top of the content it is supposed to interrupt. The scrim is the
+// background and stays full-bleed; its padding is what keeps the centred card off the notch and the
+// home indicator, so it grows by the live safe-area insets on top of its fixed minimum.
+const askScrimBaseStyle = {
   alignItems: 'center',
   backgroundColor: 'rgba(0, 0, 0, 0.45)',
   bottom: 0,
   justifyContent: 'center',
   left: 0,
-  padding: 24,
   position: 'absolute',
   right: 0,
   top: 0,
 } as const
+
+function askScrimInsetStyle(insets: SafeAreaInsets): Record<string, number> {
+  return {
+    paddingBottom: askScrimPadding + insets.bottom,
+    paddingLeft: askScrimPadding + insets.left,
+    paddingRight: askScrimPadding + insets.right,
+    paddingTop: askScrimPadding + insets.top,
+  }
+}
+
+const askScrimPadding = 24
 
 const askSurfaceStyle = {
   backgroundColor: '#ffffff',
@@ -126,31 +140,59 @@ const sheetInlineScrimStyle = {
   justifyContent: 'flex-end',
 } as const
 
-const sheetInlineSurfaceStyle = {
+const sheetInlineSurfaceBaseStyle = {
   backgroundColor: '#ffffff',
   borderTopLeftRadius: 16,
   borderTopRightRadius: 16,
   maxHeight: '90%',
-  padding: 20,
+  paddingTop: 20,
 } as const
 
-const sheetModalSurfaceStyle = {
+// The card's own background reaches the bottom edge; its bottom padding is what clears the home
+// indicator, so it grows by the live inset on top of the fixed base padding. Side padding grows the
+// same way for a landscape notch; the top edge never meets the window, so it stays fixed.
+function sheetInlineSurfaceInsetStyle(insets: SafeAreaInsets): Record<string, number> {
+  return {
+    paddingBottom: sheetSurfacePadding + insets.bottom,
+    paddingLeft: sheetSurfacePadding + insets.left,
+    paddingRight: sheetSurfacePadding + insets.right,
+  }
+}
+
+const sheetModalSurfaceBaseStyle = {
   backgroundColor: '#ffffff',
   flex: 1,
-  padding: 20,
 } as const
+
+// A native Modal presents its own window: the OS does not extend the enclosing safe-area or
+// keyboard-avoidance machinery into it the way it does for a screen pushed by `react-native-screens`,
+// so this surface computes its own insets rather than delegating to a native `contentInset`.
+function sheetModalSurfaceInsetStyle(insets: SafeAreaInsets): Record<string, number> {
+  return {
+    paddingBottom: sheetSurfacePadding + insets.bottom,
+    paddingLeft: sheetSurfacePadding + insets.left,
+    paddingRight: sheetSurfacePadding + insets.right,
+    paddingTop: sheetSurfacePadding + insets.top,
+  }
+}
+
+const sheetSurfacePadding = 20
 
 function modalSheet(
   content: React.ReactNode,
   navigation: TaoNavigationValue,
   taoProps: TaoProps | undefined,
   visible: boolean,
+  // Only the inline (no-Modal) branch below uses this: it shares the app's own window, so it takes
+  // the caller's insets. The native-Modal branch is its own window and reads its own (ModalSheetContent).
+  inlineInsets: SafeAreaInsets,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
   const dismiss = () => dismissOverlay(navigation, taoProps)
   if (!modal) {
-    // Without a modal host the sheet renders inline; the enclosing level hides it when covered.
+    // Without a modal host the sheet renders inline, inside the app's own window and its
+    // KeyboardAvoidingView; the enclosing level hides it when covered.
     return createElement(
       runtime.View,
       { style: sheetInlineScrimStyle },
@@ -158,7 +200,11 @@ function modalSheet(
         runtime.View,
         {
           ...modalAccessibilityProps(navigation, taoProps, visible),
-          style: [sheetInlineSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+          style: [
+            sheetInlineSurfaceBaseStyle,
+            sheetInlineSurfaceInsetStyle(inlineInsets),
+            mountedDesignStyle(taoProps, 'ModalSurface'),
+          ],
         },
         content,
       ),
@@ -176,15 +222,82 @@ function modalSheet(
       presentationStyle: 'pageSheet',
       visible,
     },
+    createElement(ModalSheetSurface, {
+      accessibilityProps: modalAccessibilityProps(navigation, taoProps, visible),
+      children: content,
+      taoProps,
+    }),
+  )
+}
+
+/**
+ * ModalSheetSurface nests its own SafeAreaProvider. A native Modal's `pageSheet` is its own native
+ * window — on iOS its card starts below the status bar, so its top inset is near zero while the
+ * app's root window's top inset covers the status bar — and the enclosing app's insets describe the
+ * wrong window. No `initialMetrics`: without one, `react-native-safe-area-context` seeds this
+ * provider from the enclosing provider's insets (the root window's) until the modal's own native
+ * measurement lands, so the sheet briefly renders with the wrong-but-plausible root padding rather
+ * than a blank frame — on web, where there is no per-window native measurement, a nested provider
+ * measures the document instead, so a web sheet keeps reading the document's insets (normally zero).
+ *
+ * React context still crosses this `Modal` boundary — it is a portal, not a separate React tree —
+ * so this also resets `AppSurfaceInsetContext` to false: the modal is a window no enclosing
+ * `AppSurfaceFrame` ever padded, regardless of what encloses the presenter that opened it.
+ */
+function ModalSheetSurface(props: {
+  accessibilityProps: Record<string, unknown>
+  children: React.ReactNode
+  taoProps: TaoProps | undefined
+}): React.ReactNode {
+  const SafeAreaContext = requireSafeAreaContext()
+  return createElement(
+    AppSurfaceInsetContext.Provider,
+    { value: false },
+    createElement(SafeAreaContext.SafeAreaProvider, null, createElement(ModalSheetContent, props)),
+  )
+}
+
+function ModalSheetContent(props: {
+  accessibilityProps: Record<string, unknown>
+  children: React.ReactNode
+  taoProps: TaoProps | undefined
+}): React.ReactNode {
+  const runtime = requireReactNativeRuntime()
+  const platformOS = runtime.Platform?.OS ?? 'web'
+  // Reads the provider this component is itself nested in (see ModalSheetSurface above), which
+  // measures the modal's own window rather than the app's.
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  return createElement(
+    runtime.KeyboardAvoidingView,
+    { behavior: platformOS === 'ios' ? 'padding' : undefined, style: sheetModalKeyboardStyle },
     createElement(
       runtime.View,
       {
-        ...modalAccessibilityProps(navigation, taoProps, visible),
-        style: [sheetModalSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+        ...props.accessibilityProps,
+        style: [
+          sheetModalSurfaceBaseStyle,
+          sheetModalSurfaceInsetStyle(insets),
+          mountedDesignStyle(props.taoProps, 'ModalSurface'),
+        ],
       },
-      content,
+      props.children,
     ),
   )
+}
+
+const sheetModalKeyboardStyle = { flex: 1 } as const
+
+/**
+ * OverlayInsets hands an ask scrim or an inline sheet the live insets it must add. A navigator that
+ * does not own its window renders inside an AppSurfaceFrame, whose content is already padded by the
+ * live insets — its overlay lane sits inside that same padded content, so those surfaces must not add
+ * the insets again. A window-owning navigator's overlay lane is a sibling of its per-entry frames and
+ * fills the true window, so there they must. It is a component so the reads stay out of
+ * NavigationSurface, which a plain overlay never needs them for.
+ */
+function OverlayInsets(props: { children: (insets: SafeAreaInsets) => React.ReactNode }): React.ReactNode {
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  return props.children(AppSurfaceInsetContext.use() ? zeroInsets : insets)
 }
 
 /** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
@@ -208,9 +321,13 @@ export function NavigationSurface(props: {
         )
         return createElement(NavigationLevel, {
           children: entry.response
-            ? modalAsk(content, props.navigation, props.taoProps, visible)
+            ? createElement(OverlayInsets, {
+              children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
+            })
             : entry.sheet
-            ? modalSheet(content, props.navigation, props.taoProps, visible)
+            ? createElement(OverlayInsets, {
+              children: insets => modalSheet(content, props.navigation, props.taoProps, visible, insets),
+            })
             : content,
           fill: true,
           hidden: !visible,
@@ -258,11 +375,12 @@ function modalAsk(
   navigation: TaoNavigationValue,
   taoProps: TaoProps | undefined,
   visible: boolean,
+  insets: SafeAreaInsets,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   return createElement(
     runtime.View,
-    { style: askScrimStyle },
+    { style: [askScrimBaseStyle, askScrimInsetStyle(insets)] },
     createElement(
       runtime.View,
       {

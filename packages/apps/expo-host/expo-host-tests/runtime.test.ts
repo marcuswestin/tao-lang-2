@@ -308,6 +308,18 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('setBootstrapError(error)')
         Expect(stableRoot).toContain("value?.type === 'preview-runtime-update'")
         Expect(stableRoot).toContain('event.source !== window.parent')
+        // A same-identity runtime update must not replace the applied cell object (a new cell
+        // object rebuilds the provider overlay without the remount that alone would justify it).
+        // `studio-preview-runtime-dedupe.jest-test.tsx` mirrors this exact comparison to prove the
+        // behavior against real data/provider primitives it cannot reach by importing this module;
+        // an edit here without a matching edit there fails this assertion instead of silently
+        // drifting the two apart.
+        Expect(stableRoot).toContain(
+          'setAppliedRuntime((previous: any) => sameRuntimeIdentity(previous, next) ? previous : next)',
+        )
+        Expect(stableRoot).toContain('previousIdentity.compileRevision === nextIdentity.compileRevision')
+        Expect(stableRoot).toContain('previousIdentity.cellRevision === nextIdentity.cellRevision')
+        Expect(stableRoot).toContain('previousIdentity.manifestRevision === nextIdentity.manifestRevision')
         Expect(stableRoot).toContain('runtimeMatchesPublication(nextCell, TaoStudioPublication)')
         Expect(stableRoot).toContain('<TR.Studio.Pending />')
         Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')

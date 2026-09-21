@@ -13,7 +13,7 @@ type AppShellProps = {
   children?: React.ReactNode
 }
 
-type SafeAreaInsets = {
+export type SafeAreaInsets = {
   readonly bottom: number
   readonly left: number
   readonly right: number
@@ -37,6 +37,33 @@ export type SafeAreaContextModule = {
 
 /** The inset every full-screen Tao surface keeps between its content and the window edge. */
 export const appFramePadding = 12
+
+const ReactAppSurfaceInsetContext = React.createContext(false)
+
+/**
+ * AppSurfaceInsetContext says whether the nearest enclosing AppSurfaceFrame already padded its
+ * content away from the window edge — true inside both the computed-insets branch and the
+ * `nativeInsets` branch, since either way the frame already stands between its content and the true
+ * window. A presentation surface (ask, sheet, an overlay lane) reads this to decide whether it must
+ * add the live safe-area insets itself or whether doing so would pad twice.
+ *
+ * React context still reaches across an RN `Modal` boundary (it is a portal, not a separate React
+ * tree), so a `Modal`'s content would otherwise inherit `true` from whatever frame encloses the
+ * presenter — even though the modal is its own window, one that enclosing frame never padded. A
+ * `Modal`'s own surface resets this back to `false` for its children with `{ value: false }`.
+ */
+export const AppSurfaceInsetContext = {
+  Provider: AppSurfaceInsetProvider,
+  use,
+} as const
+
+function AppSurfaceInsetProvider(props: { children?: React.ReactNode; value?: boolean }): React.ReactElement {
+  return createElement(ReactAppSurfaceInsetContext.Provider, { value: props.value ?? true }, props.children)
+}
+
+function use(): boolean {
+  return React.useContext(ReactAppSurfaceInsetContext)
+}
 
 const contentStyle = {
   flexGrow: 1,
@@ -123,9 +150,13 @@ export function AppSurfaceFrame(props: {
       style: [rootStyle, mountedDesignStyle(props.taoProps, 'AppSurface')],
     },
     createElement(
-      ParentDirectionContext.Provider,
-      { direction: ParentDirectionContext.defaultProps.parentDirection },
-      props.children,
+      AppSurfaceInsetContext.Provider,
+      null,
+      createElement(
+        ParentDirectionContext.Provider,
+        { direction: ParentDirectionContext.defaultProps.parentDirection },
+        props.children,
+      ),
     ),
   )
 }
