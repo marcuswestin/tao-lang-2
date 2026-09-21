@@ -16,15 +16,14 @@ const REACT_SINGLETON_ANCHOR = 'tao-expo-host'
 
 /**
  * Packages allowed their own React because they never reach a bundle. `tao-cli-kit`,
- * `tao-verification`, `tao-cli`, and `tao-dev-cli` render the repository's terminal UI with Ink,
- * whose peer range starts above the React that Expo pins, so unifying the two would break one of
- * them. Their React must stay out of every bundle, which `taoStudioReactSingletonPlugin` enforces
- * by resolving React through the anchor instead.
+ * `tao-verification`, and `tao-cli` render the repository's terminal UI with Ink, whose peer range
+ * starts above the React that Expo pins, so unifying the two would break one of them. Their React
+ * must stay out of every bundle, which `taoStudioReactSingletonPlugin` enforces by resolving React
+ * through the anchor instead.
  */
 const HOST_TOOL_REACT_PACKAGES: Record<string, string> = {
   'tao-cli': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
   'tao-cli-kit': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
-  'tao-dev-cli': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
   'tao-verification': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
 }
 

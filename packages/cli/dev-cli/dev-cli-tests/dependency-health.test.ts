@@ -24,12 +24,12 @@ Describe('dependency health probes', () => {
           error: undefined,
           exitCode: 1,
           signal: null,
-          stderr: '1 | await import("ink")\n    ^\nerror: Cannot find module "ink" from "/repo/packages/cli/dev-cli"\n',
+          stderr: '1 | await import("ink")\n    ^\nerror: Cannot find module "ink" from "/repo/packages/cli/cli-kit"\n',
           stdout: '',
         }
       },
     })
 
-    Expect(failure).toBe('packages/cli/dev-cli: error: Cannot find module "ink" from "/repo/packages/cli/dev-cli"')
+    Expect(failure).toBe('packages/cli/cli-kit: error: Cannot find module "ink" from "/repo/packages/cli/cli-kit"')
   })
 })

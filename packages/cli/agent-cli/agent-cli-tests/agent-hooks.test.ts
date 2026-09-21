@@ -273,6 +273,35 @@ Describe('agent hooks', () => {
     }
     Expect(hooks.hooks['preToolUse']?.some(entry => entry.matcher === 'Bash')).toBe(true)
   })
+
+  Test('every shim that counts `:h` levels to the repository root actually lands there', async () => {
+    const cliDir = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli')
+    const repoRoot = Repo.getRoot()
+    const shims = (await FS.listDir(cliDir)).filter(name => name.endsWith('.zsh'))
+    let counted = 0
+
+    for (const name of shims) {
+      const path = FS.resolvePath(name, cliDir)
+      const source = await FS.readText(path)
+      const expression = source.match(/REPO_ROOT="(\$\{SCRIPT_DIR(?::h)+\})"/)?.[1]
+      if (expression === undefined) {
+        continue
+      }
+      counted++
+      // Evaluate the file's own expression rather than reimplementing dirname counting, against
+      // this shim's real location, so a future move of the file fails this test instead of
+      // silently writing under `packages/` again.
+      const result = await CLI.run('zsh', {
+        args: ['-c', `SCRIPT_DIR="${FS.dirname(path)}"; print -r -- ${expression}`],
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(`${name}: ${result.stdout.trim()}`).toBe(`${name}: ${repoRoot}`)
+    }
+
+    // A future shim written some other way should not silently drop out of this check.
+    Expect(counted).toBeGreaterThan(0)
+  })
 })
 
 /** runHook feeds a harness payload to a hook script the way a harness does. */

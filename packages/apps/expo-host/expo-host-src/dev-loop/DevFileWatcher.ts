@@ -86,7 +86,10 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
         Repo.resolvePath('Justfile'),
         Repo.resolvePath('packages/language/ast-utils'),
         Repo.resolvePath('packages/compiler'),
-        Repo.resolvePath('packages/cli/dev-cli'),
+        // `tao dev`'s own reporter and command wiring, which this loop runs through
+        // (`@expo-host/dev-loop/expo-dev-loop` is called only from `packages/cli/tao-cli`); the
+        // dev loop's own code under `packages/apps/expo-host` is already covered below.
+        Repo.resolvePath('packages/cli/tao-cli/cli-src/dev'),
         Repo.resolvePath('packages/language/parser/parser-src'),
         Repo.resolvePath('packages/apps/runtime'),
         Repo.resolvePath('packages/apps/expo-host'),

@@ -850,7 +850,7 @@ export function crossPackageSourceImportIssues(
  * the parser could never run; it also turns any top-level fault in Studio code into a failure of the
  * gate runner itself rather than of one node.
  */
-const DEV_ENTRY_PATH = 'packages/cli/dev-cli/dev-cli-src/dev.ts'
+export const DEV_ENTRY_PATH = 'packages/cli/dev-cli/dev-cli-src/dev.ts'
 /**
  * Package aliases the entry must reach only behind `await import(...)`. `@studio` pulls in the
  * generated parser; `@studio-tooling`, `@expo-host` (its bare root, not only `/dev-loop`), and
@@ -866,6 +866,7 @@ const DEV_LAZY_IMPORT_SPECIFIERS = ['@studio', '@studio-tooling', '@expo-host', 
  * themselves route through; a general tsconfig-paths resolver is not worth it for this lint.
  */
 const ALIAS_SOURCE_ROOTS: Record<string, string> = {
+  '@agent-cli': 'packages/cli/agent-cli/agent-cli-src',
   '@cli-kit': 'packages/cli/cli-kit/cli-kit-src',
   '@verification': 'packages/testing/verification/verification-src',
 }
@@ -878,6 +879,16 @@ export function devLazyStudioImportIssues(
   entryPath: string = DEV_ENTRY_PATH,
 ): string[] {
   const byPath = new Map(files.map(file => [file.path, file]))
+  if (!byPath.has(entryPath)) {
+    // A file map built from the real repository always carries its own entry; one that does not
+    // means `DEV_ENTRY_PATH` moved out from under this rule, which would otherwise vacate it
+    // silently — the entry stops being traced and every static Studio or Expo import inside it
+    // stops being caught.
+    return [
+      `${entryPath}:1 does not exist, so this rule is not watching the \`./dev\` entry at all; update`
+      + ' `DEV_ENTRY_PATH` in packages/testing/verification/verification-src/repo-lint.ts to its new path.',
+    ]
+  }
   const queue: Array<{ chain: readonly string[]; path: string }> = [{ chain: [entryPath], path: entryPath }]
   const visited = new Set<string>()
   const issues: Array<{ detail: string; line: number; path: string }> = []

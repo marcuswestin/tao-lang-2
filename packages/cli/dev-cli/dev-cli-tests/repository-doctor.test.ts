@@ -34,6 +34,13 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       landingBrokerReady: true,
     },
+    gitHooks: ['commit-msg', 'pre-commit'].map(event => ({
+      event,
+      ours: true,
+      present: true,
+      resolvesHere: true,
+      scriptPaths: ['packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh'],
+    })),
     linkedWorktree: true,
     lockfilePresent: true,
     machine: { cpuCount: 8, lanes: [], loadAverage: 1.2 },
@@ -146,6 +153,64 @@ Describe('repository doctor', () => {
     Expect(check(missingHelper, 'GitHub transport')?.detail).toContain('no GitHub CLI credential helper')
     Expect(check(missingBroker, 'GitHub transport')?.status).toBe('warn')
     Expect(check(missingBroker, 'GitHub transport')?.remediation).toContain('just landing-setup')
+  })
+
+  Test('warns when a shared hook was never installed', () => {
+    const report = doctorReport(facts({
+      gitHooks: [
+        { event: 'commit-msg', ours: false, present: false, resolvesHere: false, scriptPaths: [] },
+        { event: 'pre-commit', ours: false, present: false, resolvesHere: false, scriptPaths: [] },
+      ],
+    }))
+
+    const hooks = report.checks.filter(check => check.name === 'git hooks')
+    Expect(hooks.every(hook => hook.status === 'warn')).toBe(true)
+    Expect(hooks[0]?.detail).toContain('commit-msg is not installed')
+    Expect(hooks[0]?.remediation).toContain('./agent setup')
+    Expect(report.status).toBe('warn')
+  })
+
+  Test('warns when the shared hook names a script path stale in this worktree', () => {
+    // The hooks directory is shared by every worktree on the machine and last-writer-wins: an
+    // older worktree can leave a path here that only exists in its own layout.
+    const report = doctorReport(facts({
+      gitHooks: [
+        {
+          event: 'commit-msg',
+          ours: true,
+          present: true,
+          resolvesHere: false,
+          scriptPaths: ['packages/dev/dev-src/cli/agent-git-hooks.zsh'],
+        },
+        { event: 'pre-commit', ours: true, present: true, resolvesHere: true, scriptPaths: ['x.zsh'] },
+      ],
+    }))
+
+    const stale = check(report, 'git hooks')
+    Expect(stale?.status).toBe('warn')
+    Expect(stale?.detail).toContain('commit-msg names packages/dev/dev-src/cli/agent-git-hooks.zsh')
+    Expect(stale?.detail).toContain('silently skipped')
+    Expect(stale?.remediation).toContain('./agent setup')
+    Expect(report.status).toBe('warn')
+  })
+
+  Test('passes a foreign hook without examining it, and a resolved shared hook', () => {
+    const report = doctorReport(facts({
+      gitHooks: [
+        { event: 'commit-msg', ours: false, present: true, resolvesHere: false, scriptPaths: [] },
+        {
+          event: 'pre-commit',
+          ours: true,
+          present: true,
+          resolvesHere: true,
+          scriptPaths: ['packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh'],
+        },
+      ],
+    }))
+
+    const hooks = report.checks.filter(check => check.name === 'git hooks')
+    Expect(hooks.every(hook => hook.status === 'pass')).toBe(true)
+    Expect(hooks[0]?.detail).toContain('was not written by this repository')
   })
 
   Test('names the process holding a conventional port, and who else it might belong to', () => {
