@@ -41,28 +41,56 @@
         "*-tests/**/*.{ts,tsx}"
       ]
     },
-    "packages/dev": {
+    "packages/cli/agent-cli": {
       "entry": [
-        "dev-src/dev.ts",
-        "dev-src/agent-dev.ts",
-        "dev-src/cli/agent-help.ts",
-        "dev-src/agent-hooks/ShellHabitsEntry.ts",
-        "dev-src/agent-hooks/SubagentBriefEntry.ts",
-        "dev-src/agent-hooks/GitHooksEntry.ts",
-        "dev-src/performance/language-performance.ts",
-        "dev-src/repository-tests/*.ts",
-        "dev-src/studio/StudioClientSnapshotProcess.ts",
-        "dev-src/studio/StudioPackagedService.ts",
-        "dev-src/studio/StudioPackagedTestCommand.ts",
-        "dev-tests/**/*.test.{ts,tsx}",
-        "performance-checks/**/*.test.{ts,tsx}",
+        "agent-cli-src/agent-dev.ts",
+        "agent-cli-src/cli/agent-help.ts",
+        "agent-cli-src/agent-hooks/ShellHabitsEntry.ts",
+        "agent-cli-src/agent-hooks/SubagentBriefEntry.ts",
+        "agent-cli-src/agent-hooks/GitHooksEntry.ts",
+        "agent-cli-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "agent-cli-src/**/*.{ts,tsx}",
+        "agent-cli-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/cli/dev-cli": {
+      "entry": [
+        "dev-cli-src/dev.ts",
+        "dev-cli-src/performance/language-performance.ts",
+        "dev-cli-src/repo-lint-entry.ts",
+        "dev-cli-tests/**/*.test.{ts,tsx}",
+        "performance-checks/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "dev-cli-src/**/*.{ts,tsx}",
+        "dev-cli-tests/**/*.{ts,tsx}",
+        "performance-checks/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/ides/studio-tooling": {
+      "entry": [
+        "studio-tooling-src/StudioClientSnapshotProcess.ts",
+        "studio-tooling-src/StudioPackagedService.ts",
+        "studio-tooling-src/StudioPackagedTestCommand.ts",
+        "studio-tooling-tests/**/*.test.{ts,tsx}",
         "studio-smoke/**/*.test.{ts,tsx}"
       ],
       "project": [
-        "dev-src/**/*.{ts,tsx}",
-        "dev-tests/**/*.{ts,tsx}",
-        "performance-checks/**/*.{ts,tsx}",
+        "studio-tooling-src/**/*.{ts,tsx}",
+        "studio-tooling-tests/**/*.{ts,tsx}",
         "studio-smoke/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/testing/verification": {
+      "entry": [
+        "verification-src/*.ts",
+        "verification-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "verification-src/**/*.{ts,tsx}",
+        "verification-tests/**/*.{ts,tsx}"
       ]
     },
     "packages/testing/e2e-testing": {

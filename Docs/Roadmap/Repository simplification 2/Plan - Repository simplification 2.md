@@ -27,8 +27,8 @@ and the `repo-lint` convention table. Its Documentation and Command-surface part
 
 1. Scope
    - a. No test code is touched: `*.test.*`, test helpers, `*-tests/`, Test Apps, the test compiler,
-     and all of `packages/dev/dev-src/repository-tests/` except `repo-lint.ts`, which is the
-     enforcement point this pass extends.
+     and all of `packages/testing/verification/verification-src/` except `repo-lint.ts`, which is
+     the enforcement point this pass extends.
    - b. Defects a slice exposes are fixed in that slice and named in its commit.
    - c. Under `Apps/`, documentation only.
    - d. Emitted TSX may change shape.
@@ -321,12 +321,16 @@ external automation tool (Appium, Playwright) for `host-control`; **service** is
 process that answers requests; **TypeScript implementation** is the TypeScript file behind a
 stdlib `.tao` declaration.
 
+**CLI restructure landed**, stepwise rather than in one slice: `packages/cli/cli-kit` and
+`packages/testing/verification` extracted first, then `packages/ides/studio-tooling`, then the Expo
+dev loop moved into `packages/apps/expo-host` behind an injected `DevLoopReporter`, and finally what
+remained of `packages/dev` split into `packages/cli/dev-cli` and `packages/cli/agent-cli` —
+dissolving `dev` for good.
+
 Later slices, in order:
 
-1. **CLI restructure**, dissolving `dev` into `packages/cli/{cli-kit,dev-cli,agent-cli}` and
-   `packages/testing/verification`.
-2. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
+1. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
    package next to `core`, with a surface snapshot test and a gate that apps import only the SDK,
    never runtime internals.
-3. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
-4. **A vocabulary pass on "host"**, which today names more than one thing.
+2. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
+3. **A vocabulary pass on "host"**, which today names more than one thing.

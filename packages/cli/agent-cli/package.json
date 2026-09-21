@@ -1,0 +1,16 @@
+{
+  "name": "tao-agent-cli",
+  "private": true,
+  "type": "module",
+  "module": "agent-cli-src/agent-dev.ts",
+  "exports": {
+    ".": "./agent-cli-src/agent-dev.ts"
+  },
+  "dependencies": {
+    "tao-cli-kit": "workspace:*",
+    "tao-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@commander-js/extra-typings": "^15.0.0"
+  }
+}

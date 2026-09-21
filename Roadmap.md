@@ -29,6 +29,14 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
     duplicated per worktree for no reason, and where a single orchestrator does and does not help
     live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
+## Tao tooling performance
+
+- [ ] Make the `tao` commands interactive-grade.
+  - An uncached `tao check` of WordFlower takes 20-27s against 14ms of actual parsing; the causes are
+    product defects that also set the floor of every verification lane. Measurements, root causes,
+    the floor of the current stack, the phased fix, and the stack alternatives considered live in
+    [`Docs/Roadmap/Tao tooling performance.md`](Docs/Roadmap/Tao%20tooling%20performance.md).
+
 ## Real-host testing
 
 - [ ] Prove the additive [real-host testing prototype](Docs/Roadmap/Real-host%20testing%20prototype.md)
@@ -156,7 +164,7 @@ tests written in Tao, green in Current, for every construct introduced.
   - Closed by `34132956`: the journey ran ten consecutive green normal-terminal runs and
     `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again, with
     `VERIFY_FULL_SKIPPED` now empty. `just studio-smoke
-    packages/dev/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
+    packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
     transaction defects it found landed with focused coverage along the way.
   - Standing rule for whoever touches the stub preview next: do not widen `previewOriginPath`. The
@@ -175,7 +183,13 @@ tests written in Tao, green in Current, for every construct introduced.
     up front — findings feed back through the tranche process. Context:
     `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 commands).
 - [ ] Harden `tao test`
-  - Filters, watch, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - Richer failure reporting and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - Filters and watch have landed: path arguments and `--name <pattern>` select journeys, and
+    `--watch` reruns the selected set on any change under the selected paths or the selected tests'
+    project roots, serialized, until Ctrl-C. A rerun is still the whole one-shot pipeline — a
+    cold compile and a Jest child — so it costs what `tao test` costs; making it sub-second is Phase 1
+    item 7 and Phase 2 of `Docs/Roadmap/Tao tooling performance.md`, and the loop takes its run body
+    as a dependency so a live-workspace or headless run replaces it without touching the loop.
   - The output half landed with the verification-orchestration plan: the Jest child streams live,
     `--output lines|quiet` defaults by terminal, a quiet run keeps the full output in
     `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
@@ -305,9 +319,22 @@ Product and codebase backlog, unordered.
 - [ ] Finish simulation mode in Tao Studio
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
-    Remaining: review the exact server-produced capture diff, load captured state in tests, and finish browser
-    proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls and
-    reactive per-cell Scheme resolution exist; the remaining proof is the external browser interaction gate.
+    The capture review is proven: the server proposal returns the exact diff without writing, the client
+    shows it before applying, and cancel or a failed proposal applies nothing.
+  - The browser proof of observable delay, offline, declared failure, and cross-cell isolation exists
+    as `packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts`, driven through
+    the Environment and scenario panel. It found and now guards a defect: a runtime update repeating
+    the applied revisions rebuilt a cell's provider overlay without a remount, so one run in five
+    mounted a cell with its heading and nothing else. With that fixed it passed twenty runs in twenty.
+  - Remaining: make that journey a `verify-full` gate. It is an explicit lane today
+    (`./agent studio-smoke <file>`), and registering it touches `VERIFY_FULL_GATES` in the `Justfile`,
+    `GateCatalog.ts`, and the three tests that pin the gate list.
+  - Two leads the diagnosis left open: `setMatrixManifest` emits `preview-manifest-changed` without
+    checking the revision moved, which is the likely producer of the repeated update; and
+    `resetFromRecovery()` reconfigures a datasource without a remount, which would strand live
+    queries the same way in a production app if nothing else remounts them. Neither is confirmed.
+  - Loading captured state in tests stays deferred with the fixture-through-action result and handle
+    semantics (`Docs/Spec/Tao Studio.md`).
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
   - Part 1 of the simplification plan removed the dead subpath exports and de-exported the
     internal-only symbols; the export/rename sweep that answers the namespace question is Part 5.1
@@ -320,6 +347,12 @@ Product and codebase backlog, unordered.
   - Studio now selects a folder owning exactly one project definition, scopes its workspace and package
     lookup to that root, and runs multiple projects as separate concurrent sessions. Remaining: have the
     IDE extension manage one workspace per project folder and stop requiring a Git repo at the project root.
+  - One Studio feature still needs Git: beta ship finds the `tao` launcher through `Repo.getRoot`
+    (`runBetaShip` in `packages/ides/studio/studio-src/StudioServer.ts`), which throws outside a Git
+    worktree. Project discovery, scoping, and compile already fall back to a filesystem walk. The IDE
+    extension has no project-root finder at all: each VS Code workspace folder becomes one
+    language-server root (`ide-extension-src/extension/workspace-server-roots.ts`), so it should reuse
+    Studio's `resolveStudioProjectRoot` once that moves somewhere both can import.
 - [ ] Implement styling, and then all of `Docs/Spec/Tao Layout and UI.md`.
   - Consider declaration-level style defaults that a caller may override, and settle how the two
     merge — in particular how a caller clears a default rather than adding to it:
@@ -373,7 +406,6 @@ Product and codebase backlog, unordered.
 - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines.
 - Formatter: drop redundant `render` keywords once the language makes `render` optional in view bodies.
 - Compiler: add codegen tracing and source maps when needed.
-- Dev loop: watch resolved relative import roots outside the selected app folder.
 
 ## Records
 

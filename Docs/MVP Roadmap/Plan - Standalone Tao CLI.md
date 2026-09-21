@@ -19,7 +19,7 @@ numbers are reproduced verbatim so a later reader can tell measurement from opin
 - `tao dev` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
 - The dev loop it drives is the _repository's_ dev loop: it calls `just`,
-  `bun run packages/dev/dev-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
+  `bun run packages/cli/dev-cli/dev-cli-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
   log path, and the runtime-toolchain root on the **Git worktree root** (`Repo.getRoot()` shells out
   to `git rev-parse --show-toplevel`).
 
@@ -331,15 +331,15 @@ Not macOS-only, but broken on Windows or outside a checkout:
   `HostEnvironmentError` outside a worktree. On the `tao dev` path it decides the Expo home
   (`.artifacts/cache/expo`), the Expo log path, the runtime-toolchain root, the dev-data root, and
   the Expo Go APK cache.
-- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/dev/dev-src/dev.ts`,
+- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/cli/dev-cli/dev-cli-src/dev.ts`,
   and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository-root paths beside the
   project root it already watches. This is the repository's own loop, reused by `tao dev`.
   Separating the shipped loop from the repository loop is the largest single piece of work in this
   item, and it is not an OS problem.
 - `tao review` launches Chrome over CDP, so it needs a browser on the host. It is not optional
-  today: `tao-cli.ts` reaches it through `await import('tao-dev/studio-review')`, which pulls
-  Studio, the CDP client, and the rest of the `packages/dev` graph into the binary already measured
-  at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
+  today: `tao-cli.ts` reaches it through `await import('tao-studio-tooling/studio-review')`, which
+  pulls Studio, the CDP client, and the rest of the `packages/ides/studio-tooling` graph into the
+  binary already measured at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
 - Android needs a JDK, the SDK, and an emulator image — `A8`'s requirement graph.
 
 Honest platform claim for `R4`: **`create`, `check`, `fmt`, `fix`, `compile`, `test`, and the web
@@ -497,7 +497,7 @@ checkout.
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
-**4. A shipped dev loop.** Cut `@expo-dev-loop` free of `Repo.getRoot()`, `just`,
+**4. A shipped dev loop.** Cut `@expo-host/dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through
 `process.execPath`; re-anchor the four repository-relative values `expo-config.ts` and
 `expo-server.ts` hand Expo — `__UNSAFE_EXPO_HOME_DIRECTORY`, `EXPO_LOG_PATH`,
@@ -576,7 +576,7 @@ overlap with `A3` and `A8`.
    version of this for the update service; the same answer probably serves both.
 8. **Does the first release include `tao review`?** It needs a local Chrome, which is a real host
    requirement to put in front of a stranger. Note that leaving it out is not free: it is imported
-   from `tao-cli.ts` today and pulls the whole `packages/dev` graph into the binary, so excluding it
+   from `tao-cli.ts` today and pulls the whole developer-CLI graph into the binary, so excluding it
    is a bundling change with its own slice.
 
 ## Notes for whoever implements this

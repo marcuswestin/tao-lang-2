@@ -115,33 +115,33 @@ test-host *ARGS:
 
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
-studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
+studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
 [group('Host proofs')]
-studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
+studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
 [group('Host proofs')]
 studio-host-control-smoke run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-host-control.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 
 # Probe external Studio accessibility and physical input through Appium Mac2
 [group('Host proofs')]
 studio-mac2-acceptance run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-mac2-acceptance.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
 
 # Export WordFlower and prove its physical keyboard path in real headless Chrome
 [group('Host proofs')]
 keyboard-navigation-smoke run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
 [group('Host proofs')]
@@ -328,7 +328,8 @@ fmt: _parser-gen
 # It stays safe to exclude because it takes no paths and writes no content of its own: it formats
 # files already in the tree and regenerates files from `.rulesync`, which is reviewed. Neither
 # produces instruction text that was not reviewed, which is what the protection is actually for.
-# Keep it that way — nothing that runs tests, reaches the network, or takes an argument belongs here.
+# Keep it that way — nothing that runs tests or takes an argument belongs here. The formatter
+# plugins resolve from installed local packages, including when dprint's cache is cold.
 # Fix the files a sandboxed shell may not write: skill formatting and generated harness config
 [group('Dev')]
 fix-agent-config:
@@ -356,7 +357,7 @@ lint: _repo-lint
 # Fail on exported symbols nothing imports; a gate in verify and verify-full
 [group('Dev')]
 dead-exports:
-    bun run packages/dev/dev-src/repository-tests/DeadExports.ts
+    bun run packages/testing/verification/verification-src/DeadExports.ts
 
 # Diagnose this checkout without changing it; pass --json for a structured report
 [group('Report')]
@@ -414,12 +415,12 @@ simplify-audit *ARGS:
 # Benchmark cold and steady-state language-service performance
 [group('Report')]
 bench iterations="10":
-    bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
+    bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
 # Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
-    bun run packages/dev/dev-src/performance/admission-experiment.ts {{ ARGS }}
+    bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
 [group('Run')]
@@ -436,12 +437,12 @@ install-ide-extension: _ide-extension-package
 # Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
 [group('Run')]
 android: _compile-word-flower-app _android-emulator _android-expo-go
-    bun run packages/dev/dev-src/dev.ts expo-android
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts expo-android
 
 # Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
 [group('Setup')]
 clean-scratch:
-    zsh -c 'source "{{ justfile_directory() }}/packages/dev/dev-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
+    zsh -c 'source "{{ justfile_directory() }}/packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
 
 # Clean run dependencies and build artifacts
 [group('Setup')]
@@ -473,13 +474,13 @@ clean-all: clean-scratch
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -523,13 +524,13 @@ _agent-config:
     ./dev agent-config
 
 _deps:
-    zsh packages/dev/dev-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+    zsh packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
 
 _git-hooks:
-    ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
+    ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
-    bun run packages/dev/dev-src/doctor/DependencyHealth.ts
+    bun run packages/testing/verification/verification-src/DependencyHealth.ts
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:
@@ -543,7 +544,7 @@ _fix-dprint:
     print -r -- "$out"
     if [[ $code -ne 0 && "$out" == *"Operation not permitted"* ]]; then
       print -u2 -r -- "The sandbox write-protects the paths above, which is why formatting them failed."
-      print -u2 -r -- "Run \`just fix-agent-config\` (excluded from the sandbox) and re-run this gate."
+      print -u2 -r -- "Run \`./agent fix-agent-config\` (excluded from the sandbox) and re-run this gate."
     fi
     [[ $code -eq 0 ]]
     dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
@@ -556,10 +557,10 @@ _fix-just-fmt:
 
 # Both developer-environment index pages are generated from the entry files; never hand-edit them.
 _fix-ledger-index:
-    bun run packages/dev/dev-src/repository-tests/fix-ledger-index.ts
+    bun run packages/testing/verification/verification-src/fix-ledger-index.ts
 
 _runtime-pack-check:
-    bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts
+    bun run packages/testing/verification/verification-src/runtime-package-pack.ts
 
 # `CompileApp.ts` stamps and then delegates to `./tao compile`. Four test recipes and both verify
 # lanes depend on this gate, so an unconditional 2.7s compile was paid before a single test could
@@ -567,7 +568,7 @@ _runtime-pack-check:
 # as a module rather than through `./dev`, matching `_parser-gen`: nobody types a private recipe, so
 # the discoverable command bought nothing and cost `./dev`'s boot on every run.
 _compile-word-flower-app: _parser-gen
-    bun run packages/dev/dev-src/repository-tests/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
+    bun run packages/testing/verification/verification-src/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
 
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
@@ -584,7 +585,7 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/dev/dev-src/repository-tests/repo-lint.ts
+    bun run packages/cli/dev-cli/dev-cli-src/repo-lint-entry.ts
 
 # TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
@@ -597,13 +598,13 @@ _typecheck:
 # suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
 # `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
-    bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts test "{{ PATTERN }}"
 
 _android-emulator:
-    bun run packages/dev/dev-src/dev.ts android-emulator
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-emulator
 
 _android-expo-go:
-    bun run packages/dev/dev-src/dev.ts android-expo-go
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-expo-go
 
 _parser-gen:
-    bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts
+    bun run packages/testing/verification/verification-src/ParserGenerate.ts

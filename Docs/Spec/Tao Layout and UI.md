@@ -545,6 +545,59 @@ nav-owned absolute layer, and `as toast (Key:, Duration:)` already produces app-
 content. Raw absolute positioning, overflow flags, z-index-like layout, popovers, and portals still
 need design and should not sneak into ordinary layout syntax merely because the runtime has a prop.
 
+### Safe Area And Keyboard Insets
+
+Every compiled app root — and the Studio subject root — renders inside the runtime's universal app
+shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
+`packages/apps/expo-host/expo-host-tests/` prove it for:
+
+- The generated app root itself, and every full-screen navigator surface that does not own its
+  native window (`SlotNav`, a JS-drawn `SelectionNav` bar in `"tabs"` or `"drawer"` display, and an
+  app auxiliary such as `@window`): each is padded exactly once — a fixed 12 logical pixels plus the
+  live safe-area inset on every edge — inside a scroll frame that dismisses the keyboard on drag (iOS)
+  or tap (Android) and never traps a tap on its own content.
+- A navigator that owns its native window (`StackNav`, a native-tab or `"toggle"` `SelectionNav`)
+  frames each of its own screens the same way. Nesting one inside another — a stack held as another
+  stack's or a `SlotNav`'s `Initial` value — insets exactly once, never twice, and an app auxiliary
+  insets independently of whatever the main navigator does with its own window.
+- `ask`, the inline shape of `as sheet`, and `as toast` are edge-safe without double-padding: their
+  overlay lane detects whether its enclosing navigator already sits inside an `AppSurfaceFrame` (a
+  navigator that does not own its window) and adds no further inset there — the frame's own padding
+  already reaches the edge — but adds the live safe-area inset itself when the enclosing navigator
+  owns its window, where the overlay lane is a sibling of the per-entry frames and fills the true
+  window directly. A toast is always the second case: it renders as a sibling of the app host's own
+  frame regardless of what the main navigator does, so it always adds the live inset.
+- A sheet presented through the platform's native modal host is a separate native window — on iOS a
+  `pageSheet`'s card starts below the status bar, so its own top inset differs from the app's root
+  window — so that presentation nests its own `SafeAreaProvider`, with no `initialMetrics`, and reads
+  insets from that provider rather than the app's. Without `initialMetrics`,
+  `react-native-safe-area-context` seeds a nested provider from its parent provider's insets, so the
+  sheet renders with the root window's insets until the modal's own native measurement lands — not a
+  blank frame. On web, where there is no per-window native measurement, a nested provider measures
+  the document instead, so a web sheet keeps reading the document's insets (normally zero). The
+  presentation also carries its own `KeyboardAvoidingView`, since the root one cannot reach a separate
+  native window either, and resets the "already inset" signal below for its own content, since React
+  context still crosses this window boundary (a `Modal` is a portal, not a separate React tree) even
+  though the modal's window itself was never padded by whatever frame encloses the presenter.
+
+Known, pre-existing limitation, not addressed here: an ask's dimming scrim sits inside the same
+scrollable content an enclosing `AppSurfaceFrame` already padded, when its navigator does not own its
+window. Absolute positioning there is relative to the content container, which sizes to content and
+can be shorter or taller than the true viewport, so the scrim does not reliably reach the actual
+window edges in that configuration — it is inset from them by at least the frame's own padding either
+way, but does not necessarily cover them exactly.
+
+Not yet covered, and not decided by what exists today:
+
+- A plain `present … as overlay` (no `ask`, no `as sheet`) renders unpadded, on purpose for now:
+  whether it should default to inset content (a banner) or stay full-bleed (a dimming spinner layer)
+  is undecided, and the two look identical at this presentation mode.
+- A `SplitNav` pane whose `Content` is itself a window-owning navigator is not yet guarded against a
+  double inset the way a `StackNav` or `SlotNav` entry is; `SplitNav` renders every pane's content
+  through one shared frame regardless of what is nested inside a pane.
+- Android's keyboard resize behavior (`softwareKeyboardLayoutMode` and equivalents) is unset; only
+  the iOS `KeyboardAvoidingView` `behavior` is chosen explicitly.
+
 ## Misc
 
 ### UI Defaults
@@ -657,7 +710,9 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - `nudge`: small post-layout movement that does not affect siblings
 - `overlay`: a possible in-layout positioning term, distinct from implemented presentation
   `as overlay`
-- safe-area and keyboard-aware helpers
+- whether a plain `as overlay` presentation should default to inset or full-bleed content, and
+  `SplitNav` pane insets when a pane holds a nested window-owning navigator — see "Safe Area And
+  Keyboard Insets" above for what safe-area and keyboard avoidance is already implemented and proven
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
 - aspect ratio

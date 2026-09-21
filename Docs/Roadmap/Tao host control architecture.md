@@ -79,7 +79,7 @@ Those are valuable production seams, but not yet one supported external automati
 
 Relevant owners:
 
-- `packages/dev/dev-src/studio/StudioCdp.ts`
+- `packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts`
 - `packages/compiler/compiler-src/codegen/app/TaoPropsCompiler.ts`
 - `packages/apps/runtime/TaoRuntime-src/TR-interaction-outline.ts`
 - `packages/apps/runtime/TaoRuntime-src/TR-studio-device-inspect.ts`

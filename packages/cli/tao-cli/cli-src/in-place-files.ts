@@ -6,7 +6,8 @@ export namespace InPlace {
   /** Result declares the outcome of one in-place Tao file operation. */
   export type Result = {
     path: string
-    status: 'changed' | 'unchanged' | 'error'
+    /** A dependency reached by validation is reported without checking or rewriting its canonical source. */
+    status: 'changed' | 'unchanged' | 'error' | 'diagnostics'
     /** error states an operation failure that produced no positioned diagnostic of its own. */
     error?: string
     /** diagnostics are the file's own lexer, parser, linker, and validator findings, in report order. */

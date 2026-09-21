@@ -8,11 +8,16 @@
   ],
   "overrides": {
     "expo-constants": "57.0.18",
-    "langium": "~4.3.1"
+    "langium": "~4.3.1",
+    "morgan": "1.12.0"
   },
   "devDependencies": {
+    "@dprint/json": "0.23.0",
+    "@dprint/markdown": "0.23.2",
+    "@dprint/typescript": "0.96.1",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "@xmldom/xmldom": "0.9.12",
     "knip": "^6.34.0",
     "rulesync": "16.18.0",
     "typescript": "5.9.3",

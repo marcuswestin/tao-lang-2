@@ -111,7 +111,7 @@ function createCommands(): Command {
     .description('Capture every Studio scenario as a portable web visual review.')
     .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
       try {
-        const { runStudioReview } = await import('tao-dev/studio-review')
+        const { runStudioReview } = await import('tao-studio-tooling/studio-review')
         const result = await runStudioReview(path, {
           against: options.against,
           appName: options.app,
@@ -285,21 +285,39 @@ function createCommands(): Command {
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
         + ' pattern. For a scheduler running one pattern across many suites.',
     )
+    .option(
+      '--watch',
+      'Run the selected tests, then rerun them on any change under the selected paths or the project'
+        + ' roots of the selected tests, until Ctrl-C. A failing run'
+        + ' keeps watching.',
+    )
     .description('Run Tao tests declared in .tao files at or under the given paths.')
-    .action(async (paths: string[], options: { name?: string; output?: string; passWithNoTests?: boolean }) => {
-      try {
-        const { TestOutput } = await import('./test-output')
-        const { runTestCommand } = await import('./test-command')
-        await runTestCommand(paths.length > 0 ? paths : ['.'], {
-          name: options.name,
-          output: TestOutput.resolveMode(options.output),
-          passWithNoTests: options.passWithNoTests,
-        })
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
+    .action(
+      async (
+        paths: string[],
+        options: { name?: string; output?: string; passWithNoTests?: boolean; watch?: boolean },
+      ) => {
+        try {
+          const { TestOutput } = await import('./test-output')
+          const testPaths = paths.length > 0 ? paths : ['.']
+          const testOptions = {
+            name: options.name,
+            output: TestOutput.resolveMode(options.output),
+            passWithNoTests: options.passWithNoTests,
+          }
+          if (options.watch) {
+            const { runTestWatchCommand } = await import('./test-watch')
+            await runTestWatchCommand(testPaths, testOptions)
+            return
+          }
+          const { runTestCommand } = await import('./test-command')
+          await runTestCommand(testPaths, testOptions)
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
+      },
+    )
 
   commands
     .command('completion')
@@ -372,6 +390,7 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
+    const diagnosticsOnly = results.filter(result => result.status === 'diagnostics')
     const diagnostics = results.flatMap(result => result.diagnostics ?? [])
     const errorCount = diagnostics.filter(Diagnostic.isError).length
       + results.reduce((held, result) => held + (result.unreportedDiagnostics ?? 0), 0)
@@ -388,7 +407,7 @@ async function runInPlaceCommand(
       return
     }
 
-    const unchangedCount = results.length - changed.length - errored.length
+    const unchangedCount = results.length - changed.length - errored.length - diagnosticsOnly.length
     const summary = [
       `${changed.length} ${labels.changed}`,
       `${unchangedCount} unchanged`,

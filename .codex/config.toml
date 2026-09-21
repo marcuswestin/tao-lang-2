@@ -5,7 +5,7 @@
 # and .rulesync/profiles.jsonc. Edit those canonical files, not either generated Codex output:
 # rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a
 # curated domain allowlist, so this profile is rendered by
-# packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.
+# packages/cli/agent-cli/agent-cli-src/agent-config/CodexConfigGenerator.ts instead.
 #
 # The sibling .codex/hooks.json is generated from .rulesync/hooks.jsonc by the same setup and
 # runs `./agent setup` when a session starts, the one setup entry Worktrunk (.config/wt.toml),

@@ -17,7 +17,7 @@ Implement language features as vertical slices. Use the same focused feature nam
 - Keep each module's public surface focused on one main concept. Export helpers only for real cross-file or package boundaries.
 - Prefer behavior tests.
 - A jest end-to-end test in `expo-host` earns its place only when it needs a native or module override, asserts generated-code shape, or exercises the harness itself. New behavior coverage lands in Tao as a `.test.tao` journey; existing jest suites migrate opportunistically when touched. Do not schedule a wholesale rewrite.
-- `just dead-exports` fails on exports nothing imports and runs in `verify` and `verify-full`; `removing-code` owns the fix pattern.
+- `./agent dead-exports` fails on exports nothing imports and runs in `verify` and `verify-full`; `removing-code` owns the fix pattern.
 
 ## Errors
 

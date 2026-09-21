@@ -1,0 +1,19 @@
+{
+  "name": "tao-verification",
+  "private": true,
+  "type": "module",
+  "module": "verification-src/verification.ts",
+  "exports": {
+    ".": "./verification-src/verification.ts"
+  },
+  "dependencies": {
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
+    "tao-cli-kit": "workspace:*",
+    "tao-host-control": "workspace:*",
+    "tao-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18"
+  }
+}
