@@ -219,10 +219,15 @@ async function runLane(
   const startedAt = dependencies.now()
   // `--no-cache` because a recorded green tree would let a lane finish without doing the work, and a
   // lane that skipped its work measures nothing about how the machine shares itself.
+  // No `TAO_OUTPUT_MODE` here, deliberately. Setting it to `quiet` seemed harmless and was not:
+  // `work-reporter.test.ts` asserts that a terminal gets the dashboard, and it reads the ambient
+  // environment when the caller gives it none — so the variable travelled into the lane's own test
+  // suite and failed it in every checkout at once. That would have shown up as ten lanes each with a
+  // false red, which is exactly the signal this experiment exists to measure, produced by the
+  // measurement itself. The output is piped anyway, and a pipe already selects the quiet report.
   const result = await dependencies.run('just', {
     args: [lane, '--no-cache'],
     cwd: repositoryRoot,
-    env: { TAO_OUTPUT_MODE: 'quiet' },
   })
   const wallMs = dependencies.now().getTime() - startedAt.getTime()
   const summary = await readLaneSummary(lane, repositoryRoot, dependencies)

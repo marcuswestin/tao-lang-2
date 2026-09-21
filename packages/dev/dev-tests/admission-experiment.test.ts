@@ -25,7 +25,7 @@ function fakeDependencies(options: {
   loadAverage?: number
   scripts?: Record<string, LaneScript>
 } = {}) {
-  const calls: Array<{ args: readonly string[]; cwd?: string }> = []
+  const calls: Array<{ args: readonly string[]; cwd?: string; env?: unknown }> = []
   let clock = 0
   const dependencies: AdmissionExperimentDependencies = {
     activeLanes: async () => options.lanes ?? [],
@@ -49,7 +49,7 @@ function fakeDependencies(options: {
       } as ValueT
     },
     run: async (_command, spec) => {
-      calls.push({ args: spec.args ?? [], cwd: spec.cwd })
+      calls.push({ args: spec.args ?? [], cwd: spec.cwd, env: spec.env })
       return {
         args: [...(spec.args ?? [])],
         command: 'x',
@@ -167,5 +167,16 @@ Describe('admission experiment', () => {
     await runAdmissionExperiment({ lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] }, fake.dependencies)
 
     Expect(fake.calls.every(call => call.args.includes('--no-cache'))).toBe(true)
+  })
+
+  // Setting it to `quiet` travelled into the lane's own suite, where `work-reporter.test.ts` reads
+  // the ambient environment and asserts a terminal gets the dashboard. Every checkout failed that
+  // test at once — ten false reds manufactured by the measurement itself.
+  Test('passes no output-mode environment into the lane', async () => {
+    const fake = fakeDependencies({ scripts: { '/repo/a': { elapsedMs: 10_000 } } })
+
+    await runAdmissionExperiment({ lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] }, fake.dependencies)
+
+    Expect(fake.calls.every(call => call.env === undefined)).toBe(true)
   })
 })
