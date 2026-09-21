@@ -6,10 +6,10 @@ in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
 `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; they do not describe the current
 CLI. The implementation must update those documents and the command help when behavior changes.
 
-This is the durable record of the choices, not a demand to start implementation before the planned
-`packages/dev` CLI restructure lands on `main`. The CLI work should start from post-restructure
-`main`, not from the unrelated `feat/real-host-acceptance` history. The design discussion changed
-the personal dialogue skill separately; no skill change is part of this CLI work.
+This is the durable record of the choices, not an implementation. The planned CLI restructure has
+landed on `main`; implementation should start from that post-restructure state, not from the
+unrelated `feat/real-host-acceptance` history. The design discussion changed the personal dialogue
+skill separately; no skill change is part of this CLI work.
 
 ## Product boundary and architecture
 
@@ -176,10 +176,11 @@ native builds default to Release; and existing-beta invitations use `tao invite 
 
 ## Implementation and acceptance boundary
 
-- Wait for the planned CLI restructure to land on `main`: it moves the current `packages/dev`
-  Expo loop to `packages/apps/expo-host`, TUI/reporting to `packages/cli/cli-kit`, dev-data support
-  to `packages/cli/dev-cli`, and Studio tooling next to `packages/ides/studio`. Start the workflow
-  implementation from that `main`; do not port the unrelated real-host branch.
+- The CLI restructure has landed on `main`: the Expo loop is in `packages/apps/expo-host`,
+  TUI/reporting in `packages/cli/cli-kit`, developer commands in `packages/cli/dev-cli`, agent
+  commands in `packages/cli/agent-cli`, verification in `packages/testing/verification`, and Studio
+  tooling in `packages/ides/studio-tooling`. Start the workflow implementation from this structure;
+  do not port the unrelated real-host branch.
 - Record and reconcile this contract in the older plans and command help, then implement a shared
   project-local service, dev ownership, web/desktop builds, native local builds, ship policy, and
   clean. Keep command adapters thin. Add or change workspace packages only through the repository's
