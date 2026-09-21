@@ -350,14 +350,18 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
   }
   if (facts.dependencyHealthError !== undefined) {
     return {
-      detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
+      detail: `the installed dependency graph is unhealthy or differs from bun.lock: ${facts.dependencyHealthError}`,
       name: 'dependencies',
       remediation:
         "Repair with: ./agent setup; if a protected package path is denied, start 'just session-unsandboxed' and run './agent setup' there.",
       status: 'fail',
     }
   }
-  return { detail: 'installed and complete against the frozen lockfile', name: 'dependencies', status: 'pass' }
+  return {
+    detail: 'startup modules load and installed nested links match bun.lock',
+    name: 'dependencies',
+    status: 'pass',
+  }
 }
 
 function dependencyCompatibilityCheck(facts: DoctorFacts): DoctorCheck {

@@ -350,6 +350,10 @@ fix: _parser-gen
 check no_cache='false':
     ./dev gates _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _runtime-pack-check --lane check --green-tree check {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
+# Build a VSIX without installing it, for VS Code packager compatibility checks
+[group('Dev')]
+ide-extension-package: _ide-extension-package
+
 # Run the repository lint on its own
 [group('Dev')]
 lint: _repo-lint
