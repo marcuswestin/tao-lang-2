@@ -13,9 +13,9 @@ the personal dialogue skill separately; no skill change is part of this CLI work
 
 ## Product boundary and architecture
 
-- `tao dev`, `tao build`, `tao ship`, and `tao clean` are the public workflow verbs. Do not add a
-  public `tao package` or an app-OTA `tao update` command. `tao build --compile-only` replaces the
-  old public `tao compile` once its callers have migrated.
+- `tao dev`, `tao build`, `tao ship`, `tao invite`, and `tao clean` are the public workflow verbs.
+  Do not add a public `tao package` or an app-OTA `tao update` command. `tao build --compile-only`
+  replaces the old public `tao compile` once its callers have migrated.
 - The CLI should expose the development and build capabilities that overlap with Studio. A shared
   development-session/build API sits beneath both surfaces; Studio must not shell out to the CLI as
   its core architecture. Keep Studio-only editor and preview behavior in Studio.
@@ -67,11 +67,15 @@ the personal dialogue skill separately; no skill change is part of this CLI work
 - Desktop build: produce a runnable local macOS `.app` with Electrobun, rather than merely a web
   bundle. It runs the same Tao app with desktop-only capabilities where available. Building without
   the `.app` was considered and rejected as the public desktop artifact.
-- iOS build: produce a locally runnable `.app`, not an App Store distribution archive. When the
-  machine has the prerequisites for a physical-device build, choose that; otherwise fall back to
-  a simulator build. `--device` explicitly requires the physical build and must not silently fall
-  back. `tao build --ios --configuration release` is a locally runnable Release-configuration app,
-  not an uploadable distribution build. Native artifacts do not require an install-and-run script.
+- iOS build: produce a locally runnable `.app`, not an App Store distribution archive. A normal
+  `tao build --ios` always builds for the simulator. When a compatible physical device is connected
+  and the machine has the prerequisites to build for it, also build the device artifact; do not
+  choose one instead of the other. `--device` explicitly requires the physical build, produces
+  only that artifact, and must not silently fall back to a simulator build. There is no separate
+  force-simulator flag. Native local builds default to Release configuration, with Debug available
+  explicitly through `--configuration debug`. `tao build --ios --configuration release` remains a
+  valid explicit spelling for a locally runnable Release app, not an uploadable distribution build.
+  Native artifacts do not require an install-and-run script.
 - Android build: produce a locally installable APK, not a Play Store upload artifact. Native build
   targets may be added after web/desktop in implementation sequence; while unavailable, show them
   in the picker with a “not yet implemented” alert and make explicit flags fail clearly.
@@ -87,9 +91,7 @@ the personal dialogue skill separately; no skill change is part of this CLI work
   redundant beta-mode alias. Move recipient arguments from the old `--beta=emails` form to
   `--to EMAIL`; reject the old recipient form with a migration message. A new beta uses the
   configured internal testers by default; additional recipients are explicit. Inviting someone
-  to an _existing_ beta is a separate operation, not a new ship. The dialogue used
-  `tao testers invite --ios EMAIL` as its proposed spelling; confirm that spelling against the
-  eventual CLI design before treating it as an independently settled command name.
+  to an _existing_ beta is a separate operation, not a new ship.
 - `--prod` is required for an iOS production submission; a bare ship never means production.
   Production asks for confirmation with **No** as the default (unless an explicit noninteractive
   confirmation option is used). A developer may ship production directly without a prior beta.
@@ -121,6 +123,15 @@ the personal dialogue skill separately; no skill change is part of this CLI work
   (`.tao-project/lock.jsonc`) or a clearly separate durable shipping store, not in disposable local
   build records. Do not make `tao clean` remove that history.
 
+## `tao invite`
+
+- `tao invite EMAIL` invites a recipient to an existing beta without creating or shipping a new
+  build. Platform flags, such as `--ios`, select the invitation destination explicitly and may be
+  combined when multiple destinations exist. With no platform flag, an interactive picker lets the
+  developer select one or more platforms; a noninteractive invocation without a platform fails
+  clearly. Initially, iOS/TestFlight is the only implemented destination. Other platforms must be
+  marked unavailable until their invitation flow exists.
+
 ## `tao clean`
 
 - Bare `tao clean` interactively lists and selects retained local build artifacts. Include old and
@@ -137,31 +148,31 @@ the personal dialogue skill separately; no skill change is part of this CLI work
 These examples are the compact regression checklist for the command design. They are not a claim
 that the current CLI accepts them.
 
-| Use case                                         | Invocation or operation                                                                 |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Start a live session without opening a target    | `tao dev`                                                                               |
-| Open selected live targets at startup            | `tao dev --web --desktop`                                                               |
-| Build local static web files and serve them      | `tao build --web`, then the artifact's `run` script                                     |
-| Build a local desktop app                        | `tao build --desktop`                                                                   |
-| Build a physical iOS app explicitly              | `tao build --ios --device`                                                              |
-| Build a locally runnable iOS Release app         | `tao build --ios --configuration release`                                               |
-| Build a local Android APK                        | `tao build --android`                                                                   |
-| Inspect generated source before native packaging | `tao build --ios --compile-only`                                                        |
-| Build several targets together                   | `tao build --web --desktop --android`                                                   |
-| Ship a new iOS beta                              | `tao ship --ios`                                                                        |
-| Ship a new beta and name a recipient             | `tao ship --ios --to alice@example.com`                                                 |
-| Invite a recipient to an existing beta           | Separate tester-invite operation; proposed `tao testers invite --ios alice@example.com` |
-| Update an existing beta over the air             | `tao ship --ios --update`                                                               |
-| Roll back a compatible beta update               | `tao ship --ios --update --rollback`                                                    |
-| Ship production                                  | `tao ship --ios --prod`                                                                 |
-| Attempt web shipping before hosting exists       | `tao ship --web` fails clearly                                                          |
-| Select retained local builds for deletion        | `tao clean`                                                                             |
+| Use case                                            | Invocation or operation                             |
+| --------------------------------------------------- | --------------------------------------------------- |
+| Start a live session without opening a target       | `tao dev`                                           |
+| Open selected live targets at startup               | `tao dev --web --desktop`                           |
+| Build local static web files and serve them         | `tao build --web`, then the artifact's `run` script |
+| Build a local desktop app                           | `tao build --desktop`                               |
+| Build local iOS simulator and available device apps | `tao build --ios`                                   |
+| Build a physical iOS app explicitly                 | `tao build --ios --device`                          |
+| Build a locally runnable iOS Debug app              | `tao build --ios --configuration debug`             |
+| Build a local Android APK                           | `tao build --android`                               |
+| Inspect generated source before native packaging    | `tao build --ios --compile-only`                    |
+| Build several targets together                      | `tao build --web --desktop --android`               |
+| Ship a new iOS beta                                 | `tao ship --ios`                                    |
+| Ship a new beta and name a recipient                | `tao ship --ios --to alice@example.com`             |
+| Invite a recipient to an existing iOS beta          | `tao invite alice@example.com --ios`                |
+| Pick invitation platforms interactively             | `tao invite alice@example.com`                      |
+| Update an existing beta over the air                | `tao ship --ios --update`                           |
+| Roll back a compatible beta update                  | `tao ship --ios --update --rollback`                |
+| Ship production                                     | `tao ship --ios --prod`                             |
+| Attempt web shipping before hosting exists          | `tao ship --web` fails clearly                      |
+| Select retained local builds for deletion           | `tao clean`                                         |
 
-The dialogue did **not** settle an explicit force-simulator flag. Because ordinary `tao build
---ios` may choose a physical build when signing is available, an invocation guaranteed to produce
-only a simulator artifact still needs a product decision before public help or examples promise it.
-The native build's default Debug/Release configuration was also not independently settled; only
-the meaning of explicit `--configuration release` was.
+The remaining product-level CLI questions recorded in the prior version of this document are now
+settled: default iOS builds include a simulator artifact and an available device artifact; local
+native builds default to Release; and existing-beta invitations use `tao invite EMAIL`.
 
 ## Implementation and acceptance boundary
 
