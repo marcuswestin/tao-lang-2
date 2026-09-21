@@ -33,7 +33,7 @@ import { type PerformanceSampleSummary, summarizeSamples } from './language-perf
 const QUIET_LOAD_RATIO = 0.5
 
 /** One lane's result, read from the lane's own `summary.json` rather than inferred from its exit. */
-export type AdmissionLaneOutcome = {
+type AdmissionLaneOutcome = {
   /** Repository root the lane ran in, so a failure can be reproduced by hand. */
   repositoryRoot: string
   startedAt: string
@@ -54,7 +54,7 @@ export type AdmissionLaneOutcome = {
 }
 
 /** One phase of the experiment: the lanes started together, and what the machine did during it. */
-export type AdmissionPhase = {
+type AdmissionPhase = {
   requestedLanes: number
   outcomes: readonly AdmissionLaneOutcome[]
   summary: PerformanceSampleSummary
