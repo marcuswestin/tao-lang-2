@@ -86,6 +86,30 @@ _bench-check:
     ])
   })
 
+  Test('a file-keyed node-import entry blesses every site in that file', () => {
+    const path = 'packages/dev/dev-tests/fixtures.test.ts'
+    const source = "import 'node:path'\nconst x = 1\nimport 'node:fs'\n"
+    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [path])).toEqual([])
+  })
+
+  Test('a line-keyed node-import entry blesses only its own site', () => {
+    const path = 'packages/runtime-toolchain/runtime-toolchain-tests/shipped.test.ts'
+    const source = "import 'node:path'\nconst x = 1\nimport 'node:fs'\n"
+    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`]))
+      .toEqual([
+        `${path}:3 imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\` from`
+        + ' `@shared`, and add the seam there when none fits.',
+      ])
+  })
+
+  Test('reports a file-keyed node-import entry whose file no longer imports one', () => {
+    const path = 'packages/dev/dev-tests/swept.test.ts'
+    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source: 'export const x = 1\n' }], [path]))
+      .toEqual([
+        `${path} no longer imports a \`node:\` module; drop its repo lint allowlist entry.`,
+      ])
+  })
+
   Test('reports a raw-error allowlist entry that no longer builds one', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.rawError,
