@@ -1,7 +1,7 @@
+import { OutputText } from '@cli-kit'
 import Workspace from '@compiler/workspace'
 import Formatter from '@formatter'
 import { Assert, Errors, FS, HCI, Platform, Repo } from '@shared'
-import { OutputText } from '../cli/OutputText'
 
 const fixtureRelativePath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
 const defaultIterations = 10

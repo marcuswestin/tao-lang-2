@@ -1,4 +1,5 @@
-import { Errors, FS, HCI, Platform, Switch, Text } from '@shared'
+import { OutputText } from '@cli-kit/OutputText'
+import { Errors, FS, HCI, Platform, Switch } from '@shared'
 
 /** TestOutputMode names how `tao test` reports the test runner process's own output. */
 export type TestOutputMode = 'lines' | 'quiet'
@@ -118,7 +119,9 @@ function createLineWriter(): TestOutputWriter {
       HCI.writeLine(line)
     },
     write(chunk) {
-      const lines = normalizeNewlines(`${pending}${chunk.toString('utf8')}`).split('\n')
+      // Buffers only newline shape, not `OutputText.sanitize`: this streams the runner's own lines
+      // to a real terminal, and stripping ANSI here would drop its color along the way.
+      const lines = normalizeCarriageReturns(`${pending}${chunk.toString('utf8')}`).split('\n')
       pending = lines.pop() ?? ''
       for (const line of lines) {
         HCI.writeLine(line)
@@ -153,12 +156,16 @@ function hasResultCountLine(text: string): boolean {
 }
 
 function outputLines(output: string): string[] {
-  return normalizeNewlines(Text.stripAnsi(output)).split('\n').filter(line => line.trim().length > 0)
+  return normalizeCarriageReturns(OutputText.stripAnsi(output)).split('\n').filter(line => line.trim().length > 0)
 }
 
-// Mirrors `OutputText.sanitize` in packages/dev, which tao-cli cannot import across the package
-// boundary; keep the two in step.
-function normalizeNewlines(output: string): string {
+/**
+ * normalizeCarriageReturns folds a lone `\r` into a line break, unlike `OutputText.sanitize`, which
+ * deletes it instead and glues a `\r`-overwritten progress line onto the text that follows it —
+ * breaking the `^`-anchored `SUMMARY_LINE` match below. `createLineWriter` also relies on this
+ * rather than `OutputText.sanitize` to keep the runner's own ANSI colors on a real terminal.
+ */
+function normalizeCarriageReturns(output: string): string {
   return output.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
 }
 

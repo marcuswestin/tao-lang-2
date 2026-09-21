@@ -14,13 +14,14 @@
     "commander": "^15.0.0",
     "ink": "^7.1.1",
     "react": "^19.2.8",
+    "tao-cli-kit": "workspace:*",
     "tao-e2e-testing": "workspace:*",
     "tao-generation": "workspace:*",
     "tao-host-control": "workspace:*",
     "tao-appium-driver": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-studio": "workspace:*",
-    "wrap-ansi": "^10.0.1"
+    "tao-verification": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

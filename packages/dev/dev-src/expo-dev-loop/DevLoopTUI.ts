@@ -1,9 +1,7 @@
+import { type ColumnLayout, DashboardGrid, OutputText, type TerminalSize } from '@cli-kit'
 import { HCI, Platform, Switch } from '@shared'
 import { Box, render, Text, useWindowSize } from 'ink'
 import React from 'react'
-
-import { type ColumnLayout, DashboardGrid, type TerminalSize } from '../cli/DashboardGrid'
-import { OutputText } from '../cli/OutputText'
 
 type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'p' | 'q' | 'r' | 's' | 't' | 'v' | 'w'
 

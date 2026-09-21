@@ -35,8 +35,8 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 ## Standing scope
 
 - Never touch test code: `*.test.*`, test helpers, `*-tests/`, Test Apps, the test compiler, the
-  runner and lanes under `repository-tests/`. `repo-lint.ts` is the exception; it is where new
-  gates land.
+  runner and lanes under `packages/testing/verification`. `repo-lint.ts` is the exception; it is
+  where new gates land.
 - Fix a defect a slice exposes, in that slice, and name it in the commit.
 - Under `Apps/`, documentation only. Emitted TSX may change shape.
 

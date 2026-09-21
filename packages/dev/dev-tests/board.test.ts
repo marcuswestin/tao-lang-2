@@ -1,7 +1,7 @@
 import { type CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { GreenTree } from '@verification/GreenTree'
 import { board, formatBoardReport, parseWorktreePorcelain } from '../dev-src/doctor/Board'
-import { GreenTree } from '../dev-src/repository-tests/GreenTree'
 
 /**
  * `board` reads three things it must never mutate: the worktree it is asked about, the shared

@@ -50,7 +50,7 @@
         "dev-src/agent-hooks/SubagentBriefEntry.ts",
         "dev-src/agent-hooks/GitHooksEntry.ts",
         "dev-src/performance/language-performance.ts",
-        "dev-src/repository-tests/*.ts",
+        "dev-src/repo-lint-entry.ts",
         "dev-src/studio/StudioClientSnapshotProcess.ts",
         "dev-src/studio/StudioPackagedService.ts",
         "dev-src/studio/StudioPackagedTestCommand.ts",
@@ -63,6 +63,16 @@
         "dev-tests/**/*.{ts,tsx}",
         "performance-checks/**/*.{ts,tsx}",
         "studio-smoke/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/testing/verification": {
+      "entry": [
+        "verification-src/*.ts",
+        "verification-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "verification-src/**/*.{ts,tsx}",
+        "verification-tests/**/*.{ts,tsx}"
       ]
     },
     "packages/testing/e2e-testing": {

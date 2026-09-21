@@ -3,13 +3,13 @@ import { Workspace } from '@compiler/workspace'
 import type { HostController } from '@host-control'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
-import { delimiter as pathDelimiter } from 'node:path'
 import {
   MachineLanes,
   MachineResourceBusyError,
   type MachineResourceLease,
   type MachineResourceOwner,
-} from '../repository-tests/MachineLanes'
+} from '@verification/MachineLanes'
+import { delimiter as pathDelimiter } from 'node:path'
 import {
   defaultStudioAppName,
   defaultStudioBundleIdentifier,
