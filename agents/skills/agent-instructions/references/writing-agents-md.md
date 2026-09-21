@@ -30,6 +30,11 @@ so that a later reader disagrees with the argument rather than re-running the re
   evidence about what agents actually carry, not on a figure from an external guide; published
   recommendations range from 60 lines to a 650-line, 24,000-character file shipped by the vendor that
   originated the AGENTS.md convention, and no vendor states a number in primary documentation.
+- Pressure belongs on the file that loads unconditionally. Root `AGENTS.md` is paid by every session
+  whether or not it is relevant; a `SKILL.md` is paid only when its description matches; a
+  `references/` file only when something opens it. So a large skill is much cheaper than its size
+  suggests, and the budget to defend hardest is the root file's. Shrink there first, and move
+  detail outward rather than deleting it.
 
 ## How much "why"
 

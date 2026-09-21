@@ -111,17 +111,13 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
   const states: TestNodeState[] = []
   for (const suite of options.selected) {
     const tuning = GateCatalog.suiteTuning(suite.name)
-    // Under `--concurrent` Bun reports every test in a file as the time from that file's shared
-    // start to its own completion (see `TestRunner.deadlineFor`), so a file's tests summed together
-    // is not that file's cost — it is inflated by however many other tests in the file finished
-    // after it, which grows with the file's own test count rather than with its work. Packing shards
-    // by that sum would put a file's weight before what it actually costs; the ledger has nothing
-    // trustworthy to say about relative per-file cost for a suite tuned this way, so shards fall back
-    // to the mean-cost packing `TestShards.packFiles` already gives an unmeasured file.
-    const concurrent = (tuning.args ?? []).includes('--concurrent')
-    const ledgerCosts = concurrent
-      ? new Map<string, number>()
-      : TestShards.fileCostsFromLedger(options.ledger, suite.name)
+    // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
+    // about relative per-file cost either, so shards fall back to the mean-cost packing
+    // `TestShards.packFiles` already gives an unmeasured file. `GateCatalog` owns which suites those
+    // are and why; the ledger declines to record their durations for the same reason.
+    const ledgerCosts = GateCatalog.reportsAttributableDurations(suite.name)
+      ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
+      : new Map<string, number>()
     const plan = TestShards.planShards({
       // A suite's own units win when the ledger cannot speak about them at all.
       fileCostMs: suite.shardUnits === undefined || suite.unitCostMs === undefined

@@ -569,6 +569,20 @@ function suiteTuning(suite: string): SuiteTuning {
   return SUITE_TUNING.get(suite) ?? {}
 }
 
+/**
+ * reportsAttributableDurations answers whether a suite's per-test durations mean what they say.
+ *
+ * Under `--concurrent` Bun reports every test in a file as the time from that file's shared start to
+ * its own completion, so a test's recorded duration grows with how many of its neighbours finish
+ * after it rather than with its own work: `studio-dev.test.ts` runs 61 tests in 3.3s and the ledger
+ * held a dozen of its cases at ~6.20s each. Nothing downstream can repair that, so the judgment
+ * lives here and the ledger declines to record the number at all. Shard packing asks the same
+ * question, and asking it in one place is what keeps the two answers from drifting apart.
+ */
+function reportsAttributableDurations(suite: string): boolean {
+  return !(suiteTuning(suite).args ?? []).includes('--concurrent')
+}
+
 /** suiteReads returns the file classes a suite reads: its declared narrowing, or the whole tree. */
 function suiteReads(suite: string): readonly SourceClass[] {
   return suiteTuning(suite).reads ?? DEFAULT_SUITE_READS
@@ -598,6 +612,7 @@ export const GateCatalog = {
   machineWidth,
   metadata,
   node,
+  reportsAttributableDurations,
   suiteReads,
   suiteTuning,
   testDependencies,
