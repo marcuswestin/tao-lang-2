@@ -116,14 +116,14 @@ the label the root view was bound to and on the content of the
 navigator it renders, never on a navigation title: the synthesized root navigator is a slot and
 renders no chrome of its own. The label is what tells a variant's rebinding apart from the base
 app, and the status bar's own text is what tells an unmounted sibling from a mounted one that
-renders nothing. The runtime's own suite in `packages/runtime/TR-tests/` proves the mechanism the
+renders nothing. The runtime's own suite in `packages/apps/runtime/TR-tests/` proves the mechanism the
 journeys stand on: a rendered navigator mounts once on the occurrence that hosts it, that host
 routes Back and activation to it, and it restores by its own identity when it attaches.
 
 The split journey never drags a divider: the Tao test language has no `resize` step, and resize
 interaction is the adapter's. `relaunch` proves that device-local `(persist)` state outlives the
 launched instance while ephemeral view state does not; encoding and decoding that state through
-device storage stays with the runtime's persisted-state suite in `packages/runtime/TR-tests/`,
+device storage stays with the runtime's persisted-state suite in `packages/apps/runtime/TR-tests/`,
 because a relaunch reads that same store again rather than rebuilding it. Reading it again is what
 gives the journey its teeth: break the storage key and the split journey fails. The same split holds
 for navigation: the Navigation MVP journey proves where a relaunch reopens and what an abandoned

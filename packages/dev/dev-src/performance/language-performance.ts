@@ -1,6 +1,6 @@
+import Workspace from '@compiler/workspace'
 import Formatter from '@formatter'
 import { Assert, Errors, FS, HCI, Platform, Repo } from '@shared'
-import Workspace from '@workspace'
 import { OutputText } from '../cli/OutputText'
 
 const fixtureRelativePath = 'Apps/WordFlower/1 - Current/WordFlower.tao'

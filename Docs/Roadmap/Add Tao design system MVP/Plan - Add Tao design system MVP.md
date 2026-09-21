@@ -42,7 +42,7 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 Tranche 4 proved the first slice through the owning package suites and WordFlower. The broader design
 MVP should add a dedicated Test App only when a later tranche settles semantic tokens and recipes:
 
-- Parser, validator, formatter, compiler, runtime, and runtime-toolchain tests cover flat tokens,
+- Parser, validator, formatter, compiler, runtime, and expo-host tests cover flat tokens,
   named bundles, diagnostics, lowering, mounted-app lookup, and precedence.
 - `Apps/WordFlower/1 - Current/Design.tao` and the WordFlower journeys prove the end-to-end first
   slice in a product app.
@@ -101,12 +101,12 @@ Concrete work:
   - named clause-bundle resolution;
   - deterministic same-clause replacement and style production;
   - React Native style production.
-- Keep reusable semantics in `packages/runtime/TaoRuntime-src/`; generated app TypeScript should stay declarative and minimal.
+- Keep reusable semantics in `packages/apps/runtime/TaoRuntime-src/`; generated app TypeScript should stay declarative and minimal.
 - Add runtime tests for token and bundle resolution, fallback behavior, and style precedence.
 
 Likely commit unit: compiler design lowering plus `TR` design helpers and runtime tests.
 
-Validation: compiler tests through compile success/failure, `packages/runtime/TR-tests`, and targeted runtime e2e tests.
+Validation: compiler tests through compile success/failure, `packages/apps/runtime/TR-tests`, and targeted runtime e2e tests.
 
 Exit criteria: a Tao app can select a design and render at least Text, Button, and a surface/container with deterministic styles produced by the runtime.
 

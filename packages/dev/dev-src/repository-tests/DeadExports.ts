@@ -34,7 +34,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * What may survive is an export something outside the TypeScript import graph really reaches: a
  * consumer of `@tao/runtime`, of the published `tao` CLI, or of `@tao/*`, or a module loaded as
  * text rather than imported. Each of those is recorded in the declaring package, in a file named
- * for the one reason its exports are there — `packages/tao-cli/cli-src/subprocess-test-api.ts` is
+ * for the one reason its exports are there — `packages/cli/tao-cli/cli-src/subprocess-test-api.ts` is
  * the only such record today — which `config/knip.json` declares an entry point by path so the
  * record does not itself read as dead. That is knip's own documented answer — re-export from an
  * entry file — rather than the per-symbol `@public` JSDoc tag knip also offers and its own guide

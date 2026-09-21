@@ -8,14 +8,13 @@ import {
 
 const PACKAGE_PATHS: Record<string, string> = {
   'tao-dev': 'packages/dev/package.json',
-  'tao-runtime-toolchain': 'packages/runtime-toolchain/package.json',
-  'tao-studio': 'packages/studio/package.json',
-  'tao-workspace': 'packages/workspace/package.json',
+  'tao-expo-host': 'packages/apps/expo-host/package.json',
+  'tao-studio': 'packages/ides/studio/package.json',
 }
 
 const INSTALLED_WORKSPACE: Record<string, Record<string, string>> = {
   'tao-dev': { react: '19.2.8' },
-  'tao-runtime-toolchain': {
+  'tao-expo-host': {
     '@react-native-community/netinfo': '12.0.1',
     '@types/react': '19.2.18',
     react: '19.2.3',
@@ -60,32 +59,32 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a singleton anchor that drifts from the installed Expo SDK', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.2.8', 'react-dom': '19.2.8', 'react-test-renderer': '19.2.8' },
+      'tao-expo-host': { react: '19.2.8', 'react-dom': '19.2.8', 'react-test-renderer': '19.2.8' },
       'tao-studio': { react: '19.2.8' },
     }))
 
     Expect(issues.length).toBe(2)
-    Expect(issues[0]).toContain('tao-runtime-toolchain resolves react 19.2.8')
+    Expect(issues[0]).toContain('tao-expo-host resolves react 19.2.8')
     Expect(issues[0]).toContain('Expo SDK is built against react 19.2.3')
-    Expect(issues[0]).toContain('packages/runtime-toolchain/package.json')
+    Expect(issues[0]).toContain('packages/apps/expo-host/package.json')
     Expect(issues[1]).toContain('react-dom')
   })
 
   Test('rejects a second React reaching the Studio bundle', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
+      'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
       'tao-studio': { react: '19.2.8' },
     }))
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('tao-studio resolves react 19.2.8')
     Expect(issues[0]).toContain('two React copies in one bundle render nothing')
-    Expect(issues[0]).toContain('packages/studio/package.json')
+    Expect(issues[0]).toContain('packages/ides/studio/package.json')
   })
 
   Test('rejects an undocumented package carrying its own React', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
+      'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
       'tao-workspace': { react: '18.3.1' },
     }))
 
@@ -96,7 +95,7 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a test renderer that does not match the React it renders', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.4' },
+      'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.4' },
     }))
 
     Expect(issues.length).toBe(1)
@@ -105,7 +104,7 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects React types outside the installed React Native peer range', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': {
+      'tao-expo-host': {
         '@types/react': '18.3.1',
         react: '19.2.3',
         'react-dom': '19.2.3',
@@ -120,7 +119,7 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a native module the installed Expo SDK does not bundle', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': {
+      'tao-expo-host': {
         '@react-native-community/netinfo': '12.0.0',
         react: '19.2.3',
         'react-dom': '19.2.3',
@@ -135,12 +134,12 @@ Describe('runtime dependency compatibility', () => {
 
   Test('reports a declared dependency the lockfile never installed', () => {
     const issues = dependencyCompatibilityIssues(facts(
-      { 'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3' } },
+      { 'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3' } },
       {
         manifests: [{
           dependencies: { 'never-installed': '^1.0.0', 'tao-shared': 'workspace:*' },
-          name: 'tao-runtime-toolchain',
-          path: 'packages/runtime-toolchain/package.json',
+          name: 'tao-expo-host',
+          path: 'packages/apps/expo-host/package.json',
         }],
       },
     ))
@@ -157,7 +156,7 @@ Describe('runtime dependency compatibility', () => {
     // so the assertion would pass on a partially installed checkout — the case it exists for.
     Expect(Object.keys(installed.expoBundledVersions).length).toBeGreaterThan(0)
     Expect(installed.reactNativeTypesPeer).toBeDefined()
-    Expect(installed.resolvedByPackage['tao-runtime-toolchain']?.['react']).toBeDefined()
+    Expect(installed.resolvedByPackage['tao-expo-host']?.['react']).toBeDefined()
     Expect(dependencyCompatibilityIssues(installed)).toEqual([])
   })
 
@@ -171,12 +170,12 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a second react-dom in the Studio bundle, not only a second react', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
+      'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
       'tao-studio': { react: '19.2.3', 'react-dom': '18.3.1' },
     }))
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('tao-studio resolves react-dom 18.3.1')
-    Expect(issues[0]).toContain('packages/studio/package.json')
+    Expect(issues[0]).toContain('packages/ides/studio/package.json')
   })
 })

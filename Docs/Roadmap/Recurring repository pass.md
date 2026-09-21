@@ -21,7 +21,8 @@ notes after each completed pass; Git history is the longer record.
   and remain to triage. The pinned Linux Nixpkgs glibc remains tracker-affected. Agent-config
   recovery now resolves dprint plugins from installed local packages, including with a cold cache.
   This pass did not establish physical-device, real CloudKit,
-  installed-binary OTA, signed Studio, or distribution acceptance, and did not review later `main`.
+  installed-binary OTA, signed Studio, or distribution acceptance. The later `2bc90866` package
+  restructure was integrated for compatibility but has not had a repository-wide pass.
 
 ## Consider next time
 

@@ -1,7 +1,7 @@
 import { Packages } from '@ast-utils'
+import { Workspace } from '@compiler/workspace'
 import { Assert, FS } from '@shared'
 import { withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 import Compiler, { type CompileOptions, type CompileResult } from '../compiler-src/compiler'
 
 const compilerSession = Compiler.createSession()

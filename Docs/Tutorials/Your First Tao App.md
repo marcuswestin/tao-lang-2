@@ -1,7 +1,7 @@
 <!--
 Every ```tao block carries a directive after the language word — `program`, `edit`, `edit tail`,
 `edit after=<kind>`, or `final` — which readers never see and which
-`packages/tao-cli/cli-tests/tutorials.test.ts` uses to replay this tutorial step by step. That suite
+`packages/cli/tao-cli/cli-tests/tutorials.test.ts` uses to replay this tutorial step by step. That suite
 formats and validates the file after every step, reproduces the finished file from the steps, and
 runs its behavior test. Keep the directives correct when editing a snippet; the suite says so when
 they are not.

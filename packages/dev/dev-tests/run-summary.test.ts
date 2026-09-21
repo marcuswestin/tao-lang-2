@@ -291,10 +291,10 @@ Describe('versioned run summary', () => {
 
   Test('recognizes generated-tree cleanup failures imposed by the host', () => {
     Expect(classifyFailure(
-      "EFAULT: bad address in system call argument, rm '/repo/packages/ide-extension/_gen_ide-extension/@tao'",
+      "EFAULT: bad address in system call argument, rm '/repo/packages/ides/ide-extension/_gen_ide-extension/@tao'",
     )).toBe('sandbox-restriction')
     Expect(classifyFailure(
-      "EPERM: operation not permitted, rmdir '/repo/packages/runtime-toolchain/.artifacts/tests/run/_gen_tao-app'",
+      "EPERM: operation not permitted, rmdir '/repo/packages/apps/expo-host/.artifacts/tests/run/_gen_tao-app'",
     )).toBe('sandbox-restriction')
   })
 

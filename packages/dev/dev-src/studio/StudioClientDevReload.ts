@@ -29,15 +29,19 @@ export const StudioClientDevReload = {
 
 /**
  * Whether a path is loaded by the Studio server process rather than only bundled into the browser client.
- * Everything outside `studio-src/client` is treated as server-owned: a shared module reaches both, and
- * saying "restart to be sure" is the safe direction to be wrong in.
+ * Everything outside `studio-src/client` and `studio-src/code-editor` is treated as server-owned: a
+ * shared module reaches both, and saying "restart to be sure" is the safe direction to be wrong in. The
+ * editor package is browser-bundled foreign-view code, not server code, even though it sits beside
+ * `client/` rather than inside it.
  */
 function isStudioServerSource(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
   if (!normalized.includes('/studio-src/')) {
     return false
   }
-  return !normalized.includes('/studio-src/client/') && !normalized.endsWith('Panel.ts')
+  return !normalized.includes('/studio-src/client/')
+    && !normalized.includes('/studio-src/code-editor/')
+    && !normalized.endsWith('Panel.ts')
 }
 
 /** Rebuilds the browser-owned Studio shell and publishes only complete client bundles. */
@@ -135,8 +139,7 @@ function studioClientAssetSnapshot(snapshot: StudioClientAssetSnapshot): StudioC
 
 async function subscribeStudioClientSources(listener: StudioClientChangeListener): Promise<() => Promise<void>> {
   const roots = [
-    Repo.resolvePath('packages/code-editor/code-editor-src'),
-    Repo.resolvePath('packages/studio/studio-src'),
+    Repo.resolvePath('packages/ides/studio/studio-src'),
   ]
   const watcher = watch(roots, { ignoreInitial: true })
   let timer: ReturnType<typeof setTimeout> | undefined

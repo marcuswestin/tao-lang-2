@@ -72,11 +72,15 @@ function ensure_agent_build() {
 # `./agent setup` is the one public dependency command and continues into the Justfile setup recipe
 # for an explicit health proof plus generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"
+# `./agent setup --refresh-lockfile` updates the lockfile after a package manifest changes;
+# ordinary entry points install from the frozen lockfile.
 if [[ "${1:-}" == fix-agent-config ]]; then
   # This command runs outside a harness sandbox to rewrite protected agent configuration. Its
-  # bootstrap must never install packages in that less confined process. The separate cold dprint
-  # plugin path remains tracked in the developer-environment backlog.
+  # bootstrap must never install packages in that less confined process.
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --no-install
+elif [[ "${1:-}" == setup && "${2:-}" == --refresh-lockfile ]]; then
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --refresh-lockfile
+  set -- setup
 elif needs_build; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --health
 else

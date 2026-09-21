@@ -331,7 +331,7 @@ launches the same app, and checks in a file never depend on the order they are w
 
 Encoding and decoding a navigation snapshot — argument serialization, schema-version fallback,
 variant keying, entity handles — stays with the runtime's restoration suite in
-`packages/runtime/TR-tests/`, and so does the launch-boundary lifecycle a `relaunch` step drives.
+`packages/apps/runtime/TR-tests/`, and so does the launch-boundary lifecycle a `relaunch` step drives.
 The same split holds for persisted state: a relaunch really does read the device again, so a journey
 asserting a persisted value across one fails when the round trip through storage is broken, while
 the encoding and the storage keys themselves stay with the runtime's persisted-state suite.

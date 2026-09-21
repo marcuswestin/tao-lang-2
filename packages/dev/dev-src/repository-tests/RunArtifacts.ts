@@ -49,6 +49,17 @@ export type LiveRunWriter = {
 const SUMMARY_FILE = 'summary.json'
 const LATEST_LINK = 'latest'
 
+/**
+ * logFileName turns a node's label into a flat, filesystem-safe file name. A test node's label is
+ * its suite id, and a grouped package's suite id carries the group as a path segment
+ * (`language/validator`) — the same shape `TestRunner.nativeReport` already sanitizes a node name
+ * into for its report file, applied here so a suite's `.log` stays a sibling of every other node's
+ * rather than nesting into a `<group>/` subdirectory the rest of this module never creates.
+ */
+function logFileName(label: string): string {
+  return label.replaceAll(/[^\w.-]/g, '_')
+}
+
 /** runStamp returns the filesystem-safe timestamp a run's directory is named after. */
 function runStamp(now = new Date()): string {
   const timestamp = now.toISOString().replaceAll(/[:.]/g, '-')
@@ -72,7 +83,7 @@ function locate(options: { lane: string; logRoot?: string; repositoryRoot?: stri
 async function assignLogPaths(states: readonly WorkState[], location: RunLocation): Promise<void> {
   await FS.mkdir(location.logRoot)
   for (const state of states) {
-    state.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(state.node)}.log`, location.logRoot)
+    state.logPath = FS.resolvePath(`${logFileName(WorkGraph.nodeLabel(state.node))}.log`, location.logRoot)
   }
 }
 
@@ -110,7 +121,7 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
     const initialAttempt = state.attempts?.[0]
     if (initialAttempt !== undefined) {
       const initialPath = FS.resolvePath(
-        `${WorkGraph.nodeLabel(state.node)}.initial.log`,
+        `${logFileName(WorkGraph.nodeLabel(state.node))}.initial.log`,
         options.location.logRoot,
       )
       await FS.writeText(initialPath, initialAttempt.fullOutput)

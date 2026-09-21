@@ -1,6 +1,6 @@
+import { Workspace } from '@compiler/workspace'
 import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 
 Describe('compiler: Studio preview fixture values', () => {
   Test('publishes a yes/no fixture field as a boolean rather than its source word', async () => {

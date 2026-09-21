@@ -1,4 +1,0 @@
-// CodeEditor is Tao's foreign CodeMirror boundary. The implementation stays TypeScript forever;
-// Tao owns its content and action contract.
-public
-view CodeEditor(Content text, Change action(text)) from ./CodeEditor.tsx

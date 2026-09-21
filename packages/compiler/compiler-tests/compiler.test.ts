@@ -1,3 +1,4 @@
+import { Workspace } from '@compiler/workspace'
 import {
   app,
   Describe,
@@ -8,7 +9,6 @@ import {
   Test,
   withTaoFiles,
 } from '@shared/test'
-import { Workspace } from '@workspace'
 import { TestCompiler as Compiler, withCompiledTestPlan } from './test-compile'
 
 const tsFence = '```ts'

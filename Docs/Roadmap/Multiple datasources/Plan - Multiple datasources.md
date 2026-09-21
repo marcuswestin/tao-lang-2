@@ -147,17 +147,17 @@ Each slice is mergeable on its own and leaves every existing app compiling.
 
 ### 1. Language surface
 
-- **Prelude** (`packages/stdlib/@tao/Prelude.tao`): `primitive datasource with { implement, Data
+- **Prelude** (`packages/apps/stdlib/@tao/Prelude.tao`): `primitive datasource with { implement, Data
   list of data is [] }`; `primitive app with { …, Datasource list of datasource is [] }`. A slot of
   type `list of T` accepts a single `T` as a one-element list, which is the rule that keeps
   `Datasource Local { … }` valid; `Data` and `Datasource` take the reference-block form as `Toolbar`
   does. `data` needs to be a referenceable type in `Type.ts` so a reference block can name entity
   declarations; today they are only query sources.
-- **Grammar** (`packages/parser/parser-grammar/`): a `configure` entry in `app.langium`'s property
+- **Grammar** (`packages/language/parser/parser-grammar/`): a `configure` entry in `app.langium`'s property
   list and in variant patches, whose block holds `Name with { … }` entries; `reference` joins the
   field trait list in `data.langium` beside `relation`; the reference block already parses
   (`ConfigurationEntry.reference`) and needs its target set widened to data declarations.
-- **Validator** (`packages/validator/validator-src/validators/`): the membership rules in
+- **Validator** (`packages/language/validator/validator-src/validators/`): the membership rules in
   decision 6 in `data-validator.ts` and a new `datasource-membership` pass that computes
   entity→datasource per app; `configure` target and content checks in `app-validator.ts` and
   `configured-values-validator.ts`; `reference` trait checks (target declares `unique`, no `owned`,
@@ -200,7 +200,7 @@ Each slice is mergeable on its own and leaves every existing app compiling.
 
 ### 4. Ship preflight
 
-- `packages/tao-cli/cli-src/ship-project.ts`: replace the `Datasource Dev`, `AppId`, and iCloud
+- `packages/cli/tao-cli/cli-src/ship-project.ts`: replace the `Datasource Dev`, `AppId`, and iCloud
   container regexes with the compiled app's binding list, so a `Dev` member anywhere in the set
   refuses ship, and every InstantDB and iCloud member contributes its manifest facts. This is the
   slice most likely to surface a hidden single-datasource assumption; treat any regex left behind
@@ -575,9 +575,9 @@ snapshots.
 - Configuration readers shared by InstantDB and ICloud live in
   `@tao/data/providers/provider-configuration.ts`, copied with each sidecar's relative import graph.
 
-**The native module.** `packages/icloud-native` (`tao-icloud-native`) is the repository's first
+**The native module.** `packages/providers/icloud` (`tao-icloud`) is the repository's first
 native code: an Expo module in Swift, autolinked into the runtime host through the existing
-`autolinkingModuleResolution` setting because the package is a dependency of `tao-runtime-toolchain`.
+`autolinkingModuleResolution` setting because the package is a dependency of `tao-expo-host`.
 
 - `ios/TaoICloudModule.swift` exposes `readDocument`, `writeDocument`, `startWatching`, and
   `stopWatching`, plus a `documentChanged` event. Reads and writes go through `NSFileCoordinator`
@@ -585,7 +585,7 @@ native code: an Expo module in Swift, autolinked into the runtime host through t
   `NSMetadataQuery` objects over the ubiquitous data and documents scopes, started on the main
   thread, reading off it. JavaScript chooses the watch identifier so no event can precede its
   owner learning it.
-- `icloud-native-src/icloud-native.ts` publishes `ICloudDocuments`, the boundary the provider
+- `icloud-src/icloud-native.ts` publishes `ICloudDocuments`, the boundary the provider
   drives, and `loadICloudDocuments`, which binds the Swift module lazily and fails with a
   host-environment error where the module is absent — Android, the web, or an Expo Go session.
 - `plugins/with-tao-icloud.cjs` (`app.plugin.js`) grants the iCloud Documents entitlements. The
@@ -617,10 +617,10 @@ Trigger iCloud Sync_ to push changes between simulators.
 - Delivery latency is iCloud's. A metadata query reports a remote write when the daemon has
   downloaded it, which in practice is seconds on a live device and manual on the simulator.
 
-**Validation.** Focused coverage: `packages/icloud-native/icloud-native-tests` proves the document
+**Validation.** Focused coverage: `packages/providers/icloud/icloud-tests` proves the document
 boundary over a fake native module (absent documents, container pass-through, watch routing by
 identifier, stop-once, start failures) and the config plugin's container derivation and entitlement
-merging. `packages/stdlib/stdlib-tests/data-providers.test.ts` runs `ICloud` through `TR.testProvider`
+merging. `packages/apps/stdlib/stdlib-tests/data-providers.test.ts` runs `ICloud` through `TR.testProvider`
 with a fake document store and a rejecting variant, and proves document naming per storage key and
 container, the absence of `reset`, echo and transient filtering, unsubscribe guarding, and
 configuration validation before the native module loads. Compiler coverage compiles the `ICloud`
@@ -658,7 +658,7 @@ as the first provider, ahead of InstantDB. It does so without touching the store
 grammar: the ledger is derived at the provider boundary by diffing the snapshots the store already
 saves, and the fold is projected back into the snapshot the store already loads.
 
-- **`packages/runtime/TaoRuntime-src/TR-data-sync.ts`** is the family. `TaoChangeSet` and
+- **`packages/apps/runtime/TaoRuntime-src/TR-data-sync.ts`** is the family. `TaoChangeSet` and
   `TaoSyncOp` are the wire shapes (row upserts carrying stamped field values, and stamped deletes);
   `TaoSyncProvider` / `TaoSyncConnection` / `TaoSyncObserver` are the provider contract (push,
   subscribe to remote change-sets and to acceptance of one's own, optional fetch, an `online`
@@ -700,7 +700,7 @@ saves, and the fold is projected back into the snapshot the store already loads.
   purge) and the local image is re-created whole; a zone reset clears the images; an iCloud account
   change stops pushes until the app relaunches, so one account's queue is never written into
   another's database.
-- **`TaoCloudKitModule.swift`** (in `tao-icloud-native`, beside the iCloud Documents module) is
+- **`TaoCloudKitModule.swift`** (in `tao-icloud`, beside the iCloud Documents module) is
   one `CKSyncEngine` per session over one record zone of the private database. Fetched changes are
   written to an inbox file before the delegate returns and stay there until JavaScript acknowledges
   them after checkpointing, so the engine's change token never advances past records the fold has
@@ -759,25 +759,25 @@ saves, and the fold is projected back into the snapshot the store already loads.
   the runtime grows a native ledger (the exploration's first slice as written), the diff goes away
   and the family contract, the fold, and the providers stay.
 - **Not run on a device.** The Swift compiles (see DEVENV-055 for the build steps); the provider
-  is proven only against the fake CloudKit zone in `packages/stdlib/stdlib-tests`, which stores
+  is proven only against the fake CloudKit zone in `packages/apps/stdlib/stdlib-tests`, which stores
   numbers as the server does, versions records, answers conflicts with the server's copy, plays an
   offline session's queue against the server on reconnect, and counts acknowledgements — but has
   no real engine, no push, and no account.
 
 **Validation.**
 
-- `packages/runtime/TR-tests/TR-data-sync.test.ts`: the conformance suite over the memory
+- `packages/apps/runtime/TR-tests/TR-data-sync.test.ts`: the conformance suite over the memory
   authority (which now also proves both pending queues drain); concurrent edits to different fields
   both survive and a same-field race resolves by stamp under a real partition; offline change-sets
   survive a relaunch and push once online; a child delivered before its parent is hidden and then
   shown; a deleted row stays deleted under a later edit; a remote row a save predates is neither
   deleted nor lost; transport-minted stamps order below later local edits; an echo of the replica's
   own change-set republishes nothing.
-- `packages/stdlib/stdlib-tests/data-providers.test.ts`: the CloudKit sync provider passes the
+- `packages/apps/stdlib/stdlib-tests/data-providers.test.ts`: the CloudKit sync provider passes the
   conformance suite over the fake zone; records carry stamped fields, encoded booleans, relation
   identities, and a tombstone on delete; a server conflict merges fieldwise, both devices converge,
   and every fetched batch is acknowledged; configuration is validated before the native side loads.
-- `packages/icloud-native/icloud-native-tests`: the zone boundary starts one session per zone,
+- `packages/providers/icloud/icloud-tests`: the zone boundary starts one session per zone,
   routes fetched, sent, zone-reset, account-change, and failure events by session, acknowledges a
   batch, classifies native rejections, and the plugin grants CloudKit without the Documents-only
   ubiquity container.

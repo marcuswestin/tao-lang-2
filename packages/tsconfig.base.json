@@ -21,16 +21,16 @@
     "rootDir": ".",
     "paths": {
       "@host-control": [
-        "./host-control/host-control-src/host-control.ts"
+        "./testing/host-control/host-control-src/host-control.ts"
       ],
-      "@host-control/playwright": [
-        "./host-control-playwright/host-control-playwright-src/host-control-playwright.ts"
+      "@playwright-driver": [
+        "./testing/playwright-driver/playwright-driver-src/host-control-playwright.ts"
       ],
-      "@host-control/appium": [
-        "./host-control-appium/appium-src/appium.ts"
+      "@appium-driver": [
+        "./testing/appium-driver/appium-driver-src/appium.ts"
       ],
       "@e2e-testing": [
-        "./e2e-testing/HostTestingCommand.ts"
+        "./testing/e2e-testing/HostTestingCommand.ts"
       ],
       "@shared": [
         "./shared/shared-src/shared.ts"
@@ -45,85 +45,79 @@
         "./shared/shared-src/*"
       ],
       "@parser": [
-        "./parser/parser-src/parser.ts"
+        "./language/parser/parser-src/parser.ts"
       ],
       "@parser/*": [
-        "./parser/parser-src/*"
+        "./language/parser/parser-src/*"
       ],
       "@ast-utils": [
-        "./ast-utils/ast-utils-src/ast-utils.ts"
+        "./language/ast-utils/ast-utils-src/ast-utils.ts"
       ],
       "@validator": [
-        "./validator/validator-src/validator.ts"
+        "./language/validator/validator-src/validator.ts"
       ],
       "@validator/*": [
-        "./validator/validator-src/*"
+        "./language/validator/validator-src/*"
       ],
       "@compiler": [
         "./compiler/compiler-src/compiler.ts"
+      ],
+      "@compiler/workspace": [
+        "./compiler/compiler-src/workspace/index.ts"
       ],
       "@compiler/*": [
         "./compiler/compiler-src/*"
       ],
       "@formatter": [
-        "./formatter/formatter-src/formatter.ts"
+        "./language/formatter/formatter-src/formatter.ts"
       ],
       "@formatter/*": [
-        "./formatter/formatter-src/*"
+        "./language/formatter/formatter-src/*"
       ],
       "@source-actions": [
-        "./source-actions/source-actions-src/source-actions.ts"
+        "./language/source-actions/source-actions-src/source-actions.ts"
       ],
       "@source-actions/*": [
-        "./source-actions/source-actions-src/*"
-      ],
-      "@workspace": [
-        "./workspace/workspace-src/index.ts"
-      ],
-      "@workspace/*": [
-        "./workspace/workspace-src/*"
+        "./language/source-actions/source-actions-src/*"
       ],
       "@runtime": [
-        "./runtime/TaoRuntime-src/TR.ts"
+        "./apps/runtime/TaoRuntime-src/TR.ts"
       ],
       "@runtime/TR": [
-        "./runtime/TaoRuntime-src/TR.ts"
+        "./apps/runtime/TaoRuntime-src/TR.ts"
       ],
       "@tao/runtime": [
-        "./runtime/TaoRuntime-src/TR.ts"
+        "./apps/runtime/TaoRuntime-src/TR.ts"
       ],
       "@tao/runtime/core": [
-        "./runtime/TaoRuntime-src/core/RuntimeCore.ts"
+        "./apps/runtime/TaoRuntime-src/core/RuntimeCore.ts"
       ],
       "@runtime/*": [
-        "./runtime/TaoRuntime-src/*"
+        "./apps/runtime/TaoRuntime-src/*"
       ],
-      "@runtime-toolchain": [
-        "./runtime-toolchain/runtime-toolchain-src/runtime.ts"
+      "@expo-host": [
+        "./apps/expo-host/expo-host-src/runtime.ts"
       ],
-      "@runtime-toolchain/*": [
-        "./runtime-toolchain/runtime-toolchain-src/*"
+      "@expo-host/*": [
+        "./apps/expo-host/expo-host-src/*"
       ],
       "@studio": [
-        "./studio/studio-src/studio.ts"
+        "./ides/studio/studio-src/studio.ts"
       ],
       "@studio/*": [
-        "./studio/studio-src/*"
+        "./ides/studio/studio-src/*"
       ],
       "@generation": [
-        "./generation/generation-src/generation.ts"
+        "./ai/generation/generation-src/generation.ts"
       ],
       "@generation/*": [
-        "./generation/generation-src/*"
+        "./ai/generation/generation-src/*"
       ],
       "@update-server/types": [
-        "./update-server/update-server-src/update-types.ts"
-      ],
-      "@tao/code-editor": [
-        "./code-editor/code-editor-src/CodeEditor.tsx"
+        "./services/update-server/update-server-src/update-types.ts"
       ],
       "@stdlib": [
-        "./stdlib/stdlib-src/stdlib.ts"
+        "./apps/stdlib/stdlib-src/stdlib.ts"
       ],
       "@expo-dev-loop": [
         "./dev/dev-src/expo-dev-loop/expo-dev-loop.ts"

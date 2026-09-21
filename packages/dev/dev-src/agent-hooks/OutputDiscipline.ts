@@ -74,7 +74,7 @@ const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts
 
 const BUN_INSTALL_REFUSAL =
   '`bun install` skips repository adapter generation. Run `./agent setup` for routine installs. '
-  + 'Ask Ro before adding or updating packages, then use the approved update command and run `./agent setup`.'
+  + 'Ask Ro before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
 
 const GIT_ADD_WIDE_REFUSAL =
   'Stage exact reviewed paths — `git add -- <path>…` — never `.`, `-A`, or `-u` (AGENTS.md). Ro and '

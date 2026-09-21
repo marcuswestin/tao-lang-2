@@ -42,8 +42,8 @@ const PINNED_NATIVE_VERSIONS = {
 
 /** Artifacts Studio itself needs beyond the ones every Tao command needs. */
 const STUDIO_SOURCES = [
-  'packages/studio/studio-src/TaoStudioClient.tao',
-  'packages/studio/studio-src/TaoStudioBrowser.tsx',
+  'packages/ides/studio/studio-src/TaoStudioClient.tao',
+  'packages/ides/studio/studio-src/TaoStudioBrowser.tsx',
 ]
 
 export type StudioDoctorReport = {
@@ -264,7 +264,7 @@ function releaseCheck(facts: StudioDoctorFacts): DoctorCheck {
       // Nothing here is configured for release, which is the ordinary state of a dev machine.
       detail: 'no signing identity or notarization credentials are configured',
       name: 'studio release',
-      remediation: 'Optional. Only ./dev package-studio-native needs them; see packages/studio/README.md.',
+      remediation: 'Optional. Only ./dev package-studio-native needs them; see packages/ides/studio/README.md.',
       status: 'warn',
     }
   }

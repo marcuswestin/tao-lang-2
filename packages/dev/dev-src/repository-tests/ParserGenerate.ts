@@ -135,7 +135,7 @@ type ParserGenerateFileHooks = Pick<
 /** runParserGenerate regenerates the parser and fails on any diagnostic that is not documented. */
 export async function runParserGenerate(options: ParserGenerateOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
-  const parserRoot = FS.resolvePath('packages/parser', repositoryRoot)
+  const parserRoot = FS.resolvePath('packages/language/parser', repositoryRoot)
   const stampPath = FS.resolvePath(STAMP_PATH, repositoryRoot)
   const inputs = await parserGenerateInputHash(parserRoot)
   if (await parserGenerateIsUpToDate(parserRoot, repositoryRoot, stampPath, inputs)) {
@@ -166,7 +166,7 @@ async function runParserGenerateLocked(
   // removal and rename for provenance-bearing worktree directories. Generate into a disposable
   // host-temporary package instead, then publish files into the existing directory shape.
   const stagingRepositoryRoot = await createParserGenerateStagingRepository(parserRoot)
-  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  const stagingParserRoot = FS.resolvePath('packages/language/parser', stagingRepositoryRoot)
   const generate = options.generate
     ?? (async () => await runLangiumGenerate(stagingParserRoot, repositoryRoot, parserRoot))
   let outcome: number | undefined
@@ -197,7 +197,14 @@ async function runParserGenerateLocked(
         return 1
       }
 
-      await synchronizeGeneratedOutputs(stagingParserRoot, parserRoot, inputs, options)
+      await synchronizeGeneratedOutputs(
+        stagingParserRoot,
+        stagingRepositoryRoot,
+        parserRoot,
+        repositoryRoot,
+        inputs,
+        options,
+      )
       if (await parserGenerateInputHash(parserRoot) !== inputs) {
         Errors.throwUnexpected('Parser generation inputs changed before stamp publication; refusing stale metadata.')
       }
@@ -264,7 +271,7 @@ async function validateDeclaredOutputBoundaries(
  */
 async function createParserGenerateStagingRepository(parserRoot: string): Promise<string> {
   const stagingRepositoryRoot = await FS.mkTmpDir('tao-parser-generate-')
-  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  const stagingParserRoot = FS.resolvePath('packages/language/parser', stagingRepositoryRoot)
   try {
     await FS.copyFile(
       FS.resolvePath(LANGIUM_CONFIG, parserRoot),
@@ -309,13 +316,14 @@ type GeneratedPublicationPlan = {
 /** synchronizeGeneratedOutputs publishes every declared output as one rollback-capable file transaction. */
 async function synchronizeGeneratedOutputs(
   stagingParserRoot: string,
+  stagingRepositoryRoot: string,
   parserRoot: string,
+  repositoryRoot: string,
   expectedInputs: string,
   options: ParserGenerateOptions,
 ): Promise<void> {
-  const plan = await generatedPublicationPlan(stagingParserRoot, parserRoot)
+  const plan = await generatedPublicationPlan(stagingParserRoot, stagingRepositoryRoot, parserRoot, repositoryRoot)
   const transactionRoot = await FS.mkTmpDir('tao-parser-publish-')
-  const repositoryRoot = FS.resolvePath('../..', parserRoot)
   const publicationScratchRoot = FS.resolvePath('.artifacts', repositoryRoot)
   const stagedFiles = new Map<string, string>()
   const backups = new Map<string, string>()
@@ -474,10 +482,10 @@ async function validatePublicationPrecommit(
 /** generatedPublicationPlan rejects shape and symlink hazards before collecting any publication work. */
 async function generatedPublicationPlan(
   stagingParserRoot: string,
+  stagingRepositoryRoot: string,
   parserRoot: string,
+  repositoryRoot: string,
 ): Promise<GeneratedPublicationPlan> {
-  const stagingRepositoryRoot = FS.resolvePath('../..', stagingParserRoot)
-  const repositoryRoot = FS.resolvePath('../..', parserRoot)
   const stagedOutputs = await declaredOutputPaths(stagingParserRoot)
   const outputs = await declaredOutputPaths(parserRoot)
   if (stagedOutputs.length !== outputs.length) {

@@ -56,9 +56,9 @@ Describe('green tree records', () => {
 
   Test('IDE evidence invalidates on installed input or either generated output tree changing', async () => {
     const root = await mkTestDir('tao-green-tree-ide-generated-')
-    const wasm = FS.resolvePath('packages/formatter/node_modules/@dprint/typescript/plugin.wasm', root)
-    const bundleRoot = FS.resolvePath('packages/ide-extension/_gen_ide-extension', root)
-    const syntaxRoot = FS.resolvePath('packages/ide-extension/ide-extension-syntaxes/_gen_syntaxes', root)
+    const wasm = FS.resolvePath('packages/language/formatter/node_modules/@dprint/typescript/plugin.wasm', root)
+    const bundleRoot = FS.resolvePath('packages/ides/ide-extension/_gen_ide-extension', root)
+    const syntaxRoot = FS.resolvePath('packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes', root)
     const bundle = FS.resolvePath('extension/main.cjs', bundleRoot)
     const added = FS.resolvePath('language/added.cjs', bundleRoot)
     const syntax = FS.resolvePath('tao-lang.tmLanguage.json', syntaxRoot)
@@ -116,7 +116,7 @@ Describe('green tree records', () => {
 
   Test('generated output evidence invalidates a lane on edit, addition, deletion, or absence', async () => {
     const root = await mkTestDir('tao-green-tree-generated-')
-    const outputRoot = FS.resolvePath('packages/runtime-toolchain/_gen_tao-app', root)
+    const outputRoot = FS.resolvePath('packages/apps/expo-host/_gen_tao-app', root)
     const app = FS.resolvePath('App.tsx', outputRoot)
     const added = FS.resolvePath('Added.tsx', outputRoot)
     try {

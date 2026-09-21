@@ -11,7 +11,7 @@ import {
 import { TAO_TEST_NO_CACHE_ENV_KEY } from '../dev-src/repository-tests/GateRunner'
 
 const APP_PATH = 'Apps/Example/Example.tao'
-const OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
+const OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
 const SOURCE_ROOTS = ['packages/compiler/compiler-src', 'packages/stdlib'] as const
 const INPUT_FILES = ['bun.lock', 'packages/compiler/package.json'] as const
 const STAMP = '.artifacts/compile-app-stamp.json'

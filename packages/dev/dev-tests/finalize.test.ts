@@ -819,7 +819,10 @@ Describe('finalize', () => {
     async () => {
       const fake = fakeDependencies({
         headSha: 'mainsha00000000000000000000000000000000000',
-        diffPaths: ['packages/studio/studio-src/client/Editor.ts', 'packages/dev/dev-src/repository-tests/Finalize.ts'],
+        diffPaths: [
+          'packages/ides/studio/studio-src/client/Editor.ts',
+          'packages/dev/dev-src/repository-tests/Finalize.ts',
+        ],
       })
       const messagePath = '/repo/.artifacts/merge/feat/example.msg'
       fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
@@ -853,7 +856,7 @@ Describe('finalize', () => {
       Expect(outcome.lines.some(line => line.includes('4. Remaining: none'))).toBe(true)
       Expect(outcome.lines.some(line => line.includes('5. Advisory'))).toBe(true)
       Expect(outcome.lines.some(line => line.includes('Developer environment upgrades.md'))).toBe(true)
-      Expect(outcome.lines.some(line => line.includes('packages/studio/studio-src/client/Editor.ts'))).toBe(true)
+      Expect(outcome.lines.some(line => line.includes('packages/ides/studio/studio-src/client/Editor.ts'))).toBe(true)
     },
   )
 

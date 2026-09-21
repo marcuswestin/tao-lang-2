@@ -35,7 +35,7 @@ checkable by the compiler rather than promised by the team.
 
 More is in place than the roadmap's "regressed" row suggests. As implemented today:
 
-- **Time is virtualized, centrally.** `TR.Clock` (`packages/runtime/TaoRuntime-src/TR-units.ts`)
+- **Time is virtualized, centrally.** `TR.Clock` (`packages/apps/runtime/TaoRuntime-src/TR-units.ts`)
   is a singleton virtual clock: `beginTest` pins now to a fixed epoch (`2026-01-01 09:00 UTC`),
   `advance` fires due callbacks in time order, `endTest` cancels everything. It already owns
   `now`, `@tao/time` tickers, `(default now)` stamps, toast expiry, fill-cache windows, and

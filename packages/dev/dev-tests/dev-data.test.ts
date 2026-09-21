@@ -6,7 +6,7 @@ import {
   type DevDataHost,
   DevProvider,
   resolveDevDataBootstrap,
-} from '../../stdlib/@tao/data/providers/dev/Dev'
+} from '../../apps/stdlib/@tao/data/providers/dev/Dev'
 import {
   DEV_DATA_ROOT_PATH,
   devDataAppKey,

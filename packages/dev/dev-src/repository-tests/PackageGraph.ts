@@ -35,16 +35,28 @@ async function load(repositoryRoot = Repo.getRoot()): Promise<PackageGraph> {
   const owners = await specifierOwners(repositoryRoot, packages)
   const imports = new Map<string, ReadonlySet<string>>()
   await Promise.all(packages.map(async name => {
-    imports.set(name, await importedPackages(FS.resolvePath(name, packagesRoot), packagesRoot, name, owners))
+    imports.set(name, await importedPackages(FS.resolvePath(name, packagesRoot), packagesRoot, name, owners, packages))
   }))
   return { imports, packages }
 }
 
+/** A top-level `packages/*` entry is either a package (has its own `package.json`) or a group of
+ * packages one level deeper; a moved package's name is then `<group>/<package>`. */
 async function packageDirectories(packagesRoot: string): Promise<string[]> {
   const names: string[] = []
   for (const name of await FS.listDir(packagesRoot)) {
+    const groupRoot = FS.resolvePath(name, packagesRoot)
     if (await FS.isFile(FS.resolvePath(`${name}/package.json`, packagesRoot))) {
       names.push(name)
+      continue
+    }
+    if (!(await FS.isDirectory(groupRoot))) {
+      continue
+    }
+    for (const nested of await FS.listDir(groupRoot)) {
+      if (await FS.isFile(FS.resolvePath(`${nested}/package.json`, groupRoot))) {
+        names.push(`${name}/${nested}`)
+      }
     }
   }
   return names.sort()
@@ -55,8 +67,8 @@ async function specifierOwners(repositoryRoot: string, packages: readonly string
   const tsconfig = await FS.readJson<TsconfigPaths>(FS.resolvePath(TSCONFIG_BASE, repositoryRoot))
   const owners = new Map<string, string>()
   for (const [alias, targets] of Object.entries(tsconfig.compilerOptions?.paths ?? {})) {
-    const owner = targets[0]?.replace(/^\.\//, '').split('/')[0]
-    if (owner !== undefined && packages.includes(owner)) {
+    const owner = ownerFromRelativePath(targets[0]?.replace(/^\.\//, '') ?? '', packages)
+    if (owner !== undefined) {
       owners.set(alias.replace(/\/\*$/, ''), owner)
     }
   }
@@ -76,6 +88,7 @@ async function importedPackages(
   packagesRoot: string,
   self: string,
   owners: ReadonlyMap<string, string>,
+  packages: readonly string[],
 ): Promise<Set<string>> {
   const imported = new Set<string>()
   const files = await Repo.filesUnder(packageRoot, { extensions: ['.ts', '.tsx'] })
@@ -84,7 +97,7 @@ async function importedPackages(
     for (const match of source.matchAll(IMPORT_PATTERN)) {
       const specifier = match[1] ?? ''
       const owner = specifier.startsWith('.')
-        ? relativeOwner(specifier, file, packagesRoot)
+        ? relativeOwner(specifier, file, packagesRoot, packages)
         : ownerOf(specifier, owners)
       if (owner !== undefined && owner !== self) {
         imported.add(owner)
@@ -94,13 +107,29 @@ async function importedPackages(
   return imported
 }
 
-function relativeOwner(specifier: string, sourceFile: string, packagesRoot: string): string | undefined {
+function relativeOwner(
+  specifier: string,
+  sourceFile: string,
+  packagesRoot: string,
+  packages: readonly string[],
+): string | undefined {
   const target = FS.resolvePath(specifier, FS.dirname(sourceFile))
   if (!FS.pathIsWithin(target, packagesRoot)) {
     return undefined
   }
-  const owner = FS.relativePath(packagesRoot, target).split('/')[0]
-  return owner === undefined || owner.length === 0 ? undefined : owner
+  return ownerFromRelativePath(FS.relativePath(packagesRoot, target), packages)
+}
+
+/** A package name is one or two path segments (a group's package nests one level deeper); resolve
+ * the longest prefix of `relative` that names a known package. */
+function ownerFromRelativePath(relative: string, packages: readonly string[]): string | undefined {
+  const segments = relative.split('/')
+  const oneLevel = segments[0]
+  if (oneLevel !== undefined && packages.includes(oneLevel)) {
+    return oneLevel
+  }
+  const twoLevel = segments.slice(0, 2).join('/')
+  return packages.includes(twoLevel) ? twoLevel : undefined
 }
 
 /** ownerOf resolves a specifier to its alias owner, trying the longest alias first. */
@@ -142,4 +171,4 @@ function affected(graph: PackageGraph, changed: Iterable<string>): AffectedPacka
 }
 
 /** PackageGraph owns the workspace import graph the changed-files lane selects suites from. */
-export const PackageGraph = { affected, load } as const
+export const PackageGraph = { affected, load, ownerFromRelativePath, packageDirectories } as const

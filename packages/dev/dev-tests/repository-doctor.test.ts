@@ -27,7 +27,7 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       toolchain: [{ name: 'bun', present: true, version: '1.3.13' }],
       version: 1,
     },
-    generatedParserArtifacts: [{ path: 'packages/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
+    generatedParserArtifacts: [{ path: 'packages/language/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
     githubTransport: {
       configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],

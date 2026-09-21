@@ -2,7 +2,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo, TaoStdlib } from '@shared'
 
 /**
  * `just test`, `just test-file`, `just test-changed`, `just test-retry`, and both verify lanes all
- * depend on the WordFlower app being compiled into `packages/runtime-toolchain/_gen_tao-app`. That
+ * depend on the WordFlower app being compiled into `packages/apps/expo-host/_gen_tao-app`. That
  * compile costs ~2.7s of single-threaded work and used to be paid unconditionally, so running one
  * dev test that never reads the generated app still waited three seconds for it, and every verify
  * lane carried it on the serial floor.
@@ -33,7 +33,7 @@ const STAMP_PATH = '.artifacts/compile-app-stamp.json'
 const STAMP_VERSION = 2
 
 /** Where `./tao compile` writes the generated app, relative to the repository root. */
-const DEFAULT_OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
+const DEFAULT_OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
 
 /**
  * Every repository-owned directory whose content can change what a compile produces. Getting this
@@ -44,23 +44,22 @@ const DEFAULT_OUTPUT_ROOT = 'packages/runtime-toolchain/_gen_tao-app'
  *
  * - `parser-src` carries the generated `_gen_tao-parser` tree as well as the hand-written parser, so
  *   naming it once keeps both the parser and its generator's output in the decision.
- * - `packages/stdlib` is named at its package root rather than at `stdlib-src`, because the Tao
+ * - `packages/apps/stdlib` is named at its package root rather than at `stdlib-src`, because the Tao
  *   stdlib is `@tao/**` — `.tao` sources and the TypeScript sidecars the compiler copies beside
  *   them — and a new top-level asset directory there must be picked up without editing this list.
  * - The app's own project tree is not here; it is hashed from the app path the caller passes.
  */
 export const COMPILE_SOURCE_ROOTS: readonly string[] = [
-  'packages/ast-utils/ast-utils-src',
+  'packages/language/ast-utils/ast-utils-src',
   'packages/compiler/compiler-src',
-  'packages/generation/generation-src',
-  'packages/icloud-native/icloud-native-src',
-  'packages/parser/parser-src',
-  'packages/runtime-toolchain/runtime-toolchain-src',
+  'packages/ai/generation/generation-src',
+  'packages/providers/icloud/icloud-src',
+  'packages/language/parser/parser-src',
+  'packages/apps/expo-host/expo-host-src',
   'packages/shared/shared-src',
-  'packages/stdlib',
-  'packages/tao-cli/cli-src',
-  'packages/validator/validator-src',
-  'packages/workspace/workspace-src',
+  'packages/apps/stdlib',
+  'packages/cli/tao-cli/cli-src',
+  'packages/language/validator/validator-src',
 ]
 
 /**
@@ -70,17 +69,16 @@ export const COMPILE_SOURCE_ROOTS: readonly string[] = [
  */
 export const COMPILE_INPUT_FILES: readonly string[] = [
   'bun.lock',
-  'packages/ast-utils/package.json',
+  'packages/language/ast-utils/package.json',
   'packages/compiler/package.json',
-  'packages/generation/package.json',
-  'packages/icloud-native/package.json',
-  'packages/parser/package.json',
-  'packages/runtime-toolchain/package.json',
+  'packages/ai/generation/package.json',
+  'packages/providers/icloud/package.json',
+  'packages/language/parser/package.json',
+  'packages/apps/expo-host/package.json',
   'packages/shared/package.json',
-  'packages/stdlib/package.json',
-  'packages/tao-cli/package.json',
-  'packages/validator/package.json',
-  'packages/workspace/package.json',
+  'packages/apps/stdlib/package.json',
+  'packages/cli/tao-cli/package.json',
+  'packages/language/validator/package.json',
 ]
 
 /** Directories no input walk descends: installed dependencies and Git's own store. */
@@ -88,7 +86,7 @@ const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git'])
 
 /**
  * TypeScript's incremental build state is rewritten by every typecheck without any source changing.
- * It sits inside `packages/stdlib`, so hashing it would make the compile rebuild after each
+ * It sits inside `packages/apps/stdlib`, so hashing it would make the compile rebuild after each
  * `_typecheck` — a stale input in the other direction.
  */
 const EXCLUDED_INPUT_SUFFIX = '.tsbuildinfo'

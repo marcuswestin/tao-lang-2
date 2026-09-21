@@ -344,7 +344,7 @@ Describe('native test result reports', () => {
       JSON.stringify({
         testResults: [{
           assertionResults: [{ ancestorTitles: ['outer'], duration: 45, status: 'passed', title: 'works' }],
-          name: '/repo/packages/runtime-toolchain/runtime-toolchain-tests/a.jest-test.tsx',
+          name: '/repo/packages/apps/expo-host/expo-host-tests/a.jest-test.tsx',
         }],
       }),
       'runtime-jest',
@@ -353,7 +353,7 @@ Describe('native test result reports', () => {
 
     Expect(observations[0]).toEqual({
       durationMs: 45,
-      file: 'packages/runtime-toolchain/runtime-toolchain-tests/a.jest-test.tsx',
+      file: 'packages/apps/expo-host/expo-host-tests/a.jest-test.tsx',
       name: 'outer > works',
       outcome: 'passed',
       suite: 'runtime-jest',
@@ -372,7 +372,7 @@ Describe('full-run advisory', () => {
 
   Test('returns only the first matching reason', () => {
     const reason = TestAdvisory.fullRunReason(
-      { ...base, changedPaths: ['packages/dev/x.ts', 'packages/runtime/y.ts'], hasMergeCommit: true },
+      { ...base, changedPaths: ['packages/dev/x.ts', 'packages/apps/runtime/y.ts'], hasMergeCommit: true },
       { lastFullRunStartedAt: '2026-09-02T00:00:00Z', tests: {}, version: 1 },
     )
     Expect(reason).toBe('packages/dev changed since the comparison point')

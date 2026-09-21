@@ -797,7 +797,7 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).not.toContain('manual-check')
     Expect(await justRecipeNames()).not.toContain('_verify-full-smoke-launch')
     Expect(await justCommands('ship-bundle-proof')).toContain(
-      'bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts',
+      'bun run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts',
     )
     Expect(await justCommands('studio-canary')).toContain('./dev studio-canary')
     Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')

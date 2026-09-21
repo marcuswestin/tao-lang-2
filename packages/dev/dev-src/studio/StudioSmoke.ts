@@ -208,7 +208,7 @@ async function portsAreFree(ports: readonly number[]): Promise<boolean> {
  * worktree, or one checked out at an older commit, hits this before any Studio code runs.
  */
 async function requireGeneratedParser(): Promise<void> {
-  const generated = Repo.resolvePath('packages/parser/parser-src/_gen_tao-parser')
+  const generated = Repo.resolvePath('packages/language/parser/parser-src/_gen_tao-parser')
   if (!await FS.exists(generated)) {
     Errors.throwHostEnvironment(
       'The generated Tao parser is missing, so no smoke lane can start. Run `just fix` (or '

@@ -3,7 +3,7 @@
 - **Status:** In progress
 - **Section:** External
 - **Area:** Native builds
-- **Impact:** The repository now carries native code (`packages/icloud-native`, an Expo module in
+- **Impact:** The repository now carries native code (`packages/providers/icloud`, an Expo module in
   Swift), and nothing short of a full `expo run:ios` proves it compiles. An agent has to hand-assemble
   the steps, two of which fail in the Bash sandbox.
 - **Evidence:** `expo prebuild packages/runtime-toolchain --platform ios --no-install` works in the

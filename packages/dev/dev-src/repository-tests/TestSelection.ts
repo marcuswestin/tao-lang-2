@@ -37,13 +37,19 @@ const TAO_APPS = 'tao-apps'
 const ALL_APPS = 'Apps'
 
 /** Packages whose language-service performance the `performance-checks` suite measures. */
-const LANGUAGE_PERFORMANCE_PACKAGES = new Set(['compiler', 'formatter', 'parser', 'shared', 'validator', 'workspace'])
+const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
+  'compiler',
+  'language/formatter',
+  'language/parser',
+  'shared',
+  'language/validator',
+])
 /**
  * Packages the Tao behavior tests run through: the CLI that compiles them, the toolchain they are
  * compiled into, and the runtime and standard library the compiled apps execute against. Whatever
  * those import reaches them through the package graph.
  */
-const TAO_APPS_PACKAGES = new Set(['runtime', 'runtime-toolchain', 'stdlib', 'tao-cli'])
+const TAO_APPS_PACKAGES = new Set(['apps/runtime', 'apps/expo-host', 'apps/stdlib', 'cli/tao-cli'])
 /** Repository workflow files whose behavior the `dev` package's tests are the proof of. */
 const WORKFLOW_PATHS = [
   'Justfile',
@@ -73,10 +79,39 @@ const EVERYTHING_PATHS = new Set([
   'packages/tsconfig.base.json',
 ])
 
-/** packageTestSuite mirrors the package-suite registry's exact test-file shape. */
+/**
+ * packageNameAndRest splits a `packages/...` path into its owning package name and the path
+ * beneath it. A group's package nests one level deeper (`packages/<group>/<package>/...`); the
+ * known package list disambiguates a one-segment name from a two-segment one.
+ */
+function packageNameAndRest(path: string, packages: readonly string[]): { name: string; rest: string } | undefined {
+  if (!path.startsWith('packages/')) {
+    return undefined
+  }
+  const segments = path.slice('packages/'.length).split('/')
+  const oneLevel = segments[0]
+  const twoLevel = segments.slice(0, 2).join('/')
+  const name = oneLevel !== undefined && !packages.includes(oneLevel) && packages.includes(twoLevel)
+    ? twoLevel
+    : oneLevel
+  const rest = segments.slice(name?.split('/').length ?? 1).join('/')
+  return name === undefined || rest.length === 0 ? undefined : { name, rest }
+}
+
+/**
+ * packageTestSuite mirrors the package-suite registry's exact test-file shape. A group's package
+ * nests one level deeper (`packages/<group>/<package>/...`), which the optional inner segment
+ * matches only when it is immediately followed by that package's own `-tests` directory. The test
+ * file itself may nest further inside that `-tests` directory (`studio-tests/code-editor/*.test.ts`,
+ * `compiler-tests/workspace/*.test.ts`), so the tail after it is any path ending in `.test.ts`.
+ */
 function packageTestSuite(path: string): string | undefined {
-  const match = /^packages\/([^/]+)\/[^/]+-tests\/[^/]+\.test\.ts$/.exec(path)
-  return match?.[1]
+  const match = /^packages\/([^/]+)\/(?:([^/]+)\/)?[^/]+-tests\/.+\.test\.ts$/.exec(path)
+  if (match === null) {
+    return undefined
+  }
+  const [, first, second] = match
+  return second === undefined ? first : `${first}/${second}`
 }
 
 /** changedSelection resolves the comparison once so every runner receives exactly the same ref. */
@@ -165,9 +200,9 @@ function planChangedSuites(
       everything ??= path
       continue
     }
-    const inPackage = path.match(/^packages\/([^/]+)\/(.+)$/)
-    if (inPackage !== null) {
-      const [, name, rest] = inPackage as [string, string, string]
+    const inPackage = packageNameAndRest(path, graph.packages)
+    if (inPackage !== undefined) {
+      const { name, rest } = inPackage
       if (rest.endsWith('.md')) {
         continue
       }
@@ -175,7 +210,7 @@ function planChangedSuites(
         everything ??= path
       } else if (name === 'dev' && rest.startsWith('performance-checks/')) {
         selected.set(PERFORMANCE_CHECKS, 'changed test file')
-      } else if (name === 'runtime-toolchain' && /^runtime-toolchain-tests\/[^/]+\.jest-test\.tsx?$/.test(rest)) {
+      } else if (name === 'apps/expo-host' && /^expo-host-tests\/[^/]+\.jest-test\.tsx?$/.test(rest)) {
         selected.set(RUNTIME_JEST, 'changed test file')
       } else if (packageTestSuite(path) === name) {
         selected.set(name, 'changed test file')
@@ -219,7 +254,7 @@ function planChangedSuites(
     if (inventory.packageSuites.includes(name)) {
       selected.set(name, reason)
     }
-    if (name === 'runtime-toolchain' && inventory.hasRuntimeJest) {
+    if (name === 'apps/expo-host' && inventory.hasRuntimeJest) {
       selected.set(RUNTIME_JEST, reason)
     }
     if (
@@ -247,7 +282,7 @@ function planChangedSuites(
   let taoAppPaths: string[] | undefined
   if (appPaths.size > 0 && inventory.hasTaoApps) {
     if (appSourcesChanged) {
-      for (const suite of ['formatter', 'runtime-toolchain']) {
+      for (const suite of ['language/formatter', 'apps/expo-host']) {
         if (inventory.packageSuites.includes(suite)) {
           selected.set(suite, 'reads Tao app sources')
         }

@@ -1,6 +1,6 @@
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']
 const TEST_PATH_PATTERN =
-  /\.test\.|\.jest-test\.|-tests\/|\/test-|\/testing\/|\/studio-smoke\/|^packages\/e2e-testing\//
+  /\.test\.|\.jest-test\.|-tests\/|\/test-|\/testing\/|\/studio-smoke\/|^packages\/testing\/e2e-testing\//
 
 /** isAuditedSource is true for package TypeScript that is neither test code nor a declaration file. */
 export function isAuditedSource(path: string): boolean {
