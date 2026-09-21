@@ -68,6 +68,10 @@ A brief Ro asks you to print takes none of that worktree boilerplate. Ro pastes 
 
 ## The return contract and what you do with it
 
-Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Agent-to-agent text is exempt from the response shape Ro reads.
+Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Agent-to-agent text is exempt from the response shape Ro reads, not from these:
+
+- **Restate nothing the brief said.** Answer what was asked, in the order asked, and stop.
+- **Read `Docs/Roadmap/Developer environment upgrades/` before calling a finding new.** It often holds it, and may record the numbers it rests on as withdrawn — `DEVENV-046` had, for durations an analysis was later built on.
+- **Say which numbers were measured and which inferred.** A mechanism in a measurement's voice is how an unchecked claim reaches a decision.
 
 Completion is not correctness, and a confident summary is not evidence. Before building on a report, check one thing the agent could not have produced without doing the work — a cited `file:line`, the one command, the diff. A report that cites nothing checkable is a prompt to redo the work, not a result. Watch for two quiet failures: an agent that stopped early and reported as though it finished, and a summary that dropped the decision or open question that mattered.
