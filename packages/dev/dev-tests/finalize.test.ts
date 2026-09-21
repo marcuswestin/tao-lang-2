@@ -175,6 +175,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return states.get(path) as ValueT
     },
+    readText: async (path: string) => files.get(path) ?? '',
     run: runner,
     writeJson: async (path, value) => {
       states.set(path, structuredClone(value))
@@ -413,6 +414,40 @@ Describe('finalize', () => {
     Expect(outcome.lines.some(line => line.includes('3. Merge message: kept — recorded as written for this HEAD')))
       .toBe(true)
     Expect(outcome.ok).toBe(true)
+  })
+
+  // The landing validates the message in its preflight, so a hand-edited one that breaks the rule
+  // costs a whole round trip to find out. Finalize already validates what it drafts; this is the
+  // same rule applied to what it keeps, reported in the landing's own words.
+  Test('reports a kept merge message the landing would reject, rather than leaving it to the landing', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    const tooLong = `${'Land example with a summary that runs past the seventy-two character bound'}\n\n- One bullet.\n`
+    fake.files.set(messagePath, tooLong)
+    fake.states.set(
+      '/repo/.artifacts/merge/feat/example.state.json',
+      {
+        headSha: 'mainsha00000000000000000000000000000000000',
+        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+        messageHeadSha: 'mainsha00000000000000000000000000000000000',
+        updatedAt: '2026-09-17T09:00:00.000Z',
+        verifiedAt: '2026-09-17T09:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
+        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+        version: 2,
+      } satisfies FinalizeState,
+    )
+
+    const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    // The file is never rewritten: the author's words are theirs to fix.
+    Expect(fake.files.get(messagePath)).toBe(tooLong)
+    Expect(outcome.lines.some(line => line.includes('The merge message summary must be at most 72 characters.')))
+      .toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Fix the kept merge message, which the landing will reject')))
+      .toBe(true)
+    Expect(outcome.ok).toBe(false)
   })
 
   Test(
@@ -817,6 +852,7 @@ Describe('finalize', () => {
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
+        readText: FS.readText,
         run: async (command, spec) =>
           command === 'just'
             ? {

@@ -90,7 +90,13 @@
       "git worktree *",
       "git merge *",
       "git reset --merge",
-      "git reset --hard HEAD"
+      "git reset --hard HEAD",
+      "./dev land",
+      "./dev land *",
+      "./agent land",
+      "./agent land *",
+      "just land",
+      "just my-land"
     ],
     "filesystem": {
       "allowWrite": [
