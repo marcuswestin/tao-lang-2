@@ -68,7 +68,9 @@ function importsCreateElementFromReact(node: ts.ImportDeclaration): boolean {
   if (namedBindings === undefined || !ts.isNamedImports(namedBindings)) {
     return false
   }
-  return namedBindings.elements.some(element => staticPropertyName(element.propertyName ?? element.name) === 'createElement')
+  return namedBindings.elements.some(element =>
+    staticPropertyName(element.propertyName ?? element.name) === 'createElement'
+  )
 }
 
 function staticPropertyName(name: ts.Node): string | undefined {
