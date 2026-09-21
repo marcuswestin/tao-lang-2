@@ -11,11 +11,13 @@ Every starter follows the canonical layout from `Docs/Roadmap/Tao Revolution/Dec
 restricted to what the toolchain runs today: `App.tao` (project and app), `Data.tao` (entities),
 `Chrome.tao` (shared navigation), `Design.tao` (always written), one folder per feature with its list
 and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), `<App>.test.tao` (behavior
-tests), `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled runtime), and
-the committed empty generated-package scaffold `@/.gitkeep`. Access, Rules, and Words join as
+tests), `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled runtime),
+the committed empty generated-package scaffold `@/.gitkeep`, and copied Tao skills plus
+`AGENTS.md`, `CLAUDE.md`, and `.tao-project/skills.version`. Access, Rules, and Words join as
 their tranches land.
 
-To change a starter, change the lowering or its reference plan, then regenerate:
+To change a starter, change the lowering, reference plan, or
+`packages/ai/tao-skills/skills/` source, then regenerate:
 
 ```bash
 TAO_UPDATE_STARTERS=1 bun test "$PWD/packages/cli/tao-cli/cli-tests/creation-starter-notebook.test.ts" \

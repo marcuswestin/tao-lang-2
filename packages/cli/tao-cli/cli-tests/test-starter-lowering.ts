@@ -1,5 +1,6 @@
 import { Errors, FS, Platform, Repo } from '@shared'
 import { Expect, mkTestDir } from '@shared/test'
+import { installTaoSkills } from 'tao-skills'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
 import { validateCreationPlan } from '../cli-src/create/creation-plan'
 import { starterPlans } from '../cli-src/create/starter-plans'
@@ -32,13 +33,11 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
   try {
     const generated = FS.resolvePath(starter.directory, root)
     await writeCreationFiles(generated, lowerCreationPlan(starter.plan, { description: starter.description }))
+    await installTaoSkills(generated)
     await runFix(generated, { cwd: root })
 
     const checkedIn = Repo.resolvePath(`Apps/Starters/${starter.directory}`)
     if (UPDATE_STARTERS) {
-      if (await FS.exists(checkedIn)) {
-        await FS.remove(checkedIn)
-      }
       await FS.copyDirectory(generated, checkedIn)
     }
     Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
@@ -55,11 +54,13 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
 /** projectFilesUnder lists the project files a starter comparison covers, in a stable order. */
 async function projectFilesUnder(directory: string): Promise<string[]> {
   const paths: string[] = []
-  for await (const path of FS.walk(directory, { extensions: ['.tao', '.json'] })) {
-    const relative = FS.relativePath(directory, path)
-    if (relative.endsWith('.tao') || relative === 'tsconfig.json') {
-      paths.push(relative)
-    }
+  for await (
+    const path of FS.walk(directory, {
+      excludeDirectory: name => name === 'node_modules',
+      includeHidden: true,
+    })
+  ) {
+    paths.push(FS.relativePath(directory, path))
   }
   return paths.sort()
 }

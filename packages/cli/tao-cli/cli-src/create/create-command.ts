@@ -1,6 +1,7 @@
 import Workspace from '@compiler/workspace'
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
+import { installTaoSkills } from 'tao-skills'
 import { TaoAppModules } from '../app-modules'
 import { runFix } from '../source-commands'
 import { findTaoTestFiles } from '../test-command'
@@ -115,6 +116,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
 
   const files = lowerCreationPlan(plan, { description: brief.description })
   await writeCreationFiles(directory, files)
+  const installedSkills = await installTaoSkills(directory)
   await TaoAppModules.ensureProject(directory)
   await runFix(directory, { cwd })
   const problems = await validateProject(directory)
@@ -130,7 +132,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
   }
   say('')
   say(`Wrote ${FS.displayPath(directory)}:`)
-  for (const path of Object.keys(files).sort()) {
+  for (const path of [...Object.keys(files), ...installedSkills.paths].sort()) {
     say(`  ${path}`)
   }
 
