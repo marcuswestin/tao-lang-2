@@ -254,7 +254,10 @@ class AppiumMac2HostSession implements Mac2HostSession {
     if (this.#closing !== undefined) {
       return await this.#closing
     }
-    this.#closing = this.#closeRemote()
+    // Closing is an operation on the same remote session as input and inspection. Queue its delete
+    // behind every operation already admitted, so neither the Appium session nor its desktop lease
+    // disappears while one of them is still in use.
+    this.#closing = this.#serialize(async () => await this.#closeRemote())
     try {
       await this.#closing
     } catch (error) {

@@ -141,6 +141,15 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
     results.push(result)
   }
 
+  if (options.validate === true) {
+    const selected = new Set(files.map(file => file.path))
+    for (const [path, diagnostics] of [...diagnosticsByFile].sort(([left], [right]) => left.localeCompare(right))) {
+      if (!selected.has(path)) {
+        results.push({ path, status: 'diagnostics', diagnostics })
+      }
+    }
+  }
+
   if (cache !== undefined) {
     await cache.commit(
       [...cleared].map(([workspaceRoot, diagnostics]) => ({ diagnostics, workspaceRoot })),

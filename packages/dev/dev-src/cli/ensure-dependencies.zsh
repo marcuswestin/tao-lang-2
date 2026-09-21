@@ -125,7 +125,34 @@ function tao_repair_dependencies() {
   return 1
 }
 
+function tao_require_installed_dependencies() {
+  local state
+  tao_dependency_state
+  state="$reply"
+  if [[ "$state" == missing || "$state" == stale ]]; then
+    echo "Agent-config recovery requires an installed, current dependency tree; found $state." >&2
+    echo "Run './agent setup' in the normal sandboxed workflow, then retry agent-config recovery." >&2
+    return 1
+  fi
+
+  local health_output
+  if ! health_output="$(tao_dependency_health 2>&1)"; then
+    echo "$health_output" >&2
+    echo "Agent-config recovery found unhealthy dependencies and will not install packages." >&2
+    echo "Run './agent setup' in the normal sandboxed workflow, then retry agent-config recovery." >&2
+    return 1
+  fi
+
+  # A healthy tree restored by another entry point is safe to adopt without an install.
+  [[ "$state" == unproven ]] && touch "$TAO_DEPENDENCY_STAMP"
+  return 0
+}
+
 function tao_ensure_dependencies_locked() {
+  if [[ "$TAO_DEPENDENCY_MODE" == --no-install ]]; then
+    tao_require_installed_dependencies
+    return
+  fi
   local state
   tao_dependency_state
   state="$reply"

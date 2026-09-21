@@ -1,6 +1,6 @@
 import type { HostRevision } from '@host-control'
 import { HostControlError } from '@host-control'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import {
   createAppiumMac2HostController,
   type Mac2DesktopLease,
@@ -172,6 +172,63 @@ Describe('Appium Mac2 host controller', () => {
     Expect(observation.id).toBe('right-button-2')
     await session.close(session.descriptor().lease)
   })
+
+  Test('closes only after operations already queued on the remote session finish', async () => {
+    const remote = new FakeRemoteSession()
+    const firstStarted = Deferred()
+    const secondStarted = Deferred()
+    const releaseFirst = Deferred()
+    const releaseSecond = Deferred()
+    let actionCount = 0
+    remote.onActions = async () => {
+      actionCount += 1
+      if (actionCount === 1) {
+        firstStarted.resolve()
+        await releaseFirst.promise
+      } else {
+        secondStarted.resolve()
+        await releaseSecond.promise
+      }
+    }
+    const leases = new FakeDesktopLeases()
+    const host = createAppiumMac2HostController({
+      capabilities: { 'appium:automationName': 'Mac2', platformName: 'mac' },
+      client: { createSession: async () => remote },
+      desktopLeases: leases,
+      resolveTarget: _target => ({ using: 'accessibility id', value: 'studio-window' }),
+      target: { appId: 'dev.tao.studio' },
+    })
+    const session = await host.openSession({
+      artifactRoot: '/artifacts',
+      mode: 'acceptance',
+      revision,
+      target: 'studio',
+    })
+    const action = (key: string) =>
+      session.perform({
+        expectedRevision: revision,
+        kind: 'key',
+        key,
+        lease: session.descriptor().lease,
+      })
+
+    const first = action('A')
+    await firstStarted.promise
+    const second = action('B')
+    const closing = session.close(session.descriptor().lease)
+
+    Expect(remote.deleteCalls).toBe(0)
+    Expect(leases.lease.releaseCalls).toBe(0)
+    releaseFirst.resolve()
+    await secondStarted.promise
+    Expect(remote.deleteCalls).toBe(0)
+    Expect(leases.lease.releaseCalls).toBe(0)
+    releaseSecond.resolve()
+
+    await Promise.all([first, second, closing])
+    Expect(remote.deleteCalls).toBe(1)
+    Expect(leases.lease.releaseCalls).toBe(1)
+  })
 })
 
 class FakeDesktopLeases implements Mac2DesktopLeases {
@@ -204,19 +261,23 @@ class FakeRemoteSession implements AppiumSession {
   readonly activated: string[] = []
   readonly actionCalls: AppiumActionSequence[] = []
   clicked = 0
+  deleteCalls = 0
   deleteFailures = 0
   readonly elementsByLocator = new Map<string, readonly AppiumElement[]>()
   readonly id = 'mac2-session-1'
   readonly scripts: Array<{ args: readonly unknown[]; script: string }> = []
   readonly terminated: string[] = []
+  onActions: (() => Promise<void>) | undefined
 
   async actions(input: readonly AppiumActionSequence[]): Promise<void> {
     this.actionCalls.push(...input)
+    await this.onActions?.()
   }
   async activateApplication(appId: string): Promise<void> {
     this.activated.push(appId)
   }
   async delete(): Promise<void> {
+    this.deleteCalls += 1
     if (this.deleteFailures > 0) {
       this.deleteFailures -= 1
       throw new HostControlError('host', 'remote delete timed out')

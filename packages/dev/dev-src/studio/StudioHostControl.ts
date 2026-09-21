@@ -20,11 +20,23 @@ import { Errors, FS, Platform, Switch, Time } from '@shared'
 /** StudioHostTransport is the semantic RPC seam between dev tooling and the owned Electrobun shell. */
 export type StudioHostTransport = Readonly<{
   capabilities: readonly HostCapability[]
-  observe: (target: HostTarget, expectedRevision: HostRevision) => Promise<StudioHostTransportObservation>
-  perform: (action: StudioHostTransportAction, expectedRevision: HostRevision) => Promise<void>
+  /** Captures the active project window once; HostSessionDescriptor.target remains an opaque label. */
+  bindProject: () => Promise<StudioHostProjectBinding>
+  observe: (
+    binding: StudioHostProjectBinding,
+    target: HostTarget,
+    expectedRevision: HostRevision,
+  ) => Promise<StudioHostTransportObservation>
+  perform: (
+    binding: StudioHostProjectBinding,
+    action: StudioHostTransportAction,
+    expectedRevision: HostRevision,
+  ) => Promise<void>
   /** Resolves only after the shell has confirmed that the current document remains visible. */
-  publishRevision: (request: StudioHostTransportPublishRevision) => Promise<void>
+  publishRevision: (binding: StudioHostProjectBinding, request: StudioHostTransportPublishRevision) => Promise<void>
 }>
+
+export type StudioHostProjectBinding = Readonly<{ projectSessionId: string; windowId: number; windowToken: string }>
 
 /** The process-wide renderer fence must receive both revisions with the reload request. */
 export type StudioHostTransportPublishRevision = Readonly<{
@@ -35,16 +47,18 @@ export type StudioHostTransportPublishRevision = Readonly<{
 type StudioHostTransportObservation = Readonly<{
   accessibilityLabel?: string
   bounds?: HostObservation['bounds']
+  /** Opaque document-scoped identity of the exact rendered element that was inspected. */
+  elementId: string
   text?: string
   visible: boolean
 }>
 
 type StudioHostTransportAction =
-  | Readonly<{ kind: 'click'; target: HostTarget }>
+  | Readonly<{ elementId: string; kind: 'click'; target: HostTarget }>
   | Readonly<{ kind: 'key'; key: string }>
   | Readonly<{ kind: 'refreshDocument' }>
-  | Readonly<{ deltaX: number; deltaY: number; kind: 'scroll'; target?: HostTarget }>
-  | Readonly<{ kind: 'type'; target: HostTarget; text: string }>
+  | Readonly<{ deltaX: number; deltaY: number; kind: 'scroll'; observed?: { elementId: string; target: HostTarget } }>
+  | Readonly<{ elementId: string; kind: 'type'; target: HostTarget; text: string }>
 
 type StudioHostControlDiscovery = Readonly<{
   capability: string
@@ -133,19 +147,26 @@ class StudioHostController implements HostController {
     if (this.#closed) {
       throw new HostControlError('closed', 'The Studio semantic host controller is closed.')
     }
+    // `target` is an opaque label in the HostControl descriptor. The shell resolves the actual
+    // project window once here; later focus changes must not redirect this session's operations.
+    const binding = await this.#transport.bindProject()
+    if (this.#closed) {
+      throw new HostControlError('closed', 'The Studio semantic host controller is closed.')
+    }
     if (this.#currentRevision === undefined) {
       this.#currentRevision = copyRevision(options.revision)
     } else {
       assertRevision(this.#currentRevision, options.revision)
     }
     const session = new StudioHostSession({
+      binding,
       capabilities: this.#transport.capabilities,
       currentRevision: () => this.#currentRevisionValue(),
       id: Platform.randomUUID(),
       mode: options.mode,
       onClosed: () => this.#sessions.delete(session),
       publishRevision: async (expectedCurrentRevision, revision) =>
-        await this.#publishRevision(expectedCurrentRevision, revision),
+        await this.#publishRevision(binding, expectedCurrentRevision, revision),
       revision: copyRevision(options.revision),
       serialize: async operation => await this.#serialize(operation),
       target: options.target,
@@ -162,12 +183,16 @@ class StudioHostController implements HostController {
     return this.#currentRevision
   }
 
-  async #publishRevision(expectedCurrentRevision: HostRevision, revision: HostRevision): Promise<void> {
+  async #publishRevision(
+    binding: StudioHostProjectBinding,
+    expectedCurrentRevision: HostRevision,
+    revision: HostRevision,
+  ): Promise<void> {
     assertRevision(this.#currentRevisionValue(), expectedCurrentRevision)
     const nextRevision = copyRevision(revision)
     // The renderer only becomes current after its post-reload visibility acknowledgement. Until then
     // the previous revision remains the controller fence and stays available to the publisher.
-    await this.#transport.publishRevision({
+    await this.#transport.publishRevision(binding, {
       expectedCurrentRevision: copyRevision(expectedCurrentRevision),
       revision: nextRevision,
     })
@@ -182,6 +207,7 @@ class StudioHostController implements HostController {
 }
 
 type StudioHostSessionOptions = Readonly<{
+  binding: StudioHostProjectBinding
   capabilities: readonly HostCapability[]
   currentRevision: () => HostRevision
   id: string
@@ -195,6 +221,7 @@ type StudioHostSessionOptions = Readonly<{
 }>
 
 class StudioHostSession implements HostSession {
+  readonly #binding: StudioHostProjectBinding
   readonly #capabilities: readonly HostCapability[]
   readonly #currentRevision: () => HostRevision
   readonly #id: string
@@ -206,11 +233,13 @@ class StudioHostSession implements HostSession {
   readonly #target: string
   readonly #transport: StudioHostTransport
   #closed = false
+  #currentElementId: string | undefined
   #currentObservation: HostObservation | undefined
   #observationRevision = 0
   #revision: HostRevision
 
   constructor(options: StudioHostSessionOptions) {
+    this.#binding = Object.freeze({ ...options.binding })
     this.#capabilities = Object.freeze([...options.capabilities])
     this.#currentRevision = options.currentRevision
     this.#id = options.id
@@ -243,7 +272,10 @@ class StudioHostSession implements HostSession {
       assertRevision(this.#revision, request.expectedRevision)
       assertRevision(this.#currentRevision(), this.#revision)
       const target = copyTarget(request.target)
-      const rendered = await this.#transport.observe(target, this.#revision)
+      const rendered = await this.#transport.observe(this.#binding, target, this.#revision)
+      if (typeof rendered.elementId !== 'string' || rendered.elementId.length === 0) {
+        throw new HostControlError('host', 'Studio semantic control did not identify the observed element.')
+      }
       const observation: HostObservation = Object.freeze({
         accessibilityLabel: rendered.accessibilityLabel,
         bounds: rendered.bounds,
@@ -259,6 +291,7 @@ class StudioHostSession implements HostSession {
         visible: rendered.visible,
       })
       this.#currentObservation = observation
+      this.#currentElementId = rendered.elementId
       return observation
     })
   }
@@ -280,11 +313,16 @@ class StudioHostSession implements HostSession {
       assertRevision(this.#currentRevision(), this.#revision)
       await Switch.kind<HostAction, Promise<void>>(action, {
         click: async click => {
-          const observation = this.#assertCurrentObservation(click.observation)
-          await this.#transport.perform({ kind: 'click', target: observation.target }, this.#revision)
+          const { elementId, observation } = this.#assertCurrentObservation(click.observation)
+          await this.#transport.perform(
+            this.#binding,
+            { elementId, kind: 'click', target: observation.target },
+            this.#revision,
+          )
         },
-        key: async key => await this.#transport.perform({ kind: 'key', key: key.key }, this.#revision),
-        refreshDocument: async () => await this.#transport.perform({ kind: 'refreshDocument' }, this.#revision),
+        key: async key => await this.#transport.perform(this.#binding, { kind: 'key', key: key.key }, this.#revision),
+        refreshDocument: async () =>
+          await this.#transport.perform(this.#binding, { kind: 'refreshDocument' }, this.#revision),
         relaunchApplication: async () => {
           throw new HostControlError(
             'unsupported',
@@ -293,19 +331,27 @@ class StudioHostSession implements HostSession {
           )
         },
         scroll: async scroll => {
-          const target = scroll.observation === undefined
+          const observed = scroll.observation === undefined
             ? undefined
-            : this.#assertCurrentObservation(scroll.observation).target
-          await this.#transport.perform({
+            : (() => {
+              const { elementId, observation } = this.#assertCurrentObservation(scroll.observation)
+              return { elementId, target: observation.target }
+            })()
+          await this.#transport.perform(this.#binding, {
             deltaX: scroll.deltaX,
             deltaY: scroll.deltaY,
             kind: 'scroll',
-            target,
+            observed,
           }, this.#revision)
         },
         type: async type => {
-          const observation = this.#assertCurrentObservation(type.observation)
-          await this.#transport.perform({ kind: 'type', target: observation.target, text: type.text }, this.#revision)
+          const { elementId, observation } = this.#assertCurrentObservation(type.observation)
+          await this.#transport.perform(this.#binding, {
+            elementId,
+            kind: 'type',
+            target: observation.target,
+            text: type.text,
+          }, this.#revision)
         },
       })
       return this.#receipt(action.kind)
@@ -346,17 +392,18 @@ class StudioHostSession implements HostSession {
     })
   }
 
-  #assertCurrentObservation(observation: HostObservation): HostObservation {
+  #assertCurrentObservation(observation: HostObservation): { elementId: string; observation: HostObservation } {
     if (
       observation.sessionId !== this.#id
       || observation.observationRevision !== this.#observationRevision
       || this.#currentObservation?.id !== observation.id
+      || this.#currentElementId === undefined
     ) {
       throw staleObservation(this.#id, observation)
     }
     assertHostLease(this.#lease, observation.lease)
     assertRevision(this.#revision, observation.revision)
-    return this.#currentObservation
+    return { elementId: this.#currentElementId, observation: this.#currentObservation }
   }
 
   #assertOpen(): void {
@@ -368,6 +415,7 @@ class StudioHostSession implements HostSession {
   #advanceObservationRevision(clear = true): number {
     if (clear) {
       this.#currentObservation = undefined
+      this.#currentElementId = undefined
     }
     this.#observationRevision += 1
     return this.#observationRevision
@@ -418,11 +466,34 @@ function httpTransport(
   }
   return {
     capabilities: ['inspect', 'key', 'pointer', 'refreshDocument', 'scroll', 'textInput'],
-    observe: async (target, expectedRevision) =>
-      await call<StudioHostTransportObservation>('observe', { expectedRevision, target }),
-    perform: async (action, expectedRevision) => await call<void>('perform', { action, expectedRevision }),
-    publishRevision: async revision => await call<void>('publishRevision', revision),
+    bindProject: async () => parseProjectBinding(await call<unknown>('bindProject')),
+    observe: async (binding, target, expectedRevision) =>
+      await call<StudioHostTransportObservation>('observe', { binding, expectedRevision, target }),
+    perform: async (binding, action, expectedRevision) =>
+      await call<void>('perform', { action, binding, expectedRevision }),
+    publishRevision: async (binding, revision) => await call<void>('publishRevision', { binding, ...revision }),
   }
+}
+
+function parseProjectBinding(value: unknown): StudioHostProjectBinding {
+  if (
+    typeof value !== 'object'
+    || value === null
+    || !Number.isSafeInteger((value as { windowId?: unknown }).windowId)
+    || (value as { windowId: number }).windowId < 0
+    || typeof (value as { projectSessionId?: unknown }).projectSessionId !== 'string'
+    || (value as { projectSessionId: string }).projectSessionId.length === 0
+    || typeof (value as { windowToken?: unknown }).windowToken !== 'string'
+    || (value as { windowToken: string }).windowToken.length === 0
+  ) {
+    throw new HostControlError('host', 'Studio semantic control returned an invalid project-window binding.')
+  }
+  const binding = value as StudioHostProjectBinding
+  return Object.freeze({
+    projectSessionId: binding.projectSessionId,
+    windowId: binding.windowId,
+    windowToken: binding.windowToken,
+  })
 }
 
 function parseDiscovery(value: unknown): StudioHostControlDiscovery {

@@ -15,6 +15,20 @@ Describe('tao check CLI', () => {
     })
   })
 
+  Test('reports an imported file error when checking only its entry file', async () => {
+    await withTaoFixture({
+      'App.tao':
+        'use Bad from @ui\n\nproject {\n   id "tao-cli-test"\n   name "Tao CLI test"\n}\n\nview Main() {\n   render Bad()\n}\n',
+      '@ui/Bad.tao': 'public view Bad() {\n   render NoSuchView()\n}\n',
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', FS.resolvePath('App.tao', rootDir)])
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain("@ui/Bad.tao:2:11 error: No view named 'NoSuchView' is in scope.")
+      Expect(result.stderr).toContain('0 noncanonical, 1 unchanged, 1 error')
+    })
+  })
+
   Test('prints validator warnings without turning them into check failures', async () => {
     await withTaoFixture({
       ...checkedProjectFile,

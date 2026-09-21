@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { Errors } from '@shared'
+import { Errors, Platform } from '@shared'
 import {
   physicalIosInstallInputFailure,
   runPhysicalIosInstall,
@@ -27,11 +27,13 @@ test('rejects incomplete physical-install requests before device discovery or ap
 
 test('holds the physical iOS target lease through the install attempt and releases it after failure', async () => {
   const calls: string[] = []
+  const leases: LeaseInput[] = []
   const failure = new Errors.HostEnvironmentError('install failed')
 
   await expect(withPhysicalIosInstallLease({
     acquire: async input => {
-      calls.push(`${input.command}:${input.name}:${input.repositoryRoot.endsWith('tao-lang-2')}`)
+      leases.push(input)
+      calls.push('acquire')
       return {
         release: async () => {
           calls.push('release')
@@ -46,7 +48,12 @@ test('holds the physical iOS target lease through the install attempt and releas
     runId: 'run-id',
   })).rejects.toBe(failure)
 
-  expect(calls).toEqual(['physical iOS install run-id:ios-device:physical-id:true', 'install', 'release'])
+  expect(leases).toEqual([{
+    command: 'physical iOS install run-id',
+    name: 'ios-device:physical-id',
+    repositoryRoot: Platform.runtimeProcess.cwd(),
+  }])
+  expect(calls).toEqual(['acquire', 'install', 'release'])
 })
 
 test('records an installed receipt only after physical discovery and an isolated Release install', async () => {

@@ -1,7 +1,7 @@
 import { AppiumNoSuchAlertError, type AppiumSession, type AppiumSessionFactory } from '@appium-driver'
 import { expect, test } from '@playwright/test'
 import { Errors } from '@shared'
-import { appiumXcuiTestClient } from './AppiumMobileClients'
+import { appiumAndroidClient, appiumXcuiTestClient } from './AppiumMobileClients'
 
 test('dispatches an iOS control URL through XCUITest with the explicit target bundle ID', async () => {
   const scripts: Array<{ args: readonly unknown[]; script: string }> = []
@@ -45,6 +45,31 @@ test('dismisses a stale iOS system alert but treats an absent alert as already c
   await session.dismissAlertIfPresent!()
 
   expect(dismissals).toBe(3)
+})
+
+test('maps Android scroll gestures onto the same dominant axis as XCUITest', async () => {
+  const scripts: Array<{ args: readonly unknown[]; script: string }> = []
+  const remote = stubRemote({
+    executeScript: async <T>(script: string, args: readonly unknown[] = []): Promise<T> => {
+      scripts.push({ args, script })
+      return undefined as T
+    },
+  })
+  const session = await appiumAndroidClient({ createSession: async () => remote }).createSession({})
+
+  await session.scroll({ deltaX: 12, deltaY: 0 })
+  await session.scroll({ deltaX: -12, deltaY: 0 })
+  await session.scroll({ deltaX: 3, deltaY: -9 })
+  await session.scroll({ deltaX: 9, deltaY: -9 })
+  await session.scroll({ deltaX: 0, deltaY: 0 })
+
+  expect(scripts).toEqual([
+    { args: [{ direction: 'right', elementId: undefined, percent: 0.75 }], script: 'mobile: scrollGesture' },
+    { args: [{ direction: 'left', elementId: undefined, percent: 0.75 }], script: 'mobile: scrollGesture' },
+    { args: [{ direction: 'up', elementId: undefined, percent: 0.75 }], script: 'mobile: scrollGesture' },
+    { args: [{ direction: 'up', elementId: undefined, percent: 0.75 }], script: 'mobile: scrollGesture' },
+    { args: [{ direction: 'down', elementId: undefined, percent: 0.75 }], script: 'mobile: scrollGesture' },
+  ])
 })
 
 function stubRemote(overrides: Partial<AppiumSession>): AppiumSession {
