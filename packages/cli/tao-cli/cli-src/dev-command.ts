@@ -1,9 +1,10 @@
-import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-dev-loop'
+import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import { Errors, FS, HCI, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
+import { createInkDevLoopReporter } from './dev/dev-loop-tui'
 
 /** TaoDevCommandOptions supplies explicit selection, terminal state, and a focused loop seam. */
 type TaoDevCommandOptions = {
@@ -20,7 +21,9 @@ export async function runTaoDev(
   options: TaoDevCommandOptions = {},
 ): Promise<number> {
   const target = FS.resolvePath(targetPath)
-  const runLoop = options.runLoop ?? runDevLoop
+  // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao dev`'s to
+  // own, so this is the one place that wires the Ink implementation in.
+  const runLoop = options.runLoop ?? (selection => runDevLoop(selection, createInkDevLoopReporter()))
   let current = await initialSelection(target, options)
   if (current.kind !== 'selected') {
     return exitTaoDev(current.kind === 'exit' ? current.exitCode : 0, options)

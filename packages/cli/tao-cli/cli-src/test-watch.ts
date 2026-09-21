@@ -1,5 +1,6 @@
 import { Packages } from '@ast-utils'
-import { minimalWatchRoots, startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-dev-loop'
+import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-host/dev-loop/DebouncedWatcher'
+import { minimalWatchRoots } from '@expo-host/dev-loop/WatchRoots'
 import { Errors, FS, HCI, Platform } from '@shared'
 import { findTaoTestFiles, runTestCommandOnce, type TestCommandOptions, type TestRunOutcome } from './test-command'
 

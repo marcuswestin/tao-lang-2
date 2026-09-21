@@ -21,6 +21,12 @@ export namespace Packages {
   export type Context = {
     index: Index
     stdlibRoot: string
+    /**
+     * Symlink-resolved paths this context has already asked the file system about. It lives exactly
+     * as long as `index` beside it, which is the same kind of snapshot: neither notices a package
+     * directory or a symlink that appears after the context was created.
+     */
+    physicalPaths: Map<string, string>
   }
 
   /** ContextOptions configures package roots shared by one parser or workspace lifetime. */
@@ -88,7 +94,7 @@ export namespace Packages {
         const resolution = resolveUse(context, useStatement, request.fromFilePath)
         const workspaceFilePaths = new Set(request.workspaceFiles.map(workspaceFilePath))
         const targetFiles = request.workspaceFiles.filter(file =>
-          targetMatches(resolution, {
+          targetMatches(context, resolution, {
             filePath: workspaceFilePath(file),
             workspaceFilePaths,
           })
@@ -128,6 +134,7 @@ export namespace Packages {
     return {
       index: await createIndex(resolvedProjectRoot),
       stdlibRoot: FS.resolvePath(options.stdlibRoot ?? Stdlib.rootPath),
+      physicalPaths: new Map(),
     }
   }
 
@@ -600,32 +607,50 @@ export namespace Packages {
     }
   }
 
-  /** targetMatches returns whether a resolution target includes a Tao file path. */
-  export function targetMatches(resolution: Resolution, request: TargetMatchRequest): boolean {
+  /**
+   * targetMatches returns whether a resolution target includes a Tao file path.
+   *
+   * The linker asks this for every workspace file, for every use statement, for every reference it
+   * resolves. The path comparison is string work and turns nearly every candidate away, so it runs
+   * before the boundary guard, which is the only part that asks the file system.
+   */
+  export function targetMatches(context: Context, resolution: Resolution, request: TargetMatchRequest): boolean {
     if (resolution.relation === 'invalid' || !resolution.targetPath) {
       return false
     }
     if (isTestSourcePath(request.filePath)) {
       return false
     }
-    if (!remainsInsidePhysicalBoundarySync(request.filePath, resolution)) {
-      return false
-    }
-    if (resolution.candidateMode === 'recursive') {
-      return recursiveTargetMatches(resolution, request.filePath)
-    }
-    return directTargetMatches(resolution, request)
+    const matchesTargetPath = resolution.candidateMode === 'recursive'
+      ? recursiveTargetMatches(resolution, request.filePath)
+      : directTargetMatches(resolution, request)
+    return matchesTargetPath && remainsInsidePhysicalBoundarySync(context, request.filePath, resolution)
   }
 
-  function remainsInsidePhysicalBoundarySync(path: string, resolution: Resolution): boolean {
+  function remainsInsidePhysicalBoundarySync(context: Context, path: string, resolution: Resolution): boolean {
     if (resolution.physicalBoundaryRoot === undefined) {
       return true
     }
     try {
-      return FS.pathIsWithin(FS.realPathSync(path), FS.realPathSync(resolution.physicalBoundaryRoot))
+      return FS.pathIsWithin(physicalPath(context, path), physicalPath(context, resolution.physicalBoundaryRoot))
     } catch {
       return false
     }
+  }
+
+  /**
+   * physicalPath resolves a path's symlinks once per context. Asked afresh each time it was two
+   * `realpath` calls per question: about 450,000 for a 13-file app, and 88% of an uncached
+   * `tao check`. A path that does not resolve is not remembered, because an unsaved editor buffer
+   * fails today and has to succeed once it is written.
+   */
+  function physicalPath(context: Context, path: string): string {
+    let resolved = context.physicalPaths.get(path)
+    if (resolved === undefined) {
+      resolved = FS.realPathSync(path)
+      context.physicalPaths.set(path, resolved)
+    }
+    return resolved
   }
 
   function directTargetMatches(resolution: Resolution, request: TargetMatchRequest): boolean {

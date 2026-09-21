@@ -375,7 +375,7 @@ const LANGIUM_PARSER_PREFIX = 'packages/language/parser/'
  * Part 5 deep-import cleanup, which promotes each target into a public package entry.
  */
 const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
-  'packages/dev/dev-src/studio/StudioPackagedTestCommand.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioPackagedTestCommand.ts',
   'packages/apps/expo-host/expo-host-tests/studio-scenario-e2e.jest-test.tsx',
 ]
 
@@ -395,12 +395,12 @@ const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
  * is written, so read the file before deleting its entry.
  */
 const RAW_THROW_ALLOWLIST = [
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
-  'packages/dev/studio-smoke/studio-network-simulation.test.ts',
-  'packages/dev/studio-smoke/studio-real-app.test.ts',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
   'packages/ides/studio/studio-src/StudioWelcome.ts',
 ]
 
@@ -434,63 +434,63 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  */
 const RAW_ERROR_ALLOWLIST = [
   // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/dev/dev-src/studio/StudioCdp.ts:231',
-  'packages/dev/dev-src/studio/StudioCdp.ts:282',
-  'packages/dev/dev-src/studio/StudioCdp.ts:292',
-  'packages/dev/dev-src/studio/StudioCdp.ts:329',
-  'packages/dev/dev-src/studio/StudioCdp.ts:340',
-  'packages/dev/dev-src/studio/StudioCdp.ts:372',
-  'packages/dev/dev-src/studio/StudioCdp.ts:532',
-  'packages/dev/dev-src/studio/StudioCdp.ts:560',
-  'packages/dev/dev-src/studio/StudioCdp.ts:729',
-  'packages/dev/dev-src/studio/StudioCdp.ts:879',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:102',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:208',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:211',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:213',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:215',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:217',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:218',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:288',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:438',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:457',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:571',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:576',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:581',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:594',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:605',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:612',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:636',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:646',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:669',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:690',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:699',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:704',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:842',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:864',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:871',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:877',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:898',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:901',
-  'packages/dev/studio-smoke/studio-network-simulation.test.ts:171',
-  'packages/dev/studio-smoke/studio-network-simulation.test.ts:283',
-  'packages/dev/studio-smoke/studio-network-simulation.test.ts:291',
-  'packages/dev/studio-smoke/studio-network-simulation.test.ts:304',
-  'packages/dev/studio-smoke/studio-real-app.test.ts:128',
-  'packages/dev/studio-smoke/studio-real-app.test.ts:264',
-  'packages/dev/studio-smoke/studio-real-app.test.ts:292',
-  'packages/dev/studio-smoke/studio-real-app.test.ts:299',
-  'packages/dev/studio-smoke/studio-real-app.test.ts:367',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:205',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:930',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:935',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:940',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:965',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1204',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1225',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1408',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1450',
-  'packages/dev/studio-smoke/studio-simulated-user.test.ts:1476',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:231',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:282',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:292',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:329',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:340',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:372',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:532',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:560',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:729',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:879',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:213',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:215',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:217',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:218',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:288',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:438',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:457',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:571',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:576',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:581',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:594',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:605',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:612',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:636',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:646',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:669',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:690',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:699',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:704',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:842',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:864',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:871',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:877',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:898',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:901',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:235',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:347',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:355',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:368',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:128',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:264',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:292',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:299',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:367',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:930',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:935',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:940',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:965',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1204',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1225',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1408',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1450',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1476',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:56',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:78',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:355',
@@ -508,7 +508,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
   'packages/dev/dev-tests/codex-config-generation.test.ts:214',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
+  'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts:343',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:232',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
@@ -557,16 +557,16 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/testing/verification/verification-src/GreenTree.ts',
   'packages/testing/verification/verification-src/ParserGenerate.ts',
   'packages/testing/verification/verification-src/TestLedger.ts',
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
-  'packages/dev/dev-src/studio/StudioNative.ts',
-  'packages/dev/dev-tests/studio-review.test.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioNative.ts',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-review.test.ts',
   'packages/services/update-server/update-server-tests/update-server.test.ts',
   // `node:crypto` key signing for App Store Connect.
   'packages/cli/tao-cli/cli-tests/app-store-connect-auth.test.ts',
   // `node:net` port probes and socket connections.
-  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts',
+  'packages/apps/expo-host/expo-host-src/dev-loop/expo-runner/Ports.ts',
+  'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts',
   'packages/ai/generation/generation-live/apple-foundation-models.live.ts',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
   'packages/testing/verification/verification-tests/repo-lint.test.ts',
@@ -598,8 +598,8 @@ const CONSOLE_CALL_ALLOWLIST = [
   // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
   'packages/apps/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
-  'packages/dev/dev-src/studio/StudioWatchHealth.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioWatchHealth.ts',
   'packages/apps/expo-host/expo-host-tests/release-bundle-proof.test.ts',
   'packages/services/update-server/update-server-tests/update-server.test.ts',
   // Tests that capture or silence the global a library writes through.
@@ -611,12 +611,12 @@ const CONSOLE_CALL_ALLOWLIST = [
 const PROCESS_ACCESS_ALLOWLIST = [
   // Emitted text: the Electrobun main, a bundler `define` key, child scripts a test renders, and
   // tests asserting on generated source.
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
-  'packages/dev/dev-src/studio/StudioNative.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioNative.ts',
   'packages/testing/verification/verification-tests/machine-lanes.test.ts',
   'packages/testing/verification/verification-tests/native-host-lease.test.ts',
-  'packages/dev/dev-tests/studio-electrobun.test.ts',
-  'packages/dev/dev-tests/studio-port-lease.test.ts',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-electrobun.test.ts',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-port-lease.test.ts',
   'packages/testing/verification/verification-tests/test-ledger.test.ts',
   'packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx',
   'packages/apps/expo-host/expo-host-tests/runtime.test.ts',
@@ -629,7 +629,7 @@ const PROCESS_ACCESS_ALLOWLIST = [
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
 const BUN_CONVENIENCE_ALLOWLIST = [
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts',
 ]
 
 const NODE_IMPORT_DETAIL = 'imports a `node:` module directly; reach for `FS`, `CLI`, `Platform`, or `HCI`'
@@ -856,7 +856,24 @@ export function crossPackageSourceImportIssues(
  * gate runner itself rather than of one node.
  */
 const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
-const DEV_LAZY_IMPORT_DIRECTORIES = ['studio', 'expo-dev-loop']
+/**
+ * Package aliases the entry must reach only behind `await import(...)`. `@studio` pulls in the
+ * generated parser; `@studio-tooling`, `@expo-host` (its bare root, not only `/dev-loop`), and
+ * `@expo-host/dev-loop` are Studio's and the Expo dev loop's own packages, heavy for the same
+ * reason.
+ */
+const DEV_LAZY_IMPORT_SPECIFIERS = ['@studio', '@studio-tooling', '@expo-host', '@expo-host/dev-loop']
+
+/**
+ * Alias roots `resolveLocalModule` also follows into local source, so a heavy static import
+ * reached through one of these — not only through a relative path — is still traced for a
+ * transitive `DEV_LAZY_IMPORT_SPECIFIERS` hit. Kept to the two aliases the lazy-loaded packages
+ * themselves route through; a general tsconfig-paths resolver is not worth it for this lint.
+ */
+const ALIAS_SOURCE_ROOTS: Record<string, string> = {
+  '@cli-kit': 'packages/cli/cli-kit/cli-kit-src',
+  '@verification': 'packages/testing/verification/verification-src',
+}
 /** Matches static imports and re-exports, wrapped or not, and never the `import(...)` call form. */
 const STATIC_MODULE_PATTERN = /^(?:import\b(?!\s*\()|export\b)[^'"]*['"]([^'"]+)['"]/gm
 
@@ -882,12 +899,9 @@ export function devLazyStudioImportIssues(
     for (const match of file.source.matchAll(STATIC_MODULE_PATTERN)) {
       const specifier = match[1]!
       const target = resolveLocalModule(file.path, specifier, byPath)
-      const forbidden = specifier === '@studio'
-        || ['./studio', './expo-dev-loop'].some(prefix =>
-          current.path === entryPath && (specifier === prefix || specifier.startsWith(`${prefix}/`))
-        )
-        || target !== undefined
-          && DEV_LAZY_IMPORT_DIRECTORIES.some(directory => target.startsWith(`packages/dev/dev-src/${directory}/`))
+      const forbidden = DEV_LAZY_IMPORT_SPECIFIERS.some(prefix =>
+        specifier === prefix || specifier.startsWith(`${prefix}/`)
+      )
       if (forbidden) {
         const chain = [...current.chain, target ?? specifier]
         issues.push({
@@ -910,22 +924,30 @@ function resolveLocalModule(
   specifier: string,
   files: ReadonlyMap<string, SourceFile>,
 ): string | undefined {
-  if (!specifier.startsWith('.')) {
-    return undefined
-  }
-  const parts = importingPath.split('/')
-  parts.pop()
-  for (const segment of specifier.split('/')) {
-    if (segment === '.' || segment === '') {
-      continue
+  if (specifier.startsWith('.')) {
+    const parts = importingPath.split('/')
+    parts.pop()
+    for (const segment of specifier.split('/')) {
+      if (segment === '.' || segment === '') {
+        continue
+      }
+      if (segment === '..') {
+        parts.pop()
+      } else {
+        parts.push(segment)
+      }
     }
-    if (segment === '..') {
-      parts.pop()
-    } else {
-      parts.push(segment)
+    return sourceCandidate(parts.join('/'), files)
+  }
+  for (const [alias, sourceRoot] of Object.entries(ALIAS_SOURCE_ROOTS)) {
+    if (specifier.startsWith(`${alias}/`)) {
+      return sourceCandidate(`${sourceRoot}/${specifier.slice(alias.length + 1)}`, files)
     }
   }
-  const base = parts.join('/')
+  return undefined
+}
+
+function sourceCandidate(base: string, files: ReadonlyMap<string, SourceFile>): string | undefined {
   return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]
     .find(candidate => files.has(candidate))
 }

@@ -1,5 +1,5 @@
 import { Errors, FS, Platform, Time } from '@shared'
-import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { runTestCommandOnce } from '../cli-src/test-command'
 import { runTestWatchCommand } from '../cli-src/test-watch'
 import { withTaoFixture } from './test-cli-files'
@@ -69,7 +69,9 @@ Describe('tao test --watch (real compile)', () => {
       'App.test.tao': taoTest('WatchApp'),
       'jest-stub.mjs': '',
     }, async rootDir => {
-      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      // Outside the watched project on purpose: a run writes its compiled output here, and a
+      // runtime root inside the project would make every run trigger the next one.
+      const runtimeRoot = await mkTestDir('tao-test-watch-runtime-')
 
       await withJestStub(rootDir, async () => {
         await withRuntimeRoot(runtimeRoot, async () => {

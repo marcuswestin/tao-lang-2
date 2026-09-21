@@ -80,7 +80,17 @@ export type BuildTestNodesOptions = {
 export type TestNodePlan = {
   plans: readonly ShardPlan[]
   states: readonly TestNodeState[]
+  /** Lines a lane should surface: a suite that lost its sharding rather than chose to run whole. */
+  warnings: readonly string[]
 }
+
+/**
+ * Below this a suite running whole says nothing — it may simply be small. At or above it, a suite
+ * with no recorded duration is running as one process where it would otherwise have been split, and
+ * the lane is quietly slower than the machine it is on. Four is low enough to catch the small suites
+ * and high enough that a genuinely tiny one stays silent.
+ */
+const UNSHARDED_WARNING_UNITS = 4
 
 /**
  * Bounds every test node runs under, so a runaway cannot hold a lane open for 45 minutes again. The
@@ -109,6 +119,7 @@ const IDLE_TIMEOUT_FLOOR_MS = 120_000
 function build(options: BuildTestNodesOptions): TestNodePlan {
   const plans: ShardPlan[] = []
   const states: TestNodeState[] = []
+  const warnings: string[] = []
   for (const suite of options.selected) {
     const tuning = GateCatalog.suiteTuning(suite.name)
     // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
@@ -130,6 +141,13 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       suite: suite.name,
     })
     plans.push(plan)
+    const units = (suite.shardUnits ?? suite.files).length
+    if (plan.unshardedCause === 'no-recorded-duration' && units >= UNSHARDED_WARNING_UNITS) {
+      warnings.push(
+        `${suite.name} ran whole across ${units} units: no recorded duration under that name, so it could not be sharded. `
+          + `Expected for a new suite; for an existing one it means its recorded history is under a different name, as a rename leaves it.`,
+      )
+    }
     const count = plan.shards.length
     plan.shards.forEach((files, index) => {
       const name = TestShards.shardName(suite.name, index, count)
@@ -139,7 +157,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       states.push(nodeState(suite, name, files, count, options.timings))
     })
   }
-  return { plans, states }
+  return { plans, states, warnings }
 }
 
 function nodeState(

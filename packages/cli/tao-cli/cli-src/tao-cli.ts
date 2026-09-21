@@ -111,7 +111,7 @@ function createCommands(): Command {
     .description('Capture every Studio scenario as a portable web visual review.')
     .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
       try {
-        const { runStudioReview } = await import('tao-dev/studio-review')
+        const { runStudioReview } = await import('tao-studio-tooling/studio-review')
         const result = await runStudioReview(path, {
           against: options.against,
           appName: options.app,

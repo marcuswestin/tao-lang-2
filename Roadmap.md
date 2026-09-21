@@ -29,6 +29,14 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
     duplicated per worktree for no reason, and where a single orchestrator does and does not help
     live in `Docs/Roadmap/Parallel agents on one machine.md`.
 
+## Tao tooling performance
+
+- [ ] Make the `tao` commands interactive-grade.
+  - An uncached `tao check` of WordFlower takes 20-27s against 14ms of actual parsing; the causes are
+    product defects that also set the floor of every verification lane. Measurements, root causes,
+    the floor of the current stack, the phased fix, and the stack alternatives considered live in
+    [`Docs/Roadmap/Tao tooling performance.md`](Docs/Roadmap/Tao%20tooling%20performance.md).
+
 ## Real-host testing
 
 - [ ] Prove the additive [real-host testing prototype](Docs/Roadmap/Real-host%20testing%20prototype.md)
@@ -156,7 +164,7 @@ tests written in Tao, green in Current, for every construct introduced.
   - Closed by `34132956`: the journey ran ten consecutive green normal-terminal runs and
     `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again, with
     `VERIFY_FULL_SKIPPED` now empty. `just studio-smoke
-    packages/dev/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
+    packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
     transaction defects it found landed with focused coverage along the way.
   - Standing rule for whoever touches the stub preview next: do not widen `previewOriginPath`. The

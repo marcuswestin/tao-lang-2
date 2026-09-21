@@ -1,4 +1,4 @@
-import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-dev-loop'
+import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-host/dev-loop/DebouncedWatcher'
 import { Errors, FS, Time } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTestWatchCommand, runTestWatchLoop, type TestWatchDeps } from '../cli-src/test-watch'
@@ -219,7 +219,7 @@ Describe('runTestWatchLoop', () => {
       runOnce: async () => {
         calls += 1
         if (calls === 1) {
-          throw new Errors.UserInputError('no journey matches --name')
+          Errors.throwUserInput('no journey matches --name')
         }
         return { failed: false }
       },
@@ -255,7 +255,7 @@ Describe('runTestWatchLoop', () => {
       runOnce: async () => {
         calls += 1
         if (calls === 2) {
-          throw new Errors.UserInputError('a worker crashed')
+          Errors.throwUserInput('a worker crashed')
         }
         return { failed: false }
       },

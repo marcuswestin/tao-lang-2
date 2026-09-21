@@ -539,7 +539,7 @@ await runWithCommands(commands => {
     .option('--no-browser', 'Do not open Studio in a browser.')
     .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
-      const { runStudioDev } = await import('./studio/StudioDev')
+      const { runStudioDev } = await import('@studio-tooling/StudioDev')
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
@@ -562,7 +562,7 @@ await runWithCommands(commands => {
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
       async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
-        const { StudioCanaryCommand } = await import('./studio/StudioCanaryCommand')
+        const { StudioCanaryCommand } = await import('@studio-tooling/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.canary({
             appName: options.app,
@@ -584,7 +584,7 @@ await runWithCommands(commands => {
     .action(
       async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
         try {
-          const { StudioManualChecks } = await import('./studio/StudioManualChecks')
+          const { StudioManualChecks } = await import('@studio-tooling/StudioManualChecks')
           Platform.runtimeProcess.exit(
             await StudioManualChecks.run({
               appName: options.app,
@@ -620,7 +620,7 @@ await runWithCommands(commands => {
           releaseBaseUrl?: string
         },
       ) => {
-        const { StudioCanaryCommand } = await import('./studio/StudioCanaryCommand')
+        const { StudioCanaryCommand } = await import('@studio-tooling/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.releaseCheck({
             allowUnverified: options.allowUnverified === true,
@@ -639,7 +639,7 @@ await runWithCommands(commands => {
     .description('List recorded Tao Studio launches and whether each is still live.')
     .option('--json', 'Print a versioned structured listing.')
     .action(async (options: { json?: boolean } = {}) => {
-      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
+      const { StudioLifecycleCommand } = await import('@studio-tooling/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
     })
 
@@ -650,7 +650,7 @@ await runWithCommands(commands => {
     .option('--all', 'Stop every recorded launch.')
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { all?: boolean; json?: boolean; launch?: string } = {}) => {
-      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
+      const { StudioLifecycleCommand } = await import('@studio-tooling/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.stop(options))
     })
 
@@ -659,7 +659,7 @@ await runWithCommands(commands => {
     .description('Diagnose Tao Studio on top of the repository doctor, without changing anything.')
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { json?: boolean } = {}) => {
-      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
+      const { StudioLifecycleCommand } = await import('@studio-tooling/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.doctor({ json: options.json === true }))
     })
 
@@ -674,14 +674,14 @@ await runWithCommands(commands => {
           Errors.throwUserInput('Install on one target at a time: pass --device or --simulator, not both.')
         }
         if (options.simulator !== undefined) {
-          const { runStudioCompanionInstallOnSimulator } = await import('./studio/StudioCompanionSimulator')
+          const { runStudioCompanionInstallOnSimulator } = await import('@studio-tooling/StudioCompanionSimulator')
           const name = typeof options.simulator === 'string' ? options.simulator : ''
           Platform.runtimeProcess.exit(await runStudioCompanionInstallOnSimulator({ name }))
         }
         if (options.device === undefined) {
           Errors.throwUserInput('Name the target: --device <name> for an iPhone or iPad, or --simulator [name].')
         }
-        const { runStudioCompanionInstall } = await import('./studio/StudioCompanionDevice')
+        const { runStudioCompanionInstall } = await import('@studio-tooling/StudioCompanionDevice')
         Platform.runtimeProcess.exit(await runStudioCompanionInstall({ deviceName: options.device }))
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -704,7 +704,7 @@ await runWithCommands(commands => {
     .option('--no-browser', 'Open the Welcome window only, with no extra project window.')
     .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
-      const { runStudioDev } = await import('./studio/StudioDev')
+      const { runStudioDev } = await import('@studio-tooling/StudioDev')
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
@@ -734,7 +734,7 @@ await runWithCommands(commands => {
     .option('--version <version>', 'Studio semantic version.', '0.0.1')
     .action(async options => {
       try {
-        const { StudioNative } = await import('./studio/StudioNative')
+        const { StudioNative } = await import('@studio-tooling/StudioNative')
         const packaged = await StudioNative.packageApp({
           appName: options.appName,
           bundleIdentifier: options.bundleIdentifier,
@@ -769,7 +769,7 @@ await runWithCommands(commands => {
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
     .action(async (files, options) => {
-      const { StudioSmoke } = await import('./studio/StudioSmoke')
+      const { StudioSmoke } = await import('@studio-tooling/StudioSmoke')
       Platform.runtimeProcess.exit(
         await StudioSmoke.run({
           files,
@@ -785,7 +785,7 @@ await runWithCommands(commands => {
     .command('android-emulator')
     .description('Ensure an Android emulator exists and is booted.')
     .action(async () => {
-      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
+      const { ExpoRunner } = await import('@expo-host/dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.ensureAndroidEmulator()
     })
 
@@ -793,7 +793,7 @@ await runWithCommands(commands => {
     .command('android-expo-go')
     .description('Ensure Expo Go is installed on the booted Android emulator.')
     .action(async () => {
-      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
+      const { ExpoRunner } = await import('@expo-host/dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.ensureAndroidExpoGo()
     })
 
@@ -801,7 +801,7 @@ await runWithCommands(commands => {
     .command('expo-android')
     .description('Start the Expo runtime and open it on the booted Android emulator.')
     .action(async () => {
-      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
+      const { ExpoRunner } = await import('@expo-host/dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.startExpo()
     })
 })

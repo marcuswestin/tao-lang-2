@@ -51,17 +51,26 @@
         "dev-src/agent-hooks/GitHooksEntry.ts",
         "dev-src/performance/language-performance.ts",
         "dev-src/repo-lint-entry.ts",
-        "dev-src/studio/StudioClientSnapshotProcess.ts",
-        "dev-src/studio/StudioPackagedService.ts",
-        "dev-src/studio/StudioPackagedTestCommand.ts",
         "dev-tests/**/*.test.{ts,tsx}",
-        "performance-checks/**/*.test.{ts,tsx}",
-        "studio-smoke/**/*.test.{ts,tsx}"
+        "performance-checks/**/*.test.{ts,tsx}"
       ],
       "project": [
         "dev-src/**/*.{ts,tsx}",
         "dev-tests/**/*.{ts,tsx}",
-        "performance-checks/**/*.{ts,tsx}",
+        "performance-checks/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/ides/studio-tooling": {
+      "entry": [
+        "studio-tooling-src/StudioClientSnapshotProcess.ts",
+        "studio-tooling-src/StudioPackagedService.ts",
+        "studio-tooling-src/StudioPackagedTestCommand.ts",
+        "studio-tooling-tests/**/*.test.{ts,tsx}",
+        "studio-smoke/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "studio-tooling-src/**/*.{ts,tsx}",
+        "studio-tooling-tests/**/*.{ts,tsx}",
         "studio-smoke/**/*.{ts,tsx}"
       ]
     },

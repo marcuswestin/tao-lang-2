@@ -318,7 +318,7 @@ changed. The TestFlight group UUIDs address real tester cohorts.
 
 Ro's physical iPhone is named on 76 lines across 12 tracked files:
 
-- `packages/dev/dev-src/studio/StudioCompanionDevice.ts:261–262` — in a source comment, as the
+- `packages/ides/studio-tooling/studio-tooling-src/StudioCompanionDevice.ts:261–262` — in a source comment, as the
   worked example of the recipe's argument quoting.
 - `packages/ides/studio/README.md:46` and `Docs/Tutorials/Tao now - two-week walkthrough.md:149` — as the
   documented command a reader is shown: `just studio-companion-install device="roPhone"`.
