@@ -10,8 +10,6 @@ set -e
 SCRIPT_DIR="${0:A:h}"
 DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"
 SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
-CLI_KIT_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/cli-kit"
-VERIFICATION_PACKAGE_DIR="$SCRIPT_DIR/packages/testing/verification"
 BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
@@ -41,14 +39,10 @@ function needs_build() {
   for source_path in \
     "$DEV_PACKAGE_DIR"/dev-src/**/*.ts(N) \
     "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
-    "$CLI_KIT_PACKAGE_DIR"/cli-kit-src/**/*.ts(N) \
-    "$VERIFICATION_PACKAGE_DIR"/verification-src/**/*.ts(N) \
     "$SCRIPT_DIR"/package.json \
     "$SCRIPT_DIR"/bun.lock \
     "$DEV_PACKAGE_DIR"/package.json \
-    "$SHARED_PACKAGE_DIR"/package.json \
-    "$CLI_KIT_PACKAGE_DIR"/package.json \
-    "$VERIFICATION_PACKAGE_DIR"/package.json
+    "$SHARED_PACKAGE_DIR"/package.json
   do
     [[ "$source_path" -nt "$BUILD_STAMP" ]] && return 0
   done

@@ -1,4 +1,4 @@
-import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, FS, Repo } from '@shared'
 import { PackageGraph } from './PackageGraph'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 import { runtimeElementConventionIssues } from './RuntimeElementConventions'
@@ -1219,12 +1219,4 @@ function directoryTrancheStatuses(files: readonly SourceFile[]): string[] {
 
 function trancheStatuses(source: string): string[] {
   return [...source.matchAll(TRANCHE_STATUS_PATTERN)].map(match => match[1]!)
-}
-
-if (import.meta.main) {
-  const issues = await repoLintIssues()
-  for (const issue of issues) {
-    HCI.writeErrorLine(`repo lint: ${issue}`)
-  }
-  Platform.runtimeProcess.setExitCode(issues.length === 0 ? 0 : 1)
 }

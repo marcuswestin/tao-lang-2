@@ -1,4 +1,4 @@
-import { OutputText } from '@cli-kit'
+import { OutputText } from '@cli-kit/OutputText'
 import { Errors, FS, HCI, Platform, Switch } from '@shared'
 
 /** TestOutputMode names how `tao test` reports the test runner process's own output. */
@@ -156,11 +156,15 @@ function hasResultCountLine(text: string): boolean {
 }
 
 function outputLines(output: string): string[] {
-  return OutputText.sanitize(output).split('\n').filter(line => line.trim().length > 0)
+  return normalizeCarriageReturns(OutputText.stripAnsi(output)).split('\n').filter(line => line.trim().length > 0)
 }
 
-/** normalizeCarriageReturns folds a lone `\r` into a line break, same as `OutputText.sanitize` but
- * without stripping ANSI: `createLineWriter` still owes the terminal the runner's own colors. */
+/**
+ * normalizeCarriageReturns folds a lone `\r` into a line break, unlike `OutputText.sanitize`, which
+ * deletes it instead and glues a `\r`-overwritten progress line onto the text that follows it —
+ * breaking the `^`-anchored `SUMMARY_LINE` match below. `createLineWriter` also relies on this
+ * rather than `OutputText.sanitize` to keep the runner's own ANSI colors on a real terminal.
+ */
 function normalizeCarriageReturns(output: string): string {
   return output.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
 }

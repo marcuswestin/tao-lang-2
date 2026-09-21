@@ -6,15 +6,17 @@ import { type SuiteInventory, TestSelection } from '../verification-src/TestSele
 /**
  * A small workspace with the shapes the real one has: a leaf everything imports (`shared`), a
  * chain (`language/parser` -> `compiler` -> `workspace`), the CLI the Tao behavior tests run
- * through, and a package nothing imports (`studio`). The grouped packages — `apps/runtime`,
- * `apps/expo-host`, `apps/stdlib`, `cli/tao-cli`, `language/formatter`, `language/parser` — keep
- * the real two-segment ids, because `TestSelection`'s own `TAO_APPS_PACKAGES` and
+ * through, the dev-tooling chain that reaches it (`dev` -> `testing/verification` ->
+ * `cli/cli-kit`, with `cli/tao-cli` also importing `cli/cli-kit` directly), and a package nothing
+ * imports (`studio`). The grouped packages — `apps/runtime`, `apps/expo-host`, `apps/stdlib`,
+ * `cli/tao-cli`, `cli/cli-kit`, `testing/verification`, `language/formatter`, `language/parser` —
+ * keep the real two-segment ids, because `TestSelection`'s own `TAO_APPS_PACKAGES` and
  * `LANGUAGE_PERFORMANCE_PACKAGES` match on those exact ids.
  */
 const graph: PackageGraph = {
   imports: new Map<string, ReadonlySet<string>>([
     ['compiler', new Set(['language/parser', 'shared'])],
-    ['dev', new Set(['shared'])],
+    ['dev', new Set(['shared', 'testing/verification'])],
     ['language/formatter', new Set()],
     ['language/parser', new Set(['shared'])],
     ['apps/runtime', new Set()],
@@ -22,7 +24,9 @@ const graph: PackageGraph = {
     ['shared', new Set()],
     ['apps/stdlib', new Set(['shared'])],
     ['studio', new Set(['shared', 'workspace'])],
-    ['cli/tao-cli', new Set(['dev', 'workspace'])],
+    ['cli/tao-cli', new Set(['dev', 'workspace', 'cli/cli-kit'])],
+    ['cli/cli-kit', new Set(['shared'])],
+    ['testing/verification', new Set(['shared', 'cli/cli-kit'])],
     ['workspace', new Set(['compiler'])],
   ]),
   packages: [
@@ -36,6 +40,8 @@ const graph: PackageGraph = {
     'apps/stdlib',
     'studio',
     'cli/tao-cli',
+    'cli/cli-kit',
+    'testing/verification',
     'workspace',
   ],
 }
@@ -55,6 +61,8 @@ const inventory: SuiteInventory = {
     'apps/stdlib',
     'studio',
     'cli/tao-cli',
+    'cli/cli-kit',
+    'testing/verification',
     'workspace',
   ],
 }
@@ -163,7 +171,7 @@ Describe('changed suite plan', () => {
     ])
   })
 
-  Test('repository workflow files select the developer suite that proves them', () => {
+  Test('repository workflow files select the developer suites that prove them', () => {
     for (
       const path of [
         'Justfile',
@@ -175,10 +183,28 @@ Describe('changed suite plan', () => {
     ) {
       const result = plan([path])
       Expect(result.selected.get('dev')).toBe('repository workflow changed')
+      Expect(result.selected.get('testing/verification')).toBe('repository workflow changed')
       Expect(result.everything).toBeUndefined()
     }
-    Expect([...plan(['Justfile']).selected.keys()]).toEqual(['dev'])
+    Expect([...plan(['Justfile']).selected.keys()]).toEqual(['dev', 'testing/verification'])
     Expect(plan(['packages/dev/dev-src/dev.ts']).selected.has('tao-apps')).toBe(false)
+  })
+
+  Test('a testing/verification-only change selects dev but not the Tao apps', () => {
+    const result = plan(['packages/testing/verification/verification-src/GateCatalog.ts'])
+
+    Expect(result.selected.get('testing/verification')).toBe('changed directly')
+    Expect(result.selected.get('dev')).toBe('imports testing/verification')
+    Expect(result.selected.has('tao-apps')).toBe(false)
+  })
+
+  Test('a cli/cli-kit change selects the Tao apps and cli/tao-cli, which ships its output helper', () => {
+    const result = plan(['packages/cli/cli-kit/cli-kit-src/OutputText.ts'])
+
+    Expect(result.selected.get('cli/cli-kit')).toBe('changed directly')
+    Expect(result.selected.get('cli/tao-cli')).toBe('imports cli/cli-kit')
+    Expect(result.selected.has('tao-apps')).toBe(true)
+    Expect(result.taoAppPaths).toEqual(['Apps'])
   })
 
   Test('root dependency and toolchain files widen to every suite', () => {

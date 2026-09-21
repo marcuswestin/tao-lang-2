@@ -4,7 +4,8 @@
   "type": "module",
   "module": "cli-kit-src/cli-kit.ts",
   "exports": {
-    ".": "./cli-kit-src/cli-kit.ts"
+    ".": "./cli-kit-src/cli-kit.ts",
+    "./OutputText": "./cli-kit-src/OutputText.ts"
   },
   "dependencies": {
     "ink": "^7.1.1",
