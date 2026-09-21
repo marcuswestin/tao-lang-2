@@ -185,7 +185,7 @@ WS   /events                         gains `device-state` events carrying the st
 ```
 
 `GET /api/device/launch` and `launch/open` are served only when `runStudioDev` injects the
-physical-device launcher from `packages/dev`; a packaged Studio without it answers 501.
+physical-device launcher from `packages/ides/studio-tooling`; a packaged Studio without it answers 501.
 
 ## Module ownership
 

@@ -19,7 +19,7 @@ numbers are reproduced verbatim so a later reader can tell measurement from opin
 - `tao dev` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
 - The dev loop it drives is the _repository's_ dev loop: it calls `just`,
-  `bun run packages/dev/dev-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
+  `bun run packages/cli/dev-cli/dev-cli-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
   log path, and the runtime-toolchain root on the **Git worktree root** (`Repo.getRoot()` shells out
   to `git rev-parse --show-toplevel`).
 
@@ -331,7 +331,7 @@ Not macOS-only, but broken on Windows or outside a checkout:
   `HostEnvironmentError` outside a worktree. On the `tao dev` path it decides the Expo home
   (`.artifacts/cache/expo`), the Expo log path, the runtime-toolchain root, the dev-data root, and
   the Expo Go APK cache.
-- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/dev/dev-src/dev.ts`,
+- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/cli/dev-cli/dev-cli-src/dev.ts`,
   and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository-root paths beside the
   project root it already watches. This is the repository's own loop, reused by `tao dev`.
   Separating the shipped loop from the repository loop is the largest single piece of work in this
@@ -576,7 +576,7 @@ overlap with `A3` and `A8`.
    version of this for the update service; the same answer probably serves both.
 8. **Does the first release include `tao review`?** It needs a local Chrome, which is a real host
    requirement to put in front of a stranger. Note that leaving it out is not free: it is imported
-   from `tao-cli.ts` today and pulls the whole `packages/dev` graph into the binary, so excluding it
+   from `tao-cli.ts` today and pulls the whole developer-CLI graph into the binary, so excluding it
    is a bundling change with its own slice.
 
 ## Notes for whoever implements this

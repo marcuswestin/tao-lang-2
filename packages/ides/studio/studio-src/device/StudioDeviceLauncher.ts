@@ -1,7 +1,7 @@
 /**
- * The device tooling seam. `packages/dev` implements it with Expo, `xcrun devicectl` for a phone or
- * tablet, and `xcrun simctl` for an iOS simulator; the Studio server only serves what it is given,
- * so a packaged Studio without host tooling answers 501 instead of pretending.
+ * The device tooling seam. `packages/ides/studio-tooling` implements it with Expo, `xcrun devicectl`
+ * for a phone or tablet, and `xcrun simctl` for an iOS simulator; the Studio server only serves what
+ * it is given, so a packaged Studio without host tooling answers 501 instead of pretending.
  */
 
 export type StudioDeviceLaunchHost = {

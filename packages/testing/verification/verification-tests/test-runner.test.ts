@@ -60,8 +60,8 @@ Describe('test runner suite registry', () => {
   Test('a name pattern filters every suite, including the Tao behavior suite', async () => {
     const { byName } = await discover({ pattern: 'one package only' })
 
-    Expect(argsOf(byName, 'dev')).toContain('--pass-with-no-tests')
-    Expect(argsOf(byName, 'dev')).toContain('--test-name-pattern=one package only')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--test-name-pattern=one package only')
     // A name that selects plenty in other suites normally selects nothing here, so the Tao suite is
     // told to pass on no match. Without that it would fail the whole run, which is why it used to
     // sit filtered runs out — and a run that skips it silently loses its Tao behavior coverage.
@@ -75,14 +75,14 @@ Describe('test runner suite registry', () => {
       files: new Map([['tao-apps', ['Apps/WordFlower']]]),
       kind: 'changed',
       pattern: 'one package only',
-      suites: new Set(['dev', 'tao-apps']),
+      suites: new Set(['cli/dev-cli', 'tao-apps']),
     })
 
     // `just test "<name>"` means the suites the diff reaches, filtered to that name. The scope still
     // decides which suites run — a pattern can only ever narrow the tests inside them.
-    Expect([...byName.keys()].sort()).toEqual(['dev', 'tao-apps'])
-    Expect(argsOf(byName, 'dev')).toContain('--test-name-pattern=one package only')
-    Expect(argsOf(byName, 'dev')).toContain('--pass-with-no-tests')
+    Expect([...byName.keys()].sort()).toEqual(['cli/dev-cli', 'tao-apps'])
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--test-name-pattern=one package only')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--pass-with-no-tests')
     Expect(argsOf(byName, 'tao-apps')).toContain('--pass-with-no-tests')
   })
 
@@ -111,11 +111,11 @@ Describe('test runner suite registry', () => {
   Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
     const { byName } = await discover()
 
-    Expect(argsOf(byName, 'dev')).toContain('--concurrent')
-    Expect(argsOf(byName, 'dev')).toContain('--timeout=60000')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--concurrent')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--timeout=60000')
     // A suite that chose its own bound keeps exactly that one: a second `--timeout` would leave
     // which bound is in force up to Bun's argument precedence rather than to this table.
-    Expect(argsOf(byName, 'dev').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
+    Expect(argsOf(byName, 'cli/dev-cli').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
   })
 
   // Under `--concurrent` Bun starts every test in the file at once and reports each one's duration
@@ -133,7 +133,7 @@ Describe('test runner suite registry', () => {
 
     Expect(argsOf(byName, 'language/validator')).toContain('--concurrent')
     Expect(timeoutOf('language/validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
-    Expect(timeoutOf('dev')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(timeoutOf('cli/dev-cli')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // A suite whose tests run one at a time keeps the budget, which is what catches a regression.
     Expect(argsOf(byName, 'shared')).not.toContain('--concurrent')
     Expect(timeoutOf('shared')).toBeLessThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS)
@@ -315,12 +315,12 @@ Describe('test runner suite registry', () => {
     // Bun reads a bare relative path as a filter and walks the whole tree to resolve it, leaving a
     // descriptor open per visited entry; children spawned by a test then inherit an exhausted
     // table and their piped output never arrives. An absolute path is taken literally.
-    const files = argsOf(byName, 'dev').filter(argument => argument.endsWith('.test.ts'))
+    const files = argsOf(byName, 'cli/dev-cli').filter(argument => argument.endsWith('.test.ts'))
     Expect(files.length).toBeGreaterThan(0)
     Expect(files.every(file => file.startsWith('/'))).toBe(true)
     Expect(
       argsOf(byName, 'performance-checks').some(argument =>
-        argument.endsWith('/packages/dev/performance-checks/language-performance.test.ts')
+        argument.endsWith('/packages/cli/dev-cli/performance-checks/language-performance.test.ts')
       ),
     ).toBe(true)
   })
@@ -352,34 +352,34 @@ Describe('test runner suite registry', () => {
   Test('names every structured report after the node that writes it, so two shards cannot collide', async () => {
     const { byName } = await discover({}, { reportRoot: '/tmp/test-reports' })
 
-    Expect(argsOf(byName, 'dev')).toContain('--reporter=junit')
-    Expect(argsOf(byName, 'dev')).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--reporter=junit')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--reporter-outfile=/tmp/test-reports/cli_dev-cli.xml')
     Expect(argsOf(byName, 'runtime-jest')).toContain('--json')
     Expect(argsOf(byName, 'runtime-jest')).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
 
     // Two shards of one suite run at once. A path named for the suite would have each overwrite the
     // other's results, and the run would then read a report that describes half of what it ran.
-    const first = processOf(byName, 'dev', { nodeName: 'dev#1' })
-    const second = processOf(byName, 'dev', { nodeName: 'dev#2' })
+    const first = processOf(byName, 'cli/dev-cli', { nodeName: 'dev#1' })
+    const second = processOf(byName, 'cli/dev-cli', { nodeName: 'dev#2' })
     Expect(first.args).toContain('--reporter-outfile=/tmp/test-reports/dev_1.xml')
     Expect(second.args).toContain('--reporter-outfile=/tmp/test-reports/dev_2.xml')
     Expect(first.testReport?.path).not.toBe(second.testReport?.path)
     // The report still says which suite it belongs to, so the ledger records per-suite outcomes.
-    Expect(first.testReport?.suite).toBe('dev')
+    Expect(first.testReport?.suite).toBe('cli/dev-cli')
     Expect(processOf(byName, 'runtime-jest', { nodeName: 'runtime-jest#2' }).args)
       .toContain('--outputFile=/tmp/test-reports/runtime-jest_2.json')
   })
 
   Test('builds a process for any subset of a suite files, which is what a shard runs', async () => {
     const { byName } = await discover()
-    const all = byName.get('dev')?.files ?? []
+    const all = byName.get('cli/dev-cli')?.files ?? []
     const subset = all.slice(0, 2)
 
     Expect(subset.length).toBe(2)
-    const shard = processOf(byName, 'dev', { files: subset, nodeName: 'dev#1' })
+    const shard = processOf(byName, 'cli/dev-cli', { files: subset, nodeName: 'dev#1' })
     Expect(shard.files).toEqual(subset)
     Expect(shard.args.filter(argument => argument.endsWith('.test.ts'))).toHaveLength(2)
-    Expect(processOf(byName, 'dev').args.filter(argument => argument.endsWith('.test.ts')))
+    Expect(processOf(byName, 'cli/dev-cli').args.filter(argument => argument.endsWith('.test.ts')))
       .toHaveLength(all.length)
   })
 
@@ -387,14 +387,14 @@ Describe('test runner suite registry', () => {
     const { byName, selected } = await discover({
       files: new Map([['tao-apps', ['Apps/WordFlower']]]),
       kind: 'changed',
-      suites: new Set(['dev', 'runtime-jest', 'tao-apps']),
+      suites: new Set(['cli/dev-cli', 'runtime-jest', 'tao-apps']),
     })
 
-    Expect(selected.map(suite => suite.name)).toEqual(['dev', 'runtime-jest', 'tao-apps'])
+    Expect(selected.map(suite => suite.name)).toEqual(['cli/dev-cli', 'runtime-jest', 'tao-apps'])
     // Whole suites run in full: neither runner is asked to narrow by Git, because Bun's
     // `--changed` stops at the package boundary and Jest ignores `--changedSince` beside paths.
-    Expect(argsOf(byName, 'dev').some(argument => argument.startsWith('--changed'))).toBe(false)
-    Expect(argsOf(byName, 'dev')).not.toContain('--pass-with-no-tests')
+    Expect(argsOf(byName, 'cli/dev-cli').some(argument => argument.startsWith('--changed'))).toBe(false)
+    Expect(argsOf(byName, 'cli/dev-cli')).not.toContain('--pass-with-no-tests')
     Expect(argsOf(byName, 'runtime-jest').some(argument => argument.startsWith('--changedSince'))).toBe(false)
     Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps/WordFlower'])
     Expect(byName.get('tao-apps')?.files).toEqual(['Apps/WordFlower'])
@@ -418,7 +418,8 @@ Describe('test runner suite registry', () => {
     const inventory = await TestRunner.suiteInventory()
 
     Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps'])
-    Expect(inventory.packageSuites).toContain('dev')
+    Expect(inventory.packageSuites).toContain('cli/dev-cli')
+    Expect(inventory.packageSuites).toContain('cli/agent-cli')
     Expect(inventory.packageSuites).toContain('shared')
     Expect(inventory.hasRuntimeJest).toBe(true)
     const expected = [...inventory.packageSuites, 'performance-checks', 'runtime-jest', 'tao-apps'].sort()
@@ -440,27 +441,27 @@ Describe('test runner suite registry', () => {
     Expect(byName.get('language/parser')?.node.serial).toBe(true)
     // A suite that declares a width is not serial: it says so precisely because one of its
     // processes uses more than one core, which is what the reservation is for.
-    Expect(byName.get('dev')?.node.cost).toBe(2)
-    Expect(byName.get('dev')?.node.serial).toBe(false)
+    Expect(byName.get('cli/dev-cli')?.node.cost).toBe(2)
+    Expect(byName.get('cli/dev-cli')?.node.serial).toBe(false)
     Expect(byName.get('tao-apps')?.node.serial).toBe(false)
     // Every node is bounded, so no runaway can hold a lane open for three quarters of an hour.
-    Expect(byName.get('dev')?.node.timeoutMs).toBeGreaterThan(0)
-    Expect(byName.get('dev')?.node.idleTimeoutMs).toBeGreaterThan(0)
+    Expect(byName.get('cli/dev-cli')?.node.timeoutMs).toBeGreaterThan(0)
+    Expect(byName.get('cli/dev-cli')?.node.idleTimeoutMs).toBeGreaterThan(0)
   })
 
   Test('gives each node the edges its suite reads imply, and never the Justfile formatter', async () => {
     const { byName } = await nodesFor({ kind: 'full' })
 
     // A test node runs its runner directly, so it does not parse the Justfile on its way up.
-    Expect(byName.get('dev')?.node.needs).toContain('_compile-word-flower-app')
-    Expect(byName.get('dev')?.node.needs).toContain('_fix-tao')
-    Expect(byName.get('dev')?.node.needs).not.toContain('_fix-just-fmt')
+    Expect(byName.get('cli/dev-cli')?.node.needs).toContain('_compile-word-flower-app')
+    Expect(byName.get('cli/dev-cli')?.node.needs).toContain('_fix-tao')
+    Expect(byName.get('cli/dev-cli')?.node.needs).not.toContain('_fix-just-fmt')
     // stdlib references no `.tao` source, no app, and no generated tree, so it waits for dprint alone.
     Expect(byName.get('apps/stdlib')?.node.needs).toEqual(['_fix-dprint'])
   })
 
   Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
-    const states = [suiteState('dev'), suiteState('runtime-jest')]
+    const states = [suiteState('cli/dev-cli'), suiteState('runtime-jest')]
     for (const state of states) {
       state.status = 'passed'
       state.testObservations = []
@@ -471,9 +472,9 @@ Describe('test runner suite registry', () => {
       file: 'packages/dev/dev-tests/example.test.ts',
       name: 'not selected',
       outcome: 'skipped',
-      suite: 'dev',
+      suite: 'cli/dev-cli',
     }], states)).toBe(true)
-    states[0]!.testReport = { format: 'bun-junit', path: '/missing.xml', suite: 'dev' }
+    states[0]!.testReport = { format: 'bun-junit', path: '/missing.xml', suite: 'cli/dev-cli' }
     states[0]!.testObservations = undefined
     Expect(TestRunner.noTestsMatched('a name nothing has', [{
       file: 'packages/apps/expo-host/expo-host-tests/example.jest-test.ts',
@@ -524,7 +525,7 @@ Describe('test runner suite registry', () => {
     // And the guard, which is what the outcome is for: a whole run in which nothing matched. The
     // Bun suite reported for itself and found nothing, the Tao suite says it matched no journey,
     // and the union of the two is what the guard reads.
-    const bun = suiteState('dev')
+    const bun = suiteState('cli/dev-cli')
     bun.status = 'passed'
     bun.testObservations = []
     const observations = await TestRunner.observationsFor([matchedNothing], Repo.getRoot())
@@ -551,16 +552,16 @@ Describe('test runner suite registry', () => {
         + '</testsuite></testsuites>',
     )
     try {
-      const concurrentState = suiteState('dev')
+      const concurrentState = suiteState('cli/dev-cli')
       concurrentState.status = 'passed'
-      concurrentState.testReport = { format: 'bun-junit', path: reportPath, suite: 'dev' }
+      concurrentState.testReport = { format: 'bun-junit', path: reportPath, suite: 'cli/dev-cli' }
       const serialState = suiteState('shared')
       serialState.status = 'passed'
       serialState.testReport = { format: 'bun-junit', path: reportPath, suite: 'shared' }
 
       const observations = await TestRunner.observationsFor([concurrentState, serialState], Repo.getRoot())
 
-      Expect(observations.find(observation => observation.suite === 'dev')?.durationMs).toBeUndefined()
+      Expect(observations.find(observation => observation.suite === 'cli/dev-cli')?.durationMs).toBeUndefined()
       Expect(observations.find(observation => observation.suite === 'shared')?.durationMs).toBe(6_202.7)
     } finally {
       await FS.remove(reportRoot)
@@ -571,7 +572,7 @@ Describe('test runner suite registry', () => {
     // The question is asked of the whole run, not of each suite. A Bun test name never matches a
     // Jest test or a Tao journey, so a suite finding nothing is the ordinary case: failing on it
     // would make `just test "<a real bun test>"` red for every other suite doing the right thing.
-    const states = [suiteState('dev'), suiteState('runtime-jest')]
+    const states = [suiteState('cli/dev-cli'), suiteState('runtime-jest')]
     for (const state of states) {
       state.status = 'passed'
       state.testObservations = []
@@ -581,7 +582,7 @@ Describe('test runner suite registry', () => {
         file: 'packages/dev/dev-tests/example.test.ts',
         name: 'the one match',
         outcome: 'passed' as const,
-        suite: 'dev',
+        suite: 'cli/dev-cli',
       },
       {
         file: 'packages/apps/expo-host/expo-host-tests/example.jest-test.ts',
@@ -662,8 +663,8 @@ Describe('report-test-stats', () => {
     try {
       const store: TestLedgerStore = {
         tests: {
-          [`dev::packages/dev/dev-tests/example.test.ts::stale`]: ledgerRecord(
-            'dev',
+          [`cli/dev-cli::packages/dev/dev-tests/example.test.ts::stale`]: ledgerRecord(
+            'cli/dev-cli',
             'stale',
             'packages/dev/dev-tests/example.test.ts',
             6_202.7,
@@ -722,7 +723,7 @@ Describe('test lane reporting on a shared machine', () => {
   })
 
   Test('uses process output counts when a native report is unavailable', async () => {
-    const state = suiteState('dev')
+    const state = suiteState('cli/dev-cli')
     state.status = 'passed'
     state.fullOutput = ' 3 pass\n 0 fail\n 7 expect() calls\nRan 3 tests across 1 file.\n'
 

@@ -95,7 +95,7 @@ Describe('workspace package graph', () => {
     // Shared re-exports the shipped, host-neutral Effects core instead of copying it.
     Expect([...graph.imports.get('shared')!]).toEqual(['apps/runtime'])
     const fromShared = PackageGraph.affected(graph, ['shared']).map(entry => entry.package)
-    for (const name of ['compiler', 'dev', 'ides/studio', 'cli/tao-cli', 'apps/expo-host']) {
+    for (const name of ['compiler', 'cli/dev-cli', 'ides/studio', 'cli/tao-cli', 'apps/expo-host']) {
       Expect(fromShared).toContain(name)
     }
   })

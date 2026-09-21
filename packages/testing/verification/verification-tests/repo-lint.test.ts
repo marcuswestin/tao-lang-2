@@ -4,6 +4,7 @@ import {
   CONVENTION_RULES,
   conventionRuleIssues,
   crossPackageSourceImportIssues,
+  DEV_ENTRY_PATH,
   developerEnvironmentIndexes,
   developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
@@ -248,7 +249,7 @@ _bench-check:
       )
       await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
-      await FS.mkdir(FS.resolvePath('packages', root))
+      await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
 
       Expect(await repoLintIssues(root)).toEqual([
         'Apps/WordFlower/2 - Next is absorbed but .contract.bin differs from Apps/WordFlower/1 - Current.',
@@ -275,6 +276,7 @@ _bench-check:
       await FS.writeText(FS.resolvePath('Apps/Sample/Adapter.ts', root), source)
       await FS.writeText(FS.resolvePath('packages/apps/runtime/TR-tests/failure.test.ts', root), source)
       await FS.writeText(FS.resolvePath('packages/plugin/config.cjs', root), source)
+      await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
 
       Expect(await repoLintIssues(root)).toEqual([
         rawErrorIssue('Apps/Sample/Adapter.ts'),
@@ -301,6 +303,7 @@ _bench-check:
       await FS.writeText(FS.resolvePath('packages/ignored/Ignored.ts', root), source)
       await FS.writeText(FS.resolvePath('packages/tool/_gen_output/Ignored.ts', root), source)
       await FS.writeText(FS.resolvePath('Outside.ts', root), source)
+      await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
 
       Expect(await repoLintIssues(root)).toEqual([rawErrorIssue('Apps/Sample/NewAdapter.ts')])
     } finally {
@@ -793,39 +796,37 @@ Describe('repo lint conventions', () => {
   })
 
   Test('reports a static Studio import in the ./dev entry', () => {
-    const entry = 'packages/dev/dev-src/dev.ts'
+    const entry = DEV_ENTRY_PATH
     Expect(devLazyStudioImportIssues(
       [{ path: entry, source: `${importFrom('@shared')}\n${importFrom('@studio-tooling')}` }],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/dev.ts:2 statically reaches `@studio-tooling` through'
-      + ' packages/dev/dev-src/dev.ts -> @studio-tooling; load the boundary with `await import(...)` inside the'
+      `${entry}:2 statically reaches \`@studio-tooling\` through`
+      + ` ${entry} -> @studio-tooling; load the boundary with \`await import(...)\` inside the`
       + ' command action so the lane commands start in a checkout that has never generated the parser.',
     ])
   })
 
   Test('reports Studio and Expo modules reached through a static local import chain', () => {
-    const entry = 'packages/dev/dev-src/dev.ts'
+    const entry = DEV_ENTRY_PATH
+    const doctorCommand = 'packages/cli/dev-cli/dev-cli-src/doctor/RepositoryDoctorCommand.ts'
     Expect(devLazyStudioImportIssues(
       [
         { path: entry, source: importFrom('./doctor/RepositoryDoctorCommand') },
-        {
-          path: 'packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts',
-          source: importFrom('@expo-host/dev-loop/expo-runner/Ports'),
-        },
+        { path: doctorCommand, source: importFrom('@expo-host/dev-loop/expo-runner/Ports') },
       ],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts:1 statically reaches'
-      + ' `@expo-host/dev-loop/expo-runner/Ports` through packages/dev/dev-src/dev.ts ->'
-      + ' packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts ->'
+      `${doctorCommand}:1 statically reaches`
+      + ` \`@expo-host/dev-loop/expo-runner/Ports\` through ${entry} ->`
+      + ` ${doctorCommand} ->`
       + ' @expo-host/dev-loop/expo-runner/Ports; load the boundary with `await import(...)` inside'
       + ' the command action so the lane commands start in a checkout that has never generated the parser.',
     ])
   })
 
   Test('accepts the ./dev entry when Studio and Expo load lazily', () => {
-    const entry = 'packages/dev/dev-src/dev.ts'
+    const entry = DEV_ENTRY_PATH
     Expect(devLazyStudioImportIssues(
       [{
         path: entry,
@@ -838,41 +839,51 @@ Describe('repo lint conventions', () => {
   })
 
   Test('leaves Studio imports in every other file alone', () => {
+    const entry = DEV_ENTRY_PATH
     Expect(devLazyStudioImportIssues(
-      [{ path: 'packages/dev/dev-src/studio/StudioDev.ts', source: importFrom('@studio') }],
-      'packages/dev/dev-src/dev.ts',
+      [
+        { path: entry, source: importFrom('@shared') },
+        { path: 'packages/cli/dev-cli/dev-cli-src/studio/StudioDev.ts', source: importFrom('@studio') },
+      ],
+      entry,
     )).toEqual([])
   })
 
   Test('reports a bare @expo-host import, not only @expo-host/dev-loop', () => {
-    const entry = 'packages/dev/dev-src/dev.ts'
+    const entry = DEV_ENTRY_PATH
     Expect(devLazyStudioImportIssues(
       [{ path: entry, source: importFrom('@expo-host') }],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/dev.ts:1 statically reaches `@expo-host` through packages/dev/dev-src/dev.ts ->'
+      `${entry}:1 statically reaches \`@expo-host\` through ${entry} ->`
       + ' @expo-host; load the boundary with `await import(...)` inside the command action so the lane commands'
       + ' start in a checkout that has never generated the parser.',
     ])
   })
 
   Test('follows a @verification alias import to find a Studio import routed through it', () => {
-    const entry = 'packages/dev/dev-src/dev.ts'
+    const entry = DEV_ENTRY_PATH
+    const gateCatalog = 'packages/testing/verification/verification-src/GateCatalog.ts'
     Expect(devLazyStudioImportIssues(
       [
         { path: entry, source: importFrom('@verification/GateCatalog') },
-        {
-          path: 'packages/testing/verification/verification-src/GateCatalog.ts',
-          source: importFrom('@studio-tooling'),
-        },
+        { path: gateCatalog, source: importFrom('@studio-tooling') },
       ],
       entry,
     )).toEqual([
-      'packages/testing/verification/verification-src/GateCatalog.ts:1 statically reaches `@studio-tooling` through'
-      + ' packages/dev/dev-src/dev.ts -> packages/testing/verification/verification-src/GateCatalog.ts ->'
+      `${gateCatalog}:1 statically reaches \`@studio-tooling\` through`
+      + ` ${entry} -> ${gateCatalog} ->`
       + ' @studio-tooling; load the boundary with `await import(...)` inside the command action so the lane'
       + ' commands start in a checkout that has never generated the parser.',
     ])
+  })
+
+  Test('reports the entry as moved when the file map does not carry DEV_ENTRY_PATH', () => {
+    Expect(devLazyStudioImportIssues([{ path: 'packages/cli/dev-cli/dev-cli-src/other.ts', source: '' }]))
+      .toEqual([
+        `${DEV_ENTRY_PATH}:1 does not exist, so this rule is not watching the \`./dev\` entry at all; update`
+        + ' `DEV_ENTRY_PATH` in packages/testing/verification/verification-src/repo-lint.ts to its new path.',
+      ])
   })
 })
 

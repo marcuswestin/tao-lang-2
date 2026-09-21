@@ -421,8 +421,8 @@ A development build finds the server through the host its bundle loaded from —
 the bundle URL on a device, which is where Expo's dev server already lives — and the port and app
 key the dev server writes into the Expo manifest as `expo.extra.taoDevData`. The wire contract,
 `tao-dev-data-v1`, lives beside the client in `@tao/data/providers/dev/Dev.ts`; the server in
-`packages/dev` mirrors it. `packages/ides/studio/README.md` owns the operational side: ports, the
-storage root, and how to inspect or clear it.
+`packages/apps/expo-host` mirrors it. `packages/ides/studio/README.md` owns the operational side:
+ports, the storage root, and how to inspect or clear it.
 
 ## Queries
 

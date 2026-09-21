@@ -949,7 +949,8 @@ async function adviseOnDiff(
   )
   if (
     diffPaths.some(path =>
-      path.startsWith('packages/dev/')
+      path.startsWith('packages/cli/dev-cli/')
+      || path.startsWith('packages/cli/agent-cli/')
       || path.startsWith('packages/cli/cli-kit/')
       || path.startsWith('packages/testing/verification/')
       || path.startsWith('packages/ides/studio-tooling/')

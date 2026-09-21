@@ -2,7 +2,7 @@
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
   // Canonical agent permission rules for this repository. `./agent setup` renders them into
   // .claude/settings.json (via rulesync) plus .codex/config.toml and .codex/rules/tao.rules
-  // (via packages/dev's CodexConfigGenerator). Edit this file, never the generated ones.
+  // (via tao-agent-cli's CodexConfigGenerator). Edit this file, never the generated ones.
   "permission": {
     "bash": {
       // `--force` breaks a lock this session did not necessarily take, on the strength of a dead
