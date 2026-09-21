@@ -297,6 +297,11 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
+- [ ] Move Tao Studio to be an ordinary Tao app
+  - The browser client, its code editor, and its local-InstantDB dev stack move to `Apps/Tao Studio/`,
+    an app-local editor package, and new `tao-cloud`/`providers/instantdb` packages. No language or
+    product decision is needed; it is a location move. Plan:
+    `Docs/Roadmap/Tao Studio as a Tao app/Plan - Tao Studio as a Tao app.md`.
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
     `Docs/Archive/Plans/Repository simplification/Plan - Repository simplification.md`. Each item
@@ -438,6 +443,7 @@ Product and codebase backlog, unordered.
   for humans on `check`/`verify`/`verify-full`, the file-backed quiet output contract for agents, and
   `verify-full`'s Studio lanes parallelized on per-worker resources.
 - `Docs/Archive/Plans/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
+- `Docs/Archive/Plans/Repository simplification 2/` — the completed second simplification pass: instruction and documentation budgets, pattern conformance, and the package restructure into role groups (`shared`, `compiler`, `language`, `apps`, `providers`, `ides`, `ai`, `cli`, `services`, `testing`), landed through a dedicated `./agent` front door. `Docs/Roadmap/Tao Studio as a Tao app/Plan - Tao Studio as a Tao app.md` carries forward the one deferred slice its plan did not start.
 - `Docs/Archive/Reports/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
 - `Docs/Archive/Reports/September squash-merge remediation.md` — the September squash-merge audit's 183
   tracked findings (implemented) and the follow-up branch's open items, including a second,

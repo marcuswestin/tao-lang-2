@@ -12,6 +12,19 @@
 - While an agent owns paths exclusively, it returns requests for `shared` helpers to the agent that
   owns `shared` instead of editing it.
 
+## After a package move
+
+Every real defect a move exposes is a string, a regex, a table key, a cache key, an allowlist entry,
+or a runtime resolution — never a type error, since none of these has one to fail on. Sweep for all
+of them by the old path's literal text, not by memory of which files used it: a test nested under the
+wrong folder belongs to no suite; a cache keyed on the old path fails open instead of failing loud; a
+cross-package lint or a packaged-app payload that counts folder depth breaks silently when a level
+changes; a handler table keyed by an unvalidated wire value can resolve `constructor`, `toString`, or
+`__proto__` to an inherited member instead of failing to find one.
+Prefer resolving through a package name over counting directories to reach a sibling
+(`../x`, `:h:h:h:h`, `../../node_modules` are all the same mistake): a package rename or regroup
+breaks a directory count every time and breaks a name lookup never.
+
 ## House patterns
 
 `packages/AGENTS.md` owns the dispatch, error, and platform-access patterns and their gates.
