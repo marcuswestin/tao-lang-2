@@ -1041,7 +1041,10 @@ function resolveImports(
     }
     return [...sourceByPath.values()]
       .filter(candidate =>
-        Packages.targetMatches(resolution, { filePath: candidate.path, workspaceFilePaths: sourcePaths })
+        Packages.targetMatches(packagesContext, resolution, {
+          filePath: candidate.path,
+          workspaceFilePaths: sourcePaths,
+        })
       )
       .map(candidate => ({
         declarationsNamed: (name: string) =>
