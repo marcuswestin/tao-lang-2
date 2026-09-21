@@ -115,6 +115,7 @@ export type FinalizeDependencies = {
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
+  removeFile: (path: string) => Promise<void>
   run: FinalizeCommandRunner
   writeJson: (path: string, value: unknown) => Promise<void>
   writeLine: (line: string) => void
@@ -129,6 +130,7 @@ const defaultDependencies: FinalizeDependencies = {
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
+  removeFile: FS.remove,
   run: CLI.run,
   writeJson: FS.writeJson,
   writeLine: HCI.writeLine,
@@ -507,9 +509,16 @@ async function integrateMain(
   if (ancestor.exitCode !== 1) {
     assertCommandSucceeded(ancestor)
   }
+  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
   if (check) {
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
+    if (blocked.length > 0) {
+      lines.push(`NOTE  ${deniedIntegrationReport(blocked)}`)
+    }
     return { headSha: branchHead, integratedNow: false, mainSha }
+  }
+  if (blocked.length > 0) {
+    Errors.throwUserInput(deniedIntegrationReport(blocked))
   }
 
   const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
@@ -578,6 +587,75 @@ async function mergeTreeConflicts(
   // line and git's own messages about them.
   const [, ...rest] = preview.stdout.split('\n')
   return rest.slice(0, rest.indexOf('')).map(line => line.trim()).filter(Boolean)
+}
+
+/** The probe file a write test creates and removes; named so a stray one says what left it. */
+const WRITE_PROBE = '.finalize-write-probe'
+
+/**
+ * undeniableDirectories returns the directories `main` would write that this process cannot, empty
+ * when the merge can complete. A sandboxed shell write-protects part of the worktree — `agents/skills`
+ * among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers that partway
+ * through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications nobody made
+ * (DEVENV-111). Refusing before the merge starts is the difference between an instruction and a mess.
+ *
+ * The test is an actual write rather than a list of protected prefixes, because the list belongs to
+ * the harness rather than to this repository: it is not in `.rulesync/permissions.jsonc`, it is not
+ * in the generated settings, and a copy kept here would rot silently the first time it changed.
+ */
+async function undeniableDirectories(
+  dependencies: FinalizeDependencies,
+  root: string,
+  branchHead: string,
+  mainSha: string,
+): Promise<string[]> {
+  const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
+  const directories = new Set<string>()
+  for (const path of incoming.stdout.trim().split('\n').filter(Boolean)) {
+    directories.add(await nearestExistingDirectory(dependencies, root, FS.dirname(path)))
+  }
+  const blocked: string[] = []
+  for (const directory of [...directories].sort()) {
+    if (!await canWriteInto(dependencies, FS.resolvePath(directory, root))) {
+      blocked.push(directory === '' ? '.' : directory)
+    }
+  }
+  return blocked
+}
+
+/** nearestExistingDirectory walks up to the first directory that exists, since a new file's may not. */
+async function nearestExistingDirectory(
+  dependencies: FinalizeDependencies,
+  root: string,
+  directory: string,
+): Promise<string> {
+  let candidate = directory
+  while (candidate !== '' && candidate !== '.' && !await dependencies.exists(FS.resolvePath(candidate, root))) {
+    candidate = FS.dirname(candidate)
+  }
+  return candidate === '.' ? '' : candidate
+}
+
+/** canWriteInto reports whether this process may create a file in a directory, by creating one. */
+async function canWriteInto(dependencies: FinalizeDependencies, directory: string): Promise<boolean> {
+  const probe = FS.resolvePath(WRITE_PROBE, directory)
+  try {
+    await dependencies.writeText(probe, '')
+  } catch {
+    return false
+  }
+  // A probe that cannot be removed is worse than one never written, so its failure is not swallowed.
+  await dependencies.removeFile(probe)
+  return true
+}
+
+/** deniedIntegrationReport says what the merge would half-write, and how to do it where it works. */
+function deniedIntegrationReport(blocked: readonly string[]): string {
+  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} director${blocked.length === 1 ? 'y' : 'ies'} `
+    + `this shell may not, so the merge would stop partway and leave a tree no Git command describes:\n`
+    + `${blocked.map(path => `- ${path}`).join('\n')}\n`
+    + `Nothing has been changed. Run \`git merge ${REMOTE}/${MAIN_BRANCH}\` yourself as a top-level `
+    + 'command — the sandbox exclusion reaches it there but not inside finalize — and finalize again.'
 }
 
 /** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */

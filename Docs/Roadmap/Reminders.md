@@ -19,4 +19,7 @@ the change that acts on it.
   from the transcripts under `~/.claude/projects/-Users-ro-code-tao-lang-2*`: per assistant message,
   `message.usage` summed over `input_tokens`, `cache_creation_input_tokens` and
   `cache_read_input_tokens` is the context of that request, and `/subagents/` in the path separates
-  the two populations. A week is the shortest span that holds enough sessions to compare.
+  the two populations. A week is the shortest span that holds enough sessions to compare. Read
+  `.artifacts/logs/hook-overrides.jsonl` in the same pass: every `# hook-ok:` line is a refusal rule
+  an agent judged wrong, and a rule that collects overrides should be narrowed or dropped rather
+  than defended.
