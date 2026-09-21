@@ -15,6 +15,7 @@ import {
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
+import { createElement } from './TR-create-element'
 import {
   DataControls,
   type TaoConfiguredDatasource,
@@ -309,7 +310,7 @@ class TR {
       const itemKey = stableListKey(value, index)
       let capturedArguments: TaoRuntimeJson | undefined
       const diagnosticsArguments = () => capturedArguments ??= captureArguments({ index, value })
-      return React.createElement(
+      return createElement(
         TaoErrorBoundary,
         {
           boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${String(itemKey)}`,
@@ -317,10 +318,10 @@ class TR {
           key: itemKey,
           stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
-        React.createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select }),
+        createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select }),
       )
     })
-    return React.createElement(ForEachCollection, { descriptor, items })
+    return createElement(ForEachCollection, { descriptor, items })
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
@@ -488,8 +489,11 @@ class TR {
     props: Record<string, unknown> | null,
     ...children: React.ReactNode[]
   ): React.ReactNode {
-    return React.createElement(component as React.ComponentType<any>, props as any, ...children)
+    return createElement(component as React.ComponentType<any>, props as any, ...children)
   }
+
+  /** createElement is the runtime's one element-creation chokepoint, exposed for external callers. */
+  static createElement = createElement
 
   /**
    * WarnUnhonoredLayout reports, outside production, styling passed to a platform-native component
@@ -631,7 +635,7 @@ class TR {
     const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
     return Object.keys(props).length === 0
       ? child
-      : React.createElement(requireReactNativeRuntime().View, props, child)
+      : createElement(requireReactNativeRuntime().View, props, child)
   }
 
   /** setDevMode configures Tao runtime development-only diagnostics. */
@@ -932,7 +936,7 @@ function ForEachCollection(props: {
   items: readonly React.ReactNode[]
 }): React.ReactNode {
   const identity = useOutlineCollection(props.descriptor)
-  return React.createElement(OutlineScope, { identity }, props.items)
+  return createElement(OutlineScope, { identity }, props.items)
 }
 
 /**
@@ -957,14 +961,14 @@ function ForEachItem(props: {
   )
   const content = props.render(props.runtimeValue, props.index)
   const row = props.select
-    ? React.createElement(SelectableRow, {
+    ? createElement(SelectableRow, {
       ...(outline.label === undefined ? {} : { accessibilityLabel: outline.label }),
       capabilities: outline.capabilities,
       ...(outline.identity === undefined ? {} : { identity: outline.identity }),
       onSelect: () => props.select!(props.runtimeValue, props.index),
     }, content)
     : content
-  return React.createElement(OutlineScope, { identity: outline.identity }, row)
+  return createElement(OutlineScope, { identity: outline.identity }, row)
 }
 
 namespace TR {

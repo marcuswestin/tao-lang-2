@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { OutlineScope, type TaoOutlineProvenance, useOutlineNode } from './TR-interaction-outline'
 
 /**
@@ -51,7 +52,7 @@ export function OutlineRegionScope(props: {
   region: TaoOutlineRegion | undefined
 }): React.ReactNode {
   const identity = useOutlineRegion(props.region)
-  return React.createElement(OutlineScope, { identity }, props.children)
+  return createElement(OutlineScope, { identity }, props.children)
 }
 
 /** regionNativeProps is the accessibility a region's native root carries: a named group. */

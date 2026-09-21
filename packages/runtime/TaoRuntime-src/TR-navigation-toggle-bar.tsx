@@ -1,6 +1,7 @@
 import React from 'react'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { requireSafeAreaContext } from './TR-app-shell'
+import { createElement } from './TR-create-element'
 import { warnContainedFailure } from './TR-errors'
 import { directToolbarCapacity, navigationCommandTestId, navigationTitleTestId } from './TR-navigation-basic-stack'
 import { NavigationCommandButton } from './TR-navigation-command-button'
@@ -70,23 +71,23 @@ export function SelectionToggleBar(props: {
     label: 'Back',
   }
   const next = props.next
-  return React.createElement(runtime.View, {
+  return createElement(runtime.View, {
     accessibilityRole: 'toolbar',
     children: [
-      React.createElement(
+      createElement(
         BarMaterial,
         { dark, glass, key: 'back', shape: circleShape },
-        React.createElement(NavigationCommandButton, {
+        createElement(NavigationCommandButton, {
           command: back,
           iconOnly: true,
           outlineIdentity: `navigation:${props.name}:back`,
           taoProps: props.taoProps,
         }),
       ),
-      React.createElement(
+      createElement(
         BarMaterial,
         { dark, glass, key: 'title', shape: pillShape },
-        React.createElement(runtime.Text, {
+        createElement(runtime.Text, {
           accessibilityRole: 'header',
           children: title,
           key: 'title',
@@ -94,17 +95,17 @@ export function SelectionToggleBar(props: {
           style: [titleStyle, { color: dark ? '#f2f2f7' : '#1c1c1e' }],
           testID: props.observable ? navigationTitleTestId : undefined,
         }),
-        React.createElement(BarToolbar, {
+        createElement(BarToolbar, {
           commands: toolbar,
           key: 'toolbar',
           observable: props.observable,
           taoProps: props.taoProps,
         }),
       ),
-      next === undefined ? null : React.createElement(
+      next === undefined ? null : createElement(
         BarMaterial,
         { dark, glass, key: 'toggle', shape: togglePillShape },
-        React.createElement(NavigationCommandButton, {
+        createElement(NavigationCommandButton, {
           command: {
             enabled: props.observable,
             ...(next.icon ? { icon: next.icon } : {}),
@@ -149,10 +150,10 @@ function BarToolbar(props: {
     restoreOverflowFocus.current = true
     setExpanded(false)
   }
-  return React.createElement(runtime.View, {
+  return createElement(runtime.View, {
     children: [
       ...direct.map(command =>
-        React.createElement(NavigationCommandButton, {
+        createElement(NavigationCommandButton, {
           command: focused(command),
           iconOnly: true,
           key: command.identity,
@@ -160,7 +161,7 @@ function BarToolbar(props: {
           testID: props.observable ? navigationCommandTestId(command.label) : undefined,
         })
       ),
-      overflow.length === 0 ? null : React.createElement(NavigationCommandButton, {
+      overflow.length === 0 ? null : createElement(NavigationCommandButton, {
         accessibilityState: { expanded },
         command: {
           enabled: props.observable,
@@ -176,7 +177,7 @@ function BarToolbar(props: {
         taoProps: props.taoProps,
       }),
       expanded && overflow.length > 0
-        ? React.createElement(BarOverflowMenu, {
+        ? createElement(BarOverflowMenu, {
           commands: overflow.map(focused),
           key: 'overflow',
           observable: props.observable,
@@ -198,11 +199,11 @@ function BarOverflowMenu(props: {
   const runtime = requireReactNativeRuntime()
   const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
   React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
-  const menu = React.createElement(runtime.View, {
+  const menu = createElement(runtime.View, {
     accessibilityRole: 'menu',
     accessibilityViewIsModal: true,
     children: props.commands.map(command =>
-      React.createElement(NavigationCommandButton, {
+      createElement(NavigationCommandButton, {
         command,
         hostRef: command === props.commands[0] ? firstHost : undefined,
         key: command.identity,
@@ -218,13 +219,13 @@ function BarOverflowMenu(props: {
   if (!runtime.Modal) {
     return menu
   }
-  return React.createElement(
+  return createElement(
     runtime.Modal,
     { animationType: 'fade', onRequestClose: props.onClose, transparent: true, visible: true },
-    React.createElement(
+    createElement(
       runtime.View,
       { style: fillStyle },
-      React.createElement(runtime.Pressable, {
+      createElement(runtime.Pressable, {
         accessibilityLabel: 'Dismiss command menu',
         accessibilityRole: 'button',
         onPress: props.onClose,
@@ -244,7 +245,7 @@ function BarMaterial(props: {
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   if (props.glass) {
-    return React.createElement(props.glass.GlassView, {
+    return createElement(props.glass.GlassView, {
       children: props.children,
       colorScheme: props.dark ? 'dark' : 'light',
       glassEffectStyle: 'regular',
@@ -252,7 +253,7 @@ function BarMaterial(props: {
       style: props.shape,
     })
   }
-  return React.createElement(runtime.View, {
+  return createElement(runtime.View, {
     children: props.children,
     style: [props.shape, props.dark ? darkMaterialStyle : lightMaterialStyle],
   })

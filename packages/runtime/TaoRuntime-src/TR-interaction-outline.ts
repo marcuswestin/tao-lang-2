@@ -1,5 +1,6 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
+import { createElement } from './TR-create-element'
 import { DataControls, type TaoEntityCommandPolicy } from './TR-data'
 import { labelCorpus, primaryLabel } from './TR-interaction-labels'
 import type { Evaluable } from './TR-navigation-presentables'
@@ -646,7 +647,7 @@ export function useOutlineParentIdentity(): string | undefined {
 export function OutlineScope(props: { children?: React.ReactNode; identity: string | undefined }): React.ReactNode {
   return props.identity === undefined
     ? props.children
-    : React.createElement(OutlineParentContext.Provider, { value: props.identity }, props.children)
+    : createElement(OutlineParentContext.Provider, { value: props.identity }, props.children)
 }
 
 let mountSequence = 0

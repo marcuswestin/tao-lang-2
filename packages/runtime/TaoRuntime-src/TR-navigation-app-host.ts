@@ -1,5 +1,6 @@
 import React from 'react'
 import { appFramePadding, AppSurfaceFrame, requireSafeAreaContext } from './TR-app-shell'
+import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
 import { InteractionControls } from './TR-interaction-catalog'
@@ -22,7 +23,7 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
-  return React.createElement(
+  return createElement(
     TaoErrorBoundary,
     {
       app: props.app,
@@ -30,7 +31,7 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
       frame: { boundary: 'app', declaration: props.app.definition.name },
       stateKey: props.app.snapshot(),
     },
-    React.createElement(NavigationAppHostContent, props),
+    createElement(NavigationAppHostContent, props),
   )
 }
 
@@ -38,9 +39,9 @@ function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: Ta
   const ready = useNavigationRestoration(props.app)
   const runtime = requireReactNativeRuntime()
   if (!ready) {
-    return React.createElement(runtime.View, { style: navigationHostStyle })
+    return createElement(runtime.View, { style: navigationHostStyle })
   }
-  return React.createElement(MountedNavigationAppHost, props)
+  return createElement(MountedNavigationAppHost, props)
 }
 
 function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
@@ -108,11 +109,11 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   // A navigator that hands the window to a native surface gets true window bounds; every other
   // navigator renders inside the app's safe-area scroll frame, exactly as before.
   const ownsWindow = navigator.ownsWindowSurface()
-  const content = React.createElement(
+  const content = createElement(
     React.Fragment,
     { key: 'levels' },
     props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
-      ? React.createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
+      ? createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
       : null,
     navigator.render(navigatorTaoProps),
     ...auxiliaries.map(auxiliary =>
@@ -126,22 +127,22 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     children: [
       ownsWindow
         ? content
-        : React.createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
+        : createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
       React.Children.count(toasts) > 0
-        ? React.createElement(runtime.View, {
+        ? createElement(runtime.View, {
           children: toasts,
           key: 'app-toasts',
           style: toastLayerStyle,
         })
         : null,
-      React.createElement(InteractionLayersHost, { key: 'interaction-layers', taoProps: appTaoProps }),
+      createElement(InteractionLayersHost, { key: 'interaction-layers', taoProps: appTaoProps }),
     ],
     onKeyDown,
     onPointerDown,
     style: navigationAppHostStyle,
     tabIndex: runtime.Platform?.OS === 'web' ? 0 : undefined,
   })
-  return React.createElement(runtime.View, hostProps)
+  return createElement(runtime.View, hostProps)
 }
 
 type TaoAppHostKeyEvent =
@@ -224,9 +225,9 @@ function useWebInteractionKeyboard(listener: ((event: TaoAppHostKeyEvent) => voi
 function AppBackAffordance(props: { inset: boolean; target: RuntimeAppDefinition }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
-  const affordance = React.createElement(NavigationBackAffordance, { target: props.target })
+  const affordance = createElement(NavigationBackAffordance, { target: props.target })
   return props.inset
-    ? React.createElement(runtime.View, {
+    ? createElement(runtime.View, {
       children: affordance,
       // The frame padding as well as the insets: this control is standing in for one that would
       // otherwise sit inside `AppSurfaceFrame`, and a Back button flush against the window edge
@@ -237,7 +238,7 @@ function AppBackAffordance(props: { inset: boolean; target: RuntimeAppDefinition
         paddingTop: appFramePadding + insets.top,
       },
     })
-    : React.createElement(runtime.View, { children: affordance })
+    : createElement(runtime.View, { children: affordance })
 }
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {

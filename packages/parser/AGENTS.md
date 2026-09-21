@@ -11,10 +11,7 @@ consumes what it exports.
 - Cross-referenced grammar rules must expose their key as `name`; ignore incomplete recovery nodes
   without real names. Build scope chains nearest-to-farthest: pass the outer scope into
   `createScopeForNodes` so closer declarations shadow it.
-- Owners: local value scopes in `parser-src/value-scope.ts`, parser service installation in
-  `parser-src/parser.ts`, workspace/package-aware scopes in
-  `packages/workspace/workspace-src/langium-services.ts`, consumer-facing exports in
-  `parser-src/langium-exports.ts`.
+- Owners: value scopes (`parser-src/value-scope.ts`), parser service install (`parser-src/parser.ts`), workspace-aware scopes (`packages/workspace/workspace-src/langium-services.ts`), consumer exports (`parser-src/langium-exports.ts`).
 - Test through the parser or validator helpers that build documents, not grammar-only parsing, so
   linking and diagnostics actually run; cover shadowing and out-of-scope behavior.
 

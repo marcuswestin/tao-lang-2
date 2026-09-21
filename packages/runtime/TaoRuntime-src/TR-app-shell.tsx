@@ -1,6 +1,7 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
+import { createElement } from './TR-create-element'
 import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { ParentDirectionContext } from './TR-parent-direction'
@@ -52,10 +53,10 @@ export const AppShell = AppShellComponent
 
 function AppShellComponent(props: AppShellProps): React.JSX.Element {
   const SafeAreaContext = requireSafeAreaContext()
-  return React.createElement(
+  return createElement(
     SafeAreaContext.SafeAreaProvider,
     null,
-    React.createElement(AppShellFrame, { ...props, SafeAreaContext }),
+    createElement(AppShellFrame, { ...props, SafeAreaContext }),
   )
 }
 
@@ -66,18 +67,18 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
   const devMode = Dev.useMode()
   const scheme = SchemeControls.use()
 
-  return React.createElement(
+  return createElement(
     RN.KeyboardAvoidingView,
     {
       behavior: platformOS === 'ios' ? 'padding' : undefined,
       style: rootStyle,
     },
-    React.createElement(
+    createElement(
       DataLoadRecoveryBoundary,
       null,
       appRootChildren(props.children, devMode, scheme.resolved),
     ),
-    devMode.enabled && !Dev.isMenuHidden() ? React.createElement(DevMenu) : null,
+    devMode.enabled && !Dev.isMenuHidden() ? createElement(DevMenu) : null,
   )
 }
 
@@ -112,7 +113,7 @@ export function AppSurfaceFrame(props: {
       paddingRight: appFramePadding + insets.right,
       paddingTop: appFramePadding + insets.top,
     }
-  return React.createElement(
+  return createElement(
     RN.ScrollView,
     {
       ...(props.nativeInsets ? { contentInsetAdjustmentBehavior: 'automatic' } : {}),
@@ -121,7 +122,7 @@ export function AppSurfaceFrame(props: {
       keyboardShouldPersistTaps: 'handled',
       style: [rootStyle, mountedDesignStyle(props.taoProps, 'AppSurface')],
     },
-    React.createElement(
+    createElement(
       ParentDirectionContext.Provider,
       { direction: ParentDirectionContext.defaultProps.parentDirection },
       props.children,

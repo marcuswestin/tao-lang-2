@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { captureArguments, TaoErrorBoundary } from './TR-error-containment'
 import type {
   TaoNavigationArguments,
@@ -49,7 +50,7 @@ export class RuntimePresentable {
         ]),
       ))
     const identity = this.definition.identity?.canonical ?? this.definition.name
-    return React.createElement(
+    return createElement(
       TaoErrorBoundary,
       {
         app: TaoPropsControls.appInChain(taoProps),
@@ -62,7 +63,7 @@ export class RuntimePresentable {
         }),
         stateKey: () => JSON.stringify([taoProps?.navigation?.snapshot(), diagnosticsArguments()]),
       },
-      React.createElement(PresentableContent, {
+      createElement(PresentableContent, {
         arguments_: effectiveArguments,
         definition: this.definition,
         host,

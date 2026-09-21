@@ -1,5 +1,6 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
+import { createElement } from './TR-create-element'
 import type { TaoDesign } from './TR-design'
 import { runtimeRevisionStore } from './TR-listeners'
 import { mountedDesignStyle } from './TR-mounted-design'
@@ -383,7 +384,7 @@ export class RuntimeAppDefinition implements Subscription {
     return [...this.toastEntries.values()].map(entry =>
       // A toast is transient, so it carries its own surface rather than relying on the app's
       // background: bare text over arbitrary content is not reliably legible.
-      React.createElement(
+      createElement(
         runtime.View,
         {
           key: entry.instanceId,

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { HostEnvironmentError, UnexpectedBehaviorError, UserInputError } from './TR-errors'
@@ -236,7 +237,7 @@ class StudioPreviewErrorBoundary extends React.Component<
   override render(): React.ReactNode {
     return this.state.error === undefined
       ? this.props.children
-      : React.createElement(StudioPreviewFailure, { error: this.state.error })
+      : createElement(StudioPreviewFailure, { error: this.state.error })
   }
 }
 
@@ -252,14 +253,14 @@ function StudioPreviewPending(): React.ReactElement {
 
 function previewMessage(title: string, message: string, backgroundColor: string, color: string): React.ReactElement {
   const RN = requireReactNativeRuntime()
-  return React.createElement(
+  return createElement(
     RN.View,
     {
       accessibilityRole: 'alert',
       style: { backgroundColor, flex: 1, gap: 8, minHeight: '100%', padding: 20 },
     },
-    React.createElement(RN.Text, { style: { color, fontSize: 18, fontWeight: '700' } }, title),
-    React.createElement(
+    createElement(RN.Text, { style: { color, fontSize: 18, fontWeight: '700' } }, title),
+    createElement(
       RN.Text,
       { selectable: true, style: { color, fontFamily: 'monospace', fontSize: 13 } },
       message,
@@ -331,9 +332,9 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
     }
   }, [replayKey])
   if (error !== undefined) {
-    return React.createElement(StudioPreviewFailure, { error })
+    return createElement(StudioPreviewFailure, { error })
   }
-  return ready ? React.createElement(React.Fragment, null, props.children) : React.createElement(StudioPreviewPending)
+  return ready ? createElement(React.Fragment, null, props.children) : createElement(StudioPreviewPending)
 }
 
 /** PreviewBridge activates Studio messaging only when a generated preview supplies trusted configuration. */
@@ -385,9 +386,9 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
     }
   }, [journeyRevision, scenario])
   if (journeyError !== undefined) {
-    return React.createElement(StudioPreviewFailure, { error: journeyError })
+    return createElement(StudioPreviewFailure, { error: journeyError })
   }
-  return React.createElement(React.Fragment, null, props.children)
+  return createElement(React.Fragment, null, props.children)
 }
 
 /** replayStudioJourney drives a scenario prefix in the live browser preview through DOM events. */

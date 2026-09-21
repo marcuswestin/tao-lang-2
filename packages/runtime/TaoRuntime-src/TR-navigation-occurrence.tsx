@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { UserInputError } from './TR-errors'
 import type {
   TaoConfiguredNavigation,
@@ -24,7 +25,7 @@ export function NavigationOccurrence(props: { name: string; value: unknown; __ta
   if (value.kind === 'view') {
     return renderPresentable(value.presentable, {}, props.__tao)
   }
-  return React.createElement(HostedNavigationOccurrence, { taoProps: props.__tao, value: value.input })
+  return createElement(HostedNavigationOccurrence, { taoProps: props.__tao, value: value.input })
 }
 
 function HostedNavigationOccurrence(props: { taoProps?: TaoProps; value: TaoNavigationInput }): React.ReactNode {

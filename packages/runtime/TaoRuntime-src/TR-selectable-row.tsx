@@ -1,5 +1,6 @@
 import React from 'react'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { createElement } from './TR-create-element'
 import { InteractionControls, type TaoInteractionVerb } from './TR-interaction-catalog'
 import { interactionMeasurements, type TaoOutlineLiveEntry } from './TR-interaction-outline'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -76,13 +77,13 @@ export function SelectableRow(props: {
     const { accessibilityRole: _accessibilityRole, accessible: _accessible, onPress: _onPress, ...webProps } =
       nativeProps
     const selectableProps = webSelectableRowProps(webProps, activate)
-    return React.createElement(
+    return createElement(
       runtime.View,
       props.identity === undefined ? selectableProps : interactionMeasurements.bind(props.identity, selectableProps),
       props.children,
     )
   }
-  return React.createElement(
+  return createElement(
     runtime.Pressable,
     props.identity === undefined ? nativeProps : interactionMeasurements.bind(props.identity, nativeProps),
     props.children,

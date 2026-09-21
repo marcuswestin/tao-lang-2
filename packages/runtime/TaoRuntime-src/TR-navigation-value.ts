@@ -1,6 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import type {
   TaoNavDescriptor,
   TaoNavigationArguments,
@@ -298,14 +299,14 @@ export abstract class RuntimeNavigationValue implements Subscription {
   }
 
   render(taoProps?: TaoProps, host?: RuntimeHostReadChannel): React.ReactNode {
-    return React.createElement(NavigationValueHost, { host, navigation: this, taoProps })
+    return createElement(NavigationValueHost, { host, navigation: this, taoProps })
   }
 
   renderSurface(taoProps?: TaoProps): React.ReactNode {
     const contentTaoProps = this.overlayEntries.length > 0
       ? { ...taoProps, navigationHostActive: false }
       : taoProps
-    return React.createElement(NavigationSurface, {
+    return createElement(NavigationSurface, {
       content: this.renderContent(contentTaoProps),
       navigation: this,
       overlays: this.overlayEntries,

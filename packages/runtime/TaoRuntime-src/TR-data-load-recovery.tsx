@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { errorMessage } from './TR-errors'
 import { runtimeRevisionStore } from './TR-listeners'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -85,12 +86,12 @@ export function DataLoadRecoveryBoundary(props: DataLoadRecoveryBoundaryProps): 
   React.useSyncExternalStore(changes.subscribe, changes.snapshot, changes.snapshot)
   const failure = activeFailure
 
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
-    React.createElement(React.Fragment, { key: reloadRevision }, props.children),
+    createElement(React.Fragment, { key: reloadRevision }, props.children),
     failure
-      ? React.createElement(DataLoadFailureOverlay, { failure, key: failure.id })
+      ? createElement(DataLoadFailureOverlay, { failure, key: failure.id })
       : null,
   )
 }
@@ -105,20 +106,20 @@ function DataLoadFailureOverlay(props: { failure: DataLoadFailure }): React.JSX.
     return () => subscription?.remove()
   }, [RN.BackHandler])
 
-  return React.createElement(
+  return createElement(
     RN.View,
     {
       accessibilityLabel: 'App data load failure',
       accessibilityViewIsModal: true,
       style: styles.overlay,
     },
-    React.createElement(
+    createElement(
       RN.View,
       { style: styles.panel },
-      React.createElement(RN.Text, { style: styles.title }, "Couldn't load app data"),
-      React.createElement(RN.Text, { style: styles.message }, props.failure.message),
-      recoveryError ? React.createElement(RN.Text, { style: styles.message }, recoveryError) : null,
-      React.createElement(
+      createElement(RN.Text, { style: styles.title }, "Couldn't load app data"),
+      createElement(RN.Text, { style: styles.message }, props.failure.message),
+      recoveryError ? createElement(RN.Text, { style: styles.message }, recoveryError) : null,
+      createElement(
         RN.Pressable,
         {
           accessibilityLabel: buttonLabel,
@@ -137,7 +138,7 @@ function DataLoadFailureOverlay(props: { failure: DataLoadFailure }): React.JSX.
           },
           style: [styles.button, recovering ? styles.buttonDisabled : undefined],
         },
-        React.createElement(RN.Text, { style: styles.buttonText }, buttonLabel),
+        createElement(RN.Text, { style: styles.buttonText }, buttonLabel),
       ),
     ),
   )

@@ -22,13 +22,13 @@ You know the file and line (read it); the brief would take longer to write than 
 
 ## Parallelism
 
-Three to five concurrent agents is the working range; beyond that you become the bottleneck, since every report still has to be read and checked by you. Launch, then continue, then collect, and take the next unblocked piece to a fresh agent rather than waiting for the whole fan-out — reusing a finished one means messaging it, which waits for Ro (see below). Readers and a writer do not mix — a reader that opens a file while something else rewrites it reports a defect that was never there. Either the fan-out is read-only, or every agent owns its paths exclusively under `references/parallel-implementation.md`; never both over the same seam.
+Three to five concurrent agents is the working range; beyond that you become the bottleneck, since every report still has to be read and checked by you. Launch, then continue, then collect, and reuse a finished agent for the next unblocked piece rather than waiting for the whole fan-out. Readers and a writer do not mix — a reader that opens a file while something else rewrites it reports a defect that was never there. Either the fan-out is read-only, or every agent owns its paths exclusively under `references/parallel-implementation.md`; never both over the same seam.
 
 ## Messaging another agent
 
-A subagent's return is the one agent-to-agent channel that is yours to use. Every other one waits for Ro's approval in the current request: continuing a spawned agent with `SendMessage`, writing to another Claude session on this machine or in the cloud, and any relay that reaches an agent Ro did not point you at. The harness gates those tools with an `ask` rule, but the rule holds where no gate exists — a brief that tells a subagent to go message a third agent is the same message sent one remove away.
+A subagent you spawned is yours to talk to: its return, and continuing it with `SendMessage` to correct it, extend its task, or reuse its context, never need approval. Every other exchange waits for Ro's approval in the current request: writing to another Claude session on this machine or in the cloud, to a teammate's agent, and any relay that reaches an agent Ro did not point you at. `SendMessage` reaches those too and the harness cannot tell them apart, so the rule holds where no gate exists — a brief that tells a subagent to go message a third agent is the same message sent one remove away.
 
-Ask when the exchange buys something a fresh agent with a fuller brief would not: name the recipient, what you would send, and what it unblocks, as one question Ro can answer yes or no. An approval covers that message, not the exchange it opens; the next one asks again. Between asking and hearing back, do the rest of the task — a pending message is not a reason to idle, and it is not a reason to launch the agent anyway and message it afterwards.
+For those, ask when the exchange buys something a subagent of your own would not: name the recipient, what you would send, and what it unblocks, as one question Ro can answer yes or no. An approval covers that message, not the exchange it opens; the next one asks again. Between asking and hearing back, do the rest of the task — a pending message is not a reason to idle.
 
 ## Model and effort routing
 

@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { InteractionControls } from './TR-interaction-catalog'
 import { type TaoOutlineLiveEntry, useOutlineNode } from './TR-interaction-outline'
 import { nativeNavigationModule } from './TR-navigation-native-hosts'
@@ -44,7 +45,7 @@ export function renderNativeSelectionTabs(options: {
   if (!nativeSelectionTabsAvailable()) {
     return undefined
   }
-  return React.createElement(NativeSelectionTabs, options)
+  return createElement(NativeSelectionTabs, options)
 }
 
 function NativeSelectionTabs(options: {
@@ -56,7 +57,7 @@ function NativeSelectionTabs(options: {
   const module = nativeNavigationModule()!
   const BottomTabs = module.BottomTabs!
   const identities = React.useRef(new Map<string, string>())
-  return React.createElement(
+  return createElement(
     BottomTabs,
     {
       experimentalControlNavigationStateInJS: true,
@@ -66,7 +67,7 @@ function NativeSelectionTabs(options: {
       },
     },
     options.items.map(item =>
-      React.createElement(NativeSelectionTab, {
+      createElement(NativeSelectionTab, {
         active: item.key === options.activeKey,
         item,
         key: item.key,
@@ -102,7 +103,7 @@ function NativeSelectionTab(props: {
     props.onIdentity(identity)
     return () => props.onIdentity(undefined)
   }, [identity, props.onIdentity])
-  return React.createElement(BottomTabsScreen, {
+  return createElement(BottomTabsScreen, {
     children: props.item.content,
     isFocused: props.active,
     tabKey: props.item.key,

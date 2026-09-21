@@ -5,6 +5,7 @@ import { isAuditedSource } from '../simplify-audit/AuditedSource'
 import { instructionBudget, instructionCharacterCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
 import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
+import { runtimeElementConventionIssues } from './RuntimeElementConventions'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -1053,6 +1054,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
   issues.push(...runtimeArrayConventionIssues(packageFiles))
+  issues.push(...runtimeElementConventionIssues(packageFiles))
   return issues
 }
 
