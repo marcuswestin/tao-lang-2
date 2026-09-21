@@ -31,6 +31,7 @@ import {
   StudioDraftStatus,
   StudioProjectContext,
 } from '../studio-src/client/StudioApp'
+import { StudioDialog } from '../studio-src/client/StudioDialog'
 import {
   isStudioSaveShortcut,
   studioCellLabel,
@@ -1044,6 +1045,263 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
   Expect(rejectedName).toBe('UserInputError')
   Expect(preview.capture).toBeUndefined()
 })
+
+Test('Studio Tao fixture capture proposes the server diff, shows it, and applies only on confirm', async () => {
+  const previousFetch = globalThis.fetch
+  const previousConfirm = StudioDialog.confirm
+  const restoreWindow = stubStudioSessionWindow('/sessions/window-capture')
+  const fetched: Array<{ body: unknown; url: string }> = []
+  const confirmed: unknown[] = []
+  const applied: unknown[] = []
+  let resolved: unknown
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    fetched.push({ body: init?.body === undefined ? undefined : JSON.parse(String(init.body)), url })
+    return new Response(
+      JSON.stringify({
+        content: 'fixture-content-with-CapturedState',
+        diff: '--- Garden.tao\n+++ Garden.tao (proposed)\n@@ -1,0 +2,1 @@\n+fixture CapturedState { }',
+        edits: [],
+        path: 'Garden.tao',
+        proposedSourceVersion: 'source-2',
+        requestId: 'capture-1',
+        sourceVersion: 'source-1',
+      }),
+      { status: 200 },
+    )
+  }) as typeof fetch
+  ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = async options => {
+    confirmed.push(options)
+    return true
+  }
+  try {
+    const previewWindow = {}
+    const preview = previewConnection('preview-capture-confirm', 'default', previewWindow)
+    preview.capture = {
+      fixtureName: 'CapturedState',
+      identity: {
+        appName: 'Garden',
+        path: 'Garden.tao',
+        previewInstanceId: preview.previewInstanceId,
+        project: '/workspace',
+        sourceVersion: 'source-1',
+      },
+      reject(error) {
+        resolved = error
+      },
+      requestId: 'capture-1',
+      resolve(result) {
+        resolved = result
+      },
+      timeout: setTimeout(() => {}, 10_000),
+    }
+    await handlePreviewMessage(
+      {
+        data: {
+          channel: studioProtocolChannel,
+          fixture: { accounts: [], creates: [] },
+          identity: {
+            appName: 'Garden',
+            previewInstanceId: preview.previewInstanceId,
+            project: '/workspace',
+          },
+          protocolVersion: studioProtocolVersion,
+          requestId: 'capture-1',
+          type: 'preview-fixture-captured',
+        },
+        origin: preview.origin,
+        source: previewWindow,
+      } as unknown as MessageEvent,
+      preview,
+      { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+      async () => undefined,
+      {
+        async applySourceAction(envelope) {
+          applied.push(envelope)
+        },
+        inspect() {},
+      },
+    )
+
+    Expect(fetched).toHaveLength(1)
+    Expect(fetched[0]?.url.endsWith('/api/source-action/propose')).toBe(true)
+    Expect((fetched[0]?.body as { action: { kind: string } }).action.kind).toBe('insert-captured-fixture')
+    Expect(confirmed).toEqual([{
+      confirmLabel: 'Save fixture',
+      diff: '--- Garden.tao\n+++ Garden.tao (proposed)\n@@ -1,0 +2,1 @@\n+fixture CapturedState { }',
+      title: 'Save this captured Tao fixture?',
+    }])
+    Expect(applied).toHaveLength(1)
+    Expect((applied[0] as { action: { kind: string } }).action.kind).toBe('insert-captured-fixture')
+    Expect(resolved).toBe('saved')
+    Expect(preview.capture).toBeUndefined()
+  } finally {
+    globalThis.fetch = previousFetch
+    ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = previousConfirm
+    restoreWindow()
+  }
+})
+
+Test('Studio Tao fixture capture applies nothing when the confirmation dialog is cancelled', async () => {
+  const previousFetch = globalThis.fetch
+  const previousConfirm = StudioDialog.confirm
+  const restoreWindow = stubStudioSessionWindow('/sessions/window-cancel')
+  const applied: unknown[] = []
+  let resolved: unknown
+  globalThis.fetch = (async (_input: string | URL | Request) => {
+    return new Response(
+      JSON.stringify({
+        content: 'fixture-content-with-CapturedState',
+        diff: '--- Garden.tao\n+++ Garden.tao (proposed)\n@@ -1,0 +2,1 @@\n+fixture CapturedState { }',
+        edits: [],
+        path: 'Garden.tao',
+        proposedSourceVersion: 'source-2',
+        requestId: 'capture-2',
+        sourceVersion: 'source-1',
+      }),
+      { status: 200 },
+    )
+  }) as typeof fetch
+  ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = async () => false
+  try {
+    const previewWindow = {}
+    const preview = previewConnection('preview-capture-cancel', 'default', previewWindow)
+    preview.capture = {
+      fixtureName: 'CapturedState',
+      identity: {
+        appName: 'Garden',
+        path: 'Garden.tao',
+        previewInstanceId: preview.previewInstanceId,
+        project: '/workspace',
+        sourceVersion: 'source-1',
+      },
+      reject(error) {
+        resolved = error
+      },
+      requestId: 'capture-2',
+      resolve(result) {
+        resolved = result
+      },
+      timeout: setTimeout(() => {}, 10_000),
+    }
+    await handlePreviewMessage(
+      {
+        data: {
+          channel: studioProtocolChannel,
+          fixture: { accounts: [], creates: [] },
+          identity: {
+            appName: 'Garden',
+            previewInstanceId: preview.previewInstanceId,
+            project: '/workspace',
+          },
+          protocolVersion: studioProtocolVersion,
+          requestId: 'capture-2',
+          type: 'preview-fixture-captured',
+        },
+        origin: preview.origin,
+        source: previewWindow,
+      } as unknown as MessageEvent,
+      preview,
+      { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+      async () => undefined,
+      {
+        async applySourceAction(envelope) {
+          applied.push(envelope)
+        },
+        inspect() {},
+      },
+    )
+
+    Expect(applied).toHaveLength(0)
+    Expect(resolved).toBe('cancelled')
+    Expect(preview.capture).toBeUndefined()
+  } finally {
+    globalThis.fetch = previousFetch
+    ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = previousConfirm
+    restoreWindow()
+  }
+})
+
+Test(
+  'Studio Tao fixture capture applies nothing and never opens the dialog when the proposal request fails',
+  async () => {
+    const previousFetch = globalThis.fetch
+    const previousConfirm = StudioDialog.confirm
+    const restoreWindow = stubStudioSessionWindow('/sessions/window-propose-failed')
+    const applied: unknown[] = []
+    const confirmed: unknown[] = []
+    let resolved: unknown
+    globalThis.fetch = (async (_input: string | URL | Request) => {
+      return new Response(
+        JSON.stringify({ error: 'Studio source changed before the edit was applied.' }),
+        { status: 409 },
+      )
+    }) as typeof fetch
+    ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = async options => {
+      confirmed.push(options)
+      return true
+    }
+    try {
+      const previewWindow = {}
+      const preview = previewConnection('preview-capture-propose-failed', 'default', previewWindow)
+      preview.capture = {
+        fixtureName: 'CapturedState',
+        identity: {
+          appName: 'Garden',
+          path: 'Garden.tao',
+          previewInstanceId: preview.previewInstanceId,
+          project: '/workspace',
+          sourceVersion: 'source-1',
+        },
+        reject(error) {
+          resolved = error
+        },
+        requestId: 'capture-3',
+        resolve(result) {
+          resolved = result
+        },
+        timeout: setTimeout(() => {}, 10_000),
+      }
+      await handlePreviewMessage(
+        {
+          data: {
+            channel: studioProtocolChannel,
+            fixture: { accounts: [], creates: [] },
+            identity: {
+              appName: 'Garden',
+              previewInstanceId: preview.previewInstanceId,
+              project: '/workspace',
+            },
+            protocolVersion: studioProtocolVersion,
+            requestId: 'capture-3',
+            type: 'preview-fixture-captured',
+          },
+          origin: preview.origin,
+          source: previewWindow,
+        } as unknown as MessageEvent,
+        preview,
+        { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+        async () => undefined,
+        {
+          async applySourceAction(envelope) {
+            applied.push(envelope)
+          },
+          inspect() {},
+        },
+      )
+
+      Expect(confirmed).toHaveLength(0)
+      Expect(applied).toHaveLength(0)
+      Expect(resolved).toBeInstanceOf(Error)
+      Expect((resolved as Error).message).toBe('Studio source changed before the edit was applied.')
+      Expect(preview.capture).toBeUndefined()
+    } finally {
+      globalThis.fetch = previousFetch
+      ;(StudioDialog as { confirm: typeof StudioDialog.confirm }).confirm = previousConfirm
+      restoreWindow()
+    }
+  },
+)
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
   Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })
@@ -3467,6 +3725,23 @@ function cell(cellId: string): StudioPreviewManifestV2['cells'][number] {
     environment: cellEnvironment(),
     scenarioId: cellId,
     stateLayers: [],
+  }
+}
+
+/** Stubs the managed-session `window.location` the API client reads its request paths from. */
+function stubStudioSessionWindow(pathname: string): () => void {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { pathname } },
+    writable: true,
+  })
+  return () => {
+    if (previousWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
   }
 }
 

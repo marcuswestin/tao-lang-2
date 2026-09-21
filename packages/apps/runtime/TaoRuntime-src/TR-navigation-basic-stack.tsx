@@ -59,6 +59,18 @@ function BasicStackLevel(props: {
   useDocumentTitle(observable ? slots.title : undefined)
   useEnclosingChrome(props.chrome, slots, observable && !isNavigation(props.entry.presentable))
   const runtime = requireReactNativeRuntime()
+  // An entry that is itself a window-owning navigator already frames its own screens (see
+  // `RuntimeSelectionNav.itemEntryLevels`); wrapping it in another AppSurfaceFrame here would inset
+  // its content twice.
+  const contentOwnsWindow = isNavigation(props.entry.presentable) && props.entry.presentable.ownsWindowSurface()
+  // A nested stack reads its own bottom clearance and enclosing chrome from these same props (see
+  // `RuntimeStackNav.renderContent`), which `entryTaoProps` above does not carry — re-inject them,
+  // exactly as `itemEntryLevels` does for a toggle bar's own nested stack.
+  const nestedStack = isNavigation(props.entry.presentable) && props.entry.presentable.kind === 'stack'
+  const contentTaoProps = nestedStack
+    ? { ...entryTaoProps, navigationBottomInset: props.bottomInset, navigationChrome: props.chrome }
+    : entryTaoProps
+  const content = renderPresentable(props.entry.presentable, props.entry.arguments, contentTaoProps, props.entry.host)
   return createElement(NavigationLevel, {
     fill: true,
     hidden: props.hidden,
@@ -100,11 +112,13 @@ function BasicStackLevel(props: {
           key: 'header',
           style: [headerStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader', 'row')],
         }),
-        createElement(
-          AppSurfaceFrame,
-          { bottomInset: props.bottomInset, key: 'content', taoProps: entryTaoProps },
-          renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
-        ),
+        contentOwnsWindow
+          ? createElement(runtime.View, { children: content, key: 'content', style: stackStyle })
+          : createElement(
+            AppSurfaceFrame,
+            { bottomInset: props.bottomInset, key: 'content', taoProps: entryTaoProps },
+            content,
+          ),
       ],
       style: [stackStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
     }),

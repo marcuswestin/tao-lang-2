@@ -404,7 +404,10 @@ Phase 1 — keep the workspace alive (weeks):
 
 6. `tao dev` compiles in-process on a live workspace through `DocumentBuilder.update` instead of
    spawning `tao compile` per save.
-7. `tao check --watch` and `tao test --watch` on the same live workspace.
+7. `tao check --watch` and `tao test --watch` on the same live workspace. `tao test --watch` exists
+   as an outer loop (`packages/cli/tao-cli/cli-src/test-watch.ts`): debounced, serialized, and
+   rerunning the whole one-shot pipeline, so it costs a full `tao test` per change. What remains is
+   giving it the live workspace as its run body, which it takes as a dependency.
 8. One resident language service shared by the editor extension, Studio, and optionally the CLI,
    with a version handshake and an idle exit.
 
