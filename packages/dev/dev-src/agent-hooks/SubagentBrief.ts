@@ -8,7 +8,7 @@
  */
 const RULES = [
   'Commands here run from the worktree root, with paths relative to it; a `cd`, `export`, or `VAR=value` prefix takes a command out of its permission allow rule.',
-  'Searches use `rg`, which skips the generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and the linked worktrees that `grep -r` and `find` descend into.',
+  "About 1,800 of this worktree's 120,000 files are its source; the rest are `node_modules/`, the generated `_gen_*` trees, `.artifacts/` logs, and linked worktrees, which a search that honours `.gitignore` skips and a recursive `grep` or `find` reads as though it were source.",
   'The Git index belongs to the caller: work here does not stage, unstage, commit, reset, stash, or switch branches.',
   "The developer-environment ledger under `Docs/Roadmap/Developer environment upgrades/` and its index are the caller's to edit; findings about the developer environment go back in the report instead.",
   'Work products in this repository — file names, documents, code, comments, branch names, commit messages — name no agent identity, and carry no AI `Co-Authored-By` trailer or generated-with line.',

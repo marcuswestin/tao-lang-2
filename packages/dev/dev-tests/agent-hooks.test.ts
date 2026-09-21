@@ -1,7 +1,7 @@
 import { CLI, FS, Repo, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { branchWarnings, commitMessageWarnings } from '../dev-src/agent-hooks/CommitChecks'
-import { PIPE_WARNING, PREFIX_WARNING, SEARCH_WARNING, shellHabitWarnings } from '../dev-src/agent-hooks/ShellHabits'
+import { PIPE_WARNING, PREFIX_WARNING, shellHabitWarnings } from '../dev-src/agent-hooks/ShellHabits'
 import { subagentBrief } from '../dev-src/agent-hooks/SubagentBrief'
 
 const SHELL_HABITS = Repo.resolvePath('packages/dev/dev-src/cli/agent-shell-habits.zsh')
@@ -9,48 +9,42 @@ const SUBAGENT_BRIEF = Repo.resolvePath('packages/dev/dev-src/cli/agent-subagent
 const GIT_HOOKS = Repo.resolvePath('packages/dev/dev-src/cli/agent-git-hooks.zsh')
 
 /** The habits the shell hook reports, as the codes the table below names for each. */
-type Habit = 'PREFIX' | 'SEARCH' | 'PIPE'
+type Habit = 'PREFIX' | 'PIPE'
 const HABIT_WARNING: Record<Habit, string> = {
   PIPE: PIPE_WARNING,
   PREFIX: PREFIX_WARNING,
-  SEARCH: SEARCH_WARNING,
 }
 
 /** Each case is one Bash command and every habit it should be warned about, in report order. */
 const SHELL_CASES: ReadonlyArray<readonly [string, readonly Habit[]]> = [
-  // Searching a tree.
-  ['grep -r todo packages', ['SEARCH']],
-  ['grep -rn todo packages', ['SEARCH']],
-  ['grep -R todo packages', ['SEARCH']],
-  ['grep --recursive todo packages', ['SEARCH']],
-  ['find . -name "*.ts"', ['SEARCH']],
-  ['find packages/dev -type f', ['SEARCH']],
-  ['rg -n todo packages', []],
-  ['grep -n todo one-file.ts', []],
-  // `find` that removes what it finds is not a search.
-  ['find .artifacts/tmp -name "*.log" -delete', []],
   // A prefix that leaves the allow rule.
   ['cd packages/dev && bun test', ['PREFIX']],
   ['export TAO_OUTPUT_MODE=lines', ['PREFIX']],
   ['TAO_OUTPUT_MODE=lines ./dev gates', ['PREFIX']],
   ['./agent test', []],
-  // Judging a gate through a pipe.
-  ['./agent verify | tail -20', ['PIPE']],
-  ['just check 2>&1 | rg FAIL', ['PIPE']],
+  // Judging a report through a pipe. A gate is refused by OutputDiscipline instead, and warning
+  // about it as well would put two voices beside one refusal.
   ['./dev gates | head', ['PIPE']],
-  ['bun test packages/dev | tail -5', ['PIPE']],
-  ['bunx tsc --noEmit | rg error', ['PIPE']],
+  ['./agent board | rg hungry', ['PIPE']],
+  ['./agent verify | tail -20', []],
+  ['just check 2>&1 | rg FAIL', []],
+  ['bun test packages/dev | tail -5', []],
+  ['bunx tsc --noEmit | rg error', []],
   // The same mistake inside a command substitution, with its assignment prefix.
-  ['result=$(just --dry-run verify | rg parser)', ['PREFIX', 'PIPE']],
+  ['result=$(just --dry-run reclaim | rg parser)', ['PREFIX', 'PIPE']],
   // Piping something whose status nobody reads as a verdict.
   ['rg -n todo packages | head -5', []],
   ['git log --oneline | head -5', []],
   ['bun run packages/dev/dev-src/dev.ts | head', []],
   // Reading the real status back makes the pipe safe.
-  ['set -o pipefail; ./agent verify | tail', []],
-  ['./agent verify > out.txt 2>&1; echo "EXIT=$?"', []],
+  ['set -o pipefail; ./dev gates | tail', []],
+  ['./dev gates > out.txt 2>&1; echo "EXIT=$?"', []],
+  // Searching is OutputDiscipline's to refuse; nothing here warns about it.
+  ['grep -r todo packages', []],
+  ['rg -n todo packages', []],
+  ['find . -name "*.ts"', []],
   // Quoted text is text, not a command.
-  ['git commit -m "replace grep -r and stop doing just check | tail"', []],
+  ['git commit -m "replace grep -r and stop doing just reclaim | tail"', []],
   ['echo "cd elsewhere"', []],
 ]
 
@@ -77,7 +71,7 @@ Describe('agent hooks', () => {
   })
 
   Test('carries a warning to the model without touching the permission decision', async () => {
-    const warned = await runHook(SHELL_HABITS, preToolUsePayload('./agent verify | tail -20'))
+    const warned = await runHook(SHELL_HABITS, preToolUsePayload('./dev gates | tail -20'))
 
     Expect(warned.exitCode).toBe(0)
     const output = JSON.parse(warned.stdout) as {
@@ -120,7 +114,7 @@ Describe('agent hooks', () => {
     for (
       const rule of [
         'worktree root',
-        '`rg`',
+        '120,000 files',
         'stage, unstage',
         'developer environment',
         'no agent identity',
