@@ -1,5 +1,6 @@
 import { Assert, Errors, FS, Json, Platform } from '@shared'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
+import { TestHarnessFiles } from './test-harness-files'
 import { TestRunId } from './test-run-id'
 
 /** DIRECTORY_NAME names the ignored runtime-toolchain directory that holds every generated run root. */
@@ -259,6 +260,7 @@ async function pruneAtStartup(generatedRoot: string): Promise<void> {
 async function pruneGeneratedRoot(generatedRoot: string): Promise<void> {
   const now = Date.now()
   for (const [category, runRoots] of await findRunRootsByCategory(generatedRoot)) {
+    await pruneEntrypointPlans(FS.resolvePath(category, generatedRoot), now)
     const cached = await pruneCacheEntries(generatedRoot, category, now)
     const unreferenced = runRoots.filter(runRoot => !cached.has(runRoot.path))
     for (const runRoot of staleRunRoots(unreferenced, now)) {
@@ -324,6 +326,23 @@ async function pruneCacheEntries(
     kept.add(candidate.runRoot)
   }
   return kept
+}
+
+/**
+ * pruneEntrypointPlans removes the Jest entrypoint plans beside one home's run roots that no run has
+ * written in a week. `test-harness-files.ts` writes them and owns why they live outside any run
+ * root; a plan is a few hundred bytes and every run rewrites the one it uses, so its modification
+ * time is when it was last wanted.
+ */
+async function pruneEntrypointPlans(home: string, now: number): Promise<void> {
+  const plansRoot = FS.resolvePath(TestHarnessFiles.DIRECTORY_NAME, home)
+  for (const name of await listDirectory(plansRoot)) {
+    const plan = FS.resolvePath(name, plansRoot)
+    const writtenMs = await FS.modifiedTimeMs(plan).catch(() => now)
+    if (now - writtenMs >= RETAINED_CACHE_AGE_MS) {
+      await removeQuietly(plan)
+    }
+  }
 }
 
 /** staleRunRoots keeps every root a concurrent run may own, then the newest finished roots. */
