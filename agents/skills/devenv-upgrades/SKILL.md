@@ -8,8 +8,10 @@ description: >-
 
 The open backlog is `Docs/Roadmap/Developer environment upgrades.md` and its entry files; the closed
 record is `Docs/Roadmap/Developer environment upgrades archive.md` and
-`Developer environment upgrades/Archive/`. Those two pages own the entry format, the statuses, and
-the next free ID. This skill owns which entries to take and how a task leaves both halves.
+`Developer environment upgrades/Archive/`. Those two pages own the entry format and the statuses.
+A new entry is named `DEVENV-NAME-WORDS-ETC.md` after its own title, never numbered; numbered
+entries predate that and keep their numbers. This skill owns which entries to take and how a task
+leaves both halves.
 
 ## Selecting the next set
 
@@ -37,8 +39,8 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
   `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills are four seams that
   rarely collide; two entries touching one gate file are one group, not two, and documentation-only
   entries all touch the shared instruction files, so they too are one group.
-- Propose a batch of more than two entries to Ro before implementing — the ID, the one-line cost, and
-  why it is in this batch.
+- Propose a batch of more than two entries to Ro before implementing — the name, the one-line cost,
+  and why it is in this batch.
 
 ## Working an entry
 
@@ -58,16 +60,17 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
 - Setting an entry to `Resolved` or `Closed` is what moves it. In one change: set the status,
   `git mv` the file into `Developer environment upgrades/Archive/`, move its index line from the open
   index to the archive index, and append `- **Archived:** <YYYY-MM-DD>` as the entry's last field.
-  `_repo-lint` enforces the placement and ID uniqueness; do not work around it by leaving the status
+  `_repo-lint` enforces the placement and id uniqueness; do not work around it by leaving the status
   stale.
 - Name the branch or commit that settled the entry in its **Evidence** or **Dependencies**, drop a
-  section the move leaves empty, and never reuse an ID — a regressed entry returns to the open
-  backlog under its original ID with the new evidence appended, not as a second entry.
+  section the move leaves empty, and never reuse an id — a regressed entry returns to the open
+  backlog under its original name with the new evidence appended, not as a second entry.
 - Sweep before finishing: archive any addressed entry another task left in the open index, and say in
-  the handoff which IDs you moved that were not yours.
+  the handoff which entries you moved that were not yours.
 
 ## Reporting
 
-- Name the IDs addressed, the IDs archived, and the evidence behind each; link both indexes once.
+- Name the entries addressed, the entries archived, and the evidence behind each; link both indexes
+  once.
 - An entry you selected and then abandoned goes back to `Candidate` with what you learned added to its
   **Evidence**, so the next task does not repeat the attempt.

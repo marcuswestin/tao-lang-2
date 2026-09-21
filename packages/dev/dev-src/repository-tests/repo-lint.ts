@@ -114,8 +114,14 @@ const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
  * branches adding an entry each add a file and one line rather than colliding over a shared block.
  * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
  * a line can point at a file nobody wrote, and — because two new files merge silently where two new
- * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
+ * blocks would have conflicted — two branches could ship the same id. This rule is where all
  * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ *
+ * New entries are named `DEVENV-NAME-WORDS-ETC.md` after their own title rather than by the next
+ * free number, because the number was the collision: every branch read the same highest id and
+ * chose the same successor, so the ledger renumbered on nearly every merge. A name derived from the
+ * title collides only when two branches genuinely record the same finding, which is a duplicate
+ * worth catching. Numbered entries predate that and stay valid; nothing renumbers them.
  *
  * The backlog has two halves, open and archived, and an entry belongs to the half its own status
  * names: the open index would otherwise regrow the unread tail the per-file layout was meant to end,
@@ -142,9 +148,17 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
     const entries = [...side.entries].filter(entry => entry.name.endsWith('.md'))
       .sort((left, right) => left.name.localeCompare(right.name))
     for (const entry of entries) {
-      const id = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      // A numbered entry keeps its number as its identity; a named one is identified by the whole
+      // name, which is the point of the scheme — two branches cannot pick the same name by accident
+      // the way they both picked the next free number.
+      const numbered = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      const named = entry.name.match(/^(DEVENV-[A-Z0-9]+(?:-[A-Z0-9]+)*)\.md$/)?.[1]
+      const id = numbered ?? named
       if (id === undefined) {
-        issues.push(`${linkPrefix}${entry.name} must be named DEVENV-NNN-<slug>.md.`)
+        issues.push(
+          `${linkPrefix}${entry.name} must be named DEVENV-NAME-WORDS-ETC.md, with the title's`
+            + ' words in capitals joined by dashes.',
+        )
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
@@ -184,7 +198,7 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
 
 /** The open index's links must not match the archive's, which extend them with one more segment. */
 function indexLinkPattern(linkPrefix: string): RegExp {
-  return new RegExp(`^- \\[DEVENV-\\d+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
+  return new RegExp(`^- \\[DEVENV-[^\\s\\]]+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
 }
 
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
@@ -487,8 +501,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:545',
-  'packages/dev/dev-tests/repo-lint.test.ts:546',
+  'packages/dev/dev-tests/repo-lint.test.ts:572',
+  'packages/dev/dev-tests/repo-lint.test.ts:573',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
