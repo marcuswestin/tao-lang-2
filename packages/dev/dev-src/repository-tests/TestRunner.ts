@@ -321,7 +321,15 @@ async function printFlakes(limit = 20, repositoryRoot = Shared.Repo.getRoot()): 
 }
 
 async function printSlowest(limit = 20, repositoryRoot = Shared.Repo.getRoot()): Promise<number> {
-  const records = await TestLedger.slowest(repositoryRoot, limit)
+  // Requested oversized and filtered here, rather than trusting the ledger's own `durationMs`
+  // absence to have kept every `--concurrent` record out: `observationsFor` stops feeding the ledger
+  // new per-case numbers for those suites, but a record it wrote before this change keeps its old
+  // one — nothing overwrites a duration with "no new data" (see the comment there). This is the one
+  // place a reader could still see a stale, meaningless-from-the-start number, so it filters by
+  // suite rather than by the field the ledger could not retroactively clear.
+  const records = (await TestLedger.slowest(repositoryRoot, Number.MAX_SAFE_INTEGER))
+    .filter(record => !isConcurrentSuite(record.suite))
+    .slice(0, Number.isInteger(limit) && limit > 0 ? limit : 20)
   if (records.length === 0) {
     Shared.HCI.writeLine('No per-test timings recorded yet; run just test first.')
     return 0
@@ -569,6 +577,18 @@ async function withExistingAppRoots(plan: ChangedPlan, repositoryRoot: string): 
   return { ...plan, selected, skipped: [...plan.skipped, TAO_APPS], taoAppPaths: undefined }
 }
 
+/**
+ * isConcurrentSuite reports whether a suite's tests run under Bun's `--concurrent`, which is also
+ * where a per-case duration stops meaning what it says: `TestRunner.deadlineFor` documents that Bun
+ * then reports every test's duration as the time from the file's shared start to its own completion,
+ * not the test's own work. `observationsFor` reads this to decide which suites' per-case numbers are
+ * worth recording at all, so the distinction is made once, by name, rather than inferred later from
+ * whatever pattern the corrupted numbers happen to leave in the ledger.
+ */
+function isConcurrentSuite(suite: string): boolean {
+  return (GateCatalog.suiteTuning(suite).args ?? []).includes('--concurrent')
+}
+
 async function observationsFor(states: readonly SuiteState[], repositoryRoot: string): Promise<TestObservation[]> {
   const observations: TestObservation[] = []
   for (const state of states) {
@@ -585,6 +605,14 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
       : state.testReport === undefined
       ? undefined
       : await TestReport.read(state.testReport, repositoryRoot)
+    // A concurrent suite's own per-case numbers are not its tests' durations (see
+    // `isConcurrentSuite`), so they are dropped at the one place every source — the ledger, the
+    // shard packer, `report-test-stats` — reads from. A suite whose tests run one at a time keeps
+    // its numbers exactly as the reporter wrote them: the distinction is explicit here rather than
+    // left for a reader to notice in a "6202.7, 6202.6, 6202.5…" pattern.
+    if (state.testObservations !== undefined && isConcurrentSuite(state.suite)) {
+      state.testObservations = state.testObservations.map(observation => ({ ...observation, durationMs: undefined }))
+    }
     if (state.testReport !== undefined && state.testObservations === undefined && state.status === 'passed') {
       state.status = 'failed'
       state.exitCode = 1

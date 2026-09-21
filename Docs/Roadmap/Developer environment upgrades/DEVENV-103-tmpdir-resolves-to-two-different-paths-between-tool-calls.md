@@ -1,6 +1,7 @@
 # DEVENV-103 — `$TMPDIR` resolves to two different paths between tool calls
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent sandbox
 - **Impact:** A file an agent writes to `$TMPDIR` in one Bash call can be unreadable by the same
   spelling in the next, because the variable expands to the sandbox's own temporary root in some

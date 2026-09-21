@@ -1,6 +1,7 @@
 # DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory
 
 - **Status:** In progress
+- **Section:** External
 - **Area:** Test execution
 - **Impact:** One failing `toEqual` whose operands are Langium AST nodes allocates without bound until
   macOS runs out of application memory. Nothing bounds it: no repository test node carries a timeout, an

@@ -1,6 +1,7 @@
 # DEVENV-076 — A documentation-only change selects no test suites
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test selection
 - **Impact:** Documents that are now proven by a test suite — `Docs/Tutorials/Your First Tao App.md`
   is replayed, formatted, validated, and run by `packages/tao-cli/cli-tests/tutorials.test.ts` — can

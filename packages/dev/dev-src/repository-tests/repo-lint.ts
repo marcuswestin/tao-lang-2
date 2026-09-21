@@ -89,11 +89,15 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
-/** LedgerEntry is one backlog file as this rule sees it: its file name and the status it records. */
+/** LedgerEntry is one backlog file as this rule sees it: its file name and the fields it records. */
 export type LedgerEntry = {
   name: string
   /** The entry's own `**Status:**`, or an empty string when the file states none. */
   status: string
+  /** The entry's own `# DEVENV-... — Title` heading text, without the leading `# `, or `''` when absent. */
+  heading?: string
+  /** The entry's own `**Section:**`; meaningful only for an entry that lives in the open directory. */
+  section?: string
 }
 
 /** LedgerSide is one half of the backlog: the entry files in a directory and the index that lists them. */
@@ -110,12 +114,28 @@ const OPEN_LINK_PREFIX = 'Developer environment upgrades/'
 const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
 
 /**
- * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
- * branches adding an entry each add a file and one line rather than colliding over a shared block.
- * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
- * a line can point at a file nobody wrote, and — because two new files merge silently where two new
- * blocks would have conflicted — two branches could ship the same id. This rule is where all
- * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ * Allowed `**Section:**` values for an open-backlog entry, paired with the open index heading each
+ * one generates, in the order the index prints them. Meaningless for an archived entry, which the
+ * archive index lists as one flat, generated list instead. The `devenv-upgrades` skill owns when to
+ * use each value.
+ */
+const LEDGER_SECTIONS = [
+  ['Deferred', 'Deferred project — begin after the large branches land'],
+  ['External', 'External and observational findings'],
+] as const
+const LEDGER_SECTION_VALUES: ReadonlySet<string> = new Set(LEDGER_SECTIONS.map(([value]) => value))
+const LEDGER_SECTION_LIST = LEDGER_SECTIONS.map(([value]) => `\`${value}\``).join(' or ')
+
+/**
+ * The developer-environment backlog is one file per entry plus a generated index, so that two
+ * branches adding an entry each add a file — the one thing two branches ever touch at once here, and
+ * merging two new files never conflicts. `Developer environment upgrades.md` and
+ * `Developer environment upgrades archive.md` are rendered from the entry files by
+ * `writeDeveloperEnvironmentLedgerIndexes` (the `_fix-ledger-index` gate); nobody hand-edits them, so
+ * the three drift symptoms this rule used to catch one at a time — a file the index never linked, a
+ * link to a file that no longer exists, a link a kept-both merge duplicated — can no longer happen on
+ * their own and collapse into one check below: the committed index text matches what the entry files
+ * generate.
  *
  * New entries are named `DEVENV-NAME-WORDS-ETC.md` after their own title rather than by the next
  * free number, because the number was the collision: every branch read the same highest id and
@@ -126,25 +146,18 @@ const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
  * The backlog has two halves, open and archived, and an entry belongs to the half its own status
  * names: the open index would otherwise regrow the unread tail the per-file layout was meant to end,
  * one addressed entry at a time. An ID is unique across both halves, because an archived entry is
- * still quoted by ID from commit messages and from other entries' dependencies.
+ * still quoted by ID from commit messages and from other entries' dependencies. Within the open half,
+ * an entry also names the generated section it prints under, in its own `**Section:**` field.
  */
 export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: LedgerSide): string[] {
   const issues: string[] = []
   const byId = new Map<string, string[]>()
   for (
-    const [side, indexName, linkPrefix, archiveSide] of [
-      [open, OPEN_INDEX, OPEN_LINK_PREFIX, false],
-      [archived, ARCHIVE_INDEX, ARCHIVE_LINK_PREFIX, true],
+    const [side, linkPrefix, archiveSide] of [
+      [open, OPEN_LINK_PREFIX, false],
+      [archived, ARCHIVE_LINK_PREFIX, true],
     ] as const
   ) {
-    // Counted rather than collected: a merge that keeps both sides of a conflicting index edit
-    // leaves one file linked twice, which reads as correct from either direction — the file exists
-    // and it is listed — and is the one way this layout can still drift without a check below.
-    const linked = new Map<string, number>()
-    for (const match of side.index.matchAll(indexLinkPattern(linkPrefix))) {
-      const name = match[1]!
-      linked.set(name, (linked.get(name) ?? 0) + 1)
-    }
     const entries = [...side.entries].filter(entry => entry.name.endsWith('.md'))
       .sort((left, right) => left.name.localeCompare(right.name))
     for (const entry of entries) {
@@ -162,43 +175,90 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
-      if (!linked.has(entry.name)) {
-        issues.push(`${indexName} needs an index line linking \`${entry.name}\`.`)
-      }
       if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
         issues.push(
           archiveSide
             ? `${linkPrefix}${entry.name} is \`${entry.status}\`; an entry that is not addressed`
               + ' belongs in the open backlog.'
-            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it and its index line to`
-              + ' the archive in the change that addressed it.',
+            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it into`
+              + ' `Developer environment upgrades/Archive/` in the change that addressed it.',
         )
       }
-    }
-    const present = new Set(entries.map(entry => entry.name))
-    for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
-      if (!present.has(name)) {
-        issues.push(`${indexName} links \`${name}\`, which does not exist.`)
-      }
-      if (count > 1) {
-        issues.push(`${indexName} links \`${name}\` ${count} times; keep one index line.`)
+      if (!archiveSide && !LEDGER_SECTION_VALUES.has(entry.section ?? '')) {
+        issues.push(`${linkPrefix}${entry.name} needs a \`**Section:**\` of ${LEDGER_SECTION_LIST}.`)
       }
     }
   }
   for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
     if (names.length > 1) {
       issues.push(
-        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')};`
-          + ' rename the later-merged file and its index line.',
+        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')}; rename the`
+          + ' later-merged file.',
       )
     }
+  }
+  const generated = developerEnvironmentIndexes(open, archived)
+  if (open.index !== '' && open.index !== generated.openIndex) {
+    issues.push(`${OPEN_INDEX} is out of date with its entry files; run \`just _fix-ledger-index\` to regenerate it.`)
+  }
+  if (archived.index !== '' && archived.index !== generated.archiveIndex) {
+    issues.push(
+      `${ARCHIVE_INDEX} is out of date with its entry files; run \`just _fix-ledger-index\` to regenerate it.`,
+    )
   }
   return issues
 }
 
-/** The open index's links must not match the archive's, which extend them with one more segment. */
-function indexLinkPattern(linkPrefix: string): RegExp {
-  return new RegExp(`^- \\[DEVENV-[^\\s\\]]+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
+const OPEN_INDEX_HEADER = [
+  '# Developer environment upgrades',
+  '',
+  'The durable backlog for repository setup, automation, verification, worktree, diagnostic, and',
+  'host-environment improvements. Product defects belong in their product roadmap; an entry here may',
+  'link one when the developer workflow is also affected.',
+  '',
+  '**Generated.** `just _fix-ledger-index` renders this page from the entry files under',
+  '[`Developer environment upgrades/`](<Developer environment upgrades/>); do not hand-edit it. Entry',
+  'format, the `**Section:**` values, and how entries are selected, worked, and archived live in the',
+  '`devenv-upgrades` skill. An addressed entry moves to',
+  '[`Developer environment upgrades archive.md`](<Developer environment upgrades archive.md>) in the',
+  'change that addressed it.',
+].join('\n')
+
+const ARCHIVE_INDEX_HEADER = [
+  '# Developer environment upgrades — archive',
+  '',
+  'The closed record of [`Developer environment upgrades.md`](<Developer environment upgrades.md>).',
+  '',
+  '**Generated.** `just _fix-ledger-index` renders this page from the entry files under',
+  '[`Developer environment upgrades/Archive/`](<Developer environment upgrades/Archive/>); do not',
+  'hand-edit it. Archiving rules live in the `devenv-upgrades` skill.',
+].join('\n')
+
+/** developerEnvironmentIndexes renders both ledger index files from their entry files, deterministically. */
+export function developerEnvironmentIndexes(
+  open: LedgerSide,
+  archived: LedgerSide,
+): { archiveIndex: string; openIndex: string } {
+  const openEntries = [...open.entries].filter(entry => entry.name.endsWith('.md'))
+  const archivedEntries = [...archived.entries].filter(entry => entry.name.endsWith('.md'))
+  const sections = LEDGER_SECTIONS.map(([value, heading]) => {
+    const lines = openEntries
+      .filter(entry => (entry.section ?? '') === value)
+      .sort((left, right) => (left.heading ?? '').localeCompare(right.heading ?? ''))
+      .map(entry => ledgerIndexLine(entry, OPEN_LINK_PREFIX))
+    return [`## ${heading}`, '', ...lines].join('\n')
+  })
+  const archiveLines = archivedEntries
+    .sort((left, right) => (left.heading ?? '').localeCompare(right.heading ?? ''))
+    .map(entry => ledgerIndexLine(entry, ARCHIVE_LINK_PREFIX))
+  return {
+    archiveIndex: `${ARCHIVE_INDEX_HEADER}\n\n## Entries\n\n${archiveLines.join('\n')}\n`,
+    openIndex: `${OPEN_INDEX_HEADER}\n\n${sections.join('\n\n')}\n`,
+  }
+}
+
+function ledgerIndexLine(entry: LedgerEntry, linkPrefix: string): string {
+  return `- [${entry.heading ?? ''}](<${linkPrefix}${entry.name}>) — ${entry.status}`
 }
 
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
@@ -501,8 +561,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:572',
-  'packages/dev/dev-tests/repo-lint.test.ts:573',
+  'packages/dev/dev-tests/repo-lint.test.ts:607',
+  'packages/dev/dev-tests/repo-lint.test.ts:608',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
@@ -1065,10 +1125,28 @@ async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexP
       continue
     }
     const source = await FS.readText(FS.resolvePath(name, entriesPath))
-    entries.push({ name, status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '' })
+    entries.push({
+      heading: source.match(/^# (.+)$/m)?.[1]?.trim() ?? '',
+      name,
+      section: source.match(/^- \*\*Section:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+      status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+    })
   }
   const index = FS.resolvePath(indexPath, repoRoot)
   return { entries, index: (await FS.exists(index)) ? await FS.readText(index) : '' }
+}
+
+/** writeDeveloperEnvironmentLedgerIndexes regenerates both ledger index files from their entry files; the `_fix-ledger-index` gate runs this. */
+export async function writeDeveloperEnvironmentLedgerIndexes(repoRoot = Repo.getRoot()): Promise<void> {
+  const open = await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ENTRIES, DEVELOPER_ENVIRONMENT_INDEX)
+  const archived = await readLedgerSide(
+    repoRoot,
+    DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES,
+    DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX,
+  )
+  const { archiveIndex, openIndex } = developerEnvironmentIndexes(open, archived)
+  await FS.writeText(FS.resolvePath(DEVELOPER_ENVIRONMENT_INDEX, repoRoot), openIndex)
+  await FS.writeText(FS.resolvePath(DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX, repoRoot), archiveIndex)
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {

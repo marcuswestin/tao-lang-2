@@ -4,6 +4,7 @@ import {
   CONVENTION_RULES,
   conventionRuleIssues,
   crossPackageSourceImportIssues,
+  developerEnvironmentIndexes,
   developerEnvironmentLedgerIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
@@ -316,70 +317,112 @@ _bench-check:
     ])
   })
 
-  Test('reports developer-environment entries the index does not link, and links with no entry', () => {
-    const index = '# Developer environment upgrades\n\n'
-      + '- [DEVENV-901 — Listed](<Developer environment upgrades/DEVENV-901-listed.md>) — Candidate\n'
-      + '- [DEVENV-903 — Vanished](<Developer environment upgrades/DEVENV-903-vanished.md>) — Candidate\n'
-    Expect(developerEnvironmentLedgerIssues(
-      openSide(index, ['DEVENV-901-listed.md', 'DEVENV-902-unlisted.md']),
-      emptySide,
-    )).toEqual([
-      'Developer environment upgrades.md needs an index line linking `DEVENV-902-unlisted.md`.',
-      'Developer environment upgrades.md links `DEVENV-903-vanished.md`, which does not exist.',
-    ])
-  })
-
   Test('reports two developer-environment entries that claim the same ID, in either half', () => {
-    const index = '- [DEVENV-904 — One](<Developer environment upgrades/DEVENV-904-one.md>) — Candidate\n'
-    const archiveIndex = '- [DEVENV-904 — Two](<Developer environment upgrades/Archive/DEVENV-904-two.md>) — Resolved\n'
     Expect(developerEnvironmentLedgerIssues(
-      openSide(index, ['DEVENV-904-one.md']),
-      archivedSide(archiveIndex, ['DEVENV-904-two.md']),
+      openSide('', ['DEVENV-904-one.md']),
+      archivedSide('', ['DEVENV-904-two.md']),
     )).toEqual([
       'Developer environment upgrades: DEVENV-904 is claimed by Developer environment upgrades/DEVENV-904-one.md,'
-      + ' Developer environment upgrades/Archive/DEVENV-904-two.md;'
-      + ' rename the later-merged file and its index line.',
+      + ' Developer environment upgrades/Archive/DEVENV-904-two.md; rename the later-merged file.',
     ])
   })
 
-  Test('reports one developer-environment entry the index links twice', () => {
-    // A merge that keeps both sides of a conflicting index edit lands here, and it reads as correct
-    // from either direction on its own: the file exists, and it is listed.
-    const index = '- [DEVENV-905 — Once](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
-      + '- [DEVENV-905 — Again](<Developer environment upgrades/DEVENV-905-twice.md>) — Candidate\n'
-    Expect(developerEnvironmentLedgerIssues(openSide(index, ['DEVENV-905-twice.md']), emptySide)).toEqual([
-      'Developer environment upgrades.md links `DEVENV-905-twice.md` 2 times; keep one index line.',
-    ])
-  })
-
-  Test('accepts a developer-environment backlog whose entries, statuses, and both indexes agree', () => {
-    const index = '- [DEVENV-901 — One](<Developer environment upgrades/DEVENV-901-one.md>) — Candidate\n'
-      + '- [DEVENV-902 — Two](<Developer environment upgrades/DEVENV-902-two.md>) — Incoming\n'
-    const archiveIndex =
-      '- [DEVENV-900 — Done](<Developer environment upgrades/Archive/DEVENV-900-done.md>) — Resolved\n'
+  Test('accepts a developer-environment backlog whose entries and generated index agree', () => {
+    const open: LedgerSide = {
+      entries: [
+        { heading: 'DEVENV-901 — One', name: 'DEVENV-901-one.md', section: 'External', status: 'Candidate' },
+        { heading: 'DEVENV-902 — Two', name: 'DEVENV-902-two.md', section: 'Deferred', status: 'Incoming' },
+        { name: '.DS_Store', status: '' },
+      ],
+      index: '',
+    }
+    const archived: LedgerSide = {
+      entries: [{ heading: 'DEVENV-900 — Done', name: 'DEVENV-900-done.md', status: 'Resolved' }],
+      index: '',
+    }
+    const generated = developerEnvironmentIndexes(open, archived)
     Expect(developerEnvironmentLedgerIssues(
-      {
-        entries: [
-          { name: 'DEVENV-901-one.md', status: 'Candidate' },
-          { name: 'DEVENV-902-two.md', status: 'Incoming' },
-          { name: '.DS_Store', status: '' },
-        ],
-        index,
-      },
-      archivedSide(archiveIndex, ['DEVENV-900-done.md']),
+      { ...open, index: generated.openIndex },
+      { ...archived, index: generated.archiveIndex },
     )).toEqual([])
   })
 
-  Test('reports an addressed entry left in the open backlog, and an open one left in the archive', () => {
-    const index = '- [DEVENV-901 — Done](<Developer environment upgrades/DEVENV-901-done.md>) — Resolved\n'
-    const archiveIndex =
-      '- [DEVENV-902 — Open](<Developer environment upgrades/Archive/DEVENV-902-open.md>) — Candidate\n'
+  Test('reports when the generated developer-environment index is out of date', () => {
+    const open: LedgerSide = {
+      entries: [
+        { heading: 'DEVENV-906 — Drifted', name: 'DEVENV-906-drifted.md', section: 'External', status: 'Candidate' },
+      ],
+      index: '',
+    }
+    const generated = developerEnvironmentIndexes(open, emptySide)
+    Expect(developerEnvironmentLedgerIssues({ ...open, index: `${generated.openIndex}stray text\n` }, emptySide))
+      .toEqual([
+        'Developer environment upgrades.md is out of date with its entry files; run `just _fix-ledger-index` to'
+        + ' regenerate it.',
+      ])
+  })
+
+  Test('reports when the generated developer-environment archive index is out of date', () => {
+    const archived: LedgerSide = {
+      entries: [{ heading: 'DEVENV-907 — Drifted', name: 'DEVENV-907-drifted.md', status: 'Resolved' }],
+      index: '',
+    }
+    const generated = developerEnvironmentIndexes(emptySide, archived)
+    Expect(
+      developerEnvironmentLedgerIssues(emptySide, { ...archived, index: `${generated.archiveIndex}stray text\n` }),
+    ).toEqual([
+      'Developer environment upgrades archive.md is out of date with its entry files; run `just _fix-ledger-index`'
+      + ' to regenerate it.',
+    ])
+  })
+
+  Test('requires a valid Section on an open developer-environment entry', () => {
     Expect(developerEnvironmentLedgerIssues(
-      { entries: [{ name: 'DEVENV-901-done.md', status: 'Resolved' }], index },
-      { entries: [{ name: 'DEVENV-902-open.md', status: 'Candidate' }], index: archiveIndex },
+      {
+        entries: [{ heading: 'DEVENV-908 — Unsectioned', name: 'DEVENV-908-unsectioned.md', status: 'Candidate' }],
+        index: '',
+      },
+      emptySide,
     )).toEqual([
-      'Developer environment upgrades/DEVENV-901-done.md is `Resolved`; move it and its index line to the archive'
-      + ' in the change that addressed it.',
+      'Developer environment upgrades/DEVENV-908-unsectioned.md needs a `**Section:**` of `Deferred` or `External`.',
+    ])
+  })
+
+  Test('renders developer-environment indexes from entry files, grouped by section and sorted by heading', () => {
+    const open: LedgerSide = {
+      entries: [
+        { heading: 'DEVENV-902 — Bravo', name: 'DEVENV-902-bravo.md', section: 'External', status: 'Candidate' },
+        { heading: 'DEVENV-901 — Alpha', name: 'DEVENV-901-alpha.md', section: 'External', status: 'Planned' },
+        { heading: 'DEVENV-903 — Charlie', name: 'DEVENV-903-charlie.md', section: 'Deferred', status: 'Blocked' },
+      ],
+      index: '',
+    }
+    const archived: LedgerSide = {
+      entries: [{ heading: 'DEVENV-900 — Done', name: 'DEVENV-900-done.md', status: 'Resolved' }],
+      index: '',
+    }
+    const { archiveIndex, openIndex } = developerEnvironmentIndexes(open, archived)
+    Expect(openIndex).toContain(
+      '## Deferred project — begin after the large branches land\n\n'
+        + '- [DEVENV-903 — Charlie](<Developer environment upgrades/DEVENV-903-charlie.md>) — Blocked',
+    )
+    Expect(openIndex).toContain(
+      '## External and observational findings\n\n'
+        + '- [DEVENV-901 — Alpha](<Developer environment upgrades/DEVENV-901-alpha.md>) — Planned\n'
+        + '- [DEVENV-902 — Bravo](<Developer environment upgrades/DEVENV-902-bravo.md>) — Candidate',
+    )
+    Expect(archiveIndex).toContain(
+      '- [DEVENV-900 — Done](<Developer environment upgrades/Archive/DEVENV-900-done.md>) — Resolved',
+    )
+  })
+
+  Test('reports an addressed entry left in the open backlog, and an open one left in the archive', () => {
+    Expect(developerEnvironmentLedgerIssues(
+      { entries: [{ name: 'DEVENV-901-done.md', section: 'External', status: 'Resolved' }], index: '' },
+      { entries: [{ name: 'DEVENV-902-open.md', status: 'Candidate' }], index: '' },
+    )).toEqual([
+      'Developer environment upgrades/DEVENV-901-done.md is `Resolved`; move it into'
+      + ' `Developer environment upgrades/Archive/` in the change that addressed it.',
       'Developer environment upgrades/Archive/DEVENV-902-open.md is `Candidate`; an entry that is not addressed'
       + ' belongs in the open backlog.',
     ])
@@ -393,28 +436,20 @@ _bench-check:
   })
 
   Test('accepts an entry named for its title beside a numbered one', () => {
-    const index = '- [DEVENV-901 — Numbered](<Developer environment upgrades/DEVENV-901-numbered.md>) — Candidate\n'
-      + '- [DEVENV-NAMED-FOR-ITS-TITLE — Named](<Developer environment upgrades/DEVENV-NAMED-FOR-ITS-TITLE.md>)'
-      + ' — Candidate\n'
     Expect(developerEnvironmentLedgerIssues(
-      openSide(index, ['DEVENV-901-numbered.md', 'DEVENV-NAMED-FOR-ITS-TITLE.md']),
+      openSide('', ['DEVENV-901-numbered.md', 'DEVENV-NAMED-FOR-ITS-TITLE.md']),
       emptySide,
     )).toEqual([])
   })
 
   Test('reports one title claimed by both halves of the ledger', () => {
-    const index = '- [DEVENV-SAME-TITLE-TWICE — Open](<Developer environment upgrades/DEVENV-SAME-TITLE-TWICE.md>)'
-      + ' — Candidate\n'
-    const archiveIndex = '- [DEVENV-SAME-TITLE-TWICE — Done]'
-      + '(<Developer environment upgrades/Archive/DEVENV-SAME-TITLE-TWICE.md>) — Resolved\n'
     Expect(developerEnvironmentLedgerIssues(
-      openSide(index, ['DEVENV-SAME-TITLE-TWICE.md']),
-      archivedSide(archiveIndex, ['DEVENV-SAME-TITLE-TWICE.md']),
+      openSide('', ['DEVENV-SAME-TITLE-TWICE.md']),
+      archivedSide('', ['DEVENV-SAME-TITLE-TWICE.md']),
     )).toEqual([
       'Developer environment upgrades: DEVENV-SAME-TITLE-TWICE is claimed by'
       + ' Developer environment upgrades/DEVENV-SAME-TITLE-TWICE.md,'
-      + ' Developer environment upgrades/Archive/DEVENV-SAME-TITLE-TWICE.md;'
-      + ' rename the later-merged file and its index line.',
+      + ' Developer environment upgrades/Archive/DEVENV-SAME-TITLE-TWICE.md; rename the later-merged file.',
     ])
   })
 
@@ -795,9 +830,13 @@ function file(path: string, source: string, bytes?: Uint8Array): TestFile {
 
 const emptySide: LedgerSide = { entries: [], index: '' }
 
-/** The status each helper gives its entries is the one that belongs in that half, so only the case under test differs. */
+/**
+ * The status and section each helper gives its entries are the ones that belong in that half, so
+ * only the case under test differs; a test that cares about a specific section builds its own
+ * `LedgerSide` instead of using this helper.
+ */
 function openSide(index: string, names: readonly string[]): LedgerSide {
-  return { entries: names.map(name => ({ name, status: 'Candidate' })), index }
+  return { entries: names.map(name => ({ name, section: 'External', status: 'Candidate' })), index }
 }
 
 function archivedSide(index: string, names: readonly string[]): LedgerSide {

@@ -1,6 +1,7 @@
 # DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path
 
 - **Status:** In progress
+- **Section:** External
 - **Partly addressed, 2026-09-20:** `Finalize.ts` now asks `git merge-tree --write-tree --name-only`
   what would conflict _before_ attempting the merge, and separates the two failures. A merge that
   recorded unmerged entries still says to resolve it by hand and names them. A merge that failed

@@ -1,6 +1,7 @@
 # DEVENV-097 — Verification in a freshly created worktree can never hit a green record
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification lanes
 - **Impact:** A green record is stored per checkout and keyed on the resolved `.devenv/profile`
   alongside the tree hash. A worktree created on the fly has neither: an empty store, and a toolchain

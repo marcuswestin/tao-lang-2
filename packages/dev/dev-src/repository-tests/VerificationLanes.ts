@@ -29,17 +29,29 @@ export const VERIFY_FULL_SANDBOX = 'verify-full-sandbox'
 export const VERIFY_OR_WIDER: readonly string[] = [VERIFY, VERIFY_FULL_SANDBOX, VERIFY_FULL]
 
 /**
- * The lanes that may not run without the landing lock. Membership is by breadth, not by whether the
- * lane is merge evidence: these are the runs that take the machine for minutes, so two at once is
- * both agents finishing later than either would alone, and a landing that follows one of them is
- * standing on a tree a neighbour may already have invalidated.
+ * The lanes broad enough to take the machine for minutes rather than seconds — the property both
+ * `LandingLock` and `MachineLanes`' admission queue key off of, each for its own reason (see `LOCKED`
+ * below and `MachineLanes.laneQueue`). Kept as its own export, distinct from `LOCKED`, so a consumer
+ * reads the policy it actually means rather than a name that happens to hold the same lanes today;
+ * nothing requires the two policies to keep agreeing, and an alias would make a future disagreement
+ * silent instead of a one-line diff.
+ */
+export const BROAD: readonly string[] = [TEST_ALL, VERIFY, VERIFY_FULL, VERIFY_FULL_SANDBOX]
+
+/**
+ * The lanes that may not run without the landing lock. Membership is by breadth (see `BROAD`), not by
+ * whether the lane is merge evidence: these are the runs that take the machine for minutes, so two at
+ * once is both agents finishing later than either would alone, and a landing that follows one of them
+ * is standing on a tree a neighbour may already have invalidated.
  *
  * Everything narrower stays free on purpose. An agent must be able to check the change it just made
  * without waiting on anybody — `test-file`, a named test, `test-retry`, `check`, `fix`, `fmt` — and
- * the diff-scoped lanes in between (`verify-changed`, `test-changed`) are throttled by the existing
- * machine-lane slot admission rather than by the lock.
+ * the diff-scoped lanes in between (`verify-changed`, `test-changed`) are narrow by this same
+ * membership: `MachineLanes`' admission queue admits them immediately rather than making them wait
+ * behind a broad lane, so they are bounded only by their own per-lane slot ceiling, never by another
+ * lane's presence, and never by the lock.
  */
-export const LOCKED: readonly string[] = [TEST_ALL, VERIFY, VERIFY_FULL, VERIFY_FULL_SANDBOX]
+export const LOCKED: readonly string[] = [...BROAD]
 
 /** Every lane name this module defines, for the test that pins them against the `Justfile`. */
 export const ALL: readonly string[] = [
@@ -54,6 +66,7 @@ export const ALL: readonly string[] = [
 
 export const VerificationLanes = {
   ALL,
+  BROAD,
   CHECK,
   LOCKED,
   TEST_ALL,

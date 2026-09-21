@@ -1,6 +1,7 @@
 # DEVENV-034 — Bun worker-pool test scheduling
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test performance
 - **Impact:** Replacing the package-process scheduler with Bun's worker pool is not currently safe: the
   comparison workload can fail timing-sensitive tests or fail to terminate.

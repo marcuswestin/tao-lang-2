@@ -1,6 +1,7 @@
 # DEVENV-039 — Native Studio launch resolves the generated app before it is written
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Studio launch
 - **Impact:** The command a person runs most for device work opens with a red bundler error that is not
   one, which trains readers to ignore the place real bundler failures appear.

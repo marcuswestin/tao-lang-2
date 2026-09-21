@@ -1,6 +1,7 @@
 # DEVENV-101 — `_fix-dprint` cannot format a skill file inside the sandbox
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification lanes, agent sandbox
 - **Impact:** An agent that writes an unformatted file under `agents/skills/` cannot get any verify
   lane green from a sandboxed shell. `_fix-dprint` fails to rewrite the file, and every gate behind

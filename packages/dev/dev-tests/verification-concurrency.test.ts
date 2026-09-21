@@ -292,58 +292,22 @@ Describe('two lanes in one checkout', () => {
 })
 
 /**
- * The one lane that refuses to share. Every other kind of contention here is about dividing the
- * machine fairly; this is about a lane whose gates cannot be divided at all, because they drive one
- * window server between them.
+ * The `gui` lease. Every other kind of contention here is about dividing the machine fairly; this is
+ * about the two nodes that cannot be divided at all, because they drive one window server between
+ * them — `studio-smoke-native` and `studio-canary`, the only gates `GateCatalog` declares
+ * `resources: [GateCatalog.GUI_RESOURCE]` on.
  */
-Describe('a lane that needs the machine to itself', () => {
-  Test('refuses while another lane is registered, names it, and runs once it is gone', async () => {
-    const root = await mkTestDir('tao-verify-needs-machine-')
-    const holderRoot = await mkTestDir('tao-verify-needs-machine-holder-')
-    const registryRoot = FS.resolvePath('registry', root)
-    const started: string[] = []
-    const lane = async () =>
-      await runGates({
-        gates: [READER_GATE],
-        lane: 'verify-full',
-        needsMachine: true,
-        registryRoot,
-        repositoryRoot: root,
-        runGate: async gate => {
-          started.push(gate)
-          return { exitCode: 0, output: '' }
-        },
-      })
-
-    const holder = await MachineLanes.acquire({ lane: 'dev-test', registryRoot, repositoryRoot: holderRoot })
-    try {
-      // The refusal names the holder the way an exclusive confirmation names it — lane, then the
-      // worktree it is running in — so the two waits a developer can meet read alike.
-      await Expect(lane()).rejects.toThrow(`dev-test in ${FS.basename(holderRoot)}`)
-      await Expect(lane()).rejects.toThrow('needs this machine to itself')
-      // Refused means refused: nothing ran, so nothing was proved and nothing was recorded.
-      Expect(started).toEqual([])
-
-      await holder.release()
-      const summary = await lane()
-      Expect(summary.status).toBe('passed')
-      Expect(started).toEqual([READER_GATE])
-    } finally {
-      await holder.release()
-      await FS.remove(root)
-      await FS.remove(holderRoot)
-    }
-  })
-
-  Test('lets every other lane share the machine, however many are registered', async () => {
+Describe('the machine-wide gui lease', () => {
+  Test('an ordinary lane shares the machine freely, however many other lanes are registered', async () => {
     const root = await mkTestDir('tao-verify-shares-machine-')
     const holderRoot = await mkTestDir('tao-verify-shares-machine-holder-')
     const registryRoot = FS.resolvePath('registry', root)
 
     const holder = await MachineLanes.acquire({ lane: 'dev-test', registryRoot, repositoryRoot: holderRoot })
     try {
-      // Refusing is this one lane's property, declared by the Justfile that owns lane membership.
-      // Without the flag a busy machine is a scheduling fact, and the broker's share handles it.
+      // A lane with no gui-declaring gate in it never touches the lease at all: a registered peer,
+      // gui or not, is a scheduling fact for the CPU broker alone.
+      Expect(GateCatalog.metadata(READER_GATE).resources ?? []).toEqual([])
       const summary = await runGates({
         gates: [READER_GATE],
         lane: 'verify',
@@ -352,6 +316,88 @@ Describe('a lane that needs the machine to itself', () => {
         runGate: async () => ({ exitCode: 0, output: '' }),
       })
       Expect(summary.status).toBe('passed')
+    } finally {
+      await holder.release()
+      await FS.remove(root)
+      await FS.remove(holderRoot)
+    }
+  })
+
+  Test('a gui node holds the machine-wide lease while it runs and releases it once it completes', async () => {
+    const root = await mkTestDir('tao-verify-gui-lease-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const guiHeld = Deferred()
+    let heldDuringRun: boolean | undefined
+    try {
+      // Not awaited yet: the gate itself waits on `guiHeld`, so awaiting here before releasing it
+      // would deadlock the test against its own assertion.
+      const pending = runGates({
+        gates: ['studio-canary'],
+        lane: 'verify-full',
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async () => {
+          heldDuringRun = await MachineLanes.tryAcquireResource({
+            name: GateCatalog.GUI_RESOURCE,
+            registryRoot,
+          }) === undefined
+          await guiHeld.promise
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      await until(() => heldDuringRun !== undefined, {
+        description: 'the gui node to check the lease while it is running',
+        timeoutMs: LANE_WAIT_MS,
+      })
+      Expect(heldDuringRun).toBe(true)
+      guiHeld.resolve()
+
+      const summary = await pending
+      Expect(summary.status).toBe('passed')
+      // Released once the run is over: a fresh acquisition of the same name succeeds immediately.
+      const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
+      Expect(after).toBeDefined()
+      await after?.release()
+    } finally {
+      guiHeld.resolve()
+      await FS.remove(root)
+    }
+  })
+
+  Test('a second gui acquirer is told the exact holder rather than refusing outright', async () => {
+    const root = await mkTestDir('tao-verify-gui-contention-')
+    const holderRoot = await mkTestDir('tao-verify-gui-contention-holder-')
+    const registryRoot = FS.resolvePath('registry', root)
+
+    const holder = await MachineLanes.acquireResource({
+      command: 'dev-test gui',
+      name: GateCatalog.GUI_RESOURCE,
+      registryRoot,
+      repositoryRoot: holderRoot,
+    })
+    try {
+      const summary = runGates({
+        gates: ['studio-canary'],
+        guiLeaseWaitMs: 200,
+        lane: 'verify-full',
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+      // Named the way `StudioNative`'s own native-host lease names it: the command and the worktree
+      // holding it, not merely that something is busy.
+      await Expect(summary).rejects.toThrow(`dev-test gui in ${holderRoot}`)
+
+      await holder.release()
+      const retried = await runGates({
+        gates: ['studio-canary'],
+        lane: 'verify-full',
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+      Expect(retried.status).toBe('passed')
     } finally {
       await holder.release()
       await FS.remove(root)

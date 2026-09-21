@@ -17,9 +17,9 @@ that work:
 
 - A top-level lane registers itself under `~/.cache/tao/machine-lanes` before it schedules anything,
   and every node atomically reserves slots from that machine-wide budget before it starts.
-- Fair shares are recomputed whenever work is admitted. A lane already above a newly reduced share
-  finishes its running nodes but cannot admit more until it is back within that share. A lane that
-  is running nothing is always admitted one slot, whatever the machine-wide total says.
+- Admission is whole-lane and in arrival order. A lane either runs at its own full ceiling or waits
+  with a printed position that shrinks as the lanes ahead of it end; it is never thinned to a slot
+  or two. The machine admits a small fixed number of broad lanes at once.
 - A lease is removed when the lane ends, and pruned by the next lane when its process is gone.
 - The one remaining nested runner is `./tao test`, the published product CLI, inside the `tao-apps`
   node. It is already within the width its parent reserved, so it neither registers nor divides
@@ -27,13 +27,16 @@ that work:
   test` inside a verification lane: suites and shards are nodes of the same graph.
 - An explicit `--jobs` caps that lane but does not opt it out of machine coordination.
 
-So one worktree running `verify` on an 18-CPU machine can use 18 slots, two converge on 9 each, and
-four converge on 4 or 5 each. Every lane keeps a floor of one slot, honoured even when the machine's
-slots are all reserved, so a lane that joins a busy machine always starts something instead of
-waiting on work that will not shrink for minutes. That is the only oversubscription allowed: above
-the floor the machine-wide total still governs, so the bound is `cpuCount` plus at most one slot per
-lane that is running nothing. A slot is not a CPU in any case: one slot may run a whole test file's
-parallel children, so the reservation total tracks fairness between lanes rather than load. A
+So one worktree running `verify` on an 18-CPU machine uses the machine, and the next broad lane to
+arrive waits for it rather than halving it. Splitting was tried first and failed as both a fairness
+bound and a CPU bound: thirteen live lanes were measured holding two admitted slots between them
+while sixteen CPUs' worth of budget went unissued, and the load average still reached 36 on those 18
+CPUs. Both halves of that say the same thing — a slot is not a CPU. One slot may run a whole test
+file's parallel children, so dividing the total finer made every lane narrow without making the
+machine quieter, while the number of whole lanes is a bound that can be defended, since a lane at
+its ceiling is by construction one machine's worth of work. Narrow lanes do not queue: the one-file
+and diff-scoped runs an agent makes twenty times an hour are admitted immediately, because making
+them wait behind a batch lane is the starvation this whole mechanism exists to prevent. A
 blocked node reports what it is waiting for, names the lane holding an exclusive confirmation when
 that is the cause, and backs off its registry polling. CPU admission fails open
 only when its registry is unavailable; exclusive confirmation and named resources fail closed

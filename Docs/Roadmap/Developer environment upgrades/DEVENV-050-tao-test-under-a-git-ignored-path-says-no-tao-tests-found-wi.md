@@ -1,6 +1,7 @@
 # DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Diagnostics
 - **Impact:** A project under an ignored directory looks test-less, and the person reads it as a
   discovery bug in their project rather than an ignore rule.

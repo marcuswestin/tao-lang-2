@@ -1,6 +1,7 @@
 # DEVENV-082 — No pseudo-terminal inside the agent sandbox
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent sandbox and workflow output
 - **Impact:** Output that only exists on a terminal — the work-graph TUI, prefixed `lines` streaming,
   and now the colored verdict line — cannot be observed from a sandboxed shell at all, because every

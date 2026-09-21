@@ -1,6 +1,7 @@
 # DEVENV-072 — Shared devenv profile makes its coreutils vanish mid-command in every worktree
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Worktrees and shell environment
 - **Impact:** A tool shell resolves `dirname`, `basename`, and the other profile-provided coreutils
   through `.devenv/profile`, which every linked worktree symlinks to the primary checkout's single

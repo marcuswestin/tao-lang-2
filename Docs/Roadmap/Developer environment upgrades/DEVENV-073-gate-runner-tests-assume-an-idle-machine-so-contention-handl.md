@@ -1,6 +1,7 @@
 # DEVENV-073 — Gate-runner tests assume an idle machine, so contention handling fails its own suite
 
 - **Status:** Incoming
+- **Section:** External
 - **Area:** Verification diagnostics
 - **Impact:** `packages/dev/dev-tests/gate-runner.test.ts`, `test-runner.test.ts`, and
   `verification-concurrency.test.ts` assert

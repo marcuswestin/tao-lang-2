@@ -1,6 +1,7 @@
 # DEVENV-113 — Uncached complete verification has no repeated stable tail
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test performance
 - **Impact:** One uncached complete lane can spend more than a minute on a single suite, but optimizing
   the first observed tail would trade correctness and maintenance for a bottleneck that may disappear

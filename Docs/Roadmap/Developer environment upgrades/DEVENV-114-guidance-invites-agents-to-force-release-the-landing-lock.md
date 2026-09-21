@@ -1,6 +1,7 @@
 # DEVENV-114 — The guidance invites agents to force-release a lock the design reserves for a person
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Landing and merge workflow
 - **Impact:** `LandingLock.ts` is explicit that the lock is never reclaimed automatically, that a
   dead PID does not mean a released lock because the acquiring process is _expected_ to exit while

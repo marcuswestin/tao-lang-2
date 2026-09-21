@@ -1,6 +1,7 @@
 # DEVENV-061 — `bun test` from the repository root loses subprocess output
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test execution
 - **Impact:** An agent debugging with a direct `bun test <path>` from the repository root sees tests
   that assert on captured command output fail, while the same tests pass through the repository's own
