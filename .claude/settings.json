@@ -93,10 +93,14 @@
       "git reset --hard HEAD",
       "./dev land",
       "./dev land *",
-      "./agent land",
-      "./agent land *",
+      "./dev merge-with-main",
+      "./dev merge-with-main *",
       "just land",
-      "just my-land"
+      "just land *",
+      "just merge-with-main",
+      "just merge-with-main *",
+      "just my-land",
+      "just my-land *"
     ],
     "filesystem": {
       "allowWrite": [

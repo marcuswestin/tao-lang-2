@@ -11,6 +11,21 @@
   is the half-written tree itself: the merge is still attempted inside the sandbox, so it can still
   stop partway and leave modifications the reader did not make. That needs the sandbox-inheritance
   fix under Dependencies, not another change here.
+- **Partly addressed, 2026-09-21:** the half-written tree is gone. `Finalize.ts` now probes before
+  merging: it takes the directories `main` would write, creates and removes a file in each, and
+  refuses with those directories named if any write is denied — so the merge is never attempted
+  where it cannot finish, and the worktree is untouched rather than half-written. The probe is an
+  actual write rather than a list of protected prefixes, because that list is the harness's: it is
+  in neither `.rulesync/permissions.jsonc` nor the generated settings, and a copy kept here would
+  rot silently. **What remains** is that finalize still cannot perform the merge itself in that
+  case; it hands off to a top-level `git merge`. Excluding `./agent finalize` from the sandbox the
+  way `eabe05bc` excluded the landing would fix that, but finalize runs every test suite, which is a
+  different order of blast radius from a landing a person has already approved.
+- **Correction, 2026-09-21:** the Dependencies note below is wrong about what a general fix would
+  look like. A Seatbelt profile is inherited and can only be narrowed by a descendant, never widened,
+  so no harness change can lift a nested `git` out of the sandbox its parent runs in. There is no
+  general fix waiting to be written; the only lever is which top-level commands are named approval
+  boundaries and excluded, which is what `eabe05bc` did for the landing.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox
@@ -37,9 +52,12 @@
   dirty tracked paths of which 60 were byte-identical to `main`, 5 untracked paths all present in
   `main`, no `MERGE_HEAD`, and a plain `git merge main` afterwards that named the one real conflict.
   A different branch and a different conflicting path, so this is the command and not one branch.
-- **Workaround:** Set the debris aside with `git stash push -u -m '<unique-tag>'` rather than
-  `git checkout -f`, which is both sandbox-denied and classifier-denied; then run `git merge
-  origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD
+- **Workaround:** Only needed for a tree an older finalize already half-wrote. Set the debris aside
+  with `git stash push -u -m '<unique-tag>'` rather than `git checkout -f`, which is both
+  sandbox-denied and classifier-denied — confirmed 2026-09-21 on
+  `feat/ripgrep-replace-flag-issue-970ab2`, where `checkout -f`, `git merge` and even a
+  path-scoped `git restore` were all refused as irreversible local destruction, and the tagged stash
+  was not; then run `git merge origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD
   origin/main` is a read-only way to learn what actually conflicts before touching anything.
 - **Proposed change:** Run the integration merge the way a top-level `git merge` already runs — the
   policy exclusion exists precisely because this operation writes sandbox-protected paths — or detect
