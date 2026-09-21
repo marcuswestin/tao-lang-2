@@ -412,7 +412,7 @@ delegation-report *ARGS:
 simplify-audit *ARGS:
     ./dev simplify-audit {{ ARGS }}
 
-# Benchmark cold and steady-state language-service performance
+# Benchmark cold and steady-state language-service performance; fails when a steady-state median passes its budget
 [group('Report')]
 bench iterations="10":
     bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
