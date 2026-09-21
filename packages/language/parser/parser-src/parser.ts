@@ -138,6 +138,27 @@ export const Parser = {
     return await buildDocuments(context.services, entryDocument, documents, options)
   },
 
+  /**
+   * parseEntries parses several entry files of one workspace with a single build. Every file is read,
+   * parsed, and linked once however many entries reach it, and each entry's result still holds only
+   * the documents that entry reaches, in the order `parse` would have loaded them.
+   *
+   * Linking on the union is sound because nothing a reference resolves to depends on which entry
+   * loaded the file: imports resolve by path, and a file's `folder` siblings are loaded with it
+   * under every entry that reaches it. Test sidecars are the one kind of file an app file's graph
+   * never holds, which is why the scope provider keeps them out of folder scope itself.
+   */
+  async parseEntries(context: ParserContext, uris: readonly URI[], options: ParseOptions = {}): Promise<ParseResult[]> {
+    const loaded: LoadedDocuments = new Map()
+    const graphs: { entryDocument: AST.Document; documents: AST.Document[] }[] = []
+    for (const uri of uris) {
+      const entryDocument = await documentFromFilePath(context, uri.path, loaded)
+      graphs.push({ entryDocument, documents: await loadReachableDocuments(context, entryDocument, loaded) })
+    }
+    await linkDocuments(context.services, [...new Set(graphs.flatMap(graph => graph.documents))], options)
+    return graphs.map(graph => parseResultFromDocuments(graph.entryDocument, graph.documents))
+  },
+
   /** parseSyntax parses Tao source text into an AST without loading imports or linking references. */
   parseSyntax(code: string, context?: ParserContext): SyntaxParse {
     syntaxContext ??= Parser.createContext()
@@ -269,6 +290,16 @@ async function buildDocuments(
   documents: readonly AST.Document[],
   options: ParseOptions,
 ): Promise<ParseResult> {
+  await linkDocuments(services, documents, options)
+  return parseResultFromDocuments(entryDocument, documents)
+}
+
+/** linkDocuments makes `documents` the whole of what the services hold, then builds them once. */
+async function linkDocuments(
+  services: ParserServices,
+  documents: readonly AST.Document[],
+  options: ParseOptions,
+): Promise<void> {
   const langiumDocuments = services.shared.workspace.LangiumDocuments
   const currentUris = new Set(documents.map(document => document.uri.toString()))
   for (const retained of Array.from(langiumDocuments.all)) {
@@ -289,7 +320,9 @@ async function buildDocuments(
     eagerLinking: true,
     validation: options.validation ?? true,
   })
+}
 
+function parseResultFromDocuments(entryDocument: AST.Document, documents: readonly AST.Document[]): ParseResult {
   const files = documents.map(parsedFileFromDocument).filter(isParsedFile)
   const entry = files.find(file => file.path === entryDocument.uri.path)
   Assert.defined(entry, 'entry Tao document exists in parsed files', { entryPath: entryDocument.uri.path })
@@ -420,12 +453,22 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
   return file !== undefined
 }
 
-async function loadReachableDocuments(context: ParserContext, entryDocument: AST.Document): Promise<AST.Document[]> {
+/**
+ * LoadedDocuments holds the documents one batch of entries has read so far, by path, so a file
+ * several entries reach is read and parsed once and every entry's graph names the same document.
+ */
+type LoadedDocuments = Map<string, AST.Document>
+
+async function loadReachableDocuments(
+  context: ParserContext,
+  entryDocument: AST.Document,
+  loaded?: LoadedDocuments,
+): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
   // Sibling scans are memoized per directory for this load only; files may change between runs.
   const siblingScans: SiblingScanCache = new Map()
   const intrinsicDocuments = await Promise.all(
-    (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path)),
+    (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path, loaded)),
   )
   const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments]
 
@@ -436,7 +479,7 @@ async function loadReachableDocuments(context: ParserContext, entryDocument: AST
       continue
     }
     documents.set(currentPath, document)
-    queue.push(...await loadReferencedDocuments(context, document, documents, siblingScans))
+    queue.push(...await loadReferencedDocuments(context, document, documents, siblingScans, loaded))
   }
 
   return [...documents.values()]
@@ -447,6 +490,7 @@ async function loadReferencedDocuments(
   document: AST.Document,
   loadedDocuments: ReadonlyMap<string, AST.Document>,
   siblingScans: SiblingScanCache,
+  loaded?: LoadedDocuments,
 ): Promise<AST.Document[]> {
   const ast = document.parseResult.value
   if (ast === undefined) {
@@ -457,7 +501,7 @@ async function loadReferencedDocuments(
   // so the whole folder is loaded rather than only what the imports point at.
   for (const siblingPath of await siblingTaoFilePaths(document.uri.path, siblingScans)) {
     if (!loadedDocuments.has(siblingPath)) {
-      referencedDocuments.push(await documentFromFilePath(context, siblingPath))
+      referencedDocuments.push(await documentFromFilePath(context, siblingPath, loaded))
     }
   }
   const importingStatements = ast.statements.filter(statement =>
@@ -469,7 +513,7 @@ async function loadReferencedDocuments(
     })
     for (const candidatePath of candidatePaths) {
       if (!loadedDocuments.has(candidatePath)) {
-        referencedDocuments.push(await documentFromFilePath(context, candidatePath))
+        referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
       }
     }
   }
@@ -498,7 +542,7 @@ async function folderSiblingPathsIn(directory: string): Promise<string[]> {
     return []
   }
   const candidates = (await FS.listDir(directory))
-    .filter(name => FS.extname(name) === '.tao' && !name.endsWith('.test.tao'))
+    .filter(name => FS.extname(name) === '.tao' && !AST.isTestSidecarPath(name))
     .map(name => FS.resolvePath(name, directory))
   const paths: string[] = []
   for (const path of candidates) {
@@ -509,8 +553,18 @@ async function folderSiblingPathsIn(directory: string): Promise<string[]> {
   return paths
 }
 
-async function documentFromFilePath(context: ParserContext, filePath: string): Promise<AST.Document> {
-  return await context.services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
+async function documentFromFilePath(
+  context: ParserContext,
+  filePath: string,
+  loaded?: LoadedDocuments,
+): Promise<AST.Document> {
+  const held = loaded?.get(filePath)
+  if (held !== undefined) {
+    return held
+  }
+  const document = await context.services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
     Langium.URI.file(filePath),
   )
+  loaded?.set(filePath, document)
+  return document
 }
