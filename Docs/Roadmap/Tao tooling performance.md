@@ -3,8 +3,8 @@
 Research report, 2026-09-21. It answers four questions in order: where verification time goes, what
 makes the developer-facing `tao` commands slow, how fast the current stack (TypeScript, Bun, Langium,
 Jest, Expo) can be made, and whether a different stack would raise that ceiling enough to matter.
-Nothing here is implemented; section 8 is the proposed sequence and section 9 the judgments that are
-Ro's.
+The largest single defect it found (5.1) was fixed in the change that landed it; everything else is
+proposed, with section 8 the sequence and section 9 the judgments that are Ro's.
 
 The bar is interactive-grade: a warm single-file check or fix under 100ms, a whole-app check under
 1s, one behavior test re-run under 1s, a whole app's tests under 10s, and an edit visible in the
@@ -128,14 +128,23 @@ reused workspace reuses nothing.
 
 ### 5.1 Import resolution calls `realpath` inside the linker's inner loop
 
-`Packages.targetMatches` guards every candidate file against escaping its package through a symlink
-(`packages/language/ast-utils/ast-utils-src/Packages.ts:620-629`), with two `realpathSync` calls per
-question. The question is asked for every workspace file, for every `use` statement, every time a
-reference is resolved (`Packages.ts:87-95`, reached from `value-scope.ts:645-708`). For a 13-file
-app that is on the order of 450,000 syscalls: 22.0s of a 24.8s profile. The guard is right and the
-answer cannot change during a build, so it belongs in a per-build table. This one defect is most of
-`tao check`, `tao fix`, the validate stage of `tao test`, and a large share of every suite in
-section 3.
+`Packages.targetMatches` guarded every candidate file against escaping its package through a
+symlink with two `realpathSync` calls per question, asked before the cheap path comparison that
+turns nearly every candidate away. The question is asked for every workspace file, for every `use`
+statement, every time a reference is resolved (`Packages.createResolver`, reached from
+`value-scope.ts:645-708`). For a 13-file app that was on the order of 450,000 syscalls: 22.0s of a
+24.8s profile. This one defect was most of `tao check`, `tao fix`, the validate stage of `tao test`,
+and a large share of every suite in section 3.
+
+**Fixed in the change that landed this report.** The guard stays, because a file loaded through one
+import can sit lexically inside another package while physically outside it. Two things changed:
+the path comparison now runs first, so the file system is asked only about files an import actually
+names; and each path's symlinks are resolved once per `Packages.Context`, in a table that lives
+beside the package index and shares its lifetime and its kind of staleness — neither notices a
+package directory or a symlink that appears after the context was created. A path that fails to
+resolve is not remembered, so a file an editor has not saved yet matches once it is written. System
+time for the uncached check fell from 17-24s to 0.7s; the tables in section 4 keep the before
+figures and the "+ realpath memo" column is what the fix delivers.
 
 ### 5.2 The scope provider recomputes imports per reference
 
@@ -344,7 +353,7 @@ real projects outgrow Langium's heap, and the trigger should be one of those, ob
 
 Phase 0 — remove the defects (days; no design decisions; unblocks every lane in section 3):
 
-1. Resolve the physical-boundary guard once per build per path (5.1).
+1. ~~Resolve the physical-boundary guard once per path (5.1).~~ Landed with this report.
 2. Compute each document's import table once per build and cache it the way Langium intends (5.2).
 3. Build the union of a workspace's entries in one pass and validate each entry over the shared,
    linked graph (5.3); teach `./agent bench` to assert a budget so this cannot regress silently.

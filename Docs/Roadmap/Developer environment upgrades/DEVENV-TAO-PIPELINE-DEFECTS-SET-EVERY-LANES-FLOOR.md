@@ -12,17 +12,16 @@
   standard library in 14ms.
 - **Evidence:** Measured 2026-09-21, recorded with method and profiles in
   [`Tao tooling performance.md`](<../Tao tooling performance.md>) sections 4 and 5. In short: 88.6%
-  of a `tao check` profile is `realpathSync` from
-  `packages/language/ast-utils/ast-utils-src/Packages.ts:620-629`; scope resolution recomputes every
-  import per reference (`packages/language/parser/parser-src/value-scope.ts:645-708`); every entry
-  file rebuilds the whole graph from disk (`packages/language/parser/parser-src/parser.ts:266-291`,
+  of a `tao check` profile was `realpathSync` from the symlink guard in `Packages.targetMatches`,
+  **fixed in the change that added this entry** (check 22s to about 2.3s, fix 9s to 1.2s, compile
+  3.2s to 0.8s). Still open: scope resolution recomputes every import per reference
+  (`packages/language/parser/parser-src/value-scope.ts:645-708`); every entry file rebuilds the whole
+  graph from disk (`packages/language/parser/parser-src/parser.ts:266-291`,
   `packages/compiler/compiler-src/workspace/Workspace.ts:99-111`); each `tao test` compile lands in
-  fresh paths and misses Babel's cache. A ten-line experimental memo took check from 22s to 2.3s,
-  fix from 9s to 1.2s, and compile from 3.2s to 0.8s.
+  fresh paths and misses Babel's cache.
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
-- **Proposed change:** Phase 0 of the linked report: a per-build physical-boundary table, a cached
-  per-document import table, one build for the union of a workspace's entries, and stable
+- **Proposed change:** The rest of Phase 0 of the linked report: a cached per-document import table, one build for the union of a workspace's entries, and stable
   content-addressed test output paths. Then give `./agent bench` a budget it asserts, since it
   reports today and fails nothing.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
