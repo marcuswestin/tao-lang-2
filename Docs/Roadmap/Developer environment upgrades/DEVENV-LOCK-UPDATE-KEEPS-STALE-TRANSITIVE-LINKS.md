@@ -11,7 +11,9 @@
   `./agent setup` exited successfully and refreshed `.artifacts/build/agent-dev/dev-deps.stamp`,
   `node_modules/.bun/@expo+plist@0.8.1/node_modules/@xmldom/xmldom` still linked to
   `@xmldom+xmldom@0.8.13`, even though the `0.8.15` package directory was present. The installed
-  Expo link was stale against the frozen graph.
+  Expo link was stale against the frozen graph. A fresh detached checkout at `078d2905` installed
+  Expo's `0.8.15` link and root `0.9.12` link with `./agent setup`; an Expo plist build/parse round
+  trip passed there. That checkout was removed after the check.
 - **Workaround:** Verify advisory conclusions against `bun.lock` and use a fresh worktree for
   runtime acceptance of the changed graph; no in-place managed-shell repair was established.
 - **Proposed change:** Make dependency health compare installed package links against relevant
