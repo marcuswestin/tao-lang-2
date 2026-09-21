@@ -17,6 +17,17 @@
   than the work attributable to the test. A comparable distortion is visible across the suite:
   `packages/dev/dev-tests/studio-dev.test.ts` runs 61 tests in 3.3s standalone while the ledger
   records a dozen of its cases at ~6.20s each.
+- **Evidence, the distortion reaches the schedule line every lane prints:** the per-node `elapsedMs`
+  this entry found inflated is also what `chainDuration` sums to produce `serialFloorMs`
+  (`packages/dev/dev-src/repository-tests/WorkSchedule.ts:113`), so the `Schedule:` line ending every
+  verification — serial floor, critical path, idle slot-seconds — inherits it. The tell is that the
+  floor keeps coming out equal to the makespan: four consecutive runs on 2026-09-21 reported 42.3s of
+  42.3s, 52.5s of 52.5s, 79.0s of 79.1s and 52.1s of 52.3s, each naming a chain ending in `tao-apps`,
+  with 23-83% of slot-seconds called idle. That is what a floor computed from wall-clock-to-date
+  looks like, not a real dependency chain. It matters more than the per-test figures, because this is
+  the line an agent reads to decide where a lane's time goes: on 2026-09-21 an agent reported to Ro
+  that the machine was 83% idle waiting on one serial chain, which these numbers say and the measured
+  3.58s WordFlower run contradicts. Fixing the recording fixes both readings.
 - **Evidence, implementation audit:** The earlier audit's conclusion — that the cold tail is
   dominated by the shared-workspace validation and compilation pass rather than by Jest — survives
   the correction and is the useful part of it. That fixed cost is paid once per `tao test`

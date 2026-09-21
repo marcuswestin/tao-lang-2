@@ -1,6 +1,6 @@
 import { CONVENTION_RULES } from '../repository-tests/repo-lint'
 import { isAuditedSource } from './AuditedSource'
-import { instructionBudget, instructionLineCount } from './InstructionBudgets'
+import { instructionBudget, instructionCharacterCount, instructionLineCount } from './InstructionBudgets'
 import { type KindChain, kindChainsIn } from './KindChains'
 
 /** AuditFile is one tracked repository file the audit reads. */
@@ -31,7 +31,7 @@ export type SimplifyAuditReport = {
   docs: { files: number; lines: number; subtree: string }[]
   duplicatedConstants: { name: string; paths: string[]; value: string }[]
   imports: { count: number; from: string; to: string }[]
-  instructions: { budget?: number; lines: number; path: string }[]
+  instructions: { budget?: number; characters: number; lines: number; path: string }[]
   kindChains: KindChain[]
   largeFiles: { lines: number; path: string }[]
   packages: PackageAudit[]
@@ -134,10 +134,13 @@ export function simplifyAudit(files: readonly AuditFile[]): SimplifyAuditReport 
       .filter(file => isInstructionPath(file.path))
       .map(file => ({
         budget: instructionBudget(file.path),
+        // Both are reported: the budget is in characters, and the spread between the two is what
+        // shows a file spending its budget on long bullets rather than on more of them.
+        characters: instructionCharacterCount(file.source),
         lines: instructionLineCount(file.source),
         path: file.path,
       }))
-      .sort((left, right) => right.lines - left.lines),
+      .sort((left, right) => right.characters - left.characters),
     kindChains: sources
       .flatMap(file => kindChainsIn(file.path, file.source))
       .sort((left, right) => right.length - left.length || left.path.localeCompare(right.path)),

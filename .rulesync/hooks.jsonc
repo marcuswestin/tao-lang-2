@@ -34,12 +34,13 @@
     // `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` says the calibration is
     // done. Claude Code renamed the spawning tool from `Task` to `Agent`; the matcher follows.
     //
-    // The shell-habits hook states, beside the tool result, the habits this repository's commands
-    // depend on: `rg` over a recursive `grep` or `find`, no `cd`/`export`/`VAR=` prefix, and a
-    // gate's exit status captured rather than piped away. Both harnesses carry that text
-    // non-blocking through `hookSpecificOutput.additionalContext`, so unlike the logging hooks
-    // above its stdout must reach the harness rather than /dev/null. It warns; it never blocks,
-    // and `|| true` keeps a missing worktree from being reported as a hook error.
+    // The shell-habits hook states, beside the tool result, the two habits a warning still serves:
+    // no `cd`/`export`/`VAR=` prefix, which would send the command to permission review, and a
+    // report's exit status captured rather than piped away. A gate's pipe is refused below rather
+    // than warned about here, so that one command never draws both voices. Both harnesses carry
+    // this text non-blocking through `hookSpecificOutput.additionalContext`, so unlike the logging
+    // hooks above its stdout must reach the harness rather than /dev/null. It warns; it never
+    // blocks, and `|| true` keeps a missing worktree from being reported as a hook error.
     "preToolUse": [
       // The output-discipline hook is the one hook here that refuses rather than warns, and the
       // reason is structural rather than a preference for strictness. A warning travels in
@@ -49,6 +50,15 @@
       // agents read through Bash in a week, and `OutputDiscipline.ts` refuses exactly those,
       // naming the pipe, the redirect, or the summary flag that makes the command acceptable. It
       // owns no habit the shell-habits hook already warns about.
+      //
+      // It also refuses the commands that return a plausible wrong answer rather than a large one,
+      // where a warning arrives beside a result the agent has already believed: a recursive `grep`
+      // or `find` over a tree 67 times the size of its source, `rg -r`/`rg -L` spelled from a grep
+      // habit, a gate whose verdict a filter replaces, `bun test` on a relative path, a wide `git
+      // add` or a bare `git stash` over work other writers left here, and a shell redirect writing
+      // reviewed content. `# hook-ok: <reason>` runs a command a rule wrongly caught and records
+      // the reason in `.artifacts/logs/hook-overrides.jsonl`, so a misfiring rule is found from
+      // evidence rather than from argument.
       //
       // The refusal travels as `hookSpecificOutput.permissionDecision: "deny"`, which both harnesses
       // document as the way to deny a tool call, neither requiring a particular exit code for it:

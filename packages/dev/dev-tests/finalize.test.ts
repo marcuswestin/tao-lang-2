@@ -40,6 +40,10 @@ type FakeRepository = {
   /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
   deniedMergeStderr?: string
   diffPaths?: string[]
+  /** Worktree-relative directories that exist, for the write probe that runs before a merge. */
+  existingDirectories?: string[]
+  /** Worktree-relative directories a write is denied in, as the sandbox denies `agents/skills`. */
+  unwritableDirectories?: string[]
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -149,8 +153,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     return result(args, spec.cwd, '', 1)
   }
 
+  const resolvedIn = (directories: readonly string[]): string[] =>
+    directories.map(directory => FS.resolvePath(directory, '/repo'))
+
   const dependencies: FinalizeDependencies = {
-    exists: async path => states.has(path) || files.has(path),
+    exists: async path =>
+      states.has(path) || files.has(path) || resolvedIn(repository.existingDirectories ?? []).includes(path),
     findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
@@ -180,8 +188,14 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     writeJson: async (path, value) => {
       states.set(path, structuredClone(value))
     },
+    removeFile: async path => {
+      files.delete(path)
+    },
     writeLine: line => lines.push(line),
     writeText: async (path, value) => {
+      if (resolvedIn(repository.unwritableDirectories ?? []).some(directory => path.startsWith(`${directory}/`))) {
+        Errors.throwUnexpected(`EPERM: operation not permitted, open '${path}'`)
+      }
       files.set(path, value)
     },
   }
@@ -265,6 +279,38 @@ Describe('finalize', () => {
     Expect(message.includes('agents/skills/delegation/SKILL.md')).toBe(true)
     Expect(message.includes('DEVENV-111')).toBe(true)
     Expect(message.includes('resolve it by hand and finalize again')).toBe(false)
+  })
+
+  Test('refuses before a merge it could not finish, rather than half-writing the worktree', async () => {
+    // 77 of main's last 100 commits touch `agents/skills`, which a sandboxed shell cannot write.
+    const fake = fakeDependencies({
+      diffPaths: ['agents/skills/delegation/SKILL.md', 'packages/dev/dev-src/dev.ts'],
+      existingDirectories: ['agents/skills/delegation', 'packages/dev/dev-src'],
+      unwritableDirectories: ['agents/skills'],
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    const message = String(failure)
+    Expect(message.includes('agents/skills/delegation')).toBe(true)
+    Expect(message.includes('packages/dev/dev-src')).toBe(false)
+    Expect(message.includes('Nothing has been changed.')).toBe(true)
+    Expect(message.includes('as a top-level command')).toBe(true)
+    // The merge must never have been attempted; that is the whole point of probing first.
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('merges normally when every directory main would write is writable', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['packages/dev/dev-src/dev.ts'],
+      existingDirectories: ['packages/dev/dev-src'],
+    })
+
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
+
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(true)
+    // The probe leaves nothing behind in a directory it could write.
+    Expect([...fake.files.keys()].some(path => path.endsWith('.finalize-write-probe'))).toBe(false)
   })
 
   Test('names what would conflict even when the merge recorded nothing to resolve', async () => {
@@ -853,6 +899,7 @@ Describe('finalize', () => {
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
         readText: FS.readText,
+        removeFile: FS.remove,
         run: async (command, spec) =>
           command === 'just'
             ? {
