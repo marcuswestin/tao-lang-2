@@ -7,13 +7,13 @@ registerRuntimeE2ELifecycle()
 const insets = { bottom: 5, left: 2, right: 3, top: 7 }
 
 function setInsets(): void {
-  (require('react-native-safe-area-context') as {
+  ;(require('react-native-safe-area-context') as {
     setSafeAreaInsetsForTests(value: typeof insets): void
   }).setSafeAreaInsetsForTests(insets)
 }
 
 function resetInsets(): void {
-  (require('react-native-safe-area-context') as {
+  ;(require('react-native-safe-area-context') as {
     setSafeAreaInsetsForTests(value: typeof insets): void
   }).setSafeAreaInsetsForTests({ bottom: 0, left: 0, right: 0, top: 0 })
 }

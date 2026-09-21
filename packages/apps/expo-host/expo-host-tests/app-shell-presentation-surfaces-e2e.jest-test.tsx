@@ -256,7 +256,7 @@ Describe('Expo runtime: presentation surfaces', () => {
   )
 
   Test(
-    'insets a sheet presented through the native Modal host using the modal window\'s own insets, and gives it its own keyboard avoidance',
+    "insets a sheet presented through the native Modal host using the modal window's own insets, and gives it its own keyboard avoidance",
     async () => {
       setInsets()
       // The page sheet's own native window: on iOS its card starts below the status bar, so its top
