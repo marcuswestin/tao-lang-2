@@ -12,6 +12,18 @@ function tao_bun_install_args() {
   reply=(install --cwd "$worktree_dir")
 }
 
+# Populate zsh's conventional reply array with the command and arguments `./agent` finally invokes,
+# given its own raw argument list. `setup --refresh-lockfile` runs its own lockfile-refresh pass
+# ahead of the ordinary `setup` command; any flags after `--refresh-lockfile` (`--json`, …) must
+# still reach that command rather than being dropped on the floor.
+function tao_agent_command_args() {
+  if [[ "${1:-}" == setup && "${2:-}" == --refresh-lockfile ]]; then
+    reply=(setup "${@:3}")
+  else
+    reply=("$@")
+  fi
+}
+
 # Run a command under a kernel-managed lock that is released with the owning subshell.
 function tao_run_with_lock() {
   local lock_file="$1"

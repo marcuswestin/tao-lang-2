@@ -1,5 +1,5 @@
 import { OutputText } from '@cli-kit'
-import { FS, HCI } from '@shared'
+import { FS, HCI, Repo } from '@shared'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import type { WorkState } from './WorkGraph'
@@ -42,6 +42,18 @@ export type FailureKind =
   | 'test-assertion'
   | 'user-interruption'
 
+/**
+ * ExtractedFailure names one test or issue a failed gate's log points to, pulled from the gate's own
+ * full output rather than left for a reader to grep out of a log file. `error` and `file` are best
+ * effort: a format this cannot recognize still names the test, and a gate whose whole log matches no
+ * known format contributes no entries at all rather than a guess dressed up as one.
+ */
+export type ExtractedFailure = {
+  error?: string
+  file?: string
+  test: string
+}
+
 /** GateResult records one node's outcome. */
 export type GateResult = {
   elapsedMs: number
@@ -50,6 +62,13 @@ export type GateResult = {
   expectedMs?: number
   /** How a failure should be acted on, when the node failed. */
   failureKind?: FailureKind
+  /**
+   * The tests or issues this node's log names, capped at `MAX_FAILURES_PER_GATE`. Absent on a
+   * passing node and on a failed one whose log matched no recognized format.
+   */
+  failures?: readonly ExtractedFailure[]
+  /** How many more `extractFailures` found past the cap, when it found more than fit. */
+  failuresTruncated?: number
   logPath?: string
   name: string
   /** Nodes that had to pass before this one started. */
@@ -77,6 +96,12 @@ export type GateSummary = {
   /** What the machine was carrying while this run happened; absent for a run that did not sample it. */
   contention?: ContentionReport
   elapsedMs: number
+  /**
+   * Every gate's `failures`, flattened and tagged with the gate that reported it, capped at
+   * `MAX_FAILURES_TOTAL`. Absent when nothing failed, or when every failed gate's log matched no
+   * recognized format.
+   */
+  failures?: readonly (ExtractedFailure & { gate: string })[]
   /** The first failing node, which is the one to act on. */
   firstFailure?: { logPath?: string; name: string; output: string }
   gates: readonly GateResult[]
@@ -136,6 +161,14 @@ export type BuildSummaryOptions = {
 }
 
 const FAILURE_OUTPUT_LINES = 40
+/** The raw tail kept beside a `First failure` excerpt once `Failed:` already names the tests. */
+const SHORT_FAILURE_OUTPUT_LINES = 15
+/** How many of one gate's own failures `extractFailures` keeps; the rest are counted, not dropped. */
+const MAX_FAILURES_PER_GATE = 20
+/** How many failures the summary's top-level rollup keeps, across every failed gate. */
+const MAX_FAILURES_TOTAL = 40
+/** How many lines of the top-level `Failed:` block a reader is shown before `… and N more`. */
+const MAX_DISPLAYED_FAILURES = 20
 const SUMMARY_VERSION = 2
 const CHROME_PRE_DEVTOOLS_HOST_ABORT =
   /^HostEnvironmentError: Chrome exited before exposing DevTools \(exit none, signal SIGABRT\)$/m
@@ -234,6 +267,173 @@ export function classifyFailure(output: string, context: ClassifyContext = {}): 
     ?.kind ?? 'repository'
 }
 
+/**
+ * Structured failures. A failed gate's `summary.json` entry used to carry only a 40-line raw tail, so
+ * a reader learned which node failed but not which test — that meant grepping the node's own log.
+ * `extractFailures` reads the same full output `classifyFailure` does and pulls out the tests or
+ * issues it names, trying one format at a time and stopping at the first that matches anything. A log
+ * this recognizes no format for contributes nothing: the raw tail beside it is still the fallback, and
+ * a guessed match would be worse than none.
+ */
+
+/** One failing Bun test: `(fail) <name> [<ms>]`, with the nearest `error:` line and stack frame above it. */
+const BUN_FAIL_LINE = /^\(fail\)\s+(.+?)(?:\s*\[[\d.]+\s*m?s\])?\s*$/
+const BUN_PASS_LINE = /^\(pass\)\s+/
+const BUN_ERROR_LINE = /^error:\s*(.+)$/
+/** A stack frame naming a source location, shared by Bun's and Jest's own transcripts. */
+const STACK_FRAME = /\bat .*\(([^()\s]+:\d+:\d+)\)\s*$/
+/** Bun's own header above a failing test's source excerpt, when the `at` frame scrolled out of a tail. */
+const BUN_FILE_HEADER = /^(\S+\.test\.tsx?):\s*$/
+
+function parseBunFailures(output: string): ExtractedFailure[] {
+  const lines = output.split('\n')
+  const failures: ExtractedFailure[] = []
+  let blockStart = 0
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const fail = line.match(BUN_FAIL_LINE)
+    if (fail !== null) {
+      const block = lines.slice(blockStart, index)
+      failures.push({
+        error: lastMatch(block, BUN_ERROR_LINE)?.[1],
+        file: lastMatch(block, STACK_FRAME)?.[1] ?? lastMatch(block, BUN_FILE_HEADER)?.[1],
+        test: fail[1]!.trim(),
+      })
+      blockStart = index + 1
+      continue
+    }
+    if (BUN_PASS_LINE.test(line)) {
+      blockStart = index + 1
+    }
+  }
+  return failures
+}
+
+/** One Jest failure header: `● <describe path> › <test>`, Jest's own composition of nested describes. */
+const JEST_BULLET_LINE = /^\s*●\s+(.+?)\s*$/
+/** A line from Jest's own source-frame excerpt, which is not the assertion message above it. */
+const JEST_CODE_FRAME_LINE = /^\s*(?:>?\s*\d+\s*\||\|)/
+
+function parseJestFailures(output: string): ExtractedFailure[] {
+  const lines = output.split('\n')
+  const headers = lines
+    .map((line, index) => (JEST_BULLET_LINE.test(line) ? index : undefined))
+    .filter((index): index is number => index !== undefined)
+  return headers.map((headerIndex, order) => {
+    const block = lines.slice(headerIndex + 1, headers[order + 1] ?? lines.length)
+    const errorLine = block.find(line =>
+      line.trim().length > 0 && !JEST_CODE_FRAME_LINE.test(line) && !STACK_FRAME.test(line)
+    )
+    return {
+      error: errorLine?.trim(),
+      file: firstMatch(block, STACK_FRAME)?.[1],
+      test: lines[headerIndex]!.match(JEST_BULLET_LINE)![1]!.trim(),
+    }
+  })
+}
+
+/** One suite line from the repository's own sharded test runner, as `TestResultSummary.printSuiteSummaries` writes it. */
+const SHARDED_SUITE_LINE = /^- (\S+): (failed|passed|skipped); tests (\d+|n\/a); pass (\d+|n\/a); fail (\d+|n\/a)/
+
+function parseShardedRunnerFailures(output: string): ExtractedFailure[] {
+  const failures: ExtractedFailure[] = []
+  for (const line of output.split('\n')) {
+    const match = line.match(SHARDED_SUITE_LINE)
+    if (match === null || match[2] !== 'failed') {
+      continue
+    }
+    const [, suite, , tests, pass, fail] = match
+    failures.push({ error: `${fail} of ${tests} tests failed (${pass} passed)`, test: suite! })
+  }
+  return failures
+}
+
+/** One `tsc` diagnostic: `file(line,col): error TSxxxx: message`. */
+const TSC_ERROR_LINE = /^(\S+\.tsx?)\((\d+),(\d+)\): error (TS\d+): (.+)$/
+
+function parseTypecheckFailures(output: string): ExtractedFailure[] {
+  const failures: ExtractedFailure[] = []
+  for (const line of output.split('\n')) {
+    const match = line.match(TSC_ERROR_LINE)
+    if (match === null) {
+      continue
+    }
+    const [, file, lineNumber, column, code, message] = match
+    failures.push({ error: `${code}: ${message}`, file: `${file}:${lineNumber}:${column}`, test: line.trim() })
+  }
+  return failures
+}
+
+/** `repo-lint` and `dead-exports` both prefix one issue per line with their own name. */
+const ISSUE_LINE_PREFIXES = ['repo lint: ', 'dead exports: ']
+const ISSUE_LOCATION = /^(\S+:\d+)\s+(.+)$/
+
+/**
+ * parseIssueLineFailures reads one issue per line, `test` set to the issue's own detail and `file`
+ * to the `path:line` head it followed — not the whole prefixed line, which `formatFailureLine` would
+ * otherwise have nothing left to add without repeating it. A prefixed line with no `path:line` head —
+ * `dead exports:`'s own trailing count, not an issue — names nothing this can point a reader at, so
+ * it is skipped rather than reported as a failure with no location.
+ */
+function parseIssueLineFailures(output: string): ExtractedFailure[] {
+  const failures: ExtractedFailure[] = []
+  for (const line of output.split('\n')) {
+    const prefix = ISSUE_LINE_PREFIXES.find(candidate => line.startsWith(candidate))
+    if (prefix === undefined) {
+      continue
+    }
+    const location = line.slice(prefix.length).match(ISSUE_LOCATION)
+    if (location === null) {
+      continue
+    }
+    failures.push({ file: location[1], test: location[2]! })
+  }
+  return failures
+}
+
+/**
+ * extractFailures tries one recognized log format at a time and returns the first that matched
+ * anything. ANSI is stripped first: every format below is matched against plain text, the same way a
+ * reader would read it off a terminal.
+ */
+function extractFailures(output: string): ExtractedFailure[] {
+  const stripped = OutputText.stripAnsi(output)
+  const parsers = [
+    parseBunFailures,
+    parseJestFailures,
+    parseShardedRunnerFailures,
+    parseTypecheckFailures,
+    parseIssueLineFailures,
+  ]
+  for (const parse of parsers) {
+    const found = parse(stripped)
+    if (found.length > 0) {
+      return found
+    }
+  }
+  return []
+}
+
+function lastMatch(lines: readonly string[], pattern: RegExp): RegExpMatchArray | undefined {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const match = lines[index]!.match(pattern)
+    if (match !== null) {
+      return match
+    }
+  }
+  return undefined
+}
+
+function firstMatch(lines: readonly string[], pattern: RegExp): RegExpMatchArray | undefined {
+  for (const line of lines) {
+    const match = line.match(pattern)
+    if (match !== null) {
+      return match
+    }
+  }
+  return undefined
+}
+
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */
 export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const declaredSkips = options.declaredSkips ?? []
@@ -256,10 +456,15 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
   ]
   const firstFailed = order.map(name => results.get(name)).find(result => result?.status === 'failed')
   const failedState = options.states.find(state => state.name === firstFailed?.name)
+  const failures = ordered
+    .filter(result => result.status === 'failed')
+    .flatMap(result => (result.failures ?? []).map(failure => ({ ...failure, gate: result.name })))
+    .slice(0, MAX_FAILURES_TOTAL)
 
   return {
     contention: options.contention,
     elapsedMs: Math.round(options.elapsedMs),
+    failures: failures.length === 0 ? undefined : failures,
     firstFailure: firstFailed === undefined ? undefined : {
       logPath: firstFailed.logPath,
       name: firstFailed.name,
@@ -293,6 +498,10 @@ function tolerate(result: GateResult, toleratedByNode: ReadonlyMap<string, reado
   return {
     ...result,
     failureKind: undefined,
+    // A demoted node is reported `passed`, so it carries no failures either — `failures` names what
+    // a *failed* gate's log points to, and this one is not that anymore.
+    failures: undefined,
+    failuresTruncated: undefined,
     reason: `failed only on ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}: ${
       tolerated.join(', ')
     }`,
@@ -429,9 +638,13 @@ export function formatGateSummary(summary: GateSummary, options: VerdictOptions 
   }
   lines.push(`Logs: ${FS.displayPath(summary.logRoot)}`)
   lines.push(`Summary: ${FS.displayPath(FS.resolvePath(RunArtifacts.SUMMARY_FILE, summary.logRoot))}`)
+  lines.push(...formatFailuresBlock(summary.failures ?? [], Repo.getRoot()))
   if (summary.firstFailure !== undefined) {
     lines.push('', `First failure — ${summary.firstFailure.name}:`)
-    lines.push(summary.firstFailure.output)
+    // Once `Failed:` above already names every test a log matched, the raw tail beside it is read
+    // for corroboration, not discovery, so it costs a reader less to scroll past.
+    const excerptLimit = (summary.failures?.length ?? 0) > 0 ? SHORT_FAILURE_OUTPUT_LINES : FAILURE_OUTPUT_LINES
+    lines.push(lastLines(summary.firstFailure.output, excerptLimit))
     if (summary.firstFailure.logPath !== undefined) {
       lines.push(`Full log: ${FS.displayPath(summary.firstFailure.logPath)}`)
     }
@@ -440,6 +653,98 @@ export function formatGateSummary(summary: GateSummary, options: VerdictOptions 
   // scroll back to is one the rollup already told them.
   lines.push(formatVerdict(summary, options))
   return lines.join('\n')
+}
+
+/**
+ * formatFailuresBlock names every test or issue a failed run's gates pointed to, in one place, before
+ * the raw tail a reader used to have to open a log to get the same answer from. Nothing when nothing
+ * was extracted, so a run whose logs matched no recognized format reads exactly as it did before this
+ * existed.
+ */
+function formatFailuresBlock(
+  failures: readonly (ExtractedFailure & { gate: string })[],
+  repositoryRoot: string,
+): string[] {
+  if (failures.length === 0) {
+    return []
+  }
+  const visible = failures.slice(0, MAX_DISPLAYED_FAILURES)
+  const omitted = failures.length - visible.length
+  return [
+    '',
+    'Failed:',
+    ...visible.map(failure => `${FAILED_LINE_PREFIX}${formatFailureLine(failure, repositoryRoot)}`),
+    ...(omitted > 0 ? [`… and ${omitted} more`] : []),
+  ]
+}
+
+const FAILED_LINE_PREFIX = '- '
+const FAILED_LINE_ERROR_PREFIX = ' — '
+
+/**
+ * formatFailureLine renders one failure at `FAILED_LINE_WIDTH`, truncating only free-form prose when
+ * the line runs long — `gate › test` and `(file:line)` are what a reader clicks or greps on next, and
+ * a truncated line number reads as a wrong one, not a short one. `error` and `file` are each dropped
+ * when `test` already carries the same text, which is what an issue-line failure's own detail does —
+ * a guard kept here rather than trusted to every parser that can feed this.
+ */
+function formatFailureLine(failure: ExtractedFailure & { gate: string }, repositoryRoot: string): string {
+  const file = dedupedFileSuffix(failure, repositoryRoot)
+  const error = dedupedError(failure)
+  const prefix = `${failure.gate} › `
+  if (error === undefined) {
+    const fixedWidth = FAILED_LINE_PREFIX.length + prefix.length + file.length
+    const budget = Math.max(0, FAILED_LINE_WIDTH - fixedWidth)
+    return `${prefix}${truncateToWidth(failure.test, budget)}${file}`
+  }
+  const test = `${prefix}${failure.test}`
+  const fixedWidth = FAILED_LINE_PREFIX.length + test.length + FAILED_LINE_ERROR_PREFIX.length + file.length
+  const errorBudget = Math.max(0, FAILED_LINE_WIDTH - fixedWidth)
+  return `${test}${FAILED_LINE_ERROR_PREFIX}${truncateToWidth(error, errorBudget)}${file}`
+}
+
+/** dedupedError is `failure.error`, or undefined when `test` already carries the same text — the
+ * shape an issue-line failure's own detail would otherwise repeat once past a source that has since
+ * been fixed to not set both. */
+function dedupedError(failure: ExtractedFailure): string | undefined {
+  return failure.error === undefined || failure.test.includes(failure.error) ? undefined : failure.error
+}
+
+/** dedupedFileSuffix is the `(file:line)` a rendered line adds, empty when `test` already names the
+ * same location. */
+function dedupedFileSuffix(failure: ExtractedFailure, repositoryRoot: string): string {
+  if (failure.file === undefined) {
+    return ''
+  }
+  const relative = relativizeFailureFile(failure.file, repositoryRoot)
+  if (failure.test.includes(relative) || failure.test.includes(failure.file)) {
+    return ''
+  }
+  return ` (${relative})`
+}
+
+/**
+ * relativizeFailureFile rewrites an absolute path a gate printed to one relative to the repository
+ * root, so it survives `FAILED_LINE_WIDTH` next to the line number that makes it useful — an
+ * absolute worktree path routinely ate that budget on its own and left the line truncated before the
+ * `:line` ever printed. A gate that already reported a repository-relative path, which is most of
+ * them, is left exactly as it wrote it.
+ */
+function relativizeFailureFile(file: string, repositoryRoot: string): string {
+  const separator = file.indexOf(':')
+  const path = separator === -1 ? file : file.slice(0, separator)
+  if (!FS.isAbsolute(path)) {
+    return file
+  }
+  const suffix = separator === -1 ? '' : file.slice(separator)
+  return `${FS.relativePath(repositoryRoot, path)}${suffix}`
+}
+
+/** A line long past this is one runaway assertion message, not information a reader needs all of. */
+const FAILED_LINE_WIDTH = 160
+
+function truncateToWidth(text: string, width: number): string {
+  return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`
 }
 
 /**
@@ -528,11 +833,15 @@ function nodeResult(
       interrupted: state.failure?.kind === 'interrupted',
     })
     : undefined
+  const found = failed ? extractFailures(state.fullOutput) : []
+  const failures = found.slice(0, MAX_FAILURES_PER_GATE)
   return {
     elapsedMs: Math.round(state.elapsedMs),
     exitCode,
     expectedMs: expectedMs?.(state.name),
     failureKind,
+    failures: failures.length === 0 ? undefined : failures,
+    failuresTruncated: found.length > MAX_FAILURES_PER_GATE ? found.length - MAX_FAILURES_PER_GATE : undefined,
     logPath: state.logPath,
     name: state.name,
     needs: state.node.needs,
@@ -570,4 +879,53 @@ function collectWarnings(states: readonly WorkState[]): string[] {
 function lastLines(output: string, limit: number): string {
   const lines = output.split('\n').filter(line => line.trim().length > 0)
   return lines.slice(-limit).join('\n')
+}
+
+/** A verdict line, as `formatVerdict` writes it: `<lane>: PASSED in 1.0s`, or `FAILED` with the rest. */
+const LANE_VERDICT_LINE = /^\S[\w./-]*: (?:PASSED|FAILED) in /
+const LANE_LOGS_LINE = /^Logs: /
+const LANE_SUMMARY_LINE = /^Summary: /
+
+/**
+ * extractLaneReport pulls a nested `./dev gates` lane's own short report — its verdict, its `Failed:`
+ * block, and where its logs live — out of that lane's full captured output, so a caller that stopped
+ * streaming a child's output live (`MergeWithMain`'s non-interactive landing) can still show what the
+ * lane told its own reader, instead of nothing or everything.
+ *
+ * A lane the caller ran produced no `Verification summary:` block at all when nothing in it matched
+ * any recognized structure — `dead-exports`, run directly rather than through `./dev gates`, is the
+ * one case in this repository — so the fallback is the same short raw tail every other reader of a
+ * failed log gets, rather than silence.
+ */
+export function extractLaneReport(output: string): string[] {
+  const structured = structuredLaneReportLines(output)
+  if (structured.length > 0) {
+    return structured
+  }
+  const fallback = lastLines(output, SHORT_FAILURE_OUTPUT_LINES)
+  return fallback.length === 0 ? [] : fallback.split('\n')
+}
+
+function structuredLaneReportLines(output: string): string[] {
+  const lines: string[] = []
+  let inFailedBlock = false
+  for (const line of OutputText.stripAnsi(output).split('\n')) {
+    if (line === 'Failed:') {
+      inFailedBlock = true
+      lines.push(line)
+      continue
+    }
+    if (inFailedBlock) {
+      if (line.trim().length === 0) {
+        inFailedBlock = false
+        continue
+      }
+      lines.push(line)
+      continue
+    }
+    if (LANE_VERDICT_LINE.test(line) || LANE_LOGS_LINE.test(line) || LANE_SUMMARY_LINE.test(line)) {
+      lines.push(line)
+    }
+  }
+  return lines
 }

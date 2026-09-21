@@ -84,7 +84,8 @@ if [[ "${1:-}" == fix-agent-config ]]; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --no-install
 elif [[ "${1:-}" == setup && "${2:-}" == --refresh-lockfile ]]; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --refresh-lockfile
-  set -- setup
+  tao_agent_command_args "$@"
+  set -- "${reply[@]}"
 elif needs_build; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --health
 else

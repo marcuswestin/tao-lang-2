@@ -88,6 +88,12 @@ function tao_report_install_failure() {
     return
   fi
 
+  if [[ "$install_output" == *"lockfile had changes, but lockfile is frozen"* ]]; then
+    echo "The lockfile no longer matches a package.json (a dependency changed since it was written)." >&2
+    echo "Recover with: ./agent setup --refresh-lockfile" >&2
+    return
+  fi
+
   echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
 }
 
