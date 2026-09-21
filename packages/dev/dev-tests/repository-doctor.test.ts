@@ -40,6 +40,8 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     nodeModulesPresent: true,
     nodeVersion: 'v24.14.1',
     ports: [{ listeners: [], port: 8081, purpose: 'Expo Metro' }],
+    processGivenPath: '/w',
+    processRealPath: '/w',
     repositoryRoot: '/w',
     satisfies: Platform.semverSatisfies,
     watchmanHealthy: true,
@@ -351,4 +353,16 @@ Describe('repository doctor', () => {
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')
     Expect(check(report, 'parser artifacts')?.status).toBe('pass')
   })
+  Test('fails when the worktree is reached through a symlink', () => {
+    const checks = repositoryDoctorChecks(facts({ processGivenPath: '/tmp/probe', processRealPath: '/w' }))
+    const check = checks.find(candidate => candidate.name === 'worktree path')
+    Expect(check?.status).toBe('fail')
+    Expect(check?.remediation).toContain('git worktree move /tmp/probe /w')
+  })
+
+  Test('passes when the worktree is at its real path', () => {
+    const checks = repositoryDoctorChecks(facts())
+    Expect(checks.find(candidate => candidate.name === 'worktree path')?.status).toBe('pass')
+  })
+
 })
