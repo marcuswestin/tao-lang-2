@@ -1585,6 +1585,11 @@ reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe f
   § _Presenting overlays and toasts_ owns its lane, stacking, and Back precedence, and this entry
   records that rather than deciding it. _(Recorded while rewriting
   `Apps/WordFlower/4 - Revolution`, Process step 2.)_
+  **A plain overlay is full-bleed.** Every other presentation pads its content off the safe area
+  without the source asking: `ask`, `as sheet`, and `as toast` are the safe modes. A plain
+  `as overlay` is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach
+  the window edges, so the runtime adds no inset and what it contains is the author's to inset.
+  _(Decided by Ro, 2026-09-21.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
