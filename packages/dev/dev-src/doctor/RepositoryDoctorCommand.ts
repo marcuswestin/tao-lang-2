@@ -3,14 +3,14 @@ import {
   type EnvironmentFingerprint,
   environmentFingerprintOf,
   formatFingerprint,
-} from './EnvironmentFingerprint'
+} from '@verification/EnvironmentFingerprint'
 import {
-  type CheckStatus,
   type DoctorReport,
   doctorReport,
+  exitCodeFor,
   formatCheck,
   readDoctorFacts,
-} from './RepositoryDoctor'
+} from '@verification/RepositoryDoctor'
 
 /** RunDoctorOptions selects the output shape; the diagnosis itself never differs. */
 type RunDoctorOptions = {
@@ -20,14 +20,6 @@ type RunDoctorOptions = {
 
 /** The command a report asks somebody to run, quoted wherever this command points at the fingerprint. */
 const FINGERPRINT_COMMAND = './agent doctor --fingerprint'
-
-/**
- * A warning is a fact about the machine, not a failure of the command, so only `fail` exits
- * nonzero. That keeps `doctor` usable as a gate without making optional tooling block work.
- */
-function exitCodeFor(status: CheckStatus): number {
-  return status === 'fail' ? 1 : 0
-}
 
 /** writeReport prints a gathered report in whichever shape the caller asked for. */
 function writeReport(report: DoctorReport, options: RunDoctorOptions): void {

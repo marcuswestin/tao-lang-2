@@ -113,6 +113,12 @@
       "@studio/*": [
         "./ides/studio/studio-src/*"
       ],
+      "@studio-tooling": [
+        "./ides/studio-tooling/studio-tooling-src/StudioReview.ts"
+      ],
+      "@studio-tooling/*": [
+        "./ides/studio-tooling/studio-tooling-src/*"
+      ],
       "@generation": [
         "./ai/generation/generation-src/generation.ts"
       ],
@@ -124,9 +130,6 @@
       ],
       "@stdlib": [
         "./apps/stdlib/stdlib-src/stdlib.ts"
-      ],
-      "@expo-dev-loop": [
-        "./dev/dev-src/expo-dev-loop/expo-dev-loop.ts"
       ],
       "@verification": [
         "./testing/verification/verification-src/verification.ts"

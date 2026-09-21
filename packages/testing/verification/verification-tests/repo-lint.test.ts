@@ -795,11 +795,11 @@ Describe('repo lint conventions', () => {
   Test('reports a static Studio import in the ./dev entry', () => {
     const entry = 'packages/dev/dev-src/dev.ts'
     Expect(devLazyStudioImportIssues(
-      [{ path: entry, source: `${importFrom('@shared')}\n${importFrom('./studio/StudioSmoke')}` }],
+      [{ path: entry, source: `${importFrom('@shared')}\n${importFrom('@studio-tooling')}` }],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/dev.ts:2 statically reaches `./studio/StudioSmoke` through'
-      + ' packages/dev/dev-src/dev.ts -> ./studio/StudioSmoke; load the boundary with `await import(...)` inside the'
+      'packages/dev/dev-src/dev.ts:2 statically reaches `@studio-tooling` through'
+      + ' packages/dev/dev-src/dev.ts -> @studio-tooling; load the boundary with `await import(...)` inside the'
       + ' command action so the lane commands start in a checkout that has never generated the parser.',
     ])
   })
@@ -808,19 +808,18 @@ Describe('repo lint conventions', () => {
     const entry = 'packages/dev/dev-src/dev.ts'
     Expect(devLazyStudioImportIssues(
       [
-        { path: entry, source: importFrom('./doctor/RepositoryDoctor') },
+        { path: entry, source: importFrom('./doctor/RepositoryDoctorCommand') },
         {
-          path: 'packages/dev/dev-src/doctor/RepositoryDoctor.ts',
-          source: importFrom('../expo-dev-loop/expo-runner/Ports'),
+          path: 'packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts',
+          source: importFrom('@expo-host/dev-loop/expo-runner/Ports'),
         },
-        { path: 'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts', source: 'export const Ports = {}' },
       ],
       entry,
     )).toEqual([
-      'packages/dev/dev-src/doctor/RepositoryDoctor.ts:1 statically reaches'
-      + ' `packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts` through packages/dev/dev-src/dev.ts ->'
-      + ' packages/dev/dev-src/doctor/RepositoryDoctor.ts ->'
-      + ' packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts; load the boundary with `await import(...)` inside'
+      'packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts:1 statically reaches'
+      + ' `@expo-host/dev-loop/expo-runner/Ports` through packages/dev/dev-src/dev.ts ->'
+      + ' packages/dev/dev-src/doctor/RepositoryDoctorCommand.ts ->'
+      + ' @expo-host/dev-loop/expo-runner/Ports; load the boundary with `await import(...)` inside'
       + ' the command action so the lane commands start in a checkout that has never generated the parser.',
     ])
   })
@@ -831,8 +830,8 @@ Describe('repo lint conventions', () => {
       [{
         path: entry,
         source: `${importFrom('./repository-tests/GateRunner')}\n`
-          + "  const { StudioSmoke } = await import('./studio/StudioSmoke')\n"
-          + "  const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')\n",
+          + "  const { StudioSmoke } = await import('@studio-tooling/StudioSmoke')\n"
+          + "  const { ExpoRunner } = await import('@expo-host/dev-loop/expo-runner/ExpoRunner')\n",
       }],
       entry,
     )).toEqual([])

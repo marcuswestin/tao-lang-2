@@ -7,13 +7,13 @@ import {
 } from '../verification-src/DependencyCompatibility'
 
 const PACKAGE_PATHS: Record<string, string> = {
-  'tao-dev': 'packages/dev/package.json',
+  'tao-cli-kit': 'packages/cli/cli-kit/package.json',
   'tao-expo-host': 'packages/apps/expo-host/package.json',
   'tao-studio': 'packages/ides/studio/package.json',
 }
 
 const INSTALLED_WORKSPACE: Record<string, Record<string, string>> = {
-  'tao-dev': { react: '19.2.8' },
+  'tao-cli-kit': { react: '19.2.8' },
   'tao-expo-host': {
     '@react-native-community/netinfo': '12.0.1',
     '@types/react': '19.2.18',

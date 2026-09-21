@@ -17,7 +17,7 @@ function hostError(message: string): Error {
  * arrives through `DevDataHost`, so Bun tests drive the same code the device runs.
  */
 
-/** The wire contract; `packages/dev/dev-src/dev-data/DevDataServer.ts` mirrors it and must stay in step. */
+/** The wire contract; `packages/apps/expo-host/expo-host-src/dev-loop/dev-data/DevDataServer.ts` mirrors it and must stay in step. */
 const DevDataProtocol = {
   /** The Expo manifest key (`expo.extra.taoDevData`) a development build reads its bootstrap from. */
   manifestKey: 'taoDevData',

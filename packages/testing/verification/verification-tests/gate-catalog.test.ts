@@ -459,7 +459,9 @@ Describe('gate catalog scheduling', () => {
     Expect(workers.toSorted()).toEqual([0, 1, 2])
     Expect(commands.get('studio-smoke-native')?.args).toContain('--native')
     Expect(commands.get('studio-smoke')?.args).not.toContain('--native')
-    Expect(commands.get('studio-smoke')?.args.at(-1)).toBe('packages/dev/studio-smoke/studio-launch.test.ts')
+    Expect(commands.get('studio-smoke')?.args.at(-1)).toBe(
+      'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts',
+    )
   })
 
   Test('runs the generator, then the Tao fixer, then the compile, then the tests', async () => {

@@ -197,9 +197,9 @@ physical-device launcher from `packages/dev`; a packaged Studio without it answe
 | Gateway, trust store, status snapshot             | `packages/ides/studio/studio-src/device/*`                                        |
 | Loopback routes and `device-state` events         | `packages/ides/studio/studio-src/StudioServer.ts`                                 |
 | Workbench button/popover                          | `packages/ides/studio/studio-src/client/StudioDevicePanel.ts`                     |
-| Physical-device discovery, install, open, URL, QR | `packages/dev/dev-src/studio/StudioCompanionDevice.ts`, `StudioDeviceLaunch.ts`   |
+| Physical-device discovery, install, open, URL, QR | `packages/ides/studio-tooling/studio-tooling-src/StudioCompanionDevice.ts`, `StudioDeviceLaunch.ts` |
 | Companion shell                                   | `packages/ides/studio-companion-app/`                                             |
-| Process wiring and preview-runtime manifest       | `packages/dev/dev-src/studio/StudioDev.ts`, `StudioPreviewRuntime.ts`             |
+| Process wiring and preview-runtime manifest       | `packages/ides/studio-tooling/studio-tooling-src/StudioDev.ts`, `StudioPreviewRuntime.ts` |
 
 ## Proof record - 2026-09-03
 

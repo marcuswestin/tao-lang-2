@@ -104,7 +104,7 @@ Describe('agent-config recovery bootstrap', () => {
       Expect(unhealthy.exitCode).not.toBe(0)
       Expect(unhealthy.stderr).toContain('unhealthy dependencies')
       Expect(await bunCommands(test)).toEqual([
-        `run ${FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', test.root)}`,
+        `run ${FS.resolvePath('packages/testing/verification/verification-src/DependencyHealth.ts', test.root)}`,
       ])
     } finally {
       await FS.remove(test.root)
@@ -118,7 +118,7 @@ Describe('agent-config recovery bootstrap', () => {
       const result = await runDependencyCheck(test)
       Expect(result.exitCode).toBe(0)
       Expect(await bunCommands(test)).toEqual([
-        `run ${FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', test.root)}`,
+        `run ${FS.resolvePath('packages/testing/verification/verification-src/DependencyHealth.ts', test.root)}`,
       ])
       Expect(await FS.exists(FS.resolvePath('.artifacts/build/agent-dev/dev-deps.stamp', test.root))).toBe(true)
     } finally {

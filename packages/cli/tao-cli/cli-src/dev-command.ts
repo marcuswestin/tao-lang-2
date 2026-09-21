@@ -1,4 +1,4 @@
-import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-dev-loop'
+import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import { Errors, FS, HCI, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'

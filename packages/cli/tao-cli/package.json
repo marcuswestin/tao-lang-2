@@ -15,13 +15,13 @@
     "commander": "^15.0.0",
     "tao-ast-utils": "workspace:*",
     "tao-cli-kit": "workspace:*",
-    "tao-dev": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-generation": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-expo-host": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-source-actions": "workspace:*",
+    "tao-studio-tooling": "workspace:*",
     "tao-update-server": "workspace:*",
     "tao-compiler": "workspace:*"
   }

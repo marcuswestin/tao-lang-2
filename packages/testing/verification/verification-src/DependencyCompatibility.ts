@@ -15,15 +15,14 @@ const BUNDLED_PACKAGES = ['tao-runtime', 'tao-expo-host', 'tao-studio'] as const
 const REACT_SINGLETON_ANCHOR = 'tao-expo-host'
 
 /**
- * Packages allowed their own React because they never reach a bundle. `tao-dev`, `tao-cli-kit`,
- * and `tao-verification` render the repository's terminal UI with Ink, whose peer range starts
+ * Packages allowed their own React because they never reach a bundle. `tao-cli-kit` and
+ * `tao-verification` render the repository's terminal UI with Ink, whose peer range starts
  * above the React that Expo pins, so unifying the two would break one of them. Their React must
  * stay out of every bundle, which `taoStudioReactSingletonPlugin` enforces by resolving React
  * through the anchor instead.
  */
 const HOST_TOOL_REACT_PACKAGES: Record<string, string> = {
   'tao-cli-kit': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
-  'tao-dev': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
   'tao-verification': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
 }
 
