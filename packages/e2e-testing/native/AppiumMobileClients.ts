@@ -84,11 +84,7 @@ function iosSession(remote: WireSession): AppiumWebDriverSession {
     scroll: async input =>
       await remote.executeScript('mobile: scroll', [{
         ...(input.element === undefined ? {} : { elementId: wire(input.element).id }),
-        direction: Math.abs(input.deltaY) >= Math.abs(input.deltaX)
-          ? input.deltaY >= 0 ? 'down' : 'up'
-          : input.deltaX >= 0
-          ? 'right'
-          : 'left',
+        direction: scrollDirection(input),
       }]),
     terminateApp: async appId => await remote.terminateApplication(appId),
   }
@@ -123,12 +119,20 @@ function androidSession(remote: WireSession): AppiumAndroidWebDriverSession {
     screenshot: async () => await remote.screenshot(),
     scroll: async input =>
       await remote.executeScript('mobile: scrollGesture', [{
-        direction: input.deltaY >= 0 ? 'down' : 'up',
+        direction: scrollDirection(input),
         elementId: input.element === undefined ? undefined : wire(input.element).id,
         percent: 0.75,
       }]),
     terminateApp: async appId => await remote.terminateApplication(appId),
   }
+}
+
+/** Both Appium backends choose the dominant axis; vertical wins a tie, including a zero gesture. */
+function scrollDirection(input: Readonly<{ deltaX: number; deltaY: number }>): 'down' | 'left' | 'right' | 'up' {
+  if (Math.abs(input.deltaY) >= Math.abs(input.deltaX)) {
+    return input.deltaY >= 0 ? 'down' : 'up'
+  }
+  return input.deltaX >= 0 ? 'right' : 'left'
 }
 
 function keyActions(key: string): readonly Readonly<Record<string, unknown>>[] {
