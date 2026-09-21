@@ -569,9 +569,16 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
   frame regardless of what the main navigator does, so it always adds the live inset.
 - A sheet presented through the platform's native modal host is a separate native window — on iOS a
   `pageSheet`'s card starts below the status bar, so its own top inset differs from the app's root
-  window — so that presentation nests its own `SafeAreaProvider` and reads that window's insets
-  rather than the app's, and carries its own `KeyboardAvoidingView` since the root one cannot reach a
-  separate native window either.
+  window — so that presentation nests its own `SafeAreaProvider`, with no `initialMetrics`, and reads
+  insets from that provider rather than the app's. Without `initialMetrics`,
+  `react-native-safe-area-context` seeds a nested provider from its parent provider's insets, so the
+  sheet renders with the root window's insets until the modal's own native measurement lands — not a
+  blank frame. On web, where there is no per-window native measurement, a nested provider measures
+  the document instead, so a web sheet keeps reading the document's insets (normally zero). The
+  presentation also carries its own `KeyboardAvoidingView`, since the root one cannot reach a separate
+  native window either, and resets the "already inset" signal below for its own content, since React
+  context still crosses this window boundary (a `Modal` is a portal, not a separate React tree) even
+  though the modal's window itself was never padded by whatever frame encloses the presenter.
 
 Known, pre-existing limitation, not addressed here: an ask's dimming scrim sits inside the same
 scrollable content an enclosing `AppSurfaceFrame` already padded, when its navigator does not own its

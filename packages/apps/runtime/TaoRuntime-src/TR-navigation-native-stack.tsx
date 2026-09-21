@@ -119,7 +119,14 @@ function NativeStackItemContent(props: {
   // `RuntimeSelectionNav.itemEntryLevels`); wrapping it in another AppSurfaceFrame here would inset
   // its content twice.
   const contentOwnsWindow = isNavigation(props.entry.presentable) && props.entry.presentable.ownsWindowSurface()
-  const content = renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host)
+  // A nested stack reads its own bottom clearance and enclosing chrome from these same props (see
+  // `RuntimeStackNav.renderContent`), which `entryTaoProps` above does not carry — re-inject them,
+  // exactly as `itemEntryLevels` does for a toggle bar's own nested stack.
+  const nestedStack = isNavigation(props.entry.presentable) && props.entry.presentable.kind === 'stack'
+  const contentTaoProps = nestedStack
+    ? { ...entryTaoProps, navigationBottomInset: props.bottomInset, navigationChrome: props.chrome }
+    : entryTaoProps
+  const content = renderPresentable(props.entry.presentable, props.entry.arguments, contentTaoProps, props.entry.host)
   return createElement(
     ScreenStackItem,
     {

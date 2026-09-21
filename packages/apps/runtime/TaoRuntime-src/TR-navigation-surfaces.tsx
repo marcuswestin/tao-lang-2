@@ -183,7 +183,9 @@ function modalSheet(
   navigation: TaoNavigationValue,
   taoProps: TaoProps | undefined,
   visible: boolean,
-  insets: SafeAreaInsets,
+  // Only the inline (no-Modal) branch below uses this: it shares the app's own window, so it takes
+  // the caller's insets. The native-Modal branch is its own window and reads its own (ModalSheetContent).
+  inlineInsets: SafeAreaInsets,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
@@ -200,7 +202,7 @@ function modalSheet(
           ...modalAccessibilityProps(navigation, taoProps, visible),
           style: [
             sheetInlineSurfaceBaseStyle,
-            sheetInlineSurfaceInsetStyle(insets),
+            sheetInlineSurfaceInsetStyle(inlineInsets),
             mountedDesignStyle(taoProps, 'ModalSurface'),
           ],
         },
@@ -232,9 +234,15 @@ function modalSheet(
  * ModalSheetSurface nests its own SafeAreaProvider. A native Modal's `pageSheet` is its own native
  * window — on iOS its card starts below the status bar, so its top inset is near zero while the
  * app's root window's top inset covers the status bar — and the enclosing app's insets describe the
- * wrong window. No `initialMetrics`: the root window's metrics are captured for the root window, and
- * handing them to this provider would show the wrong padding for one frame instead of none; a sheet
- * already animating in makes that one blank frame the smaller, harder-to-notice cost.
+ * wrong window. No `initialMetrics`: without one, `react-native-safe-area-context` seeds this
+ * provider from the enclosing provider's insets (the root window's) until the modal's own native
+ * measurement lands, so the sheet briefly renders with the wrong-but-plausible root padding rather
+ * than a blank frame — on web, where there is no per-window native measurement, a nested provider
+ * measures the document instead, so a web sheet keeps reading the document's insets (normally zero).
+ *
+ * React context still crosses this `Modal` boundary — it is a portal, not a separate React tree —
+ * so this also resets `AppSurfaceInsetContext` to false: the modal is a window no enclosing
+ * `AppSurfaceFrame` ever padded, regardless of what encloses the presenter that opened it.
  */
 function ModalSheetSurface(props: {
   accessibilityProps: Record<string, unknown>
@@ -242,7 +250,11 @@ function ModalSheetSurface(props: {
   taoProps: TaoProps | undefined
 }): React.ReactNode {
   const SafeAreaContext = requireSafeAreaContext()
-  return createElement(SafeAreaContext.SafeAreaProvider, null, createElement(ModalSheetContent, props))
+  return createElement(
+    AppSurfaceInsetContext.Provider,
+    { value: false },
+    createElement(SafeAreaContext.SafeAreaProvider, null, createElement(ModalSheetContent, props)),
+  )
 }
 
 function ModalSheetContent(props: {

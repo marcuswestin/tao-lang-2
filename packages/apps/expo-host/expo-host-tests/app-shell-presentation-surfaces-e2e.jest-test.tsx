@@ -280,7 +280,9 @@ Describe('Expo runtime: presentation surfaces', () => {
           Expect(card).toBeDefined()
           // Proves the modal content used the NESTED provider's insets, not the root window's —
           // asserting the root's values here would fail, since they differ on every edge but `left`
-          // and `right`, which are 0 in both.
+          // and `right`, which are 0 in both. This proves the structural property (modal content
+          // reads its nearest, own provider); the library's real per-window native measurement is
+          // not something Jest can observe.
           Expect(RN.StyleSheet.flatten(card!.props.style)).toMatchObject({
             paddingBottom: 20 + modalInsets.bottom,
             paddingLeft: 20 + modalInsets.left,
@@ -296,6 +298,75 @@ Describe('Expo runtime: presentation surfaces', () => {
           const expectedBehavior = RN.Platform.OS === 'ios' ? 'padding' : undefined
           Expect(keyboardViews.every(view => view.props.behavior === expectedBehavior)).toBe(true)
         })
+      } finally {
+        resetInsets()
+      }
+    },
+  )
+
+  Test(
+    'does not leak the already-inset context through a native Modal: an ask nested inside a sheet still insets',
+    async () => {
+      setInsets()
+      try {
+        await testCompileApp(
+          `
+            use Button from @tao/ui/basic
+            use SlotNav from @tao/nav
+
+            ${askConfirmView}
+
+            app SheetAskApp {
+              view Editor
+            }
+
+            view Editor() {
+              action OpenSheet() { present SheetContent() as sheet }
+              render Button("Open sheet") [] { on press OpenSheet }
+            }
+
+            nav InnerSlot = SlotNav { Initial InnerHome }
+
+            view SheetContent() {
+              render InnerSlot()
+            }
+
+            scene InnerHome() {
+              Title "Inner Home"
+              action OpenAsk() {
+                let Result = ask Confirm()
+                if Result is Confirmed { dismiss }
+              }
+              render Button("Open ask") [] { on press OpenAsk }
+            }
+          `,
+          async screen => {
+            // The presenter (Editor) sits inside the app host's own AppSurfaceFrame, since its
+            // synthesized SlotNav does not own its window — but the ask below is asked from inside
+            // the sheet's own nested SlotNav (InnerSlot), a descendant of the native Modal that frame
+            // never padded. React context still crosses the Modal portal, so without resetting it,
+            // this ask would wrongly read "already inset" from the presenter's ancestor frame.
+            await act(async () => {
+              fireEvent.press(screen.getByText('Open sheet'))
+            })
+            await act(async () => {
+              fireEvent.press(screen.getByText('Open ask'))
+            })
+            ExpectScreen(screen).toHaveText('Yes')
+
+            const scrim = screen.UNSAFE_getAllByType(RN.View).find(view => {
+              const style = RN.StyleSheet.flatten(view.props.style) ?? {}
+              return style.backgroundColor === 'rgba(0, 0, 0, 0.45)'
+            })
+            Expect(scrim).toBeDefined()
+            Expect(RN.StyleSheet.flatten(scrim!.props.style)).toMatchObject({
+              paddingBottom: 24 + insets.bottom,
+              paddingLeft: 24 + insets.left,
+              paddingRight: 24 + insets.right,
+              paddingTop: 24 + insets.top,
+            })
+          },
+        )
       } finally {
         resetInsets()
       }

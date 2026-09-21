@@ -148,4 +148,58 @@ Describe('Expo runtime: nested window-owning navigators', () => {
       resetInsets()
     }
   })
+
+  Test("carries a toggle bar's bottom clearance through a nested window-owning navigator", async () => {
+    setInsets()
+    try {
+      await testCompileApp(
+        `
+          use SelectionNav, StackNav from @tao/nav
+          use Text from @tao/ui
+
+          nav InnerStack = StackNav {
+            Initial InnerHome
+            Title "Inner Stack"
+          }
+
+          let ItemStack = StackNav { Initial InnerStack }
+
+          let MainSelection = SelectionNav {
+            Initial @home
+            Display "toggle"
+            @home { Label "Home" Content ItemStack }
+          }
+
+          app ToggleNestedApp {
+            Name "Toggle Nested"
+            Navigator MainSelection
+          }
+
+          scene InnerHome() {
+            Title "Inner Home"
+            render Text("Inner Home body")
+          }
+        `,
+        screen => {
+          ExpectScreen(screen).toHaveText('Inner Home body')
+          // Only one screen renders anywhere in this tree (the toggle item's stack holds another
+          // stack, whose own entry is the only non-window-owning content), so its AppSurfaceFrame is
+          // the only ScrollView — a nested one clearing the floating toggle bar's own 64px, on top of
+          // the ordinary frame padding and inset, the same as `RuntimeSelectionNav.itemEntryLevels`
+          // gives a toggle item's own direct (non-nested) content.
+          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
+          Expect(scrollViews).toHaveLength(1)
+          const toggleBarClearance = 64
+          Expect(RN.StyleSheet.flatten(scrollViews[0]!.props.contentContainerStyle)).toMatchObject({
+            paddingBottom: 12 + insets.bottom + toggleBarClearance,
+            paddingLeft: 12 + insets.left,
+            paddingRight: 12 + insets.right,
+            paddingTop: 12 + insets.top,
+          })
+        },
+      )
+    } finally {
+      resetInsets()
+    }
+  })
 })

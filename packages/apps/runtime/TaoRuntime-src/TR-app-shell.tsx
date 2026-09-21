@@ -46,14 +46,19 @@ const ReactAppSurfaceInsetContext = React.createContext(false)
  * `nativeInsets` branch, since either way the frame already stands between its content and the true
  * window. A presentation surface (ask, sheet, an overlay lane) reads this to decide whether it must
  * add the live safe-area insets itself or whether doing so would pad twice.
+ *
+ * React context still reaches across an RN `Modal` boundary (it is a portal, not a separate React
+ * tree), so a `Modal`'s content would otherwise inherit `true` from whatever frame encloses the
+ * presenter — even though the modal is its own window, one that enclosing frame never padded. A
+ * `Modal`'s own surface resets this back to `false` for its children with `{ value: false }`.
  */
 export const AppSurfaceInsetContext = {
   Provider: AppSurfaceInsetProvider,
   use,
 } as const
 
-function AppSurfaceInsetProvider(props: { children?: React.ReactNode }): React.ReactElement {
-  return createElement(ReactAppSurfaceInsetContext.Provider, { value: true }, props.children)
+function AppSurfaceInsetProvider(props: { children?: React.ReactNode; value?: boolean }): React.ReactElement {
+  return createElement(ReactAppSurfaceInsetContext.Provider, { value: props.value ?? true }, props.children)
 }
 
 function use(): boolean {
