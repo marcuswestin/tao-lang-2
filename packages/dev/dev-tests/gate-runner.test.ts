@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
 import type { GeneratedEvidence, GeneratedOutput } from '../dev-src/repository-tests/GeneratedEvidence'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
@@ -456,11 +456,17 @@ Describe('gate runner under a shared machine', () => {
     const root = await mkTestDir('tao-gate-runner-')
     const held = Deferred()
     const started: string[] = []
+    let declined = false
 
     const finished = runGates({
       gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
       logRoot: FS.resolvePath('logs', root),
       machineCpuCount: 4,
+      onEvent: event => {
+        if (event.kind === 'waiting') {
+          declined = true
+        }
+      },
       registryRoot,
       repositoryRoot: root,
       runGate: async (name, logPath) => {
@@ -471,7 +477,11 @@ Describe('gate runner under a shared machine', () => {
       },
     })
 
-    await settle(20)
+    // The broker's `waiting` event is the lane's first refused admission: an observed fact, where a
+    // turn count or a sleep would be a guess about how long registration takes on a busy host.
+    await until(() => declined, {
+      description: 'this run to report its first declined admission attempt',
+    })
     Expect(started).toEqual([])
 
     // One lane ahead ends. The queue drains in order, and this lane is admitted whole: every gate
@@ -490,6 +500,8 @@ Describe('gate runner under a shared machine', () => {
     Expect(summary.status).toBe('passed')
     // The wait itself is reported rather than swallowed; what the broker said about it — the
     // position and the lanes ahead — is asserted where the broker forms it, in `machine-lanes`.
+    // A refused lane sleeps one whole poll before it asks again, so the wait clears the reporting
+    // noise floor on any host. Its kind is incidental, so only its presence is asserted.
     Expect(summary.gates.flatMap(gate => gate.waits ?? []).length).toBeGreaterThan(0)
     await FS.remove(root)
     await FS.remove(registryRoot)
