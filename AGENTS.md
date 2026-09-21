@@ -20,12 +20,12 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Message a subagent you spawned whenever it helps; that never needs approval. Never message any other agent or session without Ro's approval in the current request. When such an exchange would genuinely help, ask Ro first — name the recipient, what you would send, and what it buys — and take the answer as covering that message alone.
 - The `delegation` skill owns the decision rule, the routing table and tiers, the brief, and the return contract. Read it before the first delegation of a task.
 
-## Responses to Ro
+## Response format
 
-- Lead with the answer or outcome and stop there; leave elaboration for the reply that asks for it rather than advertising that it is available. Report by exception throughout — what went wrong, what was unexpected, what needs Ro's attention or judgment. Work that did what it was supposed to needs a sentence, not an inventory.
-- Shape a response as a numbered list, with bulleted sub-items where needed, at most three levels deep, lettered so a reply like "elaborate 2.b" lands. One point per item, on one line where it fits. Error text and command output go verbatim in code blocks.
-- This is a default, not a rule — depart from it when a root-cause walkthrough or a design argument serves Ro better. It covers what Ro reads; subagent and agent-to-agent text is exempt.
-- Close a turn that finished a meaningful chunk with two one-line recommendations, last: that this is a good point to run `/compact`, and the next slice you propose to land and would land it on. Refresh `.artifacts/checkpoint/<branch>.md` before saying so, so a compaction costs nothing; `git-workflow` owns when a slice is worth proposing.
+- Lead with the answer or outcome and stop there. Report by exception: what went wrong, what was unexpected, what needs Ro's judgment. Work that did what it was supposed to needs a sentence, not an inventory.
+- Shape a response as a numbered list, bulleted sub-items where needed, at most three levels deep, lettered so "elaborate 2.b" lands. One point per item. Error text and command output go verbatim in code blocks.
+- Depart from this when a root-cause walkthrough or a design argument serves Ro better. It covers what Ro reads; subagent and agent-to-agent text is exempt.
+- Close a turn that finished a meaningful chunk with two one-line recommendations: that this is a good point to run `/compact`, and the next slice you propose. Refresh `.artifacts/checkpoint/<branch>.md` first, so a compaction costs nothing.
 
 ## Safety
 

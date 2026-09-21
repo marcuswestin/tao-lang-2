@@ -170,6 +170,23 @@ Describe('per-test ledger', () => {
     })
   })
 
+  Test('records no duration for a suite whose runner cannot attribute time to one test', async () => {
+    // Under `--concurrent` Bun reports every test in a file as the time from that file's shared
+    // start to its own completion, so the number is meaningless; `dev` is tuned that way.
+    await withRepository(async root => {
+      const file = await writeTestFile(root)
+      await TestLedger.recordRun({
+        fullRun: false,
+        observations: [{ ...observation(file, 'passed'), durationMs: 6_200, suite: 'dev' }],
+        repositoryRoot: root,
+        startedAt: 1,
+      })
+
+      // It is absent rather than zero: a reader can tell "not measured" from "measured as fast".
+      Expect((await TestLedger.slowest(root)).length).toBe(0)
+    })
+  })
+
   Test('compacts long histories while retaining adjacent outcomes for every test', async () => {
     await withRepository(async root => {
       const file = await writeTestFile(root)

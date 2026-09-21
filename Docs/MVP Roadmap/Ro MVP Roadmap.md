@@ -59,7 +59,7 @@ committed `secrets/secrets.jsonc`.
   send a pull request to a mirror, and a one-way sync makes every outside change a manual port.
   Publishing everything is what makes contribution possible at all.
 - What that accepts, from `Report - Publication audit.md`: the agent instruction set and the
-  `Responses to Ro` section (`P1`), the "never mention an agent identity" rule (`P2`), the sandbox
+  `Response format` section (`P1`), the "never mention an agent identity" rule (`P2`), the sandbox
   policy as a map of what agents may do (`P3`), `Roadmap.md`'s two personal sections (`P7`, `P8`),
   the September remediation record (`P9`), the developer-environment backlog (`P10`), and commit
   authorship in perpetuity (`P20`). The audit judged none of these unsafe — only candid.

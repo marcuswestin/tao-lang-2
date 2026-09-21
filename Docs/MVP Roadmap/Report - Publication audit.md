@@ -47,15 +47,15 @@ profiles under `agents/subagents/`, the 4 `.rulesync/` sources, and their genera
 
 `AGENTS.md` refers to Ro 18 times, and skills add 46 more references. It states that "Ro is the
 project lead and language designer", that Ro decides language semantics, roadmap priority, and
-product behavior, and that pushing and merging always stop for Ro. A whole `Responses to Ro` section
-prescribes how an agent should talk to Ro: lead with the answer, at most three levels of nesting,
-letter the sub-items Ro may want to address.
+product behavior, and that pushing and merging always stop for Ro. A whole `Response format` section
+— named `Responses to Ro` when this audit was written — prescribes how an agent should talk to Ro:
+lead with the answer, at most three levels of nesting, letter the sub-items Ro may want to address.
 
 Published, this tells a reader that Tao is one person's project with agents doing the typing, and it
 publishes Ro's personal communication preferences as repository content. Neither is damaging; both
 are more intimate than a public repository usually is.
 
-- **Recommendation:** keep the instruction set, but move the `Responses to Ro` section out of the
+- **Recommendation:** keep the instruction set, but move the `Response format` section out of the
   published copy — it is the one part that is about Ro rather than about Tao. If `R2` picks a
   curated public repository, keep a slimmed `AGENTS.md` there that covers the codebase conventions
   and drop the authority and response-shape sections entirely.

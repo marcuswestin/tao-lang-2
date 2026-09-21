@@ -17,17 +17,22 @@
   than the work attributable to the test. A comparable distortion is visible across the suite:
   `packages/dev/dev-tests/studio-dev.test.ts` runs 61 tests in 3.3s standalone while the ledger
   records a dozen of its cases at ~6.20s each.
-- **Evidence, the distortion reaches the schedule line every lane prints:** the per-node `elapsedMs`
-  this entry found inflated is also what `chainDuration` sums to produce `serialFloorMs`
-  (`packages/dev/dev-src/repository-tests/WorkSchedule.ts:113`), so the `Schedule:` line ending every
-  verification — serial floor, critical path, idle slot-seconds — inherits it. The tell is that the
-  floor keeps coming out equal to the makespan: four consecutive runs on 2026-09-21 reported 42.3s of
-  42.3s, 52.5s of 52.5s, 79.0s of 79.1s and 52.1s of 52.3s, each naming a chain ending in `tao-apps`,
-  with 23-83% of slot-seconds called idle. That is what a floor computed from wall-clock-to-date
-  looks like, not a real dependency chain. It matters more than the per-test figures, because this is
-  the line an agent reads to decide where a lane's time goes: on 2026-09-21 an agent reported to Ro
-  that the machine was 83% idle waiting on one serial chain, which these numbers say and the measured
-  3.58s WordFlower run contradicts. Fixing the recording fixes both readings.
+- **Correction, 2026-09-21:** an earlier revision of this entry claimed the distortion also reached
+  the `Schedule:` line every lane prints. It does not, and the claim is withdrawn. A node's
+  `elapsedMs` is set from its own `startedAt` at the moment it begins running
+  (`WorkGraph.ts:481`), so it is a genuine wall duration; only the per-test durations a runner
+  reports are inflated. Checked against the run at
+  `.artifacts/logs/verify-changed/2026-09-21T12-53-31-560Z-30857-09a84fb5`, where the reported
+  critical path sums exactly to the reported floor: 17ms + 298 + 40 + 17,182 + 586 + 16,240 =
+  34.4s, against a 34.4s makespan. The floor equalling the makespan is not a recording artefact —
+  it is what a lane looks like when it really is one dependency chain, here with `_fix-tao` and the
+  `dev` suite accounting for 97% of it and the machine genuinely idle around them. Whether that
+  chain is worth shortening is a live question; it is just not this entry's.
+- **Addressed, 2026-09-21, for the per-test durations:** `GateCatalog.reportsAttributableDurations`
+  now owns which suites report a duration that means anything, and `TestLedger` records no
+  `durationMs` at all for the suites that do not, rather than storing a number every reader has to
+  know to distrust. `TestNodes` shard packing, which had worked around the same distortion
+  independently, now asks the same predicate.
 - **Evidence, implementation audit:** The earlier audit's conclusion — that the cold tail is
   dominated by the shared-workspace validation and compilation pass rather than by Jest — survives
   the correction and is the useful part of it. That fixed cost is paid once per `tao test`

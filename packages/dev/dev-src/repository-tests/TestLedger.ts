@@ -1,5 +1,6 @@
 import { Errors, FS, Json, Repo, Time } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
+import { GateCatalog } from './GateCatalog'
 import { MachineLanes, type MachineResourceLease } from './MachineLanes'
 
 /** TestOutcome is the result a native test reporter recorded for one test. */
@@ -177,9 +178,12 @@ async function recordRunUnlocked(
   for (const observation of options.observations) {
     const id = testId(observation)
     const previous = previousTests[id]
+    // A suite whose runner cannot attribute time to a single test records no duration at all, rather
+    // than one every reader has to know to distrust; `GateCatalog` owns which suites those are.
+    const attributable = GateCatalog.reportsAttributableDurations(observation.suite)
     const record: TestLedgerRecord = {
       ...observation,
-      durationMs: rollingDuration(previous?.durationMs, observation.durationMs),
+      durationMs: attributable ? rollingDuration(previous?.durationMs, observation.durationMs) : undefined,
       fileIdentity: identities.get(observation.file) ?? missingIdentity(observation.file),
       id,
       lastFailedAt: observation.outcome === 'failed' ? recordedAt : previous?.lastFailedAt,
