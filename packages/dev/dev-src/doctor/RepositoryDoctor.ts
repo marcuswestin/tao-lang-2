@@ -1,11 +1,11 @@
 import { CLI, FS, Platform, Repo, Switch } from '@shared'
-import { landingBrokerIsReady } from '../landing-broker/LandingBrokerClient'
-import { ProcessListeners } from '../ProcessListeners'
 import {
   dependencyCompatibilityIssues,
   readDependencyFacts,
-} from '../repository-tests/DependencyCompatibility'
-import { type LaneRecord, MachineLanes } from '../repository-tests/MachineLanes'
+} from '@verification/DependencyCompatibility'
+import { landingBrokerIsReady } from '@verification/landing-broker/LandingBrokerClient'
+import { type LaneRecord, MachineLanes } from '@verification/MachineLanes'
+import { ProcessListeners } from '../ProcessListeners'
 import { dependencyHealthError } from './DependencyHealth'
 import {
   type EnvironmentFingerprint,
@@ -364,7 +364,7 @@ function dependencyCompatibilityCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: facts.dependencyIssues.join(' '),
     name: 'dependency compatibility',
-    remediation: 'Reproduce with: bun run packages/dev/dev-src/repository-tests/DependencyCompatibility.ts',
+    remediation: 'Reproduce with: bun run packages/testing/verification/verification-src/DependencyCompatibility.ts',
     status: 'fail',
   }
 }

@@ -1,4 +1,15 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
+import { FinalizeCommand, LandCommand } from '@verification/Finalize'
+import { runGates } from '@verification/GateRunner'
+import { GreenTree } from '@verification/GreenTree'
+import { landingBrokerIsReady } from '@verification/landing-broker/LandingBrokerClient'
+import { LandingBrokerInstaller } from '@verification/landing-broker/LandingBrokerInstaller'
+import { LandingLock } from '@verification/LandingLock'
+import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
+import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
+import { TestRunner } from '@verification/TestRunner'
+import { WorkReporter } from '@verification/WorkReporter'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { CleanCommand } from './clean/CleanCommand'
 import { runWithCommands } from './cli/run-with-commands'
@@ -7,24 +18,14 @@ import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
-import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
-import { LandingBrokerInstaller } from './landing-broker/LandingBrokerInstaller'
-import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand } from './repository-tests/Finalize'
-import { runGates } from './repository-tests/GateRunner'
-import { GreenTree } from './repository-tests/GreenTree'
-import { LandingLock } from './repository-tests/LandingLock'
-import { landedReport, MergeWithMainCommand } from './repository-tests/MergeWithMain'
-import { formatGateSummary, formatVerdict, gateExitCode } from './repository-tests/RunSummary'
-import { TestRunner } from './repository-tests/TestRunner'
-import { WorkReporter } from './repository-tests/WorkReporter'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
  * parser through `@studio`, so a static import here would make `gates`, `test`, `doctor`, and
  * `agent-config` unstartable in a checkout that has never generated it — before the graph that
  * generates it can run — and would turn any top-level fault in Studio code into a failure of the
- * gate runner itself. `devLazyStudioImportIssues` in `repository-tests/repo-lint.ts` enforces this.
+ * gate runner itself. `devLazyStudioImportIssues` in `packages/testing/verification`'s `repo-lint.ts`
+ * enforces this.
  */
 
 type TestCommandOptions = {
@@ -433,7 +434,7 @@ await runWithCommands(commands => {
     .option('--json', 'Print the full structured report instead of the summary tables.')
     .action(async (options: { json?: boolean } = {}) => {
       // Loaded lazily: the audit counts `repo-lint`'s allowlists, and `repo-lint` reaches `@studio`.
-      const { SimplifyAuditCommand } = await import('./simplify-audit/SimplifyAuditCommand')
+      const { SimplifyAuditCommand } = await import('@verification/simplify-audit/SimplifyAuditCommand')
       Platform.runtimeProcess.exit(await SimplifyAuditCommand.run({ json: options.json === true }))
     })
 

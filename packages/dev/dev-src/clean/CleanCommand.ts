@@ -1,5 +1,5 @@
+import { OutputText } from '@cli-kit'
 import { CLI, HCI, Repo } from '@shared'
-import { OutputText } from '../cli/OutputText'
 
 /**
  * `just clean` and `just clean-all`, as steps a reader can watch rather than one silent block.

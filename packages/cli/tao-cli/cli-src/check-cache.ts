@@ -7,7 +7,7 @@ import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
  * one app pays that for all of them.
  *
  * This module is the per-workspace answer to that, and it is the same content stamp
- * `packages/dev/dev-src/repository-tests/ParserGenerate.ts` puts in front of Langium and
+ * `packages/testing/verification/verification-src/ParserGenerate.ts` puts in front of Langium and
  * `CompileApp.ts` puts in front of `tao compile`: hash what the work reads, remember what it
  * concluded, and skip the work while the hash still agrees. A workspace whose inputs are byte-identical
  * to the ones behind its last clean check cannot produce a different verdict, so its verdict is
