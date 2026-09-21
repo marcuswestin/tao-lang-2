@@ -40,9 +40,9 @@ entry. In short: name a new entry after its own title, never a number, and recor
   proposed change is a poor trade however real it is; say so and leave it.
 - Prefer a batch that is genuinely parallel: group entries so no two groups write the same files, and
   hand each group a path list it owns exclusively, per `delegation`'s
-  `references/parallel-implementation.md`. `packages/dev/` internals, the `./tao` CLI, `.rulesync/`
-  permission sources, and `AGENTS.md` with the skills rarely collide; entries touching the same file
-  are one group.
+  `references/parallel-implementation.md`. `packages/cli/dev-cli/` and `packages/cli/agent-cli/`
+  internals, the `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills
+  rarely collide; entries touching the same file are one group.
 - Propose a batch of more than two entries to Ro before implementing — the name, the one-line cost,
   and why it is in this batch.
 

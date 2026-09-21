@@ -1,0 +1,35 @@
+import { Describe, Expect, Test } from '@shared/test'
+import { dependencyHealthError } from '@verification/DependencyHealth'
+
+Describe('dependency health probes', () => {
+  /*
+   * The probes name modules and directories as plain strings, and Bun links workspace dependencies
+   * per package, so a mistyped module or a probe pointed at the wrong package directory fails
+   * exactly like a damaged tree — silently turning `./agent setup` into a permanent repair loop. This
+   * runs the real probes against this checkout, which the verify graph has already installed.
+   */
+  Test('every probe loads on an installed checkout', async () => {
+    Expect(await dependencyHealthError()).toBeUndefined()
+  })
+
+  Test('reports the underlying loader error instead of Bun location prelude', async () => {
+    const failure = await dependencyHealthError('/repo', {
+      isFile: async () => false,
+      run: async (command, spec) => {
+        const options = spec ?? {}
+        return {
+          args: [...(options.args ?? [])],
+          command,
+          cwd: options.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: '1 | await import("ink")\n    ^\nerror: Cannot find module "ink" from "/repo/packages/cli/dev-cli"\n',
+          stdout: '',
+        }
+      },
+    })
+
+    Expect(failure).toBe('packages/cli/dev-cli: error: Cannot find module "ink" from "/repo/packages/cli/dev-cli"')
+  })
+})

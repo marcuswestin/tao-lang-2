@@ -498,13 +498,13 @@ const RAW_ERROR_ALLOWLIST = [
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
-  'packages/dev/dev-tests/agent-config-generation.test.ts:44',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:84',
-  'packages/dev/dev-tests/agent-config-generation.test.ts:107',
-  'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:214',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:44',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:84',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:107',
+  'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
+  'packages/cli/agent-cli/agent-cli-tests/codex-config-generation.test.ts:214',
   'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts:343',
-  'packages/dev/dev-tests/studio-companion-device.test.ts:560',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:560',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:232',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
@@ -850,7 +850,7 @@ export function crossPackageSourceImportIssues(
  * the parser could never run; it also turns any top-level fault in Studio code into a failure of the
  * gate runner itself rather than of one node.
  */
-const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
+const DEV_ENTRY_PATH = 'packages/cli/dev-cli/dev-cli-src/dev.ts'
 /**
  * Package aliases the entry must reach only behind `await import(...)`. `@studio` pulls in the
  * generated parser; `@studio-tooling`, `@expo-host` (its bare root, not only `/dev-loop`), and

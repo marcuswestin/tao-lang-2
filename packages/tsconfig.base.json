@@ -26,6 +26,9 @@
       "@cli-kit/*": [
         "./cli/cli-kit/cli-kit-src/*"
       ],
+      "@agent-cli/*": [
+        "./cli/agent-cli/agent-cli-src/*"
+      ],
       "@host-control": [
         "./testing/host-control/host-control-src/host-control.ts"
       ],

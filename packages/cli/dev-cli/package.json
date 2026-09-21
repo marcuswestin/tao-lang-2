@@ -1,0 +1,28 @@
+{
+  "name": "tao-dev-cli",
+  "private": true,
+  "type": "module",
+  "module": "dev-cli-src/dev.ts",
+  "exports": {
+    ".": "./dev-cli-src/dev.ts"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^15.0.0",
+    "chokidar": "^5.0.0",
+    "commander": "^15.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
+    "tao-agent-cli": "workspace:*",
+    "tao-cli-kit": "workspace:*",
+    "tao-e2e-testing": "workspace:*",
+    "tao-expo-host": "workspace:*",
+    "tao-shared": "workspace:*",
+    "tao-studio-tooling": "workspace:*",
+    "tao-verification": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "tao-compiler": "workspace:*",
+    "tao-formatter": "workspace:*"
+  }
+}

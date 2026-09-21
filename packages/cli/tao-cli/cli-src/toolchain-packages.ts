@@ -20,11 +20,17 @@ import { FS, Repo } from '@shared'
  * packages a verdict depends on, and fails the moment a dependency edge into one of them appears.
  *
  * What the test cannot see is a reach that is not a dependency edge at all — a path built at
- * runtime, a computed require. None is known into these three groups, and none should exist:
+ * runtime, a computed require. None is known into these entries, and none should exist:
  * a developer tool, an IDE, and a test driver are all consumers of the language, never inputs to
  * it. A change that makes one of them an input belongs on the other side of this list.
+ *
+ * An entry names either a whole top-level group (`ides`, `testing`) or, when a group also holds a
+ * verdict-relevant package, one `group/package` pair instead: `cli` holds `cli/tao-cli` and
+ * `cli/cli-kit`, which a verdict depends on, alongside the developer and agent CLIs, which it does
+ * not, so `cli` itself cannot be denylisted whole and `cli/dev-cli` and `cli/agent-cli` are named
+ * individually.
  */
-export const VERDICT_IRRELEVANT_GROUPS: readonly string[] = ['dev', 'ides', 'testing']
+export const VERDICT_IRRELEVANT_GROUPS: readonly string[] = ['ides', 'testing', 'cli/dev-cli', 'cli/agent-cli']
 
 /**
  * verdictPackageFiles lists the package sources a Tao verdict can depend on: every visible file
@@ -35,15 +41,20 @@ export async function verdictPackageFiles(packagesRoot: string): Promise<string[
   const root = FS.resolvePath(packagesRoot)
   const excluded = new Set(VERDICT_IRRELEVANT_GROUPS)
   const files = await Repo.filesUnder(root)
-  return files.filter(path => !excluded.has(groupOf(root, path)))
+  return files.filter(path => !isVerdictIrrelevant(root, path, excluded))
 }
 
 /**
- * groupOf names the top-level folder a package file sits under, which is the group after the
- * restructure. A file directly under `packages/` belongs to no group and is always hashed.
+ * isVerdictIrrelevant matches a file against the denylist at whichever granularity an entry
+ * names: the top-level folder a package file sits under, which is the group after the
+ * restructure, or that group's own package when the denylist names one specifically. A file
+ * directly under `packages/` belongs to no group and is never excluded.
  */
-function groupOf(packagesRoot: string, path: string): string {
+function isVerdictIrrelevant(packagesRoot: string, path: string, excluded: ReadonlySet<string>): boolean {
   const relative = FS.relativePath(packagesRoot, path)
-  const [first] = relative.split('/')
-  return first ?? ''
+  const [group, groupPackage] = relative.split('/')
+  if (group === undefined) {
+    return false
+  }
+  return excluded.has(group) || (groupPackage !== undefined && excluded.has(`${group}/${groupPackage}`))
 }

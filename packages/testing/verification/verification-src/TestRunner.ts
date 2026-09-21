@@ -131,7 +131,7 @@ const LANE = 'dev-test'
 /** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
 const QUIET_FAILURE_OUTPUT_LINES = 40
 const PERFORMANCE_CHECKS = 'performance-checks'
-const PERFORMANCE_CHECK_FILE = 'packages/dev/performance-checks/language-performance.test.ts'
+const PERFORMANCE_CHECK_FILE = 'packages/cli/dev-cli/performance-checks/language-performance.test.ts'
 const RUNTIME_JEST = 'runtime-jest'
 const RUNTIME_JEST_TESTS = 'packages/apps/expo-host/expo-host-tests'
 const TAO_APPS = 'tao-apps'

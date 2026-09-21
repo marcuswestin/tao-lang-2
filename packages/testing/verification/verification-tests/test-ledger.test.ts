@@ -172,12 +172,12 @@ Describe('per-test ledger', () => {
 
   Test('records no duration for a suite whose runner cannot attribute time to one test', async () => {
     // Under `--concurrent` Bun reports every test in a file as the time from that file's shared
-    // start to its own completion, so the number is meaningless; `dev` is tuned that way.
+    // start to its own completion, so the number is meaningless; `cli/dev-cli` is tuned that way.
     await withRepository(async root => {
       const file = await writeTestFile(root)
       await TestLedger.recordRun({
         fullRun: false,
-        observations: [{ ...observation(file, 'passed'), durationMs: 6_200, suite: 'dev' }],
+        observations: [{ ...observation(file, 'passed'), durationMs: 6_200, suite: 'cli/dev-cli' }],
         repositoryRoot: root,
         startedAt: 1,
       })
@@ -372,10 +372,10 @@ Describe('full-run advisory', () => {
 
   Test('returns only the first matching reason', () => {
     const reason = TestAdvisory.fullRunReason(
-      { ...base, changedPaths: ['packages/dev/x.ts', 'packages/apps/runtime/y.ts'], hasMergeCommit: true },
+      { ...base, changedPaths: ['packages/cli/dev-cli/x.ts', 'packages/apps/runtime/y.ts'], hasMergeCommit: true },
       { lastFullRunStartedAt: '2026-09-02T00:00:00Z', tests: {}, version: 1 },
     )
-    Expect(reason).toBe('packages/dev changed since the comparison point')
+    Expect(reason).toBe('the developer or agent CLI changed since the comparison point')
   })
 
   Test('recognizes a full run older than this branch', () => {

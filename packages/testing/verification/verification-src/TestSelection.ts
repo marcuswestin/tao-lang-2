@@ -51,20 +51,27 @@ const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
  */
 const TAO_APPS_PACKAGES = new Set(['apps/runtime', 'apps/expo-host', 'apps/stdlib', 'cli/tao-cli'])
 /**
- * Dev-tooling packages `dev`, `testing/verification`, and `ides/studio-tooling` reach
- * `cli/tao-cli` through a workflow dependency — a gate catalog, a scheduler, the lazy
- * `studio-review` command — rather than through anything a compiled app ships. Their own changes
- * must not widen a `tao-apps` run to every app, so they are excluded as seeds for
- * `appAffectedPackages` below; `PackageGraph.affected` still visits them as *dependents* of
- * whatever else changed, which is the propagation this exclusion leaves alone. `cli/cli-kit` is
- * not in this set: `tao-cli` ships its `OutputText` helper, which shapes the `Tests:` summary
- * line the repository runner scrapes, so a `cli/cli-kit` change must still select the Tao apps.
+ * Dev-tooling packages `cli/dev-cli`, `cli/agent-cli`, `testing/verification`, and
+ * `ides/studio-tooling` reach `cli/tao-cli` through a workflow dependency — a gate catalog, a
+ * scheduler, the lazy `studio-review` command — rather than through anything a compiled app
+ * ships. Their own changes must not widen a `tao-apps` run to every app, so they are excluded as
+ * seeds for `appAffectedPackages` below; `PackageGraph.affected` still visits them as
+ * *dependents* of whatever else changed, which is the propagation this exclusion leaves alone.
+ * `cli/cli-kit` is not in this set: `tao-cli` ships its `OutputText` helper, which shapes the
+ * `Tests:` summary line the repository runner scrapes, so a `cli/cli-kit` change must still
+ * select the Tao apps.
  */
-const APP_UNAFFECTING_TOOLING_PACKAGES = new Set(['dev', 'testing/verification', 'ides/studio-tooling'])
+const APP_UNAFFECTING_TOOLING_PACKAGES = new Set([
+  'cli/dev-cli',
+  'cli/agent-cli',
+  'testing/verification',
+  'ides/studio-tooling',
+])
 /**
- * Repository workflow files whose behavior the `dev` and `testing/verification` packages' tests
- * are the proof of: `dev` for `./agent`/`./dev` wiring, `testing/verification` for the gate
- * catalog, repo-lint, and test-selection rules that read the Justfile and these entrypoints.
+ * Repository workflow files whose behavior the `cli/dev-cli`, `cli/agent-cli`, and
+ * `testing/verification` packages' tests are the proof of: the CLI packages for `./agent`/`./dev`
+ * wiring, `testing/verification` for the gate catalog, repo-lint, and test-selection rules that
+ * read the Justfile and these entrypoints.
  */
 const WORKFLOW_PATHS = [
   'Justfile',
@@ -223,7 +230,7 @@ function planChangedSuites(
       }
       if (!graph.packages.includes(name)) {
         everything ??= path
-      } else if (name === 'dev' && rest.startsWith('performance-checks/')) {
+      } else if (name === 'cli/dev-cli' && rest.startsWith('performance-checks/')) {
         selected.set(PERFORMANCE_CHECKS, 'changed test file')
       } else if (name === 'apps/expo-host' && /^expo-host-tests\/[^/]+\.jest-test\.tsx?$/.test(rest)) {
         selected.set(RUNTIME_JEST, 'changed test file')
@@ -250,7 +257,8 @@ function planChangedSuites(
       continue
     }
     if (WORKFLOW_PATHS.includes(path) || WORKFLOW_PREFIXES.some(prefix => path.startsWith(prefix))) {
-      selected.set('dev', 'repository workflow changed')
+      selected.set('cli/dev-cli', 'repository workflow changed')
+      selected.set('cli/agent-cli', 'repository workflow changed')
       selected.set('testing/verification', 'repository workflow changed')
       continue
     }

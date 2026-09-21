@@ -6,7 +6,7 @@ import { type SuiteInventory, TestSelection } from '../verification-src/TestSele
 /**
  * A small workspace with the shapes the real one has: a leaf everything imports (`shared`), a
  * chain (`language/parser` -> `compiler` -> `workspace`), the CLI the Tao behavior tests run
- * through, the dev-tooling chain that reaches it (`dev` -> `testing/verification` ->
+ * through, the dev-tooling chain that reaches it (`cli/dev-cli` -> `testing/verification` ->
  * `cli/cli-kit`, with `cli/tao-cli` also importing `cli/cli-kit` directly and, lazily, only for
  * `studio-review`, `ides/studio-tooling`), and a package nothing imports (`studio`). The grouped
  * packages — `apps/runtime`, `apps/expo-host`, `apps/stdlib`, `cli/tao-cli`, `cli/cli-kit`,
@@ -17,7 +17,7 @@ import { type SuiteInventory, TestSelection } from '../verification-src/TestSele
 const graph: PackageGraph = {
   imports: new Map<string, ReadonlySet<string>>([
     ['compiler', new Set(['language/parser', 'shared'])],
-    ['dev', new Set(['shared', 'testing/verification'])],
+    ['cli/dev-cli', new Set(['shared', 'testing/verification'])],
     ['language/formatter', new Set()],
     ['language/parser', new Set(['shared'])],
     ['apps/runtime', new Set()],
@@ -25,7 +25,7 @@ const graph: PackageGraph = {
     ['shared', new Set()],
     ['apps/stdlib', new Set(['shared'])],
     ['studio', new Set(['shared', 'workspace'])],
-    ['cli/tao-cli', new Set(['dev', 'workspace', 'cli/cli-kit', 'ides/studio-tooling'])],
+    ['cli/tao-cli', new Set(['cli/dev-cli', 'workspace', 'cli/cli-kit', 'ides/studio-tooling'])],
     ['cli/cli-kit', new Set(['shared'])],
     ['testing/verification', new Set(['shared', 'cli/cli-kit'])],
     ['ides/studio-tooling', new Set(['shared', 'testing/verification'])],
@@ -33,7 +33,7 @@ const graph: PackageGraph = {
   ]),
   packages: [
     'compiler',
-    'dev',
+    'cli/dev-cli',
     'language/formatter',
     'language/parser',
     'apps/runtime',
@@ -55,7 +55,7 @@ const inventory: SuiteInventory = {
   hasTaoApps: true,
   packageSuites: [
     'compiler',
-    'dev',
+    'cli/dev-cli',
     'language/formatter',
     'language/parser',
     'apps/runtime',
@@ -127,7 +127,7 @@ Describe('changed suite plan', () => {
     // The CLI compiles the Tao behavior tests, so a change reaching it reaches every app.
     Expect(result.taoAppPaths).toEqual(['Apps'])
     Expect(result.skipped).toContain('runtime-jest')
-    Expect(result.skipped).toContain('dev')
+    Expect(result.skipped).toContain('cli/dev-cli')
     Expect(result.everything).toBeUndefined()
   })
 
@@ -144,7 +144,7 @@ Describe('changed suite plan', () => {
     Expect([...plan(['packages/cli/tao-cli/cli-tests/cli.test.ts']).selected.keys()]).toEqual(['cli/tao-cli'])
     Expect([...plan(['packages/apps/expo-host/expo-host-tests/nav.jest-test.tsx']).selected.keys()])
       .toEqual(['runtime-jest'])
-    Expect([...plan(['packages/dev/performance-checks/language-performance.test.ts']).selected.keys()])
+    Expect([...plan(['packages/cli/dev-cli/performance-checks/language-performance.test.ts']).selected.keys()])
       .toEqual(['performance-checks'])
   })
 
@@ -186,19 +186,19 @@ Describe('changed suite plan', () => {
       ]
     ) {
       const result = plan([path])
-      Expect(result.selected.get('dev')).toBe('repository workflow changed')
+      Expect(result.selected.get('cli/dev-cli')).toBe('repository workflow changed')
       Expect(result.selected.get('testing/verification')).toBe('repository workflow changed')
       Expect(result.everything).toBeUndefined()
     }
-    Expect([...plan(['Justfile']).selected.keys()]).toEqual(['dev', 'testing/verification'])
-    Expect(plan(['packages/dev/dev-src/dev.ts']).selected.has('tao-apps')).toBe(false)
+    Expect([...plan(['Justfile']).selected.keys()]).toEqual(['cli/dev-cli', 'testing/verification'])
+    Expect(plan(['packages/cli/dev-cli/dev-cli-src/dev.ts']).selected.has('tao-apps')).toBe(false)
   })
 
   Test('a testing/verification-only change selects dev but not the Tao apps', () => {
     const result = plan(['packages/testing/verification/verification-src/GateCatalog.ts'])
 
     Expect(result.selected.get('testing/verification')).toBe('changed directly')
-    Expect(result.selected.get('dev')).toBe('imports testing/verification')
+    Expect(result.selected.get('cli/dev-cli')).toBe('imports testing/verification')
     Expect(result.selected.has('tao-apps')).toBe(false)
   })
 
@@ -231,7 +231,13 @@ Describe('changed suite plan', () => {
   })
 
   Test('documentation selects nothing', () => {
-    const result = plan(['Docs/Roadmap/Plan.md', 'AGENTS.md', 'packages/dev/README.md', 'LICENSE', '.gitignore'])
+    const result = plan([
+      'Docs/Roadmap/Plan.md',
+      'AGENTS.md',
+      'packages/cli/dev-cli/README.md',
+      'LICENSE',
+      '.gitignore',
+    ])
 
     Expect(result.selected.size).toBe(0)
     Expect(result.skipped.length).toBe(inventory.packageSuites.length + 3)
@@ -255,13 +261,13 @@ Describe('changed suite plan', () => {
   })
 
   Test('selected suites keep the inventory order so the printed plan reads like a run', () => {
-    const result = plan(['packages/workspace/workspace-src/index.ts', 'packages/dev/dev-src/dev.ts'])
+    const result = plan(['packages/workspace/workspace-src/index.ts', 'packages/cli/dev-cli/dev-cli-src/dev.ts'])
 
     // `workspace` is not a language-performance package (only `compiler`, its merged home, is), so
     // this path exercises order across a package suite, two importers, and the app suite — not
     // `performance-checks`, which the compiler-change test above already covers.
     Expect([...result.selected.keys()]).toEqual([
-      'dev',
+      'cli/dev-cli',
       'studio',
       'cli/tao-cli',
       'workspace',

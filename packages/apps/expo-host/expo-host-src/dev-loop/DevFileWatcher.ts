@@ -86,7 +86,7 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
         Repo.resolvePath('Justfile'),
         Repo.resolvePath('packages/language/ast-utils'),
         Repo.resolvePath('packages/compiler'),
-        Repo.resolvePath('packages/dev'),
+        Repo.resolvePath('packages/cli/dev-cli'),
         Repo.resolvePath('packages/language/parser/parser-src'),
         Repo.resolvePath('packages/apps/runtime'),
         Repo.resolvePath('packages/apps/expo-host'),
