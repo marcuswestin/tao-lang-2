@@ -44,13 +44,13 @@ export function verdictLine(outcome: Pick<AgentRunOutcome, 'command' | 'duration
 
 /** BoundedFailures is a failure list capped at `MAX_FAILURE_LINES`, shared by the text and JSON
  * reports so neither can cap at a different limit than the other. */
-export type BoundedFailures = {
+type BoundedFailures = {
   failures: readonly AgentFailure[]
   truncated: boolean
 }
 
 /** boundFailures caps a failure list at `MAX_FAILURE_LINES`, the one limit both report shapes honor. */
-export function boundFailures(failures: readonly AgentFailure[]): BoundedFailures {
+function boundFailures(failures: readonly AgentFailure[]): BoundedFailures {
   const shown = failures.slice(0, MAX_FAILURE_LINES)
   return { failures: shown, truncated: shown.length < failures.length }
 }
@@ -68,9 +68,17 @@ export function failedBlock(failures: readonly AgentFailure[]): string[] {
 
 function failureLine(failure: AgentFailure): string {
   const test = failure.test === undefined ? '' : ` — ${failure.test}`
-  const error = failure.error === undefined ? '' : ` — ${failure.error}`
-  const file = failure.file === undefined ? '' : ` (${failure.file})`
-  return `  - ${failure.gate}${test}${error}${file}`
+  const error = dedupedFailureText(failure.error, failure.test)
+  const file = dedupedFailureText(failure.file, failure.test)
+  return `  - ${failure.gate}${test}${error === undefined ? '' : ` — ${error}`}${
+    file === undefined ? '' : ` (${file})`
+  }`
+}
+
+/** dedupedFailureText is `value`, or undefined when `test` already carries the same text — a repo-lint
+ * or dead-exports issue's own detail would otherwise repeat once as `test` and again as `error`. */
+function dedupedFailureText(value: string | undefined, test: string | undefined): string | undefined {
+  return value === undefined || (test !== undefined && test.includes(value)) ? undefined : value
 }
 
 /** outcomeStatus is the pass/fail read of an outcome's exit code, shared by the text and JSON reports. */
@@ -84,7 +92,8 @@ function outcomeStatus(exitCode: number): 'failed' | 'passed' {
  * the failures, and the log path only.
  */
 export function buildReportText(outcome: AgentRunOutcome, options: BuildReportOptions = {}): string {
-  const lines = ['REPORT:', verdictLine(outcome), ...failedBlock(outcome.failures)]
+  const failed = failedBlock(outcome.failures)
+  const lines = ['REPORT:', verdictLine(outcome), ...failed]
   if (options.verbose !== true) {
     const bounded = boundOutput(
       outcome.output,
@@ -92,10 +101,32 @@ export function buildReportText(outcome: AgentRunOutcome, options: BuildReportOp
       outcomeStatus(outcome.exitCode),
       options.maxLines,
     )
-    lines.push(...bounded.lines)
+    lines.push(...(failed.length > 0 ? stripChildFailedBlock(bounded.lines) : bounded.lines))
   }
   lines.push(outcome.logUnavailable === undefined ? outcome.logPath : `log unavailable: ${outcome.logUnavailable}`)
   return lines.join('\n')
+}
+
+/**
+ * stripChildFailedBlock drops one contiguous `Failed:` block from a child's own tail — a line that
+ * reads exactly `Failed:` through the run of `- ` / `  - ` lines right after it — so a failure this
+ * report already named in its own `Failed:` block above is not read a second time below. A tail with
+ * no such line is returned unchanged.
+ */
+function stripChildFailedBlock(lines: readonly string[]): string[] {
+  const start = lines.indexOf('Failed:')
+  if (start === -1) {
+    return [...lines]
+  }
+  let end = start + 1
+  while (end < lines.length && isFailedBlockEntry(lines[end]!)) {
+    end += 1
+  }
+  return [...lines.slice(0, start), ...lines.slice(end)]
+}
+
+function isFailedBlockEntry(line: string): boolean {
+  return line.startsWith('- ') || line.startsWith('  - ')
 }
 
 /** AgentJsonReport is the one object `--json` prints, and nothing else. `failuresTruncated` is true
@@ -131,6 +162,6 @@ export function buildJsonReport(outcome: AgentRunOutcome, options: BuildReportOp
     failuresTruncated: boundedFailures.truncated,
     logPath: outcome.logPath,
     ...(outcome.logUnavailable === undefined ? {} : { logUnavailable: outcome.logUnavailable }),
-    tail: bounded.lines,
+    tail: boundedFailures.failures.length > 0 ? stripChildFailedBlock(bounded.lines) : bounded.lines,
   }
 }

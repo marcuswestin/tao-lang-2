@@ -458,16 +458,24 @@ Describe('structured failures', () => {
 
   Test('extracts repo-lint and dead-exports issue lines, one failure per line', () => {
     const summary = failedSummary(ISSUE_LOG, '_repo-lint')
-    const [reposLint, deadExports] = ISSUE_LOG.split('\n')
 
+    // `test` is the issue's own detail, not the whole prefixed line, and carries no `error` of its
+    // own — `formatFailureLine` would otherwise have nothing left to add without repeating it.
     Expect(summary.gates[0]?.failures).toEqual([
-      {
-        error: 'writes through the global console; use `HCI.writeLine`',
-        file: 'packages/foo/bar.ts:42',
-        test: reposLint,
-      },
-      { error: 'someExport is exported but never imported.', file: 'packages/foo/baz.ts:10', test: deadExports },
+      { file: 'packages/foo/bar.ts:42', test: 'writes through the global console; use `HCI.writeLine`' },
+      { file: 'packages/foo/baz.ts:10', test: 'someExport is exported but never imported.' },
     ])
+  })
+
+  Test('excludes an issue-prefixed summary count line that names no path:line', () => {
+    const summary = failedSummary(
+      'dead exports: 2 unused, 159 bound from .tao sources, 3 reached through a namespace facade, '
+        + '0 republished by an import-type query.',
+      'dead-exports',
+    )
+
+    Expect(summary.gates[0]?.failures).toBeUndefined()
+    Expect(summary.failures).toBeUndefined()
   })
 
   Test('names nothing from a log matching no recognized format, leaving the raw tail as the only evidence', () => {
@@ -605,5 +613,23 @@ Describe('structured failures', () => {
     Expect(failedLine).toContain('(sample.test.ts:5:15)')
     Expect(failedLine).toContain('…')
     Expect(failedLine).not.toContain(longAssertion)
+  })
+
+  Test('formatGateSummary renders a repo-lint issue line once, truncating its long detail instead of the file', () => {
+    const longDetail = "constructs a raw Error; use the repo's error constructors instead, build "
+      + `\`new Errors.UnexpectedBehaviorError(...)\` ${'x'.repeat(200)}`
+    const file = 'packages/testing/verification/verification-tests/merge-with-main.test.ts:970'
+    const log = `repo lint: ${file} ${longDetail}`
+    const summary = failedSummary(log, '_repo-lint')
+    const rendered = formatGateSummary(summary)
+    const failedLine = rendered.split('\n').find(line => line.startsWith('- _repo-lint › '))
+
+    Expect(failedLine).toBeDefined()
+    Expect(failedLine!.length).toBeLessThanOrEqual(160)
+    Expect(failedLine).toContain(`(${file})`)
+    Expect(failedLine).toContain('…')
+    // The detail appears exactly once — no ` — <detail again>` echo now that an issue line never
+    // sets both `test` and `error` to the same text.
+    Expect(failedLine?.match(/constructs a raw Error/g)?.length).toBe(1)
   })
 })

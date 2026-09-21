@@ -967,7 +967,7 @@ Describe('merge-with-main', () => {
     const fake = fakeDependencies()
     fake.dependencies.isInteractive = () => false
     const underlying = fake.dependencies.run
-    const spawnError = new Error('spawn just ENOENT')
+    const spawnError = new Errors.HostEnvironmentError('spawn just ENOENT')
     fake.dependencies.run = async (command, spec) => {
       if (command === 'just' && spec.args?.[0] === 'land-barrier') {
         await underlying(command, spec)

@@ -368,6 +368,13 @@ function parseTypecheckFailures(output: string): ExtractedFailure[] {
 const ISSUE_LINE_PREFIXES = ['repo lint: ', 'dead exports: ']
 const ISSUE_LOCATION = /^(\S+:\d+)\s+(.+)$/
 
+/**
+ * parseIssueLineFailures reads one issue per line, `test` set to the issue's own detail and `file`
+ * to the `path:line` head it followed — not the whole prefixed line, which `formatFailureLine` would
+ * otherwise have nothing left to add without repeating it. A prefixed line with no `path:line` head —
+ * `dead exports:`'s own trailing count, not an issue — names nothing this can point a reader at, so
+ * it is skipped rather than reported as a failure with no location.
+ */
 function parseIssueLineFailures(output: string): ExtractedFailure[] {
   const failures: ExtractedFailure[] = []
   for (const line of output.split('\n')) {
@@ -375,9 +382,11 @@ function parseIssueLineFailures(output: string): ExtractedFailure[] {
     if (prefix === undefined) {
       continue
     }
-    const rest = line.slice(prefix.length)
-    const location = rest.match(ISSUE_LOCATION)
-    failures.push({ error: location?.[2] ?? rest, file: location?.[1], test: line.trim() })
+    const location = line.slice(prefix.length).match(ISSUE_LOCATION)
+    if (location === null) {
+      continue
+    }
+    failures.push({ file: location[1], test: location[2]! })
   }
   return failures
 }
@@ -673,20 +682,45 @@ const FAILED_LINE_PREFIX = '- '
 const FAILED_LINE_ERROR_PREFIX = ' — '
 
 /**
- * formatFailureLine renders one failure at `FAILED_LINE_WIDTH`, truncating only its own free-form
- * `error` text when the line runs long. `gate › test` and `(file:line)` are what a reader clicks or
- * greps on next, and a truncated line number reads as a wrong one, not a short one, so only the
- * error prose ever gives way.
+ * formatFailureLine renders one failure at `FAILED_LINE_WIDTH`, truncating only free-form prose when
+ * the line runs long — `gate › test` and `(file:line)` are what a reader clicks or greps on next, and
+ * a truncated line number reads as a wrong one, not a short one. `error` and `file` are each dropped
+ * when `test` already carries the same text, which is what an issue-line failure's own detail does —
+ * a guard kept here rather than trusted to every parser that can feed this.
  */
 function formatFailureLine(failure: ExtractedFailure & { gate: string }, repositoryRoot: string): string {
-  const test = `${failure.gate} › ${failure.test}`
-  const file = failure.file === undefined ? '' : ` (${relativizeFailureFile(failure.file, repositoryRoot)})`
-  if (failure.error === undefined) {
-    return `${test}${file}`
+  const file = dedupedFileSuffix(failure, repositoryRoot)
+  const error = dedupedError(failure)
+  const prefix = `${failure.gate} › `
+  if (error === undefined) {
+    const fixedWidth = FAILED_LINE_PREFIX.length + prefix.length + file.length
+    const budget = Math.max(0, FAILED_LINE_WIDTH - fixedWidth)
+    return `${prefix}${truncateToWidth(failure.test, budget)}${file}`
   }
+  const test = `${prefix}${failure.test}`
   const fixedWidth = FAILED_LINE_PREFIX.length + test.length + FAILED_LINE_ERROR_PREFIX.length + file.length
   const errorBudget = Math.max(0, FAILED_LINE_WIDTH - fixedWidth)
-  return `${test}${FAILED_LINE_ERROR_PREFIX}${truncateToWidth(failure.error, errorBudget)}${file}`
+  return `${test}${FAILED_LINE_ERROR_PREFIX}${truncateToWidth(error, errorBudget)}${file}`
+}
+
+/** dedupedError is `failure.error`, or undefined when `test` already carries the same text — the
+ * shape an issue-line failure's own detail would otherwise repeat once past a source that has since
+ * been fixed to not set both. */
+function dedupedError(failure: ExtractedFailure): string | undefined {
+  return failure.error === undefined || failure.test.includes(failure.error) ? undefined : failure.error
+}
+
+/** dedupedFileSuffix is the `(file:line)` a rendered line adds, empty when `test` already names the
+ * same location. */
+function dedupedFileSuffix(failure: ExtractedFailure, repositoryRoot: string): string {
+  if (failure.file === undefined) {
+    return ''
+  }
+  const relative = relativizeFailureFile(failure.file, repositoryRoot)
+  if (failure.test.includes(relative) || failure.test.includes(failure.file)) {
+    return ''
+  }
+  return ` (${relative})`
 }
 
 /**

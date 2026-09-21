@@ -48,6 +48,24 @@ Describe('agent report', () => {
     ])
   })
 
+  Test('omits error and file from a failure line once test already carries the same text', () => {
+    // A repo-lint or dead-exports issue names its own detail and location only once, in `test`; a
+    // failure line built from it must not echo either back as `error` or `(file)`.
+    const failures: AgentFailure[] = [{
+      error: "constructs a raw Error; use the repo's error constructors",
+      file: 'packages/testing/verification/verification-tests/merge-with-main.test.ts:970',
+      gate: '_repo-lint',
+      test: 'packages/testing/verification/verification-tests/merge-with-main.test.ts:970 constructs a raw Error; '
+        + "use the repo's error constructors",
+    }]
+
+    Expect(failedBlock(failures)).toEqual([
+      'Failed:',
+      '  - _repo-lint — packages/testing/verification/verification-tests/merge-with-main.test.ts:970 constructs '
+      + "a raw Error; use the repo's error constructors",
+    ])
+  })
+
   Test('bounds the Failed: block to 20 lines plus an elision line', () => {
     const failures: AgentFailure[] = Array.from(
       { length: 25 },
@@ -90,6 +108,44 @@ Describe('agent report', () => {
       ]
         .join('\n'),
     )
+  })
+
+  Test("drops the child lane's own Failed: block from the tail, keeping the rest around it", () => {
+    const outcome = {
+      ...PASSED,
+      exitCode: 1,
+      failures: [{ gate: 'shared', test: 'renders the board' }] as readonly AgentFailure[],
+      output: [
+        '',
+        'Failed:',
+        '  - shared › renders the board — expect(received).toBe(expected) (sample.test.ts:5:15)',
+        '',
+        'First failure — shared:',
+        'expect(received).toBe(expected)',
+        'Full log: .artifacts/logs/verify-full/latest/shared.log',
+        'verify-full: FAILED in 12.0s — first failure: shared',
+      ].join('\n'),
+    }
+
+    const text = buildReportText(outcome)
+
+    Expect(text).toBe(
+      [
+        'REPORT:',
+        'test-file: failed (exit 1) in 1.2s',
+        'Failed:',
+        '  - shared — renders the board',
+        '',
+        '',
+        'First failure — shared:',
+        'expect(received).toBe(expected)',
+        'Full log: .artifacts/logs/verify-full/latest/shared.log',
+        'verify-full: FAILED in 12.0s — first failure: shared',
+        PASSED.logPath,
+      ].join('\n'),
+    )
+    // The front door's own Failed: block is the only one left — the child's copy of it is gone.
+    Expect(text.split('Failed:').length - 1).toBe(1)
   })
 
   Test('omits the child output in verbose mode, since it already streamed live', () => {
