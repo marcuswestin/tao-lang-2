@@ -512,6 +512,19 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     // Initial content presents and dismisses through this slot, exactly like presented content.
     return renderPresentable(this.descriptor.config.initial, {}, navigationProps(taoProps, this))
   }
+
+  /**
+   * ownsWindowSurface delegates to the slot's showing content: `present` only ever hands this slot
+   * a plain view, but `Initial` may be a nested window-owning navigator, and that navigator already
+   * frames its own screens — an enclosing AppSurfaceFrame here would inset its content twice.
+   */
+  override ownsWindowSurface(): boolean {
+    if (this.presented) {
+      return false
+    }
+    const initial = this.descriptor.config.initial
+    return isNavigation(initial) && initial.ownsWindowSurface()
+  }
 }
 
 type SelectionItemState = {

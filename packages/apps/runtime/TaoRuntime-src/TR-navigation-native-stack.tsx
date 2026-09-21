@@ -115,17 +115,24 @@ function NativeStackItemContent(props: {
     ? undefined
     : { capabilities: backCapabilities, control: backIdentity, scope: backIdentity }
   const activateBack = InteractionControls.Activate(backOccurrence, () => props.navigation.back())
+  // An entry that is itself a window-owning navigator already frames its own screens (see
+  // `RuntimeSelectionNav.itemEntryLevels`); wrapping it in another AppSurfaceFrame here would inset
+  // its content twice.
+  const contentOwnsWindow = isNavigation(props.entry.presentable) && props.entry.presentable.ownsWindowSurface()
+  const content = renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host)
   return createElement(
     ScreenStackItem,
     {
       // ScreenStack owns native coverage. ScreenStackItem forbids decreasing a native-stack
       // screen from activityState 2 to 1 during push, so every retained item stays active here.
       activityState: 2,
-      children: createElement(
-        AppSurfaceFrame,
-        { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
-        renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
-      ),
+      children: contentOwnsWindow
+        ? content
+        : createElement(
+          AppSurfaceFrame,
+          { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
+          content,
+        ),
       headerConfig: {
         children: Right && header && props.observable && slots.toolbar.length > 0
           ? createElement(Right, null, createElement(NativeToolbar, { commands: slots.toolbar }))
