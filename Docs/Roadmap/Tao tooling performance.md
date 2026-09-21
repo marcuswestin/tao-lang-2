@@ -243,6 +243,25 @@ exempt — so every edit re-transforms every compiled app. WordFlower's five tes
 app variants. The mechanism is inferred from the path scheme and the timings (same run root 2.8s,
 new run root 5.9-9.2s) and wants one confirming experiment with stable paths.
 
+**Confirmed since, and it was larger than inferred.** Counting the files Jest's transform cache
+gains per run is a measure machine load cannot disturb. Every run into a new run root added exactly
+2,135 — not the compiled apps alone but every module the run loads, React Native included. The
+cause is one directory: the generated Jest entrypoints sat inside the run root, that directory is a
+`roots` entry in `jest.tao-test.config.cjs`, and Jest hashes its whole configuration into the key of
+every transform. With every path held still, a second run added none. The entrypoints name Tao test
+files and nothing a compile produced, so they now live beside the run roots under a name that is a
+function of the plan alone, and the run-root lifecycle is untouched: a compile after an edit adds
+650 files instead of 2,135.
+
+The 650 that remain are the compiled apps: WordFlower's eight test variants each carry their own
+copy of the same compiled standard-library modules, in a directory whose name changes with every
+compile. Making those paths stable is not safe the simple way. A directory per variant that compiles
+overwrite in place would let a run read a mixture while another compile writes, and would let a
+published run root's manifest come to name newer output than it was fingerprinted for — a stale
+green. The sound reduction is to compile what variants share once per run root, which cuts the 650
+to roughly a hundred on every run without any path outliving its compile. The cache itself never
+evicts anything and held 3.49 million files when counted; the ledger has the entry.
+
 ### 5.6 A Tao developer outside this repository has no cache at all
 
 `check-cache.ts:18-24` and `test-cache.ts` deliberately stamp only inside this repository's own Git
@@ -415,7 +434,8 @@ Phase 0 — remove the defects (days; no design decisions; unblocks every lane i
    linked graph (5.3).~~ Done; check 1.22s and fix 0.80s on the fixture, not the 0.5s projected below,
    for the two reasons 5.3 ends on. Teach `./agent bench` to assert a budget so this cannot regress
    silently.
-4. Compile tests to stable, content-addressed paths and deduplicate app variants (5.5, option A).
+4. ~~Keep Jest's configuration still across compiles (5.5).~~ Done for the entrypoint directory, which
+   was 70% of it. Remaining: compile what test variants share once per run root.
 5. Give a packaged CLI a version-keyed cache in a user cache directory (5.6).
 
 Expected on the fixture: check 20s → about 0.5s, fix 9s → about 0.5s, compile 3.2s → about 0.5s,
