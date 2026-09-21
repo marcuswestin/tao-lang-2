@@ -167,15 +167,15 @@ const splittableFixture = {
 /** listEntrypoints lists the Jest entrypoints of the plan a run `width` workers wide generated. */
 async function listEntrypoints(runtimeRoot: string, width: number): Promise<string[]> {
   const found: string[] = []
-  for (const runRoot of await listRunRoots(runtimeRoot)) {
-    const plans = FS.resolvePath(
-      `_gen_tao-app-test/tao-test-command/${runRoot}/${RuntimeTesting.TestHarnessFiles.DIRECTORY_NAME}`,
-      runtimeRoot,
-    )
-    for (const plan of await FS.isDirectory(plans) ? await FS.listDir(plans) : []) {
-      if (plan.startsWith(`${width}-`)) {
-        found.push(...await FS.listDir(FS.resolvePath(plan, plans)))
-      }
+  // Plans live beside the run roots rather than inside one, so that the directory Jest is configured
+  // with does not move from compile to compile.
+  const plans = FS.resolvePath(
+    `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestHarnessFiles.DIRECTORY_NAME}`,
+    runtimeRoot,
+  )
+  for (const plan of await FS.isDirectory(plans) ? await FS.listDir(plans) : []) {
+    if (plan.startsWith(`${width}-`)) {
+      found.push(...await FS.listDir(FS.resolvePath(plan, plans)))
     }
   }
   return found.toSorted()
@@ -544,6 +544,34 @@ Describe('tao test CLI', () => {
               'shard-2-of-2.jest.tsx',
             ])
           })
+        })
+      })
+    })
+  })
+
+  // Jest hashes its whole configuration into the key of every transform it caches, and the
+  // entrypoint directory is in that configuration. When it sat inside the run root, every compile
+  // moved it and the runner re-transformed React Native and everything else it loads.
+  Test('hands the test runner the same entrypoint directory after an edit compiles a new run root', async () => {
+    const entrypointsStub =
+      `process.stderr.write(\`entrypoints: \${process.env.${RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV}}\\n\`)\n`
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': entrypointsStub }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const entrypointsOf = (output: string) => /entrypoints: (.+)/.exec(output)?.[1]
+
+          const first = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const firstRunRoots = await listRunRoots(runtimeRoot)
+          await FS.writeText(FS.resolvePath('App.tao', rootDir), taoApp('Reported').replace('"Reported"', '"Edited"'))
+          const second = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+
+          Expect(first.exitCode).toBe(0)
+          Expect(second.exitCode).toBe(0)
+          Expect(await listRunRoots(runtimeRoot)).not.toEqual(firstRunRoots)
+          Expect(entrypointsOf(outputText(first))).toBeDefined()
+          Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
+          Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
         })
       })
     })

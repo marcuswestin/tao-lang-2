@@ -199,6 +199,26 @@ provider's fall-through now returns an empty scope, so a reference the grammar g
 resolves to nothing and says so. The whole repository checks clean under all three rules, and each
 has a test that loads the declaration it must not find and fails when the rule is removed.
 
+**Built since, and what it bought.** `Workspace.parseFiles` builds a workspace's entries once;
+every entry keeps the graph it alone reaches and is validated against it, and both copies of the
+folder-sibling rule now leave test sidecars out. `tao check` and `tao fix` had a second per-file
+rebuild this section missed: the canonical-source pass parsed each file as an entry of its own
+(`source-commands.ts`, `canonicalizeFile`), which was 1.1s of the 1.8s; it now reads the same build,
+and falls back to a parse of its own the moment any file of the workspace is found changed. Checked
+both ways across the repository's 20 workspaces, the two builds report identical diagnostics, and a
+test holds the Navigation app to that. WordFlower: check 1.8s → 1.22s, fix 1.04s → 0.80s. The
+repository: uncached check 7.3s → 6.6s.
+
+That is well short of the 0.5s this report projected, and the projection was wrong in two ways worth
+keeping. Validation is still one pass per entry over that entry's whole graph — 212 file validations
+for WordFlower's 28 files, 0.34s against 0.17s for the build itself — because several validators
+genuinely read the entry's graph (navigation reachability, selection keys, datasource membership,
+global commands), so a file cannot simply be validated once. Separating file-local validators, which
+are most of them, from graph-reading ones would remove most of it and is a change to the validator's
+contract rather than a defect. And opening a workspace costs 0.10-0.15s before any file is read:
+`Packages.createContext` scans the project for package directories, 2.2s of the repository's 6.6s
+across 20 workspaces, paid again by every test that opens one.
+
 ### 5.4 Every command is a cold process, including the ones in a loop
 
 A one-file check costs 370ms wall and 0.73s of CPU before it has anything to say: Bun start, the
@@ -223,6 +243,25 @@ exempt — so every edit re-transforms every compiled app. WordFlower's five tes
 app variants. The mechanism is inferred from the path scheme and the timings (same run root 2.8s,
 new run root 5.9-9.2s) and wants one confirming experiment with stable paths.
 
+**Confirmed since, and it was larger than inferred.** Counting the files Jest's transform cache
+gains per run is a measure machine load cannot disturb. Every run into a new run root added exactly
+2,135 — not the compiled apps alone but every module the run loads, React Native included. The
+cause is one directory: the generated Jest entrypoints sat inside the run root, that directory is a
+`roots` entry in `jest.tao-test.config.cjs`, and Jest hashes its whole configuration into the key of
+every transform. With every path held still, a second run added none. The entrypoints name Tao test
+files and nothing a compile produced, so they now live beside the run roots under a name that is a
+function of the plan alone, and the run-root lifecycle is untouched: a compile after an edit adds
+650 files instead of 2,135.
+
+The 650 that remain are the compiled apps: WordFlower's eight test variants each carry their own
+copy of the same compiled standard-library modules, in a directory whose name changes with every
+compile. Making those paths stable is not safe the simple way. A directory per variant that compiles
+overwrite in place would let a run read a mixture while another compile writes, and would let a
+published run root's manifest come to name newer output than it was fingerprinted for — a stale
+green. The sound reduction is to compile what variants share once per run root, which cuts the 650
+to roughly a hundred on every run without any path outliving its compile. The cache itself never
+evicts anything and held 3.49 million files when counted; the ledger has the entry.
+
 ### 5.6 A Tao developer outside this repository has no cache at all
 
 `check-cache.ts:18-24` and `test-cache.ts` deliberately stamp only inside this repository's own Git
@@ -233,15 +272,15 @@ directory.
 
 ## 6. The floor of the current stack
 
-| Loop                           | Bar     | Floor on TypeScript + Bun + Langium, and what it takes                                                                                       |
-| ------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Warm single-file check or fix  | <100ms  | **40-70ms** measured (update 7-35ms + validation 30ms). Needs a live workspace: watch mode, the LSP, or a daemon.                            |
-| Cold single-file check         | —       | **about 0.35s**, the process floor. Lazy imports might reach 0.2s. Not reducible below about 0.15s on this stack.                            |
-| Whole-app check, cold process  | <1s     | **about 0.5s** for WordFlower (0.35s process + one 0.1-0.2s build). About 1s at ten times the size; parse alone scales to 25k lines in 0.1s. |
-| Format                         | instant | 8ms per file warm; 0.35s cold, all of it the process.                                                                                        |
-| Recompile on save in `tao dev` | 1-2s    | **about 0.2s** in-process (update + validate + about 0.1s codegen), then Metro Fast Refresh. Meets the bar with room.                        |
-| Re-run one behavior test       | <1s     | **Not on Jest** (2.8s best case). **0.22s** in a prototype headless Bun runner. See 6.1.                                                     |
-| Whole app's tests              | <10s    | 3.6s today when nothing changed, 14-26s after an edit; about 5s fixed and still on Jest; **1.2s** headless for WordFlower's 29 journeys.     |
+| Loop                           | Bar     | Floor on TypeScript + Bun + Langium, and what it takes                                                                                                                                                                                                                                                                |
+| ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Warm single-file check or fix  | <100ms  | **40-70ms** measured (update 7-35ms + validation 30ms). Needs a live workspace: watch mode, the LSP, or a daemon.                                                                                                                                                                                                     |
+| Cold single-file check         | —       | **about 0.35s**, the process floor. Lazy imports might reach 0.2s. Not reducible below about 0.15s on this stack.                                                                                                                                                                                                     |
+| Whole-app check, cold process  | <1s     | **about 0.5s** for WordFlower (0.35s process + one 0.1-0.2s build). About 1s at ten times the size; parse alone scales to 25k lines in 0.1s. Measured with the one build in place: 1.22s — the build is 0.17s as projected; per-entry validation (0.34s) and opening the workspace (0.15s) are what is left, see 5.3. |
+| Format                         | instant | 8ms per file warm; 0.35s cold, all of it the process.                                                                                                                                                                                                                                                                 |
+| Recompile on save in `tao dev` | 1-2s    | **about 0.2s** in-process (update + validate + about 0.1s codegen), then Metro Fast Refresh. Meets the bar with room.                                                                                                                                                                                                 |
+| Re-run one behavior test       | <1s     | **Not on Jest** (2.8s best case). **0.22s** in a prototype headless Bun runner. See 6.1.                                                                                                                                                                                                                              |
+| Whole app's tests              | <10s    | 3.6s today when nothing changed, 14-26s after an edit; about 5s fixed and still on Jest; **1.2s** headless for WordFlower's 29 journeys.                                                                                                                                                                              |
 
 So the language tooling is nowhere near its floor, and the floor clears the bar. Public evidence
 agrees on where the ceiling is. TypeFox, who build Langium, shipped a Go successor in March 2026
@@ -391,9 +430,12 @@ Phase 0 — remove the defects (days; no design decisions; unblocks every lane i
 1. ~~Resolve the physical-boundary guard once per path (5.1).~~ Landed with this report.
 2. ~~Remember what each `use` statement resolves to instead of recomputing it per reference (5.2).~~
    Done.
-3. Build the union of a workspace's entries in one pass and validate each entry over the shared,
-   linked graph (5.3); teach `./agent bench` to assert a budget so this cannot regress silently.
-4. Compile tests to stable, content-addressed paths and deduplicate app variants (5.5, option A).
+3. ~~Build the union of a workspace's entries in one pass and validate each entry over the shared,
+   linked graph (5.3).~~ Done; check 1.22s and fix 0.80s on the fixture, not the 0.5s projected below,
+   for the two reasons 5.3 ends on. Teach `./agent bench` to assert a budget so this cannot regress
+   silently.
+4. ~~Keep Jest's configuration still across compiles (5.5).~~ Done for the entrypoint directory, which
+   was 70% of it. Remaining: compile what test variants share once per run root.
 5. Give a packaged CLI a version-keyed cache in a user cache directory (5.6).
 
 Expected on the fixture: check 20s → about 0.5s, fix 9s → about 0.5s, compile 3.2s → about 0.5s,

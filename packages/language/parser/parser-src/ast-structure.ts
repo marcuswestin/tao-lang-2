@@ -11,6 +11,15 @@ export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
 
+/**
+ * isTestSidecarPath says whether a path names a `.test.tao` sidecar. An app file's graph never holds
+ * one: the loader leaves them out of a folder's siblings, and folder scope leaves them out too, so
+ * what an app file sees does not change when a command happens to have its tests loaded beside it.
+ */
+export function isTestSidecarPath(path: string): boolean {
+  return path.endsWith('.test.tao')
+}
+
 /** rememberVisibleWorkspaceFiles binds every parsed root to the complete workspace loaded with it. */
 export function rememberVisibleWorkspaceFiles(files: readonly AST.TaoFile[]): void {
   for (const file of files) {
@@ -678,7 +687,7 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
   const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/'))
   for (const file of visibleWorkspaceFiles.get(root) ?? []) {
     const path = AST.getDocument(file).uri.path
-    if (file === root || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+    if (file === root || isTestSidecarPath(path) || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
       continue
     }
     for (const declaration of file.statements) {

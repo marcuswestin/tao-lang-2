@@ -8,14 +8,18 @@ import type * as TestCompiler from './test-compiler/TestCompiler'
  * declares the whole manifest.
  *
  * Being a Jest root is why this directory must hold the entrypoints and nothing else. Jest crawls
- * every root, and the run root around this one is a tree of compiled apps that a run reads by path
+ * every root, and the run roots beside this one are trees of compiled apps that a run reads by path
  * and must never pay to crawl — which is the whole reason the config names directories rather than
  * taking its default of the package.
  */
 const ENTRYPOINTS_ENV = 'TAO_TEST_RUNTIME_ENTRYPOINTS'
 
-/** DIRECTORY_NAME names where in a run root the generated entrypoints live, one plan per subdirectory. */
-const DIRECTORY_NAME = 'journeys'
+/**
+ * DIRECTORY_NAME names where the generated entrypoints live beside the run roots, one plan per
+ * subdirectory. The leading dot keeps it from reading as a run root or a category to
+ * `test-run-root.ts`, which prunes it.
+ */
+const DIRECTORY_NAME = '.journeys'
 
 /** FILE_SUFFIX ends every generated entrypoint, and is what the config's `testMatch` selects on. */
 const FILE_SUFFIX = '.jest.tsx'
@@ -67,8 +71,8 @@ export type GeneratedEntrypoints = {
 }
 
 /**
- * write generates the Jest entrypoints for one run of `manifest` out of `runRoot`, and returns the
- * directory holding them together with how many there are.
+ * write generates the Jest entrypoints for one run of `manifest` under `home`, the directory that
+ * holds the run roots, and returns the directory holding them together with how many there are.
  *
  * Jest distributes test *files* across its worker pool, so a run that declares its whole manifest in
  * one entrypoint leaves the pool nothing to distribute and runs every journey in one worker however
@@ -79,20 +83,25 @@ export type GeneratedEntrypoints = {
  * its own module registry: see `JOURNEYS_PER_SHARD`. `workerBudget` is therefore a ceiling on the
  * number of shards rather than a target for it, and the work in the manifest is the other ceiling.
  *
- * The entrypoints are generated beside the compiled apps they run, so they live and die with the run
- * root. A run root is reused by any later run that compiles to the same output, and those runs need
- * not want the same division — a different worker budget, or a `--name` pattern narrowing the
- * manifest, divides the same compiled apps differently. A plan therefore names its own directory:
- * two runs wanting one plan write byte-identical files into it, and two runs wanting different plans
- * cannot see each other's at all.
+ * An entrypoint names Tao test files and nothing a compile produced — the run finds its compiled
+ * apps through the manifest its environment names — so a plan is a function of the test files and
+ * the width alone, and it names its own directory after exactly that: two runs wanting one plan
+ * write byte-identical files into it, and two runs wanting different plans cannot see each other's
+ * at all.
+ *
+ * That directory must not move from run to run, which is why it is not inside the run root. Jest
+ * hashes its whole configuration into the key of every transform it caches, and this directory is in
+ * that configuration as a root. Inside a run root it changed with every compile, so every compile
+ * re-transformed all 2,135 modules a WordFlower run loads, React Native among them, and left as many
+ * dead files in Jest's cache. Beside the run roots, a run whose plan is unchanged reuses them all.
  */
 async function write(
-  runRoot: string,
+  home: string,
   manifest: TestCompiler.Manifest,
   workerBudget: number,
 ): Promise<GeneratedEntrypoints> {
   const shards = planShards(manifest, workerBudget)
-  const directory = FS.resolvePath(`${DIRECTORY_NAME}/${planName(shards)}`, runRoot)
+  const directory = FS.resolvePath(`${DIRECTORY_NAME}/${planName(shards)}`, home)
   for (const [index, shard] of shards.entries()) {
     await writeAtomically(
       FS.resolvePath(entrypointName(index, shards.length), directory),

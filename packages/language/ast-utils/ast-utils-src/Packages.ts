@@ -705,7 +705,7 @@ export namespace Packages {
 
   /** isTestSourcePath returns whether a path names a Tao sidecar test file. */
   export function isTestSourcePath(filePath: string): boolean {
-    return FS.basename(filePath).endsWith('.test.tao')
+    return AST.isTestSidecarPath(filePath)
   }
 
   /** isScenariosSourcePath returns whether a path names a Tao scenarios sidecar file. */

@@ -731,7 +731,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const declarations: DeclarationT[] = []
     for (const document of this.coreServices.shared.workspace.LangiumDocuments.all) {
       const path = document.uri.path
-      if (path === currentPath || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+      if (
+        path === currentPath
+        || AST.isTestSidecarPath(path)
+        || path.slice(0, path.lastIndexOf('/')) !== currentDirectory
+      ) {
         continue
       }
       const file = document.parseResult.value
