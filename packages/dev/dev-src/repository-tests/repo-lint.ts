@@ -501,8 +501,8 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
   'packages/generation/generation-live/apple-foundation-models.live.ts:3',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:545',
-  'packages/dev/dev-tests/repo-lint.test.ts:546',
+  'packages/dev/dev-tests/repo-lint.test.ts:572',
+  'packages/dev/dev-tests/repo-lint.test.ts:573',
   'packages/dev/dev-tests/work-graph.test.ts:465',
   'packages/dev/dev-tests/work-graph.test.ts:466',
   // Stream classes a test constructs to stand in for a terminal.
