@@ -104,7 +104,7 @@ Describe('tao test --watch (real compile)', () => {
           })
 
           Expect(calls).toBe(2)
-          // Every rerun bypasses the compiled-output cache, so both runs compiled from source.
+          // The edit changes the cache fingerprint, so the rerun compiles again rather than reusing.
           const compileCount = captured.stdout.split('Compiling apps').length - 1
           Expect(compileCount).toBe(2)
           Expect(captured.stdout).not.toContain('Reusing compiled apps')

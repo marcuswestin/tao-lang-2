@@ -93,8 +93,10 @@ export type TestWatchCommandDeps = {
 
 /**
  * runTestWatchCommand runs `tao test --watch`: the selected set once, then again on any change under
- * the selected paths or the selected tests' project roots, until Ctrl-C. Every rerun bypasses the
- * compiled-output cache, because a watch loop exists to show a fresh run, not a replayed green.
+ * the selected paths or the selected tests' project roots, until Ctrl-C. A rerun goes through the same
+ * compiled-output cache a one-shot run does: its fingerprint covers every file this command watches,
+ * so a real change always recompiles, and a change that leaves those files as they were reuses the
+ * compile and still runs the tests.
  *
  * A path with no Tao tests under it today still joins the watch set rather than ending the command:
  * the whole point of watching the selected directories is to notice a test file that does not exist
@@ -124,7 +126,6 @@ export async function runTestWatchCommand(
   const removeSigterm = controller === undefined ? undefined : Platform.onProcessSignal('SIGTERM', () => {
     controller.abort()
   })
-  const restoreNoCache = disableTestCacheForWatch()
 
   try {
     await runTestWatchLoop({
@@ -138,23 +139,6 @@ export async function runTestWatchCommand(
   } finally {
     removeSigint?.()
     removeSigterm?.()
-    restoreNoCache()
-  }
-}
-
-/**
- * disableTestCacheForWatch forces every run inside a watch loop to compile from source, and restores
- * whatever the environment held before the loop started once it stops.
- */
-function disableTestCacheForWatch(): () => void {
-  const previous = Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
-  Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = 'true'
-  return () => {
-    if (previous === undefined) {
-      delete Platform.runtimeProcess.env['TAO_TEST_NO_CACHE']
-    } else {
-      Platform.runtimeProcess.env['TAO_TEST_NO_CACHE'] = previous
-    }
   }
 }
 

@@ -288,7 +288,7 @@ function createCommands(): Command {
     .option(
       '--watch',
       'Run the selected tests, then rerun them on any change under the selected paths or the project'
-        + ' roots of the selected tests, until Ctrl-C. Every rerun compiles from source; a failing run'
+        + ' roots of the selected tests, until Ctrl-C. A failing run'
         + ' keeps watching.',
     )
     .description('Run Tao tests declared in .tao files at or under the given paths.')

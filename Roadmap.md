@@ -186,7 +186,10 @@ tests written in Tao, green in Current, for every construct introduced.
   - Richer failure reporting and broader runtime coverage. Test Apps already assert behavior in Tao.
   - Filters and watch have landed: path arguments and `--name <pattern>` select journeys, and
     `--watch` reruns the selected set on any change under the selected paths or the selected tests'
-    project roots, serialized and always compiled from source, until Ctrl-C.
+    project roots, serialized, until Ctrl-C. A rerun is still the whole one-shot pipeline — a
+    cold compile and a Jest child — so it costs what `tao test` costs; making it sub-second is Phase 1
+    item 7 and Phase 2 of `Docs/Roadmap/Tao tooling performance.md`, and the loop takes its run body
+    as a dependency so a live-workspace or headless run replaces it without touching the loop.
   - The output half landed with the verification-orchestration plan: the Jest child streams live,
     `--output lines|quiet` defaults by terminal, a quiet run keeps the full output in
     `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
