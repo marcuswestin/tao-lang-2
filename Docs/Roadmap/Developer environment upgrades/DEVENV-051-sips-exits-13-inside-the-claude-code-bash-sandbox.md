@@ -1,6 +1,7 @@
 # DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Sandbox
 - **Impact:** Any workflow that shells out to the system image tool — `tao create` reading a palette
   from an image, or an agent converting a screenshot — silently yields nothing in a sandboxed shell.

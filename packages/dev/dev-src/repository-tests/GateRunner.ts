@@ -1,4 +1,4 @@
-import { Errors, FS, Repo, Time } from '@shared'
+import { FS, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { FlakeTolerance } from './FlakeTolerance'
 import { GateCatalog } from './GateCatalog'
@@ -17,7 +17,6 @@ import {
 } from './GreenTree'
 import {
   type ContentionReport,
-  type LaneRecord,
   type MachineLane,
   MachineLanes,
   type MachineResourceLease,
@@ -77,11 +76,11 @@ export type RunGatesOptions = {
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
   jsonPath?: string
   /**
-   * Refuse to start while another lane is registered on this machine. For a lane whose gates drive
-   * the window server, sharing the host is not slowness but interference, so the honest answer is
-   * to decline rather than to produce a verdict about the contention.
+   * Injected by tests; bounds how long a `gui` node waits for the machine-wide `gui` lease
+   * (`GateCatalog.GUI_RESOURCE`) before it gives up and reports the exact holder. Production uses
+   * `GUI_WAIT_MS`.
    */
-  needsMachine?: boolean
+  guiLeaseWaitMs?: number
   /** Artifact lane; names the log directory and appears in the summary. */
   lane?: string
   logRoot?: string
@@ -130,6 +129,13 @@ const PREPARE_LOCK_PATH = '.artifacts/verify/prepare-lock'
 const PREPARE_RESOURCE = 'verify-prepare'
 /** A lane may wait this long for another lane's prepare phase before it gives up and says who holds it. */
 const PREPARE_WAIT_MS = 10 * 60 * 1_000
+/**
+ * A `gui` node may wait this long for another worktree's `gui` node, or a standalone recipe using
+ * the same machine-wide lease, before it gives up and reports the exact holder. Generous for the
+ * same reason as `PREPARE_WAIT_MS`: a `verify-full` run beside another one is ordinary, not a
+ * failure, and the two `gui` nodes together are only a ~21s serial floor once admitted.
+ */
+const GUI_WAIT_MS = 10 * 60 * 1_000
 
 /** runGates executes every node of a lane through the one work graph and returns the rollup. */
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
@@ -239,11 +245,18 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
-  // Asked before this lane registers: a lane that can see its own registration finds a holder every
-  // time and refuses every time.
-  await refuseWithoutMachine(options, location.lane)
-  // Every worktree on this machine reserves against the same CPUs. Registration establishes this
-  // lane's ceiling; the broker recomputes its fair share at every node admission.
+  // Named before the CPU broker below reserves anything, so a lane that will wait or fail on the
+  // window server never holds slots for work it has not yet been allowed to run.
+  const guiLeaseNames = new Set(
+    states
+      .filter(state => (state.node.resources ?? []).includes(GateCatalog.GUI_RESOURCE))
+      .map(state => state.name),
+  )
+  const guiLease = guiLeaseNames.size === 0 ? undefined : await acquireGuiLease(location.repositoryRoot, options)
+  // Every worktree on this machine reserves against the same CPUs. Registration puts this lane in
+  // the machine-wide queue; admission is whole-lane and in arrival order, so a lane either runs at
+  // its full requested width or waits with a printed position — it is never thinned to a slot or
+  // two while a dozen siblings do the same.
   const machineLane = await MachineLanes.acquire({
     lane: location.lane,
     cpuCount: options.machineCpuCount,
@@ -265,6 +278,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
 
   const { contention, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
+    const finishedGui = new Set<string>()
     const onPrepareFinished = () => {
       if (options.greenTree === undefined) {
         void prepareLease?.release()
@@ -296,6 +310,14 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
             onPrepareFinished()
           }
         }
+        if (event.kind === 'complete' && guiLeaseNames.has(event.state.name)) {
+          finishedGui.add(event.state.name)
+          if (finishedGui.size === guiLeaseNames.size) {
+            // Released the moment this run's own gui nodes are done, not when the whole lane is —
+            // the CPU-bound work packed around them may run for a long time after.
+            void guiLease?.release()
+          }
+        }
       },
       runNode,
       slotBroker: machineLane,
@@ -303,6 +325,11 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     if (prepareNames.size > 0 && finishedPrepare.size < prepareNames.size) {
       // An interrupted or dependency-skipped prepare phase never emitted its last completion.
       onPrepareFinished()
+    }
+    if (guiLeaseNames.size > 0 && finishedGui.size < guiLeaseNames.size) {
+      // Same case as the prepare phase above: an interrupted or dependency-skipped run never emitted
+      // every gui node's completion, so nothing else would release the lease.
+      void guiLease?.release()
     }
     await liveArtifacts.finish()
     await reporter.finish()
@@ -325,6 +352,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     // lock from being held for the whole read-only phase; this one is only the backstop.
     await Promise.all([snapshot, generatedSnapshot]).catch(() => undefined)
     await prepareLease?.release()
+    // Backstop for the same reason as the prepare lock's: a throw between acquiring the gui lease
+    // and either release above running must not leave a crashed lane holding the window server
+    // against every other worktree and standalone recipe sharing it.
+    await guiLease?.release()
   })
 
   verifiedTree = await snapshot
@@ -599,53 +630,42 @@ async function acquirePrepare(
 }
 
 /**
- * refuseWithoutMachine stops a lane that needs the machine while another lane holds part of it.
+ * acquireGuiLease takes the machine-wide `gui` lease before this run's own `gui`-declaring nodes are
+ * admitted, and holds it until every one of them has finished. A second worktree's `gui` node, or a
+ * standalone recipe running `studio-smoke-native` or `studio-canary`'s own work outside `./dev
+ * gates` entirely, waits on it or is told the exact holder instead of clicking into this run's
+ * windows.
  *
- * Every other kind of contention on this host is a scheduling problem: lanes divide the CPUs and a
- * busy machine makes a run slower, not wrong. The browser and native gates are the exception,
- * because they drive one window server and one set of simulators between them — two runs do not
- * halve each other's speed, they click into each other's windows. A verdict produced under that is
- * about the contention rather than about the branch, so this declines to produce one.
+ * This replaces `--needs-machine`, which refused a lane outright whenever any other lane was
+ * registered at all, because it could not see whether that lane's gates touched the window server.
+ * That wideness is no longer needed: `verify-full` and `verify-full-sandbox` cannot overlap each
+ * other regardless (both sit in `VerificationLanes.LOCKED`, behind the machine-wide landing lock),
+ * the six browser gates run headless Chrome on disjoint ports and are declared parallel-safe, and
+ * the two gates that do drive a real window server — `studio-smoke-native` and `studio-canary` — are
+ * exactly the ones `GateCatalog` declares `resources: [GUI_RESOURCE]` on. Naming the lease after that
+ * resource, rather than after the lane, is what lets every other gate share the machine freely while
+ * these two still cannot overlap a peer's.
  *
- * It declines rather than waits: the lane it is waiting for may be a person's interactive session
- * with no end in sight, and a command that says why it will not run is more useful than one that
- * hangs. Nothing is held, so retrying costs nothing once the other lane finishes.
+ * It waits rather than refuses, unlike the flag it replaces: a refusal costs whoever hits it a model
+ * turn to retry by hand, and a bounded wait costs nothing when the holder finishes well within it —
+ * which two `gui` nodes together, at a measured ~21s, usually do. `MachineResourceBusyError`'s
+ * message already names the holder the way `LandingLock.describeWaiting` does, once the wait finally
+ * runs out; nothing here has to spell that out a second time.
  *
- * The predicate is any registered lane, not only one that itself drives the window server, and that
- * is wider than the reason above on purpose: a purely CPU-bound lane still starves the timing-
- * sensitive gates this one is about to run, which is the same wrong verdict by a different route.
- * The window server is why the refusal exists; starvation is why it does not try to be clever about
- * which neighbour it found. Two such lanes starting together can both read an empty registry and
- * both proceed — this narrows a window rather than closing one, and the loser of that race is a
- * slow, noisy run rather than a wrong one.
+ * Acquired before this run's own nodes are admitted rather than at the point one is ready to start:
+ * `GateCatalog.GUI_PRIORITY` already pins both `gui` nodes to begin at t=0, so by the time either
+ * would actually run the lease is already held, and taking it up front means a lane that will end up
+ * waiting or failing on it never first reserves CPU broker slots for work it has not been allowed to
+ * run.
  */
-async function refuseWithoutMachine(options: RunGatesOptions, lane: string): Promise<void> {
-  if (options.needsMachine !== true) {
-    return
-  }
-  const inspection = await MachineLanes.inspectLanes(options.registryRoot)
-  // A registry the host will not reveal proves nothing in either direction. Refusing on it would
-  // make this lane unrunnable wherever the registry cannot be read, over a conflict that may not
-  // exist; the lane runs, and the contention report still says what it saw.
-  if (!inspection.available || inspection.lanes.length === 0) {
-    return
-  }
-  const holders = inspection.lanes.map(describeLaneHolder).join(', ')
-  Errors.throwHostEnvironment(
-    `${lane} needs this machine to itself: ${holders} ${inspection.lanes.length === 1 ? 'is' : 'are'} already `
-      + 'running. Its browser and native gates share one window server, so a run beside another lane '
-      + 'reports that interference rather than this branch. Wait for that lane to finish or stop it, then retry.',
-  )
-}
-
-/**
- * describeLaneHolder names one registered lane the way `MachineLanes.describeExclusiveHolder` names
- * the holder of an exclusive confirmation, so the two refusals a developer can meet read alike.
- */
-function describeLaneHolder(record: LaneRecord): string {
-  return record.lane.length === 0 || record.repositoryRoot.length === 0
-    ? `PID ${record.pid}`
-    : `${record.lane} in ${FS.basename(record.repositoryRoot)}`
+async function acquireGuiLease(repositoryRoot: string, options: RunGatesOptions): Promise<MachineResourceLease> {
+  return await MachineLanes.acquireResource({
+    command: `${options.lane ?? DEFAULT_LANE} gui`,
+    name: GateCatalog.GUI_RESOURCE,
+    registryRoot: options.registryRoot,
+    repositoryRoot,
+    waitTimeoutMs: options.guiLeaseWaitMs ?? GUI_WAIT_MS,
+  })
 }
 
 /** graphEnvironment is what every child of one lane's graph inherits beyond its own command's env. */

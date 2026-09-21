@@ -1,6 +1,7 @@
 # DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent scratch tooling
 - **Impact:** An agent cannot run a throwaway script from its scratchpad against the repository's path
   aliases, so probes end up as files inside the worktree.

@@ -1,6 +1,7 @@
 # DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Dependency installation
 - **Impact:** A stale Bun link can block every verification command, while the documented clean-install
   recovery cannot remove a dependency tree containing a sandbox-protected fixture file.

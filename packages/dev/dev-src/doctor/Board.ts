@@ -204,6 +204,27 @@ function formatMachineSection(machine: BoardMachine): string {
       ? '  landing lock: free'
       : `  landing lock: held by ${LandingLock.describe(machine.landingLock)}`,
   )
+  // A held lock used to say only who took it and when, so a lock waiting on an agent between
+  // commands looked exactly like a lock running a 15-minute host lane. The phase breakdown is the
+  // whole difference, and it is the reason to read `board` before deciding a lock is wedged.
+  if (machine.landingLock !== undefined) {
+    const phases = LandingLock.describePhases(machine.landingLock)
+    lines.push(
+      `    held for ${LandingLock.describeDuration(LandingLock.heldForMs(machine.landingLock))}${
+        machine.landingLock.landing ? ' by a landing' : ''
+      }`,
+    )
+    if (phases.length === 0) {
+      lines.push(
+        machine.landingLock.landing
+          ? '    no phase reported yet; a landing that reports none has not started its transaction'
+          : '    no phase reported; this hold is a lane rather than a landing',
+      )
+    }
+    for (const phase of phases) {
+      lines.push(`    ${phase}`)
+    }
+  }
   if (machine.resources.length === 0) {
     lines.push('  no named resource lease is held')
   }
@@ -215,6 +236,19 @@ function formatMachineSection(machine: BoardMachine): string {
     )
   }
   return lines.join('\n')
+}
+
+/**
+ * What the lock is spending its turn on, for the one-line verdict. An agent deciding whether to wait
+ * needs the phase more than it needs the holder: `cheap gates 31s` will be gone shortly, `host proof
+ * 11m` will not, and no phase at all on a landing means nothing is running under the lock.
+ */
+function landingPhaseSuffix(record: LandingLockRecord): string {
+  const phase = LandingLock.currentPhase(record)
+  if (phase === undefined) {
+    return record.landing ? ' (no phase running)' : ''
+  }
+  return ` (${phase.name} for ${LandingLock.describeDuration(Math.max(0, Date.now() - Date.parse(phase.startedAt)))})`
 }
 
 /**
@@ -257,7 +291,9 @@ function computeVerdict(machine: BoardMachine, thisRoot: string): string {
       : undefined,
     machine.landingLock === undefined
       ? undefined
-      : `landing lock held by ${lockMine ? 'this checkout' : FS.basename(machine.landingLock.holder)}`,
+      : `landing lock held by ${lockMine ? 'this checkout' : FS.basename(machine.landingLock.holder)}${
+        landingPhaseSuffix(machine.landingLock)
+      }`,
   ].filter((part): part is string => part !== undefined)
 
   const attribution = othersCount > 0

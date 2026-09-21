@@ -1,6 +1,7 @@
 # DEVENV-059 — Xcode 27 runtime installation can strand Apple device services
 
 - **Status:** In progress
+- **Section:** External
 - **Area:** iOS simulator workflow
 - **Impact:** After installing the iOS 27 simulator runtime, Tao cannot discover, boot, install, or
   launch any simulator even though Xcode reports the iOS 27 SDK as installed.

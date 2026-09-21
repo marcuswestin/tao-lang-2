@@ -2,7 +2,7 @@ import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { inspectLandingRemote, type LandingBrokerInspection } from '../landing-broker/LandingBrokerClient'
 import { GeneratedEvidence } from './GeneratedEvidence'
 import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
-import { validateMergeMessage } from './MergeWithMain'
+import { MergeWithMainCommand, validateMergeMessage } from './MergeWithMain'
 import { VerificationLanes } from './VerificationLanes'
 
 /*
@@ -247,6 +247,130 @@ export const FinalizeCommand = {
   },
 } as const
 
+/** LandOptions is what `./dev land` accepts; every flag only removes work. */
+export type LandOptions = {
+  /** Report the readiness of this branch and the plan, and change nothing. */
+  dryRun?: boolean
+  /** Override `.artifacts/merge/<branch>.msg`. */
+  messageFile?: string
+  /** Override the current repository root, principally for tests. */
+  repositoryRoot?: string
+  /** Replace an existing merge message with a fresh mechanical draft before landing. */
+  redraft?: boolean
+  /** Skip the otherwise mandatory unsandboxed full verification; see `merge-with-main`. */
+  skipVerifyFull?: boolean
+  /** Skip the staged-squash `just verify --complete` pass; see `merge-with-main`. */
+  skipVerify?: boolean
+}
+
+/** LandResult reports what the landing did and the lines it printed. */
+export type LandResult = {
+  lines: string[]
+  mode: 'dry-run' | 'executed'
+}
+
+/**
+ * LandCommand is the whole landing, as one command and one process.
+ *
+ * It exists because the sequence it replaces was not slow, it was *interrupted*. Across twenty
+ * landings the merge itself took 2-94s from the locked snapshot to the moved ref, while the lock sat
+ * held for 36-44 minutes against 5-15 minutes of lane time, over four to nine separately-invoked
+ * locked runs. Every gap between those runs was a model turn, a refusal, or a re-verification —
+ * agent latency spent inside a machine-wide lock. Collapsing the chain into one process removes the
+ * gaps without making any single step faster, and the phase telemetry on the lock is what makes the
+ * difference visible rather than asserted.
+ *
+ * The split is the design: readiness and the merge message are settled **before** the lock, because
+ * they are the parts that need judgment and might need an author; integration, the barrier,
+ * verification, the squash, the push, and the cleanup happen **after** it, in one `try`/`finally`,
+ * because they are the parts that need the machine and must not be interleaved with another
+ * landing's.
+ */
+export const LandCommand = {
+  async run(
+    options: LandOptions = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<LandResult> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    const preparation = await prepareForLanding(
+      {
+        ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+        redraft: options.redraft === true,
+        repositoryRoot: root,
+      },
+      dependencies,
+    )
+    if (!preparation.ok) {
+      Errors.throwUserInput(
+        `'${preparation.branch}' is not ready to land, and the landing lock was not taken:\n`
+          + preparation.remaining.map(item => `- ${item}`).join('\n'),
+      )
+    }
+
+    const merge = await MergeWithMainCommand.run({
+      dryRun: options.dryRun === true,
+      ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+      repositoryRoot: root,
+      skipVerify: options.skipVerify === true,
+      skipVerifyFull: options.skipVerifyFull === true,
+    })
+    return { lines: [...preparation.lines, ...merge.lines], mode: merge.mode === 'dry-run' ? 'dry-run' : 'executed' }
+  },
+} as const
+
+/** LandingPreparation is everything settled before the lock is taken. */
+export type LandingPreparation = {
+  branch: string
+  lines: string[]
+  /** True when nothing is left for the author to do, which is the condition for taking the lock. */
+  ok: boolean
+  remaining: string[]
+}
+
+/**
+ * The unlocked half of a landing: prove this is a clean feature branch, settle the merge message,
+ * and say what a person still has to weigh. It deliberately does **not** integrate main and does
+ * **not** verify. Both used to happen here, and both were wasted the moment main moved between this
+ * command and the next: integration now happens inside the lock, and the cheap-gate barrier there is
+ * what fails a bad tree fast. What is left is exactly the work that could need an author, which is
+ * the work that must not happen while the machine is held.
+ */
+export async function prepareForLanding(
+  options: Pick<FinalizeOptions, 'fresh' | 'messageFile' | 'redraft' | 'repositoryRoot'> = {},
+  dependencies: FinalizeDependencies = defaultDependencies,
+): Promise<LandingPreparation> {
+  const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+  const lines: string[] = []
+  const remaining: string[] = []
+
+  const branch = await assertOnFeatureBranch(dependencies, root)
+  await assertCleanWorktree(dependencies, root)
+
+  const mainSha = await readMainSha(dependencies, root, lines)
+  const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+
+  const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
+  const priorState = options.fresh === true ? undefined : await loadState(dependencies, statePath)
+  const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
+  const message = await draftOrKeepMessage(
+    dependencies,
+    root,
+    messageFile,
+    priorState,
+    mainSha,
+    headSha,
+    false,
+    options.redraft === true,
+    lines,
+  )
+  remaining.push(...messageRemaining(message, messageFile))
+  const advisories = await adviseOnDiff(dependencies, root, mainSha, headSha, branch, lines)
+  for (const advisory of advisories) {
+    lines.push(`NOTE  Advisory (not a gate): ${advisory}`)
+  }
+  return { branch, lines, ok: remaining.length === 0, remaining }
+}
+
 function summaryLines(
   branch: string,
   integration: MainIntegration,
@@ -339,28 +463,7 @@ async function integrateMain(
   check: boolean,
   lines: string[],
 ): Promise<MainIntegration> {
-  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
-  const brokerMain = broker?.refs.get(MAIN_BRANCH)
-  let directMain: string | undefined
-  if (brokerMain === undefined) {
-    const fetch = await dependencies.run('git', {
-      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
-      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    }
-  }
-  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
-  lines.push(
-    brokerMain !== undefined
-      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
-      : directMain !== undefined
-      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
-      : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
-  )
-
+  const mainSha = await readMainSha(dependencies, root, lines)
   const branchHead = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   const ancestor = await dependencies.run('git', { args: ['merge-base', '--is-ancestor', mainSha, 'HEAD'], cwd: root })
   if (ancestor.exitCode === 0) {
@@ -383,6 +486,37 @@ async function integrateMain(
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
   return { headSha, integratedNow: true, mainSha }
+}
+
+/**
+ * readMainSha answers "what is main" without changing anything, through the broker where it is
+ * installed, a direct fetch where it is not, and the local ref offline. It is separate from
+ * integrating because the landing transaction now integrates main itself, under the lock, while the
+ * unlocked preparation still needs main's sha to draft a merge message against.
+ */
+async function readMainSha(dependencies: FinalizeDependencies, root: string, lines: string[]): Promise<string> {
+  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
+  const brokerMain = broker?.refs.get(MAIN_BRANCH)
+  let directMain: string | undefined
+  if (brokerMain === undefined) {
+    const fetch = await dependencies.run('git', {
+      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
+      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    }
+  }
+  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
+  lines.push(
+    brokerMain !== undefined
+      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
+      : directMain !== undefined
+      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
+      : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
+  )
+  return mainSha
 }
 
 /**

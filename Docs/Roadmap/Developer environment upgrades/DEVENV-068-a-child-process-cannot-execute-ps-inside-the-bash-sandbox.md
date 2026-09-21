@@ -1,6 +1,7 @@
 # DEVENV-068 — A child process cannot execute `ps` inside the Bash sandbox
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Sandbox
 - **Impact:** Repository code that lists processes through a subprocess sees nothing in a sandboxed lane,
   so a lane cannot find a leftover process it needs to stop, and the code path that would do it cannot

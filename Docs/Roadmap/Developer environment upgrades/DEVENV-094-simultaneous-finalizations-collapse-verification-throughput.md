@@ -1,6 +1,7 @@
 # DEVENV-094 — Simultaneous worktree finalizations collapse verification throughput
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Parallel verification
 - **Impact:** Every agent finishing its task runs the repository's heaviest lane at the same moment,
   so the fair share per lane falls to one or two slots and a lane that takes well under a minute

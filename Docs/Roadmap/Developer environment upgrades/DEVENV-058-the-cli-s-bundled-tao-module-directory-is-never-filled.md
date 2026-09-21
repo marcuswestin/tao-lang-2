@@ -1,6 +1,7 @@
 # DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Packaging
 - **Impact:** `TaoAppModules.runtimeRoot()` resolves only because `packages/runtime` sits beside
   `packages/tao-cli` in this repository. A CLI copied anywhere else links a created project at

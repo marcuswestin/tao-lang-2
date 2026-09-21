@@ -1,6 +1,7 @@
 # DEVENV-071 — `rg`'s `-r` is a replacement string, not grep's recursion flag
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent tooling
 - **Impact:** `rg -rn <pattern> <path>` prints every match with the matched text replaced by the literal
   `n`, so the output reads as genuine source and can be quoted into a document or a review as fact.

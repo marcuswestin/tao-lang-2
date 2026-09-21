@@ -1,6 +1,7 @@
 # DEVENV-069 — An in-flight edit to a shared package fails other agents' test runs and names the wrong file
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Concurrent worktrees
 - **Impact:** While several workstreams share one checkout, a momentarily half-applied edit in a shared
   package fails whatever suite another agent is running, reporting a bare `ReferenceError` from the

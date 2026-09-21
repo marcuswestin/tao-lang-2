@@ -1,6 +1,7 @@
 # DEVENV-033 — Conflicting color-mode warning noise
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification diagnostics
 - **Impact:** The sandbox full-verification summary repeated more than twenty Node warnings, obscuring
   meaningful gate warnings even though the bundle proof passed.

@@ -1,6 +1,7 @@
 # DEVENV-109 — The dev-data cross-process test times out under a full lane
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test reliability, `packages/dev`
 - **Impact:** `verify` fails on a branch that did not break it, and `finalize` stops with it. One
   re-run costs a whole lane because the failed record covers the tree.

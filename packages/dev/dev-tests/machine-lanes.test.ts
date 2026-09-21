@@ -1,6 +1,7 @@
-import { CLI, FS, Platform, Repo } from '@shared'
+import { CLI, FS, Platform, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
-import { type LaneRecord, MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import { type LaneRecord, type MachineLane, MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import { VerificationLanes } from '../dev-src/repository-tests/VerificationLanes'
 
 /**
  * The registry is what one worktree knows about the others, so every test here is about two lanes
@@ -11,6 +12,20 @@ import { type LaneRecord, MachineLanes } from '../dev-src/repository-tests/Machi
 
 async function leaseFiles(root: string): Promise<string[]> {
   return (await FS.listDir(root)).filter(name => name.endsWith('.json')).sort()
+}
+
+/**
+ * registerInOrder registers lanes one at a time, a clock tick apart. Arrival is recorded to the
+ * millisecond and a tie falls back to the random registration id, so a test that means "this lane
+ * arrived first" has to make that true rather than assume the loop was slow enough to make it so.
+ */
+async function registerInOrder(registryRoot: string, names: readonly string[]): Promise<MachineLane[]> {
+  const lanes: MachineLane[] = []
+  for (const lane of names) {
+    lanes.push(await MachineLanes.acquire({ cpuCount: 4, lane, registryRoot, repositoryRoot: `/${lane}-worktree` }))
+    await Time.sleep(2)
+  }
+  return lanes
 }
 
 async function writeForeignLease(root: string, record: Partial<LaneRecord> & { pid: number }): Promise<void> {
@@ -26,7 +41,7 @@ async function writeForeignLease(root: string, record: Partial<LaneRecord> & { p
 }
 
 Describe('machine lanes', () => {
-  Test('fairly divides available CPUs and gives every registered lane a chance to admit', () => {
+  Test('admits whole lanes in arrival order and queues everything behind them', () => {
     const records = (count: number) =>
       Array.from({ length: count }, (_, index) => ({
         id: String(index),
@@ -38,15 +53,20 @@ Describe('machine lanes', () => {
         startedAt: `2026-09-03T12:00:${String(index).padStart(2, '0')}.000Z`,
       }))
 
-    Expect([...MachineLanes.fairAllocations(18, records(1)).values()]).toEqual([18])
-    Expect([...MachineLanes.fairAllocations(18, records(2)).values()]).toEqual([9, 9])
-    Expect([...MachineLanes.fairAllocations(18, records(4)).values()]).toEqual([5, 5, 4, 4])
-    // More lanes than CPUs is the case the one-slot floor exists for: every lane may still run
-    // something, and the machine is oversubscribed by the number of lanes above its CPU count.
-    Expect([...MachineLanes.fairAllocations(2, records(8)).values()]).toEqual(Array(8).fill(1))
+    // Ten lanes asking at once is the case this policy is sized for: two run, eight hold nothing.
+    const queue = MachineLanes.laneQueue(records(10))
+    Expect(queue.filter(entry => entry.admitted).map(entry => entry.record.id)).toEqual(['0', '1'])
+    Expect(queue.map(entry => entry.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    Expect(MachineLanes.laneQueue(records(1)).map(entry => entry.admitted)).toEqual([true])
+    // Two, from the run record rather than from a share of the CPUs: two overlapping lanes measured
+    // 1.45x of the uncontended median and three measured 2.0x, against a 1.5x bar.
+    Expect(MachineLanes.ADMITTED_LANES).toBe(2)
+    // Arrival order, not registry order: a lane cannot be overtaken by one that registered later,
+    // which is what makes the printed position drain strictly downwards.
+    Expect(MachineLanes.laneQueue(records(3).toReversed()).map(entry => entry.record.id)).toEqual(['0', '1', '2'])
   })
 
-  Test('a second lane sees the first and takes half the machine', async () => {
+  Test('a second lane sees the first and still runs at its full width', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
     // Process 1 is the one pid guaranteed to be alive and not this process, which is what a lease
     // held by another worktree looks like from here.
@@ -54,7 +74,8 @@ Describe('machine lanes', () => {
 
     const lane = await MachineLanes.acquire({ lane: 'verify', registryRoot, repositoryRoot: '/here' })
 
-    Expect(lane.capacity).toBe(Math.ceil(Platform.cpuCount() / 2))
+    // Second of the two lanes this machine admits whole: it shares the machine, not its own width.
+    Expect(lane.capacity).toBe(Platform.cpuCount())
     const leases = await leaseFiles(registryRoot)
     Expect(leases).toContain('1.json')
     Expect(leases.some(name => name.startsWith(`${Platform.runtimeProcess.pid}-`) && name.endsWith('.lane.json')))
@@ -123,7 +144,9 @@ Describe('machine lanes', () => {
     })
     const work = await lane.tryAcquire(8, true)
 
-    Expect(work?.slots).toBe(4)
+    // The legacy record still normalizes conservatively — its whole stored width counts as held —
+    // and that no longer narrows anyone else, because the machine is divided by whole lanes now.
+    Expect(work?.slots).toBe(8)
     Expect((await MachineLanes.activeLanes(registryRoot)).find(record => record.lane === 'legacy-verify'))
       .toMatchObject({ maxSlots: 4, slots: 4 })
     await work?.release()
@@ -201,7 +224,7 @@ Describe('machine lanes', () => {
     await outer.release()
   })
 
-  Test('rebalances every admission when a second lane joins without oversubscribing', async () => {
+  Test('runs both admitted lanes at full width rather than splitting the machine between them', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
     const first = await MachineLanes.acquire({
       cpuCount: 6,
@@ -209,8 +232,8 @@ Describe('machine lanes', () => {
       registryRoot,
       repositoryRoot: '/first',
     })
-    const firstWork = await first.tryAcquire(3, false)
-    Expect(firstWork?.slots).toBe(3)
+    const firstWork = await first.tryAcquire(6, false)
+    Expect(firstWork?.slots).toBe(6)
 
     const second = await MachineLanes.acquire({
       cpuCount: 6,
@@ -218,45 +241,18 @@ Describe('machine lanes', () => {
       registryRoot,
       repositoryRoot: '/second',
     })
-    const secondWork = await second.tryAcquire(3, false)
+    const secondWork = await second.tryAcquire(6, false)
 
-    Expect(secondWork?.slots).toBe(3)
-    // The first lane began with all six slots available, but its revised fair share is three.
+    // Neither lane is narrowed by the other's arrival: the machine is divided by whole lanes, and
+    // the sum of admitted slots was never a quantity of CPU to divide.
+    Expect(secondWork?.slots).toBe(6)
+    Expect(first.capacity).toBe(6)
+    const records = await MachineLanes.activeLanes(registryRoot)
+    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(12)
+
+    // Its own ceiling is still the bound on one lane.
     Expect(await first.tryAcquire(1, false)).toBeUndefined()
-    const records = await MachineLanes.activeLanes(registryRoot)
-    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(6)
-
-    await firstWork?.release()
-    await secondWork?.release()
-    await first.release()
-    const expandedWork = await second.tryAcquire(6, false)
-    Expect(second.ceiling).toBe(6)
-    Expect(expandedWork?.slots).toBe(6)
-    await expandedWork?.release()
-    await second.release()
-  })
-
-  Test('admits a lane that joins a machine whose slots are all reserved', async () => {
-    // The stall this prevents: lanes that registered while the machine was emptier hold every slot
-    // until their running nodes end, and a lane that joins after them must not wait on that.
-    const registryRoot = await mkTestDir('tao-machine-lanes-')
-    const first = await MachineLanes.acquire({ cpuCount: 2, lane: 'first', registryRoot, repositoryRoot: '/first' })
-    const firstWork = await first.tryAcquire(2, false)
-    Expect(firstWork?.slots).toBe(2)
-
-    const second = await MachineLanes.acquire({ cpuCount: 2, lane: 'second', registryRoot, repositoryRoot: '/second' })
-    const secondWork = await second.tryAcquire(1, false)
-
-    Expect(secondWork?.slots).toBe(1)
-    Expect(second.waitReason).toBeUndefined()
-    const records = await MachineLanes.activeLanes(registryRoot)
-    // Three slots on a two-CPU machine: the joining lane's floor, and nothing beyond it.
-    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(3)
-
-    // The floor is one slot per lane, not a way around the machine total: a lane that is already
-    // running something waits like any other.
-    Expect(await second.tryAcquire(1, true)).toBeUndefined()
-    Expect(second.waitReason).toBe('this lane holds 1 of its 1 slots; 2 lanes are registered')
+    Expect(first.waitReason).toBe('this lane holds 6 of its 6 slots; 2 lanes are registered')
 
     await firstWork?.release()
     await secondWork?.release()
@@ -264,30 +260,159 @@ Describe('machine lanes', () => {
     await second.release()
   })
 
-  Test('does not let a joining lane stack a whole share on top of a full machine', async () => {
-    // A lane that registered while the machine was emptier keeps the wider share it reserved under.
-    // The lane that joins gets its floor so it can start, and then waits with everyone else: the
-    // machine holds one extra slot, not a second full share on top of the first.
+  Test('queues a third broad lane behind the two ahead of it and names them', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
-    const early = await MachineLanes.acquire({ cpuCount: 4, lane: 'early', registryRoot, repositoryRoot: '/early' })
-    const earlyWork = await early.tryAcquire(4, false)
-    Expect(earlyWork?.slots).toBe(4)
+    const lanes = await registerInOrder(registryRoot, [VerificationLanes.TEST_ALL, VerificationLanes.VERIFY])
+    const work = await Promise.all(lanes.map(async lane => await lane.tryAcquire(4, false)))
+    Expect(work.map(reservation => reservation?.slots)).toEqual([4, 4])
 
-    const late = await MachineLanes.acquire({ cpuCount: 4, lane: 'late', registryRoot, repositoryRoot: '/late' })
-    Expect(late.capacity).toBe(2)
-    const floor = await late.tryAcquire(2, true)
+    const third = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: VerificationLanes.VERIFY_FULL,
+      registryRoot,
+      repositoryRoot: '/verify-full-worktree',
+    })
 
-    Expect(floor?.slots).toBe(1)
-    Expect(await late.tryAcquire(1, true)).toBeUndefined()
-    Expect(late.waitReason).toBe("every one of the machine's 4 slots is reserved; 2 lanes are registered")
+    // A queued lane holds nothing at all — not a floor slot, not a partial share.
+    Expect(third.capacity).toBe(0)
+    Expect(await third.tryAcquire(4, true)).toBeUndefined()
+    Expect(await third.tryAcquire(1, true)).toBeUndefined()
+    Expect(third.waitReason).toBe(
+      'queued at position 3 of 3 lanes; test-all in test-all-worktree and verify in verify-worktree are running',
+    )
     const total = (await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)
-    Expect(total).toBe(5)
+    Expect(total).toBe(8)
 
-    await floor?.release()
-    await earlyWork?.release()
-    await early.release()
-    await late.release()
+    await Promise.all(work.map(async reservation => await reservation?.release()))
+    await Promise.all(lanes.map(async lane => await lane.release()))
+    await third.release()
   })
+
+  Test('moves a queued broad lane up as the lanes ahead of it finish, and never lets a newcomer pass it', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    // Registered one at a time, because arrival order is the whole property under test.
+    const lanes = await registerInOrder(registryRoot, [
+      VerificationLanes.TEST_ALL,
+      VerificationLanes.VERIFY,
+      VerificationLanes.VERIFY_FULL,
+      VerificationLanes.VERIFY_FULL_SANDBOX,
+    ])
+    const [first, second, third, fourth] = [lanes[0]!, lanes[1]!, lanes[2]!, lanes[3]!]
+
+    Expect(await third.tryAcquire(1, false)).toBeUndefined()
+    Expect(third.waitReason).toBe(
+      'queued at position 3 of 4 lanes; test-all in test-all-worktree and verify in verify-worktree are running',
+    )
+    Expect(await fourth.tryAcquire(1, false)).toBeUndefined()
+    Expect(fourth.waitReason).toBe(
+      'queued at position 4 of 4 lanes; test-all in test-all-worktree and verify in verify-worktree are running'
+        + ', 1 more lane is queued ahead',
+    )
+
+    await first.release()
+    // The position shrank by one, and the lane that was behind is still behind.
+    Expect(await fourth.tryAcquire(1, false)).toBeUndefined()
+    Expect(fourth.waitReason).toBe(
+      'queued at position 3 of 3 lanes; verify in verify-worktree and verify-full in verify-full-worktree are running',
+    )
+    const promoted = await third.tryAcquire(4, false)
+    Expect(promoted?.slots).toBe(4)
+    Expect(third.capacity).toBe(4)
+
+    await second.release()
+    const last = await fourth.tryAcquire(4, false)
+    Expect(last?.slots).toBe(4)
+
+    await promoted?.release()
+    await last?.release()
+    await third.release()
+    await fourth.release()
+  })
+
+  Test('keeps a narrow or unrecognized lane off the broad queue, admitted regardless of arrival order', () => {
+    const record = (id: string, lane: string, startedAt: string) => ({
+      id,
+      lane,
+      maxSlots: 4,
+      pid: Number(id) + 1,
+      repositoryRoot: `/worktree-${id}`,
+      slots: 0,
+      startedAt,
+    })
+
+    // A narrow lane and a lane name this module has never seen, both arriving before three broad
+    // lanes — under whole-lane admission with no breadth distinction, either would have taken one of
+    // the two `ADMITTED_LANES` positions.
+    const records = [
+      record('0', 'test-file', '2026-09-03T12:00:00.000Z'),
+      record('1', 'a-lane-name-nobody-declared', '2026-09-03T12:00:01.000Z'),
+      record('2', VerificationLanes.TEST_ALL, '2026-09-03T12:00:02.000Z'),
+      record('3', VerificationLanes.VERIFY, '2026-09-03T12:00:03.000Z'),
+      record('4', VerificationLanes.VERIFY_FULL, '2026-09-03T12:00:04.000Z'),
+    ]
+
+    const queue = MachineLanes.laneQueue(records)
+    const byId = new Map(queue.map(entry => [entry.record.id, entry]))
+
+    // Neither the narrow lane nor the unrecognized one occupies a broad position.
+    Expect(byId.get('0')?.admitted).toBe(true)
+    Expect(byId.get('0')?.position).toBe(0)
+    Expect(byId.get('1')?.admitted).toBe(true)
+    Expect(byId.get('1')?.position).toBe(0)
+    // The two broad lanes that arrived next still take the two `ADMITTED_LANES` positions — the lanes
+    // ahead of them in arrival order did not consume one.
+    Expect(byId.get('2')?.admitted).toBe(true)
+    Expect(byId.get('2')?.position).toBe(1)
+    Expect(byId.get('3')?.admitted).toBe(true)
+    Expect(byId.get('3')?.position).toBe(2)
+    // The third broad lane queues, exactly as it would with no narrow lane present at all.
+    Expect(byId.get('4')?.admitted).toBe(false)
+    Expect(byId.get('4')?.position).toBe(3)
+  })
+
+  Test(
+    'admits a narrow lane immediately alongside two admitted broad lanes and a queued third, '
+      + "and leaves the narrow lane out of the queued lane's printed position",
+    async () => {
+      const registryRoot = await mkTestDir('tao-machine-lanes-')
+      // The narrow lane registers first, ahead of every broad lane, so this also proves arrival order
+      // never gives it a broad position to hold.
+      const narrow = await MachineLanes.acquire({
+        cpuCount: 4,
+        lane: 'test-file',
+        registryRoot,
+        repositoryRoot: '/test-file-worktree',
+      })
+      Expect(narrow.capacity).toBe(4)
+      const narrowWork = await narrow.tryAcquire(4, false)
+      Expect(narrowWork?.slots).toBe(4)
+      await Time.sleep(2)
+
+      const lanes = await registerInOrder(registryRoot, [VerificationLanes.TEST_ALL, VerificationLanes.VERIFY])
+      const work = await Promise.all(lanes.map(async lane => await lane.tryAcquire(4, false)))
+      Expect(work.map(reservation => reservation?.slots)).toEqual([4, 4])
+
+      const third = await MachineLanes.acquire({
+        cpuCount: 4,
+        lane: VerificationLanes.VERIFY_FULL,
+        registryRoot,
+        repositoryRoot: '/verify-full-worktree',
+      })
+      Expect(third.capacity).toBe(0)
+      Expect(await third.tryAcquire(1, true)).toBeUndefined()
+      // "3 of 3" and the two named lanes count only the broad ones: the narrow lane is running too,
+      // but it is not part of what this lane is queued behind.
+      Expect(third.waitReason).toBe(
+        'queued at position 3 of 3 lanes; test-all in test-all-worktree and verify in verify-worktree are running',
+      )
+
+      await Promise.all(work.map(async reservation => await reservation?.release()))
+      await Promise.all(lanes.map(async lane => await lane.release()))
+      await third.release()
+      await narrowWork?.release()
+      await narrow.release()
+    },
+  )
 
   Test('says what a declined admission is waiting for', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
@@ -299,12 +424,15 @@ Describe('machine lanes', () => {
       repositoryRoot: '/second-worktree',
     })
 
-    const held = await first.tryAcquire(2, false)
-    Expect(held?.slots).toBe(2)
+    const held = await first.tryAcquire(4, false)
+    Expect(held?.slots).toBe(4)
     Expect(await first.tryAcquire(1, false)).toBeUndefined()
-    Expect(first.waitReason).toBe('this lane holds 2 of its 2 slots; 2 lanes are registered')
+    Expect(first.waitReason).toBe('this lane holds 4 of its 4 slots; 2 lanes are registered')
+    const partial = await second.tryAcquire(3, false)
+    Expect(partial?.slots).toBe(3)
     Expect(await second.tryAcquire(3, false)).toBeUndefined()
-    Expect(second.waitReason).toBe('this node wants 3 slots, more than the 2 free to this lane; 2 lanes are registered')
+    Expect(second.waitReason).toBe('this node wants 3 slots, more than the 1 free to this lane; 2 lanes are registered')
+    await partial?.release()
 
     // An exclusive holder outranks both, and is named so the waiting lane points somewhere.
     await held?.release()
@@ -390,7 +518,7 @@ Describe('machine lanes', () => {
     }
   })
 
-  Test('coordinates simultaneous admissions from independent processes against one CPU total', async () => {
+  Test('coordinates simultaneous admissions from independent processes against one arrival queue', async () => {
     const root = await mkTestDir('tao-machine-lanes-processes-')
     const registryRoot = FS.resolvePath('registry', root)
     const beginPath = FS.resolvePath('begin', root)
@@ -454,9 +582,11 @@ Describe('machine lanes', () => {
         ),
       )
 
-      Expect(results.map(result => result.slots).toSorted()).toEqual([2, 2])
+      // Both processes are inside the admitted count, so each takes the width it asked for and the
+      // registry accounts for both without either narrowing the other.
+      Expect(results.map(result => result.slots).toSorted()).toEqual([4, 4])
       Expect(results.every(result => result.peakLanes > 1)).toBe(true)
-      Expect((await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)).toBe(4)
+      Expect((await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)).toBe(8)
 
       await FS.writeText(releasePath, '')
       const exits = await Promise.all(children)
@@ -655,7 +785,36 @@ Describe('machine lanes', () => {
 
     Expect(lane.capacity).toBe(Platform.cpuCount())
     Expect(lane.report().contended).toBe(false)
+    // Unbrokered means admitted: a lane that cannot see the queue is never told to wait in it.
+    Expect((await lane.tryAcquire(Platform.cpuCount(), false))?.slots).toBe(Platform.cpuCount())
+    Expect(lane.waitReason).toBeUndefined()
     await lane.release()
+  })
+
+  Test('a registry that becomes unreadable mid-run admits the lane rather than queueing it', async () => {
+    // Admission is advisory: whole-lane queueing is worth a wait only while the queue can be read.
+    // Unlike `LandingLock`, which fails closed, a lane whose registry disappears keeps working.
+    const root = await mkTestDir('tao-machine-lanes-vanishing-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const lane = await MachineLanes.acquire({ cpuCount: 4, lane: 'verify', registryRoot, repositoryRoot: '/here' })
+    try {
+      const reserved = await lane.tryAcquire(4, false)
+      Expect(reserved?.slots).toBe(4)
+      await reserved?.release()
+
+      // A file where the registry directory belongs: every read and every lock of it now fails.
+      await FS.remove(registryRoot)
+      await FS.writeText(registryRoot, 'not a directory\n')
+      const degraded = await lane.tryAcquire(4, false)
+
+      Expect(degraded?.slots).toBe(4)
+      Expect(lane.waitReason).toBeUndefined()
+      await degraded?.release()
+    } finally {
+      await FS.remove(registryRoot).catch(() => {})
+      await lane.release().catch(() => {})
+      await FS.remove(root)
+    }
   })
 
   Test('an unreadable resource registry fails closed', async () => {

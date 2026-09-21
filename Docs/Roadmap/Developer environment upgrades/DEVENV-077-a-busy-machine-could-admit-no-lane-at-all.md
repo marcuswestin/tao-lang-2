@@ -1,6 +1,7 @@
 # DEVENV-077 — A busy machine could admit no lane at all
 
 - **Status:** Incoming
+- **Section:** External
 - **Area:** Parallel verification
 - **Impact:** Every lane on the machine could sit at zero running nodes while the CPUs were mostly
   idle. A lane that joined while the machine was fully reserved never started its first node, so an

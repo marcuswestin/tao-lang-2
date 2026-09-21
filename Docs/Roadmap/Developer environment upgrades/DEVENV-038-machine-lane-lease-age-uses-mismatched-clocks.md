@@ -1,6 +1,7 @@
 # DEVENV-038 — Machine-lane lease age uses mismatched clocks
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification coordination
 - **Impact:** The six-hour age branch for CPU-lane records never activates, so a reused PID could keep
   a stale registration alive and under-allocate later verification work.

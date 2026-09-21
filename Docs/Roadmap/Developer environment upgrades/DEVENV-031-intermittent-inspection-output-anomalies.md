@@ -1,6 +1,7 @@
 # DEVENV-031 — Intermittent inspection-output anomalies
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Host tooling
 - **Impact:** One `rg` result appeared mangled and a one-off status read did not immediately show an
   untracked file, which can mislead concurrent review.

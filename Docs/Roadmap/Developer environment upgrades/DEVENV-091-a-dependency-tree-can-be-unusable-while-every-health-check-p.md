@@ -1,6 +1,7 @@
 # DEVENV-091 — A dependency tree can be unusable while every health check passes
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Dependency installation, diagnostics
 - **Impact:** A worktree's dependencies became unusable mid-session with no `./agent setup`, repair,
   or install invoked. Both checks a reader would reach for said the tree was fine: `./agent doctor`
