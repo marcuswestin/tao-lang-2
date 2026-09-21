@@ -44,7 +44,7 @@ export function packagedExpoCommand(
   executable: string
 } {
   return {
-    argsPrefix: [FS.resolvePath('../../node_modules/expo/bin/cli', options.runtimeToolchainRoot)],
+    argsPrefix: [FS.resolvePath('../../../node_modules/expo/bin/cli', options.runtimeToolchainRoot)],
     executable: options.testNodePath,
   }
 }
@@ -114,9 +114,9 @@ export async function startStudioPackagedService(
           testCommandEnv: {
             TAO_STDLIB_ROOT: options.stdlibRoot,
             TAO_TEST_IN_PROCESS: 'true',
-            TAO_TEST_JEST_PATH: FS.resolvePath('../../node_modules/jest/bin/jest.js', options.runtimeToolchainRoot),
+            TAO_TEST_JEST_PATH: FS.resolvePath('../../../node_modules/jest/bin/jest.js', options.runtimeToolchainRoot),
             TAO_TEST_NODE_PATH: options.testNodePath,
-            TAO_TEST_NODE_MODULES_ROOT: FS.resolvePath('../../node_modules', options.runtimeToolchainRoot),
+            TAO_TEST_NODE_MODULES_ROOT: FS.resolvePath('../../../node_modules', options.runtimeToolchainRoot),
             TAO_TEST_RUNTIME_ROOT: options.runtimeToolchainRoot,
           },
           testCommandPath: options.testNodePath,
