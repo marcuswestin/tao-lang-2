@@ -1,8 +1,8 @@
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 
 /** printControls writes the interactive dev-loop key list. */
 function printControls(): void {
-  DevLoopTUI.printDevLoopControls()
+  DevLoopOutput.printDevLoopControls()
 }
 
 const COMMAND_KEYS = ['\u0003', 'q', 'r', 'd', 'p', 'w', 'i', 'c', 'f', 't', 'v', 'e', 'a', 's'] as const

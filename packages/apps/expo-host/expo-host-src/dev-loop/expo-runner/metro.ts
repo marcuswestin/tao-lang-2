@@ -1,5 +1,5 @@
 import { Errors, Json, Time } from '@shared'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import { ExpoConfig, type ExpoPlatform, type ExpoSessionConfig } from './expo-config'
 import { Ports } from './Ports'
 
@@ -52,9 +52,9 @@ async function reloadExpoApps(config: ExpoSessionConfig): Promise<void> {
   await waitForMetro(config)
   const response = await fetch(`${config.EXPO_ORIGIN}/message?method=reload`)
   if (response.ok) {
-    DevLoopTUI.logDevLoop('dev', 'sent Expo reload')
+    DevLoopOutput.logDevLoop('dev', 'sent Expo reload')
   } else {
-    DevLoopTUI.logDevLoop('dev', `Expo reload failed: ${response.status} ${await response.text()}`, 'warn')
+    DevLoopOutput.logDevLoop('dev', `Expo reload failed: ${response.status} ${await response.text()}`, 'warn')
   }
 }
 
@@ -110,14 +110,18 @@ async function expoOpenEndpoint(
     }
 
     if (!ok && probe.status !== 404) {
-      DevLoopTUI.logDevLoop(
+      DevLoopOutput.logDevLoop(
         'dev',
         `could not resolve Expo URL for ${platform}: ${probe.status} ${probe.text}`,
         'warn',
       )
     }
   } catch (error) {
-    DevLoopTUI.logDevLoop('dev', `could not resolve Expo URL for ${platform}: ${Errors.formatForUser(error)}`, 'warn')
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `could not resolve Expo URL for ${platform}: ${Errors.formatForUser(error)}`,
+      'warn',
+    )
   }
   return undefined
 }

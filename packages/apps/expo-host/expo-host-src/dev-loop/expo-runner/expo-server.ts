@@ -1,6 +1,5 @@
-import { OutputText } from '@cli-kit'
-import { FS, Repo } from '@shared'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { FS, Repo, Text } from '@shared'
+import { DevLoopOutput } from '../DevLoopOutput'
 import {
   finalizeStudioProcessTree,
   startStudioProcessTree,
@@ -55,7 +54,7 @@ export class ExpoServer {
       },
       onOutput: (stream, chunk) => {
         this.appendRecentOutput(String(chunk))
-        DevLoopTUI.writeDevLoopOutput('expo', stream, chunk)
+        DevLoopOutput.writeDevLoopOutput('expo', stream, chunk)
         void this.logFile?.write(chunk)
       },
     })
@@ -64,16 +63,16 @@ export class ExpoServer {
       void this.closeOutputAndLog()
       if (!this.stopping) {
         const summary = `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`
-        DevLoopTUI.logDevLoop('dev', summary, 'warn')
+        DevLoopOutput.logDevLoop('dev', summary, 'warn')
         this.unexpectedExit?.(formatExpoExitFailure(this.recentOutput(), summary))
       }
     })
     this.child.onceError(error => {
       const message = `Failed to start Expo: ${error.message}`
       this.appendRecentOutput(`\n${message}`)
-      DevLoopTUI.logDevLoop('dev', message, 'error')
+      DevLoopOutput.logDevLoop('dev', message, 'error')
     })
-    DevLoopTUI.logDevLoop('dev', `Expo log: ${logPath}`)
+    DevLoopOutput.logDevLoop('dev', `Expo log: ${logPath}`)
   }
 
   async stop(): Promise<void> {
@@ -126,7 +125,7 @@ export class ExpoServer {
 
 /** formatExpoExitFailure keeps the useful tail of Expo output when its dashboard disappears. */
 export function formatExpoExitFailure(output: string, summary: string): string {
-  const outputLines = OutputText.stripAnsi(output)
+  const outputLines = Text.stripAnsi(output)
     .split(/\r?\n/)
     .map(line => line.trimEnd())
     .filter(line => line.length > 0)

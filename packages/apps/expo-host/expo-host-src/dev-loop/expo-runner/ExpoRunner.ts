@@ -1,5 +1,5 @@
 import { CLI, Errors, Repo } from '@shared'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import { createAndroid } from './android'
 import {
   createExpoConfig,
@@ -106,12 +106,12 @@ async function startExpo(
   openPreparedAndroid: (url?: string) => Promise<void>,
 ): Promise<void> {
   const runtimeToolchainRoot = Repo.resolvePath(config.RUNTIME_TOOLCHAIN_PATH)
-  void openPreparedAndroid().catch(error => DevLoopTUI.logDevLoop('dev', Errors.formatForUser(error), 'error'))
+  void openPreparedAndroid().catch(error => DevLoopOutput.logDevLoop('dev', Errors.formatForUser(error), 'error'))
   const result = await CLI.run('bunx', {
     args: config.EXPO_START_ARGS,
     cwd: runtimeToolchainRoot,
     env: config.EXPO_START_ENV,
-    onOutput: DevLoopTUI.devLoopOutputHandler('expo'),
+    onOutput: DevLoopOutput.devLoopOutputHandler('expo'),
   })
   if (result.error || result.exitCode !== 0) {
     throw new Errors.CommandExecutionError(result)

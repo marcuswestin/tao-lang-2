@@ -1,5 +1,4 @@
-import { OutputText } from '@cli-kit'
-import { DevLoopTUI } from '@expo-host/dev-loop/DevLoopTUI'
+import { devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
 import { createDevLoopExpoSession } from '@expo-host/dev-loop/expo-dev-loop'
 import {
   createAndroid,
@@ -36,13 +35,13 @@ import { createServer } from 'node:net'
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
     // Expo announces this on stderr on every start. Painted red it reads as a broken build.
-    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Experimental Expo Autolinking module resolver is enabled.'))
+    Expect(devLoopOutputKind('stderr', 'Experimental Expo Autolinking module resolver is enabled.'))
       .toBe('info')
-    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Starting Metro Bundler')).toBe('info')
-    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'warning: package.json is deprecated')).toBe('warn')
-    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Error: listen EADDRINUSE: address already in use')).toBe('error')
-    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Metro bundling failed')).toBe('error')
-    Expect(DevLoopTUI.devLoopOutputKind('stdout', 'Error: this one already went to stdout')).toBe('info')
+    Expect(devLoopOutputKind('stderr', 'Starting Metro Bundler')).toBe('info')
+    Expect(devLoopOutputKind('stderr', 'warning: package.json is deprecated')).toBe('warn')
+    Expect(devLoopOutputKind('stderr', 'Error: listen EADDRINUSE: address already in use')).toBe('error')
+    Expect(devLoopOutputKind('stderr', 'Metro bundling failed')).toBe('error')
+    Expect(devLoopOutputKind('stdout', 'Error: this one already went to stdout')).toBe('info')
   })
 
   Test('turns a LaunchServices refusal into the one sentence that names a remedy', () => {
@@ -695,39 +694,6 @@ Describe('Expo Metro runtime link helpers', () => {
 
     const absent = await fetchExpoOpenEndpoint('http://127.0.0.1:8082', 'ios', fetchImpl)
     Expect(absent).toEqual({ body: undefined, status: 404, text: 'Not found' })
-  })
-})
-
-Describe('Expo dev-loop dashboard layout', () => {
-  Test('wraps long output instead of clipping it', () => {
-    Expect(OutputText.wrapLine('Compiled /Users/ro/code/tao-lang-2/Apps/Books/Books.tao', 20)).toEqual([
-      'Compiled /Users/ro/c',
-      'ode/tao-lang-2/Apps/',
-      'Books/Books.tao',
-    ])
-  })
-
-  Test('wraps output by terminal width without splitting Unicode graphemes', () => {
-    Expect(OutputText.wrapLine('123456789😀界', 10)).toEqual([
-      '123456789',
-      '😀界',
-    ])
-  })
-
-  Test('uses a two-by-two grid when four skinny columns would clip', () => {
-    const layout = DevLoopTUI.dashboardLayout({ columns: 120, rows: 28 }, 4, 2)
-    Expect(layout.columnsPerRow).toBe(2)
-    Expect(layout.columnWidth).toBeGreaterThanOrEqual(48)
-  })
-
-  Test('keeps a two-column grid in a wide terminal instead of a four-column strip', () => {
-    const layout = DevLoopTUI.dashboardLayout({ columns: 220, rows: 28 }, 5, 2)
-    Expect(layout.columnsPerRow).toBe(2)
-  })
-
-  Test('keeps one full-width column in a narrow terminal', () => {
-    const layout = DevLoopTUI.dashboardLayout({ columns: 72, rows: 28 }, 4, 2)
-    Expect(layout.columnsPerRow).toBe(1)
   })
 })
 

@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Json } from '@shared'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import { Android, type AndroidSession, EXPO_GO_SDK_VERSION } from './android'
 import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { detectLanIPv4 } from './lan-host'
@@ -99,7 +99,7 @@ export async function openPhysicalDevice(
   const iosDevices = await (dependencies.listIosDevices ?? listIosPhysicalDevices)()
   const androidSerials = await listAndroidPhysicalDevices(android)
   if (iosDevices.length === 0 && androidSerials.length === 0) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       `No connected physical device. Connect Android with compatible Expo Go, or use an iOS Simulator; generic physical iOS is unsupported for Expo SDK ${unsupportedPhysicalIosSdk}.`,
       'warn',
@@ -108,7 +108,7 @@ export async function openPhysicalDevice(
   }
 
   for (const device of iosDevices) {
-    DevLoopTUI.logDevLoop('dev', physicalIosUnsupportedMessage(device), 'warn')
+    DevLoopOutput.logDevLoop('dev', physicalIosUnsupportedMessage(device), 'warn')
   }
   if (androidSerials.length === 0) {
     return false
@@ -198,7 +198,7 @@ async function listAndroidPhysicalDevices(android: AndroidSession): Promise<stri
     return await android.listPhysicalDevices()
   } catch (error) {
     if (error instanceof Errors.UserInputError) {
-      DevLoopTUI.logDevLoop('dev', Errors.formatForUser(error), 'warn')
+      DevLoopOutput.logDevLoop('dev', Errors.formatForUser(error), 'warn')
       return []
     }
     throw error
@@ -218,7 +218,7 @@ async function openAndroidExpoGo(
     await android.openExpoGoOnSerial(serial, url)
     return true
   } catch (error) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       `Could not open Expo Go on ${serial}: ${Errors.formatForUser(error)}. Try ${lanUrl} in Expo Go.`,
       'warn',

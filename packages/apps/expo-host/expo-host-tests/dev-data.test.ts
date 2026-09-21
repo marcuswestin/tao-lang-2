@@ -209,7 +209,7 @@ Describe('dev data server', () => {
     `
     const child = CLI.run('bun', {
       args: ['-e', script],
-      env: { NODE_ENV: Platform.runtimeProcess.env['NODE_ENV'] ?? '', TAO_DEV_DATA_PROCESS_ROOT: rootDir },
+      env: { NODE_ENV: Platform.runtimeProcess.env['NODE_ENV'], TAO_DEV_DATA_PROCESS_ROOT: rootDir },
       stdio: 'pipe',
     })
     const parentServer = await DevDataServer.start({ rootDir })

@@ -503,7 +503,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
   'packages/dev/dev-tests/codex-config-generation.test.ts:214',
-  'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts:344',
+  'packages/apps/expo-host/expo-host-tests/expo-dev-loop.test.ts:343',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:232',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
@@ -853,10 +853,22 @@ export function crossPackageSourceImportIssues(
 const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
 /**
  * Package aliases the entry must reach only behind `await import(...)`. `@studio` pulls in the
- * generated parser; `@studio-tooling` and `@expo-host/dev-loop` are Studio's and the Expo dev
- * loop's own packages, heavy for the same reason.
+ * generated parser; `@studio-tooling`, `@expo-host` (its bare root, not only `/dev-loop`), and
+ * `@expo-host/dev-loop` are Studio's and the Expo dev loop's own packages, heavy for the same
+ * reason.
  */
-const DEV_LAZY_IMPORT_SPECIFIERS = ['@studio', '@studio-tooling', '@expo-host/dev-loop']
+const DEV_LAZY_IMPORT_SPECIFIERS = ['@studio', '@studio-tooling', '@expo-host', '@expo-host/dev-loop']
+
+/**
+ * Alias roots `resolveLocalModule` also follows into local source, so a heavy static import
+ * reached through one of these — not only through a relative path — is still traced for a
+ * transitive `DEV_LAZY_IMPORT_SPECIFIERS` hit. Kept to the two aliases the lazy-loaded packages
+ * themselves route through; a general tsconfig-paths resolver is not worth it for this lint.
+ */
+const ALIAS_SOURCE_ROOTS: Record<string, string> = {
+  '@cli-kit': 'packages/cli/cli-kit/cli-kit-src',
+  '@verification': 'packages/testing/verification/verification-src',
+}
 /** Matches static imports and re-exports, wrapped or not, and never the `import(...)` call form. */
 const STATIC_MODULE_PATTERN = /^(?:import\b(?!\s*\()|export\b)[^'"]*['"]([^'"]+)['"]/gm
 
@@ -907,22 +919,30 @@ function resolveLocalModule(
   specifier: string,
   files: ReadonlyMap<string, SourceFile>,
 ): string | undefined {
-  if (!specifier.startsWith('.')) {
-    return undefined
-  }
-  const parts = importingPath.split('/')
-  parts.pop()
-  for (const segment of specifier.split('/')) {
-    if (segment === '.' || segment === '') {
-      continue
+  if (specifier.startsWith('.')) {
+    const parts = importingPath.split('/')
+    parts.pop()
+    for (const segment of specifier.split('/')) {
+      if (segment === '.' || segment === '') {
+        continue
+      }
+      if (segment === '..') {
+        parts.pop()
+      } else {
+        parts.push(segment)
+      }
     }
-    if (segment === '..') {
-      parts.pop()
-    } else {
-      parts.push(segment)
+    return sourceCandidate(parts.join('/'), files)
+  }
+  for (const [alias, sourceRoot] of Object.entries(ALIAS_SOURCE_ROOTS)) {
+    if (specifier.startsWith(`${alias}/`)) {
+      return sourceCandidate(`${sourceRoot}/${specifier.slice(alias.length + 1)}`, files)
     }
   }
-  const base = parts.join('/')
+  return undefined
+}
+
+function sourceCandidate(base: string, files: ReadonlyMap<string, SourceFile>): string | undefined {
   return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]
     .find(candidate => files.has(candidate))
 }

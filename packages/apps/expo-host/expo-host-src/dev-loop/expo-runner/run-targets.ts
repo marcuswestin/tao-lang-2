@@ -2,7 +2,7 @@
 
 import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
 import type { AndroidSession } from './android'
 import type { ExpoSessionConfig } from './expo-config'
@@ -50,10 +50,10 @@ async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
     await context.android.ensureExpoGo()
     const endpoint = await context.metro.expoOpenEndpoint('android')
     await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopTUI.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
     return true
   } catch (error) {
-    DevLoopTUI.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
+    DevLoopOutput.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
     return false
   }
 }
@@ -83,10 +83,10 @@ async function openIosSimulator(
   }
   const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
   if (result.exitCode === 0 && result.error === undefined) {
-    DevLoopTUI.logDevLoop('dev', `opened iOS Simulator (${simulator.name})`)
+    DevLoopOutput.logDevLoop('dev', `opened iOS Simulator (${simulator.name})`)
     return true
   }
-  DevLoopTUI.logDevLoop('dev', simulatorOpenFailure(simulator.name, link, result), 'warn')
+  DevLoopOutput.logDevLoop('dev', simulatorOpenFailure(simulator.name, link, result), 'warn')
   return false
 }
 
@@ -127,7 +127,7 @@ async function openStartupTargets(
     try {
       await open()
     } catch (error) {
-      DevLoopTUI.logDevLoop('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`, 'warn')
+      DevLoopOutput.logDevLoop('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`, 'warn')
     }
   }))
 }
@@ -141,7 +141,7 @@ async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean
   if (await context.android.prepareAvailableExpoGo()) {
     const endpoint = await context.metro.expoOpenEndpoint('android')
     await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopTUI.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
     return true
   }
   return false
@@ -152,7 +152,7 @@ async function ensureIosSimulator(
   shouldStop: () => boolean,
 ): Promise<IosSimulator | undefined> {
   if (!await CLI.commandExists('xcrun')) {
-    DevLoopTUI.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
+    DevLoopOutput.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
     return undefined
   }
   if (shouldStop()) {
@@ -160,7 +160,7 @@ async function ensureIosSimulator(
   }
   const simulator = await selectIosSimulator()
   if (!simulator) {
-    DevLoopTUI.logDevLoop('dev', 'No available iOS Simulator found.', 'warn')
+    DevLoopOutput.logDevLoop('dev', 'No available iOS Simulator found.', 'warn')
     return undefined
   }
   await openSimulatorApp(simulator.udid)
@@ -172,7 +172,7 @@ async function ensureIosSimulator(
   }
   if (!await waitForIosSimulatorBoot(config, simulator.udid, shouldStop)) {
     if (!shouldStop()) {
-      DevLoopTUI.logDevLoop('dev', `iOS Simulator did not finish booting: ${simulator.name}`, 'warn')
+      DevLoopOutput.logDevLoop('dev', `iOS Simulator did not finish booting: ${simulator.name}`, 'warn')
     }
     return undefined
   }
@@ -193,7 +193,7 @@ async function selectIosSimulator(): Promise<IosSimulator | undefined> {
 async function listIosSimulators(): Promise<IosSimulator[]> {
   const result = await CLI.run('xcrun', { args: ['simctl', 'list', 'devices', '--json', 'available'] })
   if (result.exitCode !== 0 || result.error !== undefined) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       `Could not list iOS Simulators: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
       'warn',
@@ -218,7 +218,7 @@ async function openSimulatorApp(udid: string): Promise<void> {
   }
   const { host, result } = await presentIosSimulator(udid)
   if (result.exitCode !== 0 || result.error !== undefined) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       `Could not open ${host}: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
       'warn',
@@ -227,7 +227,7 @@ async function openSimulatorApp(udid: string): Promise<void> {
 }
 
 async function bootIosSimulator(udid: string): Promise<boolean> {
-  DevLoopTUI.logDevLoop('dev', 'booting iOS Simulator')
+  DevLoopOutput.logDevLoop('dev', 'booting iOS Simulator')
   const result = await CLI.run('xcrun', { args: ['simctl', 'boot', udid] })
   if (
     result.exitCode === 0
@@ -235,7 +235,7 @@ async function bootIosSimulator(udid: string): Promise<boolean> {
   ) {
     return true
   }
-  DevLoopTUI.logDevLoop(
+  DevLoopOutput.logDevLoop(
     'dev',
     `Could not boot iOS Simulator: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
     'warn',
@@ -266,15 +266,15 @@ function parseJson<T>(text: string): T | undefined {
 async function openChromeWebUrl(context: ExpoTargetContext, url: string): Promise<boolean> {
   try {
     await withChromeOpenEnv(context.config, () => betterOpen(url))
-    DevLoopTUI.logDevLoop('dev', `opened web in ${context.config.WEB_BROWSER_APP_NAME}`)
+    DevLoopOutput.logDevLoop('dev', `opened web in ${context.config.WEB_BROWSER_APP_NAME}`)
     return true
   } catch (error) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       `Could not open web in ${context.config.WEB_BROWSER_APP_NAME}: ${Errors.formatForUser(error)}`,
       'warn',
     )
-    DevLoopTUI.logDevLoop('dev', `Open ${url} manually.`, 'warn')
+    DevLoopOutput.logDevLoop('dev', `Open ${url} manually.`, 'warn')
     return false
   }
 }

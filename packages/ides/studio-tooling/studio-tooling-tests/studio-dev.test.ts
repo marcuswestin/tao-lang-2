@@ -579,6 +579,39 @@ Describe('Studio native wrapper foundation', () => {
       await FS.remove(payloadRoot)
     }
   })
+
+  Test('discovers a grouped workspace package and keeps its group segment', async () => {
+    // Regression: a one-level `packages/` listing finds only the repository's few ungrouped
+    // packages (`compiler`, `dev`, `shared`) and none of the grouped ones, and flattening a
+    // grouped package's target path to its basename lands it where nothing else in the payload —
+    // `validateStudioServicePayload`, the runtime's own `node_modules` hops — expects to find it.
+    const packagesRoot = await mkTestDir('tao-studio-package-roots-')
+    try {
+      await FS.writeText(
+        FS.resolvePath('compiler/package.json', packagesRoot),
+        JSON.stringify({ name: 'tao-compiler' }),
+      )
+      await FS.writeText(
+        FS.resolvePath('apps/expo-host/package.json', packagesRoot),
+        JSON.stringify({ name: 'tao-expo-host' }),
+      )
+      await FS.writeText(
+        FS.resolvePath('apps/stdlib/package.json', packagesRoot),
+        JSON.stringify({ name: 'tao-stdlib' }),
+      )
+
+      const { packageRelativePaths, packageRoots } = await StudioNative.testing.discoverStudioServicePackageRoots(
+        packagesRoot,
+      )
+
+      Expect(packageRelativePaths.get('tao-compiler')).toBe('compiler')
+      Expect(packageRelativePaths.get('tao-expo-host')).toBe('apps/expo-host')
+      Expect(packageRelativePaths.get('tao-stdlib')).toBe('apps/stdlib')
+      Expect(packageRoots.get('tao-expo-host')).toBe(FS.resolvePath('apps/expo-host', packagesRoot))
+    } finally {
+      await FS.remove(packagesRoot)
+    }
+  })
 })
 
 Describe('Studio smoke resource isolation', () => {

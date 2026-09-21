@@ -1,7 +1,6 @@
-import { OutputText } from '@cli-kit'
-import { CLI, Errors, Repo } from '@shared'
+import { CLI, Errors, Repo, Text } from '@shared'
 import CommandRunner from './CommandRunner'
-import { DevLoopTUI } from './DevLoopTUI'
+import { DevLoopOutput } from './DevLoopOutput'
 import type { ExpoRunnerSession } from './expo-runner/ExpoRunner'
 
 /** runJust runs a repo-root Just recipe with prefixed output. */
@@ -10,7 +9,7 @@ async function runJust(args: readonly string[]): Promise<void> {
   const processLabel = recipe ? JUST_LABELS[recipe] ?? 'just' : 'just'
   const result = await CLI.run('just', {
     args: ['--justfile', Repo.resolvePath('Justfile'), ...args],
-    onOutput: DevLoopTUI.devLoopOutputHandler(processLabel),
+    onOutput: DevLoopOutput.devLoopOutputHandler(processLabel),
   })
   if (result.exitCode !== 0 || result.error !== undefined) {
     throw new Errors.CommandExecutionError(result)
@@ -42,7 +41,7 @@ async function runTests(repoRoot: string): Promise<void> {
   const result = await CLI.run('bun', {
     args: ['run', Repo.resolvePath('packages/dev/dev-src/dev.ts'), 'test', '--output', 'lines'],
     cwd: repoRoot,
-    onOutput: DevLoopTUI.devLoopOutputHandler('test'),
+    onOutput: DevLoopOutput.devLoopOutputHandler('test'),
   })
   if (result.exitCode !== 0 || result.error !== undefined) {
     throw new Errors.CommandExecutionError(result)
@@ -53,7 +52,7 @@ async function runTests(repoRoot: string): Promise<void> {
 async function compileApp(options: CompileAppOptions): Promise<boolean> {
   const { reason } = options
   if (!CommandRunner.beginCommand()) {
-    DevLoopTUI.logDevLoop('dev', `Command running; ignored compile (${reason}).`)
+    DevLoopOutput.logDevLoop('dev', `Command running; ignored compile (${reason}).`)
     return true
   }
 
@@ -67,7 +66,7 @@ async function compileApp(options: CompileAppOptions): Promise<boolean> {
 /** compileAppWithoutCommandLock compiles the selected Tao app while the caller owns command exclusivity. */
 async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise<boolean> {
   const { repoRoot, appPath, appName, reason, shouldRunParserGen } = options
-  DevLoopTUI.logDevLoop('dev', `compiling (${reason})`)
+  DevLoopOutput.logDevLoop('dev', `compiling (${reason})`)
   try {
     if (shouldRunParserGen) {
       await runJust(['_parser-gen'])
@@ -75,19 +74,19 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
     const result = await CLI.run(Repo.resolvePath('tao'), {
       args: ['compile', appPath, ...(appName ? ['--app', appName] : [])],
       cwd: repoRoot,
-      onOutput: DevLoopTUI.devLoopOutputHandler('compile'),
+      onOutput: DevLoopOutput.devLoopOutputHandler('compile'),
     })
     if (result.exitCode !== 0 || result.error !== undefined) {
-      DevLoopTUI.recordFailure('compile', formatCommandOutput(result) ?? Errors.formatForLog(result.error))
+      DevLoopOutput.recordFailure('compile', formatCommandOutput(result) ?? Errors.formatForLog(result.error))
       return false
     }
     if (!result.stdout.trim()) {
-      DevLoopTUI.logDevLoop('compile', 'compiled')
+      DevLoopOutput.logDevLoop('compile', 'compiled')
     }
-    DevLoopTUI.clearFailure('compile')
+    DevLoopOutput.clearFailure('compile')
     return true
   } catch (error) {
-    DevLoopTUI.recordFailure('compile', formatDevLoopFailure(error))
+    DevLoopOutput.recordFailure('compile', formatDevLoopFailure(error))
     return false
   }
 }
@@ -95,7 +94,7 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
 /** formatCommandOutput extracts the child process output that explains a failed dev command. */
 function formatCommandOutput(result: { stderr: string; stdout: string }): string | undefined {
   const commandOutput = [result.stderr, result.stdout]
-    .map(output => OutputText.stripAnsi(output).trim())
+    .map(output => Text.stripAnsi(output).trim())
     .filter(output => output.length > 0)
   return commandOutput.length > 0 ? commandOutput.join('\n') : undefined
 }

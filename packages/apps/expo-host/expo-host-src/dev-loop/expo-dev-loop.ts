@@ -2,7 +2,7 @@ import { Errors, HCI, Platform, Repo } from '@shared'
 import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
 import { DevFileWatcher } from './DevFileWatcher'
-import { DevLoopTUI } from './DevLoopTUI'
+import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
 import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
 import { ExpoRunner, type ExpoRunnerSession } from './expo-runner/ExpoRunner'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
@@ -30,15 +30,33 @@ export async function createDevLoopExpoSession(
   return await ExpoRunner.createSessionWithAvailablePort(preferredPort)
 }
 
-/** runDevLoop runs one selected app until the Tao CLI should exit, restart, or select again. */
-export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOutcome> {
+/**
+ * runDevLoop runs one selected app until the Tao CLI should exit, restart, or select again.
+ *
+ * `reporter` is the output sink every dev-loop command reports lines, failures, and prompts
+ * through; the caller that renders owns it. `tao dev` passes the Ink dashboard, so it is mounted
+ * only while a loop is running. A caller that injects none gets the plain line-writer default.
+ */
+export async function runDevLoop(
+  selection: DevAppSelection,
+  reporter: DevLoopReporter = lineDevLoopReporter(),
+): Promise<DevLoopOutcome> {
+  const restoreDevLoopReporter = setDevLoopReporter(reporter)
+  try {
+    return await runDevLoopWithActiveReporter(selection)
+  } finally {
+    restoreDevLoopReporter()
+  }
+}
+
+async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise<DevLoopOutcome> {
   const repoRoot = Repo.getRoot()
   const { appName, appPath } = selection
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
   const devDataApp = devDataAppKey(selection.projectRoot, appName)
   const devData = await DevDataServer.start({
-    log: line => DevLoopTUI.logDevLoop('data', line),
+    log: line => DevLoopOutput.logDevLoop('data', line),
     rootDir: Repo.resolvePath(DEV_DATA_ROOT_PATH),
   })
   let expo: ExpoRunnerSession
@@ -52,7 +70,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   const expoServer = expo.createServer(runtimeToolchainRoot, {
     env: devDataEnvironment(devData.port, devDataApp, devData.capability),
   })
-  const output = DevLoopTUI.startDevLoopOutput()
+  const output = DevLoopOutput.start()
   let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined
   let finished = false
@@ -88,7 +106,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     watcher = undefined
     await expoServer.stop()
     await devData.stop().catch(error => {
-      DevLoopTUI.logDevLoop('data', `Could not stop the dev data server: ${Errors.formatForLog(error)}`, 'warn')
+      DevLoopOutput.logDevLoop('data', `Could not stop the dev data server: ${Errors.formatForLog(error)}`, 'warn')
     })
   }
 
@@ -100,7 +118,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   }
 
   expoServer.onUnexpectedExit(message => {
-    DevLoopTUI.recordFailure('expo', message)
+    DevLoopOutput.recordFailure('expo', message)
     void finish({ kind: 'exit', exitCode: 1 })
   })
 
@@ -112,9 +130,9 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   })
 
   try {
-    DevLoopTUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
-    DevLoopTUI.logDevLoop('dev', `Expo Metro port: ${expo.config.EXPO_PORT}`)
-    DevLoopTUI.logDevLoop('dev', `Dev data: tao-dev-data-v1 on port ${devData.port}, app ${devDataApp}`)
+    DevLoopOutput.logDevLoop('dev', `Tao dev app: ${appPath}`)
+    DevLoopOutput.logDevLoop('dev', `Expo Metro port: ${expo.config.EXPO_PORT}`)
+    DevLoopOutput.logDevLoop('dev', `Dev data: tao-dev-data-v1 on port ${devData.port}, app ${devDataApp}`)
     // Key input starts before the first compile so q and Ctrl-C work during startup, not only
     // once Metro is ready.
     Commands.printControls()
@@ -133,7 +151,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     if (!keyInput.rawMode) {
       keyInput.stop()
       keyInput = undefined
-      DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
+      DevLoopOutput.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
     const initialCompileSucceeded = await Run.compileApp({
       repoRoot,
@@ -164,7 +182,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     void expo.openStartupTargets(shouldStop)
     return await done
   } catch (error) {
-    DevLoopTUI.recordFailure('dev', Run.formatFailure(error))
+    DevLoopOutput.recordFailure('dev', Run.formatFailure(error))
     throw error
   } finally {
     removeSigint()

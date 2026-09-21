@@ -843,6 +843,37 @@ Describe('repo lint conventions', () => {
       'packages/dev/dev-src/dev.ts',
     )).toEqual([])
   })
+
+  Test('reports a bare @expo-host import, not only @expo-host/dev-loop', () => {
+    const entry = 'packages/dev/dev-src/dev.ts'
+    Expect(devLazyStudioImportIssues(
+      [{ path: entry, source: importFrom('@expo-host') }],
+      entry,
+    )).toEqual([
+      'packages/dev/dev-src/dev.ts:1 statically reaches `@expo-host` through packages/dev/dev-src/dev.ts ->'
+      + ' @expo-host; load the boundary with `await import(...)` inside the command action so the lane commands'
+      + ' start in a checkout that has never generated the parser.',
+    ])
+  })
+
+  Test('follows a @verification alias import to find a Studio import routed through it', () => {
+    const entry = 'packages/dev/dev-src/dev.ts'
+    Expect(devLazyStudioImportIssues(
+      [
+        { path: entry, source: importFrom('@verification/GateCatalog') },
+        {
+          path: 'packages/testing/verification/verification-src/GateCatalog.ts',
+          source: importFrom('@studio-tooling'),
+        },
+      ],
+      entry,
+    )).toEqual([
+      'packages/testing/verification/verification-src/GateCatalog.ts:1 statically reaches `@studio-tooling` through'
+      + ' packages/dev/dev-src/dev.ts -> packages/testing/verification/verification-src/GateCatalog.ts ->'
+      + ' @studio-tooling; load the boundary with `await import(...)` inside the command action so the lane'
+      + ' commands start in a checkout that has never generated the parser.',
+    ])
+  })
 })
 
 /** importFrom builds an import line at call time so this file never matches the rules it exercises. */

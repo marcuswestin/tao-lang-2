@@ -1,7 +1,7 @@
 import { FS, Repo } from '@shared'
 import chokidar from 'chokidar'
 import CommandRunner from './CommandRunner'
-import { DevLoopTUI } from './DevLoopTUI'
+import { DevLoopOutput } from './DevLoopOutput'
 
 const WATCH_DEBOUNCE_MS = 250
 
@@ -38,18 +38,18 @@ function startDebouncedWatcher(
     ignored: shouldIgnoreWatchPath,
   })
   watcher.on('all', (event, path) => {
-    DevLoopTUI.logDevLoop('watch', `${spec.label} ${event}: ${path}`)
+    DevLoopOutput.logDevLoop('watch', `${spec.label} ${event}: ${path}`)
     if (timer) {
       clearTimeout(timer)
       timer = undefined
     }
     if (CommandRunner.isCommandRunning()) {
-      DevLoopTUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
+      DevLoopOutput.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
       return
     }
     timer = setTimeout(() => {
       if (CommandRunner.isCommandRunning()) {
-        DevLoopTUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
+        DevLoopOutput.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
         return
       }
       onChange(spec.shouldRunParserGen)

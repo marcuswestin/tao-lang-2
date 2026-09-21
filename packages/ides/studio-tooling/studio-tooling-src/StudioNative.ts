@@ -16,6 +16,7 @@ import {
   type MachineResourceLease,
   type MachineResourceOwner,
 } from '@verification/MachineLanes'
+import { PackageGraph } from '@verification/PackageGraph'
 import { delimiter as pathDelimiter } from 'node:path'
 import {
   defaultStudioAppName,
@@ -159,6 +160,7 @@ export const StudioNative = {
     installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
+    discoverStudioServicePackageRoots,
     materializeStudioNodeRuntime,
     materializeStudioServicePayload,
     nativeRuntimeCloseResult,
@@ -760,23 +762,39 @@ function verifyReleaseArtifacts(artifactPaths: readonly string[], channel: 'cana
   }
 }
 
+/** StudioServicePackageRoots is what the payload builder needs per workspace package: its absolute
+ * directory, and its directory relative to `packages/` for the target path inside the payload. */
+type StudioServicePackageRoots = {
+  packageRelativePaths: ReadonlyMap<string, string>
+  packageRoots: ReadonlyMap<string, string>
+}
+
+/**
+ * discoverStudioServicePackageRoots finds every workspace package's directory relative to
+ * `packages/`, preserving a grouped package's `<group>/<package>` segment: `packages/<group>` has
+ * no `package.json` of its own, only the package one level deeper does, so a depth-one walk would
+ * find only the repository's few ungrouped packages. Exported for testing.
+ */
+async function discoverStudioServicePackageRoots(packagesRoot: string): Promise<StudioServicePackageRoots> {
+  const packageRoots = new Map<string, string>()
+  const packageRelativePaths = new Map<string, string>()
+  for (const relativePath of await PackageGraph.packageDirectories(packagesRoot)) {
+    const root = FS.resolvePath(relativePath, packagesRoot)
+    const packageJson = await FS.readJson<Record<string, unknown>>(FS.resolvePath('package.json', root))
+    if (typeof packageJson['name'] === 'string') {
+      packageRoots.set(packageJson['name'], root)
+      packageRelativePaths.set(packageJson['name'], relativePath)
+    }
+  }
+  return { packageRelativePaths, packageRoots }
+}
+
 async function materializeStudioServicePayload(
   payloadRoot: string,
   additionalFiles: Readonly<Record<string, string>>,
 ): Promise<void> {
   const packagesRoot = Repo.resolvePath('packages')
-  const packageRoots = new Map<string, string>()
-  for (const directory of await FS.listDir(packagesRoot)) {
-    const root = FS.resolvePath(directory, packagesRoot)
-    const packageJsonPath = FS.resolvePath('package.json', root)
-    if (!await FS.isFile(packageJsonPath)) {
-      continue
-    }
-    const packageJson = await FS.readJson<Record<string, unknown>>(packageJsonPath)
-    if (typeof packageJson['name'] === 'string') {
-      packageRoots.set(packageJson['name'], root)
-    }
-  }
+  const { packageRelativePaths, packageRoots } = await discoverStudioServicePackageRoots(packagesRoot)
   const required = new Set<string>(['tao-expo-host'])
   const pending = [...required]
   while (pending.length > 0) {
@@ -806,7 +824,11 @@ async function materializeStudioServicePayload(
   await FS.copyFile(Repo.resolvePath('package.json'), FS.resolvePath('package.json', payloadRoot))
   await FS.copyFile(Repo.resolvePath('bun.lock'), FS.resolvePath('bun.lock', payloadRoot))
   for (const [name, sourceRoot] of [...packageRoots].sort(([left], [right]) => left.localeCompare(right))) {
-    const targetRoot = FS.resolvePath(`packages/${FS.basename(sourceRoot)}`, payloadRoot)
+    // `FS.basename(sourceRoot)` would drop a grouped package's group segment (`apps/expo-host` ->
+    // `expo-host`), landing it at a path `validateStudioServicePayload` and the runtime's own
+    // `node_modules` hops never look for. The relative path `packageDirectories` returned already
+    // carries that segment, so reuse it instead of re-deriving it from the source path.
+    const targetRoot = FS.resolvePath(`packages/${packageRelativePaths.get(name)!}`, payloadRoot)
     if (required.has(name)) {
       await copyPayloadTree(sourceRoot, targetRoot)
     } else {

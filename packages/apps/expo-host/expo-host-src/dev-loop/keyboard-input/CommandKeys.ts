@@ -1,6 +1,6 @@
 import { Errors } from '@shared'
 import CommandRunner from '../CommandRunner'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import type { ExpoRunnerSession } from '../expo-runner/ExpoRunner'
 import Run from '../Run'
 import Commands, { type CommandKey } from './Commands'
@@ -31,7 +31,7 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
   }
 
   if (CommandRunner.isCommandRunning()) {
-    DevLoopTUI.logDevLoop('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
+    DevLoopOutput.logDevLoop('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
     return
   }
 
@@ -76,7 +76,7 @@ async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<bo
     await Run.runJust(['clean'])
     await Run.runJust(['deps'])
   } catch (error) {
-    DevLoopTUI.logDevLoop('dev', Errors.formatForLog(error), 'error')
+    DevLoopOutput.logDevLoop('dev', Errors.formatForLog(error), 'error')
     await context.finish(1)
     return false
   }

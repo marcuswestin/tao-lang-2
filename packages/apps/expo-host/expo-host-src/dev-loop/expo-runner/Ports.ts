@@ -1,6 +1,6 @@
 import { CLI, Errors, type ProcessListener as Listener, ProcessListeners, Time } from '@shared'
 import { createServer } from 'node:net'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 
 const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
@@ -120,7 +120,7 @@ async function ensureFree(port: number): Promise<boolean> {
     return true
   }
 
-  DevLoopTUI.logDevLoop(
+  DevLoopOutput.logDevLoop(
     'dev',
     `Port ${port} is already in use by ${ProcessListeners.formatListeners(listeners)}.`,
     'warn',
@@ -128,12 +128,12 @@ async function ensureFree(port: number): Promise<boolean> {
   // Several worktrees of this repository share one machine, and they all reach for the same
   // conventional ports. The holder is as likely to be another checkout's dev loop as a leftover of
   // this one, so the question names that before the answer kills anything.
-  DevLoopTUI.logDevLoop(
+  DevLoopOutput.logDevLoop(
     'dev',
     'It may belong to another worktree on this machine; killing it stops that dev loop too.',
     'warn',
   )
-  const shouldKill = await DevLoopTUI.askConfirm({
+  const shouldKill = await DevLoopOutput.askConfirm({
     defaultValue: false,
     message: 'Kill it?',
   })
@@ -147,7 +147,7 @@ async function ensureFree(port: number): Promise<boolean> {
 
   await terminateListeners(listeners)
   await waitForRelease(port)
-  DevLoopTUI.logDevLoop('dev', `Port ${port} is free.`)
+  DevLoopOutput.logDevLoop('dev', `Port ${port} is free.`)
   return true
 }
 
@@ -161,9 +161,9 @@ async function findListeners(port: number): Promise<Listener[] | undefined> {
     return listeners
   }
   if (result.error !== undefined) {
-    DevLoopTUI.logDevLoop('dev', `Could not inspect port ${port}: ${result.error.message}`, 'warn')
+    DevLoopOutput.logDevLoop('dev', `Could not inspect port ${port}: ${result.error.message}`, 'warn')
   } else {
-    DevLoopTUI.logDevLoop('dev', `Could not inspect port ${port}: ${result.stderr.trim() || 'lsof failed'}`, 'warn')
+    DevLoopOutput.logDevLoop('dev', `Could not inspect port ${port}: ${result.stderr.trim() || 'lsof failed'}`, 'warn')
   }
   return undefined
 }
@@ -172,11 +172,11 @@ async function terminateListeners(listeners: readonly Listener[]): Promise<void>
   const pids = listeners.map(listener => String(listener.pid))
   const result = await CLI.run('kill', { args: ['-TERM', ...pids] })
   if (result.exitCode === 0 && result.error === undefined) {
-    DevLoopTUI.logDevLoop('dev', `Sent SIGTERM to ${formatListenerSubject(listeners)}.`)
+    DevLoopOutput.logDevLoop('dev', `Sent SIGTERM to ${formatListenerSubject(listeners)}.`)
     return
   }
   if (await listenersHaveExited(listeners)) {
-    DevLoopTUI.logDevLoop('dev', `${formatListenerSubject(listeners)} already exited.`)
+    DevLoopOutput.logDevLoop('dev', `${formatListenerSubject(listeners)} already exited.`)
     return
   }
 

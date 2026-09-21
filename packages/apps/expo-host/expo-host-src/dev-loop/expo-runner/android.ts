@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
-import { DevLoopTUI } from '../DevLoopTUI'
+import { DevLoopOutput } from '../DevLoopOutput'
 import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
@@ -70,7 +70,7 @@ async function ensureEmulator(): Promise<void> {
       'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
     )
     await requireAndroidSdkPackage(ANDROID_SYSTEM_IMAGE)
-    DevLoopTUI.logDevLoop('dev', `No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
+    DevLoopOutput.logDevLoop('dev', `No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
     await CLI.mustRun('avdmanager', {
       args: [
         'create',
@@ -98,10 +98,10 @@ async function ensureEmulator(): Promise<void> {
   const runningSerial = await findRunningEmulator()
   if (runningSerial) {
     if (await isEmulatorBooted(runningSerial)) {
-      DevLoopTUI.logDevLoop('dev', `Android emulator ${runningSerial} is already booted.`)
+      DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is already booted.`)
       return
     }
-    DevLoopTUI.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
+    DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
     await waitForBootedEmulator(logPath)
   } else {
     await startEmulator(avdName, logPath)
@@ -121,11 +121,11 @@ async function ensureExpoGoOnSerial(
   await (compatibility.requireAdb ?? requireAdb)()
   const installedVersion = await (compatibility.installedExpoGoVersion ?? installedExpoGoVersion)(serial)
   if (expoGoSupportsSdk(installedVersion)) {
-    DevLoopTUI.logDevLoop('dev', `Compatible Expo Go ${installedVersion} is already installed on ${serial}.`)
+    DevLoopOutput.logDevLoop('dev', `Compatible Expo Go ${installedVersion} is already installed on ${serial}.`)
     return
   }
 
-  DevLoopTUI.logDevLoop(
+  DevLoopOutput.logDevLoop(
     'dev',
     installedVersion === undefined
       ? `Installing Expo Go for SDK ${EXPO_GO_SDK_VERSION} on ${serial}.`
@@ -155,12 +155,12 @@ async function prepareAvailableExpoGo(
   await (compatibility.requireAdb ?? requireAdb)()
   const serial = await (compatibility.findRunningEmulator ?? findRunningEmulator)()
   if (!serial || !await (compatibility.isEmulatorBooted ?? isEmulatorBooted)(serial)) {
-    DevLoopTUI.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
+    DevLoopOutput.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
     return false
   }
   const installedVersion = await (compatibility.installedExpoGoVersion ?? installedExpoGoVersion)(serial)
   if (!expoGoSupportsSdk(installedVersion)) {
-    DevLoopTUI.logDevLoop(
+    DevLoopOutput.logDevLoop(
       'dev',
       installedVersion === undefined
         ? `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`
@@ -265,7 +265,7 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
 }
 
 async function startEmulator(avdName: string, logPath: string): Promise<void> {
-  DevLoopTUI.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
+  DevLoopOutput.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
   const logFile = await FS.openAppend(logPath)
   try {
     const emulator = CLI.start('emulator', {
@@ -275,7 +275,7 @@ async function startEmulator(avdName: string, logPath: string): Promise<void> {
       unref: true,
     })
     emulator.onceError(error =>
-      DevLoopTUI.logDevLoop('dev', `Failed to start Android emulator: ${error.message}`, 'error')
+      DevLoopOutput.logDevLoop('dev', `Failed to start Android emulator: ${error.message}`, 'error')
     )
   } finally {
     await logFile.close()
@@ -288,7 +288,7 @@ async function waitForBootedEmulator(logPath: string): Promise<void> {
     return candidate && await isEmulatorBooted(candidate) ? candidate : undefined
   }, { intervalMs: EMULATOR_BOOT_POLL_MS, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
   if (serial !== undefined) {
-    DevLoopTUI.logDevLoop('dev', `Android emulator ${serial} is booted.`)
+    DevLoopOutput.logDevLoop('dev', `Android emulator ${serial} is booted.`)
     return
   }
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
@@ -349,7 +349,7 @@ async function downloadExpoGoApk(): Promise<string> {
   }
 
   await FS.mkdir(FS.dirname(outputPath))
-  DevLoopTUI.logDevLoop('dev', `Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
+  DevLoopOutput.logDevLoop('dev', `Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
   const response = await fetch(url)
   if (!response.ok) {
     Errors.throwUserInput(`Failed to download Expo Go APK: ${response.status} ${response.statusText}`)
@@ -389,7 +389,7 @@ async function openExpoGoWhenMetroIsReady(
 }
 
 async function openExpoGoOnSerial(serial: string, url: string): Promise<void> {
-  DevLoopTUI.logDevLoop('dev', `Opening ${url} on ${serial}.`)
+  DevLoopOutput.logDevLoop('dev', `Opening ${url} on ${serial}.`)
   await CLI.mustRun('adb', {
     args: [
       '-s',

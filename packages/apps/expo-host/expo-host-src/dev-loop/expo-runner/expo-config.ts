@@ -41,7 +41,7 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
     EXPO_START_ENV: {
       BROWSER: WEB_BROWSER_APP_NAME,
       EXPO_NO_TELEMETRY: '1',
-      NODE_ENV: Platform.runtimeProcess.env['NODE_ENV'] ?? '',
+      NODE_ENV: Platform.runtimeProcess.env['NODE_ENV'],
       OPEN_MATCH_HOST_ONLY: 'true',
       __UNSAFE_EXPO_HOME_DIRECTORY: Repo.resolvePath(EXPO_HOME_PATH),
     },

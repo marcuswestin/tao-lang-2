@@ -1,5 +1,5 @@
 import { Errors } from '@shared'
-import { DevLoopTUI } from './DevLoopTUI'
+import { DevLoopOutput } from './DevLoopOutput'
 import Commands from './keyboard-input/Commands'
 
 let commandRunning = false
@@ -36,15 +36,15 @@ async function runNonInteractiveCommand(
   fn: () => Promise<boolean | void>,
 ): Promise<void> {
   if (!beginCommand()) {
-    DevLoopTUI.logDevLoop('dev', `Command already running; ignored ${label}.`)
+    DevLoopOutput.logDevLoop('dev', `Command already running; ignored ${label}.`)
     return
   }
-  DevLoopTUI.logDevLoop('dev', label)
+  DevLoopOutput.logDevLoop('dev', label)
   try {
     const didRun = await fn()
-    DevLoopTUI.logDevLoop('dev', `${label} ${didRun === false ? 'skipped' : 'done'}`)
+    DevLoopOutput.logDevLoop('dev', `${label} ${didRun === false ? 'skipped' : 'done'}`)
   } catch (error) {
-    DevLoopTUI.logDevLoop('dev', Errors.formatForLog(error), 'error')
+    DevLoopOutput.logDevLoop('dev', Errors.formatForLog(error), 'error')
   } finally {
     endCommand()
     Commands.printControls()

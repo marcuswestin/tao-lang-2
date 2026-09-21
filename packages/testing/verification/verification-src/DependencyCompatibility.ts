@@ -15,13 +15,14 @@ const BUNDLED_PACKAGES = ['tao-runtime', 'tao-expo-host', 'tao-studio'] as const
 const REACT_SINGLETON_ANCHOR = 'tao-expo-host'
 
 /**
- * Packages allowed their own React because they never reach a bundle. `tao-cli-kit` and
- * `tao-verification` render the repository's terminal UI with Ink, whose peer range starts
- * above the React that Expo pins, so unifying the two would break one of them. Their React must
- * stay out of every bundle, which `taoStudioReactSingletonPlugin` enforces by resolving React
- * through the anchor instead.
+ * Packages allowed their own React because they never reach a bundle. `tao-cli-kit`,
+ * `tao-verification`, and `tao-cli` render the repository's terminal UI with Ink, whose peer
+ * range starts above the React that Expo pins, so unifying the two would break one of them.
+ * Their React must stay out of every bundle, which `taoStudioReactSingletonPlugin` enforces by
+ * resolving React through the anchor instead.
  */
 const HOST_TOOL_REACT_PACKAGES: Record<string, string> = {
+  'tao-cli': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
   'tao-cli-kit': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
   'tao-verification': "renders the repository terminal UI with Ink, whose React peer range starts above Expo's pin",
 }
@@ -55,6 +56,7 @@ export function dependencyCompatibilityIssues(facts: DependencyFacts): string[] 
   return [
     ...reactSingletonIssues(facts),
     ...bundledReactIssues(facts),
+    ...bundledHostToolDependencyIssues(facts),
     ...hostToolReactIssues(facts),
     ...reactTypesIssues(facts),
     ...expoNativeModuleIssues(facts),
@@ -125,6 +127,43 @@ function bundledReactIssues(facts: DependencyFacts): string[] {
       ]
     })
   )
+}
+
+/**
+ * A bundled package must never declare a dependency on a host-tool React package or on `ink`
+ * itself. Even a version that happens to match today reaches the bundle through a second edge the
+ * anchor comparison above cannot see coming: the next host-tool React bump silently splits the
+ * singleton again, the way `tao-expo-host` depending on `tao-cli-kit` once mounted two React
+ * instances in one Ink tree. The dependency belongs on the CLI or tool that renders the TUI.
+ */
+function bundledHostToolDependencyIssues(facts: DependencyFacts): string[] {
+  const issues: string[] = []
+  for (const manifest of facts.manifests) {
+    if (!BUNDLED_PACKAGES.includes(manifest.name as typeof BUNDLED_PACKAGES[number])) {
+      continue
+    }
+    for (const dependencyName of Object.keys(declaredDependencies(manifest))) {
+      if (dependencyName === 'ink') {
+        issues.push(
+          `${manifest.name} declares a dependency on ink, but it is bundled into Tao Studio or a compiled `
+            + "Tao app. Ink's React peer range starts above the React Expo pins, so a bundled package "
+            + `depending on it risks two React instances in one Ink tree. Move the dependency in `
+            + `${manifestPath(facts, manifest.name)} to the CLI or tool that renders the TUI.`,
+        )
+        continue
+      }
+      const reason = HOST_TOOL_REACT_PACKAGES[dependencyName]
+      if (reason === undefined) {
+        continue
+      }
+      issues.push(
+        `${manifest.name} declares a dependency on ${dependencyName}, but it is bundled into Tao Studio or a `
+          + `compiled Tao app while ${dependencyName} ${reason}. Two React instances would reach one bundle. `
+          + `Move the dependency in ${manifestPath(facts, manifest.name)} to the CLI or tool that renders it.`,
+      )
+    }
+  }
+  return issues
 }
 
 /** A second React is legitimate only for a host tool that is documented and never bundled. */
