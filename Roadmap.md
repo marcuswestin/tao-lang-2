@@ -322,13 +322,17 @@ Product and codebase backlog, unordered.
     The capture review is proven: the server proposal returns the exact diff without writing, the client
     shows it before applying, and cancel or a failed proposal applies nothing.
   - The browser proof of observable delay, offline, declared failure, and cross-cell isolation exists
-    as `packages/dev/studio-smoke/studio-network-simulation.test.ts`, driven through the
-    Environment and scenario panel, and is an explicit lane rather than a `verify-full` gate because
-    it found a defect it should keep showing: about one run in six, a scenario cell over an
-    `Http`-backed entity mounts with its heading and nothing else — no loading state, no error, no
-    rows — or throws `Entity handle 'Item-1' belongs to an inactive provider generation`. The suspect
-    is a second `RuntimeDataSchema.configure()` after the first fill, which empties committed data and
-    retires every handle. Make it a gate once it is green ten times running.
+    as `packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts`, driven through
+    the Environment and scenario panel. It found and now guards a defect: a runtime update repeating
+    the applied revisions rebuilt a cell's provider overlay without a remount, so one run in five
+    mounted a cell with its heading and nothing else. With that fixed it passed twenty runs in twenty.
+  - Remaining: make that journey a `verify-full` gate. It is an explicit lane today
+    (`./agent studio-smoke <file>`), and registering it touches `VERIFY_FULL_GATES` in the `Justfile`,
+    `GateCatalog.ts`, and the three tests that pin the gate list.
+  - Two leads the diagnosis left open: `setMatrixManifest` emits `preview-manifest-changed` without
+    checking the revision moved, which is the likely producer of the repeated update; and
+    `resetFromRecovery()` reconfigures a datasource without a remount, which would strand live
+    queries the same way in a production app if nothing else remounts them. Neither is confirmed.
   - Loading captured state in tests stays deferred with the fixture-through-action result and handle
     semantics (`Docs/Spec/Tao Studio.md`).
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
