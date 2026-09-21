@@ -1663,12 +1663,18 @@ async function runAndSnapshot(
   dependencies: MergeWithMainDependencies,
   options: {
     mutation?: 'feature' | 'none'
+    onOutput?: CLI.CommandSpec['onOutput']
     stdio?: CLI.CommandStdio
   } = {},
 ): Promise<CLI.CommandResult> {
   const mutation = options.mutation ?? 'none'
   await assertExpectedLocalState(snapshot, dependencies)
-  const result = await dependencies.run(command, { args, cwd, stdio: options.stdio ?? 'stream' })
+  const result = await dependencies.run(command, {
+    args,
+    cwd,
+    stdio: options.stdio ?? 'stream',
+    ...(options.onOutput === undefined ? {} : { onOutput: options.onOutput }),
+  })
   const succeeded = result.exitCode === 0 && result.error === undefined && result.signal === null
   if (!succeeded) {
     await captureFailedMutation(snapshot, mutation, dependencies)
@@ -1703,6 +1709,12 @@ async function runAndSnapshot(
  * `extractLaneReport` reads them back out of the captured output — printed once when the lane finishes
  * and, on failure, repeated from the thrown error's own captured output so the last screen a reader
  * sees still names the tests.
+ *
+ * `mergedOutputCapture` is read first, not `result.stdout` alone: a `just` spawn error, a `Recipe …
+ * does not exist`, or a sandbox denial writes to stderr, which nothing above this read, so a
+ * genuinely failed lane could print nothing before the generic `Command failed: just verify-full`.
+ * The interactive branch returns before any of this runs, so its `stdio: 'inherit'` path is
+ * unchanged byte for byte.
  */
 async function runVerificationLane(
   snapshot: MergeSnapshot,
@@ -1710,21 +1722,70 @@ async function runVerificationLane(
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
 ): Promise<CLI.CommandResult> {
-  const interactive = dependencies.isInteractive()
+  if (dependencies.isInteractive()) {
+    return await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+      stdio: 'inherit',
+    })
+  }
+  const capture = mergedOutputCapture()
   try {
     const result = await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
-      stdio: interactive ? 'inherit' : 'pipe',
+      onOutput: capture.onOutput,
+      stdio: 'pipe',
     })
-    if (!interactive) {
-      writeLines(dependencies, extractLaneReport(result.stdout))
-    }
+    writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, result), result.error))
     return result
   } catch (error) {
-    if (!interactive && error instanceof Errors.CommandExecutionError) {
-      writeLines(dependencies, extractLaneReport(error.result.stdout))
+    if (error instanceof Errors.CommandExecutionError) {
+      writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, error.result), error.result.error))
     }
     throw error
   }
+}
+
+/**
+ * mergedOutputCapture collects a lane's stdout and stderr as bytes actually arrive, so a caller that
+ * only inspects the finished `CommandResult` afterward still sees them close to interleaved, the way
+ * a terminal would have shown them, rather than every stdout byte before every stderr one.
+ */
+function mergedOutputCapture(): { onOutput: NonNullable<CLI.CommandSpec['onOutput']>; read: () => string } {
+  const chunks: string[] = []
+  return {
+    onOutput: (_stream, chunk) => {
+      chunks.push(chunk.toString('utf8'))
+    },
+    read: () => chunks.join(''),
+  }
+}
+
+/**
+ * mergedLaneOutput prefers the bytes `mergedOutputCapture` actually saw arrive, in that order. A
+ * runner that never wires `onOutput` through — every test double in this file, and any future one —
+ * still gets both streams, just concatenated rather than interleaved: acceptable next to the silence
+ * this replaces.
+ */
+function mergedLaneOutput(
+  capture: { read: () => string },
+  result: Pick<CLI.CommandResult, 'stderr' | 'stdout'>,
+): string {
+  const captured = capture.read()
+  if (captured.length > 0) {
+    return captured
+  }
+  return result.stderr.length === 0 ? result.stdout : `${result.stdout}\n${result.stderr}`
+}
+
+/**
+ * laneReportLines is what a non-interactive landing shows for a nested lane: its own structured
+ * verdict when the merged output matched one, the same short raw tail every other failed log's
+ * reader gets when it did not, and — either way — the spawn error the `just` invocation itself
+ * failed with, when there was one. A pure spawn failure (the binary missing, a sandbox denial before
+ * the child ever wrote a byte) leaves the merged output empty, so the spawn error is the one thing
+ * that keeps this from printing nothing at all.
+ */
+function laneReportLines(output: string, spawnError: Error | undefined): string[] {
+  const lines = extractLaneReport(output)
+  return spawnError === undefined ? lines : [...lines, `Spawn error: ${spawnError.message}`]
 }
 
 async function captureFailedMutation(

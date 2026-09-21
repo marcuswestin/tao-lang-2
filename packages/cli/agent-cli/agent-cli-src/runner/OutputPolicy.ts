@@ -29,6 +29,14 @@ const REPORT_TAIL_LINES = 60
 const GATE_SUCCESS_LINES = 25
 const GATE_FAILURE_LINES = 40
 
+/** STATUS_VOCABULARY matches the words this repository's own tooling uses to mark a line as a
+ * verdict rather than narration — `PASS`/`FAIL`/`WARN` prefixes, a `tsc`-style `error:`, a hook's
+ * `refused`. A report's elision never drops one of these, wherever in the output it falls. */
+const STATUS_VOCABULARY = /\b(FAIL|WARN|error|refused)\b/
+/** How many status-vocabulary lines an elided middle may restore. Bounded so a run that fails
+ * everything cannot turn the elision back into the wall it exists to prevent. */
+const MAX_RESTORED_STATUS_LINES = 40
+
 export type OutputCategory = 'gate' | 'report'
 
 /** outputCategoryFor reports which output policy a command's output is bounded by. */
@@ -68,10 +76,25 @@ function boundReportOutput(wrapped: readonly string[], maxLines: number | undefi
   }
   const head = maxLines === undefined ? REPORT_HEAD_LINES : Math.ceil((budget * 2) / 3)
   const tail = maxLines === undefined ? REPORT_TAIL_LINES : budget - head
-  const elided = wrapped.length - head - tail
+  const middleEnd = wrapped.length - tail
+  // The head and the tail are shown regardless of content; only the middle is ever a candidate for
+  // elision, so a status-vocabulary line already inside one of them needs no rescuing.
+  const restored: string[] = []
+  for (let index = head; index < middleEnd && restored.length < MAX_RESTORED_STATUS_LINES; index += 1) {
+    const line = wrapped[index] ?? ''
+    if (STATUS_VOCABULARY.test(line)) {
+      restored.push(line)
+    }
+  }
+  const elided = middleEnd - head - restored.length
   return {
     elided,
-    lines: [...wrapped.slice(0, head), elisionLine(elided), ...wrapped.slice(wrapped.length - tail)],
+    lines: [
+      ...wrapped.slice(0, head),
+      ...(elided > 0 ? [elisionLine(elided)] : []),
+      ...restored,
+      ...wrapped.slice(middleEnd),
+    ],
   }
 }
 

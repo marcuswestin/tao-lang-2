@@ -172,6 +172,19 @@ Describe('output discipline', () => {
     Expect(refusalFor('just board').includes('./agent board')).toEqual(true)
   })
 
+  Test('sees through a wrapper in front of `just` and flags in front of its recipe name', () => {
+    Expect(refusalFor('time just check').includes('./agent check')).toEqual(true)
+    Expect(refusalFor('nice -n 10 just fmt').includes('./agent fmt')).toEqual(true)
+    Expect(refusalFor('just -f Justfile verify').includes('./agent verify')).toEqual(true)
+    Expect(refusalFor('just --justfile ./Justfile verify').includes('./agent verify')).toEqual(true)
+    Expect(refusalFor('env FOO=1 just test').includes('./agent test')).toEqual(true)
+    Expect(refusalFor('command just verify').includes('./agent verify')).toEqual(true)
+  })
+
+  Test('leaves a `just` call that names no recipe, even past a value flag', () => {
+    Expect(isAllowed('just -f Justfile --list')).toEqual(true)
+  })
+
   Test('leaves landing on its own spellings: an agent proposes a landing rather than making one', () => {
     Expect(isAllowed('just land')).toEqual(true)
     Expect(isAllowed('just merge-with-main')).toEqual(true)

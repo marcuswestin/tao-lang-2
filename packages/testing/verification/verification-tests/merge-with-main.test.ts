@@ -963,6 +963,132 @@ Describe('merge-with-main', () => {
     Expect(fake.lines.some(line => line.includes('_typecheck: passed'))).toBe(false)
   })
 
+  Test('a non-interactive landing names the spawn error a nested lane itself failed with', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    const spawnError = new Error('spawn just ENOENT')
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: spawnError,
+          exitCode: null,
+          signal: null,
+          stderr: '',
+          stdout: '',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // Before this fix, only `result.stdout` was read — empty here — so a landing that never even
+    // spawned `just` printed nothing at all before `Command failed: just land-barrier`.
+    Expect(fake.lines.some(line => line.includes('Spawn error: spawn just ENOENT'))).toBe(true)
+  })
+
+  Test("a non-interactive landing shows a nested lane's stderr when it never wrote to stdout", async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: 'error: Recipe `land-barrier` was not found.\n',
+          stdout: '',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // `result.stdout` alone — what this read before the fix — was empty here; only `result.stderr`
+    // named the reason, and nothing printed it.
+    Expect(fake.lines.some(line => line.includes('Recipe `land-barrier` was not found'))).toBe(true)
+  })
+
+  Test('a non-interactive landing still names context for a lane that dies before its own verdict', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: null,
+          signal: 'SIGKILL',
+          stderr: '',
+          stdout: 'Checking dprint...\nChecking Tao source...\nChecking repo-lint...\n',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // No PASSED/FAILED verdict and no Failed: block ever arrived, so this is the raw-tail fallback;
+    // it still names the last thing the lane was doing rather than nothing.
+    Expect(fake.lines.some(line => line.includes('Checking repo-lint'))).toBe(true)
+  })
+
+  Test('a non-interactive landing names a dead-exports issue line from the cheap-gate barrier', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: '',
+          stdout: [
+            'Checking dprint...',
+            'Checking Tao source...',
+            "dead exports: packages/testing/verification/verification-src/Example.ts:42 export 'unused' is never imported",
+          ].join('\n'),
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // `dead-exports` runs as a raw script rather than through `./dev gates`, so its output matches
+    // none of `extractLaneReport`'s structured formats and falls back to the same raw tail every
+    // other failed log's reader gets — which still has to name at least one issue.
+    Expect(fake.lines.some(line => line.startsWith('dead exports: '))).toBe(true)
+  })
+
   Test('uses the credential-isolated broker for every remote read and one atomic landing', async () => {
     const fake = fakeDependencies()
     const pushes: unknown[] = []

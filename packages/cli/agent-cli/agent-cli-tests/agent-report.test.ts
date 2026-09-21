@@ -108,8 +108,33 @@ Describe('agent report', () => {
       durationMs: 1_234,
       exitCode: 0,
       failures: [],
+      failuresTruncated: false,
       logPath: PASSED.logPath,
       tail: ['ok', '1 pass', '0 fail'],
     })
+  })
+
+  Test('names an unwritable log instead of a path nothing was ever written to', () => {
+    const outcome = { ...PASSED, logUnavailable: 'EACCES: permission denied' }
+
+    const text = buildReportText(outcome)
+    Expect(text.endsWith('log unavailable: EACCES: permission denied')).toBe(true)
+    Expect(text).not.toContain(PASSED.logPath)
+
+    const report = buildJsonReport(outcome)
+    Expect(report.logUnavailable).toBe('EACCES: permission denied')
+    Expect(report.logPath).toBe(PASSED.logPath)
+  })
+
+  Test('caps --json failures at the same limit as the text report and names the cut', () => {
+    const failures: AgentFailure[] = Array.from(
+      { length: 25 },
+      (_, index) => ({ gate: 'test-file', test: `t${index}` }),
+    )
+
+    const report = buildJsonReport({ ...PASSED, exitCode: 1, failures })
+
+    Expect(report.failures.length).toBe(20)
+    Expect(report.failuresTruncated).toBe(true)
   })
 })

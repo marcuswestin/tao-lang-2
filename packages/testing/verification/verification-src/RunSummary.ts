@@ -1,5 +1,5 @@
 import { OutputText } from '@cli-kit'
-import { FS, HCI } from '@shared'
+import { FS, HCI, Repo } from '@shared'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import type { WorkState } from './WorkGraph'
@@ -629,7 +629,7 @@ export function formatGateSummary(summary: GateSummary, options: VerdictOptions 
   }
   lines.push(`Logs: ${FS.displayPath(summary.logRoot)}`)
   lines.push(`Summary: ${FS.displayPath(FS.resolvePath(RunArtifacts.SUMMARY_FILE, summary.logRoot))}`)
-  lines.push(...formatFailuresBlock(summary.failures ?? []))
+  lines.push(...formatFailuresBlock(summary.failures ?? [], Repo.getRoot()))
   if (summary.firstFailure !== undefined) {
     lines.push('', `First failure — ${summary.firstFailure.name}:`)
     // Once `Failed:` above already names every test a log matched, the raw tail beside it is read
@@ -652,7 +652,10 @@ export function formatGateSummary(summary: GateSummary, options: VerdictOptions 
  * was extracted, so a run whose logs matched no recognized format reads exactly as it did before this
  * existed.
  */
-function formatFailuresBlock(failures: readonly (ExtractedFailure & { gate: string })[]): string[] {
+function formatFailuresBlock(
+  failures: readonly (ExtractedFailure & { gate: string })[],
+  repositoryRoot: string,
+): string[] {
   if (failures.length === 0) {
     return []
   }
@@ -661,22 +664,53 @@ function formatFailuresBlock(failures: readonly (ExtractedFailure & { gate: stri
   return [
     '',
     'Failed:',
-    ...visible.map(failure => `- ${truncateToWidth(formatFailureLine(failure), FAILED_LINE_WIDTH)}`),
+    ...visible.map(failure => `${FAILED_LINE_PREFIX}${formatFailureLine(failure, repositoryRoot)}`),
     ...(omitted > 0 ? [`… and ${omitted} more`] : []),
   ]
 }
 
-function formatFailureLine(failure: ExtractedFailure & { gate: string }): string {
-  const error = failure.error === undefined ? '' : ` — ${failure.error}`
-  const file = failure.file === undefined ? '' : ` (${failure.file})`
-  return `${failure.gate} › ${failure.test}${error}${file}`
+const FAILED_LINE_PREFIX = '- '
+const FAILED_LINE_ERROR_PREFIX = ' — '
+
+/**
+ * formatFailureLine renders one failure at `FAILED_LINE_WIDTH`, truncating only its own free-form
+ * `error` text when the line runs long. `gate › test` and `(file:line)` are what a reader clicks or
+ * greps on next, and a truncated line number reads as a wrong one, not a short one, so only the
+ * error prose ever gives way.
+ */
+function formatFailureLine(failure: ExtractedFailure & { gate: string }, repositoryRoot: string): string {
+  const test = `${failure.gate} › ${failure.test}`
+  const file = failure.file === undefined ? '' : ` (${relativizeFailureFile(failure.file, repositoryRoot)})`
+  if (failure.error === undefined) {
+    return `${test}${file}`
+  }
+  const fixedWidth = FAILED_LINE_PREFIX.length + test.length + FAILED_LINE_ERROR_PREFIX.length + file.length
+  const errorBudget = Math.max(0, FAILED_LINE_WIDTH - fixedWidth)
+  return `${test}${FAILED_LINE_ERROR_PREFIX}${truncateToWidth(failure.error, errorBudget)}${file}`
+}
+
+/**
+ * relativizeFailureFile rewrites an absolute path a gate printed to one relative to the repository
+ * root, so it survives `FAILED_LINE_WIDTH` next to the line number that makes it useful — an
+ * absolute worktree path routinely ate that budget on its own and left the line truncated before the
+ * `:line` ever printed. A gate that already reported a repository-relative path, which is most of
+ * them, is left exactly as it wrote it.
+ */
+function relativizeFailureFile(file: string, repositoryRoot: string): string {
+  const separator = file.indexOf(':')
+  const path = separator === -1 ? file : file.slice(0, separator)
+  if (!FS.isAbsolute(path)) {
+    return file
+  }
+  const suffix = separator === -1 ? '' : file.slice(separator)
+  return `${FS.relativePath(repositoryRoot, path)}${suffix}`
 }
 
 /** A line long past this is one runaway assertion message, not information a reader needs all of. */
 const FAILED_LINE_WIDTH = 160
 
 function truncateToWidth(text: string, width: number): string {
-  return text.length <= width ? text : `${text.slice(0, width - 1)}…`
+  return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`
 }
 
 /**

@@ -1,6 +1,6 @@
-import { FS } from '@shared'
+import { FS, Platform, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { runAgentCommand } from '../agent-cli-src/runner/AgentRunner'
+import { resolveRunStdio, runAgentCommand } from '../agent-cli-src/runner/AgentRunner'
 
 /**
  * `runAgentCommand` is exercised end to end against a real spawned process rather than a faked
@@ -78,12 +78,16 @@ Describe('agent runner', () => {
     const scratch = await mkTestDir('tao-agent-runner-summary-')
     try {
       const summaryPath = FS.resolvePath('.artifacts/logs/probe/latest/summary.json', scratch)
+      // `probe` names no real lane, so the run is found only through the `Summary:` line it prints —
+      // the same mechanism a real lane recipe uses, and the only one this test's fake command can
+      // reach now that a guessed lane directory is trusted for a fixed table of real lanes only.
       // A (fail) line the fallback parser would read differently, so the assertion below can tell
       // which source actually won.
       const script = await writeProbeScript(scratch, [
         `await Bun.write(${JSON.stringify(summaryPath)}, JSON.stringify({`,
         "  failures: [{ error: 'from summary.json', gate: 'probe', test: 'from-summary' }],",
         '}))',
+        `${LOG}('Summary: .artifacts/logs/probe/latest/summary.json')`,
         `${LOG}('(fail) from-fallback')`,
         `${EXIT}(1)`,
       ])
@@ -97,6 +101,30 @@ Describe('agent runner', () => {
       // The (fail) line the child also printed still shows up in the raw output below the Failed:
       // block, but it must never earn its own bullet — that would mean the fallback parser ran too.
       Expect(captured.stdout).not.toContain('  - probe — from-fallback')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test("still falls back to the output parser when a failed run's own summary names no failures", async () => {
+    const scratch = await mkTestDir('tao-agent-runner-empty-summary-')
+    try {
+      const summaryPath = FS.resolvePath('.artifacts/logs/probe/latest/summary.json', scratch)
+      // The lane genuinely failed (exit 1) but its own classifier named nothing — an empty
+      // `failures: []` must never be read as "nothing failed" and suppress the fallback parser.
+      const script = await writeProbeScript(scratch, [
+        `await Bun.write(${JSON.stringify(summaryPath)}, JSON.stringify({ failures: [] }))`,
+        `${LOG}('Summary: .artifacts/logs/probe/latest/summary.json')`,
+        `${LOG}('(fail) unclassified failure')`,
+        `${EXIT}(1)`,
+      ])
+
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stdout).toContain('  - probe — unclassified failure')
     } finally {
       await FS.remove(scratch)
     }
@@ -118,6 +146,115 @@ Describe('agent runner', () => {
       Expect(captured.result).toBe(1)
       Expect(captured.stdout).toContain('a fallback failure')
       Expect(captured.stdout).toContain('expect(received).toBe(expected)')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('names why a spawn failed, with a PATH hint for a missing command', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-spawn-error-')
+    try {
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: [],
+          command: 'probe',
+          cwd: scratch,
+          spawnArgs: [],
+          spawnCommand: 'tao-agent-runner-test-definitely-missing-binary',
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stdout).toContain('spawn error:')
+      Expect(captured.stdout).toContain('was not found on PATH')
+      Expect(captured.stdout).toContain('./agent setup')
+
+      const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
+      Expect(await FS.readText(latestPath)).toContain('was not found on PATH')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test(
+    'forwards a parent signal to the child, killing it, rather than leaving an empty log and an orphan',
+    async () => {
+      const scratch = await mkTestDir('tao-agent-runner-cancel-')
+      try {
+        const pidPath = FS.resolvePath('child.pid', scratch)
+        const script = await writeProbeScript(scratch, [
+          `await Bun.write(${JSON.stringify(pidPath)}, String(process.pid))`,
+          `${LOG}('child started')`,
+          'await new Promise(resolve => setTimeout(resolve, 30_000))',
+          `${LOG}('should never print')`,
+        ])
+
+        let deliverSignal: (() => void) | undefined
+        const fakeOnProcessSignal = (signal: Platform.ProcessSignal, listener: () => void) => {
+          if (signal === 'SIGTERM') {
+            deliverSignal = listener
+          }
+          return () => {}
+        }
+
+        const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
+        const runPromise = withCapturedOutput(() =>
+          runAgentCommand({
+            args: [],
+            command: 'probe',
+            cwd: scratch,
+            onProcessSignal: fakeOnProcessSignal,
+            spawnArgs: [script],
+            spawnCommand: 'bun',
+          })
+        )
+
+        // Wait for the child to actually start and be captured in the log before cancelling, so a
+        // non-empty log afterward proves the write-as-you-go behavior rather than a write at the end.
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          if (await FS.exists(latestPath) && (await FS.readText(latestPath)).includes('child started')) {
+            break
+          }
+          await Time.sleep(25)
+        }
+        Expect(deliverSignal).toBeDefined()
+        deliverSignal!()
+
+        const captured = await runPromise
+
+        Expect(captured.result).toBe(143) // 128 + SIGTERM(15)
+        Expect(captured.stdout).toContain('cancelled by SIGTERM')
+        const latestText = await FS.readText(latestPath)
+        Expect(latestText).toContain('child started')
+        Expect(latestText).toContain('cancelled by SIGTERM')
+        Expect(latestText).not.toContain('should never print')
+
+        const childPid = Number((await FS.readText(pidPath)).trim())
+        Expect(Platform.processIsAlive(childPid)).toBe(false)
+      } finally {
+        await FS.remove(scratch)
+      }
+    },
+  )
+
+  Test("reports a log it could not write without losing the run's real verdict", async () => {
+    const scratch = await mkTestDir('tao-agent-runner-log-unavailable-')
+    try {
+      // A plain file sitting where the log directory needs to be created makes `mkdir` fail exactly
+      // the way an EACCES from a denied sandbox write would: the run must still be reported in full.
+      const logDir = FS.resolvePath('.artifacts/logs/agent/probe', scratch)
+      await FS.writeText(logDir, 'not a directory')
+
+      const script = await writeProbeScript(scratch, [`${LOG}('still reported')`, `${EXIT}(1)`])
+
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stdout).toContain('probe: failed (exit 1)')
+      Expect(captured.stdout).toContain('still reported')
+      Expect(captured.stdout).toContain('log unavailable:')
     } finally {
       await FS.remove(scratch)
     }
@@ -152,5 +289,27 @@ Describe('agent runner', () => {
     } finally {
       await FS.remove(scratch)
     }
+  })
+})
+
+Describe('resolveRunStdio', () => {
+  Test('runs an ordinary command over a captured pipe, verbose or not', () => {
+    Expect(resolveRunStdio('verify', { verbose: false }, () => false)).toEqual({ stdio: 'pipe' })
+    Expect(resolveRunStdio('verify', { verbose: true }, () => false)).toEqual({ stdio: 'stream' })
+    // Interactivity is irrelevant to a command that never prompts.
+    Expect(resolveRunStdio('verify', { verbose: false }, () => true)).toEqual({ stdio: 'pipe' })
+  })
+
+  Test('leaves a prompting command on a pipe when there is no real terminal to prompt at', () => {
+    Expect(resolveRunStdio('land-unlock', { verbose: false }, () => false)).toEqual({ stdio: 'pipe' })
+    Expect(resolveRunStdio('land-unlock', { verbose: true }, () => false)).toEqual({ stdio: 'stream' })
+  })
+
+  Test('inherits every descriptor for a prompting command at a real interactive terminal', () => {
+    const decision = resolveRunStdio('land-unlock', { verbose: false }, () => true)
+    Expect(decision.stdio).toBe('inherit')
+    Expect(decision.note).toContain('not captured')
+    // `--verbose` changes nothing here: passthrough already shows everything live.
+    Expect(resolveRunStdio('land-unlock', { verbose: true }, () => true).stdio).toBe('inherit')
   })
 })

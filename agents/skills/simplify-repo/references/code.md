@@ -8,7 +8,7 @@
   cheap finds.
 - Families of near-identical functions collapse onto one parameterized helper (the `findOwning*`
   parent walks are the model case).
-- Run `just dead-exports` after every wave; removing a caller often strands an export.
+- Run `./agent dead-exports` after every wave; removing a caller often strands an export.
 - While an agent owns paths exclusively, it returns requests for `shared` helpers to the agent that
   owns `shared` instead of editing it.
 

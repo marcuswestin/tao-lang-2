@@ -1,4 +1,4 @@
-import { Platform } from '@shared'
+import { Platform, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { RunArtifacts } from '../verification-src/RunArtifacts'
 import {
@@ -570,5 +570,40 @@ Describe('structured failures', () => {
 
     Expect(failedLines).toHaveLength(20)
     Expect(rendered).toContain('… and 20 more')
+  })
+
+  Test('formatGateSummary prints an absolute failure path relative to the repository root', () => {
+    const absolute = Repo.resolvePath('packages/foo/bar.ts')
+    const log = `${absolute}(12,5): error TS2345: Argument of type 'string' is not assignable `
+      + "to parameter of type 'number'."
+    const summary = failedSummary(log, '_typecheck')
+    const rendered = formatGateSummary(summary)
+
+    // `(file:line:col)` is the trailing location every reader clicks on; it is rewritten relative
+    // to the repository root, even though the diagnostic's own raw text — quoted verbatim as the
+    // test name — still carries the absolute path it was extracted from.
+    Expect(rendered).toContain('(packages/foo/bar.ts:12:5)')
+    Expect(rendered).not.toContain(`(${absolute}:12:5)`)
+  })
+
+  Test('formatGateSummary truncates only the error text at the width limit, never the file:line', () => {
+    const longAssertion = `expect(received).toBe(expected) ${'x'.repeat(300)}`
+    const log = [
+      'sample.test.ts:',
+      '1 | import { describe, test, expect } from "bun' + ':test"',
+      '5 |     expect(1).toBe(2)',
+      `error: ${longAssertion}`,
+      '      at <anonymous> (sample.test.ts:5:15)',
+      '(fail) widget board > renders the board [0.18ms]',
+    ].join('\n')
+    const summary = failedSummary(log)
+    const rendered = formatGateSummary(summary)
+    const failedLine = rendered.split('\n').find(line => line.startsWith('- shared › '))
+
+    Expect(failedLine).toBeDefined()
+    Expect(failedLine!.length).toBeLessThanOrEqual(160)
+    Expect(failedLine).toContain('(sample.test.ts:5:15)')
+    Expect(failedLine).toContain('…')
+    Expect(failedLine).not.toContain(longAssertion)
   })
 })

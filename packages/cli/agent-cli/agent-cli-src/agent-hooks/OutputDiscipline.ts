@@ -322,17 +322,85 @@ function gatePipeDenial(stage: Stage, next: Stage | undefined): string | undefin
   return gatePipeRefusal(subcommand === undefined ? command : `${command} ${subcommand}`)
 }
 
+/** Words that run their own program rather than being one, the same set `ShellHabits`'s
+ * `COMMAND_PREFIXES` warns about (`command`, `exec`) plus `time` and `nohup`, which take no options
+ * of their own, and `nice` and `env`, which do. */
+const SIMPLE_COMMAND_WRAPPERS = new Set(['command', 'exec', 'nohup', 'time'])
+/** `nice`'s own flag that takes a separate value argument, in short and long form. */
+const NICE_ADJUSTMENT_FLAG = /^(-n|--adjustment)$/
+const ENVIRONMENT_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
 /**
- * justRecipeDenial catches a raw `just <recipe>` call for a recipe `./agent` already wraps.
- * `gatePipeDenial` is checked first by the caller, so a piped gate keeps its own more specific
- * refusal rather than being told twice to use the front door.
+ * commandAfterWrappers strips the leading words that run their own program rather than being one —
+ * `time`, `command`, `exec`, `nohup` outright, `nice` past its own scheduling flag, and `env` past
+ * its flags and leading `VAR=value` assignments — so a wrapped `just` invocation is still found
+ * underneath them.
+ */
+function commandAfterWrappers(words: readonly string[]): string[] {
+  let rest = [...words]
+  while (rest.length > 0) {
+    const word = rest[0]!
+    if (SIMPLE_COMMAND_WRAPPERS.has(word)) {
+      rest = rest.slice(1)
+      continue
+    }
+    if (word === 'nice') {
+      rest = rest.slice(1)
+      while (rest.length > 0 && isFlag(rest[0]!)) {
+        const flag = rest[0]!
+        rest = rest.slice(1)
+        if (NICE_ADJUSTMENT_FLAG.test(flag) && rest.length > 0) {
+          rest = rest.slice(1)
+        }
+      }
+      continue
+    }
+    if (word === 'env') {
+      rest = rest.slice(1)
+      while (rest.length > 0 && (isFlag(rest[0]!) || ENVIRONMENT_ASSIGNMENT.test(rest[0]!))) {
+        rest = rest.slice(1)
+      }
+      continue
+    }
+    break
+  }
+  return rest
+}
+
+/** Just's own flags that take a value, in the short and long spellings this repository's recipes use. */
+const JUST_VALUE_FLAGS = new Set(['-f', '--justfile', '-d', '--working-directory'])
+
+/** firstJustOperand returns the first word after `just` that names a recipe rather than an option,
+ * skipping a value flag's operand in both its `--flag value` and `--flag=value` forms. */
+function firstJustOperand(words: readonly string[]): string | undefined {
+  let index = 0
+  while (index < words.length) {
+    const word = words[index]!
+    if (JUST_VALUE_FLAGS.has(word)) {
+      index += 2
+      continue
+    }
+    if (isFlag(word)) {
+      index += 1
+      continue
+    }
+    return word
+  }
+  return undefined
+}
+
+/**
+ * justRecipeDenial catches a raw `just <recipe>` call for a recipe `./agent` already wraps, seeing
+ * through the wrappers a command line can put in front of `just` and the flags it can put in front
+ * of the recipe name. `gatePipeDenial` is checked first by the caller, so a piped gate keeps its own
+ * more specific refusal rather than being told twice to use the front door.
  */
 function justRecipeDenial(stage: Stage): string | undefined {
-  const [command, ...rest] = stage.words
+  const [command, ...rest] = commandAfterWrappers(stage.words)
   if (command !== 'just') {
     return undefined
   }
-  const recipe = rest.find(word => !isFlag(word))
+  const recipe = firstJustOperand(rest)
   if (recipe === undefined) {
     return undefined
   }

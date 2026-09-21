@@ -48,7 +48,7 @@ function fullRunReason(selection: ChangedSelection, ledger: TestLedgerStore): st
 
 function line(selection: ChangedSelection, ledger: TestLedgerStore): string | undefined {
   const reason = fullRunReason(selection, ledger)
-  return reason === undefined ? undefined : `Note: ${reason} — 'just verify --complete' is worth a pass.`
+  return reason === undefined ? undefined : `Note: ${reason} — './agent verify --complete' is worth a pass.`
 }
 
 /** TestAdvisory owns the one-line, non-gating complete-run recommendation. */

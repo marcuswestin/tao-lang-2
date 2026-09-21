@@ -46,6 +46,32 @@ Describe('agent output policy', () => {
     Expect(bounded.lines.at(-1)).toBe('line 299')
   })
 
+  Test('never elides a status-vocabulary line from a report, even deep in the middle', () => {
+    const lines = Array.from({ length: 400 }, (_, index) => `line ${index}`)
+    lines[200] = 'FAIL packages/cli/dev-cli/dev-cli-tests/board.test.ts'
+
+    const bounded = boundOutput(lines.join('\n'), 'report', 'failed')
+
+    Expect(bounded.lines).toContain('FAIL packages/cli/dev-cli/dev-cli-tests/board.test.ts')
+    // The head and tail are unchanged; the restored line sits right after the elision line, which now
+    // undercounts the middle by exactly the one restored line.
+    Expect(bounded.lines[120]).toBe('… and 219 more lines …')
+    Expect(bounded.lines[121]).toBe('FAIL packages/cli/dev-cli/dev-cli-tests/board.test.ts')
+    Expect(bounded.lines[122]).toBe('line 340')
+  })
+
+  Test('caps how many status-vocabulary lines a report restores from an elided middle', () => {
+    const lines = Array.from({ length: 400 }, (_, index) => `line ${index}`)
+    for (let index = 120; index < 170; index += 1) {
+      lines[index] = `WARN drifted setting ${index}`
+    }
+
+    const bounded = boundOutput(lines.join('\n'), 'report', 'failed')
+
+    const restored = bounded.lines.filter(line => line.startsWith('WARN'))
+    Expect(restored.length).toBe(40)
+  })
+
   Test('lets --max-lines override the budget for either category', () => {
     const output = Array.from({ length: 100 }, (_, index) => `line ${index}`).join('\n')
 
