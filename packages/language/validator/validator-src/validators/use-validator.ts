@@ -93,7 +93,7 @@ function validateUseStatement(useStatement: AST.UseStatement, options: ValidateU
   }
 
   const targetFiles = workspaceFiles.filter(file => {
-    return Packages.targetMatches(resolution, {
+    return Packages.targetMatches(ctx.packagesContext, resolution, {
       filePath: workspaceFilePath(file),
       workspaceFilePaths,
     })
