@@ -2,8 +2,10 @@ import type { HostAction, HostRevision, HostSession, HostTarget } from '@host-co
 import { Errors } from '@shared'
 import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
 import { StudioElectrobun } from '../dev-src/studio/StudioElectrobun'
+import { hostControlScript, hostControlWindowMatches } from '../dev-src/studio/StudioElectrobunAppSource'
 import {
   createStudioHostController,
+  type StudioHostProjectBinding,
   type StudioHostTransport,
   type StudioHostTransportPublishRevision,
   waitForStudioHostTransport,
@@ -11,6 +13,11 @@ import {
 
 const firstRevision: HostRevision = { build: 'build-1', source: 'source-1' }
 const secondRevision: HostRevision = { build: 'build-2', source: 'source-2' }
+const projectBinding: StudioHostProjectBinding = {
+  projectSessionId: 'project-a',
+  windowId: 1,
+  windowToken: 'window-one',
+}
 const entry: HostTarget = { kind: 'accessibility', name: 'Studio entry' }
 const scopedEntry: HostTarget = {
   kind: 'scoped',
@@ -18,7 +25,10 @@ const scopedEntry: HostTarget = {
   target: entry,
 }
 
-function transport(options: { publish?: (request: StudioHostTransportPublishRevision) => Promise<void> } = {}): {
+function transport(options: {
+  bindProject?: () => Promise<StudioHostProjectBinding>
+  publish?: (request: StudioHostTransportPublishRevision) => Promise<void>
+} = {}): {
   calls: Array<Record<string, unknown>>
   value: StudioHostTransport
 } {
@@ -27,20 +37,22 @@ function transport(options: { publish?: (request: StudioHostTransportPublishRevi
     calls,
     value: {
       capabilities: ['inspect', 'key', 'pointer', 'refreshDocument', 'scroll', 'textInput'],
-      observe: async (target, expectedRevision) => {
-        calls.push({ expectedRevision, kind: 'observe', target })
+      bindProject: options.bindProject ?? (async () => projectBinding),
+      observe: async (binding, target, expectedRevision) => {
+        calls.push({ binding, expectedRevision, kind: 'observe', target })
         return {
           accessibilityLabel: target.kind === 'accessibility' ? target.name : undefined,
           bounds: { height: 20, width: 100, x: 12, y: 24 },
+          elementId: 'rendered-entry',
           text: 'Current Studio entry',
           visible: true,
         }
       },
-      perform: async (action, expectedRevision) => {
-        calls.push({ ...action, expectedRevision })
+      perform: async (binding, action, expectedRevision) => {
+        calls.push({ ...action, binding, expectedRevision })
       },
-      publishRevision: async request => {
-        calls.push({ kind: 'publishRevision', ...request })
+      publishRevision: async (binding, request) => {
+        calls.push({ binding, kind: 'publishRevision', ...request })
         await options.publish?.(request)
       },
     },
@@ -102,8 +114,20 @@ Describe('Studio Electrobun semantic host control', () => {
     await Expect(second.perform(click(first, firstObservation))).rejects.toThrow('no longer current')
     await second.perform(click(second, secondObservation))
     Expect(fake.calls.filter(call => call['kind'] === 'click')).toEqual([
-      { expectedRevision: firstRevision, kind: 'click', target: entry },
-      { expectedRevision: firstRevision, kind: 'click', target: entry },
+      {
+        binding: projectBinding,
+        elementId: 'rendered-entry',
+        expectedRevision: firstRevision,
+        kind: 'click',
+        target: entry,
+      },
+      {
+        binding: projectBinding,
+        elementId: 'rendered-entry',
+        expectedRevision: firstRevision,
+        kind: 'click',
+        target: entry,
+      },
     ])
   })
 
@@ -142,6 +166,7 @@ Describe('Studio Electrobun semantic host control', () => {
     await publication
     await Expect(peerAction).rejects.toThrow('no longer current')
     Expect(fake.calls).toContainEqual({
+      binding: projectBinding,
       expectedCurrentRevision: firstRevision,
       kind: 'publishRevision',
       revision: secondRevision,
@@ -157,8 +182,14 @@ Describe('Studio Electrobun semantic host control', () => {
     await session.perform(click(session, observation))
 
     Expect(fake.calls).toEqual([
-      { expectedRevision: firstRevision, kind: 'observe', target: scopedEntry },
-      { expectedRevision: firstRevision, kind: 'click', target: scopedEntry },
+      { binding: projectBinding, expectedRevision: firstRevision, kind: 'observe', target: scopedEntry },
+      {
+        binding: projectBinding,
+        elementId: 'rendered-entry',
+        expectedRevision: firstRevision,
+        kind: 'click',
+        target: scopedEntry,
+      },
     ])
   })
 
@@ -177,7 +208,13 @@ Describe('Studio Electrobun semantic host control', () => {
 
     Expect(session.descriptor().revision).toEqual(firstRevision)
     await session.perform(click(session, observation))
-    Expect(fake.calls.at(-1)).toEqual({ expectedRevision: firstRevision, kind: 'click', target: entry })
+    Expect(fake.calls.at(-1)).toEqual({
+      binding: projectBinding,
+      elementId: 'rendered-entry',
+      expectedRevision: firstRevision,
+      kind: 'click',
+      target: entry,
+    })
   })
 
   Test('invalidates an observed target only after a visible development revision is published', async () => {
@@ -224,10 +261,16 @@ Describe('Studio Electrobun semantic host control', () => {
       readJson: async () => ({ capability: 'capability-1', url: 'http://127.0.0.1:47100/host-control', version: 1 }),
     })
 
-    await host.observe(entry, firstRevision)
+    await host.observe(projectBinding, entry, firstRevision)
 
     Expect(requests).toEqual([{
-      body: { capability: 'capability-1', expectedRevision: firstRevision, operation: 'observe', target: entry },
+      body: {
+        binding: projectBinding,
+        capability: 'capability-1',
+        expectedRevision: firstRevision,
+        operation: 'observe',
+        target: entry,
+      },
       url: 'http://127.0.0.1:47100/host-control',
     }])
   })
@@ -242,14 +285,160 @@ Describe('Studio Electrobun semantic host control', () => {
       readJson: async () => ({ capability: 'capability-1', url: 'http://127.0.0.1:47100/host-control', version: 1 }),
     })
 
-    await host.publishRevision({ expectedCurrentRevision: firstRevision, revision: secondRevision })
+    await host.publishRevision(projectBinding, { expectedCurrentRevision: firstRevision, revision: secondRevision })
 
     Expect(requests).toEqual([{
       capability: 'capability-1',
+      binding: projectBinding,
       expectedCurrentRevision: firstRevision,
       operation: 'publishRevision',
       revision: secondRevision,
     }])
+  })
+
+  Test('binds the active project once and carries that identity across later requests', async () => {
+    const requests: unknown[] = []
+    const host = await waitForStudioHostTransport('/artifacts/host-control.json', {
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { operation: string }
+        requests.push(body)
+        return Response.json({ ok: true, value: body.operation === 'bindProject' ? projectBinding : null })
+      },
+      readJson: async () => ({ capability: 'capability-1', url: 'http://127.0.0.1:47100/host-control', version: 1 }),
+    })
+    const session = await open(host)
+
+    await session.perform({
+      expectedRevision: firstRevision,
+      key: 'Enter',
+      kind: 'key',
+      lease: session.descriptor().lease,
+    })
+
+    Expect(requests).toEqual([
+      { capability: 'capability-1', operation: 'bindProject' },
+      {
+        action: { key: 'Enter', kind: 'key' },
+        binding: projectBinding,
+        capability: 'capability-1',
+        expectedRevision: firstRevision,
+        operation: 'perform',
+      },
+    ])
+  })
+
+  Test('keeps a bound project independent of focus and rejects a closed or repurposed window', () => {
+    const first = { id: 1 }
+    const second = { id: 2 }
+    const windows = new Map([[first.id, first], [second.id, second]])
+    const projectWindows = new Set([first, second])
+    const windowSessions = new Map([[first.id, 'project-a'], [second.id, 'project-b']])
+    const windowTokens = new Map([[first.id, 'window-one'], [second.id, 'window-two']])
+    let activeWindow = second
+
+    Expect(activeWindow).toBe(second)
+    Expect(
+      hostControlWindowMatches(
+        projectBinding,
+        windows.get(projectBinding.windowId),
+        projectWindows,
+        windowSessions,
+        windowTokens,
+      ),
+    ).toBe(true)
+    windowSessions.set(first.id, 'project-c')
+    Expect(
+      hostControlWindowMatches(
+        projectBinding,
+        windows.get(projectBinding.windowId),
+        projectWindows,
+        windowSessions,
+        windowTokens,
+      ),
+    ).toBe(false)
+    windowSessions.set(first.id, 'project-a')
+    windowTokens.set(first.id, 'replacement-window')
+    Expect(
+      hostControlWindowMatches(
+        projectBinding,
+        windows.get(projectBinding.windowId),
+        projectWindows,
+        windowSessions,
+        windowTokens,
+      ),
+    ).toBe(false)
+    windowTokens.set(first.id, 'window-one')
+    windows.delete(first.id)
+    projectWindows.delete(first)
+    Expect(
+      hostControlWindowMatches(
+        projectBinding,
+        windows.get(projectBinding.windowId),
+        projectWindows,
+        windowSessions,
+        windowTokens,
+      ),
+    ).toBe(false)
+    activeWindow = first
+    Expect(activeWindow).toBe(first)
+  })
+
+  Test('the emitted renderer keeps an observed element through input and rejects a reordered occurrence', () => {
+    const renderer = rendererHarness()
+    const target: HostTarget = { kind: 'tag', occurrence: 1, value: 'row' }
+    const first = renderer.element('First', 'row')
+    const second = renderer.element('Second', 'row')
+    renderer.order.push(first, second)
+
+    const observed = renderer.run({ operation: 'observe', target })
+    const elementId = (observed.result as { elementId: string }).elementId
+    renderer.order.reverse()
+    const staleClick = renderer.run({ action: { elementId, kind: 'click', target }, operation: 'perform' })
+    Expect(staleClick.error).toBe('Studio semantic observation is no longer current.')
+    Expect(first.clicks).toBe(0)
+    Expect(second.clicks).toBe(0)
+
+    renderer.order.reverse()
+    const clicked = renderer.run({ action: { elementId, kind: 'click', target }, operation: 'perform' })
+    Expect(clicked.error).toBe(undefined)
+    Expect(first.clicks).toBe(1)
+    Expect(second.clicks).toBe(0)
+
+    const forScroll = renderer.run({ operation: 'observe', target })
+    const scrollId = (forScroll.result as { elementId: string }).elementId
+    renderer.order.reverse()
+    const staleScroll = renderer.run({
+      action: { deltaX: 10, deltaY: 0, kind: 'scroll', observed: { elementId: scrollId, target } },
+      operation: 'perform',
+    })
+    Expect(staleScroll.error).toBe('Studio semantic observation is no longer current.')
+    Expect(first.scrolls).toEqual([])
+
+    renderer.order.reverse()
+    const typed = renderer.run({
+      action: { elementId: scrollId, kind: 'type', target, text: 'Updated' },
+      operation: 'perform',
+    })
+    Expect(typed.error).toBe(undefined)
+    Expect(first.value).toBe('Updated')
+  })
+
+  Test('the renderer rejects unsupported roles and a changed project document before input', () => {
+    const renderer = rendererHarness()
+    const input = renderer.element('Search', 'search')
+    renderer.order.push(input)
+    const roleTarget: HostTarget = { kind: 'accessibility', name: 'Search', role: 'button' }
+
+    const role = renderer.run({ operation: 'observe', target: roleTarget })
+    Expect(role.error).toBe('Studio semantic accessibility role targets are unsupported.')
+
+    const target: HostTarget = { kind: 'tag', value: 'search' }
+    const observed = renderer.run({ operation: 'observe', target })
+    const elementId = (observed.result as { elementId: string }).elementId
+    renderer.pathname = '/sessions/project-b'
+    const changedProject = renderer.run({ action: { elementId, kind: 'click', target }, operation: 'perform' })
+    Expect(changedProject.error).toBe('Studio semantic control project document changed.')
+    Expect(input.clicks).toBe(0)
   })
 
   Test('materializes a capability-protected semantic endpoint in the Electrobun shell', () => {
@@ -278,3 +467,102 @@ Describe('Studio Electrobun semantic host control', () => {
     Expect(main).not.toContain('CSS.escape')
   })
 })
+
+type RendererMessage = { error?: string; result?: unknown }
+
+function rendererHarness(): {
+  element: (label: string, tag: string) => RendererElement
+  order: RendererElement[]
+  pathname: string
+  run: (request: Record<string, unknown>) => RendererMessage
+} {
+  const order: RendererElement[] = []
+  const messages: RendererMessage[] = []
+  let sequence = 0
+  const state = { pathname: '/sessions/project-a' }
+  const rendererWindow = {
+    __electrobunSendToHost: (message: RendererMessage) => messages.push(message),
+    location: state,
+    scrollBy: (_x: number, _y: number) => {},
+  }
+  const document = {
+    body: {},
+    querySelectorAll: (selector: string) =>
+      selector === '*' || selector === '[data-testid]' || selector === '[aria-label]' ? order : [],
+    readyState: 'complete',
+  }
+  const run = (request: Record<string, unknown>): RendererMessage => {
+    const script = hostControlScript({ projectSessionId: 'project-a', requestId: `request-${++sequence}`, ...request })
+    new Function(
+      'window',
+      'document',
+      'crypto',
+      'HTMLInputElement',
+      'HTMLTextAreaElement',
+      'Event',
+      'KeyboardEvent',
+      script,
+    )(
+      rendererWindow,
+      document,
+      { randomUUID: () => `element-${sequence}` },
+      RendererElement,
+      RendererElement,
+      class {},
+      class {},
+    )
+    return messages.at(-1)!
+  }
+  return {
+    element: (label, tag) => new RendererElement(label, tag),
+    order,
+    get pathname() {
+      return state.pathname
+    },
+    set pathname(value: string) {
+      state.pathname = value
+    },
+    run,
+  }
+}
+
+class RendererElement {
+  children: unknown[] = []
+  clicks = 0
+  isConnected = true
+  scrolls: Array<[number, number]> = []
+  textContent: string
+  #value = ''
+  readonly #tag: string
+
+  constructor(label: string, tag: string) {
+    this.textContent = label
+    this.#tag = tag
+  }
+
+  click(): void {
+    this.clicks += 1
+  }
+
+  dispatchEvent(_event: unknown): void {}
+
+  get value(): string {
+    return this.#value
+  }
+
+  set value(value: string) {
+    this.#value = value
+  }
+
+  getAttribute(name: string): string | null {
+    return name === 'data-testid' ? this.#tag : name === 'aria-label' ? this.textContent : null
+  }
+
+  getBoundingClientRect(): { height: number; width: number; x: number; y: number } {
+    return { height: 20, width: 100, x: 0, y: 0 }
+  }
+
+  scrollBy(x: number, y: number): void {
+    this.scrolls.push([x, y])
+  }
+}

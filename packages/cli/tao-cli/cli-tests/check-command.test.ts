@@ -292,7 +292,10 @@ Describe('tao check', () => {
         const results = await runCheck(target.path, { cwd: target.cwd })
         const sourcePath = FS.resolvePath(packageAwareCliMainPath, rootDir)
 
-        Expect(statusByFile(results, rootDir)).toEqual({ [packageAwareCliMainPath]: 'changed' })
+        Expect(statusByFile(results, rootDir)).toEqual({
+          [packageAwareCliMainPath]: 'changed',
+          'Packages/@cards/widgets/Widget.tao': 'diagnostics',
+        })
         Expect(await FS.readText(sourcePath)).toContain('LocalText, Missing')
       })
     })
