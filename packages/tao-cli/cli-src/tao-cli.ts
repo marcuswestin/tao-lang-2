@@ -372,6 +372,7 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
+    const diagnosticsOnly = results.filter(result => result.status === 'diagnostics')
     const diagnostics = results.flatMap(result => result.diagnostics ?? [])
     const errorCount = diagnostics.filter(Diagnostic.isError).length
       + results.reduce((held, result) => held + (result.unreportedDiagnostics ?? 0), 0)
@@ -388,7 +389,7 @@ async function runInPlaceCommand(
       return
     }
 
-    const unchangedCount = results.length - changed.length - errored.length
+    const unchangedCount = results.length - changed.length - errored.length - diagnosticsOnly.length
     const summary = [
       `${changed.length} ${labels.changed}`,
       `${unchangedCount} unchanged`,
