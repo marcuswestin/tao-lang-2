@@ -111,6 +111,7 @@ export type FinalizeDependencies = {
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
+  makeProbeDirectory: (prefix: string) => Promise<string>
   inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
@@ -127,6 +128,7 @@ const defaultDependencies: FinalizeDependencies = {
   findGreenTree: GreenTree.find,
   inspectRemote: inspectLandingRemote,
   key: GreenTree.key,
+  makeProbeDirectory: FS.mkTmpDir,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
@@ -509,14 +511,11 @@ async function integrateMain(
   if (ancestor.exitCode !== 1) {
     assertCommandSucceeded(ancestor)
   }
-  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
   if (check) {
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
-    if (blocked.length > 0) {
-      lines.push(`NOTE  ${deniedIntegrationReport(blocked)}`)
-    }
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
+  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
   if (blocked.length > 0) {
     Errors.throwUserInput(deniedIntegrationReport(blocked))
   }
@@ -589,8 +588,8 @@ async function mergeTreeConflicts(
   return rest.slice(0, rest.indexOf('')).map(line => line.trim()).filter(Boolean)
 }
 
-/** The probe file a write test creates and removes; named so a stray one says what left it. */
-const WRITE_PROBE = '.finalize-write-probe'
+/** Prefix for a uniquely created probe directory; a fixed path could overwrite someone's file. */
+const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
  * undeniableDirectories returns the directories `main` would write that this process cannot, empty
@@ -636,11 +635,12 @@ async function nearestExistingDirectory(
   return candidate === '.' ? '' : candidate
 }
 
-/** canWriteInto reports whether this process may create a file in a directory, by creating one. */
+/** canWriteInto reports whether this process may create an entry in a directory. */
 async function canWriteInto(dependencies: FinalizeDependencies, directory: string): Promise<boolean> {
-  const probe = FS.resolvePath(WRITE_PROBE, directory)
+  let probe: string
   try {
-    await dependencies.writeText(probe, '')
+    // mkdtemp creates the directory exclusively: an existing tracked or ignored path is untouched.
+    probe = await dependencies.makeProbeDirectory(FS.resolvePath(WRITE_PROBE_PREFIX, directory))
   } catch {
     return false
   }

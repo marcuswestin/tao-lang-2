@@ -71,6 +71,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const calls: Array<{ args: string[]; command: string; cwd?: string; stdio?: CLI.CommandStdio }> = []
   const states = new Map<string, unknown>()
   const files = new Map<string, string>()
+  const probePaths: string[] = []
   const lines: string[] = []
   const greenTreeRecords = new Map<string, GreenTreeRecord>()
   let headAfterMerge = repository.headSha
@@ -176,6 +177,15 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       return undefined
     },
     key: async () => ({ toolchain: FAKE_TOOLCHAIN, treeHash: `tree-of-${headAfterMerge}` }),
+    makeProbeDirectory: async prefix => {
+      if (resolvedIn(repository.unwritableDirectories ?? []).some(directory => prefix.startsWith(`${directory}/`))) {
+        Errors.throwUnexpected(`EPERM: operation not permitted, mkdir '${prefix}'`)
+      }
+      const path = `${prefix}${probePaths.length}`
+      probePaths.push(path)
+      files.set(path, '')
+      return path
+    },
     now: () => new Date('2026-09-17T12:00:00.000Z'),
     readJson: async <ValueT>(path: string) => {
       if (!states.has(path)) {
@@ -199,7 +209,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, greenTreeRecords, lines, repository, states }
+  return { calls, dependencies, files, greenTreeRecords, lines, probePaths, repository, states }
 }
 
 Describe('finalize', () => {
@@ -309,8 +319,24 @@ Describe('finalize', () => {
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
 
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(true)
-    // The probe leaves nothing behind in a directory it could write.
-    Expect([...fake.files.keys()].some(path => path.endsWith('.finalize-write-probe'))).toBe(false)
+    // A uniquely created probe leaves nothing behind in a directory it could write.
+    Expect(fake.probePaths.length).toBe(1)
+    Expect(fake.files.has(fake.probePaths[0]!)).toBe(false)
+  })
+
+  Test('does not overwrite an existing file with the old fixed probe name', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['packages/dev/dev-src/dev.ts'],
+      existingDirectories: ['packages/dev/dev-src'],
+    })
+    const existing = '/repo/packages/dev/dev-src/.finalize-write-probe'
+    fake.files.set(existing, 'keep this file')
+
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
+
+    Expect(fake.files.get(existing)).toBe('keep this file')
+    Expect(fake.probePaths.length).toBe(1)
+    Expect(fake.files.has(fake.probePaths[0]!)).toBe(false)
   })
 
   Test('names what would conflict even when the merge recorded nothing to resolve', async () => {
@@ -724,11 +750,16 @@ Describe('finalize', () => {
   })
 
   Test('--check reports without integrating main, running a lane, or writing any file', async () => {
-    const fake = fakeDependencies()
+    const fake = fakeDependencies({
+      diffPaths: ['agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+    })
     const outcome = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.probePaths).toEqual([])
     Expect(fake.files.size).toBe(0)
     Expect(fake.states.size).toBe(0)
     Expect(outcome.lines.some(line => line.startsWith('PLAN'))).toBe(true)
@@ -896,6 +927,7 @@ Describe('finalize', () => {
         exists: FS.exists,
         findGreenTree: async () => undefined,
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
+        makeProbeDirectory: FS.mkTmpDir,
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
         readText: FS.readText,

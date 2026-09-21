@@ -19,6 +19,11 @@ fi
 # `./dev` runs from source, so it uses the same installer and completion proof as `./agent` before
 # Bun resolves the entry module. A dependency tree restored here therefore never triggers a second
 # install when the next command enters through `./agent`.
-zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR"
+if [[ "${1:-}" == agent-config ]]; then
+  # Agent-config regeneration is a sandbox-excluded recovery; use only dependencies already here.
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --no-install
+else
+  zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR"
+fi
 
 exec bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"
