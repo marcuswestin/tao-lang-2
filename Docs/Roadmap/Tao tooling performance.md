@@ -148,12 +148,18 @@ figures and the "+ realpath memo" column is what the fix delivers.
 
 ### 5.2 The scope provider recomputes imports per reference
 
-`ValueScopeProvider.importedDeclarations` (`value-scope.ts:645-666`) walks the file's `use`
-statements and, for each, filters every document in the workspace — per reference, from some twenty
-call sites, with `LangiumDocuments.all` re-walking Langium's URI trie each time (`collectValues` was
-the top non-native frame once `realpath` was gone). Cost is references × imports × documents.
-Langium's intended shape is to compute a document's importable names once per build and cache them
-(`DocumentCache`, `WorkspaceCache`); caching per `use` statement alone halves the link phase.
+`ValueScopeProvider.importedDeclarations` walked the file's `use` statements and, for each, filtered
+every document in the workspace — per reference, from some twenty call sites, with
+`LangiumDocuments.all` re-walking Langium's URI trie each time (`collectValues` was the top
+non-native frame once `realpath` was gone). Cost was references × imports × documents.
+
+**Fixed after 5.1.** The provider now remembers what each `use` statement resolves to. The table is
+keyed weakly by the statement, because `Parser.parse` replaces every document it builds and so
+retires the statements with them, and it is dropped whenever Langium starts an update, because the
+editor relinks an importing file without re-parsing it; a test pins that case and fails without the
+reset. Measured on `main` with 5.1 landed, then with this: check 2.17s → 1.80s, fix 1.23s → 1.04s,
+compile 0.87s → 0.85s. `folderDeclarations` still walks every document per call and is the next
+candidate for the same treatment, though what is left of `tao check` is almost all 5.3.
 
 ### 5.3 Every entry rebuilds the whole graph, and nothing survives between entries
 
@@ -161,8 +167,37 @@ Langium's intended shape is to compute a document's importable names once per bu
 file from disk, and runs a full eager-linking build (`parser.ts:133-139`, `266-291`).
 `Workspace.validateFiles` calls it once per entry (`Workspace.ts:99-111`), so checking a 13-file app
 parses and links the standard library 13 times. This is what is left of `tao check` after 5.1 and
-5.2: 1.9s where one build of the union would be about 0.2s. It is also why the LSP-grade
+5.2: 1.8s where one build of the union would be about 0.2s. It is also why the LSP-grade
 incremental path — 7-35ms for a one-file change — is unreachable from any command.
+
+Building the union once is only safe if no file comes to see more than it sees in its own graph,
+and two things stand in the way. The loader keeps `.test.tao` files out of an app file's graph
+(`folderSiblingPathsIn`, `parser.ts:496-510`), while `ValueScopeProvider.folderDeclarations` walks
+every document the workspace holds without excluding them, so in a union build a folder-visible
+declaration in a test file would leak into its app-file siblings; the provider has to apply the
+loader's rule itself. And a validator that reads the whole workspace would see every entry's files
+instead of one entry's, so each entry has to be validated against its own reachable set, computed
+from the shared linked graph, the way `validateFiles` already scopes everything but project
+identity. The editor has always linked on the union, so the first of these is a latent difference
+between the editor and `tao check` today, not one a union build would introduce.
+
+A third constraint was a language question before it was an engineering one. Three of the grammar's
+cross-references — `ProjectDefaultApp.app` (`DefaultApp X` in a project declaration),
+`ViewDeclaration.response` (a responding view's type), and `TestDeclaration.dependencies` (what a
+test says it exercises) — fell through to Langium's default scope, which offers every top-level
+declaration of every document the workspace holds, imports and visibility ignored. What they resolved
+to, and whether `tao check` reported them unresolved, therefore depended on which files an entry
+happened to load, and differed between the CLI and the editor; a union build would have changed
+those answers. A textual audit of the grammar found the first two, and logging the fall-through
+during a whole-repository check found the third, which is the method to trust.
+
+**Scoped since.** `DefaultApp` follows the rule `Decisions.md` already states — one app declaration
+from this project, wherever in the project it is declared, test sidecars excluded because they are
+loaded only when they are the file being checked. A response type and a test's dependencies follow
+ordinary visibility, declared in the file or reached by `use`, as every other reference does. The
+provider's fall-through now returns an empty scope, so a reference the grammar gains without a rule
+resolves to nothing and says so. The whole repository checks clean under all three rules, and each
+has a test that loads the declaration it must not find and fails when the rule is removed.
 
 ### 5.4 Every command is a cold process, including the ones in a loop
 
@@ -354,7 +389,8 @@ real projects outgrow Langium's heap, and the trigger should be one of those, ob
 Phase 0 — remove the defects (days; no design decisions; unblocks every lane in section 3):
 
 1. ~~Resolve the physical-boundary guard once per path (5.1).~~ Landed with this report.
-2. Compute each document's import table once per build and cache it the way Langium intends (5.2).
+2. ~~Remember what each `use` statement resolves to instead of recomputing it per reference (5.2).~~
+   Done.
 3. Build the union of a workspace's entries in one pass and validate each entry over the shared,
    linked graph (5.3); teach `./agent bench` to assert a budget so this cannot regress silently.
 4. Compile tests to stable, content-addressed paths and deduplicate app variants (5.5, option A).
