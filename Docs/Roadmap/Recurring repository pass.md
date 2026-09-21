@@ -6,24 +6,30 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Most recent full catch-up:** the September squash-merge audit reviewed `main` through
-  `18505fafbb5b4cae20351c1e8ef5dfbdc805e499`. Its remediation and remaining external acceptance
-  boundary are recorded in
+- **Most recent catch-up:** the 2026-09-21 pass reviewed the 74 first-parent `main` commits after
+  `18505fafbb5b4cae20351c1e8ef5dfbdc805e499`, through
+  `5e3526439008882a2c15da3e1cbdc44b7976cc91`. The earlier remediation and its external
+  acceptance boundary remain in
   [`September squash-merge remediation.md`](<../Archive/Reports/September squash-merge remediation.md>).
-- **Covered:** correctness and regression review of the first-parent squash merges through that
-  commit, followed by independent verification and deduplication of proposed findings.
-- **Not covered for the next pass:** commits after that boundary. The next orchestrator must inspect
-  them before deciding which kinds of review or repository-health work are worthwhile. The prior
-  pass does not establish current dependency security or external device, provider, signing, or
-  distribution acceptance.
+- **Covered:** changed language/CLI, Studio and native host control, developer automation, and
+  verification seams; focused reproductions and tests for accepted defects; `bun audit` on the
+  recorded lock graph; and the Nixpkgs tracker and upstream notices for pinned `devenv.lock` inputs.
+- **Outcome and limits:** remediation on `feat/recurring-repository-pass` addresses the confirmed
+  CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
+  workflow defects. The Appium graph still pins advisory-affected `@xmldom/xmldom@0.9.10` and
+  `morgan@1.11.0`; the pinned Linux Nixpkgs glibc remains tracker-affected. A cold dprint cache can
+  still trigger a plugin download in sandbox-excluded agent-config recovery, recorded in the
+  developer-environment backlog. This pass did not establish physical-device, real CloudKit,
+  installed-binary OTA, signed Studio, or distribution acceptance, and did not review later `main`.
 
 ## Consider next time
 
-- Start with the commits after the recorded boundary and the current repository documentation;
-  choose checks because the changes make them useful, not because every category must run.
-- Consider correctness and regressions, security, architecture and package boundaries, test and
-  verification quality, documentation or roadmap drift, simplification, setup reproducibility, and
-  release or external-platform concerns.
+- Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
+  entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
+  and current risks rather than repeating every category.
+- Recheck the Appium transitive advisory pins and Linux Nixpkgs glibc status. Exercise the
+  agent-config recovery boundary on a cold cache after its network path is narrowed, and use real
+  host or device evidence before claiming external acceptance.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes and
   research current advisories or security releases from primary sources:
   - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run
