@@ -1,7 +1,7 @@
+import { OutputText } from '@cli-kit'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { createServer } from 'node:net'
-import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
 import { createDevLoopExpoSession } from '../dev-src/expo-dev-loop/expo-dev-loop'
 import {

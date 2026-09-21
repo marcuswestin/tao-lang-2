@@ -79,6 +79,20 @@ export type CommandResult = {
   error?: Error
 }
 
+/** SandboxDenialOutcome is the slice of a command result `isSandboxDenial` reads. `error` is kept
+ * as broad as `unknown` because a caller's own probe result may carry a caught exception rather
+ * than the narrower `Error` a supervised `CLI` command reports. */
+type SandboxDenialOutcome = Pick<CommandResult, 'stderr' | 'stdout'> & { error?: unknown }
+
+const SANDBOX_DENIAL = /\b(operation not permitted|permission denied|eperm|eacces|sandbox)\b/i
+
+/** isSandboxDenial recognizes the policy-denial evidence shared by capability and command diagnostics. */
+export function isSandboxDenial(result: SandboxDenialOutcome): boolean {
+  const output = `${result.stderr}\n${result.stdout}`.trim()
+  const fallback = result.error instanceof Error ? result.error.message : ''
+  return SANDBOX_DENIAL.test(output || fallback)
+}
+
 /** CommandCloseResult records process close status. */
 export type CommandCloseResult = {
   exitCode: number | null

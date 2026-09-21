@@ -1,5 +1,5 @@
+import { OutputText } from '@cli-kit'
 import { FS, Repo } from '@shared'
-import { OutputText } from '../../cli/OutputText'
 import {
   finalizeStudioProcessTree,
   startStudioProcessTree,

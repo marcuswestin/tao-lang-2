@@ -1,5 +1,5 @@
 import { Assert, CLI, Errors, FS, HCI, Platform } from '@shared'
-import { MachineLanes } from '../repository-tests/MachineLanes'
+import { MachineLanes } from '@verification/MachineLanes'
 import {
   defaultWorktreeDependencies,
   type ProvisionedWorktrees,

@@ -1,6 +1,6 @@
 import { CLI, Errors, FS, Repo } from '@shared'
-import { LandingLock } from '../repository-tests/LandingLock'
-import { MachineLanes, type MachineResourceOwner } from '../repository-tests/MachineLanes'
+import { LandingLock } from '@verification/LandingLock'
+import { MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
 import { parseWorktreePorcelain } from './Board'
 
 /**

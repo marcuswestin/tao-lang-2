@@ -1,5 +1,5 @@
+import { OutputText } from '@cli-kit'
 import { CLI, Errors, Repo } from '@shared'
-import { OutputText } from '../cli/OutputText'
 import CommandRunner from './CommandRunner'
 import { DevLoopTUI } from './DevLoopTUI'
 import type { ExpoRunnerSession } from './expo-runner/ExpoRunner'

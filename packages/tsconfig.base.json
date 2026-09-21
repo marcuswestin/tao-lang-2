@@ -20,6 +20,12 @@
     "noPropertyAccessFromIndexSignature": true,
     "rootDir": ".",
     "paths": {
+      "@cli-kit": [
+        "./cli/cli-kit/cli-kit-src/cli-kit.ts"
+      ],
+      "@cli-kit/*": [
+        "./cli/cli-kit/cli-kit-src/*"
+      ],
       "@host-control": [
         "./testing/host-control/host-control-src/host-control.ts"
       ],
@@ -121,6 +127,12 @@
       ],
       "@expo-dev-loop": [
         "./dev/dev-src/expo-dev-loop/expo-dev-loop.ts"
+      ],
+      "@verification": [
+        "./testing/verification/verification-src/verification.ts"
+      ],
+      "@verification/*": [
+        "./testing/verification/verification-src/*"
       ]
     }
   },

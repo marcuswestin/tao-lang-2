@@ -357,7 +357,7 @@ lint: _repo-lint
 # Fail on exported symbols nothing imports; a gate in verify and verify-full
 [group('Dev')]
 dead-exports:
-    bun run packages/dev/dev-src/repository-tests/DeadExports.ts
+    bun run packages/testing/verification/verification-src/DeadExports.ts
 
 # Diagnose this checkout without changing it; pass --json for a structured report
 [group('Report')]
@@ -557,10 +557,10 @@ _fix-just-fmt:
 
 # Both developer-environment index pages are generated from the entry files; never hand-edit them.
 _fix-ledger-index:
-    bun run packages/dev/dev-src/repository-tests/fix-ledger-index.ts
+    bun run packages/testing/verification/verification-src/fix-ledger-index.ts
 
 _runtime-pack-check:
-    bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts
+    bun run packages/testing/verification/verification-src/runtime-package-pack.ts
 
 # `CompileApp.ts` stamps and then delegates to `./tao compile`. Four test recipes and both verify
 # lanes depend on this gate, so an unconditional 2.7s compile was paid before a single test could
@@ -568,7 +568,7 @@ _runtime-pack-check:
 # as a module rather than through `./dev`, matching `_parser-gen`: nobody types a private recipe, so
 # the discoverable command bought nothing and cost `./dev`'s boot on every run.
 _compile-word-flower-app: _parser-gen
-    bun run packages/dev/dev-src/repository-tests/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
+    bun run packages/testing/verification/verification-src/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
 
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
@@ -585,7 +585,7 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/dev/dev-src/repository-tests/repo-lint.ts
+    bun run packages/dev/dev-src/repo-lint-entry.ts
 
 # TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
@@ -607,4 +607,4 @@ _android-expo-go:
     bun run packages/dev/dev-src/dev.ts android-expo-go
 
 _parser-gen:
-    bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts
+    bun run packages/testing/verification/verification-src/ParserGenerate.ts

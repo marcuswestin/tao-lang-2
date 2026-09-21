@@ -1,9 +1,9 @@
 # Repository lanes
 
 How `check`, `verify`, `verify-full`, and `./agent test` behave when several worktrees of this
-repository are working at once. `packages/dev` owns the scheduler, the gate catalog, the artifacts
-every lane writes, and the doctor; this README owns the operational half — what is shared, what is
-not, and how a lane reports a failure it did not cause.
+repository are working at once. `packages/testing/verification` owns the scheduler and the gate
+catalog; `packages/dev` owns the artifacts every lane writes and the doctor. This README owns the
+operational half — what is shared, what is not, and how a lane reports a failure it did not cause.
 
 Several agents and people work in linked worktrees under `.claude/worktrees/`, `~/.codex/worktrees/`,
 and elsewhere. Every one of them is a full checkout with its own `node_modules`, its own `_gen_*`
