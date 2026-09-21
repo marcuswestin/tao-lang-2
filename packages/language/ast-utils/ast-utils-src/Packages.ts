@@ -108,6 +108,13 @@ export namespace Packages {
       async candidateFilePaths(useStatement, request) {
         return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
       },
+      projectSourceFiles(request) {
+        const projectRoot = projectRootForPath(context.index, request.fromFilePath)
+        return request.workspaceFiles.filter(file => {
+          const path = workspaceFilePath(file)
+          return !isTestSourcePath(path) && projectRootForPath(context.index, path) === projectRoot
+        })
+      },
     }
   }
 

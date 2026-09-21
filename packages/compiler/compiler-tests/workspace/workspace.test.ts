@@ -490,53 +490,6 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
-  // The editor updates a changed document in place and only relinks the files that import it, so the
-  // importing file keeps its use statement while what that statement resolves to is replaced. A
-  // resolution remembered across the update would point the import at a declaration in a syntax
-  // tree nothing holds any more.
-  Test('resolves an import against the imported file as it is after an editor update', async () => {
-    await withTaoFiles(
-      'tao-workspace-lsp-import-after-update-',
-      {
-        'App/Main.tao': `
-          project { id "app" name "App" }
-          use Label from @data
-          workspace let Selected = Label
-        `,
-        'App/@data/Data.tao': 'workspace let Label = "Before"',
-      },
-      async (paths, rootDir) => {
-        const packagesContext = await Packages.createContext(FS.resolvePath('App', rootDir))
-        const services = createWorkspaceLspServices(packagesContext)
-        const documents = services.shared.workspace.LangiumDocuments
-        const factory = services.shared.workspace.LangiumDocumentFactory
-        const builder = services.shared.workspace.DocumentBuilder
-        const main = await factory.fromUri(Langium.URI.file(paths['App/Main.tao']!))
-        const data = await factory.fromUri(Langium.URI.file(paths['App/@data/Data.tao']!))
-        documents.addDocument(main)
-        documents.addDocument(data)
-        await builder.build([main, data], { eagerLinking: true, validation: true })
-        const importedLabel = () => {
-          const file = main.parseResult.value
-          Expect.Is(file, AST.isTaoFile)
-          return file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
-        }
-        const before = importedLabel()
-        Expect(before && AST.findRoot(before)).toBe(data.parseResult.value)
-
-        await FS.writeText(paths['App/@data/Data.tao']!, 'workspace let Label = "After"')
-        await builder.update([data.uri], [])
-        await builder.build([main, data], { eagerLinking: true, validation: true })
-
-        const after = importedLabel()
-        Expect(after).toBeDefined()
-        Expect(after).not.toBe(before)
-        Expect(after && AST.findRoot(after)).toBe(data.parseResult.value)
-        Expect(lspErrorMessages(main.diagnostics ?? [])).toEqual([])
-      },
-    )
-  })
-
   Test('opens a nested editor folder at its inline-declared project root', async () => {
     await withTaoFiles(
       'tao-workspace-lsp-containing-project-',

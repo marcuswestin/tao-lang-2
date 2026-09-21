@@ -181,6 +181,24 @@ from the shared linked graph, the way `validateFiles` already scopes everything 
 identity. The editor has always linked on the union, so the first of these is a latent difference
 between the editor and `tao check` today, not one a union build would introduce.
 
+A third constraint was a language question before it was an engineering one. Three of the grammar's
+cross-references — `ProjectDefaultApp.app` (`DefaultApp X` in a project declaration),
+`ViewDeclaration.response` (a responding view's type), and `TestDeclaration.dependencies` (what a
+test says it exercises) — fell through to Langium's default scope, which offers every top-level
+declaration of every document the workspace holds, imports and visibility ignored. What they resolved
+to, and whether `tao check` reported them unresolved, therefore depended on which files an entry
+happened to load, and differed between the CLI and the editor; a union build would have changed
+those answers. A textual audit of the grammar found the first two, and logging the fall-through
+during a whole-repository check found the third, which is the method to trust.
+
+**Scoped since.** `DefaultApp` follows the rule `Decisions.md` already states — one app declaration
+from this project, wherever in the project it is declared, test sidecars excluded because they are
+loaded only when they are the file being checked. A response type and a test's dependencies follow
+ordinary visibility, declared in the file or reached by `use`, as every other reference does. The
+provider's fall-through now returns an empty scope, so a reference the grammar gains without a rule
+resolves to nothing and says so. The whole repository checks clean under all three rules, and each
+has a test that loads the declaration it must not find and fails when the rule is removed.
+
 ### 5.4 Every command is a cold process, including the ones in a loop
 
 A one-file check costs 370ms wall and 0.73s of CPU before it has anything to say: Bun start, the
