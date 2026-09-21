@@ -1,47 +1,7 @@
+import { declarationWord } from './grammar-words'
 import * as AST from './parserASTExport'
 
 type LinkerReference = AST.Document['references'][number]
-
-/**
- * DECLARATION_WORDS spells each grammar cross-reference type in the word a Tao author writes. A
- * reference that does not resolve is the most common mistake a newcomer makes, and Langium's own
- * message names the grammar type it was looking for — `RenderTarget`, `EntityDataField` — which is
- * an internal name no Tao program contains. An unlisted type falls back to its spaced-out spelling,
- * so a cross-reference added to the grammar later still reads as words rather than as a type name.
- */
-const DECLARATION_WORDS: Readonly<Record<string, string>> = {
-  ActionDeclaration: 'action',
-  AppDeclaration: 'app',
-  AppValueDeclaration: 'app or alias',
-  CaseDeclaration: 'case',
-  CaseSetCase: 'case',
-  CommandDeclaration: 'command',
-  ConstructorDeclaration: 'type',
-  Declaration: 'declaration',
-  EntityDataDeclaration: 'data entity',
-  EntityDataField: 'field',
-  FixtureAccountDeclaration: 'fixture account',
-  FixtureDeclaration: 'fixture',
-  FixtureValueDeclaration: 'fixture value',
-  FunctionDeclaration: 'function',
-  ListedDeclaration: 'data entity or value',
-  NamedDeclaration: 'declaration',
-  RefinementBaseDeclaration: 'type or value',
-  RenderSlotContract: 'render slot',
-  // A scene is a view and a nav is a scene, so one word covers every render target.
-  RenderTarget: 'view',
-  ScenarioSubjectDeclaration: 'app or view',
-  StateDeclaration: 'state',
-  TypeDeclaration: 'type',
-  UsePackageStatement: 'package',
-  ValueDeclaration: 'value',
-  ViewDeclaration: 'view',
-}
-
-/** declarationWord returns the Tao word for a grammar cross-reference type. */
-export function declarationWord(referenceType: string): string {
-  return DECLARATION_WORDS[referenceType] ?? referenceType.replaceAll(/(?<!^)([A-Z])/g, ' $1').toLowerCase()
-}
 
 /**
  * unresolvedReferenceMessage states an unresolved cross-reference in Tao's vocabulary, or returns

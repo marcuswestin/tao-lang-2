@@ -4,6 +4,8 @@ import {
   FinalizeCommand,
   type FinalizeDependencies,
   type FinalizeState,
+  LandCommand,
+  prepareForLanding,
 } from '../dev-src/repository-tests/Finalize'
 import {
   GeneratedEvidence,
@@ -35,7 +37,11 @@ const FAKE_GENERATED: GeneratedEvidenceRecord = {
 type FakeRepository = {
   branch: string
   conflictOnMerge?: boolean
+  /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
+  deniedMergeStderr?: string
   diffPaths?: string[]
+  /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
+  mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
   headSha: string
   localMainSha?: string
@@ -45,8 +51,8 @@ type FakeRepository = {
   verifyExitCode?: number
 }
 
-function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0) {
-  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr: '', stdout }
+function result(args: readonly string[], cwd: string | undefined, stdout = '', exitCode = 0, stderr = '') {
+  return { args: [...args], command: 'x', cwd, error: undefined, exitCode, signal: null, stderr, stdout }
 }
 
 function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
@@ -94,7 +100,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       const mainShaUsed = repository.remoteReachable ? repository.mainSha : repository.localMainSha
       return result(args, spec.cwd, '', mainShaUsed === headAfterMerge || mainShaUsed === repository.headSha ? 0 : 1)
     }
+    if (args[0] === 'merge-tree' && args[1] === '--write-tree') {
+      const conflicts = repository.mergeTreeConflicts ?? []
+      return conflicts.length === 0
+        ? result(args, spec.cwd, 'treeoid0000000000000000000000000000000000\n')
+        : result(args, spec.cwd, `treeoid0000000000000000000000000000000000\n${conflicts.join('\n')}\n\nCONFLICT\n`, 1)
+    }
     if (args[0] === 'merge' && args[1] === '--no-edit') {
+      if (repository.deniedMergeStderr !== undefined) {
+        return result(args, spec.cwd, '', 1, repository.deniedMergeStderr)
+      }
       if (repository.conflictOnMerge === true) {
         return result(args, spec.cwd, '', 1)
       }
@@ -102,7 +117,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       return result(args, spec.cwd)
     }
     if (joined === 'diff --name-only --diff-filter=U') {
-      return result(args, spec.cwd, 'conflicted.ts\n')
+      return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
       return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
@@ -160,6 +175,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return states.get(path) as ValueT
     },
+    readText: async (path: string) => files.get(path) ?? '',
     run: runner,
     writeJson: async (path, value) => {
       states.set(path, structuredClone(value))
@@ -233,6 +249,40 @@ Describe('finalize', () => {
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
       .rejects.toThrow('conflicted.ts')
     Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
+  })
+
+  Test('calls a denied integration what it is, rather than a conflict with nothing to resolve', async () => {
+    const fake = fakeDependencies({
+      deniedMergeStderr: "error: unable to unlink old 'agents/skills/delegation/SKILL.md': Operation not permitted",
+      mergeTreeConflicts: ['agents/skills/delegation/SKILL.md'],
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    const message = String(failure)
+    Expect(message.includes('did not complete, and it is not a conflict')).toBe(true)
+    Expect(message.includes('Operation not permitted')).toBe(true)
+    Expect(message.includes('agents/skills/delegation/SKILL.md')).toBe(true)
+    Expect(message.includes('DEVENV-111')).toBe(true)
+    Expect(message.includes('resolve it by hand and finalize again')).toBe(false)
+  })
+
+  Test('names what would conflict even when the merge recorded nothing to resolve', async () => {
+    const fake = fakeDependencies({ deniedMergeStderr: 'denied', mergeTreeConflicts: [] })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+
+    Expect(String(failure).includes('Nothing would have conflicted.')).toBe(true)
+  })
+
+  Test('asks what would conflict before attempting the merge, not after it has failed', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true, mergeTreeConflicts: ['conflicted.ts'] })
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
+
+    const preview = fake.calls.findIndex(call => call.args[0] === 'merge-tree')
+    const merge = fake.calls.findIndex(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')
+    Expect(preview).toBeGreaterThanOrEqual(0)
+    Expect(preview < merge).toBe(true)
   })
 
   Test('runs just verify --complete only when no accepted lane already covers this tree', async () => {
@@ -360,62 +410,131 @@ Describe('finalize', () => {
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
     Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by Ro.\n')
-    Expect(outcome.lines.some(line => line.includes('Merge message is current'))).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('3. Merge message: kept — recorded as written for this HEAD')))
+      .toBe(true)
+    Expect(outcome.ok).toBe(true)
   })
 
-  Test('redrafts when the recorded head sha no longer matches the current HEAD', async () => {
-    const fake = fakeDependencies()
+  // The landing validates the message in its preflight, so a hand-edited one that breaks the rule
+  // costs a whole round trip to find out. Finalize already validates what it drafts; this is the
+  // same rule applied to what it keeps, reported in the landing's own words.
+  Test('reports a kept merge message the landing would reject, rather than leaving it to the landing', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Stale draft\n\n- From an earlier HEAD.\n')
-    const statePath = '/repo/.artifacts/merge/feat/example.state.json'
+    const tooLong = `${'Land example with a summary that runs past the seventy-two character bound'}\n\n- One bullet.\n`
+    fake.files.set(messagePath, tooLong)
     fake.states.set(
-      statePath,
+      '/repo/.artifacts/merge/feat/example.state.json',
       {
-        headSha: 'someoldhead0000000000000000000000000000000',
-        mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
-        messageHeadSha: 'someoldhead0000000000000000000000000000000',
+        headSha: 'mainsha00000000000000000000000000000000000',
+        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+        messageHeadSha: 'mainsha00000000000000000000000000000000000',
         updatedAt: '2026-09-17T09:00:00.000Z',
         verifiedAt: '2026-09-17T09:00:00.000Z',
         verifiedLane: 'verify',
         verifiedToolchain: FAKE_TOOLCHAIN,
-        verifiedTreeHash: 'some-old-tree',
+        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
         version: 2,
       } satisfies FinalizeState,
     )
 
-    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).not.toBe('Stale draft\n\n- From an earlier HEAD.\n')
+    // The file is never rewritten: the author's words are theirs to fix.
+    Expect(fake.files.get(messagePath)).toBe(tooLong)
+    Expect(outcome.lines.some(line => line.includes('The merge message summary must be at most 72 characters.')))
+      .toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Fix the kept merge message, which the landing will reject')))
+      .toBe(true)
+    Expect(outcome.ok).toBe(false)
   })
 
-  Test('a missing state file degrades to redrafting even when a matching message file already exists', async () => {
+  Test(
+    'keeps the message and says the branch gained commits when the recorded head sha no longer matches',
+    async () => {
+      const fake = fakeDependencies()
+      const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+      const written = 'Land example\n\n- Written when the branch was one commit shorter.\n'
+      fake.files.set(messagePath, written)
+      const statePath = '/repo/.artifacts/merge/feat/example.state.json'
+      fake.states.set(
+        statePath,
+        {
+          headSha: 'someoldhead0000000000000000000000000000000',
+          mainIntegratedSha: 'someoldmain00000000000000000000000000000000',
+          messageHeadSha: 'someoldhead0000000000000000000000000000000',
+          updatedAt: '2026-09-17T09:00:00.000Z',
+          verifiedAt: '2026-09-17T09:00:00.000Z',
+          verifiedLane: 'verify',
+          verifiedToolchain: FAKE_TOOLCHAIN,
+          verifiedTreeHash: 'some-old-tree',
+          version: 2,
+        } satisfies FinalizeState,
+      )
+
+      const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+      Expect(fake.files.get(messagePath)).toBe(written)
+      Expect(outcome.lines.some(line =>
+        line.includes(
+          'Kept the existing merge message; the branch has gained commits since it was recorded for '
+            + 'someoldhead0',
+        )
+      )).toBe(true)
+      Expect(
+        outcome.lines.some(line =>
+          line.includes('3. Merge message: kept — the branch has gained commits since it was recorded for someoldhead0')
+          && line.includes('only the author can confirm it still describes this branch')
+        ),
+      ).toBe(true)
+      // Only the author can tell whether the new commits changed what the branch is for, so it is work
+      // that remains, not a resolved step.
+      Expect(outcome.lines.some(line => line.includes('Confirm the kept merge message still describes this branch')))
+        .toBe(true)
+      Expect(outcome.ok).toBe(false)
+    },
+  )
+
+  Test('a missing state file keeps a hand-written message and says nothing records which HEAD it covers', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Written by hand before finalize ever ran.\n'
+    fake.files.set(messagePath, written)
 
-    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    // No state exists to prove the file was written for this HEAD, so finalize cannot skip the step.
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    // No state proves which HEAD this file covers, and a missing record is never a licence to
+    // replace what an author wrote.
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Kept the existing merge message; nothing records which HEAD it was written for')
+      ),
+    ).toBe(true)
+    Expect(outcome.ok).toBe(false)
   })
 
-  Test('a malformed or older-version state file degrades to redrafting rather than failing the run', async () => {
+  Test('a malformed or older-version state file keeps the message rather than replacing it', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(statePath, { headSha: 'mainsha00000000000000000000000000000000000', version: 0 })
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(outcome.lines.some(line => line.includes('nothing records which HEAD it was written for'))).toBe(true)
     Expect(outcome.ok).toBe(false)
   })
 
-  Test('an unreadable state file (bad JSON) degrades to redrafting rather than throwing', async () => {
+  Test('an unreadable state file (bad JSON) keeps the message rather than throwing or replacing it', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(statePath, statePath) // exists() sees it; readJson will "succeed" oddly, so force a throw instead:
     fake.dependencies.readJson = async () => {
@@ -424,8 +543,67 @@ Describe('finalize', () => {
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(fake.files.get(messagePath)).toBe(written)
     Expect(outcome.ok).toBe(false)
+  })
+
+  Test('run twice over a hand-written merge message leaves it byte-identical and reports keeping it', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    const written = 'Land the example workflow\n\n- One bullet an author actually wrote.\n'
+    fake.files.set(messagePath, written)
+
+    const first = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const second = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(first.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(second.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
+    Expect(second.lines.some(line => line.includes('3. Merge message: kept'))).toBe(true)
+    Expect([...fake.files.keys()].filter(path => path.endsWith('.msg'))).toEqual([messagePath])
+    // The first run asks the author to confirm a message it has no record of; having reported that
+    // and recorded this HEAD, the second run stands on it instead of asking again.
+    Expect(first.ok).toBe(false)
+    Expect(second.ok).toBe(true)
+  })
+
+  Test('--redraft replaces an existing merge message and says it replaced it', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(messagePath, 'Land example\n\n- Written by hand, and explicitly thrown away.\n')
+
+    const outcome = await FinalizeCommand.run({ redraft: true, repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Redrafted the merge message from 1 commit(s), replacing what was there')
+      ),
+    ).toBe(true)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('3. Merge message: redrafted on request, replacing what was there — needs review')
+      ),
+    ).toBe(true)
+    Expect(outcome.lines.some(line => line.includes('Review the redrafted merge message before landing'))).toBe(true)
+    Expect(outcome.ok).toBe(false)
+  })
+
+  Test('--check describes a hand-written message exactly as the run that follows it does', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    const written = 'Land example\n\n- Written by hand.\n'
+    fake.files.set(messagePath, written)
+
+    const checked = await FinalizeCommand.run({ check: true, repositoryRoot: '/repo' }, fake.dependencies)
+    const ran = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    // `--check` used to call a hand-written file current for this HEAD while the run that followed
+    // replaced it. Both now reach the same decision from the same inputs.
+    const messageLine = (lines: readonly string[]) => lines.find(line => line.startsWith('3. Merge message:'))
+    Expect(messageLine(checked.lines)).toBe(messageLine(ran.lines))
+    Expect(messageLine(checked.lines)).toContain('kept — nothing records which HEAD it was written for')
+    Expect(fake.files.get(messagePath)).toBe(written)
   })
 
   Test(
@@ -511,10 +689,11 @@ Describe('finalize', () => {
     Expect(outcome.ok).toBe(false)
   })
 
-  Test('--fresh ignores matching recorded state and redrafts anyway', async () => {
+  Test('--fresh ignores the recorded state but never replaces an existing merge message', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+    const written = 'Land example\n\n- Add the example workflow\n'
+    fake.files.set(messagePath, written)
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     fake.states.set(
       statePath,
@@ -538,9 +717,24 @@ Describe('finalize', () => {
       treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
     })
 
-    await FinalizeCommand.run({ fresh: true, repositoryRoot: '/repo' }, fake.dependencies)
+    const outcome = await FinalizeCommand.run({ fresh: true, repositoryRoot: '/repo' }, fake.dependencies)
+
+    // `--fresh` discards the record, which used to guarantee the overwrite. It now costs the run its
+    // proof that the message is current, and nothing else.
+    Expect(fake.files.get(messagePath)).toBe(written)
+    Expect(
+      outcome.lines.some(line =>
+        line.includes('Kept the existing merge message; nothing records which HEAD it was written for')
+      ),
+    ).toBe(true)
+
+    const redrafted = await FinalizeCommand.run(
+      { fresh: true, redraft: true, repositoryRoot: '/repo' },
+      fake.dependencies,
+    )
 
     Expect(fake.files.get(messagePath)).toContain('DRAFT: ')
+    Expect(redrafted.lines.some(line => line.includes('Redrafted the merge message'))).toBe(true)
   })
 
   Test(
@@ -658,6 +852,7 @@ Describe('finalize', () => {
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
+        readText: FS.readText,
         run: async (command, spec) =>
           command === 'just'
             ? {
@@ -689,6 +884,75 @@ Describe('finalize', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+})
+
+/**
+ * The unlocked half of a landing. What it must *not* do is as load-bearing as what it does: it
+ * settles the merge message, which is the only part that can need an author, and it leaves
+ * integrating main and verifying to the transaction, where they happen under the lock and cannot go
+ * stale between one command and the next.
+ */
+Describe('landing preparation', () => {
+  Test('settles the merge message without integrating main or running a lane', async () => {
+    const fake = fakeDependencies()
+
+    const preparation = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(preparation.branch).toBe('feat/example')
+    Expect(preparation.ok).toBe(false)
+    Expect(preparation.remaining[0]).toContain('Review the drafted merge message before landing')
+    // The two things the transaction owns now, neither of which happens here.
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    // But main is still read, because a draft is written against `main..HEAD`.
+    Expect(preparation.lines.some(line => line.includes('Read origin/main at'))).toBe(true)
+  })
+
+  Test('is ready once the message on disk is recorded against this HEAD', async () => {
+    const fake = fakeDependencies()
+    fake.files.set('/repo/.artifacts/merge/feat/example.msg', 'Land it\n\n- Do the thing.\n')
+    fake.states.set(
+      '/repo/.artifacts/merge/feat/example.state.json',
+      {
+        headSha: fake.repository.headSha,
+        mainIntegratedSha: fake.repository.mainSha,
+        messageHeadSha: fake.repository.headSha,
+        updatedAt: '2026-09-19T12:00:00.000Z',
+        verifiedAt: '2026-09-19T12:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
+        verifiedTreeHash: 'tree',
+        version: 2,
+      } satisfies FinalizeState,
+    )
+
+    const preparation = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(preparation.ok).toBe(true)
+    Expect(preparation.remaining).toEqual([])
+  })
+
+  Test('refuses to take the lock at all when the branch is not ready', async () => {
+    // A landing that took the machine-wide lock and then discovered an unreviewed merge message
+    // would be spending everyone else's turn on something only its author can finish.
+    const fake = fakeDependencies()
+
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
+      .rejects.toThrow('is not ready to land, and the landing lock was not taken')
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
+  })
+
+  Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
+    const detached = fakeDependencies({ branch: '' })
+    await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
+      .rejects.toThrow('requires a feat/* branch')
+
+    const dirty = fakeDependencies({ status: '?? stray.ts\n' })
+    await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
+      .rejects.toThrow('stray.ts')
+    Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
   })
 })
 

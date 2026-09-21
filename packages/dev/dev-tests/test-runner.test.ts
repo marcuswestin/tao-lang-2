@@ -2,6 +2,7 @@ import { FS, Repo, TaoTestProtocol } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { FlakeTolerance } from '../dev-src/repository-tests/FlakeTolerance'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
+import { TestLedger, type TestLedgerStore } from '../dev-src/repository-tests/TestLedger'
 import { type SelectedSuite, TestNodes, type TestProcess } from '../dev-src/repository-tests/TestNodes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
 import { type SuiteState, TestRunner, type TestRunRequest } from '../dev-src/repository-tests/TestRunner'
@@ -165,6 +166,83 @@ Describe('test runner suite registry', () => {
     Expect(wordFlower).toBeGreaterThan(
       (await FS.readText(Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao'))).length,
     )
+  })
+
+  // `validator` is tuned `--concurrent` (like `dev`) and stays shardable; `shared` is neither. A
+  // `--concurrent` suite's per-file ledger sums are inflated by however many other tests in the file
+  // finished after the one being measured (see the `--concurrent` timeout test above), not by real
+  // work, so packing by them would weigh a file wrong in exactly the suites this catches.
+  Test('ignores stale per-file ledger costs when packing a suite tuned --concurrent', async () => {
+    const files = [
+      'packages/demo/demo-tests/a.test.ts',
+      'packages/demo/demo-tests/b.test.ts',
+      'packages/demo/demo-tests/c.test.ts',
+      'packages/demo/demo-tests/d.test.ts',
+    ]
+    const skewedLedgerFor = (suite: string) => {
+      const tests: TestLedgerStore['tests'] = {}
+      // File `a` alone outweighs the other three combined — if honored, it packs onto its own shard.
+      const durations: Record<string, number> = {
+        'a.test.ts': 100_000,
+        'b.test.ts': 10,
+        'c.test.ts': 10,
+        'd.test.ts': 10,
+      }
+      for (const file of files) {
+        const id = `${suite}::${file}::only`
+        tests[id] = {
+          durationMs: durations[file.split('/').at(-1)!],
+          file,
+          fileIdentity: `identity-${file}`,
+          id,
+          lastRunAt: '2026-01-01T00:00:00.000Z',
+          name: 'only',
+          outcome: 'passed',
+          suite,
+        }
+      }
+      return { tests, version: 1 as const }
+    }
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, units) => ({ args: [], command: 'true', files: units })
+    // 8_600ms measured less the 600ms default startup is 8_000ms of work: two shards at the 4.0s
+    // target, well clear of both the sharding floor and the startup cap.
+    const timings = {
+      nodes: {
+        shared: {
+          emaMs: 8_600,
+          lastMs: 8_600,
+          lastRunAt: '2026-01-01T00:00:00.000Z',
+          samples: 1,
+          source: 'wall' as const,
+        },
+        validator: {
+          emaMs: 8_600,
+          lastMs: 8_600,
+          lastRunAt: '2026-01-01T00:00:00.000Z',
+          samples: 1,
+          source: 'wall' as const,
+        },
+      },
+      version: 1 as const,
+    }
+
+    const concurrentPlan = TestNodes.build({
+      ledger: skewedLedgerFor('validator'),
+      selected: [{ buildProcess, files, name: 'validator' }],
+      timings,
+    }).plans.find(plan => plan.suite === 'validator')
+    const serialPlan = TestNodes.build({
+      ledger: skewedLedgerFor('shared'),
+      selected: [{ buildProcess, files, name: 'shared' }],
+      timings,
+    }).plans.find(plan => plan.suite === 'shared')
+
+    Expect(concurrentPlan?.shards.length).toBe(2)
+    Expect(serialPlan?.shards.length).toBe(2)
+    // Ignored: the mean-cost fallback splits four equally-weighted files two and two.
+    Expect(concurrentPlan?.shards.map(shard => shard.length).toSorted()).toEqual([2, 2])
+    // Honored: file `a`'s 100_000ms dwarfs the rest, so it packs alone against the other three.
+    Expect(serialPlan?.shards.map(shard => shard.length).toSorted()).toEqual([1, 3])
   })
 
   Test('gives a suite that declares no bound one work-denominated timeout', async () => {
@@ -421,6 +499,36 @@ Describe('test runner suite registry', () => {
     ).toBe(false)
   })
 
+  // `dev` is tuned `--concurrent` and `shared` is not (see `test('gives concurrent process-heavy
+  // developer tests a contention-safe timeout')` above), so the same reporter output means something
+  // different for each: `dev`'s per-case `time` is the file's shared start to that test's own
+  // completion, never the test's own work, where `shared`'s is the test's own duration outright.
+  Test('drops a per-case duration for a suite tuned --concurrent and keeps it where a test runs alone', async () => {
+    const reportRoot = await mkTestDir('tao-test-report-')
+    const reportPath = FS.resolvePath('report.xml', reportRoot)
+    await FS.writeText(
+      reportPath,
+      '<testsuites tests="1"><testsuite>'
+        + '<testcase classname="d" file="packages/dev/dev-tests/example.test.ts" name="t" time="6.2027"></testcase>'
+        + '</testsuite></testsuites>',
+    )
+    try {
+      const concurrentState = suiteState('dev')
+      concurrentState.status = 'passed'
+      concurrentState.testReport = { format: 'bun-junit', path: reportPath, suite: 'dev' }
+      const serialState = suiteState('shared')
+      serialState.status = 'passed'
+      serialState.testReport = { format: 'bun-junit', path: reportPath, suite: 'shared' }
+
+      const observations = await TestRunner.observationsFor([concurrentState, serialState], Repo.getRoot())
+
+      Expect(observations.find(observation => observation.suite === 'dev')?.durationMs).toBeUndefined()
+      Expect(observations.find(observation => observation.suite === 'shared')?.durationMs).toBe(6_202.7)
+    } finally {
+      await FS.remove(reportRoot)
+    }
+  })
+
   Test('a filter that matched somewhere passes, however many suites it matched nothing in', () => {
     // The question is asked of the whole run, not of each suite. A Bun test name never matches a
     // Jest test or a Tao journey, so a suite finding nothing is the ordinary case: failing on it
@@ -482,6 +590,61 @@ Describe('test runner suite registry', () => {
 
       Expect(captured.result).toBe(0)
       Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+})
+
+Describe('report-test-stats', () => {
+  function ledgerRecord(
+    suite: string,
+    name: string,
+    file: string,
+    durationMs: number | undefined,
+  ): TestLedgerStore['tests'][string] {
+    const id = `${suite}::${file}::${name}`
+    return {
+      durationMs,
+      file,
+      fileIdentity: 'identity',
+      id,
+      lastRunAt: '2026-01-01T00:00:00.000Z',
+      name,
+      outcome: 'passed',
+      suite,
+    }
+  }
+
+  // `dev` is tuned `--concurrent`; a record left over from before this change still carries a
+  // per-case duration that was never one test's own. Filtering the "Slowest tests" output by suite,
+  // rather than trusting every such record to already be gone, is what still catches it.
+  Test('drops a stale --concurrent per-case duration and keeps a real one', async () => {
+    const root = await mkTestDir('tao-report-test-stats-')
+    try {
+      const store: TestLedgerStore = {
+        tests: {
+          [`dev::packages/dev/dev-tests/example.test.ts::stale`]: ledgerRecord(
+            'dev',
+            'stale',
+            'packages/dev/dev-tests/example.test.ts',
+            6_202.7,
+          ),
+          [`shared::packages/shared/shared-tests/shared.test.ts::real`]: ledgerRecord(
+            'shared',
+            'real',
+            'packages/shared/shared-tests/shared.test.ts',
+            12.5,
+          ),
+        },
+        version: 1,
+      }
+      await FS.writeJson(FS.resolvePath(TestLedger.LEDGER_PATH, root), store)
+
+      const captured = await withCapturedOutput(() => TestRunner.printSlowest(20, root))
+
+      Expect(captured.stdout).toContain('real')
+      Expect(captured.stdout).not.toContain('stale')
     } finally {
       await FS.remove(root)
     }

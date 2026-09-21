@@ -7,7 +7,6 @@
       "Bash(./tao *)",
       "Bash(adb devices *)",
       "Bash(adb get-state *)",
-      "Bash(bun install *)",
       "Bash(bun run *)",
       "Bash(bun test *)",
       "Bash(cd *)",
@@ -59,6 +58,7 @@
       "mcp__claude-in-chrome__*"
     ],
     "deny": [
+      "Bash(bun install *)",
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(~/.aws/**)",
@@ -68,7 +68,9 @@
     "ask": [
       "Bash(./agent land-unlock --force*)",
       "Bash(./dev land-unlock --force*)",
-      "Bash(just land-unlock --force*)"
+      "Bash(just land-unlock --force*)",
+      "SendMessage",
+      "mcp__ccd_session_mgmt__send_message"
     ]
   },
   "sandbox": {
@@ -88,7 +90,13 @@
       "git worktree *",
       "git merge *",
       "git reset --merge",
-      "git reset --hard HEAD"
+      "git reset --hard HEAD",
+      "./dev land",
+      "./dev land *",
+      "./agent land",
+      "./agent land *",
+      "just land",
+      "just my-land"
     ],
     "filesystem": {
       "allowWrite": [
@@ -169,20 +177,24 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-output-discipline.zsh\" || true"
+          },
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
             "type": "command",
             "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
           }
         ]
       }

@@ -14,6 +14,7 @@ const canonicalRules = `{
       "git merge *": "allow",
       "just studio-smoke *": "allow",
       "git status *": "allow",
+      "bun install *": "deny",
     },
     "read": {
       "~/code/tao-lang/**": "allow",
@@ -161,6 +162,8 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["git","merge"]')
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
     Expect(rendered).not.toContain('git status')
+    Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
+    Expect(rendered).toContain('Use ./agent setup')
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -239,6 +242,11 @@ Describe('Codex config generation', () => {
       const list = action === 'deny' ? settings.permissions?.deny : settings.permissions?.allow
       Expect(list ?? []).toContain(rendered)
     }
+    for (const [pattern, action] of Object.entries(rules.permission?.bash ?? {})) {
+      if (action === 'deny') {
+        Expect(settings.permissions?.deny ?? []).toContain(`Bash(${pattern})`)
+      }
+    }
     Expect(settings.sandbox?.network?.allowedDomains ?? [])
       .toEqual(rules.claudecode?.sandbox?.network?.allowedDomains ?? [])
   })
@@ -289,5 +297,6 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
     Expect(rules).not.toContain('studio-smoke')
+    Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
   })
 })

@@ -1,6 +1,7 @@
 # DEVENV-068 — A child process cannot execute `ps` inside the Bash sandbox
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Sandbox
 - **Impact:** Repository code that lists processes through a subprocess sees nothing in a sandboxed lane,
   so a lane cannot find a leftover process it needs to stop, and the code path that would do it cannot
@@ -25,6 +26,18 @@
   repository code reads process facts that way rather than through `ps`. The per-PID `ps` shape is
   allowed for direct diagnostic use, which does not address this entry: the denial here is on the
   exec of `ps` by a child process, not on the shape of the command.
+- **Correction (2026-09-19):** the direct shell `ps` is **not** reliably allowed either, which the
+  evidence above assumes and which `AGENTS.md` depends on. During one landing session the blessed
+  fixed shape `ps -axo pid=,ppid=,lstart=,command=` returned `operation not permitted: ps` in the
+  agent's own shell, and `ps -p <pid>` did the same, while the identical commands had succeeded
+  minutes earlier in that session and succeeded again when re-run unsandboxed. The denial is
+  intermittent rather than a stable child-versus-shell property. The hazard is that the common
+  spelling `ps … 2>/dev/null | rg <pid>` renders a denial as empty output — byte-identical to "that
+  process is gone" — so an agent judging a lock owner's liveness can conclude the opposite of the
+  truth. Until this is fixed, prove the tool works (`ps -axo pid= | wc -l` returning a plausible
+  count) and never suppress its stderr before trusting silence. This does **not** apply to the
+  landing lock: that lock is held by a worktree and is deliberately never liveness-checked, and
+  scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-114`.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
   the adjacent host process-visibility constraints.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its

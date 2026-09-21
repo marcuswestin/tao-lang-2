@@ -1,6 +1,7 @@
 # DEVENV-015 — Reliable host-browser verification
 
 - **Status:** Planned
+- **Section:** Deferred
 - **Area:** Studio browser smoke
 - **Impact:** The complete simulated-user journey cannot run in the managed host when Chrome aborts with
   `SIGABRT` before exposing DevTools; ordinary `verify` intentionally omits this proof.

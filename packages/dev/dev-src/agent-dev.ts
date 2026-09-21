@@ -17,6 +17,11 @@ const JUST_COMMANDS = [
   // AGENTS.md rather than dropping to `just`.
   'land-lock',
   'land-unlock',
+  // Whether a branch landed is a fact in the repository, not an inference from a command's output:
+  // a wrapper that was stopped, a task marked failed by the shell it piped into, or a summary read
+  // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
+  'landed',
+  'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
   'setup',
@@ -30,6 +35,7 @@ const JUST_COMMANDS = [
   'test-all',
   'test-changed',
   'test-file',
+  'test-host',
   'test-retry',
   // Each verification scope is its own name rather than a flag on one name, so an agent reaches it
   // the same way a developer does: by completing a prefix, not by recalling which flag it took.
@@ -56,7 +62,7 @@ await runWithCommands(commands => {
       .passThroughOptions()
       .action(async (args: string[] = []) => {
         const result = await CLI.run('just', {
-          args: [command, ...args],
+          args: [command === 'setup' ? '_setup' : command, ...args],
           cwd: Repo.getRoot(),
           stdio: 'inherit',
         })

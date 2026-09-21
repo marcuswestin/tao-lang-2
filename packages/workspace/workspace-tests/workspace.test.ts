@@ -1,7 +1,7 @@
 import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
 import { type Diagnostic, Diagnostics, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '@workspace'
 import { createWorkspaceLspServices } from '../workspace-src/langium-services'
 
@@ -201,6 +201,29 @@ Describe('directory-rooted Tao workspace pipeline', () => {
 
         Expect(fresh).not.toBe(shared)
         Expect(shared).toBe(sameShared)
+      },
+    )
+  })
+
+  Test('opens one root concurrently with independent contexts that settle', async () => {
+    await withTaoFiles(
+      'tao-workspace-duplicate-open-',
+      {
+        'Main.tao': 'view MainView() { }\n',
+      },
+      async (paths, rootDir) => {
+        const [first, second] = await until(
+          async () =>
+            await Promise.all([
+              Workspace.open(rootDir),
+              Workspace.open(FS.resolvePath('.', rootDir)),
+            ]),
+          { description: 'two independent workspaces for the same root', timeoutMs: 2_000 },
+        )
+
+        Expect(first).not.toBe(second)
+        Expect((await first.parse(paths['Main.tao']!)).diagnostics).toEqual([])
+        Expect((await second.parse(paths['Main.tao']!)).diagnostics).toEqual([])
       },
     )
   })

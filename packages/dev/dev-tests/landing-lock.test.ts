@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { LandingLock, LandingLockBusyError, LandingLockUnreadableError } from '../dev-src/repository-tests/LandingLock'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
@@ -272,5 +272,126 @@ Describe('landing lock', () => {
       async () => undefined,
     )
     Expect(await LandingLock.inspect(root)).toBeUndefined()
+  })
+
+  Test('records the phases a landing spends its turn on, closing each as the next begins', async () => {
+    const root = await mkTestDir('landing-lock-phases')
+    await LandingLock.acquire({ label: 'land feat/x', landing: true, registryRoot: root, repositoryRoot: ONE })
+
+    await LandingLock.beginPhase({ name: 'integrating', registryRoot: root, repositoryRoot: ONE })
+    await LandingLock.beginPhase({ name: 'cheap gates', registryRoot: root, repositoryRoot: ONE })
+    const held = (await LandingLock.inspect(root))!
+
+    Expect(held.landing).toBe(true)
+    Expect(held.phases.map(phase => phase.name)).toEqual(['integrating', 'cheap gates'])
+    // Exactly one phase is open at a time: the open one is what a waiter is actually waiting on.
+    Expect(held.phases.filter(phase => phase.endedAt === undefined)).toHaveLength(1)
+    Expect(LandingLock.currentPhase(held)?.name).toBe('cheap gates')
+    Expect(LandingLock.describe(held)).toContain('cheap gates for ')
+    Expect(LandingLock.describePhases(held).at(-1)).toContain('cheap gates:')
+    Expect(LandingLock.describePhases(held).at(-1)).toContain('so far')
+
+    await LandingLock.endPhases({ registryRoot: root, repositoryRoot: ONE })
+    const ended = (await LandingLock.inspect(root))!
+    Expect(LandingLock.currentPhase(ended)).toBeUndefined()
+    Expect(ended.phases.every(phase => phase.endedAt !== undefined)).toBe(true)
+  })
+
+  Test('never writes a phase into a lock this worktree does not hold', async () => {
+    // Telemetry that can corrupt another worktree's record is worse than no telemetry, so this
+    // reports rather than throws, and writes nothing.
+    const root = await mkTestDir('landing-lock-phase-foreign')
+    await LandingLock.acquire({ label: 'land feat/x', landing: true, registryRoot: root, repositoryRoot: ONE })
+
+    Expect(await LandingLock.beginPhase({ name: 'push', registryRoot: root, repositoryRoot: TWO }))
+      .toBeUndefined()
+    Expect((await LandingLock.inspect(root))!.phases).toEqual([])
+    // And a free lock has nothing to write to either.
+    const free = await mkTestDir('landing-lock-phase-free')
+    Expect(await LandingLock.beginPhase({ name: 'push', registryRoot: free, repositoryRoot: ONE }))
+      .toBeUndefined()
+  })
+
+  Test('a hold that is not a landing reports no phases and defers nothing', async () => {
+    const root = await mkTestDir('landing-lock-lane-hold')
+    await acquire(root, ONE, 'verify from one')
+    const held = (await LandingLock.inspect(root))!
+
+    Expect(held.landing).toBe(false)
+    Expect(held.phases).toEqual([])
+    Expect(await LandingLock.landingInProgress(root)).toBe(false)
+    // A `verify` holding the lock is a peer the existing slot admission throttles against, not a
+    // turn being spent, so a diff-scoped lane starts beside it immediately.
+    await LandingLock.admitLane({ lane: 'verify-changed', registryRoot: root, waitTimeoutMs: 0 })
+  })
+
+  Test('stops admitting diff-scoped lanes once a landing has taken the turn', async () => {
+    const root = await mkTestDir('landing-lock-admission')
+    await LandingLock.acquire({ label: 'land feat/x', landing: true, registryRoot: root, repositoryRoot: ONE })
+    Expect(await LandingLock.landingInProgress(root)).toBe(true)
+
+    for (const lane of ['verify-changed', 'test-changed']) {
+      Expect(LandingLock.deferredWhileLanding(lane)).toBe(true)
+      const error = await LandingLock.admitLane({ lane, registryRoot: root, waitTimeoutMs: 0 })
+        .then(() => undefined, (caught: unknown) => caught)
+      Expect(error).toBeInstanceOf(LandingLockBusyError)
+      Expect((error as LandingLockBusyError).message).toContain('none of which a landing defers')
+    }
+    // Everything narrower stays free, so iteration never waits on somebody else's landing.
+    for (const lane of ['test-file', 'test-retry', 'check', 'fix', 'fmt']) {
+      Expect(LandingLock.deferredWhileLanding(lane)).toBe(false)
+      await LandingLock.admitLane({ lane, registryRoot: root, waitTimeoutMs: 0 })
+    }
+  })
+
+  Test('defers a neighbour in the holding worktree too, because agents share a checkout here', async () => {
+    // Several agents work in one worktree in this repository, so admitting on "not my worktree"
+    // would let the landing's own neighbours take the machine it is holding.
+    const root = await mkTestDir('landing-lock-admission-same-worktree')
+    await LandingLock.acquire({ label: 'land feat/x', landing: true, registryRoot: root, repositoryRoot: ONE })
+
+    const error = await LandingLock.holdingForLane(
+      { lane: 'verify-changed', registryRoot: root, repositoryRoot: ONE, waitTimeoutMs: 0 },
+      async () => undefined,
+    ).then(() => undefined, (caught: unknown) => caught)
+    Expect(error).toBeInstanceOf(LandingLockBusyError)
+  })
+
+  Test('admits a deferred lane as soon as the landing releases', async () => {
+    const root = await mkTestDir('landing-lock-admission-handover')
+    const hold = await LandingLock.acquire({
+      label: 'land feat/x',
+      landing: true,
+      registryRoot: root,
+      repositoryRoot: ONE,
+    })
+    let admitted = false
+    const waiting = LandingLock.admitLane({ lane: 'verify-changed', registryRoot: root, waitTimeoutMs: 5_000 })
+      .then(() => {
+        admitted = true
+      })
+    Expect(admitted).toBe(false)
+    await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: hold.token! })
+    await waiting
+    Expect(admitted).toBe(true)
+  })
+
+  Test('reads a record written before phases existed as one that simply reports nothing', async () => {
+    // An unreadable lock refuses every acquisition on the machine. That is far too much to pay for
+    // a progress line, so a missing or malformed phase list degrades instead of failing closed.
+    const root = await mkTestDir('landing-lock-phase-compat')
+    await FS.writeJson(FS.resolvePath('.landing-lock.json', root), {
+      acquiredAt: '2026-09-19T12:00:00.000Z',
+      durable: true,
+      holder: ONE,
+      label: 'landing from one',
+      pid: Platform.runtimeProcess.pid,
+      scopedHolds: [],
+    })
+
+    const record = (await LandingLock.inspect(root))!
+    Expect(record.phases).toEqual([])
+    Expect(record.landing).toBe(false)
+    Expect(LandingLock.heldForMs(record, new Date('2026-09-19T12:05:00.000Z'))).toBe(5 * 60 * 1_000)
   })
 })

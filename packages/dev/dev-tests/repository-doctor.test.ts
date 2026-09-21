@@ -28,12 +28,20 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       version: 1,
     },
     generatedParserArtifacts: [{ path: 'packages/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
+    githubTransport: {
+      configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
+      effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      landingBrokerReady: true,
+    },
     linkedWorktree: true,
     lockfilePresent: true,
     machine: { cpuCount: 8, lanes: [], loadAverage: 1.2 },
     nodeModulesPresent: true,
     nodeVersion: 'v24.14.1',
     ports: [{ listeners: [], port: 8081, purpose: 'Expo Metro' }],
+    processGivenPath: '/w',
+    processRealPath: '/w',
     repositoryRoot: '/w',
     satisfies: Platform.semverSatisfies,
     watchmanHealthy: true,
@@ -89,7 +97,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ dependencyHealthError: "Cannot find module 'expo/metro-config'" }))
 
     Expect(check(report, 'dependencies')?.status).toBe('fail')
-    Expect(check(report, 'dependencies')?.remediation).toContain('just deps')
+    Expect(check(report, 'dependencies')?.remediation).toContain('./agent setup')
   })
 
   Test('surfaces the runtime dependency compatibility gate', () => {
@@ -97,6 +105,47 @@ Describe('repository doctor', () => {
 
     Expect(check(report, 'dependency compatibility')?.status).toBe('fail')
     Expect(check(report, 'dependency compatibility')?.detail).toContain('react 19.2.8')
+  })
+
+  Test('requires an explicit HTTPS origin and GitHub credential helper', () => {
+    const ssh = doctorReport(facts({
+      githubTransport: {
+        configuredOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+        credentialHelpers: [],
+        effectiveOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+      },
+    }))
+    const rewritten = doctorReport(facts({
+      githubTransport: {
+        configuredOriginUrl: 'git@github.com:marcuswestin/tao-lang-2.git',
+        credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
+        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      },
+    }))
+    const missingHelper = doctorReport(facts({
+      githubTransport: {
+        configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        credentialHelpers: ['osxkeychain'],
+        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+      },
+    }))
+    const missingBroker = doctorReport(facts({
+      githubTransport: {
+        configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
+        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
+        landingBrokerReady: false,
+      },
+    }))
+
+    Expect(check(ssh, 'GitHub transport')?.status).toBe('fail')
+    Expect(check(ssh, 'GitHub transport')?.remediation).toContain('just github-setup')
+    Expect(check(rewritten, 'GitHub transport')?.status).toBe('warn')
+    Expect(check(rewritten, 'GitHub transport')?.detail).toContain('stored as git@github.com')
+    Expect(check(missingHelper, 'GitHub transport')?.status).toBe('warn')
+    Expect(check(missingHelper, 'GitHub transport')?.detail).toContain('no GitHub CLI credential helper')
+    Expect(check(missingBroker, 'GitHub transport')?.status).toBe('warn')
+    Expect(check(missingBroker, 'GitHub transport')?.remediation).toContain('just landing-setup')
   })
 
   Test('names the process holding a conventional port, and who else it might belong to', () => {
@@ -303,5 +352,16 @@ Describe('repository doctor', () => {
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')
     Expect(check(report, 'parser artifacts')?.status).toBe('pass')
+  })
+  Test('fails when the worktree is reached through a symlink', () => {
+    const checks = repositoryDoctorChecks(facts({ processGivenPath: '/tmp/probe', processRealPath: '/w' }))
+    const check = checks.find(candidate => candidate.name === 'worktree path')
+    Expect(check?.status).toBe('fail')
+    Expect(check?.remediation).toContain('git worktree move /tmp/probe /w')
+  })
+
+  Test('passes when the worktree is at its real path', () => {
+    const checks = repositoryDoctorChecks(facts())
+    Expect(checks.find(candidate => candidate.name === 'worktree path')?.status).toBe('pass')
   })
 })

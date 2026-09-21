@@ -1,4 +1,5 @@
 import { CLI, FS, Platform, Repo, Switch } from '@shared'
+import { landingBrokerIsReady } from '../landing-broker/LandingBrokerClient'
 import { ProcessListeners } from '../ProcessListeners'
 import {
   dependencyCompatibilityIssues,
@@ -93,6 +94,14 @@ type ArtifactRoot = {
   writable: boolean
 }
 
+/** GitHubTransport records the configured URL, its effective rewrite, and HTTPS credential wiring. */
+type GitHubTransport = {
+  configuredOriginUrl?: string
+  credentialHelpers: readonly string[]
+  effectiveOriginUrl?: string
+  landingBrokerReady?: boolean
+}
+
 /** DoctorFacts is the machine state the checks read, gathered once so the checks stay pure. */
 export type DoctorFacts = {
   artifactRoots: readonly ArtifactRoot[]
@@ -108,12 +117,17 @@ export type DoctorFacts = {
   devenvProfileNode?: string
   direnvAllowed?: boolean
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
+  githubTransport: GitHubTransport
   linkedWorktree: boolean
   lockfilePresent: boolean
   machine: MachineState
   nodeModulesPresent: boolean
   nodeVersion?: string
   ports: readonly PortOccupancy[]
+  /** The working directory this process was invoked under, before symlinks were resolved. */
+  processGivenPath: string
+  /** That working directory with symlinks resolved; equal to the above unless one was traversed. */
+  processRealPath: string
   repositoryRoot: string
   satisfies: (version: string, range: string) => boolean
   watchmanVersion?: string
@@ -124,6 +138,7 @@ export type DoctorFacts = {
 export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
   return [
     worktreeCheck(facts),
+    worktreeRealPathCheck(facts),
     devenvProfileCheck(facts),
     direnvCheck(facts),
     nodeCheck(facts),
@@ -131,12 +146,40 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     bunTempDirCheck(facts),
     dependencyInstallationCheck(facts),
     dependencyCompatibilityCheck(facts),
+    githubTransportCheck(facts),
     watchmanCheck(facts),
     machineLanesCheck(facts),
     parserArtifactCheck(facts),
     ...artifactRootChecks(facts),
     ...portChecks(facts),
   ]
+}
+
+/**
+ * A worktree reached through a symlink is a checkout TypeScript cannot typecheck.
+ *
+ * `/tmp` is a symlink to `/private/tmp` on macOS, and the agent sandbox sets `$TMPDIR` to the
+ * symlink form, so a worktree created there is reached by two paths at once. TypeScript resolves
+ * imports through both and treats the results as different declarations, which surfaces as types
+ * that are not assignable to themselves — `Type 'AdvanceStep' is not assignable to type
+ * 'AdvanceStep'` — with nothing in the message naming a path as the cause. This names it.
+ *
+ * The rule is the symlink, not the location: worktrees under `/private/tmp` are an established
+ * convention for throwaway checkouts and are unaffected, and the same failure reaches a symlinked
+ * home directory or a network mount that resolves elsewhere.
+ */
+function worktreeRealPathCheck(facts: DoctorFacts): DoctorCheck {
+  if (facts.processGivenPath === facts.processRealPath) {
+    return { detail: facts.processGivenPath, name: 'worktree path', status: 'pass' }
+  }
+  return {
+    detail: `${facts.processGivenPath} resolves to ${facts.processRealPath}`,
+    name: 'worktree path',
+    remediation: 'This checkout is reached through a symlink, so TypeScript sees two identities for every file and '
+      + 'typecheck fails with types that are not assignable to themselves. Move it to its real path: '
+      + `git worktree move ${facts.processGivenPath} ${facts.processRealPath}`,
+    status: 'fail',
+  }
 }
 
 /** doctorReport wraps the checks in the versioned envelope, with the worst status winning. */
@@ -286,7 +329,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: 'bun.lock is missing',
       name: 'dependencies',
-      remediation: 'Restore it from Git, then run: just deps',
+      remediation: 'Restore it from Git, then run: ./agent setup',
       status: 'fail',
     }
   }
@@ -294,7 +337,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: 'node_modules is missing',
       name: 'dependencies',
-      remediation: 'Install with: just deps',
+      remediation: 'Install with: ./agent setup',
       status: 'fail',
     }
   }
@@ -303,7 +346,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
       detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
       name: 'dependencies',
       remediation:
-        'Repair with: just deps, or from an unsandboxed shell when a package shipping .idea/ is the damaged one: rm -rf node_modules && bun install',
+        "Repair with: ./agent setup; if a protected package path is denied, start 'just session-unsandboxed' and run './agent setup' there.",
       status: 'fail',
     }
   }
@@ -323,6 +366,55 @@ function dependencyCompatibilityCheck(facts: DoctorFacts): DoctorCheck {
     name: 'dependency compatibility',
     remediation: 'Reproduce with: bun run packages/dev/dev-src/repository-tests/DependencyCompatibility.ts',
     status: 'fail',
+  }
+}
+
+function githubTransportCheck(facts: DoctorFacts): DoctorCheck {
+  const { configuredOriginUrl, credentialHelpers, effectiveOriginUrl } = facts.githubTransport
+  if (effectiveOriginUrl === undefined) {
+    return {
+      detail: 'origin has no readable URL',
+      name: 'GitHub transport',
+      remediation: 'Configure GitHub HTTPS authentication with: just github-setup',
+      status: 'fail',
+    }
+  }
+  if (!effectiveOriginUrl.startsWith('https://github.com/')) {
+    return {
+      detail: `origin resolves to ${effectiveOriginUrl}, not GitHub HTTPS`,
+      name: 'GitHub transport',
+      remediation: 'Configure GitHub HTTPS authentication with: just github-setup',
+      status: 'fail',
+    }
+  }
+  if (configuredOriginUrl !== effectiveOriginUrl) {
+    return {
+      detail: `origin resolves to ${effectiveOriginUrl}, but is stored as ${configuredOriginUrl ?? '<missing>'}`,
+      name: 'GitHub transport',
+      remediation: 'Store the HTTPS URL directly with: just github-setup',
+      status: 'warn',
+    }
+  }
+  if (!credentialHelpers.some(helper => helper.includes('auth git-credential'))) {
+    return {
+      detail: `${effectiveOriginUrl} has no GitHub CLI credential helper`,
+      name: 'GitHub transport',
+      remediation: 'Configure the helper with: just github-setup',
+      status: 'warn',
+    }
+  }
+  if (facts.githubTransport.landingBrokerReady === false) {
+    return {
+      detail: `${effectiveOriginUrl} is configured, but the credential-isolated landing broker is unavailable`,
+      name: 'GitHub transport',
+      remediation: 'Install or refresh it from a normal terminal with: just landing-setup',
+      status: 'warn',
+    }
+  }
+  return {
+    detail: `${effectiveOriginUrl} with the GitHub CLI credential helper and landing broker`,
+    name: 'GitHub transport',
+    status: 'pass',
   }
 }
 
@@ -477,6 +569,7 @@ export async function readDoctorFacts(
     ports,
     dependencyIssues,
     fingerprintFacts,
+    githubTransport,
   ] = await Promise.all([
     readBranch(repositoryRoot),
     readLinkedWorktree(repositoryRoot),
@@ -488,9 +581,16 @@ export async function readDoctorFacts(
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
     readFingerprintFacts(repositoryRoot),
+    readGitHubTransport(repositoryRoot),
   ])
-  const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
+  // The working directory reported by the runtime is already symlink-resolved, so it can never
+  // reveal one; the shell's `PWD` keeps the logical path the command was actually invoked
+  // through, which is the path that leaks into tool arguments and then into TypeScript's module
+  // identities.
+  const processGivenPath = Platform.runtimeProcess.env['PWD'] ?? Platform.runtimeProcess.cwd()
+  const [canonicalRepositoryRoot, processRealPath, laneInspection] = await Promise.all([
     canonicalPath(repositoryRoot),
+    canonicalPath(processGivenPath),
     MachineLanes.inspectLanes(options.machineRegistryRoot, { prune: false }),
   ])
   const canonicalLanes = await Promise.all(laneInspection.lanes.map(async lane => ({
@@ -509,6 +609,7 @@ export async function readDoctorFacts(
     direnvAllowed,
     fingerprint: environmentFingerprint(fingerprintFacts),
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
+    githubTransport,
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
     machine: {
@@ -521,11 +622,41 @@ export async function readDoctorFacts(
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,
     ports,
+    processGivenPath,
+    processRealPath,
     repositoryRoot: canonicalRepositoryRoot,
     satisfies: Platform.semverSatisfies,
     watchmanHealthy: watchman.healthy,
     watchmanVersion: watchman.version,
   }
+}
+
+async function readGitHubTransport(repositoryRoot: string): Promise<GitHubTransport> {
+  const [configured, effective, helpers, landingBrokerReady] = await Promise.all([
+    CLI.run('git', { args: ['config', '--local', '--get', 'remote.origin.url'], cwd: repositoryRoot }),
+    CLI.run('git', { args: ['remote', 'get-url', 'origin'], cwd: repositoryRoot }),
+    CLI.run('git', {
+      args: ['config', '--get-all', 'credential.https://github.com.helper'],
+      cwd: repositoryRoot,
+    }),
+    landingBrokerIsReady().catch(() => false),
+  ])
+  return {
+    configuredOriginUrl: successfulLine(configured),
+    credentialHelpers: helpers.exitCode === 0
+      ? helpers.stdout.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+      : [],
+    effectiveOriginUrl: successfulLine(effective),
+    landingBrokerReady,
+  }
+}
+
+function successfulLine(result: CLI.CommandResult): string | undefined {
+  if (result.error !== undefined || result.exitCode !== 0) {
+    return undefined
+  }
+  const line = result.stdout.trim().split('\n')[0]?.trim()
+  return line === '' ? undefined : line
 }
 
 async function canonicalPath(path: string): Promise<string> {

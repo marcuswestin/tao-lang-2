@@ -448,10 +448,11 @@ Describe('gate failure classification', () => {
 })
 
 Describe('gate runner under a shared machine', () => {
-  Test('runs only as many gates at once as its share of a machine full of other lanes allows', async () => {
-    // Three neighbours plus this lane divide the injected four-CPU machine to exactly one slot each,
-    // so the assertion does not depend on how many CPUs the host running the test happens to have.
-    const registryRoot = await busyRegistryRoot(3)
+  Test('starts nothing while whole lanes are admitted ahead of it, then runs at full width', async () => {
+    // The machine admits whole lanes in arrival order, so two neighbours registered before this run
+    // put it third in the queue. A queued lane holds no slots at all: it starts no gate, rather than
+    // running every gate through a share too narrow to be worth the contention.
+    const registryRoot = await busyRegistryRoot(2)
     const root = await mkTestDir('tao-gate-runner-')
     const held = Deferred()
     const started: string[] = []
@@ -470,20 +471,26 @@ Describe('gate runner under a shared machine', () => {
       },
     })
 
-    await until(() => started.length === 1, {
-      description: 'the lane to fill its share of the machine',
-    })
     await settle(20)
-    // Without a machine-wide share the third gate would already be running: an untuned gate costs
-    // one slot and the graph would have had a whole machine of them.
-    // More live lanes than CPUs means some lanes wait and each admitted lane owns one slot; a
-    // minimum of two here would itself oversubscribe the machine.
-    Expect(started).toHaveLength(1)
+    Expect(started).toEqual([])
+
+    // One lane ahead ends. The queue drains in order, and this lane is admitted whole: every gate
+    // it has runs at once, because its width is the machine's rather than a quarter of it.
+    await FS.remove(FS.resolvePath('neighbour-0.json', registryRoot))
+    await until(() => started.length === 3, {
+      description: 'the queued lane to be admitted and run every gate at once',
+      // A queued lane polls once a second, because nothing it waits for changes faster than a lane
+      // ending; the budget is for that poll and for a busy host, not for a slow condition.
+      timeoutMs: 10_000,
+    })
 
     held.resolve()
     const summary = await finished
     Expect(started).toHaveLength(3)
     Expect(summary.status).toBe('passed')
+    // The wait itself is reported rather than swallowed; what the broker said about it — the
+    // position and the lanes ahead — is asserted where the broker forms it, in `machine-lanes`.
+    Expect(summary.gates.flatMap(gate => gate.waits ?? []).length).toBeGreaterThan(0)
     await FS.remove(root)
     await FS.remove(registryRoot)
   })

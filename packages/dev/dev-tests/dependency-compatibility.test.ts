@@ -147,7 +147,7 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('never-installed ^1.0.0, which is not installed')
-    Expect(issues[0]).toContain('just deps')
+    Expect(issues[0]).toContain('./agent setup')
   })
 
   Test('holds for the installed workspace', async () => {
@@ -166,7 +166,7 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBeGreaterThan(0)
     Expect(issues[0]).toContain('could not be read')
-    Expect(issues[0]).toContain('just deps')
+    Expect(issues[0]).toContain('./agent setup')
   })
 
   Test('rejects a second react-dom in the Studio bundle, not only a second react', () => {

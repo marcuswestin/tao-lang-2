@@ -1,6 +1,7 @@
 # DEVENV-078 — A peer's exclusive confirmation blocks every other lane without bound
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Parallel verification
 - **Impact:** While any lane holds the machine-wide exclusive lease, `tryAcquire` returns nothing to
   every other lane, and a waiting lane retries forever with no deadline. A `./dev test` lane started

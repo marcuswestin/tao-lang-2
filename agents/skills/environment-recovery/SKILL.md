@@ -11,6 +11,17 @@ first: `./agent` and `./agent doctor` name the denied operation and the recovery
 below, and following their output is faster and more current than this file. Come here when the
 output is not enough, or when you need the reasoning behind it.
 
+## The worktree's own path
+
+- Create a worktree at a real path, never one reached through a symlink. `/tmp` resolves to
+  `/private/tmp` on macOS and the sandbox sets `$TMPDIR` to the symlink form, so a checkout made
+  there is reached by two paths at once: TypeScript resolves imports through both, treats the
+  results as different declarations, and `_typecheck` fails with types that are not assignable to
+  themselves (`Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`) naming no cause.
+- `./agent doctor`'s `worktree path` check names it. `git worktree move <given> <real>` fixes it,
+  and needs an unsandboxed shell. The rule is the symlink, not the location — worktrees under
+  `/private/tmp` are fine, and a symlinked home or network mount hits the same failure.
+
 ## The devenv profile
 
 - `./agent setup` bootstraps dependencies and the CLI build on every `./agent` call, so a stale
@@ -29,11 +40,13 @@ output is not enough, or when you need the reasoning behind it.
 ## Denied installs
 
 - A few npm packages ship `.idea/` and `.gitmodules`, which an agent sandbox protects inside the
-  working directory and no setting exempts; a sandboxed install that must write one fails as
-  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent doctor` names the broken
-  install and its remediation — follow that rather than diagnosing the two by hand.
-- Never name a Bun install backend to work around this. `--backend=copyfile` makes `bun install`
-  unrunnable sandboxed rather than fixing it.
+  working directory and no setting exempts. A sandboxed install that must write one fails as
+  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
+  denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
+  install and the same remediation. Only the tempdir case is resumable. For either protected-path
+  failure, start an unsandboxed session with `just session-unsandboxed` and run `./agent setup`.
+- Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
+  file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 
 ## Sandbox or host
 

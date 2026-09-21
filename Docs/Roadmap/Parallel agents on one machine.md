@@ -7,6 +7,12 @@ to stop duplicating. Everything below is measured on this machine on 2026-09-17 
 otherwise. Individual defects belong in `Developer environment upgrades.md`; this document owns the
 shape of the problem.
 
+The readings below are kept as measured. Two of the gaps they identify have since been closed, and
+the sections that describe those gaps say so where they appear: fair-share admission was replaced by
+whole-lane admission in arrival order, and narrow lanes were exempted from the queue so an agent
+iterating never waits behind a batch lane. Gap 2 — that only top-level lanes register — is untouched
+and remains the reason the acceptance measurements here are still unobtained.
+
 ## What the machine actually looked like
 
 One reading, taken while a single `verify --complete` was running:
@@ -36,7 +42,10 @@ have to be asked; `./agent doctor` is the one command that already prints them t
 machine-wide slot budget. It works, and it is the right foundation. Three gaps let the above happen
 anyway:
 
-1. **It arbitrates declared widths, not real use.** A node reserving one slot may use one core or
+1. **It arbitrates declared widths, not real use.** _(Closed: fair share was replaced by whole-lane
+   admission in arrival order, on the reasoning that the number of whole lanes is the only bound
+   derivable from what is recorded. Feeding load average back into admission, as this paragraph
+   proposes, was not adopted and is still available.)_ A node reserving one slot may use one core or
    four. Twelve lanes were each inside their fair share while the machine ran at nearly 2x
    oversubscription, because the sum of what everyone _declared_ was correct and the sum of what
    everyone _did_ was not. The broker already samples load average — for the contention report only.
@@ -56,6 +65,10 @@ anyway:
    accurate and is the gap.
 
 ## A one-file run should not queue behind fifteen batch lanes
+
+_(Closed, and by this section's own second proposal: the entry points already distinguish iteration
+from batch, so narrow lanes are now admitted immediately and do not take or wait on a queue
+position. The reserved-share variant was not needed once admission became whole-lane.)_
 
 Fair share is the right policy for two lanes and the wrong one for an agent iterating. Measured while
 writing this: `./dev test-file <one file>` — normally under two seconds — did not complete in seven

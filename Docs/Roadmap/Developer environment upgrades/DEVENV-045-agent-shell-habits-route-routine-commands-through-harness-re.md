@@ -1,6 +1,7 @@
 # DEVENV-045 — Agent shell habits route routine commands through harness review
 
 - **Status:** In progress
+- **Section:** External
 - **Area:** Agent harness performance
 - **Impact:** In Claude Code auto mode, every Bash call outside a narrow allow rule or the built-in
   read-only set waits about two seconds for the permission classifier; in Codex, every escalated action

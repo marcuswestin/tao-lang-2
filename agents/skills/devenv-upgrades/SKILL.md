@@ -6,10 +6,18 @@ description: >-
 
 # Developer Environment Upgrades
 
-The open backlog is `Docs/Roadmap/Developer environment upgrades.md` and its entry files; the closed
-record is `Docs/Roadmap/Developer environment upgrades archive.md` and
-`Developer environment upgrades/Archive/`. Those two pages own the entry format, the statuses, and
-the next free ID. This skill owns which entries to take and how a task leaves both halves.
+The open backlog is `Docs/Roadmap/Developer environment upgrades.md`; the closed record is
+`Docs/Roadmap/Developer environment upgrades archive.md`. **Both are generated** by
+`just _fix-ledger-index` from the entry files under `Developer environment upgrades/` (and its
+`Archive/`) — never hand-edit either index. This skill owns which entries to take next and how a
+task leaves both halves.
+
+## Entry format
+
+Field-by-field format, naming, and status/section meanings live in
+[`references/entry-format.md`](references/entry-format.md) — read it before adding or editing an
+entry. In short: name a new entry after its own title, never a number, and record `**Section:**` —
+`Deferred` or `External` — right after `**Status:**`.
 
 ## Selecting the next set
 
@@ -23,22 +31,20 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
   - **Cost** — the size of its **Proposed change** and the evidence its **Acceptance** demands: a
     clause, a flag, or a declared input is cheap; a new lease protocol, a host lane, or a native
     toolchain is not.
-  - **Importance** — how often the **Impact** is paid and what it costs when paid: highest is a
-    confidently wrong result (an untested-but-green gate, output an agent would quote as fact, a
-    memo proving the wrong tree), then what every agent pays daily, then entries whose
-    **Workaround** actually works.
-  - **Reach** — how many other entries the fix settles or unblocks; entries sharing an **Area** are
-    often one change, and an entry's **Dependencies** name the rest.
+  - **Importance** — how often the **Impact** is paid and what it costs: highest is a confidently
+    wrong result (an untested-but-green gate, output an agent would quote as fact, a memo proving the
+    wrong tree), then what every agent pays daily, then entries whose **Workaround** actually works.
+  - **Reach** — how many other entries the fix settles or unblocks; an **Area** an entry shares with
+    others, and its **Dependencies**, name them.
 - Take cheap, important, wide-reach entries first. An entry with a reliable workaround and a large
   proposed change is a poor trade however real it is; say so and leave it.
-- Prefer a batch that is genuinely parallel: group the selected entries so no two groups write the
-  same files, and hand each group a path list it owns exclusively, as `delegation`'s
-  `references/parallel-implementation.md` requires. `packages/dev/` gate and runner internals, the
-  `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills are four seams that
-  rarely collide; two entries touching one gate file are one group, not two, and documentation-only
-  entries all touch the shared instruction files, so they too are one group.
-- Propose a batch of more than two entries to Ro before implementing — the ID, the one-line cost, and
-  why it is in this batch.
+- Prefer a batch that is genuinely parallel: group entries so no two groups write the same files, and
+  hand each group a path list it owns exclusively, per `delegation`'s
+  `references/parallel-implementation.md`. `packages/dev/` internals, the `./tao` CLI, `.rulesync/`
+  permission sources, and `AGENTS.md` with the skills rarely collide; entries touching the same file
+  are one group.
+- Propose a batch of more than two entries to Ro before implementing — the name, the one-line cost,
+  and why it is in this batch.
 
 ## Working an entry
 
@@ -56,18 +62,19 @@ the next free ID. This skill owns which entries to take and how a task leaves bo
 ## Archiving — in the same change, every time
 
 - Setting an entry to `Resolved` or `Closed` is what moves it. In one change: set the status,
-  `git mv` the file into `Developer environment upgrades/Archive/`, move its index line from the open
-  index to the archive index, and append `- **Archived:** <YYYY-MM-DD>` as the entry's last field.
-  `_repo-lint` enforces the placement and ID uniqueness; do not work around it by leaving the status
-  stale.
-- Name the branch or commit that settled the entry in its **Evidence** or **Dependencies**, drop a
-  section the move leaves empty, and never reuse an ID — a regressed entry returns to the open
-  backlog under its original ID with the new evidence appended, not as a second entry.
+  `git mv` the file into `Developer environment upgrades/Archive/`, and append
+  `- **Archived:** <YYYY-MM-DD>` as the last field. Never touch either index by hand — the next
+  `_fix-ledger-index` run (in `verify`) renders the move; `_repo-lint` enforces placement and id
+  uniqueness, so do not work around it by leaving the status stale. Archive `Incoming` only once the
+  branch that owns the fix lands and is re-verified here.
+- Name the branch or commit that settled it in **Evidence** or **Dependencies**, and never reuse an
+  id: a regressed entry returns to the open backlog under its original id, `git mv`'d back with a
+  **Section** restored and the new evidence appended, not as a second entry.
 - Sweep before finishing: archive any addressed entry another task left in the open index, and say in
-  the handoff which IDs you moved that were not yours.
+  the handoff which entries you moved that were not yours.
 
 ## Reporting
 
-- Name the IDs addressed, the IDs archived, and the evidence behind each; link both indexes once.
+- Name the entries addressed and archived, with the evidence behind each; link both indexes once.
 - An entry you selected and then abandoned goes back to `Candidate` with what you learned added to its
   **Evidence**, so the next task does not repeat the attempt.

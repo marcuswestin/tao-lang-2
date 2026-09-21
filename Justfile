@@ -2,24 +2,49 @@ set quiet
 
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
-BUN_CACHE_DIR := justfile_directory() + "/.artifacts/cache/bun"
-BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
 help:
     just --list
 
-# `just setup` is what every harness runs through `./agent setup`: Worktrunk's pre-start hook
+# The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-# Setup dependencies, current parser output, generated agent adapters, and the warn-only Git hooks
+_setup: _deps _agent-config _git-hooks
+
+# Configure this checkout and GitHub CLI for HTTPS Git authentication
 [group('Setup')]
-setup: deps _parser-gen _agent-config _git-hooks
+github-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git config --global --unset-all 'url.git@github.com:.insteadOf' 2>/dev/null || true
+    git config --global --unset-all 'url.ssh://git@github.com/.insteadOf' 2>/dev/null || true
+    git config --global --replace-all 'url.https://github.com/.insteadOf' 'git@github.com:'
+    git config --global --add 'url.https://github.com/.insteadOf' 'ssh://git@github.com/'
+    if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+      gh auth login --hostname github.com --git-protocol https --web
+    fi
+    gh config set git_protocol https --host github.com
+    gh auth setup-git --hostname github.com
+    git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
+    git ls-remote --exit-code origin refs/heads/main >/dev/null
+    ./dev landing-broker-install
+    printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
+
+# Install or update the credential-isolated landing service for this repository
+[group('Setup')]
+landing-setup:
+    ./dev landing-broker-install
+
+# Check the credential-isolated landing service without performing a GitHub operation
+[group('Setup')]
+landing-status:
+    ./dev landing-broker-status
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -83,6 +108,11 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
+# Run the opt-in real-host testing prototype; does not run or replace the existing suites
+[group('Host proofs')]
+test-host *ARGS:
+    ./dev test-host {{ ARGS }}
+
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
 studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
@@ -92,6 +122,16 @@ studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id=
 [group('Host proofs')]
 studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
+
+# Prove semantic host control against the owned native Studio shell
+[group('Host proofs')]
+studio-host-control-smoke run_id="local":
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-host-control.test.ts
+
+# Probe external Studio accessibility and physical input through Appium Mac2
+[group('Host proofs')]
+studio-mac2-acceptance run_id="local":
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
@@ -132,26 +172,6 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 [group('Ship')]
 studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
-
-# Install development dependencies
-# Install dependencies, then repair a partial tree. Bun's own verification only checks that
-# package directories exist, so an install stopped partway through reports "no changes" forever;
-# `_dependency-health` loads what the entry commands load and is what notices. The repair
-# re-extracts from the shared cache first, and only falls back to a cold worktree-local cache
-# when the shared one is itself the fault — that fallback re-downloads every package.
-#
-# A repair fails loudly rather than reporting what the health probe alone can see. `--force`
-# deletes before it re-clones, and the few packages shipping `.idea/` or `.gitmodules` cannot be
-# deleted inside an agent sandbox, so a sandboxed repair can leave one of them uninstalled while
-# every probed module still loads. When that happens, or when one of those packages is itself the
-# damaged one, no sandboxed repair can reach it: run `rm -rf node_modules && bun install` from an
-# unsandboxed shell.
-# Install dependencies and repair a partial dependency tree
-[group('Setup')]
-deps:
-    mkdir -p "{{ BUN_TMP_DIR }}"
-    TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
-    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi; fi
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
@@ -224,11 +244,12 @@ report-test-stats limit="20":
     echo
     ./dev test-slowest --limit "{{ limit }}"
 
-# Bring a feature branch to the state where merge-with-main can run; safe and cheap to re-run
+# Bring a feature branch to ready while iterating; `land` does its own preparation. Safe to re-run
 [arg('check', long='check', value='true')]
 [arg('fresh', long='fresh', value='true')]
-finalize check='false' fresh='false':
-    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }}
+[arg('redraft', long='redraft', value='true')]
+finalize check='false' fresh='false' redraft='false':
+    ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]
@@ -249,18 +270,46 @@ my-resolve *ARGS:
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
 my-land *ARGS:
-    ./dev finalize
-    ./dev merge-with-main {{ ARGS }}
+    ./dev land {{ ARGS }}
+
+# `land` is the whole landing, as one command and one process. It settles readiness and the merge
+# message first, unlocked, because those are the parts that may need an author; then it takes the
+# machine-wide landing lock once and, inside a single `try`/`finally`, integrates main, runs the
+# cheap-gate barrier, verifies, squashes, pushes, archives, and releases. The lock is therefore held
+# for the work rather than across the gaps between commands, which is where the 36-44 minute holds
+# came from: the merge itself never took more than 94s.
+# A conflict while integrating main is the one failure that gives the lock back and stops: resolve it
+# here, unlocked, commit the merge, and run `just land` again.
+# Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock
+[arg('dry_run', long='dry-run', value='true')]
+[arg('message_file', long='message-file')]
+[arg('redraft', long='redraft', value='true')]
+[arg('skip_verify', long='skip-verify', value='true')]
+[arg('skip_verify_full', long='skip-verify-full', value='true')]
+[group('Ship')]
+land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false':
+    ./dev land {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
+
+# The cheap-gate barrier a landing runs first, inside the lock, before anything expensive. It is
+# `check` — generation and formatting consistency, repository lint, types — plus `dead-exports`, and
+# it is deliberately the CHECK-mode gates rather than the `_fix-*` fixers the verify lanes run: a
+# fixer writes to the tree the landing is about to commit, and the landing then refuses itself with
+# `Verification changed the tree this landing was about to commit.` A red barrier costs ~30s to
+# learn; the suites behind it cost 60-170s more to learn the same thing.
+# Run the cheap gates a landing checks before it spends the expensive suites
+[group('Dev')]
+land-barrier: check dead-exports
 
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
+[arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
 [arg('skip_all', long='skip-all', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' message_file='' abort='':
-    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='':
+    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 [group('Dev')]
@@ -298,26 +347,38 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
-# The landing lock is the one turn-taking primitive: claiming it is what earns the right to run a
-# merge-evidence lane and then move refs. `land-lock` blocks until it is yours and exits holding it,
-# so no agent writes a sleep-poll loop of its own; `land-unlock` gives it back. Nothing reclaims a
-# lock on a timer, by design, so a wedged lock surfaces as a warning naming its holder rather than
-# as a takeover — `land-unlock --force` is the person-shaped way out.
+# The landing lock is the one turn-taking primitive, and `land` now takes it for the whole landing
+# in one process, so these two are **recovery and debugging tools** rather than part of the normal
+# path: claiming the lock by hand before a landing only adds a durable claim the landing does not
+# need. Reach for them to hold the machine while investigating, or to give a lock back by hand.
+# Nothing reclaims a lock on a timer, by design, so a wedged lock surfaces as a warning naming its
+# holder rather than as a takeover — `land-unlock --force` is the person-shaped way out.
 # `just` splits `*ARGS` on whitespace, so a multi-word `--label` has to go through `./dev land-lock`
 # directly; the default label names this worktree, which is what a waiting agent needs anyway.
-# Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it
+# Recovery and debugging: claim the machine-wide landing lock by hand and exit holding it
 [group('Dev')]
 land-lock *ARGS:
     ./dev land-lock {{ ARGS }}
 
-# Release the machine-wide landing lock this worktree holds
+# Recovery and debugging: release the machine-wide landing lock this worktree holds
 [group('Dev')]
 land-unlock *ARGS:
     ./dev land-unlock {{ ARGS }}
 
 # Report every worktree, the machine-wide lane and lease registry, and whether this machine is busy
+[group('Dev')]
 board *ARGS:
     ./dev board {{ ARGS }}
+
+# Report whether a branch landed, by the archive ref a landing pushes rather than by command output
+[group('Dev')]
+landed *ARGS:
+    ./dev landed {{ ARGS }}
+
+# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+[group('Dev')]
+reclaim *ARGS:
+    ./dev reclaim {{ ARGS }}
 
 # Report process, socket, simulator, and local-service capabilities without changing anything
 [group('Report')]
@@ -390,24 +451,24 @@ clean-all: clean-scratch
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
-verify complete='false' no_cache='false': deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify complete='false' no_cache='false': _deps
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
-verify-changed no_cache='false': deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-changed no_cache='false': _deps
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# `--needs-machine` is declared here and nowhere else. It is a fact about this lane, not about any
-# one gate: the browser, native, and simulator gates share one window server between them, so a
-# second lane anywhere on this host makes the verdict a report about interference. `verify-repo`
-# inherits it by invoking this recipe, which is why it carries no declaration of its own.
-# Verify everything plus the browser, native and bundle lanes; needs the machine to itself. --no-cache ignores a recorded green tree
+# This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
+# host — the native shell and the canary, which contend on the window server — declare `gui` in the
+# catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
+# headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
+# Verify everything plus the browser, native and bundle lanes. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
-verify-full no_cache='false': deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --needs-machine --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full no_cache='false': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
@@ -440,6 +501,9 @@ _doctor-json:
 _agent-config:
     ./dev agent-config
 
+_deps:
+    zsh packages/dev/dev-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+
 _git-hooks:
     ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
 
@@ -456,6 +520,10 @@ _fix-tao: _parser-gen
 
 _fix-just-fmt:
     just --fmt
+
+# Both developer-environment index pages are generated from the entry files; never hand-edit them.
+_fix-ledger-index:
+    bun run packages/dev/dev-src/repository-tests/fix-ledger-index.ts
 
 _runtime-pack-check:
     bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts

@@ -2,6 +2,7 @@ import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import type { MachineResourceOwner } from '../dev-src/repository-tests/MachineLanes'
 import {
+  LandingIntegrationConflictError,
   type MergeCommandRunner,
   type MergeSnapshot,
   MergeWithMainCommand,
@@ -106,6 +107,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const snapshots = new Map<string, unknown>()
   const moves: Array<{ fromPath: string; toPath: string }> = []
   const lines: string[] = []
+  const successLines: string[] = []
+  /** The phases the landing reported, in order, which is what the lock exposes to the board. */
+  const phases: string[] = []
+  const lockState = { durableClaimsEnded: 0, phasesEnded: 0 }
   const ancestorExitCodes = [...(repository.ancestorExitCodes ?? [])]
   const remoteMainSequence = [...(repository.remoteMainSequence ?? [])]
   let advertisedRemoteMain = repository.remoteMainHead
@@ -189,6 +194,19 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (args[0] === 'merge-base') {
       return result(command, args, spec.cwd, '', ancestorExitCodes.shift() ?? 0)
     }
+    if (joined === 'diff --name-only --diff-filter=U') {
+      // What a conflicted merge leaves behind, derived from the same status the fake already keeps,
+      // so a test cannot set one without the other.
+      return result(
+        command,
+        args,
+        spec.cwd,
+        repository.featureStatus.split('\n').filter(Boolean)
+          .filter(line => line.startsWith('UU') || line.startsWith('AA') || line.startsWith('DU'))
+          .map(line => line.slice(3))
+          .join('\n'),
+      )
+    }
     if (joined === 'log -1 --format=%cI HEAD') {
       return result(command, args, spec.cwd, '2026-09-03T12:00:00.000Z\n')
     }
@@ -241,7 +259,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       repository.mirrorHead = args[2]!
       return result(command, args, spec.cwd)
     }
-    if (joined === 'merge --no-edit origin/main') {
+    if (joined.startsWith('merge --no-edit ')) {
       if (repository.failFeatureMerge === true) {
         repository.featureStatus = 'UU example.ts\n'
         return result(command, args, spec.cwd, '', 1)
@@ -282,6 +300,15 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   const dependencies: MergeWithMainDependencies = {
     acquireLease: async () => leases.take(),
     askConfirm: async () => true,
+    beginPhase: async (_repositoryRoot, name) => {
+      phases.push(name)
+    },
+    endDurableClaim: async () => {
+      lockState.durableClaimsEnded += 1
+    },
+    endPhases: async () => {
+      lockState.phasesEnded += 1
+    },
     exists: async path => files.has(path) || snapshots.has(path),
     isInteractive: () => true,
     move: async (fromPath, toPath) => {
@@ -314,12 +341,29 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     writeJson: async (path, value) => {
       snapshots.set(path, structuredClone(value))
     },
-    writeLine: line => lines.push(line),
+    writeLine: (line, kind) => {
+      lines.push(line)
+      if (kind === 'success') {
+        successLines.push(line)
+      }
+    },
     writeText: async (path, value) => {
       files.set(path, value)
     },
   }
-  return { calls, dependencies, files, leases: leases.state, lines, moves, repository, snapshots }
+  return {
+    calls,
+    dependencies,
+    files,
+    leases: leases.state,
+    lines,
+    lockState,
+    moves,
+    phases,
+    repository,
+    snapshots,
+    successLines,
+  }
 }
 
 Describe('merge-with-main', () => {
@@ -391,9 +435,20 @@ Describe('merge-with-main', () => {
     Expect(result.mode).toBe('dry-run')
     Expect(
       fake.lines.some(line =>
-        line.startsWith('PASS  Local main is current at ') && line.endsWith('; no worktree has it checked out.')
+        line.startsWith('PASS  No worktree has main checked out;') && line.includes('local main is at ')
       ),
     ).toBe(true)
+    Expect(fake.lines).toContain('PASS  Local main is already at origin/main.')
+    Expect(fake.lines).toContain('PASS  origin/main is an ancestor of the feature branch.')
+    // The plan says the lock is taken once and that everything after it is one process, because that
+    // boundary is the whole shape of the command and a dry run is where a reader learns it.
+    Expect(
+      fake.lines.some(line =>
+        line.startsWith('PLAN  Take the machine-wide landing lock')
+        && line.includes('inside one process, under that lock')
+      ),
+    ).toBe(true)
+    Expect(fake.lines.some(line => line.startsWith('PLAN  Run the cheap-gate barrier'))).toBe(true)
     Expect(fake.lines.some(line => line.startsWith('PLAN  Build the squash commit with git commit-tree'))).toBe(true)
     // A dry run says what it would do and does none of it.
     Expect(fake.calls.some(call => call.args[0] === 'commit-tree' || call.args[0] === 'update-ref')).toBe(false)
@@ -498,7 +553,7 @@ Describe('merge-with-main', () => {
 
     Expect(failure).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect(Errors.messageOf(failure)).toContain('sandbox denied')
-    Expect(Errors.messageOf(failure)).toContain('unsandboxed shell')
+    Expect(Errors.messageOf(failure)).toContain('just landing-setup')
     Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     Expect(fake.snapshots.size).toBe(0)
   })
@@ -548,16 +603,37 @@ Describe('merge-with-main', () => {
     )
   })
 
-  Test('fails before mutation for a divergent remote main', async () => {
+  Test('lands a branch whose local main is behind the remote, catching up inside the lock', async () => {
+    // This used to be a refusal: preflight required local main to equal origin/main, so a landing
+    // that had already paid for a full verification lost the race to whoever moved main first. The
+    // catching-up is now the landing's own work, done under the lock where it cannot go stale.
     const stale = fakeDependencies({ remoteMainHead: 'new-main' })
-    await Expect(
-      MergeWithMainCommand.run({ repositoryRoot: stale.repository.featureRoot }, stale.dependencies),
-    ).rejects.toThrow('Local main is not at origin/main')
-    Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(false)
-    Expect(stale.snapshots.size).toBe(0)
+
+    const outcome = await MergeWithMainCommand.run(
+      { repositoryRoot: stale.repository.featureRoot },
+      stale.dependencies,
+    )
+
+    Expect(outcome.mode).toBe('executed')
+    // The fetch happens after the lock, not before it: nothing this landing learned can be stale.
+    Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(true)
+    Expect(stale.lines.some(line => line.startsWith('PASS  Landing lock held for'))).toBe(true)
   })
 
-  Test('takes the landing lease before moving any ref and releases it on success', async () => {
+  Test('reports a behind local main and an unintegrated main as plan rather than refusal', async () => {
+    const stale = fakeDependencies({ ancestorExitCodes: [1], remoteMainHead: 'new-main' })
+
+    const result = await MergeWithMainCommand.run(
+      { dryRun: true, repositoryRoot: stale.repository.featureRoot },
+      stale.dependencies,
+    )
+
+    Expect(result.mode).toBe('dry-run')
+    Expect(stale.lines).toContain('PLAN  Fast-forward local main to origin/main (new-main) inside the lock.')
+    Expect(stale.lines).toContain("PLAN  Merge origin/main into 'feat/example' inside the lock, before any gate runs.")
+  })
+
+  Test('takes the landing lock before moving any ref and releases it on success', async () => {
     const fake = fakeDependencies()
 
     const outcome = await MergeWithMainCommand.run(
@@ -568,7 +644,14 @@ Describe('merge-with-main', () => {
     Expect(outcome.mode).toBe('executed')
     Expect(fake.leases.acquired).toBe(1)
     Expect(fake.leases.released).toBe(1)
-    Expect(fake.lines.some(line => line.includes('Landing lease held for'))).toBe(true)
+    Expect(fake.lines.some(line => line.includes('Landing lock held for'))).toBe(true)
+    // Every phase the lock was spent on, in order, is what makes a hold's length readable on the
+    // board instead of something a person has to reconstruct from what an agent said it was doing.
+    Expect(fake.phases).toEqual(['integrating', 'cheap gates', 'repository tests', 'push', 'cleanup'])
+    // And the open phase is closed when the transaction ends, so a finished landing does not read
+    // as one still in `cleanup` forever.
+    Expect(fake.lockState.phasesEnded).toBe(1)
+    Expect(fake.lockState.durableClaimsEnded).toBe(0)
   })
 
   Test('releases the landing lease when the landing fails', async () => {
@@ -620,9 +703,50 @@ Describe('merge-with-main', () => {
     Expect(operations).toContain('git branch -D feat/example')
     Expect(fake.repository.mainHead).toBe('commit00000000000000000000000000000000000')
     Expect(([...fake.snapshots.values()][0] as MergeSnapshot).phase).toBe('complete')
-    // Exactly one lane, invoked without --no-cache, so it may reuse a green record for this tree.
-    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([['verify-full']])
+    // The cheap-gate barrier first, then exactly one expensive lane, both invoked without
+    // --no-cache so either may reuse a green record for this tree.
+    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([
+      ['land-barrier'],
+      ['verify-full'],
+    ])
   })
+
+  Test(
+    'runs the cheap-gate barrier before the expensive lane and releases without running it when it fails',
+    async () => {
+      const fake = fakeDependencies()
+      const underlying = fake.dependencies.run
+      fake.dependencies.run = async (command, spec) => {
+        if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+          await underlying(command, spec)
+          return {
+            args: [...(spec.args ?? [])],
+            command,
+            cwd: spec.cwd,
+            error: undefined,
+            exitCode: 1,
+            signal: null,
+            stderr: '',
+            stdout: '',
+          }
+        }
+        return await underlying(command, spec)
+      }
+
+      await Expect(MergeWithMainCommand.run(
+        { repositoryRoot: fake.repository.featureRoot },
+        fake.dependencies,
+      )).rejects.toThrow()
+
+      // The point of the barrier: a red cheap gate costs ~30s, and the suites behind it are never
+      // started to learn the same thing.
+      Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([['land-barrier']])
+      Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
+      // And the lock goes back, because a failed landing that keeps it blocks the whole machine.
+      Expect(fake.leases.released).toBe(1)
+      Expect(fake.phases).toEqual(['integrating', 'cheap gates'])
+    },
+  )
 
   Test('executes verification and pushes before preserving the invoking worktree and cleaning refs', async () => {
     const fake = fakeDependencies()
@@ -671,6 +795,7 @@ Describe('merge-with-main', () => {
       'PASS  Preserved the clean invoking worktree at /repo-feature on detached HEAD; '
       + 'archive its owning task when you are ready to remove it.',
     ])
+    Expect(fake.successLines).toEqual(outcome.lines)
     Expect(outcome.snapshotPath).toMatch(
       /^\/repo-feature\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
     )
@@ -741,6 +866,47 @@ Describe('merge-with-main', () => {
     )
   })
 
+  Test('uses the credential-isolated broker for every remote read and one atomic landing', async () => {
+    const fake = fakeDependencies()
+    const pushes: unknown[] = []
+    fake.dependencies.inspectRemote = async (_root, branches) => ({
+      refs: new Map(branches.flatMap(branch => {
+        if (branch === 'main') {
+          return [[branch, fake.repository.remoteMainHead]]
+        }
+        if (branch === fake.repository.branch) {
+          return [[branch, fake.repository.remoteFeatureHead!]]
+        }
+        return []
+      })),
+    })
+    fake.dependencies.pushRemote = async (_root, push) => {
+      pushes.push(push)
+      return {
+        refs: new Map([
+          ['main', fake.repository.builtHead],
+          ['merged/example', fake.repository.featureHead],
+        ]),
+      }
+    }
+
+    const outcome = await MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fake.dependencies)
+
+    Expect(outcome.mode).toBe('executed')
+    Expect(pushes).toHaveLength(1)
+    Expect(pushes[0]).toMatchObject({
+      branch: 'feat/example',
+      expectedRemoteFeatureHead: fake.repository.remoteFeatureHead,
+      expectedRemoteMainHead: fake.repository.remoteMainHead,
+      featureHead: fake.repository.featureHead,
+      landedHead: fake.repository.builtHead,
+    })
+    Expect(fake.calls.some(call => call.args[0] === 'ls-remote' || call.args[0] === 'fetch')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
+  })
+
   Test('--skip-verify-full verifies the staged squash on main instead of the feature branch', async () => {
     const fake = fakeDependencies()
 
@@ -762,11 +928,12 @@ Describe('merge-with-main', () => {
         + 'was passed.',
     )
     Expect(outcome.mode).toBe('executed')
-    // Exactly one lane, invoked without --no-cache, so it may reuse a green record for this tree.
-    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([[
-      'verify',
-      '--complete',
-    ]])
+    // The barrier still runs, because skipping the expensive lane does not make a broken tree
+    // landable; then exactly one lane, without --no-cache, so it may reuse a green record.
+    Expect(fake.calls.filter(call => call.command === 'just').map(call => call.args)).toEqual([
+      ['land-barrier'],
+      ['verify', '--complete'],
+    ])
   })
 
   Test('--skip-verify alone still fully verifies the branch and still proves the squash tree', async () => {
@@ -932,20 +1099,26 @@ Describe('merge-with-main', () => {
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
     Expect(operations.filter(operation => operation === 'just verify-full')).toHaveLength(2)
-    Expect(operations.indexOf('git merge --no-edit origin/main')).toBeGreaterThan(
+    Expect(operations.indexOf(`git merge --no-edit ${movedMain}`)).toBeGreaterThan(
       operations.indexOf('just verify-full'),
     )
     Expect(operations.findLastIndex(operation => operation === 'just verify-full')).toBeGreaterThan(
-      operations.indexOf('git merge --no-edit origin/main'),
+      operations.indexOf(`git merge --no-edit ${movedMain}`),
     )
     // Main is a ref now, so catching up with the remote is a compare-and-swap, not a checkout.
     Expect(operations.findIndex(operation => operation.startsWith('git update-ref'))).toBeGreaterThan(
       operations.findLastIndex(operation => operation === 'just verify-full'),
     )
-    Expect(fake.lines.some(line => line.includes('restarting full verification (pass 2/3)'))).toBe(true)
+    Expect(fake.lines.some(line => line.includes('restarting full verification (pass 2/2)'))).toBe(true)
+    // The restart re-runs the barrier too: a re-integrated tree is a different tree, and proving it
+    // cheap before proving it expensively is the whole point of the barrier.
+    Expect(operations.filter(operation => operation === 'just land-barrier')).toHaveLength(2)
   })
 
-  Test('stops after three verification restarts when remote main never stabilizes', async () => {
+  Test('stops after the second verification restart when remote main never stabilizes', async () => {
+    // Two, not three. Inside the lock main can only move by an outside push, so one restart absorbs
+    // that and a second means main is moving faster than the machine can verify — which is a
+    // situation to hand back rather than to keep paying a full expensive lane for.
     const originalMain = 'main000000000000000000000000000000000000'
     const fake = fakeDependencies({
       ancestorExitCodes: [0, 1, 1, 1],
@@ -956,9 +1129,9 @@ Describe('merge-with-main', () => {
 
     await Expect(MergeWithMainCommand.run({
       repositoryRoot: fake.repository.featureRoot,
-    }, fake.dependencies)).rejects.toThrow('moved during 3 consecutive verification passes')
+    }, fake.dependencies)).rejects.toThrow('moved during 2 consecutive verification passes')
 
-    Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'verify-full')).toHaveLength(3)
+    Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'verify-full')).toHaveLength(2)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(false)
     Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
   })
@@ -1076,12 +1249,23 @@ Describe('merge-with-main', () => {
     Expect(fake.repository.branch).toBe('feat/example')
   })
 
-  Test('records and aborts a failed feature integration without adopting the other worktree', async () => {
+  Test('a conflicting integration ends the lock and hands the conflicted worktree back', async () => {
+    // Resolving a conflict is model turns, and holding the machine-wide lock through them would put
+    // the long hold straight back inside the transaction it was moved out of. So the landing stops,
+    // the lock goes back — durable claim included, since `release` alone survives one by design —
+    // and the conflicted worktree is left exactly as Git wrote it.
     const fake = fakeDependencies({ ancestorExitCodes: [0, 1], failFeatureMerge: true })
 
     await Expect(MergeWithMainCommand.run({
       repositoryRoot: fake.repository.featureRoot,
-    }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
+    }, fake.dependencies)).rejects.toThrow(LandingIntegrationConflictError)
+
+    Expect(fake.lockState.durableClaimsEnded).toBe(1)
+    Expect(fake.leases.released).toBe(1)
+    // Nothing expensive was started, and no ref moved.
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'update-ref' || call.args[0] === 'commit-tree')).toBe(false)
+
     const [snapshotPath, stored] = [...fake.snapshots.entries()][0]!
     const snapshot = stored as MergeSnapshot
     Expect(snapshot.phase).toBe('failed')
@@ -1091,6 +1275,46 @@ Describe('merge-with-main', () => {
     const outcome = await MergeWithMainCommand.run({ abortSnapshot: snapshotPath }, fake.dependencies)
     Expect(outcome.mode).toBe('aborted')
     Expect(fake.repository.featureStatus).toBe('')
+  })
+
+  Test('names the conflicting paths and says the resolution happens unlocked', async () => {
+    const fake = fakeDependencies({ ancestorExitCodes: [0, 1], failFeatureMerge: true })
+
+    await Expect(MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fake.dependencies)).rejects.toThrow('- example.ts')
+    await Expect(MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fakeDependencies({ ancestorExitCodes: [0, 1], failFeatureMerge: true }).dependencies))
+      .rejects.toThrow('Resolve them here, unlocked')
+  })
+
+  Test('a failed integration that recorded no conflict is not treated as one', async () => {
+    // A merge the sandbox denied part-way leaves no unmerged entries. Calling that a conflict would
+    // send its reader looking for something that is not there, and would end a durable lock claim
+    // over a failure that has nothing to do with conflict resolution.
+    const fake = fakeDependencies({ ancestorExitCodes: [0, 1] })
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'git' && spec.args?.[0] === 'merge') {
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: 'denied',
+          stdout: '',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+    }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
+    Expect(fake.lockState.durableClaimsEnded).toBe(0)
   })
 
   Test('guarded abort restores only a snapshot whose recorded state still matches', async () => {
@@ -1210,9 +1434,15 @@ Describe('merge-with-main', () => {
         'Land integration fixture\n\n- Add the disposable feature.\n',
       )
 
+      const realPhases: string[] = []
       const dependencies: MergeWithMainDependencies = {
         acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
         askConfirm: async () => true,
+        beginPhase: async (_repositoryRoot, name) => {
+          realPhases.push(name)
+        },
+        endDurableClaim: async () => {},
+        endPhases: async () => {},
         exists: FS.exists,
         isInteractive: () => false,
         move: FS.move,
@@ -1234,6 +1464,8 @@ Describe('merge-with-main', () => {
       }, dependencies)
 
       Expect(outcome.mode).toBe('executed')
+      // On a real repository the transaction reports every phase it spends the lock on, in order.
+      Expect(realPhases).toEqual(['integrating', 'cheap gates', 'push', 'cleanup'])
       Expect(await FS.exists(featureRoot)).toBe(true)
       Expect((await gitResult(featureRoot, ['status', '--porcelain'])).stdout).toBe('')
       Expect((await gitResult(featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(

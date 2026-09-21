@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { existingTransactionResource, type TaoDebugPendingWrite, transactionResource } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import type {
@@ -404,7 +405,10 @@ export class RuntimeDataSchema {
     const order = plan.order ?? entity.defaultOrder
     if (order) {
       const multiplier = order.direction === 'desc' ? -1 : 1
-      rows.sort((left, right) => compare(this.read(left, order.field), this.read(right, order.field)) * multiplier)
+      Arrays.sortInPlace(
+        rows,
+        (left, right) => compare(this.read(left, order.field), this.read(right, order.field)) * multiplier,
+      )
     }
     const limited = plan.limit !== undefined && rows.length > plan.limit ? rows.slice(0, plan.limit) : rows
     const fill = this.fillState(plan)
@@ -444,8 +448,10 @@ export class RuntimeDataSchema {
     if (!this.connection.fill) {
       return undefined
     }
-    const where = Object.entries(this.equalityFilterValues(plan))
-      .sort(([left], [right]) => left < right ? -1 : 1)
+    const where = Arrays.sorted(
+      Object.entries(this.equalityFilterValues(plan)),
+      ([left], [right]) => left < right ? -1 : 1,
+    )
     const order = this.effectiveOrder(plan)
     return JSON.stringify(
       [plan.entity, order?.field ?? null, order?.direction ?? null, plan.limit ?? null, where],

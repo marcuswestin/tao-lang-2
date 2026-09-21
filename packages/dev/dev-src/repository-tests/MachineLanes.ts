@@ -1,4 +1,20 @@
+import {
+  type AcquireResourceOptions,
+  MachineResourceBusyError,
+  type MachineResourceLease as HostMachineResourceLease,
+  type MachineResourceOwner,
+  MachineResources,
+  type ProcessIdentity,
+  type ResourceOptions,
+} from '@host-control'
 import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { VerificationLanes } from './VerificationLanes'
+
+export { MachineResourceBusyError }
+export type { MachineResourceOwner, ProcessIdentity }
+
+/** Compatibility facade for existing lane callers; new host drivers use the fenced package lease. */
+export type MachineResourceLease = Pick<HostMachineResourceLease, 'owner' | 'release'>
 
 /** LaneRecord is the live, machine-wide accounting record for one top-level lane. */
 export type LaneRecord = {
@@ -34,31 +50,23 @@ export type MachineExclusiveLease = {
   release: () => Promise<void>
 }
 
-/** MachineResourceLease prevents another worktree from claiming the same named host resource. */
-export type MachineResourceLease = {
-  /** The identity written to the machine-wide registry for diagnostics and safe release. */
-  readonly owner: MachineResourceOwner
-  release: () => Promise<void>
-}
-
-/** MachineResourceOwner identifies the worktree operation holding one named host resource. */
-export type MachineResourceOwner = {
-  command: string
-  id: string
-  name: string
-  pid: number
-  /** OS process start identity, when the host can report it, protects against PID reuse. */
-  processStartedAt?: string
-  repositoryRoot: string
-  /** Lease acquisition time. A lease past its resource's staleness bound is prunable. */
-  startedAt: string
+/** LaneQueueEntry is one lane's place in the machine-wide arrival queue. */
+export type LaneQueueEntry = {
+  /** Admitted lanes run at their own full width; the rest hold nothing until one of them ends. */
+  admitted: boolean
+  /** 1-based place in arrival order, which is what a queued lane prints. */
+  position: number
+  record: LaneRecord & { id: string; maxSlots: number }
 }
 
 /** MachineLane is one top-level lane's registration and dynamic admission broker. */
 export type MachineLane = {
-  /** Current fair share, refreshed on admission and useful for initial child-runner sizing. */
+  /**
+   * Width this lane may hold right now: its whole ceiling while it is admitted, zero while it is
+   * queued behind the lanes that arrived first. Refreshed at every admission.
+   */
   readonly capacity: number
-  /** Per-lane ceiling. The broker, not the local graph, applies the changing fair share. */
+  /** Per-lane ceiling. The broker decides whether the lane may use it, not how wide it is. */
   readonly ceiling: number
   /** Registration identity propagated to nested diagnostics so they can exclude their owner. */
   readonly id?: string
@@ -95,41 +103,11 @@ export type AcquireOptions = {
   repositoryRoot: string
 }
 
-export type ResourceOptions = {
-  /** Command or lane shown to a second worktree when this resource is busy. */
-  command?: string
-  /** Injected by tests. */
-  lockTimeoutMs?: number
-  /**
-   * How old a lease may get before it is prunable regardless of its process identity. Defaults to
-   * `MAX_LEASE_AGE_MS`; pass `Infinity` for a resource an interactive session may validly hold all
-   * day, where only process identity may retire the lease.
-   */
-  maxAgeMs?: number
-  name: string
-  /** Injected by tests. */
-  processIdentity?: (pid: number) => Promise<ProcessIdentity>
-  registryRoot?: string
-  repositoryRoot?: string
-}
-
-export type AcquireResourceOptions = ResourceOptions & {
-  command: string
-  repositoryRoot: string
-  /** Maximum bounded wait before reporting the current owner. */
-  waitTimeoutMs?: number
-}
-
 type ExclusiveRecord = {
   id: string
   laneId: string
   pid: number
   startedAt: string
-}
-
-export type ProcessIdentity = {
-  evidence: 'alive' | 'gone' | 'unknown'
-  startedAt?: string
 }
 
 type MutexRecord = {
@@ -149,40 +127,39 @@ export type LaneInspection = {
 
 class RegistryLockTimeoutError extends Errors.HostEnvironmentError {}
 
-/** MachineResourceBusyError keeps native-host contention distinct from CPU-lane contention. */
-export class MachineResourceBusyError extends Errors.HostEnvironmentError {
-  readonly failureKind = 'native-host-busy'
-  readonly owner: MachineResourceOwner
-
-  constructor(owner: MachineResourceOwner) {
-    super(
-      `Machine resource '${owner.name}' is busy: ${owner.command} in ${owner.repositoryRoot} `
-        + `(PID ${owner.pid}), held since ${owner.startedAt}. Wait for that session to finish or stop it, then retry.`,
-      { details: { failureKind: 'native-host-busy', owner } },
-    )
-    this.owner = owner
-  }
-}
-
-const REGISTRY_DIRECTORY = 'tao/machine-lanes'
 const SAMPLE_INTERVAL_MS = 3_000
 const ADMISSION_POLL_MS = 25
 const MAX_ADMISSION_POLL_MS = 500
+/**
+ * How long a queued lane waits between admission attempts. Nothing a queued lane is waiting for can
+ * change faster than a whole lane finishing, and every attempt takes the one registry mutex every
+ * other lane admits through, so polling at the admitted lane's rate spends the machine's only
+ * serialization point on answers that cannot have changed.
+ */
+const QUEUED_POLL_MS = 1_000
+/**
+ * How many whole lanes may run at once on one machine, chosen from the run record rather than from
+ * a share of the CPUs: 260 recorded lane runs bucketed by overlap gave a median of 37.8s alone,
+ * 54.7s against one peer (1.45x), 75.8s against two (2.0x) and 691.3s against three. Two is the
+ * largest overlap that stays inside the 1.5x-of-uncontended bar this policy exists to meet, and
+ * those medians were measured while each lane was *also* throttled to a fraction of the machine, so
+ * a third lane at full width would be worse than the 2.0x that already misses the bar.
+ *
+ * It is deliberately not scaled by CPU count: a lane's own ceiling is already the CPU count, so the
+ * machine's size is expressed in how wide each admitted lane runs, not in how many are admitted.
+ */
+const ADMITTED_LANES = 2
 const CONTENDED_LOAD_RATIO = 1.5
 const MAX_LEASE_AGE_MS = 6 * 60 * 60 * 1_000
 const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
-const RESOURCE_WAIT_TIMEOUT_MS = 10_000
-const RESOURCE_POLL_MS = 100
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
 const LANE_ID_ENV_KEY = 'TAO_MACHINE_LANE_ID'
 
 /** registryRoot resolves the machine-wide directory shared by every worktree. */
 function registryRoot(): string {
-  const cacheHome = Platform.runtimeProcess.env['XDG_CACHE_HOME']
-  const base = cacheHome !== undefined && cacheHome.length > 0 ? cacheHome : FS.resolvePath('.cache', FS.homeDir())
-  return FS.resolvePath(REGISTRY_DIRECTORY, base)
+  return MachineResources.registryRoot()
 }
 
 /** activeLanes returns all live registrations, pruning crashed processes unless asked not to. */
@@ -237,8 +214,9 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     const registration = await withRegistryLock(root, async () => {
       const entries = await activeLaneEntries(root, true)
       await atomicWriteJson(path, record)
-      const allocations = fairAllocations(cpuCount, [...entries.map(entry => entry.record), record])
-      return { capacity: allocations.get(id) ?? 0, laneCount: entries.length + 1 }
+      const queue = laneQueue([...entries.map(entry => entry.record), record])
+      const own = queue.find(entry => entry.record.id === id)
+      return { capacity: own?.admitted === true ? record.maxSlots : 0, laneCount: entries.length + 1 }
     }, options.lockTimeoutMs)
     initialCapacity = registration.capacity
     initialLaneCount = registration.laneCount
@@ -264,45 +242,59 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
 }
 
 /**
- * fairAllocations redistributes unused ceilings. Every registered lane keeps a floor of one slot,
- * and that floor is honoured at admission even when the machine-wide total is already spent, which
- * bounds the machine at `cpuCount` plus at most one slot per lane running nothing.
+ * laneQueue puts every live lane in arrival order and admits the first `ADMITTED_LANES` *broad*
+ * lanes (`VerificationLanes.BROAD`) whole. An admitted broad lane may reserve up to its own ceiling; a
+ * queued broad lane reserves nothing at all until a broad lane ahead of it ends.
  *
- * The floor used to be cancelled by the machine-wide check it shares admission with — admit only
- * while `cpuCount - Σslots` is positive — exactly when the floor mattered. Lanes that registered
- * while the machine was emptier keep their wider share until each of their running nodes ends, so
- * on a busy machine the sum reaches `cpuCount` and every newcomer is reduced to zero, waiting
- * behind work that will not shrink for minutes. Measured on an 18-CPU host: 18 of 18 slots
- * reserved, CPU under a third busy, nine lanes reporting `waiting` and none of them able to start.
- * The total is worth keeping above that floor, because a lane's share shrinks as lanes join while
- * its reservations do not: without it, each new lane could stack a full share on reservations taken
- * under wider ones. It is a fairness bound rather than a CPU one either way, since a single slot
- * may run a whole test file's parallel children; lanes holding 4-6 slots were measured driving the
- * load average past 21.
+ * Only broad lanes compete for the `ADMITTED_LANES` positions, and only broad lanes can be queued at
+ * all. A narrow lane — everything not in `VerificationLanes.BROAD`, including a lane name this module
+ * has never seen — is always admitted, in any number, because it is not one of the runs this cap
+ * exists to bound: `test-file`, a named test, `test-retry`, `check`, `fix`, `fmt`, and the diff-scoped
+ * lanes all finish in seconds, and an agent runs the first of those roughly twenty times an hour. A
+ * whole-lane queue that made no distinction here would starve the command an agent runs most behind a
+ * `verify-full` that can run for minutes, which is worse than the fair-share bound this cap replaced,
+ * not better. An unrecognized lane name is treated as narrow rather than broad on purpose: the failure
+ * mode of wrongly queueing an interactive command is worse than the failure mode of admitting one lane
+ * this cap did not mean to count. A narrow lane's own `maxSlots` ceiling, governed by `requestedJobs`,
+ * still bounds it — this is a queue exemption, not a licence to take the machine.
+ *
+ * This replaces splitting the machine between every registered lane at once. That split was a
+ * fairness bound dressed as a CPU bound, and it failed as both: 13 live lanes were measured holding
+ * two admitted slots between them while 16 of 18 CPUs' worth of budget went unissued, and the load
+ * average still reached 36 on those 18 CPUs. Both halves of that measurement say the same thing —
+ * **a slot does not describe what a suite spawns**. One slot may run a whole test file's parallel
+ * children, so the sum of admitted slots is not a quantity of CPU and dividing it finer only made
+ * every lane narrow without making the machine any quieter. No correction factor is invented here,
+ * because none can be derived from what is recorded: the bound that *can* be defended is the number
+ * of whole broad lanes, since a broad lane at its ceiling is by construction one machine's worth of
+ * work.
+ *
+ * Arrival order is a total order over live broad records, and a broad lane that registers later
+ * always sorts later, so a queued lane can never be overtaken and the queue drains strictly in order.
+ * Arrival is recorded to the millisecond and a tie falls back to the registration id, which is
+ * arbitrary but fixed — two lanes that registered in the same millisecond did arrive together, and
+ * what matters is that every worktree reading the registry orders them the same way on every poll.
+ * The one way an admitted broad lane loses its place is a record appearing with an older timestamp
+ * than its own — a lease written by an older worktree, or a clock stepping backwards; its
+ * already-running nodes are unaffected and simply drain.
  */
-function fairAllocations(
-  cpuCount: number,
-  records: readonly (LaneRecord & { id: string; maxSlots: number })[],
-): Map<string, number> {
-  const ordered = [...records].sort((left, right) =>
+function laneQueue(records: readonly (LaneRecord & { id: string; maxSlots: number })[]): LaneQueueEntry[] {
+  const arrival = (left: { id: string; startedAt: string }, right: { id: string; startedAt: string }) =>
     left.startedAt.localeCompare(right.startedAt) || left.id.localeCompare(right.id)
+  const broadRank = new Map(
+    records.filter(record => isBroadLane(record.lane)).toSorted(arrival).map((record, index) => [record.id, index]),
   )
-  const allocations = new Map(ordered.map(record => [record.id, Math.min(1, record.maxSlots)]))
-  let remaining = Math.max(0, cpuCount - ordered.length)
-  while (remaining > 0) {
-    const eligible = ordered.filter(record => (allocations.get(record.id) ?? 0) < record.maxSlots)
-    if (eligible.length === 0) {
-      break
-    }
-    for (const record of eligible) {
-      if (remaining === 0) {
-        break
-      }
-      allocations.set(record.id, (allocations.get(record.id) ?? 0) + 1)
-      remaining -= 1
-    }
-  }
-  return allocations
+  return [...records].sort(arrival).map(record => {
+    const rank = broadRank.get(record.id)
+    return rank === undefined
+      ? { admitted: true, position: 0, record }
+      : { admitted: rank < ADMITTED_LANES, position: rank + 1, record }
+  })
+}
+
+/** isBroadLane says whether a lane name competes for `ADMITTED_LANES`; an unknown name is narrow. */
+function isBroadLane(lane: string): boolean {
+  return VerificationLanes.BROAD.includes(lane)
 }
 
 function contentionReport(options: { cpuCount: number; peakLanes: number; peakLoadAverage: number }): ContentionReport {
@@ -321,23 +313,54 @@ function contentionReport(options: { cpuCount: number; peakLanes: number; peakLo
  */
 function describeExclusiveHolder(exclusive: ExclusiveRecord, entries: readonly LaneEntry[]): string {
   const holder = entries.find(entry => entry.record.id === exclusive.laneId)
-  const where = holder === undefined
-    ? `PID ${exclusive.pid}`
-    : `${holder.record.lane} in ${FS.basename(holder.record.repositoryRoot)}`
+  const where = holder === undefined ? `PID ${exclusive.pid}` : describeLane(holder.record)
   return `another lane is confirming exclusively (${where})`
 }
 
+/** describeLane names one lane the way every wait in this module names one: lane, then worktree. */
+function describeLane(record: LaneRecord): string {
+  return `${record.lane} in ${FS.basename(record.repositoryRoot)}`
+}
+
+function joinNames(names: readonly string[]): string {
+  return names.length < 2 ? names[0] ?? '' : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
 /**
- * describeShare separates the three ways an admission is declined once the lane is registered and
- * nobody holds the machine exclusively: this lane is at its share, the machine is full, or the node
- * is wider than what is free. Each says how the machine is currently divided, because a share is a
- * function of how many lanes are registered.
+ * describeQueuePosition is the one thing the landing lock deliberately does not print, and the
+ * difference is that this wait has an order. A lane held back here is behind a known list of lanes
+ * that will end, so its position is a fact it can show and watch shrink; the landing lock's only
+ * question is whether someone else holds it, and a position there would be invented.
+ *
+ * `queue` is whatever `laneQueue` returned — every live lane, broad and narrow together — so this
+ * filters to the broad ones itself rather than trusting a caller to have done it. A narrow lane is
+ * never queued, so counting one into "of N lanes" or "N more queued ahead" would describe a wait that
+ * lane is not causing; only a broad lane ever reaches this function in the first place (see
+ * `tryAcquire`), and its position and total are counted among broad lanes only.
+ */
+function describeQueuePosition(queue: readonly LaneQueueEntry[], laneId: string): string {
+  const broadQueue = queue.filter(entry => isBroadLane(entry.record.lane))
+  const place = broadQueue.findIndex(entry => entry.record.id === laneId)
+  const ahead = broadQueue.slice(0, Math.max(place, 0))
+  const running = ahead.filter(entry => entry.admitted).map(entry => describeLane(entry.record))
+  const queuedAhead = ahead.length - running.length
+  const holders = running.length === 0
+    ? 'no lane is running'
+    : `${joinNames(running)} ${running.length === 1 ? 'is' : 'are'} running`
+  const queued = queuedAhead === 0
+    ? ''
+    : `, ${queuedAhead} more ${queuedAhead === 1 ? 'lane is' : 'lanes are'} queued ahead`
+  return `queued at position ${place + 1} of ${broadQueue.length} lanes; ${holders}${queued}`
+}
+
+/**
+ * describeShare separates the two ways an admitted lane still declines a node: the lane is already
+ * running its whole width, or this node is wider than what is left of it. Both name the width,
+ * because a lane admitted whole is bounded by its own ceiling and by nothing else.
  */
 function describeShare(options: {
   available: number
   capacity: number
-  cpuCount: number
-  globallyAvailable: number
   held: number
   laneCount: number
   requestedSlots: number
@@ -345,9 +368,6 @@ function describeShare(options: {
   const division = `${options.laneCount} ${options.laneCount === 1 ? 'lane is' : 'lanes are'} registered`
   if (options.held >= options.capacity) {
     return `this lane holds ${options.held} of its ${options.capacity} slots; ${division}`
-  }
-  if (options.globallyAvailable === 0) {
-    return `every one of the machine's ${options.cpuCount} slots is reserved; ${division}`
   }
   return `this node wants ${options.requestedSlots} slots, more than the ${options.available} free `
     + `to this lane; ${division}`
@@ -372,8 +392,10 @@ function registeredLane(options: {
   let peakLanes = options.initialLaneCount
   let peakLoadAverage = options.loadAverage()
   let released = false
-  let capacity = Math.max(1, options.initialCapacity)
+  // Zero is a real answer here: a queued lane holds nothing until a lane ahead of it ends.
+  let capacity = Math.max(0, options.initialCapacity)
   let admissionPollMs = ADMISSION_POLL_MS
+  let queuedPoll = false
   let waitReason: string | undefined
 
   const timer = setInterval(() => {
@@ -433,28 +455,24 @@ function registeredLane(options: {
             waitReason = describeExclusiveHolder(exclusive, entries)
             return undefined
           }
-          const allocations = fairAllocations(options.cpuCount, entries.map(entry => entry.record))
-          capacity = allocations.get(options.id) ?? 0
-          const laneAvailable = Math.max(0, capacity - own.record.slots)
-          const globallyAvailable = Math.max(
-            0,
-            options.cpuCount - entries.reduce((sum, entry) => sum + entry.record.slots, 0),
-          )
-          // A lane running nothing is admitted whatever the machine-wide total says. That first slot
-          // is the floor every registration gets, and honouring it here is what keeps a machine
-          // whose slots are all spoken for from stalling every lane that joins it afterwards. Above
-          // that floor the total still governs, which bounds the machine at one extra slot per lane
-          // rather than letting shrinking shares stack on top of reservations taken under wider ones.
-          const available = own.record.slots === 0
-            ? Math.max(1, Math.min(globallyAvailable, laneAvailable))
-            : Math.min(globallyAvailable, laneAvailable)
+          const queue = laneQueue(entries.map(entry => entry.record))
+          const admitted = queue.find(entry => entry.record.id === options.id)?.admitted === true
+          // An admitted lane owns its whole ceiling. There is no machine-wide slot total to check
+          // against any more: the machine is divided by whole broad lanes, and a narrow lane is
+          // always admitted, so this lane is either one of the former or is never queued at all.
+          capacity = admitted ? own.record.maxSlots : 0
+          if (!admitted) {
+            queuedPoll = true
+            waitReason = describeQueuePosition(queue, options.id)
+            return undefined
+          }
+          queuedPoll = false
+          const available = Math.max(0, capacity - own.record.slots)
           const slots = available >= requestedSlots ? requestedSlots : allowPartial ? available : 0
           if (slots <= 0) {
             waitReason = describeShare({
               available,
               capacity,
-              cpuCount: options.cpuCount,
-              globallyAvailable,
               held: own.record.slots,
               laneCount: entries.length,
               requestedSlots,
@@ -468,7 +486,9 @@ function registeredLane(options: {
           return slots
         }, options.lockTimeoutMs)
         if (reservation === undefined) {
-          admissionPollMs = Math.min(MAX_ADMISSION_POLL_MS, admissionPollMs * 2)
+          admissionPollMs = queuedPoll
+            ? QUEUED_POLL_MS
+            : Math.min(MAX_ADMISSION_POLL_MS, admissionPollMs * 2)
           return undefined
         }
         admissionPollMs = ADMISSION_POLL_MS
@@ -590,87 +610,12 @@ async function liveExclusive(root: string): Promise<ExclusiveRecord | undefined>
   return record
 }
 
-/**
- * acquireResource waits briefly for a named host resource, then reports the exact owning worktree
- * and command. Native callers use this rather than folding host contention into lane contention.
- */
 async function acquireResource(options: AcquireResourceOptions): Promise<MachineResourceLease> {
-  const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
-  const deadline = Time.nowMs() + waitTimeoutMs
-  while (true) {
-    const outcome = await claimResource(options)
-    if (outcome.lease !== undefined) {
-      return outcome.lease
-    }
-    if (Time.nowMs() >= deadline) {
-      throw new MachineResourceBusyError(outcome.owner)
-    }
-    await Time.sleep(Math.min(RESOURCE_POLL_MS, Math.max(1, deadline - Time.nowMs())))
-  }
+  return await MachineResources.acquire(options)
 }
 
-/** tryAcquireResource atomically claims a named host resource across all worktrees. */
 async function tryAcquireResource(options: ResourceOptions): Promise<MachineResourceLease | undefined> {
-  return (await claimResource(options)).lease
-}
-
-async function claimResource(
-  options: ResourceOptions,
-): Promise<{ lease?: MachineResourceLease; owner: MachineResourceOwner }> {
-  const root = options.registryRoot ?? registryRoot()
-  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
-  const path = resourcePath(root, options.name)
-  const processIdentity = options.processIdentity ?? inspectProcessIdentity
-  const maxAgeMs = options.maxAgeMs ?? MAX_LEASE_AGE_MS
-  const owner: MachineResourceOwner = {
-    command: options.command ?? options.name,
-    id,
-    name: options.name,
-    pid: Platform.runtimeProcess.pid,
-    processStartedAt: (await ownProcessIdentity(processIdentity)).startedAt,
-    repositoryRoot: options.repositoryRoot ?? Platform.runtimeProcess.cwd(),
-    startedAt: new Date().toISOString(),
-  }
-  let existingOwner: MachineResourceOwner | undefined
-  try {
-    const acquired = await withRegistryLock(root, async () => {
-      const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-      if (
-        existing !== undefined
-        && !leaseExpired(existing, maxAgeMs)
-        && await resourceOwnerIsLive(existing, processIdentity)
-      ) {
-        existingOwner = existing
-        return false
-      }
-      await FS.remove(path).catch(() => {})
-      await atomicWriteJson(path, owner)
-      return true
-    }, options.lockTimeoutMs)
-    if (!acquired) {
-      return { owner: existingOwner ?? owner }
-    }
-  } catch (error) {
-    Errors.throwHostEnvironment(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
-  }
-
-  let released = false
-  const lease: MachineResourceLease = {
-    owner,
-    release: async () => {
-      if (released) {
-        return
-      }
-      await withRegistryLock(root, async () => {
-        const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-        if (existing?.id === id) {
-          await FS.remove(path)
-        }
-      }, options.lockTimeoutMs)
-      released = true
-    },
-  }
-  return { lease, owner }
+  return await MachineResources.tryAcquire(options)
 }
 
 function unregisteredLane(capacity: number): MachineLane {
@@ -875,11 +820,6 @@ async function mutexTarget(linkPath: string): Promise<string | undefined> {
     : undefined
 }
 
-/** ownerIsLive reports whether a recorded resource owner still runs as the process that took the lease. */
-async function ownerIsLive(owner: MachineResourceOwner): Promise<boolean> {
-  return await resourceOwnerIsLive(owner, inspectProcessIdentity)
-}
-
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
   const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
   try {
@@ -948,110 +888,6 @@ function normalizeLaneRecord(
   }
 }
 
-function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefined {
-  if (typeof value !== 'object' || value === null) {
-    return undefined
-  }
-  const record = value as Partial<MachineResourceOwner>
-  const valid = typeof record.id === 'string'
-    && typeof record.name === 'string'
-    && Number.isInteger(record.pid)
-    && (record.pid ?? 0) > 0
-    && typeof record.startedAt === 'string'
-    && Number.isFinite(Date.parse(record.startedAt))
-    && (record.processStartedAt === undefined || typeof record.processStartedAt === 'string')
-    && (record.command === undefined || typeof record.command === 'string')
-    && (record.repositoryRoot === undefined || typeof record.repositoryRoot === 'string')
-  if (!valid) {
-    return undefined
-  }
-  return {
-    command: record.command ?? record.name!,
-    id: record.id!,
-    name: record.name!,
-    pid: record.pid!,
-    processStartedAt: record.processStartedAt,
-    repositoryRoot: record.repositoryRoot ?? '<unknown worktree>',
-    startedAt: record.startedAt!,
-  }
-}
-
-/**
- * leaseExpired applies a resource's staleness bound. Most leases are short-lived lane leases whose
- * holder may have died without a reachable process identity, so age alone retires them; a resource
- * that opts out with an infinite bound (interactive native Studio) is retired only by identity.
- */
-function leaseExpired(owner: MachineResourceOwner, maxAgeMs: number): boolean {
-  if (!Number.isFinite(maxAgeMs)) {
-    return false
-  }
-  const timestamp = Date.parse(owner.startedAt)
-  return Number.isFinite(timestamp) && Time.nowMs() - timestamp > maxAgeMs
-}
-
-let ownIdentity: { pid: number; identity: Promise<ProcessIdentity> } | undefined
-
-/**
- * ownProcessIdentity reads this process's start identity once: it cannot change, and a contended
- * lease is claimed in a tight poll loop that must not spawn `ps` on every attempt.
- */
-function ownProcessIdentity(inspect: (pid: number) => Promise<ProcessIdentity>): Promise<ProcessIdentity> {
-  const pid = Platform.runtimeProcess.pid
-  if (inspect !== inspectProcessIdentity) {
-    return inspect(pid)
-  }
-  if (ownIdentity === undefined || ownIdentity.pid !== pid) {
-    ownIdentity = { identity: inspect(pid), pid }
-  }
-  return ownIdentity.identity
-}
-
-/**
- * resourceOwnerIsLive requires evidence that the recorded process identity disappeared or changed
- * before pruning a lease inside its staleness bound: an unreadable process table is uncertainty
- * rather than staleness.
- */
-async function resourceOwnerIsLive(
-  owner: MachineResourceOwner,
-  inspect: (pid: number) => Promise<ProcessIdentity>,
-): Promise<boolean> {
-  const identity = await inspect(owner.pid)
-  if (identity.evidence === 'gone') {
-    return false
-  }
-  if (
-    identity.evidence === 'alive'
-    && owner.processStartedAt !== undefined
-    && identity.startedAt !== undefined
-    && owner.processStartedAt !== identity.startedAt
-  ) {
-    return false
-  }
-  return true
-}
-
-/** inspectProcessIdentity reads the OS start time that distinguishes a live PID from its reuse. */
-async function inspectProcessIdentity(pid: number): Promise<ProcessIdentity> {
-  try {
-    // `lstart` follows locale and time zone; pin both so every process compares the same spelling.
-    const result = await CLI.run('ps', {
-      args: ['-o', 'lstart=', '-p', String(pid)],
-      env: { LC_ALL: 'C', TZ: 'UTC' },
-      stdio: 'pipe',
-    })
-    const startedAt = result.stdout.trim()
-    if (result.error === undefined && result.exitCode === 0 && startedAt.length > 0) {
-      return { evidence: 'alive', startedAt }
-    }
-    if (result.error === undefined && !Platform.processIsAlive(pid)) {
-      return { evidence: 'gone' }
-    }
-  } catch {
-    // Fall through to the weaker kernel liveness probe. Unknown identity must remain owned.
-  }
-  return Platform.processIsAlive(pid) ? { evidence: 'unknown' } : { evidence: 'gone' }
-}
-
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && 'code' in error ? String(error.code) : undefined
 }
@@ -1060,12 +896,9 @@ function lanePath(root: string, id: string): string {
   return FS.resolvePath(`${id}.lane.json`, root)
 }
 
-function resourcePath(root: string, name: string): string {
-  return FS.resolvePath(`resource-${name.replaceAll(/[^a-zA-Z0-9._-]/g, '_')}.lease`, root)
-}
-
 /** MachineLanes owns atomic CPU and named-resource coordination across repository worktrees. */
 export const MachineLanes = {
+  ADMITTED_LANES,
   CONTENDED_LOAD_RATIO,
   EXCLUSIVE_TIMEOUT_MS,
   LANE_ID_ENV_KEY,
@@ -1074,9 +907,9 @@ export const MachineLanes = {
   activeLanes,
   contentionReport,
   describeContention,
-  fairAllocations,
   inspectLanes,
-  ownerIsLive,
+  laneQueue,
+  ownerIsLive: MachineResources.ownerIsLive,
   registryRoot,
   tryAcquireResource,
   withRegistryLock,

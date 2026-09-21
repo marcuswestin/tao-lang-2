@@ -1,27 +1,10 @@
 # Developer environment upgrades — archive
 
-This is the closed record of [`Developer environment upgrades.md`](<Developer environment upgrades.md>).
-An entry arrives here once it has been addressed: `Resolved` when the repository or host behaves as
-the entry's acceptance describes, `Closed` when the entry was withdrawn, superseded, or found not to
-be a repository problem. Entry files live in
-[`Developer environment upgrades/Archive/`](<Developer environment upgrades/Archive/>); this page is
-their index, and `_repo-lint` holds both indexes to their files exactly as it does the open backlog.
+The closed record of [`Developer environment upgrades.md`](<Developer environment upgrades.md>).
 
-## Archive rules
-
-- Archiving is part of the change that addresses an entry, not a later tidy-up. Set the entry's
-  `**Status:**`, `git mv` its file into `Developer environment upgrades/Archive/`, and move its index
-  line here. An addressed entry never stays in the open index.
-- Keep the file whole: same ID, same filename, every field, and the evidence that settled it. Name the
-  branch or commit that settled it in **Evidence** or **Dependencies**, and append
-  `- **Archived:** <YYYY-MM-DD>` as the last field.
-- Never reuse an archived ID. The next free ID is one past the highest that exists on `main` across
-  both indexes.
-- An archived entry that regresses moves back to the open backlog under its original ID, with the new
-  evidence appended. Do not open a second entry for it.
-- `Incoming` means another unmerged branch owns the fix; it is archived only after that branch lands
-  and the fix is re-verified here.
-- Keep this index in ID order, one line per entry, its status matching the entry's own.
+**Generated.** `just _fix-ledger-index` renders this page from the entry files under
+[`Developer environment upgrades/Archive/`](<Developer environment upgrades/Archive/>); do not
+hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 
 ## Entries
 
@@ -40,6 +23,12 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-013 — Repository-owned Expo cache and fast smoke failure](<Developer environment upgrades/Archive/DEVENV-013-repository-owned-expo-cache-and-fast-smoke-failure.md>) — Resolved
 - [DEVENV-014 — Interaction-test cleanup and durable manual QA](<Developer environment upgrades/Archive/DEVENV-014-interaction-test-cleanup-and-durable-manual-qa.md>) — Resolved
 - [DEVENV-016 — Studio process ownership and status](<Developer environment upgrades/Archive/DEVENV-016-studio-process-ownership-and-status.md>) — Resolved
+- [DEVENV-017 — Studio snapshot command consistency](<Developer environment upgrades/Archive/DEVENV-017-studio-snapshot-command-consistency.md>) — Resolved
+- [DEVENV-018 — Semantic facts and coverage commands](<Developer environment upgrades/Archive/DEVENV-018-semantic-facts-and-coverage-commands.md>) — Resolved
+- [DEVENV-019 — Idempotent workspace opening](<Developer environment upgrades/Archive/DEVENV-019-idempotent-workspace-opening.md>) — Resolved
+- [DEVENV-021 — Safe scratch scripts and concurrent staging](<Developer environment upgrades/Archive/DEVENV-021-safe-scratch-scripts-and-concurrent-staging.md>) — Resolved
+- [DEVENV-022 — Raw Error policy for failure mocks](<Developer environment upgrades/Archive/DEVENV-022-raw-error-policy-for-failure-mocks.md>) — Resolved
+- [DEVENV-023 — React Native test renderer convention](<Developer environment upgrades/Archive/DEVENV-023-react-native-test-renderer-convention.md>) — Closed
 - [DEVENV-025 — Worktree-safe CLI test roots](<Developer environment upgrades/Archive/DEVENV-025-worktree-safe-cli-test-roots.md>) — Resolved
 - [DEVENV-026 — Opt-in underlying error diagnostics](<Developer environment upgrades/Archive/DEVENV-026-opt-in-underlying-error-diagnostics.md>) — Resolved
 - [DEVENV-027 — Watchman-free package-local Jest](<Developer environment upgrades/Archive/DEVENV-027-watchman-free-package-local-jest.md>) — Resolved
@@ -53,9 +42,11 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-042 — Studio smoke observes persistence before browser reconciliation](<Developer environment upgrades/Archive/DEVENV-042-studio-smoke-observes-persistence-before-browser-reconciliat.md>) — Resolved
 - [DEVENV-043 — Changed-files lane fails every package with no affected tests](<Developer environment upgrades/Archive/DEVENV-043-changed-files-lane-fails-every-package-with-no-affected-test.md>) — Resolved
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
+- [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
+- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/Archive/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Resolved
 - [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/Archive/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
@@ -67,9 +58,13 @@ their index, and `_repo-lint` holds both indexes to their files exactly as it do
 - [DEVENV-085 — Jest crawled the compile cache, so the better the cache worked the slower every run got](<Developer environment upgrades/Archive/DEVENV-085-jest-crawled-the-compile-cache-on-every-run.md>) — Resolved
 - [DEVENV-087 — A permission pattern matched only one of git's two argument orders](<Developer environment upgrades/Archive/DEVENV-087-a-permission-pattern-matched-only-one-of-git-s-two-orders.md>) — Resolved
 - [DEVENV-088 — `merge-with-main`'s preflight cannot reach `origin` from inside the sandbox](<Developer environment upgrades/Archive/DEVENV-088-merge-with-main-s-preflight-cannot-reach-origin-from-inside-the-sandbox.md>) — Resolved
+- [DEVENV-089 — `finalize` overwrites a reviewed merge message with a concatenation of commit subjects](<Developer environment upgrades/Archive/DEVENV-089-finalize-overwrites-a-reviewed-merge-message.md>) — Resolved
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-093 — Ready branches convoy behind each other, each re-verifying the whole tree](<Developer environment upgrades/Archive/DEVENV-093-landing-branches-convoy-behind-each-other.md>) — Closed
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
+- [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/Archive/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
 - [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/Archive/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Resolved
 - [DEVENV-105 — `finalize` cannot consume the green evidence that `verify` records](<Developer environment upgrades/Archive/DEVENV-105-finalize-cannot-consume-the-green-evidence-that-verify-records.md>) — Resolved
+- [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
+- [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved

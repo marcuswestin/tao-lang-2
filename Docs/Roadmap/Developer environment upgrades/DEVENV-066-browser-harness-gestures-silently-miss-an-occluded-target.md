@@ -1,6 +1,7 @@
 # DEVENV-066 — Browser-harness gestures silently miss an occluded target
 
 - **Status:** Mitigated for offset gestures
+- **Section:** External
 - **Area:** Studio browser harness
 - **Impact:** `StudioCdp` dispatches real mouse input at a computed viewport point. When something
   else is painted there — a floating panel, a sticky gutter, a divider's overhanging grab area — the

@@ -4,6 +4,7 @@ import { readDelegationIssues } from '../delegation/DelegationProfiles'
 import { isAuditedSource } from '../simplify-audit/AuditedSource'
 import { instructionBudget, instructionLineCount } from '../simplify-audit/InstructionBudgets'
 import { kindChainsIn } from '../simplify-audit/KindChains'
+import { runtimeArrayConventionIssues } from './RuntimeArrayConventions'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -88,11 +89,15 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
-/** LedgerEntry is one backlog file as this rule sees it: its file name and the status it records. */
+/** LedgerEntry is one backlog file as this rule sees it: its file name and the fields it records. */
 export type LedgerEntry = {
   name: string
   /** The entry's own `**Status:**`, or an empty string when the file states none. */
   status: string
+  /** The entry's own `# DEVENV-... — Title` heading text, without the leading `# `, or `''` when absent. */
+  heading?: string
+  /** The entry's own `**Section:**`; meaningful only for an entry that lives in the open directory. */
+  section?: string
 }
 
 /** LedgerSide is one half of the backlog: the entry files in a directory and the index that lists them. */
@@ -109,81 +114,151 @@ const OPEN_LINK_PREFIX = 'Developer environment upgrades/'
 const ARCHIVE_LINK_PREFIX = 'Developer environment upgrades/Archive/'
 
 /**
- * The developer-environment backlog is one file per entry plus a hand-maintained index, so that two
- * branches adding an entry each add a file and one line rather than colliding over a shared block.
- * What that layout gives up is the guarantee a single file had for free: a file can exist unlisted,
- * a line can point at a file nobody wrote, and — because two new files merge silently where two new
- * blocks would have conflicted — two branches can ship the same `DEVENV-NNN`. This rule is where all
- * three are caught, and it is the reason the index can be hand-maintained instead of generated.
+ * Allowed `**Section:**` values for an open-backlog entry, paired with the open index heading each
+ * one generates, in the order the index prints them. Meaningless for an archived entry, which the
+ * archive index lists as one flat, generated list instead. The `devenv-upgrades` skill owns when to
+ * use each value.
+ */
+const LEDGER_SECTIONS = [
+  ['Deferred', 'Deferred project — begin after the large branches land'],
+  ['External', 'External and observational findings'],
+] as const
+const LEDGER_SECTION_VALUES: ReadonlySet<string> = new Set(LEDGER_SECTIONS.map(([value]) => value))
+const LEDGER_SECTION_LIST = LEDGER_SECTIONS.map(([value]) => `\`${value}\``).join(' or ')
+
+/**
+ * The developer-environment backlog is one file per entry plus a generated index, so that two
+ * branches adding an entry each add a file — the one thing two branches ever touch at once here, and
+ * merging two new files never conflicts. `Developer environment upgrades.md` and
+ * `Developer environment upgrades archive.md` are rendered from the entry files by
+ * `writeDeveloperEnvironmentLedgerIndexes` (the `_fix-ledger-index` gate); nobody hand-edits them, so
+ * the three drift symptoms this rule used to catch one at a time — a file the index never linked, a
+ * link to a file that no longer exists, a link a kept-both merge duplicated — can no longer happen on
+ * their own and collapse into one check below: the committed index text matches what the entry files
+ * generate.
+ *
+ * New entries are named `DEVENV-NAME-WORDS-ETC.md` after their own title rather than by the next
+ * free number, because the number was the collision: every branch read the same highest id and
+ * chose the same successor, so the ledger renumbered on nearly every merge. A name derived from the
+ * title collides only when two branches genuinely record the same finding, which is a duplicate
+ * worth catching. Numbered entries predate that and stay valid; nothing renumbers them.
  *
  * The backlog has two halves, open and archived, and an entry belongs to the half its own status
  * names: the open index would otherwise regrow the unread tail the per-file layout was meant to end,
  * one addressed entry at a time. An ID is unique across both halves, because an archived entry is
- * still quoted by ID from commit messages and from other entries' dependencies.
+ * still quoted by ID from commit messages and from other entries' dependencies. Within the open half,
+ * an entry also names the generated section it prints under, in its own `**Section:**` field.
  */
 export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: LedgerSide): string[] {
   const issues: string[] = []
   const byId = new Map<string, string[]>()
   for (
-    const [side, indexName, linkPrefix, archiveSide] of [
-      [open, OPEN_INDEX, OPEN_LINK_PREFIX, false],
-      [archived, ARCHIVE_INDEX, ARCHIVE_LINK_PREFIX, true],
+    const [side, linkPrefix, archiveSide] of [
+      [open, OPEN_LINK_PREFIX, false],
+      [archived, ARCHIVE_LINK_PREFIX, true],
     ] as const
   ) {
-    // Counted rather than collected: a merge that keeps both sides of a conflicting index edit
-    // leaves one file linked twice, which reads as correct from either direction — the file exists
-    // and it is listed — and is the one way this layout can still drift without a check below.
-    const linked = new Map<string, number>()
-    for (const match of side.index.matchAll(indexLinkPattern(linkPrefix))) {
-      const name = match[1]!
-      linked.set(name, (linked.get(name) ?? 0) + 1)
-    }
     const entries = [...side.entries].filter(entry => entry.name.endsWith('.md'))
       .sort((left, right) => left.name.localeCompare(right.name))
     for (const entry of entries) {
-      const id = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      // A numbered entry keeps its number as its identity; a named one is identified by the whole
+      // name, which is the point of the scheme — two branches cannot pick the same name by accident
+      // the way they both picked the next free number.
+      const numbered = entry.name.match(/^(DEVENV-\d+)-/)?.[1]
+      const named = entry.name.match(/^(DEVENV-[A-Z0-9]+(?:-[A-Z0-9]+)*)\.md$/)?.[1]
+      const id = numbered ?? named
       if (id === undefined) {
-        issues.push(`${linkPrefix}${entry.name} must be named DEVENV-NNN-<slug>.md.`)
+        issues.push(
+          `${linkPrefix}${entry.name} must be named DEVENV-NAME-WORDS-ETC.md, with the title's`
+            + ' words in capitals joined by dashes.',
+        )
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
-      if (!linked.has(entry.name)) {
-        issues.push(`${indexName} needs an index line linking \`${entry.name}\`.`)
-      }
       if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
         issues.push(
           archiveSide
             ? `${linkPrefix}${entry.name} is \`${entry.status}\`; an entry that is not addressed`
               + ' belongs in the open backlog.'
-            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it and its index line to`
-              + ' the archive in the change that addressed it.',
+            : `${OPEN_LINK_PREFIX}${entry.name} is \`${entry.status}\`; move it into`
+              + ' `Developer environment upgrades/Archive/` in the change that addressed it.',
         )
       }
-    }
-    const present = new Set(entries.map(entry => entry.name))
-    for (const [name, count] of [...linked].sort(([left], [right]) => left.localeCompare(right))) {
-      if (!present.has(name)) {
-        issues.push(`${indexName} links \`${name}\`, which does not exist.`)
-      }
-      if (count > 1) {
-        issues.push(`${indexName} links \`${name}\` ${count} times; keep one index line.`)
+      if (!archiveSide && !LEDGER_SECTION_VALUES.has(entry.section ?? '')) {
+        issues.push(`${linkPrefix}${entry.name} needs a \`**Section:**\` of ${LEDGER_SECTION_LIST}.`)
       }
     }
   }
   for (const [id, names] of [...byId].sort(([left], [right]) => left.localeCompare(right))) {
     if (names.length > 1) {
       issues.push(
-        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')};`
-          + ' rename the later-merged file and its index line.',
+        `Developer environment upgrades: ${id} is claimed by ${names.join(', ')}; rename the`
+          + ' later-merged file.',
       )
     }
+  }
+  const generated = developerEnvironmentIndexes(open, archived)
+  if (open.index !== '' && open.index !== generated.openIndex) {
+    issues.push(`${OPEN_INDEX} is out of date with its entry files; run \`just _fix-ledger-index\` to regenerate it.`)
+  }
+  if (archived.index !== '' && archived.index !== generated.archiveIndex) {
+    issues.push(
+      `${ARCHIVE_INDEX} is out of date with its entry files; run \`just _fix-ledger-index\` to regenerate it.`,
+    )
   }
   return issues
 }
 
-/** The open index's links must not match the archive's, which extend them with one more segment. */
-function indexLinkPattern(linkPrefix: string): RegExp {
-  return new RegExp(`^- \\[DEVENV-\\d+ — [^\\]]+\\]\\(<${linkPrefix}([^>/]+)>\\)`, 'gm')
+const OPEN_INDEX_HEADER = [
+  '# Developer environment upgrades',
+  '',
+  'The durable backlog for repository setup, automation, verification, worktree, diagnostic, and',
+  'host-environment improvements. Product defects belong in their product roadmap; an entry here may',
+  'link one when the developer workflow is also affected.',
+  '',
+  '**Generated.** `just _fix-ledger-index` renders this page from the entry files under',
+  '[`Developer environment upgrades/`](<Developer environment upgrades/>); do not hand-edit it. Entry',
+  'format, the `**Section:**` values, and how entries are selected, worked, and archived live in the',
+  '`devenv-upgrades` skill. An addressed entry moves to',
+  '[`Developer environment upgrades archive.md`](<Developer environment upgrades archive.md>) in the',
+  'change that addressed it.',
+].join('\n')
+
+const ARCHIVE_INDEX_HEADER = [
+  '# Developer environment upgrades — archive',
+  '',
+  'The closed record of [`Developer environment upgrades.md`](<Developer environment upgrades.md>).',
+  '',
+  '**Generated.** `just _fix-ledger-index` renders this page from the entry files under',
+  '[`Developer environment upgrades/Archive/`](<Developer environment upgrades/Archive/>); do not',
+  'hand-edit it. Archiving rules live in the `devenv-upgrades` skill.',
+].join('\n')
+
+/** developerEnvironmentIndexes renders both ledger index files from their entry files, deterministically. */
+export function developerEnvironmentIndexes(
+  open: LedgerSide,
+  archived: LedgerSide,
+): { archiveIndex: string; openIndex: string } {
+  const openEntries = [...open.entries].filter(entry => entry.name.endsWith('.md'))
+  const archivedEntries = [...archived.entries].filter(entry => entry.name.endsWith('.md'))
+  const sections = LEDGER_SECTIONS.map(([value, heading]) => {
+    const lines = openEntries
+      .filter(entry => (entry.section ?? '') === value)
+      .sort((left, right) => (left.heading ?? '').localeCompare(right.heading ?? ''))
+      .map(entry => ledgerIndexLine(entry, OPEN_LINK_PREFIX))
+    return [`## ${heading}`, '', ...lines].join('\n')
+  })
+  const archiveLines = archivedEntries
+    .sort((left, right) => (left.heading ?? '').localeCompare(right.heading ?? ''))
+    .map(entry => ledgerIndexLine(entry, ARCHIVE_LINK_PREFIX))
+  return {
+    archiveIndex: `${ARCHIVE_INDEX_HEADER}\n\n## Entries\n\n${archiveLines.join('\n')}\n`,
+    openIndex: `${OPEN_INDEX_HEADER}\n\n${sections.join('\n\n')}\n`,
+  }
+}
+
+function ledgerIndexLine(entry: LedgerEntry, linkPrefix: string): string {
+  return `- [${entry.heading ?? ''}](<${linkPrefix}${entry.name}>) — ${entry.status}`
 }
 
 /** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
@@ -368,16 +443,28 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-src/studio/StudioCdp.ts:560',
   'packages/dev/dev-src/studio/StudioCdp.ts:729',
   'packages/dev/dev-src/studio/StudioCdp.ts:879',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts:100',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:235',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:367',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:386',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:426',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:573',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:580',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:586',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:607',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:610',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:102',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:248',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:396',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:415',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:523',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:525',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:538',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:549',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:576',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:613',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:622',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:630',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:633',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:636',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:637',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:644',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:782',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:804',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:811',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:817',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:838',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:841',
   'packages/dev/studio-smoke/studio-real-app.test.ts:128',
   'packages/dev/studio-smoke/studio-real-app.test.ts:264',
   'packages/dev/studio-smoke/studio-real-app.test.ts:292',
@@ -400,7 +487,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/studio/studio-tests/studio-client.test.ts:626',
   'packages/studio/studio-tests/studio-client.test.ts:3043',
   // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/icloud-native/plugins/with-tao-icloud.cjs:31',
+  'packages/icloud-native/plugins/with-tao-icloud.cjs:32',
   'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
@@ -409,7 +496,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/dev/dev-tests/agent-config-generation.test.ts:84',
   'packages/dev/dev-tests/agent-config-generation.test.ts:107',
   'packages/dev/dev-tests/claude-profiles-generation.test.ts:87',
-  'packages/dev/dev-tests/codex-config-generation.test.ts:211',
+  'packages/dev/dev-tests/codex-config-generation.test.ts:214',
   'packages/dev/dev-tests/expo-dev-loop.test.ts:344',
   'packages/dev/dev-tests/studio-companion-device.test.ts:560',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx:232',
@@ -456,31 +543,28 @@ const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 const NODE_IMPORT_ALLOWLIST = [
   // `node:crypto` in the fenced verification runner, which moves to `Platform.sha256Hex` with it,
   // and other `node:` imports that follow them in the same files.
-  'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
-  'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
-  'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
-  'packages/dev/dev-src/studio/StudioCdp.ts:2',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:541',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:543',
-  'packages/dev/dev-src/studio/StudioNative.ts:4',
-  'packages/dev/dev-tests/studio-review.test.ts:3',
-  'packages/update-server/update-server-tests/update-server.test.ts:3',
+  'packages/dev/dev-src/repository-tests/GreenTree.ts',
+  'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
+  'packages/dev/dev-src/repository-tests/TestLedger.ts',
+  'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
+  'packages/dev/dev-src/studio/StudioNative.ts',
+  'packages/dev/dev-tests/studio-review.test.ts',
+  'packages/update-server/update-server-tests/update-server.test.ts',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
+  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
   // `node:net` port probes and socket connections.
-  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
-  'packages/generation/generation-live/apple-foundation-models.live.ts:3',
+  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts',
+  'packages/generation/generation-live/apple-foundation-models.live.ts',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:545',
-  'packages/dev/dev-tests/repo-lint.test.ts:546',
-  'packages/dev/dev-tests/work-graph.test.ts:465',
-  'packages/dev/dev-tests/work-graph.test.ts:466',
+  'packages/dev/dev-tests/repo-lint.test.ts',
+  'packages/dev/dev-tests/work-graph.test.ts',
   // Stream classes a test constructs to stand in for a terminal.
-  'packages/tao-cli/cli-tests/compile-command.test.ts:3',
-  'packages/tao-cli/cli-tests/create-command.test.ts:4',
-  'packages/tao-cli/cli-tests/dev-command.test.ts:3',
-  'packages/tao-cli/cli-tests/test-cli-files.ts:3',
+  'packages/tao-cli/cli-tests/compile-command.test.ts',
+  'packages/tao-cli/cli-tests/create-command.test.ts',
+  'packages/tao-cli/cli-tests/dev-command.test.ts',
+  'packages/tao-cli/cli-tests/test-cli-files.ts',
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
   'packages/studio/studio-src/StudioClientAssets.ts:3',
   'packages/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
@@ -845,25 +929,48 @@ function conventionIssues(
   ].sort()
 }
 
+/**
+ * A site-keyed allowlist takes both shapes, and the shape is the claim being made.
+ *
+ * `path:line` blesses one occurrence, so a second direct use in the same file still fails. That
+ * precision costs a maintenance tax the line number cannot pay for everywhere: the number is a
+ * coordinate, not a fact about the code, and every edit above a blessed site silently invalidates
+ * it — adding tests thirty lines above two fixtures once broke both of their entries at once.
+ *
+ * A bare `path` blesses the file, which is the honest claim where the whole file is the exception:
+ * a test asserting on generated source, or a host-facing tool whose job is reaching the host. It
+ * still goes stale when the file stops matching at all, so the ratchet only ever tightens. Keep
+ * `path:line` where a new use in an already-listed file must fail — the packages whose code ships
+ * inside built apps — and use `path` elsewhere.
+ */
 function conventionSiteIssues(
   files: readonly SourceFile[],
   matches: readonly ConventionMatch[],
   allowlist: readonly string[],
   staleDetail: string,
 ): string[] {
-  const allowed = new Set(allowlist)
+  const allowedSites = new Set(allowlist.filter(entry => sitePath(entry) !== entry))
+  const allowedFiles = new Set(allowlist.filter(entry => sitePath(entry) === entry))
   const scanned = new Set(files.map(file => file.path))
   const matchSites = new Set(matches.map(match => `${match.path}:${match.line}`))
+  const matchedPaths = new Set(matches.map(match => match.path))
   return [
-    ...matches.filter(match => !allowed.has(`${match.path}:${match.line}`)).map(issueLine),
+    ...matches
+      .filter(match => !allowedFiles.has(match.path) && !allowedSites.has(`${match.path}:${match.line}`))
+      .map(issueLine),
     ...allowlist
-      .filter(site => {
-        const separator = site.lastIndexOf(':')
-        const path = separator < 0 ? site : site.slice(0, separator)
-        return scanned.has(path) && !matchSites.has(site)
+      .filter(entry => {
+        const path = sitePath(entry)
+        return scanned.has(path) && (path === entry ? !matchedPaths.has(path) : !matchSites.has(entry))
       })
-      .map(site => `${site} ${staleDetail}`),
+      .map(entry => `${entry} ${staleDetail}`),
   ].sort()
+}
+
+/** sitePath returns an allowlist entry's file, which is the entry itself when it blesses the whole file. */
+function sitePath(entry: string): string {
+  const separator = entry.lastIndexOf(':')
+  return separator < 0 || !/^\d+$/u.test(entry.slice(separator + 1)) ? entry : entry.slice(0, separator)
 }
 
 function conventionMatches(files: readonly SourceFile[], pattern: RegExp, detail: string): ConventionMatch[] {
@@ -941,6 +1048,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
+  issues.push(...runtimeArrayConventionIssues(packageFiles))
   return issues
 }
 
@@ -1035,10 +1143,28 @@ async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexP
       continue
     }
     const source = await FS.readText(FS.resolvePath(name, entriesPath))
-    entries.push({ name, status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '' })
+    entries.push({
+      heading: source.match(/^# (.+)$/m)?.[1]?.trim() ?? '',
+      name,
+      section: source.match(/^- \*\*Section:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+      status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+    })
   }
   const index = FS.resolvePath(indexPath, repoRoot)
   return { entries, index: (await FS.exists(index)) ? await FS.readText(index) : '' }
+}
+
+/** writeDeveloperEnvironmentLedgerIndexes regenerates both ledger index files from their entry files; the `_fix-ledger-index` gate runs this. */
+export async function writeDeveloperEnvironmentLedgerIndexes(repoRoot = Repo.getRoot()): Promise<void> {
+  const open = await readLedgerSide(repoRoot, DEVELOPER_ENVIRONMENT_ENTRIES, DEVELOPER_ENVIRONMENT_INDEX)
+  const archived = await readLedgerSide(
+    repoRoot,
+    DEVELOPER_ENVIRONMENT_ARCHIVE_ENTRIES,
+    DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX,
+  )
+  const { archiveIndex, openIndex } = developerEnvironmentIndexes(open, archived)
+  await FS.writeText(FS.resolvePath(DEVELOPER_ENVIRONMENT_INDEX, repoRoot), openIndex)
+  await FS.writeText(FS.resolvePath(DEVELOPER_ENVIRONMENT_ARCHIVE_INDEX, repoRoot), archiveIndex)
 }
 
 async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {

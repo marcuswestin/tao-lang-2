@@ -165,6 +165,7 @@ Describe('gate catalog metadata', () => {
     // The Tao gates do read `.tao` sources, so they still wait for the fixer that rewrites them.
     Expect(nodeOf('_tao-check').needs).toContain('_fix-tao')
     Expect(nodeOf('_compile-word-flower-app').needs).toContain('_fix-tao')
+    Expect(nodeOf('_ide-extension-build').needs).toContain('_fix-tao')
     // `dead-exports` is a TypeScript gate that reads `.tao` too: a `.tao` binding is what keeps a
     // bridged export out of its report, so a torn read of one would fail the lane on live code.
     Expect(nodeOf('dead-exports').needs).toContain('_fix-tao')
@@ -295,8 +296,8 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'code-editor',
         'generation',
+        'host-control',
         'icloud-native',
-        'performance-checks',
         'runtime',
         'shared',
         'stdlib',
@@ -307,9 +308,19 @@ Describe('gate catalog metadata', () => {
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite))).toEqual(['_fix-dprint'])
     }
 
-    Expect(GateCatalog.suiteReads('ast-utils')).toEqual(['gen-parser', 'ts'])
-    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ast-utils')).toSorted()).toEqual([
+    for (const suite of ['ast-utils', 'performance-checks']) {
+      Expect(GateCatalog.suiteReads(suite)).toEqual(['gen-parser', 'ts'])
+      Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
+        '_fix-dprint',
+        '_parser-gen',
+      ])
+    }
+
+    Expect(GateCatalog.suiteReads('ide-extension')).toEqual(['gen-ide', 'gen-parser', 'tao', 'ts'])
+    Expect(GateCatalog.testDependencies(GateCatalog.suiteReads('ide-extension')).toSorted()).toEqual([
       '_fix-dprint',
+      '_fix-tao',
+      '_ide-extension-build',
       '_parser-gen',
     ])
 
@@ -317,7 +328,6 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'compiler',
         'formatter',
-        'ide-extension',
         'parser',
         'runtime-jest',
         'runtime-toolchain',

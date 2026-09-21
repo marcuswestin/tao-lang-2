@@ -50,6 +50,36 @@ import { VerificationLanes } from './VerificationLanes'
  * every narrow command stays runnable regardless, so a registry outage never blocks iteration.
  */
 
+/**
+ * The phases a landing transaction passes through, in the order it passes through them. A hold that
+ * names its phase and when that phase began is the difference between a lock doing useful work and a
+ * lock waiting on an agent: `36m held, cheap gates 34m` is a wedged command, `36m held, host proof
+ * 9m` is a landing earning its turn. Nothing else on the machine could reconstruct that — the record
+ * used to carry `acquiredAt` and nothing more, so every hold looked identical from the outside and
+ * hold duration had to be inferred from what an agent said it had been doing.
+ */
+export const LANDING_PHASES = [
+  'integrating',
+  'cheap gates',
+  'repository tests',
+  'host proof',
+  'push',
+  'cleanup',
+] as const
+
+/** LandingPhaseName is one of the phases a landing transaction reports while it holds the lock. */
+export type LandingPhaseName = typeof LANDING_PHASES[number]
+
+/**
+ * LandingLockPhase is one phase's span. The end is written when the next phase begins, so an entry
+ * with no `endedAt` is the phase running now and is what a waiter is actually waiting on.
+ */
+export type LandingLockPhase = {
+  endedAt?: string
+  name: string
+  startedAt: string
+}
+
 /** LandingLockRecord is the whole state of the lock: who holds it, from when, and doing what. */
 export type LandingLockRecord = {
   acquiredAt: string
@@ -63,6 +93,18 @@ export type LandingLockRecord = {
   holder: string
   /** What the holder said it was doing, printed to whoever waits and to the board. */
   label: string
+  /**
+   * True when this hold is a landing transaction rather than a broad lane. It is what tells the
+   * admission check in `admitLane` that new diff-scoped lanes must wait: a `verify` holding the lock
+   * is a peer to throttle against, while a landing is a turn already being spent and every lane
+   * admitted beside it makes that turn longer.
+   */
+  landing: boolean
+  /**
+   * What the landing has done with its turn, oldest first. Empty for a hold that reports nothing,
+   * which is every hold that is not a landing.
+   */
+  phases: readonly LandingLockPhase[]
   /** The process that took it. Informational only: the lock is designed to outlive it. */
   pid: number
   /**
@@ -106,6 +148,8 @@ export type AcquireLandingLockOptions = {
   durable?: boolean
   /** What to say the holder is doing. */
   label: string
+  /** Mark this hold a landing transaction, which reports phases and defers diff-scoped lanes. */
+  landing?: boolean
   /** Called each time the wait is still going, with the holder and how long this call has waited. */
   onWaiting?: (holder: LandingLockRecord, waitedMs: number) => void
   registryRoot?: string
@@ -236,9 +280,37 @@ function asLandingLockRecord(value: unknown): LandingLockRecord | undefined {
     durable: record.durable === true,
     holder: record.holder,
     label: record.label,
+    landing: record.landing === true,
+    phases: readPhases(record.phases),
     pid: record.pid,
     scopedHolds: liveScopedHolds(record.scopedHolds),
   }
+}
+
+/**
+ * Phases are telemetry, so a record written before this field existed, or one whose entries are
+ * malformed, degrades to "this hold reports nothing" rather than to an unreadable lock. An
+ * unreadable lock refuses every acquisition on the machine, and that is far too much to pay for a
+ * progress line.
+ */
+function readPhases(value: unknown): readonly LandingLockPhase[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.flatMap((entry): LandingLockPhase[] => {
+    if (typeof entry !== 'object' || entry === null) {
+      return []
+    }
+    const phase = entry as Partial<LandingLockPhase>
+    if (typeof phase.name !== 'string' || typeof phase.startedAt !== 'string') {
+      return []
+    }
+    return [{
+      name: phase.name,
+      startedAt: phase.startedAt,
+      ...(typeof phase.endedAt === 'string' ? { endedAt: phase.endedAt } : {}),
+    }]
+  })
 }
 
 /**
@@ -344,6 +416,9 @@ async function claim(
       const record: LandingLockRecord = {
         ...existing,
         durable: existing.durable || durable,
+        // A landing joining a hold its own worktree already had is still a landing, and the
+        // admission check reads this rather than the label, so it has to survive the join.
+        landing: existing.landing || options.landing === true,
         scopedHolds: scoped === undefined ? existing.scopedHolds : [...existing.scopedHolds, scoped],
       }
       await writeLock(registryRoot, record)
@@ -354,6 +429,8 @@ async function claim(
       durable,
       holder: repositoryRoot,
       label: options.label,
+      landing: options.landing === true,
+      phases: [],
       pid: Platform.runtimeProcess.pid,
       scopedHolds: scoped === undefined ? [] : [scoped],
     }
@@ -405,6 +482,123 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
     await FS.remove(lockPath(registryRoot))
     return 'released'
   })
+}
+
+export type PhaseOptions = {
+  registryRoot?: string
+  repositoryRoot: string
+}
+
+/**
+ * Begin a phase, closing whichever one was open. Telemetry must never be able to fail a landing, so
+ * this reports rather than throws: a lock that is free, unreadable, or held by somebody else simply
+ * records nothing, because writing a phase into another worktree's record is the one thing worse
+ * than having no phase at all.
+ *
+ * It writes through the registry mutex like every other mutation here, so a phase written while a
+ * second command in the same worktree joins the hold cannot lose that join.
+ */
+async function beginPhase(options: PhaseOptions & { name: LandingPhaseName }): Promise<LandingLockRecord | undefined> {
+  return await mutatePhases(options, phases => [
+    ...closeOpenPhases(phases),
+    { name: options.name, startedAt: new Date().toISOString() },
+  ])
+}
+
+/** Close the phase still running, which is what the end of a transaction leaves behind. */
+async function endPhases(options: PhaseOptions): Promise<LandingLockRecord | undefined> {
+  return await mutatePhases(options, closeOpenPhases)
+}
+
+function closeOpenPhases(phases: readonly LandingLockPhase[]): LandingLockPhase[] {
+  const endedAt = new Date().toISOString()
+  return phases.map(phase => phase.endedAt === undefined ? { ...phase, endedAt } : phase)
+}
+
+async function mutatePhases(
+  options: PhaseOptions,
+  change: (phases: readonly LandingLockPhase[]) => readonly LandingLockPhase[],
+): Promise<LandingLockRecord | undefined> {
+  const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
+  const repositoryRoot = await canonicalHolder(options.repositoryRoot)
+  return await MachineLanes.withRegistryLock(registryRoot, async () => {
+    const state = await readLockState(registryRoot)
+    if (state.kind !== 'held' || state.record.holder !== repositoryRoot) {
+      return undefined
+    }
+    const record: LandingLockRecord = { ...state.record, phases: change(state.record.phases) }
+    await writeLock(registryRoot, record)
+    return record
+  }).catch(() => undefined)
+}
+
+/** Report whether a landing transaction is spending the machine's turn right now. */
+async function landingInProgress(registryRoot = MachineLanes.registryRoot()): Promise<boolean> {
+  const state = await readLockState(registryRoot).catch((): LandingLockState => ({ kind: 'free' }))
+  return state.kind === 'held' && state.record.landing
+}
+
+/**
+ * The lanes a landing stops admitting. Once a landing has taken the turn, every diff-scoped lane
+ * started beside it is machine the landing is not getting, and the landing is the only run on the
+ * machine whose length a person is waiting on. Already-running lanes are left alone — killing work
+ * that is nearly done buys nothing — and everything narrower stays free, so an agent can still run
+ * `test-file`, a named test, `check`, or `fix` while somebody lands.
+ */
+const DEFERRED_WHILE_LANDING: readonly string[] = [VerificationLanes.VERIFY_CHANGED, VerificationLanes.TEST_CHANGED]
+
+/** Report whether this lane is one a landing in progress defers. */
+function deferredWhileLanding(lane: string): boolean {
+  return DEFERRED_WHILE_LANDING.includes(lane)
+}
+
+export type AdmitLaneOptions = {
+  lane: string
+  onWaiting?: (holder: LandingLockRecord, waitedMs: number) => void
+  registryRoot?: string
+  waitTimeoutMs?: number
+}
+
+/**
+ * Wait for a landing to finish before starting a diff-scoped lane. This is deliberately not the lock
+ * — the lane never takes it, so it cannot deadlock against a landing and cannot delay one by holding
+ * anything — it is only a refusal to start while somebody else's turn is being spent.
+ *
+ * Every worktree waits, not only the other ones. Several agents share one checkout in this
+ * repository, so "the landing's own worktree" is also where the neighbours are, and admitting them
+ * on that basis would defeat the whole check. The landing itself never reaches here: its own lanes
+ * are `check` and `verify-full`, neither of which is deferred.
+ */
+async function admitLane(options: AdmitLaneOptions): Promise<void> {
+  if (!deferredWhileLanding(options.lane)) {
+    return
+  }
+  const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
+  const startedMs = Time.nowMs()
+  const deadlineMs = startedMs + Math.max(0, options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
+  let reportedAtMs = startedMs
+  let reportedWaiting = false
+  while (true) {
+    const state = await readLockState(registryRoot).catch((): LandingLockState => ({ kind: 'free' }))
+    if (state.kind !== 'held' || !state.record.landing) {
+      return
+    }
+    const waitedMs = Time.nowMs() - startedMs
+    if (Time.nowMs() >= deadlineMs) {
+      throw new LandingLockBusyError(
+        `A landing has been running for the whole ${describeDuration(waitedMs)} this '${options.lane}' lane `
+          + `waited to start: ${describe(state.record)}. Run a narrower command — \`test-file\`, a named test, `
+          + '`check`, or `fix` — none of which a landing defers.',
+        state.record,
+      )
+    }
+    if (!reportedWaiting || Time.nowMs() - reportedAtMs >= WAIT_WARN_INTERVAL_MS) {
+      reportedWaiting = true
+      reportedAtMs = Time.nowMs()
+      options.onWaiting?.(state.record, waitedMs)
+    }
+    await Time.sleep(POLL_MS)
+  }
 }
 
 export type ForceReleaseOptions = {
@@ -503,14 +697,53 @@ async function holdingForLane<T>(
   work: () => Promise<T>,
 ): Promise<T> {
   if (!requiresLock(options.lane)) {
+    // A diff-scoped lane takes nothing, but it does wait: see `admitLane`. Everything narrower
+    // returns from here immediately, which is what keeps iteration free during a landing.
+    await admitLane({
+      lane: options.lane,
+      onWaiting: (holder, waitedMs) => options.onWaiting?.(holder, waitedMs),
+      ...(options.registryRoot === undefined ? {} : { registryRoot: options.registryRoot }),
+      ...(options.waitTimeoutMs === undefined ? {} : { waitTimeoutMs: options.waitTimeoutMs }),
+    })
     return await work()
   }
   return await holding({ ...options, label: options.lane }, async () => await work())
 }
 
-/** Name a holder the way every refusal and warning in this module names one. */
-function describe(record: LandingLockRecord): string {
-  return `'${record.label}' in ${record.holder} (PID ${record.pid}, since ${record.acquiredAt})`
+/**
+ * Name a holder the way every refusal and warning in this module names one, and say what it is doing
+ * now. The phase is the part a waiter can act on: a hold whose current phase is minutes old is
+ * verifying, and a hold with no phase at all after a landing started is a command that stopped.
+ */
+function describe(record: LandingLockRecord, now = new Date()): string {
+  const phase = currentPhase(record)
+  const doing = phase === undefined
+    ? ''
+    : `, ${phase.name} for ${describeDuration(Math.max(0, now.getTime() - Date.parse(phase.startedAt)))}`
+  return `'${record.label}' in ${record.holder} (PID ${record.pid}, since ${record.acquiredAt}${doing})`
+}
+
+/** The phase running now, which is the one entry that was never closed. */
+function currentPhase(record: LandingLockRecord): LandingLockPhase | undefined {
+  return record.phases.find(phase => phase.endedAt === undefined)
+}
+
+/** How long this hold has lasted, measured rather than reconstructed from what an agent reported. */
+function heldForMs(record: LandingLockRecord, now = new Date()): number {
+  return Math.max(0, now.getTime() - Date.parse(record.acquiredAt))
+}
+
+/**
+ * Every phase with what it cost, newest last, for the board. A closed phase reports the span it
+ * took; the open one reports how long it has been running, which is the number a person deciding
+ * whether to wait is actually after.
+ */
+function describePhases(record: LandingLockRecord, now = new Date()): string[] {
+  return record.phases.map(phase => {
+    const endMs = phase.endedAt === undefined ? now.getTime() : Date.parse(phase.endedAt)
+    const elapsed = describeDuration(Math.max(0, endMs - Date.parse(phase.startedAt)))
+    return phase.endedAt === undefined ? `${phase.name}: ${elapsed} so far` : `${phase.name}: ${elapsed}`
+  })
 }
 
 /** Report a duration in the coarsest unit that still says something useful. */
@@ -534,17 +767,27 @@ function describeWaiting(record: LandingLockRecord, waitedMs: number): string {
 
 export const LandingLock = {
   DEFAULT_WAIT_TIMEOUT_MS,
+  DEFERRED_WHILE_LANDING,
+  LANDING_PHASES,
   LOCKED_LANES,
   WAIT_WARN_INTERVAL_MS,
   acquire,
+  admitLane,
+  beginPhase,
+  currentPhase,
+  deferredWhileLanding,
   describe,
   describeDuration,
+  describePhases,
   describeWaiting,
+  endPhases,
   forceRelease,
+  heldForMs,
   holding,
   inspectState,
   holdingForLane,
   inspect,
+  landingInProgress,
   release,
   requiresLock,
 } as const

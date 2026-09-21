@@ -1,4 +1,5 @@
 import React from 'react'
+import { Arrays } from '../core/RuntimeCore'
 import { runtimeListeners } from '../TR-listeners'
 
 export type TaoDevModeOptions = {
@@ -264,7 +265,7 @@ function valueSignature(value: unknown): string {
     return `<${elementTypeSignature(value.type)}>`
   }
   if (typeof value === 'object') {
-    return `{${Object.keys(value).sort().join(',')}}`
+    return `{${Arrays.sorted(Object.keys(value)).join(',')}}`
   }
   return typeof value
 }

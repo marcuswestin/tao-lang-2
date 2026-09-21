@@ -11,6 +11,8 @@ export namespace InPlace {
     error?: string
     /** diagnostics are the file's own lexer, parser, linker, and validator findings, in report order. */
     diagnostics?: readonly Diagnostic[]
+    /** unreportedDiagnostics counts findings this file held back to keep its report scannable. */
+    unreportedDiagnostics?: number
   }
 
   /** PathOptions configures path resolution for in-place Tao file commands. */

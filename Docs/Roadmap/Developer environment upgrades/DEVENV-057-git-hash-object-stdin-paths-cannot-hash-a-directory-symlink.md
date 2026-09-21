@@ -1,6 +1,7 @@
 # DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification
 - **Impact:** `./agent verify` dies in `GreenTree.hashTree` before any gate runs when the working
   tree contains an untracked directory symlink.

@@ -1,33 +1,37 @@
 # DEVENV-046 — WordFlower remains the tail of the sharded Tao app tests
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test performance
-- **Impact:** Tao app tests are sharded by app root, but WordFlower owns one indivisible root and remains
-  the tail. In verify run `2026-09-20T16-35-46-656Z-96541-45b684e1`, `tao-apps#1` started as soon as its
-  dependencies allowed, then ran for 56.9s against an expectation of 53.7s. The 18-slot lane finished
-  in 72.7s with 415.1 idle slot-seconds; WordFlower was on the 72.4s serial floor.
-- **Evidence:** WordFlower contains five Tao test files and the recorded run executed 29 journeys. Its
-  shard held the fixed two-slot reservation, validated with one worker, and could not use capacity
-  released by sibling shards. Isolated warm-filesystem observations were 24.93s at two slots, 29.17s
-  at four, and 26.52s at eight; each remained one compiler worker and one Jest entrypoint. These are
-  single observations rather than a statistical benchmark, but they show no reason to widen the
-  shard. A 2026-09-20 refresh in the managed host was blocked before test startup by Node CPU discovery
-  (`sysctl kern.clockrate: Operation not permitted`), so the earlier valid observations remain the
-  applicable width evidence.
-- **Evidence, implementation audit:** The existing compiled-output cache measured roughly 29s cold
-  to 6.7s warm for its recorded Tao test run. In the 51.3s WordFlower shard observation, Jest
-  accounted for only 6.6s; the remaining cold tail is believed to be dominated by the
-  shared-workspace validation and compilation pass. The five
-  test files deliberately run serially on one compiler worker so they observe one consistent
-  workspace. A runtime improvement therefore requires either dependency-correct cache narrowing or
-  a safely partitioned compiler workspace, both of which materially increase correctness complexity.
+- **Impact:** The WordFlower shard is recorded as the serial floor of the Tao app tests, and every
+  proposal in this entry's earlier revisions — widen the shard, resize it elastically, split the app
+  root — was argued from that recording. The recording was wrong. The tests are fast; what is slow is
+  the fixed per-invocation cost around them and the contention they were measured under. The entry is
+  kept rather than closed because its conclusion ("do not widen or split") turns out to be right for
+  a reason it did not state.
+- **Evidence:** Measured directly on 2026-09-21: `./tao test "Apps/WordFlower/1 - Current"` completes
+  in **3.58s wall warm** for 29 tests, of which Jest is 2.76s; cold, the same run is roughly 9.2s.
+  The figures this entry previously reasoned from — a 56.9s shard against a 53.7s expectation, a
+  51.3s observation with only 6.6s of Jest — came from the per-node duration ledger, which under
+  `--concurrent` recorded each observation as the process's elapsed wall time up to that point rather
+  than the work attributable to the test. A comparable distortion is visible across the suite:
+  `packages/dev/dev-tests/studio-dev.test.ts` runs 61 tests in 3.3s standalone while the ledger
+  records a dozen of its cases at ~6.20s each.
+- **Evidence, implementation audit:** The earlier audit's conclusion — that the cold tail is
+  dominated by the shared-workspace validation and compilation pass rather than by Jest — survives
+  the correction and is the useful part of it. That fixed cost is paid once per `tao test`
+  invocation, so sharding multiplies it; see
+  [`DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN`](DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN.md),
+  which is where the remaining work belongs.
 - **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
-- **Proposed change:** Keep the two-slot WordFlower reservation and the shared app-root workspace.
-  Do not widen, elastically resize, or split the shard with the current evidence. If performance work
-  resumes, first add opt-in phase timings for discovery, fingerprint/cache lookup, validation,
-  compilation, entrypoint generation, and Jest; use those measurements to justify any later
-  correctness-sensitive workspace or cache change.
-- **Dependencies:** DEVENV-034 (Bun worker pool) is separate. Elastic allocation and finer workspace
-  splitting are not warranted by the present width measurements.
-- **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
-- **Source:** 2026-09-04 development-speed review; 2026-09-20 sharded scheduler follow-up.
+- **Proposed change:** Do not widen, elastically resize, or split the shard — now on the evidence
+  that there is nothing there to divide. Re-measure the app shards against CPU time rather than
+  wall-clock spans before drawing any further conclusion about them; the measurement fix landed with
+  this revision, so the numbers this entry was built on cannot be reproduced and should not be
+  quoted.
+- **Dependencies:** Re-measurement depends on the per-node CPU-time capture; the remaining
+  compile-sharing work is tracked in its own entry. DEVENV-034 (Bun worker pool) is separate.
+- **Acceptance:** A fresh set of app-shard timings taken under the corrected measurement, against
+  which any future proposal here is argued.
+- **Source:** 2026-09-04 development-speed review; 2026-09-20 sharded scheduler follow-up; premise
+  corrected 2026-09-21 after direct measurement.

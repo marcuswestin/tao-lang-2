@@ -124,6 +124,13 @@ export type WorkState = {
   attempts?: readonly WorkAttempt[]
   /** Presentation-only group for dashboards; scheduling and reporting still treat this node independently. */
   dashboardGroup?: string
+  /**
+   * Milliseconds of CPU time (`resourceUsage().cpuTime.user + .system`) the node's own process
+   * consumed, captured once it exits. Absent when the process never started (a spawn failure) or
+   * the runtime never reports usage; never 0 in either case, so a reader cannot mistake "unmeasured"
+   * for "measured and free."
+   */
+  cpuMs?: number
   elapsedMs: number
   exitCode?: number | null
   failure?: WorkFailure
@@ -589,24 +596,36 @@ async function executeNode(
  * It stops what it started and nothing else. A sibling agent's `bun test`, Metro, simulator, or
  * Studio session shares this machine and this checkout, and is never signalled by name, port, or
  * working directory.
+ *
+ * This spawns through `Bun.spawn` rather than `Platform.spawn` (Node's `child_process`), which is
+ * the one Bun-specific seam in this file: only `Bun.spawn`'s `Subprocess` exposes `resourceUsage()`,
+ * and that per-child CPU time is what lets a node's duration outlive the machine contention that
+ * corrupts wall clock. `Bun.spawn` differs from `Platform.spawn` in two ways this function absorbs
+ * rather than exposes: it throws synchronously instead of emitting an async `error` event on a
+ * missing executable, and its `env` replaces the child's environment outright instead of extending
+ * it, so the parent's own environment is merged in explicitly below.
  */
-async function runProcess(_state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
-  const child = Platform.spawn(context.run.command, {
-    args: [...context.run.args],
-    cwd: context.run.cwd,
-    detached: true,
-    env: context.env,
-    stdio: 'pipe',
-  })
+async function runProcess(state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
+  let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>
+  try {
+    child = Bun.spawn([context.run.command, ...context.run.args], {
+      cwd: context.run.cwd,
+      detached: true,
+      env: { ...Platform.runtimeProcess.env, ...context.env },
+      stderr: 'pipe',
+      stdin: 'ignore',
+      stdout: 'pipe',
+    })
+  } catch (error) {
+    return { error: Errors.asError(error), exitCode: null }
+  }
   let forceKill: ReturnType<typeof setTimeout> | undefined
   let trackedDescendants: TrackedProcess[] = []
-  child.stdout?.on('data', chunk => context.onOutput(String(chunk)))
-  child.stderr?.on('data', chunk => context.onOutput(String(chunk)))
   let cancelled = false
   try {
     context.onCancel(() => {
       cancelled = true
-      trackedDescendants = child.pid === undefined ? [] : ProcessTree.descendants(child.pid)
+      trackedDescendants = ProcessTree.descendants(child.pid)
       ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
       ProcessTree.signalGroup(child.pid, 'SIGTERM')
       forceKill = setTimeout(() => {
@@ -614,7 +633,8 @@ async function runProcess(_state: WorkState, context: WorkRunContext): Promise<W
         ProcessTree.signalGroup(child.pid, 'SIGKILL')
       }, ProcessTree.FORCE_KILL_GRACE_MS)
     })
-    const outcome = await waitForProcess(child)
+    const outcome = await waitForProcess(child, context.onOutput)
+    state.cpuMs = directCpuMs(child)
     if (cancelled) {
       await Promise.all([
         ProcessTree.waitForGroupExit(child.pid),
@@ -626,32 +646,50 @@ async function runProcess(_state: WorkState, context: WorkRunContext): Promise<W
     if (forceKill !== undefined) {
       clearTimeout(forceKill)
     }
-    child.stdin?.destroy()
-    child.stdout?.destroy()
-    child.stderr?.destroy()
-    child.removeAllListeners()
   }
 }
 
-async function waitForProcess(child: ReturnType<typeof Platform.spawn>): Promise<WorkOutcome> {
-  return await new Promise(resolve => {
-    let settled = false
-    let processError: Error | undefined
-    const finish = (outcome: WorkOutcome) => {
-      if (settled) {
+/**
+ * waitForProcess resolves only once the child has exited and both its output streams have reached
+ * end-of-stream. A stream that stays open — a detached background job the command forgot to redirect,
+ * inheriting the same pipe — must keep the node "running" exactly as it did under `child_process`'s
+ * `close` event, so a node with an escaped, output-holding descendant is still caught by its timeout
+ * rather than reported done while something is still attached to its pipes.
+ */
+async function waitForProcess(
+  child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>,
+  onOutput: (output: string) => void,
+): Promise<WorkOutcome> {
+  await Promise.all([pumpOutput(child.stdout, onOutput), pumpOutput(child.stderr, onOutput), child.exited])
+  return { exitCode: child.exitCode }
+}
+
+/** pumpOutput reports each chunk to the graph as it arrives, rather than buffering to the end. */
+async function pumpOutput(stream: ReadableStream<Uint8Array>, onOutput: (output: string) => void): Promise<void> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) {
         return
       }
-      settled = true
-      resolve(outcome)
+      onOutput(decoder.decode(value, { stream: true }))
     }
-    child.once('error', error => {
-      processError = error
-      finish({ error, exitCode: null })
-    })
-    child.once('close', exitCode => {
-      finish({ error: processError, exitCode })
-    })
-  })
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * directCpuMs reads the milliseconds of CPU time (user+system) a just-exited child consumed.
+ * `resourceUsage()` is only ever `undefined` for a process that has not exited, which cannot be true
+ * here — `waitForProcess` already awaited `child.exited` — but the guard is kept rather than asserted
+ * past, because an unmeasured node must read as absent, never as a false `0`.
+ */
+function directCpuMs(child: Bun.Subprocess): number | undefined {
+  const usage = child.resourceUsage()
+  return usage === undefined ? undefined : Number(usage.cpuTime.user + usage.cpuTime.system) / 1000
 }
 
 function finishWithoutRunning(

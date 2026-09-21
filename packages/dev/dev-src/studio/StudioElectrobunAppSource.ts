@@ -217,12 +217,25 @@ export function mainSource(): string {
     const showWindows = process.env.TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS !== 'false'
     const runProbe = process.env.TAO_STUDIO_ELECTROBUN_RUN_PROBE === 'true'
     const resultPath = process.env.TAO_STUDIO_ELECTROBUN_RESULT_PATH
+    const hostControlPath = process.env.TAO_STUDIO_HOST_CONTROL_PATH
     const windows = new Map<number, BrowserWindow>()
     const projectWindows = new Set<BrowserWindow>()
     const windowSessions = new Map<number, string>()
     let activeProjectWindow: BrowserWindow | undefined
     let auxiliaryProbeWindow: BrowserWindow | undefined
     let probeInjectionTimer: ReturnType<typeof setInterval> | undefined
+    const hostControlRequests = new Map<string, {
+      reject: (error: Error) => void
+      resolve: (value: unknown) => void
+      timeout: ReturnType<typeof setTimeout>
+    }>()
+    const hostControlReadyWindows = new Set<number>()
+    const hostControlReadyWaiters = new Map<number, Array<() => void>>()
+    const hostControlReloads = new Map<number, string>()
+    const hostControlCapability = crypto.randomUUID()
+    let hostControlOperationChain: Promise<void> = Promise.resolve()
+    let hostControlRevision: { build: string; source: string } | undefined
+    let hostControlServer: ReturnType<typeof Bun.serve> | undefined
     let quitAfterCleanup = false
     let quitting: Promise<void> | undefined
 
@@ -255,6 +268,10 @@ export function mainSource(): string {
         })
       }
       window.on('close', () => {
+        hostControlReadyWindows.delete(window.id)
+        const waiters = hostControlReadyWaiters.get(window.id) ?? []
+        hostControlReadyWaiters.delete(window.id)
+        for (const resolve of waiters) resolve()
         windows.delete(window.id)
         projectWindows.delete(window)
         if (activeProjectWindow === window) {
@@ -267,6 +284,7 @@ export function mainSource(): string {
         }
       })
       window.webview.on('did-navigate', event => {
+        hostControlReadyWindows.delete(window.id)
         const navigated = navigationUrl(event)
         const sessionId = navigated === undefined ? undefined : projectSessionId(navigated)
         if (sessionId !== undefined) {
@@ -291,6 +309,16 @@ export function mainSource(): string {
           }
           window.setTitle('Tao Studio')
         }
+      })
+      window.webview.on('host-message' as 'dom-ready', event => {
+        receiveHostControlMessage(event)
+      })
+      window.webview.on('dom-ready', () => {
+        hostControlReadyWindows.add(window.id)
+        const waiters = hostControlReadyWaiters.get(window.id) ?? []
+        hostControlReadyWaiters.delete(window.id)
+        for (const resolve of waiters) resolve()
+        void completeHostControlReload(window)
       })
       windows.set(window.id, window)
       return window
@@ -349,6 +377,7 @@ export function mainSource(): string {
 
     const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')
     const welcomeWindow = projectWindow === undefined ? createStudioWindow('Welcome') : undefined
+    void startHostControl().catch(showNativeError)
     void applyAvailableUpdate(false).catch(error => console.error('Tao Studio update check failed.', error))
 
     async function openProjectDialog(): Promise<void> {
@@ -419,6 +448,195 @@ export function mainSource(): string {
           + JSON.stringify({ command, ...detail })
           + ' }))',
       )
+    }
+
+    /** The loopback endpoint invokes semantic renderer operations, while Appium owns physical acceptance. */
+    async function startHostControl(): Promise<void> {
+      if (hostControlPath === undefined) return
+      hostControlServer = Bun.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        fetch: async request => await hostControlResponse(request),
+      })
+      const discovery = {
+        capability: hostControlCapability,
+        url: 'http://127.0.0.1:' + hostControlServer.port + '/host-control',
+        version: 1,
+      }
+      const temporaryPath = hostControlPath + '.' + crypto.randomUUID() + '.tmp'
+      try {
+        await Bun.write(temporaryPath, JSON.stringify(discovery, null, 2) + '\\n')
+        await import('node:fs/promises').then(fs => fs.rename(temporaryPath, hostControlPath))
+      } finally {
+        await import('node:fs/promises').then(fs => fs.rm(temporaryPath, { force: true }))
+      }
+    }
+
+    async function hostControlResponse(request: Request): Promise<Response> {
+      if (request.method !== 'POST' || new URL(request.url).pathname !== '/host-control') {
+        return Response.json({ message: 'Studio semantic control accepts POST /host-control only.' }, { status: 404 })
+      }
+      let requestValue: unknown
+      try {
+        requestValue = await request.json()
+      } catch {
+        return Response.json({ message: 'Studio semantic control request must be JSON.' }, { status: 400 })
+      }
+      if (typeof requestValue !== 'object' || requestValue === null) {
+        return Response.json({ message: 'Studio semantic control request must be an object.' }, { status: 400 })
+      }
+      const value = requestValue as {
+        action?: unknown
+        capability?: unknown
+        expectedCurrentRevision?: unknown
+        expectedRevision?: unknown
+        operation?: unknown
+        revision?: unknown
+        target?: unknown
+      }
+      if (value.capability !== hostControlCapability) {
+        return Response.json({ message: 'Studio semantic control capability was rejected.' }, { status: 403 })
+      }
+      try {
+        const result = await serializeHostControlOperation(async () => await runHostControlOperation(value))
+        return Response.json({ ok: true, value: result })
+      } catch (error) {
+        return Response.json({ message: error instanceof Error ? error.message : String(error) }, { status: 409 })
+      }
+    }
+
+    async function serializeHostControlOperation<T>(operation: () => Promise<T>): Promise<T> {
+      const result = hostControlOperationChain.then(operation, operation)
+      hostControlOperationChain = result.then(() => {}, () => {})
+      return await result
+    }
+
+    async function runHostControlOperation(value: {
+      action?: unknown
+      expectedCurrentRevision?: unknown
+      expectedRevision?: unknown
+      operation?: unknown
+      revision?: unknown
+      target?: unknown
+    }): Promise<unknown> {
+      const window = activeProjectWindow
+      if (window === undefined) throw new Error('Studio has no active project window for semantic control.')
+      if (!['observe', 'perform', 'publishRevision'].includes(String(value.operation))) {
+        throw new Error('Studio semantic control operation is unsupported.')
+      }
+      const expectedRevision = value.operation === 'publishRevision'
+        ? hostControlRevisionValue(value.expectedCurrentRevision, 'expectedCurrentRevision')
+        : hostControlRevisionValue(value.expectedRevision, 'expectedRevision')
+      const revision = value.operation === 'publishRevision'
+        ? hostControlRevisionValue(value.revision, 'revision')
+        : undefined
+      const reloadDocument = value.operation === 'perform'
+        && typeof value.action === 'object'
+        && value.action !== null
+        && (value.action as { kind?: unknown }).kind === 'refreshDocument'
+      if (hostControlRevision !== undefined && !sameHostControlRevision(hostControlRevision, expectedRevision)) {
+        throw new Error('Studio semantic control revision is no longer current.')
+      }
+      const requestId = crypto.randomUUID()
+      const controlRequest = value.operation === 'observe'
+        ? { expectedRevision, operation: value.operation, requestId, target: value.target }
+        : value.operation === 'perform'
+          ? { action: value.action, expectedRevision, operation: value.operation, requestId }
+          : { expectedCurrentRevision: expectedRevision, operation: value.operation, requestId, revision }
+      const result = new Promise<unknown>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          hostControlRequests.delete(requestId)
+          reject(new Error('Studio semantic control did not receive a renderer response.'))
+        }, 10_000)
+        hostControlRequests.set(requestId, { reject, resolve, timeout })
+      })
+      try {
+        await waitForHostControlDocument(window)
+        if (value.operation === 'publishRevision' || reloadDocument) {
+          hostControlReloads.set(window.id, requestId)
+          window.webview.executeJavascript('window.location.reload()')
+        } else {
+          window.webview.executeJavascript(hostControlScript(controlRequest))
+        }
+      } catch (error) {
+        rejectHostControlRequest(requestId, error)
+      }
+      const response = await result
+      if (revision !== undefined) hostControlRevision = revision
+      else if (hostControlRevision === undefined) hostControlRevision = expectedRevision
+      return response
+    }
+
+    function hostControlRevisionValue(value: unknown, name: string): { build: string; source: string } {
+      if (
+        typeof value !== 'object'
+        || value === null
+        || typeof (value as { build?: unknown }).build !== 'string'
+        || typeof (value as { source?: unknown }).source !== 'string'
+      ) throw new Error('Studio semantic control ' + name + ' must name build and source strings.')
+      return { build: (value as { build: string }).build, source: (value as { source: string }).source }
+    }
+
+    function sameHostControlRevision(left: { build: string; source: string }, right: { build: string; source: string }): boolean {
+      return left.build === right.build && left.source === right.source
+    }
+
+    async function waitForHostControlDocument(window: BrowserWindow): Promise<void> {
+      if (hostControlReadyWindows.has(window.id)) return
+      await new Promise<void>(resolve => {
+        const waiters = hostControlReadyWaiters.get(window.id) ?? []
+        waiters.push(resolve)
+        hostControlReadyWaiters.set(window.id, waiters)
+      })
+    }
+
+    async function completeHostControlReload(window: BrowserWindow): Promise<void> {
+      const requestId = hostControlReloads.get(window.id)
+      if (requestId === undefined) return
+      hostControlReloads.delete(window.id)
+      try {
+        window.webview.executeJavascript(hostControlScript({ operation: 'publishRevisionReady', requestId }))
+      } catch (error) {
+        rejectHostControlRequest(requestId, error)
+      }
+    }
+
+    function receiveHostControlMessage(event: unknown): void {
+      const value = (event as { data?: { detail?: unknown } }).data?.detail
+      if (typeof value !== 'object' || value === null) return
+      const message = value as { error?: unknown; requestId?: unknown; result?: unknown; type?: unknown }
+      if (message.type !== 'tao-studio-host-control' || typeof message.requestId !== 'string') return
+      const pending = hostControlRequests.get(message.requestId)
+      if (pending === undefined) return
+      hostControlRequests.delete(message.requestId)
+      clearTimeout(pending.timeout)
+      if (typeof message.error === 'string') pending.reject(new Error(message.error))
+      else pending.resolve(message.result)
+    }
+
+    function rejectHostControlRequest(requestId: string, error: unknown): void {
+      const pending = hostControlRequests.get(requestId)
+      if (pending === undefined) return
+      hostControlRequests.delete(requestId)
+      clearTimeout(pending.timeout)
+      pending.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+
+    function hostControlScript(request: unknown): string {
+      return '(() => {'
+        + 'const request = ' + JSON.stringify(request) + ';'
+        + 'const send = value => window.__electrobunSendToHost({ type: "tao-studio-host-control", requestId: request.requestId, ...value });'
+        + 'const fail = error => send({ error: error instanceof Error ? error.message : String(error) });'
+        + 'const occurrence = target => { const value = target.occurrence ?? 1; if (!Number.isInteger(value) || value < 1) throw new Error("Studio semantic target occurrence must be positive."); return value - 1; };'
+        + 'const exactText = (root, value) => [...root.querySelectorAll("*")].filter(element => element.children.length === 0 && element.textContent?.trim() === value);'
+        + 'const attributeValue = (root, name, value) => [...root.querySelectorAll("[" + name + "]")].filter(element => element.getAttribute(name) === value);'
+        + 'const targetElement = (target, root = document) => { if (target.kind === "scoped") return targetElement(target.target, targetElement(target.scope, root)); const index = occurrence(target); const values = target.kind === "accessibility" ? attributeValue(root, "aria-label", target.name) : target.kind === "tag" ? attributeValue(root, "data-testid", target.value) : exactText(root, target.value); const element = values[index]; if (element === undefined) throw new Error("Studio semantic target was not found."); return element; };'
+        + 'try {'
+        + 'if (request.operation === "observe") { const element = targetElement(request.target); const bounds = element.getBoundingClientRect(); send({ result: { accessibilityLabel: element.getAttribute("aria-label") ?? undefined, bounds: { height: bounds.height, width: bounds.width, x: bounds.x, y: bounds.y }, text: element.textContent ?? undefined, visible: bounds.width > 0 && bounds.height > 0 } }); return; }'
+        + 'if (request.operation === "publishRevisionReady") { if (document.readyState !== "complete" || document.body === null) throw new Error("Studio project document did not finish loading after refresh."); send({ result: null }); return; }'
+        + 'const action = request.action; if (action.kind === "click") { targetElement(action.target).click(); } else if (action.kind === "key") { window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: action.key })); } else if (action.kind === "refreshDocument") { window.location.reload(); } else if (action.kind === "scroll") { const target = action.target === undefined ? window : targetElement(action.target); target.scrollBy(action.deltaX, action.deltaY); } else if (action.kind === "type") { const element = targetElement(action.target); if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) throw new Error("Studio semantic type target is not a text input."); const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value"); descriptor?.set?.call(element, action.text); element.dispatchEvent(new Event("input", { bubbles: true })); element.dispatchEvent(new Event("change", { bubbles: true })); } else { throw new Error("Studio semantic action is unsupported."); } send({ result: null });'
+        + '} catch (error) { fail(error); }'
+        + '})()'
     }
 
     let finished = false
@@ -551,6 +769,19 @@ export function mainSource(): string {
 
     Electrobun.events.on('before-quit', event => {
       GlobalShortcut.unregisterAll()
+      hostControlServer?.stop()
+      hostControlServer = undefined
+      hostControlReloads.clear()
+      hostControlReadyWindows.clear()
+      for (const waiters of hostControlReadyWaiters.values()) {
+        for (const resolve of waiters) resolve()
+      }
+      hostControlReadyWaiters.clear()
+      for (const pending of hostControlRequests.values()) {
+        clearTimeout(pending.timeout)
+        pending.reject(new Error('Studio semantic control closed with the native shell.'))
+      }
+      hostControlRequests.clear()
       if (packagedService === undefined || quitAfterCleanup) return
       event.response = { allow: false }
       quitting ??= packagedService.stop()

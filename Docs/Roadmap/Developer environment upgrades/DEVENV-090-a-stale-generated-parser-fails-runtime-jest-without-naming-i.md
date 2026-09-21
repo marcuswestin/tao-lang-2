@@ -1,6 +1,7 @@
 # DEVENV-090 — A stale generated parser fails `runtime-jest` without naming itself
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Repository tests, generated trees
 - **Impact:** Running the `runtime-jest` suite outside a verification lane on a worktree whose
   generated parser is missing or stale fails most of the suite with an error that names neither the

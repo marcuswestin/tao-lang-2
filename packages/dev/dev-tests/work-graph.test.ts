@@ -489,6 +489,37 @@ Describe('work graph scheduling', () => {
     Expect(state.failure?.kind).toBe('timeout')
   })
 
+  Test("records a real node's own CPU time on its WorkState once it exits", async () => {
+    const state = WorkGraph.createState({
+      name: 'cpu-burner',
+      run: {
+        args: ['-e', 'let x = 0; for (let i = 0; i < 5e7; i++) { x += i } if (x < 0) throw x'],
+        command: process.execPath,
+      },
+    })
+
+    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('passed')
+    Expect(state.cpuMs).toBeDefined()
+    Expect(state.cpuMs).toBeGreaterThan(0)
+  })
+
+  Test('a command that cannot be spawned fails the node without throwing out of the run', async () => {
+    const state = WorkGraph.createState({
+      name: 'unspawnable',
+      run: { args: [], command: 'definitely-not-a-real-command-xyz' },
+    })
+
+    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.failure?.kind).toBe('process-error')
+    Expect(state.exitCode).toBeNull()
+    // The process never started, so there is nothing to have measured; absent, never a false `0`.
+    Expect(state.cpuMs).toBeUndefined()
+  })
+
   // PID-reuse safety moved with the code: `ProcessTree.signalTracked` now owns it, and
   // `packages/shared/shared-tests/process-supervision.test.ts` proves a stale identity is skipped
   // while a still-matching one is signalled.

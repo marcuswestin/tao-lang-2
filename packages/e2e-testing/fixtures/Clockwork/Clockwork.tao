@@ -1,0 +1,51 @@
+use StackNav from @tao/nav
+use Interval from @tao/time
+use Col, FormButton, Text from @tao/ui
+
+app Clockwork {
+   Name "Clockwork"
+   Navigator StackNav {
+      Initial ClockworkScene
+}  }
+
+function InitialClockworkChoice() returns text {
+   return ClockworkChoice() from ./Clockwork.ts
+}
+
+function ClockworkEnvironmentAt(Tick time) returns text {
+   return ReadClockworkEnvironment(Tick) from ./Clockwork.ts
+}
+
+function ClockworkControlReceiptAt(Tick time) returns text {
+   return ReadClockworkControlReceipt(Tick) from ./Clockwork.ts
+}
+
+scene ClockworkScene() {
+   Title "Clockwork"
+   state Tick = Interval(1.s)
+   state StartedAt = now
+   state Choice = InitialClockworkChoice()
+   let Elapsed = Tick.Value - StartedAt
+   let Remaining = 10.s - Elapsed
+   let Environment = ClockworkEnvironmentAt(Tick.Value)
+   let ControlReceipt = ClockworkControlReceiptAt(Tick.Value)
+   action ChooseColor() {
+      set Choice = InitialClockworkChoice()
+   }
+   render Col() [gap 8, pad 16] {
+      #hostReady
+      Text(Environment)
+
+      #controlReceipt
+      Text(ControlReceipt)
+
+      #countdown
+      Text("Countdown: { Remaining.Clock }")
+
+      #choice
+      Text("Choice: { Choice }")
+
+      #chooseColor
+      FormButton("Choose clockwork color") {
+         on press ChooseColor
+}  }  }

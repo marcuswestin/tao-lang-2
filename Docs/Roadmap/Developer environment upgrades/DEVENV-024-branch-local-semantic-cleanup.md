@@ -1,6 +1,7 @@
 # DEVENV-024 — Branch-local semantic cleanup
 
 - **Status:** Blocked
+- **Section:** Deferred
 - **Area:** Worktree hygiene
 - **Impact:** The semantic-agent worktree contains a modified WordFlower design file, and its intermediate
   history included scratch artifacts that must not reach a squash.

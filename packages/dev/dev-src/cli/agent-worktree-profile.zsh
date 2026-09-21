@@ -12,14 +12,6 @@ function tao_bun_install_args() {
   reply=(install --cwd "$worktree_dir")
 }
 
-# Return the fact both development entrypoints use to say a dependency install completed.
-# A source-run `./dev` can be first in a fresh worktree, while `./agent` owns the bootstrap build;
-# keeping this path here prevents one wrapper from successfully installing and the other reinstalling.
-function tao_dependency_install_stamp() {
-  local worktree_dir="$1"
-  print -r -- "${worktree_dir:A}/.artifacts/build/agent-dev/dev-deps.stamp"
-}
-
 # Run a command under a kernel-managed lock that is released with the owning subshell.
 function tao_run_with_lock() {
   local lock_file="$1"
@@ -82,6 +74,12 @@ function tao_activate_devenv_profile() {
   local devenv_profile="$2"
   tao_link_primary_devenv_profile "$worktree_dir" "$devenv_profile" || return 1
   export PATH="$devenv_profile/bin:$PATH"
+  local android_sdk="$devenv_profile/libexec/android-sdk"
+  if [[ -d "$android_sdk" ]]; then
+    export ANDROID_HOME="$android_sdk"
+    export ANDROID_SDK_ROOT="$android_sdk"
+    export ANDROID_USER_HOME="$worktree_dir/.android"
+  fi
 }
 
 # Report whether an agent host is confining this process to an OS-level sandbox.

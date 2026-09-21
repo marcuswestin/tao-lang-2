@@ -1,6 +1,7 @@
 # DEVENV-102 — No gate parses `.tao-revolution` spec sources
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification coverage
 - **Impact:** `.tao-revolution` (and `.tao-mvp`, `.tao-next`) files are deliberately invisible to Tao
   discovery, so nothing parses them. The dead-export scanner is the one gate that reads them at all,

@@ -1,6 +1,12 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { isSandboxDenial } from '../doctor/AgentCapabilities'
-import { LandingLock, LandingLockBusyError } from './LandingLock'
+import {
+  inspectLandingRemote,
+  type LandingBrokerInspection,
+  type LandingBrokerPush,
+  pushLandingRemote,
+} from '../landing-broker/LandingBrokerClient'
+import { LandingLock, LandingLockBusyError, type LandingPhaseName } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 
 const SNAPSHOT_VERSION = 1
@@ -8,7 +14,25 @@ const LANDING_RESOURCE_NAME = 'merge-with-main-landing'
 // Bounded rather than infinite: a peer whose process is gone is pruned by the registry, but one that
 // is merely wedged must eventually surface as an actionable error instead of hanging a landing.
 const LEASE_WAIT_TIMEOUT_MS = 6 * 60 * 60 * 1_000
-const MAX_STABILIZATION_PASSES = 3
+/**
+ * How many times a landing re-integrates `origin/main` and starts its verification over.
+ *
+ * It was three while integration happened before the lock, where main moving mid-run was ordinary.
+ * Inside the transaction main can only move by a push from another machine or a person, so a restart
+ * is already the unusual case — and each one costs the full expensive suites again while this
+ * landing holds the machine, which is exactly the long hold the transaction exists to remove. Two is
+ * the honest number: one restart absorbs a push that landed while this run was verifying, and a
+ * second means main is moving faster than the machine can verify, which is a situation to hand back
+ * rather than to keep paying for.
+ */
+const MAX_STABILIZATION_PASSES = 2
+/**
+ * The cheap-gate barrier: generation and formatting consistency, repository lint, types, and dead
+ * exports, in check mode. It is the first thing the transaction spends after integrating main,
+ * because a red one of these costs about 30s to learn and the suites behind it cost 60-170s more to
+ * learn nothing extra.
+ */
+const LAND_BARRIER_LANE = 'land-barrier'
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 /** Branches a landing accepts: `feat/` is an agent's, `dev/` a person's, and they land identically. */
@@ -86,6 +110,7 @@ export type MergeSnapshot = {
   phase: MergePhase
   remoteFeatureHead?: string
   remoteMainHead: string
+  remoteTransport?: RemoteTransport
   snapshotPath: string
   version: typeof SNAPSHOT_VERSION
 }
@@ -95,7 +120,20 @@ export type MergePreflight = {
   branch: string
   branchHead: string
   featureRoot: string
+  /**
+   * Whether local `refs/heads/main` already sits at `origin/main`. Once a precondition, now a fact
+   * the report states: the landing fast-forwards the ref itself, inside the lock.
+   */
+  localMainCurrent: boolean
   mainHead: string
+  /**
+   * Whether `origin/main` is already an ancestor of the branch. Once a precondition, now a fact: a
+   * branch that has fallen behind is integrated inside the lock, where nothing can move main
+   * underneath it again. Requiring it beforehand is what made a landing lose a race it had already
+   * paid a full verification for — four times on one branch — because main moved between the
+   * preflight that checked it and the lock that was supposed to protect it.
+   */
+  mainIntegrated: boolean
   message: string
   messageFile: string
   /** Detached, clean worktrees sitting at main's tip: mirrors this landing moves forward with main. */
@@ -104,6 +142,7 @@ export type MergePreflight = {
   remoteFeatureBehind: boolean
   remoteMainHead: string
   remoteMergedHead?: string
+  remoteTransport: RemoteTransport
   warnings: string[]
 }
 
@@ -124,16 +163,24 @@ export type MergeCommandRunner = (
 export type MergeWithMainDependencies = {
   acquireLease: typeof MachineLanes.acquireResource
   askConfirm: (message: string) => Promise<boolean>
+  /** Report which phase of the landing the lock is being spent on. Never throws; see `LandingLock`. */
+  beginPhase: (repositoryRoot: string, name: LandingPhaseName) => Promise<void>
+  /** End this worktree's durable `land-lock` claim, which `release` alone deliberately survives. */
+  endDurableClaim: (repositoryRoot: string) => Promise<void>
+  /** Close the phase still open, so a finished landing does not read as one still in a phase. */
+  endPhases: (repositoryRoot: string) => Promise<void>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
+  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   move: (fromPath: string, toPath: string) => Promise<void>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
+  pushRemote?: (repositoryRoot: string, push: LandingBrokerPush) => Promise<LandingBrokerInspection | undefined>
   writeJson: (path: string, value: unknown) => Promise<void>
-  writeLine: (line: string) => void
+  writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
 }
 
@@ -143,21 +190,40 @@ type Worktree = {
   path: string
 }
 
+type RemoteTransport = 'broker' | 'direct'
+
 const defaultDependencies: MergeWithMainDependencies = {
   // Forwarded rather than referenced, because the adapter is declared with the landing code it
   // belongs beside rather than up here with the rest of the injected effects.
   acquireLease: async options => await acquireLandingLock(options),
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
+  beginPhase: async (repositoryRoot, name) => {
+    await LandingLock.beginPhase({ name, repositoryRoot })
+  },
+  endDurableClaim: async repositoryRoot => {
+    await LandingLock.release({ repositoryRoot })
+  },
+  endPhases: async repositoryRoot => {
+    await LandingLock.endPhases({ repositoryRoot })
+  },
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
+  inspectRemote: inspectLandingRemote,
   move: FS.move,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
   remove: FS.remove,
   run: CLI.run,
+  pushRemote: pushLandingRemote,
   writeJson: FS.writeJson,
-  writeLine: HCI.writeLine,
+  writeLine: (line, kind) => {
+    if (kind === 'success') {
+      HCI.writeSuccess(`${line}\n`)
+    } else {
+      HCI.writeLine(line)
+    }
+  },
   writeText: FS.writeText,
 }
 
@@ -165,6 +231,59 @@ const defaultDependencies: MergeWithMainDependencies = {
 function archiveName(branch: string): string {
   const prefix = LANDABLE_PREFIXES.find(candidate => branch.startsWith(candidate)) ?? ''
   return `merged/${branch.slice(prefix.length)}`
+}
+
+/**
+ * landedReport answers one question an agent otherwise has to infer: did this branch land?
+ *
+ * Inference is what goes wrong. A landing runs for minutes through a wrapper, and every signal
+ * short of the repository itself is ambiguous — a stopped wrapper, a task marked failed because the
+ * shell it was piped into exited non-zero, a `summary.json` read while the lane was still writing
+ * it. An agent that guesses re-lands work already on `main`, which is how one branch was re-landed
+ * twice in a single session.
+ *
+ * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
+ * landing and at no other time, so the ref exists if and only if the branch landed. This reads the
+ * local remote-tracking ref after a fetch rather than asking the remote directly: `git ls-remote`
+ * authenticates, and credential paths are denied inside the agent sandbox, so the question an agent
+ * most needs to ask would be answerable only outside it.
+ */
+export async function landedReport(
+  branch?: string,
+  dependencies: MergeWithMainDependencies = defaultDependencies,
+  repositoryRoot?: string,
+): Promise<{ archive: string; branch: string; landed: boolean }> {
+  const root = repositoryRoot ?? Repo.getRoot()
+  const named = branch ?? await currentBranch(dependencies, root)
+  if (named === undefined) {
+    Errors.throwUserInput(
+      'This worktree is on a detached HEAD, so there is no branch to ask about. Name one: `./agent landed feat/<name>`.',
+    )
+  }
+  const archive = archiveName(named)
+  // A fetch keeps the answer current; a remote that cannot be reached still leaves the last known
+  // refs readable, so the check degrades to "as of the last fetch" rather than failing outright.
+  await dependencies.run('git', { args: ['fetch', 'origin', '--quiet'], cwd: root, stdio: 'pipe' })
+  const result = await dependencies.run('git', {
+    args: ['for-each-ref', '--format=%(refname:short)', `refs/remotes/origin/${archive}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return { archive, branch: named, landed: (result.stdout ?? '').trim().length > 0 }
+}
+
+/** currentBranch names this worktree's branch, or undefined on a detached HEAD. */
+async function currentBranch(
+  dependencies: MergeWithMainDependencies,
+  root: string,
+): Promise<string | undefined> {
+  const result = await dependencies.run('git', {
+    args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  const name = (result.stdout ?? '').trim()
+  return name.length > 0 ? name : undefined
 }
 
 /** Validate the human-authored part of a squash commit message. */
@@ -296,16 +415,16 @@ export async function inspectMergePreflight(
   const mainHead = localMain.stdout.trim()
   const mirrorRoots = await readMirrorRoots(dependencies, worktrees, mainHead)
 
-  const remoteRefs = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
+  const remote = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
+  const remoteRefs = remote.refs
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
   if (!remoteMainHead) {
     Errors.throwHostEnvironment(`Remote '${REMOTE}' did not report refs/heads/main.`)
   }
-  if (mainHead !== remoteMainHead) {
-    Errors.throwUserInput(
-      `Local ${MAIN_BRANCH} is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
-    )
-  }
+  // Neither "local main is current" nor "main is merged into the branch" is a precondition any
+  // more. Both are things the landing does for itself, under the lock, in the one place where the
+  // answer cannot go stale between the check and the act.
+  const localMainCurrent = mainHead === remoteMainHead
   // A remote feature branch left behind by earlier commits is the ordinary case, not an obstacle:
   // execution pushes it forward. Only a remote holding commits this worktree lacks must stop the
   // landing, because the squash would silently drop them.
@@ -333,10 +452,10 @@ export async function inspectMergePreflight(
     args: ['merge-base', '--is-ancestor', remoteMainHead, branchHead],
     cwd: featureRoot,
   })
-  if (ancestor.exitCode === 1) {
-    Errors.throwUserInput(`${REMOTE}/main must be merged into '${branch}' before landing it.`)
+  if (ancestor.exitCode !== 0 && ancestor.exitCode !== 1) {
+    assertCommandSucceeded(ancestor)
   }
-  assertCommandSucceeded(ancestor)
+  const mainIntegrated = ancestor.exitCode === 0
 
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, featureRoot)
   if (!await dependencies.exists(messageFile)) {
@@ -349,7 +468,9 @@ export async function inspectMergePreflight(
     branch,
     branchHead,
     featureRoot,
+    localMainCurrent,
     mainHead,
+    mainIntegrated,
     message,
     messageFile,
     mirrorRoots,
@@ -357,6 +478,7 @@ export async function inspectMergePreflight(
     remoteFeatureBehind,
     remoteMainHead,
     remoteMergedHead,
+    remoteTransport: remote.transport,
     warnings,
   }
 }
@@ -410,18 +532,22 @@ export const MergeWithMainCommand = {
     }
 
     await authorizeExecution(options, dependencies, preflight)
-    // Held across every ref this command moves, and released whichever way it ends.
+    // Everything above this line is unlocked, and everything below it is one process holding the
+    // lock from the first ref it touches to the last, with a `finally` that gives the lock back
+    // whichever way the transaction ends. Nothing between two commands waits on an agent any more:
+    // that gap — not the merge, which measured 2-94s — is what held the lock for 36-44 minutes.
     const lease = await acquireLandingLease(dependencies, preflight)
     try {
       const snapshot = await createSnapshot(preflight, dependencies)
       writeLines(dependencies, [
         ...preflight.warnings.map(warning => `WARN  ${warning}`),
-        `PASS  Landing lease held for ${preflight.branch}.`,
+        `PASS  Landing lock held for ${preflight.branch}; every step below runs inside it.`,
         `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
       ])
 
       await stabilizeAndVerify(snapshot, options, dependencies)
       await verifyLandingSubject(snapshot, options, dependencies)
+      await beginPhase(preflight.featureRoot, 'push', dependencies)
       await landSquash(snapshot, preflight, dependencies)
       await pushArchiveAndPreserve(snapshot, dependencies)
 
@@ -430,13 +556,53 @@ export const MergeWithMainCommand = {
         `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
-      writeLines(dependencies, completed)
+      writeLines(dependencies, completed, 'success')
       return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
     } finally {
+      await dependencies.endPhases(preflight.featureRoot)
       await lease.release()
     }
   },
 } as const
+
+/**
+ * LandingIntegrationConflictError is the one failure that ends the lock rather than the landing.
+ *
+ * Resolving a conflict is a person's or an agent's work, measured in model turns, and holding the
+ * machine-wide lock through it would put the long hold straight back inside the transaction it was
+ * moved out of. So the conflicted worktree is left exactly as Git left it, the lock goes back — the
+ * durable claim included, because a claim that outlives `release` by design would otherwise keep the
+ * machine blocked through the whole resolution — and the landing is simply re-run afterwards.
+ */
+export class LandingIntegrationConflictError extends Errors.UserInputError {}
+
+/**
+ * The lock is ended here, not just released. `release` without a token deliberately survives a
+ * durable `land-lock` claim, and that is right everywhere except this path: the agent that claimed
+ * the lock is about to spend an unbounded number of turns resolving a conflict, and nothing else on
+ * the machine should wait behind that.
+ */
+async function endLockForConflictResolution(
+  featureRoot: string,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  await dependencies.endDurableClaim(featureRoot).catch((error: unknown) => {
+    HCI.writeLine(
+      `WARN  Could not end this worktree's durable landing-lock claim after the conflict: ${
+        error instanceof Error ? error.message : String(error)
+      } Release it with \`./dev land-unlock\` before resolving.`,
+    )
+  })
+}
+
+/** Record which phase of the landing the lock is being spent on; telemetry never fails a landing. */
+async function beginPhase(
+  featureRoot: string,
+  name: LandingPhaseName,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  await dependencies.beginPhase(featureRoot, name)
+}
 
 /**
  * Landing moves refs, and two landings at once would move the same ones. The lease is the only thing
@@ -495,6 +661,9 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
   const repositoryRoot = options.repositoryRoot
   const hold = await LandingLock.acquire({
     label: options.command,
+    // Marks the hold a landing rather than a lane, which is what makes the board's phase report
+    // meaningful and what stops new diff-scoped lanes being admitted beside it.
+    landing: true,
     // Without this a landing blocked behind an abandoned lock says nothing for the whole six-hour
     // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
     // way the wait ever reaches a person.
@@ -574,8 +743,13 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
   return [
     `PASS  Feature branch: ${preflight.branch} at ${shortSha(preflight.branchHead)}`,
     `PASS  Feature worktree clean: ${preflight.featureRoot}`,
-    `PASS  Local main is current at ${shortSha(preflight.mainHead)}; no worktree has it checked out.`,
-    `PASS  ${REMOTE}/main is an ancestor of the feature branch.`,
+    `PASS  No worktree has ${MAIN_BRANCH} checked out; local main is at ${shortSha(preflight.mainHead)}.`,
+    preflight.localMainCurrent
+      ? `PASS  Local main is already at ${REMOTE}/main.`
+      : `PLAN  Fast-forward local main to ${REMOTE}/main (${shortSha(preflight.remoteMainHead)}) inside the lock.`,
+    preflight.mainIntegrated
+      ? `PASS  ${REMOTE}/main is an ancestor of the feature branch.`
+      : `PLAN  Merge ${REMOTE}/main into '${preflight.branch}' inside the lock, before any gate runs.`,
     `PASS  Merge message: ${preflight.messageFile}`,
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
@@ -589,17 +763,22 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     ...(options.skipAll === true
       ? ['PLAN  Ask once, defaulting to No, whether to merge with nothing verified at all.']
       : []),
+    'PLAN  Take the machine-wide landing lock, waiting for any landing already holding it. Everything '
+    + 'below this line happens inside one process, under that lock, and releases it whichever way it ends.',
+    options.skipAll === true
+      ? `PLAN  Skip the ${LAND_BARRIER_LANE} cheap-gate barrier because --skip-all was passed.`
+      : `PLAN  Run the cheap-gate barrier (just ${LAND_BARRIER_LANE}) and release immediately if it fails, `
+        + 'rather than spending the expensive suites to learn the same thing.',
     fullVerifySkip === undefined
       ? 'PLAN  Run just verify-full on the feature branch.'
       : `PLAN  Skip just verify-full on the feature branch because ${fullVerifySkip} was passed.`,
-    'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
+    `PLAN  If ${REMOTE}/main moved while verifying, merge it and restart (at most ${MAX_STABILIZATION_PASSES} passes).`,
     fullVerifySkip === undefined
       ? 'PLAN  Land the verified feature tree itself; full verification proved exactly those bytes.'
       : stagedVerifySkip === undefined
       ? 'PLAN  Run just verify --complete on the feature branch, because nothing else verified it.'
       : `PLAN  Skip just verify --complete because ${stagedVerifySkip} was passed; `
         + 'no lane will have verified these bytes.',
-    'PLAN  Take the machine-wide landing lease, waiting for any landing already holding it.',
     'PLAN  Build the squash commit with git commit-tree and move refs/heads/main to it only if it has '
     + 'not moved.',
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
@@ -654,7 +833,8 @@ async function authorizeExecution(
 }
 
 function skipAllPrompt(branch: string): string {
-  return `--skip-all runs no fix, no typecheck, no lint, no tests, no just verify-full on '${branch}', `
+  return `--skip-all runs no cheap-gate barrier, no fix, no typecheck, no lint, no tests, `
+    + `no just verify-full on '${branch}', `
     + 'and no just verify --complete on the staged squash. An unverified squash of '
     + `'${branch}' would then be pushed to main, whose linear history is the product of squashing, `
     + 'so it cannot be fast-forwarded away afterwards. Really merge with nothing checked at all?'
@@ -689,6 +869,7 @@ async function createSnapshot(
     phase: 'prepared',
     remoteFeatureHead: preflight.remoteFeatureHead,
     remoteMainHead: preflight.remoteMainHead,
+    remoteTransport: preflight.remoteTransport,
     snapshotPath,
     version: SNAPSHOT_VERSION,
   }
@@ -702,31 +883,28 @@ async function stabilizeAndVerify(
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   for (let pass = 1; pass <= MAX_STABILIZATION_PASSES; pass += 1) {
+    await beginPhase(snapshot.featureRoot, 'integrating', dependencies)
     await assertExpectedLocalState(snapshot, dependencies)
-    await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
-    const fetchedMain = (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`]))
-      .stdout.trim()
+    const fetchedMain = await refreshRemoteMain(snapshot, dependencies)
     const featureHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
     const ancestor = await dependencies.run('git', {
       args: ['merge-base', '--is-ancestor', fetchedMain, featureHead],
       cwd: snapshot.featureRoot,
     })
     if (ancestor.exitCode === 1) {
-      await runAndSnapshot(
-        snapshot,
-        'git',
-        ['merge', '--no-edit', `${REMOTE}/${MAIN_BRANCH}`],
-        snapshot.featureRoot,
-        'feature-integrated',
-        dependencies,
-        { mutation: 'feature' },
-      )
+      await integrateMain(snapshot, fetchedMain, dependencies)
     } else {
       assertCommandSucceeded(ancestor)
     }
+    await runBarrier(snapshot, options, dependencies)
 
     const fullVerifySkip = fullVerifySkippedBy(options)
     if (fullVerifySkip === undefined) {
+      // One phase, not two, for one process. `just verify-full` runs the repository suites and the
+      // host gates in a single `./dev gates` run, and nothing outside that process can see it cross
+      // from one to the other; `LANDING_PHASES` names both because the phase this reports will split
+      // in two as soon as `GateRunner` can say when it does.
+      await beginPhase(snapshot.featureRoot, 'repository tests', dependencies)
       const verifiedHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
       await runAndSnapshot(
         snapshot,
@@ -751,7 +929,9 @@ async function stabilizeAndVerify(
       await advanceSnapshot(snapshot, 'feature-verified', dependencies)
     }
 
-    const remoteMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    const remoteMain = (
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], snapshot.remoteTransport)
+    ).refs.get(MAIN_BRANCH)
     if (!remoteMain) {
       Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting refs/heads/main.`)
     }
@@ -780,6 +960,107 @@ async function stabilizeAndVerify(
         + `(pass ${pass + 1}/${MAX_STABILIZATION_PASSES}).`,
     )
   }
+}
+
+/**
+ * Merge `origin/main` into the branch, inside the lock, where the answer cannot go stale.
+ *
+ * A conflict here is not a landing failure to retry: it is work for a person or an agent, and the
+ * conflicted worktree is left exactly as Git wrote it. The lock goes back first — released by the
+ * caller's `finally`, and its durable claim ended here — because resolution is model turns, and
+ * holding the machine through them is the one thing this whole transaction exists to stop.
+ */
+async function integrateMain(
+  snapshot: MergeSnapshot,
+  fetchedMain: string,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  try {
+    await runAndSnapshot(
+      snapshot,
+      'git',
+      ['merge', '--no-edit', fetchedMain],
+      snapshot.featureRoot,
+      'feature-integrated',
+      dependencies,
+      { mutation: 'feature' },
+    )
+  } catch (error) {
+    const unmerged = (await dependencies.run('git', {
+      args: ['diff', '--name-only', '--diff-filter=U'],
+      cwd: snapshot.featureRoot,
+      stdio: 'pipe',
+    })).stdout.trim().split('\n').filter(Boolean)
+    if (unmerged.length === 0) {
+      throw error
+    }
+    await endLockForConflictResolution(snapshot.featureRoot, dependencies)
+    throw new LandingIntegrationConflictError(
+      `Integrating ${REMOTE}/main at ${shortSha(fetchedMain)} into '${snapshot.branch}' conflicted, so this `
+        + 'landing released the landing lock and stopped. Nothing was pushed and main was not moved.\n'
+        + `Conflicting paths:\n${unmerged.map(path => `- ${path}`).join('\n')}\n`
+        + 'Resolve them here, unlocked — the machine is free for everyone else while you do — commit the '
+        + 'merge with `git commit --no-edit`, and run `./dev land` again. The landing re-integrates '
+        + 'whatever main has become by then, so nothing you do now has to anticipate it.',
+    )
+  }
+}
+
+/**
+ * The cheap-gate barrier, run after integrating main and before anything expensive.
+ *
+ * It runs the gates in **check** mode rather than the `_fix-*` fixers the verify lanes use, and that
+ * is the whole point of putting it here. A fixer inside the transaction writes to the tree this
+ * landing is about to commit, and `verifyLandingSubject` then refuses the landing outright with
+ * `Verification changed the tree this landing was about to commit.` — so the fixers would turn a
+ * one-line formatting drift into a failed landing that has already paid for the barrier. Committing
+ * their output instead would be worse: main would gain bytes no author wrote, no reviewer read, and
+ * no merge message describes. Check mode fails in about 30s, names the file, and hands the tree back
+ * clean and unlocked so `just fix` can run where it belongs. The fixers still run later inside
+ * `verify-full`, where a check-clean tree makes them no-ops.
+ */
+async function runBarrier(
+  snapshot: MergeSnapshot,
+  options: MergeWithMainOptions,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  await beginPhase(snapshot.featureRoot, 'cheap gates', dependencies)
+  // `--skip-all` is the one flag that means nothing at all, confirmed at a terminal against a prompt
+  // that says so in those words. A barrier that ran anyway would make that prompt a lie.
+  if (options.skipAll === true) {
+    dependencies.writeLine(
+      `WARN  Skipped the ${LAND_BARRIER_LANE} cheap-gate barrier because --skip-all was passed; `
+        + 'no gate will have looked at these bytes.',
+    )
+    return
+  }
+  await runAndSnapshot(
+    snapshot,
+    'just',
+    [LAND_BARRIER_LANE],
+    snapshot.featureRoot,
+    snapshot.phase,
+    dependencies,
+    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
+  )
+}
+
+async function refreshRemoteMain(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<string> {
+  if (snapshot.remoteTransport === 'broker') {
+    const inspection = await dependencies.inspectRemote?.(snapshot.featureRoot, [MAIN_BRANCH])
+    const main = inspection?.refs.get(MAIN_BRANCH)
+    if (main === undefined) {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+    return main
+  }
+  await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
+  return (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
 }
 
 /**
@@ -977,6 +1258,86 @@ async function pushArchiveAndPreserve(
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
   await advanceSnapshot(snapshot, 'push-started', dependencies)
+  await pushRemoteRefs(snapshot, dependencies)
+
+  await beginPhase(snapshot.featureRoot, 'cleanup', dependencies)
+  // Keep the invoking directory usable after success. Detaching at the verified feature tip leaves
+  // its tree unchanged while allowing the local feature ref to be deleted after the remote archive
+  // has made that tip durable.
+  await runChecked(
+    dependencies,
+    'git',
+    ['switch', '--detach', snapshot.currentFeatureHead],
+    snapshot.featureRoot,
+    true,
+  )
+  const detached = await dependencies.run('git', {
+    args: ['symbolic-ref', '--quiet', 'HEAD'],
+    cwd: snapshot.featureRoot,
+    stdio: 'pipe',
+  })
+  if (
+    detached.exitCode !== 1
+    || detached.error !== undefined
+    || detached.signal !== null
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree did not enter detached HEAD state.')
+  }
+  const preservedState = await readLocalState(snapshot, dependencies)
+  assertMainMatches(snapshot, preservedState)
+  if (
+    preservedState.featureHead !== snapshot.currentFeatureHead
+    || preservedState.featureStatus !== ''
+    || preservedState.featureDiff !== ''
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree changed while detaching its archived tip.')
+  }
+  adoptLocalState(snapshot, preservedState)
+  await persistSnapshot(snapshot, dependencies)
+
+  // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
+  // after the remote is safely archived. The preceding push/archive phases make this forced local
+  // deletion deliberate and recoverable.
+  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.featureRoot, true)
+  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.featureRoot, true)
+  snapshot.phase = 'complete'
+  snapshot.currentMainHead = await readMainRef(snapshot, dependencies)
+  await persistSnapshot(snapshot, dependencies)
+}
+
+async function pushRemoteRefs(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (snapshot.remoteTransport === 'broker') {
+    const landedHead = snapshot.landedHead
+    if (landedHead === undefined) {
+      Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
+    }
+    const pushed = await dependencies.pushRemote?.(snapshot.featureRoot, {
+      branch: snapshot.branch,
+      expectedRemoteFeatureHead: snapshot.remoteFeatureHead ?? null,
+      expectedRemoteMainHead: snapshot.remoteMainHead,
+      featureHead: snapshot.currentFeatureHead,
+      landedHead,
+    })
+    if (pushed === undefined) {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+    if (
+      pushed.refs.get(MAIN_BRANCH) !== landedHead
+      || pushed.refs.get(archiveName(snapshot.branch)) !== snapshot.currentFeatureHead
+      || snapshot.remoteFeatureHead !== undefined && pushed.refs.has(snapshot.branch)
+    ) {
+      Errors.throwHostEnvironment('The landing broker returned refs that do not match the requested landing.')
+    }
+    await advanceSnapshot(snapshot, 'pushed', dependencies)
+    await advanceSnapshot(snapshot, 'archived', dependencies)
+    return
+  }
+
   const pushMain = await dependencies.run('git', {
     args: [
       'push',
@@ -988,7 +1349,9 @@ async function pushArchiveAndPreserve(
     stdio: 'stream',
   })
   if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
-    const observedMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
+    const observedMain = (
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], 'direct')
+    ).refs.get(MAIN_BRANCH)
     if (observedMain === snapshot.currentMainHead) {
       // A transport can report failure after the remote accepted the update. The exact remote ref
       // is stronger evidence than the process result, so recovery must stay on the irreversible side.
@@ -1033,49 +1396,6 @@ async function pushArchiveAndPreserve(
     )
   }
   await advanceSnapshot(snapshot, 'archived', dependencies)
-
-  // Keep the invoking directory usable after success. Detaching at the verified feature tip leaves
-  // its tree unchanged while allowing the local feature ref to be deleted after the remote archive
-  // has made that tip durable.
-  await runChecked(
-    dependencies,
-    'git',
-    ['switch', '--detach', snapshot.currentFeatureHead],
-    snapshot.featureRoot,
-    true,
-  )
-  const detached = await dependencies.run('git', {
-    args: ['symbolic-ref', '--quiet', 'HEAD'],
-    cwd: snapshot.featureRoot,
-    stdio: 'pipe',
-  })
-  if (
-    detached.exitCode !== 1
-    || detached.error !== undefined
-    || detached.signal !== null
-  ) {
-    Errors.throwUnexpected('The preserved feature worktree did not enter detached HEAD state.')
-  }
-  const preservedState = await readLocalState(snapshot, dependencies)
-  assertMainMatches(snapshot, preservedState)
-  if (
-    preservedState.featureHead !== snapshot.currentFeatureHead
-    || preservedState.featureStatus !== ''
-    || preservedState.featureDiff !== ''
-  ) {
-    Errors.throwUnexpected('The preserved feature worktree changed while detaching its archived tip.')
-  }
-  adoptLocalState(snapshot, preservedState)
-  await persistSnapshot(snapshot, dependencies)
-
-  // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
-  // after the remote is safely archived. The preceding push/archive phases make this forced local
-  // deletion deliberate and recoverable.
-  await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.featureRoot, true)
-  await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.featureRoot, true)
-  snapshot.phase = 'complete'
-  snapshot.currentMainHead = await readMainRef(snapshot, dependencies)
-  await persistSnapshot(snapshot, dependencies)
 }
 
 async function abortMerge(
@@ -1158,6 +1478,7 @@ async function readSnapshot(path: string, dependencies: MergeWithMainDependencie
     || typeof value.messageFile !== 'string'
     || !isMergePhase(value.phase)
     || typeof value.remoteMainHead !== 'string'
+    || value.remoteTransport !== undefined && value.remoteTransport !== 'broker' && value.remoteTransport !== 'direct'
     || typeof value.snapshotPath !== 'string'
   ) {
     Errors.throwUserInput(`Merge snapshot has an unsupported shape: ${path}`)
@@ -1284,7 +1605,19 @@ async function remoteHeads(
   dependencies: MergeWithMainDependencies,
   cwd: string,
   branches: readonly string[],
-): Promise<Map<string, string>> {
+  requiredTransport?: RemoteTransport,
+): Promise<{ refs: Map<string, string>; transport: RemoteTransport }> {
+  if (requiredTransport !== 'direct') {
+    const broker = await dependencies.inspectRemote?.(cwd, branches)
+    if (broker !== undefined) {
+      return { refs: new Map(broker.refs), transport: 'broker' }
+    }
+    if (requiredTransport === 'broker') {
+      Errors.throwHostEnvironment(
+        "The Tao landing broker is unavailable. Run 'just landing-setup' in a normal terminal and retry.",
+      )
+    }
+  }
   const result = await dependencies.run('git', {
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
@@ -1292,7 +1625,7 @@ async function remoteHeads(
   if (isSandboxDenial(result)) {
     Errors.throwHostEnvironment(
       `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
-        + 'Retry the merge-with-main command from an unsandboxed shell.',
+        + "Install the credential-isolated service with 'just landing-setup' in a normal terminal, then retry.",
       {
         cause: new Errors.CommandExecutionError(result),
         details: { command: result.command, stderr: result.stderr },
@@ -1307,7 +1640,7 @@ async function remoteHeads(
       refs.set(match[2]!, match[1]!)
     }
   }
-  return refs
+  return { refs, transport: 'direct' }
 }
 
 async function status(dependencies: MergeWithMainDependencies, cwd: string): Promise<string> {
@@ -1416,8 +1749,12 @@ function shortSha(sha: string): string {
   return sha.slice(0, 12)
 }
 
-function writeLines(dependencies: MergeWithMainDependencies, lines: readonly string[]): void {
+function writeLines(
+  dependencies: MergeWithMainDependencies,
+  lines: readonly string[],
+  kind?: 'success',
+): void {
   for (const line of lines) {
-    dependencies.writeLine(line)
+    dependencies.writeLine(line, kind)
   }
 }

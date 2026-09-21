@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import {
   captureActionHistory,
@@ -85,7 +86,7 @@ export function registerRuntimeCaptureDomain(registration: TaoRuntimeCaptureDoma
 /** captureRuntime captures only explicitly registered semantic domains in stable domain order. */
 export async function captureRuntime(failure?: TaoRuntimeFailure): Promise<TaoRuntimeCaptureArtifact> {
   const captured: TaoRuntimeCaptureDomain[] = []
-  for (const registration of [...domains.values()].sort((a, b) => a.domain.localeCompare(b.domain))) {
+  for (const registration of Arrays.sorted([...domains.values()], (a, b) => a.domain.localeCompare(b.domain))) {
     captured.push({
       domain: registration.domain,
       value: json(await registration.capture(), registration.domain),

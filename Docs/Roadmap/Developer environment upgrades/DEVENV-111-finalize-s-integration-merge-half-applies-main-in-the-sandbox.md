@@ -1,6 +1,16 @@
 # DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path
 
-- **Status:** Candidate
+- **Status:** In progress
+- **Section:** External
+- **Partly addressed, 2026-09-20:** `Finalize.ts` now asks `git merge-tree --write-tree --name-only`
+  what would conflict _before_ attempting the merge, and separates the two failures. A merge that
+  recorded unmerged entries still says to resolve it by hand and names them. A merge that failed
+  without recording any says so in those words, quotes Git's stderr, names what `merge-tree` says
+  would conflict — it answers read-only, so it works where the merge itself could not — and points at
+  running `git merge main` as a top-level command. The empty conflict list is gone. **What remains**
+  is the half-written tree itself: the merge is still attempted inside the sandbox, so it can still
+  stop partway and leave modifications the reader did not make. That needs the sandbox-inheritance
+  fix under Dependencies, not another change here.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox
@@ -22,7 +32,11 @@
   `agents/skills/parallel-implementation/SKILL.md` — which the command never printed. Re-running the
   same integration as a top-level `git merge origin/main`, which
   `.rulesync/permissions.jsonc` excludes from the sandbox, reported both conflicts correctly and
-  produced a tree that verified green.
+  produced a tree that verified green. Independently reproduced the same day on
+  `feat/agent-context-optimization-421aa5` against the same `main`: the same empty conflict list, 61
+  dirty tracked paths of which 60 were byte-identical to `main`, 5 untracked paths all present in
+  `main`, no `MERGE_HEAD`, and a plain `git merge main` afterwards that named the one real conflict.
+  A different branch and a different conflicting path, so this is the command and not one branch.
 - **Workaround:** Set the debris aside with `git stash push -u -m '<unique-tag>'` rather than
   `git checkout -f`, which is both sandbox-denied and classifier-denied; then run `git merge
   origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD

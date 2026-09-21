@@ -5,13 +5,16 @@ import { runWithCommands } from './cli/run-with-commands'
 import { DelegationReportCommand } from './delegation/DelegationReportCommand'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
+import { LandingBrokerInstaller } from './landing-broker/LandingBrokerInstaller'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
-import { FinalizeCommand } from './repository-tests/Finalize'
+import { FinalizeCommand, LandCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
 import { LandingLock } from './repository-tests/LandingLock'
-import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
+import { landedReport, MergeWithMainCommand } from './repository-tests/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
 import { WorkReporter } from './repository-tests/WorkReporter'
@@ -44,10 +47,17 @@ type GatesCommandOptions = {
   jobs?: string
   json?: string
   lane?: string
-  needsMachine?: boolean
   output?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
+}
+
+type LandCommandOptions = {
+  dryRun?: boolean
+  messageFile?: string
+  redraft?: boolean
+  skipVerify?: boolean
+  skipVerifyFull?: boolean
 }
 
 type MergeCommandOptions = {
@@ -65,6 +75,24 @@ const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui o
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('test-host')
+    .description('Run the opt-in real-host testing prototype, independently of existing suites.')
+    .argument(
+      '[mode]',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
+      'check',
+    )
+    .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
+    .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
+    .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
+    .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
+    .action(async (mode, options) => {
+      const { runHostTesting } = await import('@e2e-testing')
+      await runHostTesting(mode, options)
+    })
 
   commands
     .command('test')
@@ -128,8 +156,36 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('land')
+    .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
+    .option('--dry-run', 'Report readiness and the plan, and change nothing.')
+    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft before landing.')
+    .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
+    .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
+    .action(async (options: LandCommandOptions = {}) => {
+      try {
+        await LandCommand.run({
+          dryRun: options.dryRun === true,
+          messageFile: options.messageFile,
+          redraft: options.redraft === true,
+          skipVerify: options.skipVerify === true,
+          skipVerifyFull: options.skipVerifyFull === true,
+        })
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('land-lock')
-    .description('Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it.')
+    // Demoted deliberately. It was part of the normal path while a landing was a chain of commands
+    // that had to keep one lock between them; `land` now holds the lock across the whole
+    // transaction in one process, so claiming it by hand is for recovery and for looking at the
+    // machine, not for landing.
+    .description('Recovery and debugging: claim the machine-wide landing lock by hand and exit holding it.')
     .option('--label <text>', 'What to tell other agents this lock is being held for.')
     .option('--no-wait', 'Refuse immediately instead of waiting when another worktree holds it.')
     .action(async (options: { label?: string; wait?: boolean } = {}) => {
@@ -212,7 +268,6 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
-    .option('--needs-machine', 'Refuse to start while another lane is registered on this machine.')
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
@@ -236,7 +291,6 @@ await runWithCommands(commands => {
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
-            needsMachine: options.needsMachine === true,
             outputMode,
             skipUnsandboxed: options.skipUnsandboxed === true,
             skipped: options.skipped,
@@ -284,6 +338,25 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('landing-broker-install')
+    .description('Install or update the host-owned GitHub landing broker for this repository.')
+    .action(async () => {
+      await runExitCommand(async () => {
+        await LandingBrokerInstaller.install()
+        return 0
+      })
+    })
+
+  commands
+    .command('landing-broker-status')
+    .description('Check whether the host-owned GitHub landing broker is available.')
+    .action(async () => {
+      const ready = await landingBrokerIsReady()
+      HCI.writeLine(ready ? 'PASS  Tao landing broker is ready.' : 'FAIL  Tao landing broker is not available.')
+      Platform.runtimeProcess.exit(ready ? 0 : 1)
+    })
+
+  commands
     .command('my-branch')
     .argument('[name]', 'Branch name or suffix; defaults to $TAO_DEV_BRANCH, then your Git identity.')
     .description('Switch this checkout to your own dev/* branch, creating it from main the first time.')
@@ -322,10 +395,15 @@ await runWithCommands(commands => {
     .command('finalize')
     .description('Bring a feature branch to the state where merge-with-main can run; safe to re-run.')
     .option('--check', 'Report without mutating anything: no merge, no verification lane, no file written.')
-    .option('--fresh', 'Ignore the recorded finalize state and redraft the merge message.')
-    .action(async (options: { check?: boolean; fresh?: boolean } = {}) => {
+    .option('--fresh', 'Ignore the recorded finalize state.')
+    .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft.')
+    .action(async (options: { check?: boolean; fresh?: boolean; redraft?: boolean } = {}) => {
       try {
-        const outcome = await FinalizeCommand.run({ check: options.check === true, fresh: options.fresh === true })
+        const outcome = await FinalizeCommand.run({
+          check: options.check === true,
+          fresh: options.fresh === true,
+          redraft: options.redraft === true,
+        })
         Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -384,6 +462,34 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report instead of the table.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await BoardCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('landed [branch]')
+    .description(
+      "Report whether a branch landed, by the archive ref the landing pushes; defaults to this worktree's branch.",
+    )
+    .action(async (branch?: string) => {
+      const report = await landedReport(branch)
+      HCI.writeLine(
+        report.landed
+          ? `${report.branch} landed; archived as ${report.archive}.`
+          : `${report.branch} has not landed: no ${report.archive} on origin as of this fetch.`,
+      )
+      Platform.runtimeProcess.setExitCode(report.landed ? 0 : 1)
+    })
+
+  commands
+    .command('reclaim')
+    .description(
+      'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
+    )
+    .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
+    .option('--json', 'Print a versioned structured report instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(
+        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+      )
     })
 
   commands

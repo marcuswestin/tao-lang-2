@@ -1,6 +1,7 @@
 # DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Toolchain pin
 - **Impact:** `bun build --compile` is the mechanism behind the standalone `tao` executable
   (`Docs/MVP Roadmap/Plan - Standalone Tao CLI.md`). With the Bun the shared devenv profile supplies,

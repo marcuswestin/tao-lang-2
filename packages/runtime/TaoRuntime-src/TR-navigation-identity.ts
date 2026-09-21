@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
 
@@ -113,8 +114,10 @@ function canonicalValue(value: unknown, seen: Set<object>): CanonicalValue {
       Object.getPrototypeOf(value) === Object.prototype,
       'A restorable descriptor cannot contain an opaque host object.',
     )
-    const fields = Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
+    const fields = Arrays.sorted(
+      Object.entries(value as Record<string, unknown>),
+      ([left], [right]) => left.localeCompare(right),
+    )
       .map(([name, item]) => Object.freeze([name, canonicalValue(item, seen)] as const))
     return Object.freeze(['item', ...fields])
   } finally {

@@ -1,6 +1,7 @@
 # DEVENV-098 — A fixture holding the output-capture queue through a spawn stalls its whole shard
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test execution
 - **Impact:** `withCapturedOutput` serializes process-wide by design, so a test that spawns child
   processes inside the capture holds every other capturing test in its shard behind it. The cost is
