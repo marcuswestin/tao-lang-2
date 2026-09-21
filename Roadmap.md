@@ -323,6 +323,12 @@ Product and codebase backlog, unordered.
   - Studio now selects a folder owning exactly one project definition, scopes its workspace and package
     lookup to that root, and runs multiple projects as separate concurrent sessions. Remaining: have the
     IDE extension manage one workspace per project folder and stop requiring a Git repo at the project root.
+  - One Studio feature still needs Git: beta ship finds the `tao` launcher through `Repo.getRoot`
+    (`runBetaShip` in `packages/ides/studio/studio-src/StudioServer.ts`), which throws outside a Git
+    worktree. Project discovery, scoping, and compile already fall back to a filesystem walk. The IDE
+    extension has no project-root finder at all: each VS Code workspace folder becomes one
+    language-server root (`ide-extension-src/extension/workspace-server-roots.ts`), so it should reuse
+    Studio's `resolveStudioProjectRoot` once that moves somewhere both can import.
 - [ ] Implement styling, and then all of `Docs/Spec/Tao Layout and UI.md`.
   - Consider declaration-level style defaults that a caller may override, and settle how the two
     merge — in particular how a caller clears a default rather than adding to it:
