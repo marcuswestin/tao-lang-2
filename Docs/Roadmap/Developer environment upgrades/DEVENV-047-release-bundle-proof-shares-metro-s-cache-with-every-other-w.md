@@ -1,6 +1,7 @@
 # DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Full verification
 - **Impact:** `_ship-bundle-proof` can fail a green branch's landing run when another worktree bundles
   at the same moment, because both Expo exports write the same Metro cache under the system temp dir.

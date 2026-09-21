@@ -1,6 +1,6 @@
-import { type CLI, FS, Repo } from '@shared'
+import { type CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { board, parseWorktreePorcelain } from '../dev-src/doctor/Board'
+import { board, formatBoardReport, parseWorktreePorcelain } from '../dev-src/doctor/Board'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
 
 /**
@@ -67,6 +67,49 @@ Describe('board', () => {
     Expect(parsed.length).toBe(2)
     Expect(parsed[0]?.branch).toBe('main')
     Expect(parsed[1]?.branch).toBe('feat/x')
+  })
+
+  Test('says what a landing is spending the lock on, not only who took it and when', async () => {
+    // A lock waiting on an agent between commands used to look exactly like a lock running a
+    // 15-minute host lane. The phase breakdown is the whole difference, and it is why `board` is
+    // what a person reads before deciding a lock is wedged.
+    const registryRoot = await mkTestDir('tao-board-registry-')
+    const worktreePath = await mkTestDir('tao-board-worktree-')
+    try {
+      await FS.writeJson(FS.resolvePath('.landing-lock.json', registryRoot), {
+        acquiredAt: new Date(Date.now() - 12 * 60 * 1_000).toISOString(),
+        durable: false,
+        holder: '/peer-worktree',
+        label: 'land feat/peer',
+        landing: true,
+        phases: [
+          {
+            endedAt: new Date(Date.now() - 11 * 60 * 1_000).toISOString(),
+            name: 'integrating',
+            startedAt: new Date(Date.now() - 12 * 60 * 1_000).toISOString(),
+          },
+          { name: 'host proof', startedAt: new Date(Date.now() - 11 * 60 * 1_000).toISOString() },
+        ],
+        pid: Platform.runtimeProcess.pid,
+        scopedHolds: [{ pid: Platform.runtimeProcess.pid, token: 'peer-token' }],
+      })
+      const run = fakeGitRun({
+        [routeKey('git', ['worktree', 'list', '--porcelain'], Repo.getRoot())]: {
+          stdout: porcelainListing([{ branch: 'feat/quiet', head: 'a'.repeat(40), path: worktreePath }]),
+        },
+      })
+
+      const report = await board({ ...quietMachine, registryRoot, run })
+      const rendered = formatBoardReport(report)
+
+      Expect(report.verdict).toContain('landing lock held by peer-worktree (host proof for 11m)')
+      Expect(rendered).toContain('held for 12m by a landing')
+      Expect(rendered).toContain('integrating: 1m')
+      Expect(rendered).toContain('host proof: 11m so far')
+    } finally {
+      await FS.remove(registryRoot)
+      await FS.remove(worktreePath)
+    }
   })
 
   Test('reports a quiet verdict when no other lane or resource is registered', async () => {

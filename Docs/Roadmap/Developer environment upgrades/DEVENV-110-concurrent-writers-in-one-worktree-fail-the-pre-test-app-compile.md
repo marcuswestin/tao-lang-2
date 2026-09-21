@@ -1,6 +1,7 @@
 # DEVENV-110 — Concurrent writers in one worktree fail the pre-test app compile
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Test runner, parallel implementation
 - **Impact:** `./agent test-file` fails for an agent whose own change is sound whenever another agent
   in the same worktree saves a file during the prerequisite WordFlower compile. The failure reads

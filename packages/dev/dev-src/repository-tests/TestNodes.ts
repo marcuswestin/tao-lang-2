@@ -1,5 +1,5 @@
 import { GateCatalog } from './GateCatalog'
-import { RunTimings, type TimingsStore } from './RunTimings'
+import { type NodeSample, RunTimings, type TimingsStore } from './RunTimings'
 import type { TestLedgerStore } from './TestLedger'
 import type { NativeTestReport } from './TestReport'
 import { type ShardPlan, TestShards } from './TestShards'
@@ -111,7 +111,17 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
   const states: TestNodeState[] = []
   for (const suite of options.selected) {
     const tuning = GateCatalog.suiteTuning(suite.name)
-    const ledgerCosts = TestShards.fileCostsFromLedger(options.ledger, suite.name)
+    // Under `--concurrent` Bun reports every test in a file as the time from that file's shared
+    // start to its own completion (see `TestRunner.deadlineFor`), so a file's tests summed together
+    // is not that file's cost — it is inflated by however many other tests in the file finished
+    // after it, which grows with the file's own test count rather than with its work. Packing shards
+    // by that sum would put a file's weight before what it actually costs; the ledger has nothing
+    // trustworthy to say about relative per-file cost for a suite tuned this way, so shards fall back
+    // to the mean-cost packing `TestShards.packFiles` already gives an unmeasured file.
+    const concurrent = (tuning.args ?? []).includes('--concurrent')
+    const ledgerCosts = concurrent
+      ? new Map<string, number>()
+      : TestShards.fileCostsFromLedger(options.ledger, suite.name)
     const plan = TestShards.planShards({
       // A suite's own units win when the ledger cannot speak about them at all.
       fileCostMs: suite.shardUnits === undefined || suite.unitCostMs === undefined
@@ -199,24 +209,42 @@ function idleTimeoutMs(expectedMs: number | undefined): number {
  * `n` startups and divide the rest, so the one-process equivalent is their total less the `n - 1`
  * startups sharding added.
  */
-function suiteDurations(states: readonly TestNodeState[]): Map<string, number> {
+function suiteDurations(states: readonly TestNodeState[]): Map<string, NodeSample> {
   const shardsBySuite = new Map<string, TestNodeState[]>()
   for (const state of states) {
     if (state.status === 'passed') {
       shardsBySuite.set(state.suite, [...shardsBySuite.get(state.suite) ?? [], state])
     }
   }
-  const durations = new Map<string, number>()
+  const durations = new Map<string, NodeSample>()
   for (const [suite, shards] of shardsBySuite) {
     // A suite with a failed or skipped shard measured nothing about itself as a whole.
     if (shards.length !== states.filter(state => state.suite === suite).length) {
       continue
     }
     const fixedMs = GateCatalog.suiteTuning(suite).fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS
-    const total = shards.reduce((sum, shard) => sum + shard.elapsedMs, 0)
-    durations.set(suite, Math.max(1, Math.round(total - (shards.length - 1) * fixedMs)))
+    const totalWallMs = shards.reduce((sum, shard) => sum + shard.elapsedMs, 0)
+    const cpuMsPerShard = shards.map(shard => directCpuMs(shard))
+    durations.set(suite, {
+      // The suite ran as `shards.length` processes at once; that is what its shards' own samples
+      // were concurrent with, whatever else was in the lane beside them.
+      concurrency: shards.length,
+      // Each shard pays the suite's fixed startup again, so summing raw CPU time over-counts the
+      // one-process equivalent by `(shards.length - 1)` startups' worth, same as the wall reconstruction
+      // does below — but only defined once every shard actually reported one.
+      cpuMs: cpuMsPerShard.every(value => value !== undefined)
+        ? cpuMsPerShard.reduce((sum, value) => sum + (value ?? 0), 0)
+        : undefined,
+      wallMs: Math.max(1, Math.round(totalWallMs - (shards.length - 1) * fixedMs)),
+    })
   }
   return durations
+}
+
+/** directCpuMs mirrors `RunArtifacts.directCpuMs`: see that copy for why this reads duck-typed. */
+function directCpuMs(state: WorkState): number | undefined {
+  const cpuMs = (state as { cpuMs?: unknown }).cpuMs
+  return typeof cpuMs === 'number' && Number.isFinite(cpuMs) ? cpuMs : undefined
 }
 
 /** describePlans is the one line a run prints about how it split its suites. */

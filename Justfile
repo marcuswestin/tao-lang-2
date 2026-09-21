@@ -5,7 +5,7 @@ IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extensio
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -244,7 +244,7 @@ report-test-stats limit="20":
     echo
     ./dev test-slowest --limit "{{ limit }}"
 
-# Bring a feature branch to the state where merge-with-main can run; safe and cheap to re-run
+# Bring a feature branch to ready while iterating; `land` does its own preparation. Safe to re-run
 [arg('check', long='check', value='true')]
 [arg('fresh', long='fresh', value='true')]
 [arg('redraft', long='redraft', value='true')]
@@ -270,8 +270,35 @@ my-resolve *ARGS:
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
 my-land *ARGS:
-    ./dev finalize
-    ./dev merge-with-main {{ ARGS }}
+    ./dev land {{ ARGS }}
+
+# `land` is the whole landing, as one command and one process. It settles readiness and the merge
+# message first, unlocked, because those are the parts that may need an author; then it takes the
+# machine-wide landing lock once and, inside a single `try`/`finally`, integrates main, runs the
+# cheap-gate barrier, verifies, squashes, pushes, archives, and releases. The lock is therefore held
+# for the work rather than across the gaps between commands, which is where the 36-44 minute holds
+# came from: the merge itself never took more than 94s.
+# A conflict while integrating main is the one failure that gives the lock back and stops: resolve it
+# here, unlocked, commit the merge, and run `just land` again.
+# Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock
+[arg('dry_run', long='dry-run', value='true')]
+[arg('message_file', long='message-file')]
+[arg('redraft', long='redraft', value='true')]
+[arg('skip_verify', long='skip-verify', value='true')]
+[arg('skip_verify_full', long='skip-verify-full', value='true')]
+[group('Ship')]
+land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false':
+    ./dev land {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
+
+# The cheap-gate barrier a landing runs first, inside the lock, before anything expensive. It is
+# `check` — generation and formatting consistency, repository lint, types — plus `dead-exports`, and
+# it is deliberately the CHECK-mode gates rather than the `_fix-*` fixers the verify lanes run: a
+# fixer writes to the tree the landing is about to commit, and the landing then refuses itself with
+# `Verification changed the tree this landing was about to commit.` A red barrier costs ~30s to
+# learn; the suites behind it cost 60-170s more to learn the same thing.
+# Run the cheap gates a landing checks before it spends the expensive suites
+[group('Dev')]
+land-barrier: check dead-exports
 
 # Squash-merge this feature branch into main and push it; flags only remove work, never add it
 [arg('abort', long='abort')]
@@ -320,19 +347,20 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
-# The landing lock is the one turn-taking primitive: claiming it is what earns the right to run a
-# merge-evidence lane and then move refs. `land-lock` blocks until it is yours and exits holding it,
-# so no agent writes a sleep-poll loop of its own; `land-unlock` gives it back. Nothing reclaims a
-# lock on a timer, by design, so a wedged lock surfaces as a warning naming its holder rather than
-# as a takeover — `land-unlock --force` is the person-shaped way out.
+# The landing lock is the one turn-taking primitive, and `land` now takes it for the whole landing
+# in one process, so these two are **recovery and debugging tools** rather than part of the normal
+# path: claiming the lock by hand before a landing only adds a durable claim the landing does not
+# need. Reach for them to hold the machine while investigating, or to give a lock back by hand.
+# Nothing reclaims a lock on a timer, by design, so a wedged lock surfaces as a warning naming its
+# holder rather than as a takeover — `land-unlock --force` is the person-shaped way out.
 # `just` splits `*ARGS` on whitespace, so a multi-word `--label` has to go through `./dev land-lock`
 # directly; the default label names this worktree, which is what a waiting agent needs anyway.
-# Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it
+# Recovery and debugging: claim the machine-wide landing lock by hand and exit holding it
 [group('Dev')]
 land-lock *ARGS:
     ./dev land-lock {{ ARGS }}
 
-# Release the machine-wide landing lock this worktree holds
+# Recovery and debugging: release the machine-wide landing lock this worktree holds
 [group('Dev')]
 land-unlock *ARGS:
     ./dev land-unlock {{ ARGS }}
@@ -424,23 +452,23 @@ clean-all: clean-scratch
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# `--needs-machine` is declared here and nowhere else. It is a fact about this lane, not about any
-# one gate: the browser, native, and simulator gates share one window server between them, so a
-# second lane anywhere on this host makes the verdict a report about interference. `verify-repo`
-# inherits it by invoking this recipe, which is why it carries no declaration of its own.
-# Verify everything plus the browser, native and bundle lanes; needs the machine to itself. --no-cache ignores a recorded green tree
+# This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
+# host — the native shell and the canary, which contend on the window server — declare `gui` in the
+# catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
+# headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
+# Verify everything plus the browser, native and bundle lanes. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-full no_cache='false': _deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --needs-machine --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
@@ -492,6 +520,10 @@ _fix-tao: _parser-gen
 
 _fix-just-fmt:
     just --fmt
+
+# Both developer-environment index pages are generated from the entry files; never hand-edit them.
+_fix-ledger-index:
+    bun run packages/dev/dev-src/repository-tests/fix-ledger-index.ts
 
 _runtime-pack-check:
     bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts

@@ -1,6 +1,7 @@
 # DEVENV-062 — The documented setup command cannot refresh generated harness configuration
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent configuration
 - **Impact:** Canonical `.rulesync` changes can leave a generated harness file stale even though
   `./agent setup` and `just _agent-config` otherwise succeed, so `AgentConfigFreshness` fails after

@@ -1,54 +1,15 @@
 # Developer environment upgrades
 
-This is the one durable backlog for repository setup, automation, verification, worktree,
-diagnostic, and host-environment improvements. Product defects belong in their product roadmap;
-an entry here may link one when the developer workflow is also affected.
+The durable backlog for repository setup, automation, verification, worktree, diagnostic, and
+host-environment improvements. Product defects belong in their product roadmap; an entry here may
+link one when the developer workflow is also affected.
 
-Every entry is its own file under [`Developer environment upgrades/`](<Developer environment upgrades/>),
-named `DEVENV-NAME-WORDS-ETC.md` after its own title. This page is the index: one line per entry, in
-its section, with the status the entry itself records. `_repo-lint` fails when an entry file is
-missing from this index, when the index names a file that does not exist, or when two files claim
-the same id.
-
-This page indexes **open** work only. An addressed entry moves to
-[`Developer environment upgrades archive.md`](<Developer environment upgrades archive.md>) and its file
-to `Developer environment upgrades/Archive/`, in the change that addressed it. Search both before
-adding an entry.
-
-## Agent entry rules
-
-- Search by name, symptom, command, and area before adding an entry. Update the existing entry
-  instead of appending a duplicate.
-- The owning agent consolidates updates once after delegated findings return; subagents do not edit
-  this backlog independently. Keep evidence concise: an entry file is private to its branch, but this
-  index is shared, so every entry still costs exactly one shared line.
-- A new entry is a new file named after its own title: take the title's distinguishing words, put
-  them in capitals, and join them with dashes. Write
-  `Developer environment upgrades/DEVENV-NAME-WORDS-ETC.md` with the entry as its
-  `# DEVENV-NAME-WORDS-ETC — Title` heading and body, and add its one line to the section below.
-  Four to eight words is usually enough to be unmistakable; drop articles and prepositions rather
-  than truncating the meaning.
-- **Do not number a new entry.** Numbered entries predate this scheme and keep their numbers, which
-  are quoted from other documents and from commit messages; nothing renumbers them. The number was
-  itself the collision: every open branch read the same highest id and chose the same successor, so
-  two branches shipped the same number, the files merged silently, and the ledger renumbered on
-  nearly every merge. A name taken from the title collides only when two branches record genuinely
-  the same finding — which is a duplicate worth catching, and is resolved by merging the two entries
-  rather than by renaming one.
-- Record only observed problems or credible improvements with concrete evidence; ordinary product
-  failures do not belong here.
-- Record: **Status**, **Area**, **Impact**, **Evidence**, **Workaround**, **Proposed change**,
-  **Dependencies**, **Acceptance**, and **Source**. Use `None` when there is genuinely no workaround
-  or dependency.
-- Statuses are `Candidate`, `Planned`, `In progress`, `Incoming`, and `Blocked`. `Incoming` means
-  another unmerged branch owns the fix; re-verify it after that branch lands before resolving it.
-  `Resolved` and `Closed` entries do not live here: setting either status is what moves the entry to
-  the archive, in the same change. The `devenv-upgrades` skill owns how entries are chosen, worked,
-  and archived.
-- Keep the index line's status in step with the entry's own `**Status:**` when you change it; that is
-  the one fact stated in two places, and `_repo-lint` does not read it for you.
-- A task that adds or materially updates an entry links this index once in its handoff. A task that
-  changes nothing here says nothing about developer-environment feedback.
+**Generated.** `just _fix-ledger-index` renders this page from the entry files under
+[`Developer environment upgrades/`](<Developer environment upgrades/>); do not hand-edit it. Entry
+format, the `**Section:**` values, and how entries are selected, worked, and archived live in the
+`devenv-upgrades` skill. An addressed entry moves to
+[`Developer environment upgrades archive.md`](<Developer environment upgrades archive.md>) in the
+change that addressed it.
 
 ## Deferred project — begin after the large branches land
 
@@ -72,8 +33,8 @@ adding an entry.
 - [DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason](<Developer environment upgrades/DEVENV-050-tao-test-under-a-git-ignored-path-says-no-tao-tests-found-wi.md>) — Candidate
 - [DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox](<Developer environment upgrades/DEVENV-051-sips-exits-13-inside-the-claude-code-bash-sandbox.md>) — Candidate
 - [DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository](<Developer environment upgrades/DEVENV-052-bun-tsconfig-override-fails-for-scripts-outside-the-reposito.md>) — Candidate
-- [DEVENV-055 — No repository command compiles a native module](<Developer environment upgrades/DEVENV-055-no-repository-command-compiles-a-native-module.md>) — In progress
 - [DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands](<Developer environment upgrades/DEVENV-053-verifying-a-sibling-worktree-from-an-agent-shell-needs-unsan.md>) — Candidate
+- [DEVENV-055 — No repository command compiles a native module](<Developer environment upgrades/DEVENV-055-no-repository-command-compiles-a-native-module.md>) — In progress
 - [DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink](<Developer environment upgrades/DEVENV-057-git-hash-object-stdin-paths-cannot-hash-a-directory-symlink.md>) — Candidate
 - [DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled](<Developer environment upgrades/DEVENV-058-the-cli-s-bundled-tao-module-directory-is-never-filled.md>) — Candidate
 - [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — In progress
@@ -107,3 +68,6 @@ adding an entry.
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — In progress
 - [DEVENV-113 — Uncached complete verification has no repeated stable tail](<Developer environment upgrades/DEVENV-113-uncached-complete-verification-has-no-repeated-stable-tail.md>) — Candidate
 - [DEVENV-114 — The guidance invites agents to force-release a lock the design reserves for a person](<Developer environment upgrades/DEVENV-114-guidance-invites-agents-to-force-release-the-landing-lock.md>) — Candidate
+- [DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND — An admitted seat is held by registration, not by demand](<Developer environment upgrades/DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND.md>) — Candidate
+- [DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN — Every Tao app shard compiles the project again](<Developer environment upgrades/DEVENV-EVERY-TAO-APP-SHARD-COMPILES-THE-PROJECT-AGAIN.md>) — Candidate
+- [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate

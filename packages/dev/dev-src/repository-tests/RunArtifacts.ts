@@ -1,5 +1,5 @@
 import { FS, Platform, Repo } from '@shared'
-import { RunTimings } from './RunTimings'
+import { type NodeSample, RunTimings } from './RunTimings'
 import { type WorkEvent, WorkGraph, type WorkState } from './WorkGraph'
 
 /**
@@ -31,11 +31,11 @@ export type FinishRunOptions = {
   recordTimings?: boolean
   states: readonly WorkState[]
   /**
-   * Durations to record beside the nodes' own, for a name the run did not schedule directly. A
+   * Samples to record beside the nodes' own, for a name the run did not schedule directly. A
    * sharded suite is the case: its shards are the nodes, and the suite still has to measure itself
    * or its shard count can never change again.
    */
-  extraDurations?: ReadonlyMap<string, number>
+  extraDurations?: ReadonlyMap<string, NodeSample>
   /** The lane's own rollup, written as `summary.json`. */
   summary: unknown
 }
@@ -158,12 +158,50 @@ async function refreshLatest(location: RunLocation): Promise<void> {
 }
 
 /** measuredDurations learns only from successful work; failures and interruptions are not estimates. */
-function measuredDurations(states: readonly WorkState[]): Map<string, number> {
+function measuredDurations(states: readonly WorkState[]): Map<string, NodeSample> {
   return new Map(
     states
       .filter(state => state.status === 'passed')
-      .map(state => [state.name, state.elapsedMs]),
+      .map(state => [state.name, {
+        concurrency: laneConcurrency(state, states),
+        cpuMs: directCpuMs(state),
+        wallMs: state.elapsedMs,
+      }]),
   )
+}
+
+/**
+ * directCpuMs reads a node's own captured CPU time, when its runner measured one. `WorkGraph`'s
+ * process runner spawns through `Bun.spawn` and records `resourceUsage()`'s user+system time onto
+ * `WorkState.cpuMs` once a node exits; a node whose process never started, or whose runner is an
+ * injected test double that never sets it, simply leaves the field absent.
+ */
+function directCpuMs(state: WorkState): number | undefined {
+  return typeof state.cpuMs === 'number' && Number.isFinite(state.cpuMs) ? state.cpuMs : undefined
+}
+
+/**
+ * laneConcurrency counts how many nodes — this one included — had overlapping execution windows,
+ * from each node's own `startedAt` and `elapsedMs`. It is computed here rather than read off the
+ * scheduler because every fact it needs is already on the states this module is handed, and it is
+ * one purpose-built number rather than a general scheduling trace.
+ */
+function laneConcurrency(state: WorkState, states: readonly WorkState[]): number | undefined {
+  if (state.startedAt === undefined) {
+    return undefined
+  }
+  const start = state.startedAt
+  const end = start + state.elapsedMs
+  let overlapping = 0
+  for (const other of states) {
+    if (other.startedAt === undefined) {
+      continue
+    }
+    if (other.startedAt < end && other.startedAt + other.elapsedMs > start) {
+      overlapping += 1
+    }
+  }
+  return overlapping
 }
 
 /** RunArtifacts owns the per-run log, summary, and timing artifacts every lane writes. */

@@ -4,6 +4,8 @@ import {
   FinalizeCommand,
   type FinalizeDependencies,
   type FinalizeState,
+  LandCommand,
+  prepareForLanding,
 } from '../dev-src/repository-tests/Finalize'
 import {
   GeneratedEvidence,
@@ -846,6 +848,75 @@ Describe('finalize', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+})
+
+/**
+ * The unlocked half of a landing. What it must *not* do is as load-bearing as what it does: it
+ * settles the merge message, which is the only part that can need an author, and it leaves
+ * integrating main and verifying to the transaction, where they happen under the lock and cannot go
+ * stale between one command and the next.
+ */
+Describe('landing preparation', () => {
+  Test('settles the merge message without integrating main or running a lane', async () => {
+    const fake = fakeDependencies()
+
+    const preparation = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(preparation.branch).toBe('feat/example')
+    Expect(preparation.ok).toBe(false)
+    Expect(preparation.remaining[0]).toContain('Review the drafted merge message before landing')
+    // The two things the transaction owns now, neither of which happens here.
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    // But main is still read, because a draft is written against `main..HEAD`.
+    Expect(preparation.lines.some(line => line.includes('Read origin/main at'))).toBe(true)
+  })
+
+  Test('is ready once the message on disk is recorded against this HEAD', async () => {
+    const fake = fakeDependencies()
+    fake.files.set('/repo/.artifacts/merge/feat/example.msg', 'Land it\n\n- Do the thing.\n')
+    fake.states.set(
+      '/repo/.artifacts/merge/feat/example.state.json',
+      {
+        headSha: fake.repository.headSha,
+        mainIntegratedSha: fake.repository.mainSha,
+        messageHeadSha: fake.repository.headSha,
+        updatedAt: '2026-09-19T12:00:00.000Z',
+        verifiedAt: '2026-09-19T12:00:00.000Z',
+        verifiedLane: 'verify',
+        verifiedToolchain: FAKE_TOOLCHAIN,
+        verifiedTreeHash: 'tree',
+        version: 2,
+      } satisfies FinalizeState,
+    )
+
+    const preparation = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(preparation.ok).toBe(true)
+    Expect(preparation.remaining).toEqual([])
+  })
+
+  Test('refuses to take the lock at all when the branch is not ready', async () => {
+    // A landing that took the machine-wide lock and then discovered an unreviewed merge message
+    // would be spending everyone else's turn on something only its author can finish.
+    const fake = fakeDependencies()
+
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
+      .rejects.toThrow('is not ready to land, and the landing lock was not taken')
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
+  })
+
+  Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
+    const detached = fakeDependencies({ branch: '' })
+    await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
+      .rejects.toThrow('requires a feat/* branch')
+
+    const dirty = fakeDependencies({ status: '?? stray.ts\n' })
+    await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
+      .rejects.toThrow('stray.ts')
+    Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
   })
 })
 

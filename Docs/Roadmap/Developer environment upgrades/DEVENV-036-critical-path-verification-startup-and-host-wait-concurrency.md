@@ -1,6 +1,7 @@
 # DEVENV-036 — Critical-path verification startup and host-wait concurrency
 
 - **Status:** In progress
+- **Section:** External
 - **Area:** Verification performance
 - **Impact:** The package critical path dominates `verify`, while `verify-full` can delay that same
   25–35 second work behind shorter Studio gates and leave an 18-CPU host underused.

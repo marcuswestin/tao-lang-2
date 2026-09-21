@@ -1,6 +1,7 @@
 # DEVENV-074 — `./agent fix` cannot format the skills it is told to format
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Sandbox policy
 - **Impact:** Claude Code's Bash sandbox denies writes under `agents/skills/`, which is also where
   every project skill lives. Editing a skill and running the repository's own formatter therefore

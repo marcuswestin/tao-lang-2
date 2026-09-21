@@ -44,6 +44,14 @@ export type SourceClass =
   | 'gen-parser'
   /** The Justfile itself, which every recipe-backed node parses on its way up. */
   | 'just'
+  /**
+   * The two generated developer-environment index pages. They are Markdown, and so also dprint's to
+   * format, but they are named apart from `ts` because what makes them correct is being regenerated
+   * from the entry files — and `_repo-lint` now fails a stale one. Without a class of their own the
+   * lint would be free to read the index before the generator rewrote it and report the drift it was
+   * about to fix.
+   */
+  | 'ledger'
   /** Every `.tao` source: the apps, the standard library, the Tao test journeys. */
   | 'tao'
   /** TypeScript, JSON, and Markdown sources — dprint's file classes. */
@@ -237,7 +245,8 @@ const TYPECHECK_COST = 3
 /**
  * Studio smoke spends most of its wall time waiting on Metro, browser, simulator, or IPC
  * readiness. One accounting slot lets those host waits overlap the CPU-heavy package nodes; the
- * `gui` resource below, not an inflated CPU reservation, owns the real native-host exclusion.
+ * `gui` resource below, not an inflated CPU reservation, owns the real native-host exclusion — in
+ * this lane's own graph, and machine-wide once `GateRunner` takes the lease of the same name.
  */
 const STUDIO_LANE_COST = 1
 /** The release proof runs CPU-heavy Expo exports rather than waiting on an interactive host. */
@@ -261,6 +270,16 @@ const STUDIO_SMOKE_POOL = 'studio-smoke'
  */
 const PREPARE_PRIORITY = 8
 const GUI_PRIORITY = 6
+
+/**
+ * The window-server / native-host resource name. The graph serializes its own `gui` nodes against
+ * each other under it, the same as any other declared `resources` entry; `GateRunner` additionally
+ * takes a machine-wide lease under this exact name for as long as either is in flight, so two
+ * worktrees' `gui` nodes — or a standalone recipe running `studio-smoke-native` or `studio-canary`'s
+ * work outside `./dev gates` entirely — cannot overlap either. One name, two guarantees: the graph
+ * edge is free and in-process; the lease is what reaches outside this one lane.
+ */
+const GUI_RESOURCE = 'gui'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -312,6 +331,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
     ['_fix-just-fmt', { canonicalises: true, priority: PREPARE_PRIORITY, serial: true, writes: ['just'] }],
     ['_fix-dprint', { canonicalises: true, priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['ts'] }],
+    // Generated from the entry files, so it must land before the lint that now fails a stale index.
+    ['_fix-ledger-index', {
+      canonicalises: true,
+      priority: PREPARE_PRIORITY,
+      reads: ['ts'],
+      serial: true,
+      writes: ['ledger'],
+    }],
     ['_parser-gen', { priority: PREPARE_PRIORITY, reads: ['ts'], serial: true, writes: ['gen-parser'] }],
     // `./tao fix` reports "0 fixed, 123 unchanged" in 5s of single-threaded language-service work,
     // and is the prepare phase's whole critical path. A workspace daemon is the lever on it; until
@@ -333,7 +360,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // Readers. Each waits for the writers of the classes it names and for nothing else: the
     // TypeScript gates never wait for `./tao fix`, and the Tao gates never wait for dprint.
     ['_dprint-check', { reads: ['ts'] }],
-    ['_repo-lint', { reads: ['ts'] }],
+    ['_repo-lint', { reads: ['ledger', 'ts'] }],
     ['_runtime-pack-check', { reads: ['ts'] }],
     // It walks the `.tao` sources as well as the TypeScript, because a `.tao` binding is what keeps
     // a bridged export out of its report; reading one mid-rewrite would report live code as dead.
@@ -385,13 +412,16 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       studioSmoke('studio-agent-browser', 'packages/dev/studio-smoke/studio-agent-browser.test.ts'),
     ],
     // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
-    // their own. They start at t=0 for that reason, ahead of work that can be packed later.
+    // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
+    // also the resource name `GateRunner` takes a machine-wide lease under for as long as either is
+    // in flight, so a peer worktree's `gui` node — or a standalone `studio-smoke-native` /
+    // `studio-canary` recipe run outside `./dev gates` — cannot overlap these either.
     [
       'studio-smoke-native',
       {
         ...studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
           native: true,
-          resources: ['gui'],
+          resources: [GUI_RESOURCE],
         }),
         priority: GUI_PRIORITY,
       },
@@ -401,7 +431,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.
     [
       'studio-canary',
-      { ...studioLane(['gui']), priority: GUI_PRIORITY, timeoutMs: STUDIO_CANARY_TIMEOUT_MS },
+      { ...studioLane([GUI_RESOURCE]), priority: GUI_PRIORITY, timeoutMs: STUDIO_CANARY_TIMEOUT_MS },
     ],
   ])
 }
@@ -555,6 +585,7 @@ export const GateCatalog = {
   DEFAULT_METADATA,
   DEFAULT_SUITE_READS,
   GUI_PRIORITY,
+  GUI_RESOURCE,
   PREPARE_PRIORITY,
   STUDIO_LANE_COST,
   STUDIO_SMOKE_POOL,

@@ -1,6 +1,7 @@
 # DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Agent worktrees
 - **Impact:** An agent whose session is rooted in one worktree but asked to land work in another cannot
   typecheck or run `./agent verify` there from the sandboxed shell; each attempt is re-run unsandboxed

@@ -10,7 +10,7 @@ import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
 import { LandingBrokerInstaller } from './landing-broker/LandingBrokerInstaller'
 import { DeveloperBranchCommand, SyncMainCommand } from './repository-tests/DeveloperWorkflow'
-import { FinalizeCommand } from './repository-tests/Finalize'
+import { FinalizeCommand, LandCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
 import { LandingLock } from './repository-tests/LandingLock'
@@ -47,10 +47,17 @@ type GatesCommandOptions = {
   jobs?: string
   json?: string
   lane?: string
-  needsMachine?: boolean
   output?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
+}
+
+type LandCommandOptions = {
+  dryRun?: boolean
+  messageFile?: string
+  redraft?: boolean
+  skipVerify?: boolean
+  skipVerifyFull?: boolean
 }
 
 type MergeCommandOptions = {
@@ -149,8 +156,36 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('land')
+    .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
+    .option('--dry-run', 'Report readiness and the plan, and change nothing.')
+    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft before landing.')
+    .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
+    .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
+    .action(async (options: LandCommandOptions = {}) => {
+      try {
+        await LandCommand.run({
+          dryRun: options.dryRun === true,
+          messageFile: options.messageFile,
+          redraft: options.redraft === true,
+          skipVerify: options.skipVerify === true,
+          skipVerifyFull: options.skipVerifyFull === true,
+        })
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('land-lock')
-    .description('Claim the machine-wide landing lock, waiting for whoever holds it, and exit holding it.')
+    // Demoted deliberately. It was part of the normal path while a landing was a chain of commands
+    // that had to keep one lock between them; `land` now holds the lock across the whole
+    // transaction in one process, so claiming it by hand is for recovery and for looking at the
+    // machine, not for landing.
+    .description('Recovery and debugging: claim the machine-wide landing lock by hand and exit holding it.')
     .option('--label <text>', 'What to tell other agents this lock is being held for.')
     .option('--no-wait', 'Refuse immediately instead of waiting when another worktree holds it.')
     .action(async (options: { label?: string; wait?: boolean } = {}) => {
@@ -233,7 +268,6 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
-    .option('--needs-machine', 'Refuse to start while another lane is registered on this machine.')
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
@@ -257,7 +291,6 @@ await runWithCommands(commands => {
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
-            needsMachine: options.needsMachine === true,
             outputMode,
             skipUnsandboxed: options.skipUnsandboxed === true,
             skipped: options.skipped,

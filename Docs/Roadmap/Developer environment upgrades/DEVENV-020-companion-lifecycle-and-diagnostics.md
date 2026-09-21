@@ -1,6 +1,7 @@
 # DEVENV-020 — Companion lifecycle and diagnostics
 
 - **Status:** In progress
+- **Section:** Deferred
 - **Area:** Companion development
 - **Impact:** Multiple-app selection omits the `--app` remedy, successful installation can print an
   automation-permission stack, stale companions can remain blank after Metro changes, and simulator

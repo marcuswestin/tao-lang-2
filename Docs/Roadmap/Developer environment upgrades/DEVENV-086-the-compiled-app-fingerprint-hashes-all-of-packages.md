@@ -1,6 +1,7 @@
 # DEVENV-086 — The compiled-app fingerprint hashes all of `packages/`, so any concurrent edit invalidates every memo
 
 - **Status:** Candidate
+- **Section:** External
 - **Area:** Verification performance
 - **Impact:** `TestCache.fingerprint` folds in a toolchain identity that hashes every Git-visible
   file under `packages/`, and `CheckCache` does the same for `tao check`. That is correct — a Tao

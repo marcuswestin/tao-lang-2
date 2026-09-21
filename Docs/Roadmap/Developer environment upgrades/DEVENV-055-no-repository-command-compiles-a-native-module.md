@@ -1,6 +1,7 @@
 # DEVENV-055 — No repository command compiles a native module
 
 - **Status:** In progress
+- **Section:** External
 - **Area:** Native builds
 - **Impact:** The repository now carries native code (`packages/icloud-native`, an Expo module in
   Swift), and nothing short of a full `expo run:ios` proves it compiles. An agent has to hand-assemble
