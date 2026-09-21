@@ -10,6 +10,8 @@ import {
   parseWorktrees,
   validateMergeMessage,
 } from '../verification-src/MergeWithMain'
+import { buildSummary, formatGateSummary } from '../verification-src/RunSummary'
+import { WorkGraph, type WorkNode, type WorkState } from '../verification-src/WorkGraph'
 
 type FakeRepository = {
   ancestorExitCodes?: number[]
@@ -50,6 +52,46 @@ function result(
   stderr = '',
 ) {
   return { args: [...args], command, cwd, error: undefined, exitCode, signal: null, stderr, stdout }
+}
+
+/** A `just verify-full` node, standing in for what `./dev gates` reports for one of its own. */
+function laneState(node: Partial<WorkNode> & { name: string }, outcome: Partial<WorkState> = {}): WorkState {
+  return {
+    ...WorkGraph.createState({ run: { args: [], command: 'true' }, ...node }),
+    elapsedMs: 1_000,
+    exitCode: 0,
+    status: 'passed',
+    ...outcome,
+  }
+}
+
+/** What a passing `just verify-full` prints, real enough to exercise `extractLaneReport` against. */
+function verifyFullPassingOutput(): string {
+  const summary = buildSummary({
+    elapsedMs: 58_200,
+    lane: 'verify-full',
+    logRoot: '/repo/.artifacts/logs/verify-full/stamp',
+    states: [laneState({ name: '_typecheck' })],
+  })
+  return formatGateSummary(summary)
+}
+
+/** What a failing `just verify-full` prints, with one Bun test failure `extractLaneReport` can name. */
+function verifyFullFailingOutput(): string {
+  const summary = buildSummary({
+    elapsedMs: 12_000,
+    lane: 'verify-full',
+    logRoot: '/repo/.artifacts/logs/verify-full/stamp',
+    states: [
+      laneState({ name: '_typecheck' }),
+      laneState({ name: 'shared' }, {
+        exitCode: 1,
+        fullOutput: 'error: expect(received).toBe(expected)\n(fail) renders the board [12.00ms]',
+        status: 'failed',
+      }),
+    ],
+  })
+  return formatGateSummary(summary)
 }
 
 const realOwner: MachineResourceOwner = {
@@ -859,11 +901,192 @@ Describe('merge-with-main', () => {
     const verificationCalls = fake.calls.filter(call =>
       call.command === 'just' && (call.args[0] === 'verify-full' || call.args[0] === 'verify')
     )
-    Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream'])
+    // `stream` used to forward a nested lane's own output live, which a non-interactive landing has
+    // no terminal to show as it arrives; `pipe` still captures every byte for `extractLaneReport`.
+    Expect(verificationCalls.map(call => call.stdio)).toEqual(['pipe'])
     Expect(outcome.mode).toBe('executed')
     Expect(fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)).toContain(
       `git push origin --force-with-lease=refs/heads/main:${fake.repository.remoteMainHead} main:main`,
     )
+  })
+
+  Test("a non-interactive landing reports a passing lane's verdict instead of its raw output", async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'verify-full') {
+        return { ...await underlying(command, spec), stdout: verifyFullPassingOutput() }
+      }
+      return await underlying(command, spec)
+    }
+
+    await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
+
+    Expect(fake.lines).toContain('verify-full: PASSED in 58.2s')
+    Expect(fake.lines.some(line => line.startsWith('Logs: ') && line.endsWith('verify-full/stamp'))).toBe(true)
+    Expect(fake.lines.some(line => line.startsWith('Summary: ') && line.endsWith('verify-full/stamp/summary.json')))
+      .toBe(true)
+    // The full rollup — every gate's own line, warnings, the schedule — is exactly what streaming it
+    // live used to flood a non-interactive caller's own output with; none of it belongs here.
+    Expect(fake.lines.some(line => line.includes('_typecheck: passed'))).toBe(false)
+  })
+
+  Test("a non-interactive landing repeats the failed lane's Failed: block in its own error", async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'verify-full') {
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: '',
+          stdout: verifyFullFailingOutput(),
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    Expect(fake.lines).toContain('verify-full: FAILED in 12.0s — first failure: shared')
+    Expect(fake.lines).toContain('Failed:')
+    Expect(fake.lines.some(line => line.includes('shared › renders the board'))).toBe(true)
+    // The rollup and the raw tail are what the flood used to consist of; still absent here.
+    Expect(fake.lines.some(line => line.includes('_typecheck: passed'))).toBe(false)
+  })
+
+  Test('a non-interactive landing names the spawn error a nested lane itself failed with', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    const spawnError = new Errors.HostEnvironmentError('spawn just ENOENT')
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: spawnError,
+          exitCode: null,
+          signal: null,
+          stderr: '',
+          stdout: '',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // Before this fix, only `result.stdout` was read — empty here — so a landing that never even
+    // spawned `just` printed nothing at all before `Command failed: just land-barrier`.
+    Expect(fake.lines.some(line => line.includes('Spawn error: spawn just ENOENT'))).toBe(true)
+  })
+
+  Test("a non-interactive landing shows a nested lane's stderr when it never wrote to stdout", async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: 'error: Recipe `land-barrier` was not found.\n',
+          stdout: '',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // `result.stdout` alone — what this read before the fix — was empty here; only `result.stderr`
+    // named the reason, and nothing printed it.
+    Expect(fake.lines.some(line => line.includes('Recipe `land-barrier` was not found'))).toBe(true)
+  })
+
+  Test('a non-interactive landing still names context for a lane that dies before its own verdict', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: null,
+          signal: 'SIGKILL',
+          stderr: '',
+          stdout: 'Checking dprint...\nChecking Tao source...\nChecking repo-lint...\n',
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // No PASSED/FAILED verdict and no Failed: block ever arrived, so this is the raw-tail fallback;
+    // it still names the last thing the lane was doing rather than nothing.
+    Expect(fake.lines.some(line => line.includes('Checking repo-lint'))).toBe(true)
+  })
+
+  Test('a non-interactive landing names a dead-exports issue line from the cheap-gate barrier', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+    const underlying = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) => {
+      if (command === 'just' && spec.args?.[0] === 'land-barrier') {
+        await underlying(command, spec)
+        return {
+          args: [...(spec.args ?? [])],
+          command,
+          cwd: spec.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: '',
+          stdout: [
+            'Checking dprint...',
+            'Checking Tao source...',
+            "dead exports: packages/testing/verification/verification-src/Example.ts:42 export 'unused' is never imported",
+          ].join('\n'),
+        }
+      }
+      return await underlying(command, spec)
+    }
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow()
+
+    // `dead-exports` runs as a raw script rather than through `./dev gates`, so its output matches
+    // none of `extractLaneReport`'s structured formats and falls back to the same raw tail every
+    // other failed log's reader gets — which still has to name at least one issue.
+    Expect(fake.lines.some(line => line.startsWith('dead exports: '))).toBe(true)
   })
 
   Test('uses the credential-isolated broker for every remote read and one atomic landing', async () => {

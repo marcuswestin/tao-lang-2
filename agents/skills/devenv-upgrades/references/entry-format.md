@@ -2,7 +2,7 @@
 
 One entry is one file under `Developer environment upgrades/` (or, once addressed,
 `Developer environment upgrades/Archive/`). Both index pages are rendered from the entry files by
-`just _fix-ledger-index`; never hand-edit either index.
+`./agent ledger-index`; never hand-edit either index.
 
 ## Naming
 

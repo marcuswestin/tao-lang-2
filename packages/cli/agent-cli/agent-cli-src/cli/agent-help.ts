@@ -26,6 +26,24 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
   return 0
 }
 
+/**
+ * FALLBACK_DESCRIPTIONS covers a command whose recipe `just --list` never names: `setup` runs the
+ * private `_setup`, and `typecheck`, `parser-gen`, and `ledger-index` run a recipe spelled
+ * differently from the command (`_typecheck`, `_parser-gen`, `_fix-ledger-index`). Landing stays on
+ * `just land`/`just merge-with-main`: an agent proposes a landing rather than making one, so
+ * `./agent` deliberately has no landing command of its own.
+ */
+const FALLBACK_DESCRIPTIONS: Partial<Record<string, string>> = {
+  'ledger-index': 'Regenerate the developer-environment ledger index from its entry files',
+  'parser-gen': 'Regenerate the parser from the grammar',
+  setup: 'Install dependencies and generate agent adapters',
+  typecheck: 'Type-check every package',
+}
+
+function fallbackLine(command: string, description: string): string {
+  return `    ${command.padEnd(39)} # ${description}`
+}
+
 function justHelpLines(output: string, commands: readonly string[]): string[] {
   const linesByCommand = new Map(
     output.split('\n').map(line => [line.trimStart().split(/\s+/, 1)[0] ?? '', line]),
@@ -35,10 +53,8 @@ function justHelpLines(output: string, commands: readonly string[]): string[] {
     if (line !== undefined) {
       return [line]
     }
-    if (command === 'setup') {
-      return ['    setup                                   # Install dependencies and generate agent adapters']
-    }
-    return []
+    const fallback = FALLBACK_DESCRIPTIONS[command]
+    return fallback === undefined ? [] : [fallbackLine(command, fallback)]
   })
 }
 
@@ -84,7 +100,12 @@ take a machine-wide lease on the window server for as long as they run; verify-f
 that same membership in a managed shell without
 claiming its host-only lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway.
-Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
-On a failure, read summary.json first: it names the first failing gate and its log.
+
+Every command runs through the same front door: it captures the child's output rather than
+inheriting the terminal, writes the full capture to .artifacts/logs/agent/<command>/, and prints a
+bounded report ending in a verdict line, a Failed: block naming what broke when it did, and the log
+path — read that path for anything the report left out. --verbose streams the child's output live
+instead of holding it back; --json prints one JSON object and nothing else; --max-lines <n>
+overrides how much of the child's own output the report keeps.
 `
 }

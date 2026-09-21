@@ -211,7 +211,7 @@ async function requireGeneratedParser(): Promise<void> {
   const generated = Repo.resolvePath('packages/language/parser/parser-src/_gen_tao-parser')
   if (!await FS.exists(generated)) {
     Errors.throwHostEnvironment(
-      'The generated Tao parser is missing, so no smoke lane can start. Run `just fix` (or '
+      'The generated Tao parser is missing, so no smoke lane can start. Run `./agent fix` (or '
         + '`bun run packages/testing/verification/verification-src/ParserGenerate.ts`) in this worktree first.',
     )
   }

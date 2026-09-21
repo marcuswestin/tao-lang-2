@@ -41,6 +41,9 @@ type CompletedTestRun = {
 /** TaoTestValidationError declares validation errors found before the runtime test harness starts. */
 type TaoTestValidationError = RuntimeTesting.TestCompiler.ValidationError
 
+/** TestRunOutcome reports whether one repeatable run of the selected test set failed. */
+export type TestRunOutcome = { failed: boolean }
+
 /**
  * runTestCommand runs the user-facing `tao test` command for one or more paths, compiled and run as
  * one plan. `options.output` selects how the test runner's own output is reported; a caller that
@@ -52,52 +55,73 @@ export async function runTestCommand(
   paths: string | readonly string[],
   options: TestCommandOptions = {},
 ): Promise<void> {
-  const mode = options.output ?? 'lines'
   try {
-    const roots = (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
-    const displayRoots = roots.map(root => FS.displayPath(root)).join(', ')
-    HCI.logProcessInfo('test', `Finding Tao tests under ${displayRoots}`)
-    const found = new Set<string>()
-    for (const root of roots) {
-      for (const testPath of await findTaoTestFiles(root)) {
-        found.add(testPath)
-      }
-    }
-    const testPaths = [...found].sort()
-    if (testPaths.length === 0) {
-      HCI.writeLine(`No Tao tests found under ${displayRoots}`)
-      return
-    }
-    for (const testPath of testPaths) {
-      await TaoAppModules.ensureForPath(testPath)
-    }
-    HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
-    const runtimeRoot = testRuntimeRoot()
-    const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
-    const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
-      ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
-    if (!await reportSelectedJourneys(compiled, options, fingerprint, displayRoots)) {
-      return
-    }
-    HCI.logProcessInfo('test', 'Running Tao tests')
-    const run = await runCompiledTaoTests(compiled, mode, options.name)
-    const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
-    // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
-    // the generated code, and which a passing run either publishes for reuse or discards below.
-    const logPath = await writeTestOutputLog(compiled, run.output)
-    TestOutput.reportFinishedRun({ failed, logPath, mode, output: run.output })
-    if (failed) {
-      if (run.result?.error) {
-        HCI.writeErrorLine(Errors.formatForUser(run.result.error))
-      }
+    const outcome = await runTestCommandOnce(paths, options)
+    if (outcome.failed) {
       Platform.runtimeProcess.exit(1)
     }
-    await keepOrDiscardRunRoot(compiled, fingerprint)
-    HCI.logProcessInfo('test', 'Tao tests finished')
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
     Platform.runtimeProcess.exit(1)
   }
+}
+
+/**
+ * runTestCommandOnce runs the selected test set exactly once and reports whether it failed, instead
+ * of exiting the process. `--watch` calls this directly, once per debounced change, so that a
+ * failing run reports through the same output path a one-shot `tao test` uses without ending the
+ * watch loop; `runTestCommand` is the one-shot entry point that turns a failing outcome into the
+ * process exit code a plain `tao test` invocation reports.
+ */
+export async function runTestCommandOnce(
+  paths: string | readonly string[],
+  options: TestCommandOptions = {},
+): Promise<TestRunOutcome> {
+  const mode = options.output ?? 'lines'
+  const roots = (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
+  const displayRoots = roots.map(root => FS.displayPath(root)).join(', ')
+  HCI.logProcessInfo('test', `Finding Tao tests under ${displayRoots}`)
+  const found = new Set<string>()
+  for (const root of roots) {
+    for (const testPath of await findTaoTestFiles(root)) {
+      found.add(testPath)
+    }
+  }
+  const testPaths = [...found].sort()
+  if (testPaths.length === 0) {
+    HCI.writeLine(`No Tao tests found under ${displayRoots}`)
+    return { failed: false }
+  }
+  for (const testPath of testPaths) {
+    await TaoAppModules.ensureForPath(testPath)
+  }
+  HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
+  const runtimeRoot = testRuntimeRoot()
+  const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
+  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
+    ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
+  if (compiled === 'validation-failed') {
+    return { failed: true }
+  }
+  if (!await reportSelectedJourneys(compiled, options, fingerprint, displayRoots)) {
+    return { failed: false }
+  }
+  HCI.logProcessInfo('test', 'Running Tao tests')
+  const run = await runCompiledTaoTests(compiled, mode, options.name)
+  const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
+  // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
+  // the generated code, and which a passing run either publishes for reuse or discards below.
+  const logPath = await writeTestOutputLog(compiled, run.output)
+  TestOutput.reportFinishedRun({ failed, logPath, mode, output: run.output })
+  if (failed) {
+    if (run.result?.error) {
+      HCI.writeErrorLine(Errors.formatForUser(run.result.error))
+    }
+    return { failed: true }
+  }
+  await keepOrDiscardRunRoot(compiled, fingerprint)
+  HCI.logProcessInfo('test', 'Tao tests finished')
+  return { failed: false }
 }
 
 /**
@@ -238,13 +262,16 @@ async function compiledJourneyNames(compiled: CompiledTaoTests): Promise<string[
 
 type CompilerWorkerSession = ReturnType<typeof RuntimeTesting.TestCompiler.Worker.createSession>
 
+/** ValidationFailed marks a run whose Tao test files failed preflight validation. */
+type ValidationFailed = 'validation-failed'
+
 // Validation and compilation run across a pool of compiler worker processes: each directory group
 // stays on one worker so its files share that worker's workspace, and one worker's requests run
 // serially in its process while distinct workers run in parallel.
 async function validateAndCompileTaoTests(
   testPaths: readonly string[],
   runtimeRoot: string,
-): Promise<CompiledTaoTests> {
+): Promise<CompiledTaoTests | ValidationFailed> {
   if (Platform.runtimeProcess.env['TAO_TEST_IN_PROCESS'] === 'true') {
     return await validateAndCompileTaoTestsInProcess(testPaths, runtimeRoot)
   }
@@ -263,7 +290,7 @@ async function validateAndCompileTaoTests(
     const validationErrors = testPaths.flatMap(testPath => errorsByPath.get(testPath) ?? [])
     if (validationErrors.length > 0) {
       writeTaoTestValidationErrors(validationErrors)
-      Platform.runtimeProcess.exit(1)
+      return 'validation-failed'
     }
 
     HCI.logProcessInfo('test', 'Compiling apps')
@@ -286,14 +313,14 @@ async function validateAndCompileTaoTests(
 async function validateAndCompileTaoTestsInProcess(
   testPaths: readonly string[],
   runtimeRoot: string,
-): Promise<CompiledTaoTests> {
+): Promise<CompiledTaoTests | ValidationFailed> {
   HCI.logProcessInfo('test', 'Validating Tao test files (packaged runner)')
   const validationErrors = (await Promise.all(
     testPaths.map(testPath => RuntimeTesting.TestCompiler.validateTestFile(testPath)),
   )).flat()
   if (validationErrors.length > 0) {
     writeTaoTestValidationErrors(validationErrors)
-    Platform.runtimeProcess.exit(1)
+    return 'validation-failed'
   }
   HCI.logProcessInfo('test', 'Compiling apps')
   const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
