@@ -4,11 +4,31 @@ import * as AST from './parserASTExport'
 
 /** ValueScopeProvider resolves value references through Tao binding and parameter visibility. */
 export class ValueScopeProvider extends Langium.DefaultScopeProvider {
+  /**
+   * What each use statement resolves to. Every reference in a file asks again for every use
+   * statement above it, and each answer filters the whole workspace, so without this the link phase
+   * costs references times imports times documents.
+   *
+   * An answer depends on which documents the workspace holds, so it may outlive nothing that changes
+   * them. `Parser.parse` replaces every document it builds, which retires their use statements and
+   * these entries with them; that is why the keys are held weakly. The editor instead updates
+   * documents in place and relinks the ones a change may have moved, so the table is dropped when
+   * an update starts and again when any build finishes parsing, which is after the last syntax tree
+   * is replaced and before the first reference is linked against it.
+   */
+  private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
+
   constructor(
     private readonly coreServices: Langium.LangiumCoreServices,
     private readonly packages: PackageResolver,
   ) {
     super(coreServices)
+    const forgetUseTargets = (): void => {
+      this.useTargets = new WeakMap()
+    }
+    const builder = coreServices.shared.workspace.DocumentBuilder
+    builder.onUpdate(forgetUseTargets)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetUseTargets)
   }
 
   /** getScope returns Tao values visible to a value reference. */
@@ -695,6 +715,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     useStatement: AST.UseStatement | AST.UsePackageStatement,
     currentPath?: string,
   ): AST.Declaration[] {
+    const resolved = this.useTargets.get(useStatement)
+    if (resolved !== undefined) {
+      return resolved
+    }
     const path = currentPath ?? AST.getDocument(useStatement).uri.path
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
@@ -704,6 +728,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       workspaceFiles: allFiles,
     })]
     AST.rememberUseTargets(useStatement, declarations)
+    this.useTargets.set(useStatement, declarations)
     return declarations
   }
 }
