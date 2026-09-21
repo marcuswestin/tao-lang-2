@@ -181,6 +181,17 @@ from the shared linked graph, the way `validateFiles` already scopes everything 
 identity. The editor has always linked on the union, so the first of these is a latent difference
 between the editor and `tao check` today, not one a union build would introduce.
 
+A third constraint is a language question before it is an engineering one. Of the grammar's 39
+cross-references, 37 are scoped by `ValueScopeProvider`; the other two — `ProjectDefaultApp.app`
+(`DefaultApp X` in a project declaration) and `ViewDeclaration.response` (a view's response type) —
+fall through to Langium's default scope, which offers every top-level declaration of every document
+the workspace holds, imports and visibility ignored. What they resolve to, and whether `tao check`
+reports them unresolved, therefore already depends on which files an entry happens to load, and
+already differs between the CLI and the editor. A union build would change those answers, so both
+need a scope of their own first. The rule each should follow is Ro's to set; the recommendation is
+that a response type obeys the file's ordinary visibility (declared here or reached by `use`), and
+that `DefaultApp` may name any app declared in the project.
+
 ### 5.4 Every command is a cold process, including the ones in a loop
 
 A one-file check costs 370ms wall and 0.73s of CPU before it has anything to say: Bun start, the
