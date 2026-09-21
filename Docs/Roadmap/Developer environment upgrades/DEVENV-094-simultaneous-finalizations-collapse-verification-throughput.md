@@ -30,8 +30,21 @@
 - **Dependencies:** `MachineLanes.ts` `fairAllocations` and the `WorkGraph` reservation path;
   builds on DEVENV-001 rather than replacing it.
 - **Acceptance:** With ten lanes requested at once, the median completion time of the first three is
-  within 1.5x of the uncontended median, and total wall time for all ten beats today's fair-share
-  behavior.
+  within 1.5x of the uncontended median, and no lane fails a gate it passes alone. `just
+  admission-experiment <checkout>…` measures exactly this and refuses to run on a machine that is not
+  quiet. The second clause replaces "total wall time for all ten beats today's fair-share behavior",
+  which can no longer be measured because fair share no longer exists to compare against — and which
+  measured the wrong thing anyway: the starved hang guards, not the seconds, are what made contention
+  expensive.
+- **Still unmeasured:** The change landed on 2026-09-21 and `ADMITTED_LANES = 2` has never been
+  measured. The constant was read off this entry's own buckets, which were recorded under fair share,
+  where every lane was simultaneously throttled to a fraction of the machine — and through per-node
+  durations since shown to be process-elapsed spans rather than work. Both halves of that evidence
+  have been replaced, so the number stands on nothing and the experiment above is what settles it.
+  Two known distortions to resolve alongside it, each with its own entry: an admitted seat is held by
+  registration rather than demand, so a lane blocked on the prepare lock idles half the admission
+  budget; and a queued node's first wait is charged to the lane rather than the machine, so
+  `summary.json` under-reports contention for exactly these runs.
 - **Note:** Carried an earlier `DEVENV-076` number that another branch reused while this entry
   existed only as a body in the index; renumbered rather than renumbering the merged file.
 - **Source:** 2026-09-17 merge-finalization performance investigation.
