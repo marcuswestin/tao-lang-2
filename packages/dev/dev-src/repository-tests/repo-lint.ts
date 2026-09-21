@@ -543,33 +543,28 @@ const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 const NODE_IMPORT_ALLOWLIST = [
   // `node:crypto` in the fenced verification runner, which moves to `Platform.sha256Hex` with it,
   // and other `node:` imports that follow them in the same files.
-  'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
-  'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
-  'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
-  'packages/dev/dev-src/studio/StudioCdp.ts:2',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:469',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:471',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:759',
-  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts:761',
-  'packages/dev/dev-src/studio/StudioNative.ts:6',
-  'packages/dev/dev-tests/studio-review.test.ts:3',
-  'packages/update-server/update-server-tests/update-server.test.ts:3',
+  'packages/dev/dev-src/repository-tests/GreenTree.ts',
+  'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
+  'packages/dev/dev-src/repository-tests/TestLedger.ts',
+  'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioElectrobunAppSource.ts',
+  'packages/dev/dev-src/studio/StudioNative.ts',
+  'packages/dev/dev-tests/studio-review.test.ts',
+  'packages/update-server/update-server-tests/update-server.test.ts',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
+  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
   // `node:net` port probes and socket connections.
-  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
-  'packages/generation/generation-live/apple-foundation-models.live.ts:3',
+  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts',
+  'packages/generation/generation-live/apple-foundation-models.live.ts',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts:607',
-  'packages/dev/dev-tests/repo-lint.test.ts:608',
-  'packages/dev/dev-tests/work-graph.test.ts:465',
-  'packages/dev/dev-tests/work-graph.test.ts:466',
+  'packages/dev/dev-tests/repo-lint.test.ts',
+  'packages/dev/dev-tests/work-graph.test.ts',
   // Stream classes a test constructs to stand in for a terminal.
-  'packages/tao-cli/cli-tests/compile-command.test.ts:3',
-  'packages/tao-cli/cli-tests/create-command.test.ts:4',
-  'packages/tao-cli/cli-tests/dev-command.test.ts:3',
-  'packages/tao-cli/cli-tests/test-cli-files.ts:3',
+  'packages/tao-cli/cli-tests/compile-command.test.ts',
+  'packages/tao-cli/cli-tests/create-command.test.ts',
+  'packages/tao-cli/cli-tests/dev-command.test.ts',
+  'packages/tao-cli/cli-tests/test-cli-files.ts',
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
   'packages/studio/studio-src/StudioClientAssets.ts:3',
   'packages/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
@@ -934,25 +929,48 @@ function conventionIssues(
   ].sort()
 }
 
+/**
+ * A site-keyed allowlist takes both shapes, and the shape is the claim being made.
+ *
+ * `path:line` blesses one occurrence, so a second direct use in the same file still fails. That
+ * precision costs a maintenance tax the line number cannot pay for everywhere: the number is a
+ * coordinate, not a fact about the code, and every edit above a blessed site silently invalidates
+ * it — adding tests thirty lines above two fixtures once broke both of their entries at once.
+ *
+ * A bare `path` blesses the file, which is the honest claim where the whole file is the exception:
+ * a test asserting on generated source, or a host-facing tool whose job is reaching the host. It
+ * still goes stale when the file stops matching at all, so the ratchet only ever tightens. Keep
+ * `path:line` where a new use in an already-listed file must fail — the packages whose code ships
+ * inside built apps — and use `path` elsewhere.
+ */
 function conventionSiteIssues(
   files: readonly SourceFile[],
   matches: readonly ConventionMatch[],
   allowlist: readonly string[],
   staleDetail: string,
 ): string[] {
-  const allowed = new Set(allowlist)
+  const allowedSites = new Set(allowlist.filter(entry => sitePath(entry) !== entry))
+  const allowedFiles = new Set(allowlist.filter(entry => sitePath(entry) === entry))
   const scanned = new Set(files.map(file => file.path))
   const matchSites = new Set(matches.map(match => `${match.path}:${match.line}`))
+  const matchedPaths = new Set(matches.map(match => match.path))
   return [
-    ...matches.filter(match => !allowed.has(`${match.path}:${match.line}`)).map(issueLine),
+    ...matches
+      .filter(match => !allowedFiles.has(match.path) && !allowedSites.has(`${match.path}:${match.line}`))
+      .map(issueLine),
     ...allowlist
-      .filter(site => {
-        const separator = site.lastIndexOf(':')
-        const path = separator < 0 ? site : site.slice(0, separator)
-        return scanned.has(path) && !matchSites.has(site)
+      .filter(entry => {
+        const path = sitePath(entry)
+        return scanned.has(path) && (path === entry ? !matchedPaths.has(path) : !matchSites.has(entry))
       })
-      .map(site => `${site} ${staleDetail}`),
+      .map(entry => `${entry} ${staleDetail}`),
   ].sort()
+}
+
+/** sitePath returns an allowlist entry's file, which is the entry itself when it blesses the whole file. */
+function sitePath(entry: string): string {
+  const separator = entry.lastIndexOf(':')
+  return separator < 0 || !/^\d+$/u.test(entry.slice(separator + 1)) ? entry : entry.slice(0, separator)
 }
 
 function conventionMatches(files: readonly SourceFile[], pattern: RegExp, detail: string): ConventionMatch[] {

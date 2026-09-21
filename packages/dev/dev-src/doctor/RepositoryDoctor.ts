@@ -124,6 +124,10 @@ export type DoctorFacts = {
   nodeModulesPresent: boolean
   nodeVersion?: string
   ports: readonly PortOccupancy[]
+  /** The working directory this process was invoked under, before symlinks were resolved. */
+  processGivenPath: string
+  /** That working directory with symlinks resolved; equal to the above unless one was traversed. */
+  processRealPath: string
   repositoryRoot: string
   satisfies: (version: string, range: string) => boolean
   watchmanVersion?: string
@@ -134,6 +138,7 @@ export type DoctorFacts = {
 export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
   return [
     worktreeCheck(facts),
+    worktreeRealPathCheck(facts),
     devenvProfileCheck(facts),
     direnvCheck(facts),
     nodeCheck(facts),
@@ -148,6 +153,33 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     ...artifactRootChecks(facts),
     ...portChecks(facts),
   ]
+}
+
+/**
+ * A worktree reached through a symlink is a checkout TypeScript cannot typecheck.
+ *
+ * `/tmp` is a symlink to `/private/tmp` on macOS, and the agent sandbox sets `$TMPDIR` to the
+ * symlink form, so a worktree created there is reached by two paths at once. TypeScript resolves
+ * imports through both and treats the results as different declarations, which surfaces as types
+ * that are not assignable to themselves — `Type 'AdvanceStep' is not assignable to type
+ * 'AdvanceStep'` — with nothing in the message naming a path as the cause. This names it.
+ *
+ * The rule is the symlink, not the location: worktrees under `/private/tmp` are an established
+ * convention for throwaway checkouts and are unaffected, and the same failure reaches a symlinked
+ * home directory or a network mount that resolves elsewhere.
+ */
+function worktreeRealPathCheck(facts: DoctorFacts): DoctorCheck {
+  if (facts.processGivenPath === facts.processRealPath) {
+    return { detail: facts.processGivenPath, name: 'worktree path', status: 'pass' }
+  }
+  return {
+    detail: `${facts.processGivenPath} resolves to ${facts.processRealPath}`,
+    name: 'worktree path',
+    remediation: 'This checkout is reached through a symlink, so TypeScript sees two identities for every file and '
+      + 'typecheck fails with types that are not assignable to themselves. Move it to its real path: '
+      + `git worktree move ${facts.processGivenPath} ${facts.processRealPath}`,
+    status: 'fail',
+  }
 }
 
 /** doctorReport wraps the checks in the versioned envelope, with the worst status winning. */
@@ -551,8 +583,14 @@ export async function readDoctorFacts(
     readFingerprintFacts(repositoryRoot),
     readGitHubTransport(repositoryRoot),
   ])
-  const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
+  // The working directory reported by the runtime is already symlink-resolved, so it can never
+  // reveal one; the shell's `PWD` keeps the logical path the command was actually invoked
+  // through, which is the path that leaks into tool arguments and then into TypeScript's module
+  // identities.
+  const processGivenPath = Platform.runtimeProcess.env['PWD'] ?? Platform.runtimeProcess.cwd()
+  const [canonicalRepositoryRoot, processRealPath, laneInspection] = await Promise.all([
     canonicalPath(repositoryRoot),
+    canonicalPath(processGivenPath),
     MachineLanes.inspectLanes(options.machineRegistryRoot, { prune: false }),
   ])
   const canonicalLanes = await Promise.all(laneInspection.lanes.map(async lane => ({
@@ -584,6 +622,8 @@ export async function readDoctorFacts(
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,
     ports,
+    processGivenPath,
+    processRealPath,
     repositoryRoot: canonicalRepositoryRoot,
     satisfies: Platform.semverSatisfies,
     watchmanHealthy: watchman.healthy,

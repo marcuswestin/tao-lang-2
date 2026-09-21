@@ -370,6 +370,11 @@ land-unlock *ARGS:
 board *ARGS:
     ./dev board {{ ARGS }}
 
+# Report whether a branch landed, by the archive ref a landing pushes rather than by command output
+[group('Dev')]
+landed *ARGS:
+    ./dev landed {{ ARGS }}
+
 # Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
 [group('Dev')]
 reclaim *ARGS:

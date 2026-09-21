@@ -14,7 +14,7 @@ import { FinalizeCommand, LandCommand } from './repository-tests/Finalize'
 import { runGates } from './repository-tests/GateRunner'
 import { GreenTree } from './repository-tests/GreenTree'
 import { LandingLock } from './repository-tests/LandingLock'
-import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
+import { landedReport, MergeWithMainCommand } from './repository-tests/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
 import { WorkReporter } from './repository-tests/WorkReporter'
@@ -462,6 +462,21 @@ await runWithCommands(commands => {
     .option('--json', 'Print a versioned structured report instead of the table.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await BoardCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('landed [branch]')
+    .description(
+      "Report whether a branch landed, by the archive ref the landing pushes; defaults to this worktree's branch.",
+    )
+    .action(async (branch?: string) => {
+      const report = await landedReport(branch)
+      HCI.writeLine(
+        report.landed
+          ? `${report.branch} landed; archived as ${report.archive}.`
+          : `${report.branch} has not landed: no ${report.archive} on origin as of this fetch.`,
+      )
+      Platform.runtimeProcess.setExitCode(report.landed ? 0 : 1)
     })
 
   commands

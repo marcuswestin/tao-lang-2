@@ -233,6 +233,59 @@ function archiveName(branch: string): string {
   return `merged/${branch.slice(prefix.length)}`
 }
 
+/**
+ * landedReport answers one question an agent otherwise has to infer: did this branch land?
+ *
+ * Inference is what goes wrong. A landing runs for minutes through a wrapper, and every signal
+ * short of the repository itself is ambiguous — a stopped wrapper, a task marked failed because the
+ * shell it was piped into exited non-zero, a `summary.json` read while the lane was still writing
+ * it. An agent that guesses re-lands work already on `main`, which is how one branch was re-landed
+ * twice in a single session.
+ *
+ * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
+ * landing and at no other time, so the ref exists if and only if the branch landed. This reads the
+ * local remote-tracking ref after a fetch rather than asking the remote directly: `git ls-remote`
+ * authenticates, and credential paths are denied inside the agent sandbox, so the question an agent
+ * most needs to ask would be answerable only outside it.
+ */
+export async function landedReport(
+  branch?: string,
+  dependencies: MergeWithMainDependencies = defaultDependencies,
+  repositoryRoot?: string,
+): Promise<{ archive: string; branch: string; landed: boolean }> {
+  const root = repositoryRoot ?? Repo.getRoot()
+  const named = branch ?? await currentBranch(dependencies, root)
+  if (named === undefined) {
+    Errors.throwUserInput(
+      'This worktree is on a detached HEAD, so there is no branch to ask about. Name one: `./agent landed feat/<name>`.',
+    )
+  }
+  const archive = archiveName(named)
+  // A fetch keeps the answer current; a remote that cannot be reached still leaves the last known
+  // refs readable, so the check degrades to "as of the last fetch" rather than failing outright.
+  await dependencies.run('git', { args: ['fetch', 'origin', '--quiet'], cwd: root, stdio: 'pipe' })
+  const result = await dependencies.run('git', {
+    args: ['for-each-ref', '--format=%(refname:short)', `refs/remotes/origin/${archive}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return { archive, branch: named, landed: (result.stdout ?? '').trim().length > 0 }
+}
+
+/** currentBranch names this worktree's branch, or undefined on a detached HEAD. */
+async function currentBranch(
+  dependencies: MergeWithMainDependencies,
+  root: string,
+): Promise<string | undefined> {
+  const result = await dependencies.run('git', {
+    args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  const name = (result.stdout ?? '').trim()
+  return name.length > 0 ? name : undefined
+}
+
 /** Validate the human-authored part of a squash commit message. */
 export function validateMergeMessage(source: string): string {
   const message = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n').replace(/\n+$/u, '')

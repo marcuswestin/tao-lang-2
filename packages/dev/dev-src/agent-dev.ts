@@ -17,6 +17,10 @@ const JUST_COMMANDS = [
   // AGENTS.md rather than dropping to `just`.
   'land-lock',
   'land-unlock',
+  // Whether a branch landed is a fact in the repository, not an inference from a command's output:
+  // a wrapper that was stopped, a task marked failed by the shell it piped into, or a summary read
+  // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
+  'landed',
   'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
