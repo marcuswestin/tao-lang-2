@@ -181,16 +181,23 @@ from the shared linked graph, the way `validateFiles` already scopes everything 
 identity. The editor has always linked on the union, so the first of these is a latent difference
 between the editor and `tao check` today, not one a union build would introduce.
 
-A third constraint is a language question before it is an engineering one. Of the grammar's 39
-cross-references, 37 are scoped by `ValueScopeProvider`; the other two — `ProjectDefaultApp.app`
-(`DefaultApp X` in a project declaration) and `ViewDeclaration.response` (a view's response type) —
-fall through to Langium's default scope, which offers every top-level declaration of every document
-the workspace holds, imports and visibility ignored. What they resolve to, and whether `tao check`
-reports them unresolved, therefore already depends on which files an entry happens to load, and
-already differs between the CLI and the editor. A union build would change those answers, so both
-need a scope of their own first. The rule each should follow is Ro's to set; the recommendation is
-that a response type obeys the file's ordinary visibility (declared here or reached by `use`), and
-that `DefaultApp` may name any app declared in the project.
+A third constraint was a language question before it was an engineering one. Three of the grammar's
+cross-references — `ProjectDefaultApp.app` (`DefaultApp X` in a project declaration),
+`ViewDeclaration.response` (a responding view's type), and `TestDeclaration.dependencies` (what a
+test says it exercises) — fell through to Langium's default scope, which offers every top-level
+declaration of every document the workspace holds, imports and visibility ignored. What they resolved
+to, and whether `tao check` reported them unresolved, therefore depended on which files an entry
+happened to load, and differed between the CLI and the editor; a union build would have changed
+those answers. A textual audit of the grammar found the first two, and logging the fall-through
+during a whole-repository check found the third, which is the method to trust.
+
+**Scoped since.** `DefaultApp` follows the rule `Decisions.md` already states — one app declaration
+from this project, wherever in the project it is declared, test sidecars excluded because they are
+loaded only when they are the file being checked. A response type and a test's dependencies follow
+ordinary visibility, declared in the file or reached by `use`, as every other reference does. The
+provider's fall-through now returns an empty scope, so a reference the grammar gains without a rule
+resolves to nothing and says so. The whole repository checks clean under all three rules, and each
+has a test that loads the declaration it must not find and fails when the rule is removed.
 
 ### 5.4 Every command is a cold process, including the ones in a loop
 
