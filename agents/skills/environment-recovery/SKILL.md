@@ -6,10 +6,9 @@ description: >-
 
 # Environment Recovery
 
-Every failure here is the toolchain, not the branch. Read what the failing command printed
-first: `./agent` and `./agent doctor` name the denied operation and the recovery for the cases
-below, and following their output is faster and more current than this file. Come here when the
-output is not enough, or when you need the reasoning behind it.
+Every failure here is the toolchain, not the branch; root `AGENTS.md` covers reading a failing
+command's own output first. Come here when that is not enough, or when you need the reasoning
+behind it.
 
 ## The worktree's own path
 
