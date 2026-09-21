@@ -28,7 +28,14 @@ import { TestLedger } from './TestLedger'
 import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
 import { TestShards } from './TestShards'
-import { type WorkCommand, WorkGraph, type WorkOutcome, type WorkRunContext, type WorkState } from './WorkGraph'
+import {
+  type WorkCommand,
+  type WorkEvent,
+  WorkGraph,
+  type WorkOutcome,
+  type WorkRunContext,
+  type WorkState,
+} from './WorkGraph'
 import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkReporter'
 import { WorkSchedule } from './WorkSchedule'
 
@@ -93,6 +100,8 @@ export type RunGatesOptions = {
    */
   machineLoadAverage?: () => number
   now?: () => number
+  /** Lets a caller observe scheduling events as they happen, alongside whatever `outputMode` reports. */
+  onEvent?: (event: WorkEvent) => void
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
   /** Injected by tests; defaults to the machine-wide lane registry. */
@@ -303,6 +312,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       expectedMs,
       jobs: machineLane.ceiling,
       onEvent: event => {
+        options.onEvent?.(event)
         liveArtifacts.handle(event)
         if (event.kind === 'complete' && prepareNames.has(event.state.name)) {
           finishedPrepare.add(event.state.name)

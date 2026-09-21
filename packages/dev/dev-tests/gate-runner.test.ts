@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
 import type { GeneratedEvidence, GeneratedOutput } from '../dev-src/repository-tests/GeneratedEvidence'
 import { GreenTree } from '../dev-src/repository-tests/GreenTree'
@@ -456,11 +456,17 @@ Describe('gate runner under a shared machine', () => {
     const root = await mkTestDir('tao-gate-runner-')
     const held = Deferred()
     const started: string[] = []
+    let declined = false
 
     const finished = runGates({
       gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
       logRoot: FS.resolvePath('logs', root),
       machineCpuCount: 4,
+      onEvent: event => {
+        if (event.kind === 'waiting') {
+          declined = true
+        }
+      },
       registryRoot,
       repositoryRoot: root,
       runGate: async (name, logPath) => {
@@ -471,7 +477,15 @@ Describe('gate runner under a shared machine', () => {
       },
     })
 
-    await settle(20)
+    // `settle` counted event-loop turns, and a fixed wall-clock sleep is still a guess about how long
+    // the prologue (timings load, lease, `MachineLanes.acquire` registration) and the first admission
+    // attempt take under load. `WorkGraph` emits a `waiting` event (`WorkGraph.ts:444`) the moment an
+    // admission attempt is declined, and the only pending work here is this lane's own three gates, so
+    // that event is this lane's own first declined attempt — an observed fact instead of a guess about
+    // timing.
+    await until(() => declined, {
+      description: 'this run to report its first declined admission attempt',
+    })
     Expect(started).toEqual([])
 
     // One lane ahead ends. The queue drains in order, and this lane is admitted whole: every gate
@@ -490,6 +504,15 @@ Describe('gate runner under a shared machine', () => {
     Expect(summary.status).toBe('passed')
     // The wait itself is reported rather than swallowed; what the broker said about it — the
     // position and the lanes ahead — is asserted where the broker forms it, in `machine-lanes`.
+    // Deterministic rather than load-sensitive: the `waiting` event observed above proves this lane's
+    // first `tryAcquire` already found itself unadmitted and fell into its own `QUEUED_POLL_MS` sleep
+    // before either neighbour record was touched, so the graph's next scan is guaranteed to credit
+    // that whole slice as a wait — comfortably over the 250ms noise floor
+    // (`RunSummary.reportableWaits`, `WorkSchedule.WAIT_NOISE_MS`) regardless of host load. (It lands
+    // under the `capacity` kind rather than `machine`: `WorkGraph.blockingReason` only reports
+    // `machine` once a node's `reason` was already set by an earlier admission attempt, and this is
+    // credited from the first one — kind is incidental here, so the assertion checks only that a wait
+    // was recorded.)
     Expect(summary.gates.flatMap(gate => gate.waits ?? []).length).toBeGreaterThan(0)
     await FS.remove(root)
     await FS.remove(registryRoot)
