@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from '../TR-create-element'
 import { requireReactNativeRuntime } from '../TR-react-native'
 import { Dev } from './TR-dev'
 
@@ -112,7 +113,7 @@ export function DevMenu(): React.JSX.Element | null {
     return null
   }
 
-  const menuButton = React.createElement(
+  const menuButton = createElement(
     RN.Pressable,
     {
       accessibilityLabel: 'Tao dev menu',
@@ -141,31 +142,31 @@ export function DevMenu(): React.JSX.Element | null {
       },
       style: [menuButtonStyle, position],
     },
-    React.createElement(RN.Text, { style: menuButtonTextStyle }, 'Τ'),
+    createElement(RN.Text, { style: menuButtonTextStyle }, 'Τ'),
   )
 
   if (!overlayOpen) {
     return menuButton
   }
 
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
-    React.createElement(
+    createElement(
       RN.Pressable,
       {
         accessibilityLabel: 'Tao dev overlay',
         onPress: () => setOverlayOpen(false),
         style: overlayStyle,
       },
-      React.createElement(
+      createElement(
         RN.Pressable,
         {
           onPress: (event: any) => event?.stopPropagation?.(),
           style: overlayPanelStyle,
         },
-        React.createElement(RN.Text, { style: overlayTitleStyle }, 'Tao Dev'),
-        React.createElement(
+        createElement(RN.Text, { style: overlayTitleStyle }, 'Tao Dev'),
+        createElement(
           RN.Pressable,
           {
             accessibilityLabel: 'Toggle layout bounds',
@@ -176,7 +177,7 @@ export function DevMenu(): React.JSX.Element | null {
             },
             style: [toggleBaseStyle, mode.layoutBounds ? toggleOnStyle : toggleOffStyle],
           },
-          React.createElement(RN.Text, { style: toggleTextStyle }, `Layout bounds ${mode.layoutBounds ? 'On' : 'Off'}`),
+          createElement(RN.Text, { style: toggleTextStyle }, `Layout bounds ${mode.layoutBounds ? 'On' : 'Off'}`),
         ),
       ),
     ),

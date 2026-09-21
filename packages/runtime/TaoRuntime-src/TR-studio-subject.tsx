@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import type { TaoAppDefinition, TaoNavigationArguments } from './TR-navigation'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
@@ -54,5 +55,5 @@ export function StudioSubjectHost(props: {
       })
     }
   }, [app])
-  return React.createElement(NavigationAppHost, { app })
+  return createElement(NavigationAppHost, { app })
 }

@@ -49,6 +49,11 @@ const boundingBoxStyleProperties = new Set([
   'shadowRadius',
 ])
 
+/** Style objects this module appended for the layout-bounds overlay, so a forwarded style that carries one
+ * inward (e.g. a component spreading `{...props}` into an inner `createElement` call) is never mistaken for
+ * an author-written bounding-box style that should suppress the overlay. */
+const injectedDebugStyles = new WeakSet<object>()
+
 let devMode = defaultDevMode()
 /**
  * Whether a host above the app already offers the dev options, so the floating menu stays away.
@@ -185,6 +190,9 @@ function styleLayoutBounds(color: string, platformOS?: string): TaoDebugStyle {
 }
 
 function processCreateReactElementArgs(args: any[], options: TaoCreateElementDevOptions = {}): void {
+  if (args[0] === React.Fragment) {
+    return
+  }
   if (!isLayoutBoundsEnabled()) {
     return
   }
@@ -195,7 +203,9 @@ function processCreateReactElementArgs(args: any[], options: TaoCreateElementDev
     return
   }
 
-  props['style'] = appendStyle(props['style'], styleLayoutBounds(layoutBoundsColorForArgs(args), options.platformOS))
+  const debugStyle = styleLayoutBounds(layoutBoundsColorForArgs(args), options.platformOS)
+  injectedDebugStyles.add(debugStyle)
+  props['style'] = appendStyle(props['style'], debugStyle)
   args[1] = props
 }
 
@@ -205,6 +215,9 @@ function hasBoundingBoxAppearance(style: TaoDebugStyleInput): boolean {
   }
   if (Array.isArray(style)) {
     return style.some(hasBoundingBoxAppearance)
+  }
+  if (injectedDebugStyles.has(style)) {
+    return false
   }
   return Object.entries(style).some(([property, value]) => {
     return value !== undefined

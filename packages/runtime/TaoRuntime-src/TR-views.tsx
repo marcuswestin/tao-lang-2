@@ -2,6 +2,7 @@ import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { accessibilityStateProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   interactionMeasurements,
@@ -96,7 +97,7 @@ const scrollContentLayoutHeads = new Set<TaoLayoutEntry[0]>(['content', 'gap', '
 /** Views declares runtime-backed primitive Tao stdlib view implementations. */
 export const Views = {
   View(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       kind: 'View',
       providesParentDirection: true,
       runtimeProps,
@@ -105,7 +106,7 @@ export const Views = {
   },
 
   Text(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       kind: 'Text',
       providesParentDirection: false,
       runtimeProps,
@@ -114,7 +115,7 @@ export const Views = {
   },
 
   Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       defaultStyle: props.defaultStyle,
       kind: 'Pressable',
       nativePropOverrides: {
@@ -129,7 +130,7 @@ export const Views = {
   },
 
   TextInput(props: TaoTextInputProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoTextInput, { props, runtimeProps })
+    return createElement(TaoTextInput, { props, runtimeProps })
   },
 
   Image(props: TaoImageProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
@@ -144,7 +145,7 @@ export const Views = {
         accessibilityRole: 'image',
         accessible: true,
       }
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       kind: 'Image',
       nativePropOverrides: {
         ...accessibilityProps,
@@ -158,23 +159,23 @@ export const Views = {
   },
 
   Checkbox(props: TaoCheckboxProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoCheckbox, { props, runtimeProps })
+    return createElement(TaoCheckbox, { props, runtimeProps })
   },
 
   ScrollView(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoScrollView, { props, runtimeProps })
+    return createElement(TaoScrollView, { props, runtimeProps })
   },
 
   Panes(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPanes, { props, runtimeProps })
+    return createElement(TaoPanes, { props, runtimeProps })
   },
 
   Placeholder(props: TaoPlaceholderProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPlaceholder, { props, runtimeProps })
+    return createElement(TaoPlaceholder, { props, runtimeProps })
   },
 
   Spacer(props: TaoViewProps = {}, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       kind: 'View',
       nativePropOverrides: { accessible: false },
       providesParentDirection: false,
@@ -185,7 +186,7 @@ export const Views = {
 
   Spinner(props: TaoSpinnerProps = {}, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     const visible = props.visible !== false
-    return React.createElement(TaoPrimitiveElement, {
+    return createElement(TaoPrimitiveElement, {
       kind: 'Spinner',
       nativePropOverrides: {
         accessibilityLabel: props.label ?? 'Loading',
@@ -202,7 +203,7 @@ export const Views = {
   },
 
   Progress(props: TaoProgressProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    return React.createElement(TaoProgress, { props, runtimeProps })
+    return createElement(TaoProgress, { props, runtimeProps })
   },
 } as const
 
@@ -216,7 +217,7 @@ function TaoCheckbox({ props, runtimeProps }: {
   const occurrence = interactionOccurrence(props, runtimeProps)
   return occurrence === undefined
     ? renderTaoCheckbox(props, runtime, merged)
-    : React.createElement(TaoInteractiveCheckbox, { merged, occurrence, props, runtime })
+    : createElement(TaoInteractiveCheckbox, { merged, occurrence, props, runtime })
 }
 
 function TaoInteractiveCheckbox({ merged, occurrence, props, runtime }: {
@@ -241,7 +242,7 @@ function renderTaoCheckbox(
   host?: React.RefObject<TaoAccessibilityHost | null>,
 ): React.ReactElement {
   const disabled = props.disabled === true
-  const checkbox = createReactElement(runtime, runtime.Switch, {
+  const checkbox = createElement(runtime.Switch, {
     accessibilityElementsHidden: true,
     accessible: false,
     disabled,
@@ -249,15 +250,13 @@ function renderTaoCheckbox(
     style: { pointerEvents: 'none' },
     value: props.value,
   })
-  const label = createReactElement(
-    runtime,
+  const label = createElement(
     runtime.Text,
     { accessible: false, style: textStyle(merged.props?.style) },
     props.label,
   )
   const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.Pressable,
     {
       ...wrapperProps,
@@ -276,7 +275,7 @@ function renderTaoCheckbox(
         { alignItems: 'center', flexDirection: 'row', gap: 8, opacity: disabled ? 0.55 : 1 },
       ],
     },
-    React.createElement(React.Fragment, null, checkbox, label),
+    createElement(React.Fragment, null, checkbox, label),
   )
 }
 
@@ -305,8 +304,7 @@ function TaoScrollView({ props, runtimeProps }: {
     mergedContentContainerStyle,
   )
   const outlinedChildren = outlineChildren(children, interactionOccurrence(props, runtimeProps))
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.ScrollView,
     {
       ...scrollViewProps,
@@ -354,8 +352,7 @@ function TaoPanes({ props, runtimeProps }: {
   const children = ParentDirectionContext.childrenForLayoutParent(merged.children, nativeProps['style'])
   const outlinedChildren = outlineChildren(children, interactionOccurrence(props, runtimeProps))
 
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.View,
     {
       ...viewProps,
@@ -420,7 +417,7 @@ function TaoProgress({ props, runtimeProps }: {
   const themedStyle = merged.props?.style
   const wrapperProps = TaoPropsControls.nativePropsWithStyle(withoutVisualStyle(merged))
   const value = normalizedProgress(props.value)
-  const fill = createReactElement(runtime, runtime.View, {
+  const fill = createElement(runtime.View, {
     accessible: false,
     style: {
       backgroundColor: themedStyle?.['color'] ?? '#2f6b4f',
@@ -428,8 +425,7 @@ function TaoProgress({ props, runtimeProps }: {
       width: `${value * 100}%`,
     },
   })
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.View,
     {
       ...wrapperProps,
@@ -456,21 +452,20 @@ function TaoPlaceholder({ props, runtimeProps }: {
   const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
   const development = Dev.isDevelopmentBuild()
   const children = development
-    ? React.createElement(
+    ? createElement(
       React.Fragment,
       null,
-      createReactElement(runtime, runtime.Text, {
+      createElement(runtime.Text, {
         accessible: false,
         style: placeholderHatchStyle,
       }, placeholderHatch(wrapperProps['style'])),
-      createReactElement(runtime, runtime.Text, {
+      createElement(runtime.Text, {
         accessible: false,
         style: placeholderLabelStyle,
       }, props.label),
     )
     : undefined
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.View,
     {
       ...wrapperProps,
@@ -497,7 +492,7 @@ function TaoTextInput({ props, runtimeProps }: {
   const occurrence = interactionOccurrence(props, runtimeProps)
   return occurrence === undefined
     ? renderTaoTextInput(props, runtime, merged)
-    : React.createElement(TaoInteractiveTextInput, { merged, occurrence, props, runtime })
+    : createElement(TaoInteractiveTextInput, { merged, occurrence, props, runtime })
 }
 
 function TaoInteractiveTextInput({ merged, occurrence, props, runtime }: {
@@ -547,23 +542,20 @@ function renderTaoTextInput(
     testID: props.id || undefined,
     value: props.value,
   }
-  const input = createReactElement(
-    runtime,
+  const input = createElement(
     runtime.TextInput,
     occurrence?.control === undefined
       ? inputNativeProps
       : interactionMeasurements.bind(occurrence.control, inputNativeProps),
   )
-  const label = createReactElement(
-    runtime,
+  const label = createElement(
     runtime.Text,
     { accessible: false, style: [textInputLabelStyle, textStyle(themedStyle)] },
     props.label,
   )
-  const children = React.createElement(React.Fragment, null, label, input)
+  const children = createElement(React.Fragment, null, label, input)
   const wrapperProps = TaoPropsControls.nativePropsWithStyle(withoutVisualStyle(merged))
-  return createReactElement(
-    runtime,
+  return createElement(
     runtime.View,
     {
       ...wrapperProps,
@@ -578,12 +570,12 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props.viewProps, props.runtimeProps, parentDirection)
   if (props.semanticIdentity !== undefined) {
-    return React.createElement(TaoSemanticPrimitiveElement, { merged, props, runtime })
+    return createElement(TaoSemanticPrimitiveElement, { merged, props, runtime })
   }
   const occurrence = interactionOccurrence(props.viewProps, props.runtimeProps)
   return occurrence === undefined
     ? renderTaoPrimitiveElement(props, runtime, merged)
-    : React.createElement(TaoInteractivePrimitiveElement, { merged, occurrence, props, runtime })
+    : createElement(TaoInteractivePrimitiveElement, { merged, occurrence, props, runtime })
 }
 
 function TaoInteractivePrimitiveElement({ merged, occurrence, props, runtime }: {
@@ -663,8 +655,7 @@ function renderTaoPrimitiveElement(
     ? ParentDirectionContext.childrenForLayoutParent(elementChildren, elementProps['style'])
     : elementChildren
   const outlinedChildren = outlineChildren(providedChildren, occurrence)
-  return createReactElement(
-    runtime,
+  return createElement(
     nativeComponent(runtime, props.kind),
     elementProps,
     outlinedChildren,
@@ -694,7 +685,7 @@ function outlineChildren(
 ): React.ReactNode {
   return occurrence?.region === undefined
     ? children
-    : React.createElement(OutlineScope, { identity: occurrence.region }, children)
+    : createElement(OutlineScope, { identity: occurrence.region }, children)
 }
 
 function interactionOccurrence(
@@ -778,8 +769,7 @@ function nativeChildren(
 ): React.ReactNode {
   return props.pressableTitle === undefined
     ? children
-    : createReactElement(
-      runtime,
+    : createElement(
       runtime.Text,
       { style: [textStyle(props.defaultStyle), textStyle(style)] },
       props.pressableTitle,
@@ -886,17 +876,4 @@ function styleProperty(style: unknown, property: string): unknown {
     return undefined
   }
   return typeof style === 'object' && style !== null ? (style as Record<string, unknown>)[property] : undefined
-}
-
-function createReactElement(
-  runtime: ReactNativeRuntime,
-  component: React.ElementType,
-  elementProps: Record<string, unknown>,
-  children?: React.ReactNode,
-): React.ReactElement {
-  const args = [component, elementProps, children]
-  Dev.processCreateReactElementArgs(args, {
-    platformOS: runtime.Platform?.OS,
-  })
-  return React.createElement.apply(React, args as any)
 }

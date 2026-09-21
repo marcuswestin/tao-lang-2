@@ -1,4 +1,5 @@
 import React from 'react'
+import { createElement } from './TR-create-element'
 import { UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
@@ -112,7 +113,7 @@ function SchemeProvider(props: TaoSchemeProviderProps): React.JSX.Element {
       },
       version: schemeCaptureVersion,
     }), [snapshot])
-  return React.createElement(SchemeContext.Provider, { value: snapshot }, props.children)
+  return createElement(SchemeContext.Provider, { value: snapshot }, props.children)
 }
 
 function useScheme(): TaoSchemeSnapshot {

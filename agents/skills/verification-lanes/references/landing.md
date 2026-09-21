@@ -89,12 +89,9 @@ author attribution; the command appends the generated appendix itself.
 
 ## Reading a red lane
 
-Read `.artifacts/logs/<lane>/latest/summary.json` first. A separately recorded retry, not
-concatenated output, owns the final classification: a node failing again on its isolated retry is
-`repository`, not `machine-contention`. Others name their cause: `native-host-busy`,
-`hutch-install-timeout`, `electrobun-prepare-timeout`, `native-probe-timeout`, `native-runtime-exit`,
-`test-assertion`, `environment-setup`, `optional-tooling`, `sandbox-restriction`,
-`user-interruption`.
+Read `.artifacts/logs/<lane>/latest/summary.json` first — it names each node's failure cause. A
+separately recorded retry, not concatenated output, owns the final classification: a node failing
+again on its isolated retry is `repository`, not `machine-contention`.
 
 Run `verify-full-sandbox` immediately before a merge from a managed shell — it runs the full gate
 membership except the host-only browser and native UI gates, and never proves those passed. Run

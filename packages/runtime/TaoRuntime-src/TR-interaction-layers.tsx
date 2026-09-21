@@ -1,5 +1,6 @@
 import React from 'react'
 import { accessibilityStateProps } from './TR-accessibility'
+import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
 import { runtimeInteractionValue } from './TR-interaction-attention'
 import {
@@ -140,7 +141,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       ? () => interactionAttention.choosePendingTarget(row.identity)
       : () => interactionAttention.choosePendingSearchResult(searchResult.value)
     return (
-      React.createElement(
+      createElement(
         pending === undefined ? runtime.View : runtime.Pressable,
         {
           accessibilityLabel: rowText(attention.mode, row),
@@ -161,7 +162,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
           ],
           testID: `tao-interaction-row:${row.identity}`,
         },
-        React.createElement(
+        createElement(
           runtime.Text,
           { accessible: false },
           rowText(attention.mode, row),
@@ -172,7 +173,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   const pendingControls = attention.mode !== 'verb-pending' || attention.verbPending === undefined
     ? []
     : pendingSurfaceControls(runtime, attention.verbPending)
-  return React.createElement(
+  return createElement(
     runtime.View,
     {
       accessibilityElementsHidden: hidden,
@@ -189,10 +190,10 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     },
     hidden
       ? null
-      : React.createElement(
+      : createElement(
         React.Fragment,
         null,
-        React.createElement(
+        createElement(
           runtime.View,
           {
             accessible: false,
@@ -204,7 +205,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
               ? [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview'), interactiveSurfaceStyle]
               : [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
           },
-          React.createElement(runtime.Text, {
+          createElement(runtime.Text, {
             accessibilityLabel: heading,
             accessibilityRole: 'header',
             style: headingStyle,
@@ -245,10 +246,10 @@ function pendingSurfaceControls(
   pending: NonNullable<ReturnType<typeof interactionAttention.read>['verbPending']>,
 ): React.ReactElement[] {
   if (pending.request === 'input') {
-    return [React.createElement(PendingScalarInput, { key: 'pending-input', pending, runtime })]
+    return [createElement(PendingScalarInput, { key: 'pending-input', pending, runtime })]
   }
   if (pending.request === 'targets') {
-    return [React.createElement(
+    return [createElement(
       runtime.Pressable,
       {
         accessibilityLabel: `Search stores for ${pending.type}`,
@@ -258,7 +259,7 @@ function pendingSurfaceControls(
         style: pendingControlStyle,
         testID: 'tao-interaction-pending-search',
       },
-      React.createElement(runtime.Text, { accessible: false }, `Search all ${pending.type}`),
+      createElement(runtime.Text, { accessible: false }, `Search all ${pending.type}`),
     )]
   }
   return []
@@ -276,7 +277,7 @@ function PendingScalarInput({ pending, runtime }: {
       interactionAttention.providePendingValue(runtimeInteractionValue(scalar))
     }
   }
-  return React.createElement(runtime.TextInput, {
+  return createElement(runtime.TextInput, {
     accessibilityLabel: `${pending.slot} for ${pending.label}`,
     autoFocus: true,
     onChangeText: setValue,

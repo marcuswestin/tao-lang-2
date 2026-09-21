@@ -1,6 +1,7 @@
 import React from 'react'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { createElement } from './TR-create-element'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   type TaoInteractionOccurrence,
@@ -44,14 +45,14 @@ export function NativeStackSurface(props: {
 }): React.ReactNode {
   const module = nativeNavigationModule()
   if (!module?.ScreenStack || !module.ScreenStackItem) {
-    return React.createElement(BasicStackSurface, props)
+    return createElement(BasicStackSurface, props)
   }
   const ScreenStack = module.ScreenStack
-  return React.createElement(
+  return createElement(
     ScreenStack,
     { style: stackSurfaceStyle },
     props.entries.map((entry, index) =>
-      React.createElement(NativeStackItem, {
+      createElement(NativeStackItem, {
         active: index === props.entries.length - 1,
         bottomInset: props.bottomInset,
         chrome: props.chrome,
@@ -73,10 +74,10 @@ function NativeStackItem(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const observable = props.active && props.taoProps?.navigationHostActive !== false
-  return React.createElement(
+  return createElement(
     OutlineRegionScope,
     { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content', () => observable) },
-    React.createElement(NativeStackItemContent, { ...props, observable }),
+    createElement(NativeStackItemContent, { ...props, observable }),
   ) as React.JSX.Element
 }
 
@@ -114,20 +115,20 @@ function NativeStackItemContent(props: {
     ? undefined
     : { capabilities: backCapabilities, control: backIdentity, scope: backIdentity }
   const activateBack = InteractionControls.Activate(backOccurrence, () => props.navigation.back())
-  return React.createElement(
+  return createElement(
     ScreenStackItem,
     {
       // ScreenStack owns native coverage. ScreenStackItem forbids decreasing a native-stack
       // screen from activityState 2 to 1 during push, so every retained item stays active here.
       activityState: 2,
-      children: React.createElement(
+      children: createElement(
         AppSurfaceFrame,
         { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
         renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
       ),
       headerConfig: {
         children: Right && header && props.observable && slots.toolbar.length > 0
-          ? React.createElement(Right, null, React.createElement(NativeToolbar, { commands: slots.toolbar }))
+          ? createElement(Right, null, createElement(NativeToolbar, { commands: slots.toolbar }))
           : null,
         hidden: !header,
         hideBackButton: !header || !props.observable,
@@ -166,12 +167,12 @@ export function NativeToolbar(props: { commands: readonly TaoNavigationCommand[]
     setExpanded(false)
   }
   const toggleOverflow = () => expanded ? closeOverflow() : setExpanded(true)
-  return React.createElement(
+  return createElement(
     React.Fragment,
     null,
-    ...direct.map(command => React.createElement(NavigationCommandButton, { command, key: command.identity })),
+    ...direct.map(command => createElement(NavigationCommandButton, { command, key: command.identity })),
     overflow.length > 0
-      ? React.createElement(NavigationCommandButton, {
+      ? createElement(NavigationCommandButton, {
         accessibilityState: { expanded },
         command: {
           enabled: true,
@@ -185,7 +186,7 @@ export function NativeToolbar(props: { commands: readonly TaoNavigationCommand[]
       })
       : null,
     expanded && overflow.length > 0
-      ? React.createElement(NativeOverflowMenu, {
+      ? createElement(NativeOverflowMenu, {
         commands: overflow,
         key: 'overflow',
         onClose: closeOverflow,
@@ -201,7 +202,7 @@ function NativeOverflowMenu(props: {
   const runtime = requireReactNativeRuntime()
   const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
   React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
-  const content = React.createElement(
+  const content = createElement(
     runtime.View,
     {
       accessibilityRole: 'menu',
@@ -210,7 +211,7 @@ function NativeOverflowMenu(props: {
       style: nativeMenuStyle,
     },
     ...props.commands.map(command =>
-      React.createElement(NavigationCommandButton, {
+      createElement(NavigationCommandButton, {
         command,
         hostRef: command === props.commands[0] ? firstHost : undefined,
         key: command.identity,
@@ -222,13 +223,13 @@ function NativeOverflowMenu(props: {
   if (!runtime.Modal) {
     return content
   }
-  return React.createElement(
+  return createElement(
     runtime.Modal,
     { animationType: 'fade', onRequestClose: props.onClose, transparent: true, visible: true },
-    React.createElement(
+    createElement(
       runtime.View,
       { style: nativeMenuPortalStyle },
-      React.createElement(runtime.Pressable, {
+      createElement(runtime.Pressable, {
         accessibilityLabel: 'Dismiss command menu',
         accessibilityRole: 'button',
         onPress: props.onClose,

@@ -230,3 +230,23 @@ Five implementers, one file set each, measured on net lines removed rather than 
   the classic transform while every consumer applies the automatic one, a dev hook behind
   `createReactElement` would stop firing, nine files including the `TR.ts` entry would be renamed,
   and the rewrite of about 280 call sites lands on the package with the most unlanded work.
+
+### One element-creation point and the third instruction trim
+
+- Ro decided against JSX in the hand-written runtime and for one chokepoint instead: `createElement` in
+  `TR-create-element.ts`, public as `TR.createElement`. All 266 `React.createElement` sites and the
+  `createReactElement` wrapper in `TR-views.tsx` go through it, and `repo-lint` bans
+  `React.createElement`, its import and destructured forms, and JSX in runtime source, with no
+  allowlist. Generated app code is exempt and unchanged. `React.cloneElement` stays allowed.
+- The layout-bounds overlay now reaches every element, stdlib-built ones through `TR.Element`
+  included. Review of that widening fixed three defects it would have exposed: a forwarded debug
+  style suppressing the inner element's overlay, a `style` handed to `React.Fragment`, and a
+  `react-native` lookup per element.
+- The runtime `tsconfig` cannot reject JSX: without the `jsx` option TypeScript refuses every import
+  of a `.tsx` module, JSX or not, so the lint is the only gate.
+- The instruction trim applied thirteen of the fourteen listed shortenings, 1,571 lines to 1,559 after
+  a merge of `main` had raised the total from 1,379. Root `AGENTS.md:11` was left as `main` rewrote it.
+- A subagent an agent spawned may always be messaged; `SendMessage` is allowed in the harness, and
+  the approval rule for other agents and sessions stays in `AGENTS.md` and the `delegation` skill.
+- Merged `main` added six packages, four of them host-testing code inside the fence. The
+  consolidation table above predates them and is redone before that pass.

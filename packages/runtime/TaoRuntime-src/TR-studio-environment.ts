@@ -1,6 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UserInputError } from './TR-errors'
@@ -173,10 +174,10 @@ export const StudioEnvironmentControls = {
       },
     }), [cell, overlaySet, overlays, schemas])
     const scheme = schemeRequest(cell.environment.scheme)
-    return React.createElement(
+    return createElement(
       SchemeControls.Provider,
       scheme,
-      React.createElement(StudioHostContext.Provider, { value }, children),
+      createElement(StudioHostContext.Provider, { value }, children),
     )
   },
 

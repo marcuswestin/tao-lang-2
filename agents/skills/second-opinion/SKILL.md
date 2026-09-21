@@ -37,14 +37,7 @@ say what you withheld.
 codex exec -s read-only --ephemeral --color never "<the question and the code it concerns>"
 ```
 
-- `-s read-only` stops it editing this worktree; `--ephemeral` stops it writing session files.
-- Give it stdin — `echo "" | codex exec …` — or it blocks reading stdin and looks hung.
-- It needs an unsandboxed shell. The Bash sandbox denies `ab.chatgpt.com:443`, and the failure is a
-  `deny network-outbound` violation rather than an error from Codex.
-- `codex exec review` is Codex's own repository review, and `--output-schema <file>` constrains the
-  reply's shape when you want to compare answers rather than read one.
-- A usage limit is reported as `ERROR: You've hit your usage limit` with the date it resets. That is
-  a wall, not a fault to debug: say so and fall back to `oracle`.
+Give it stdin — `echo "" | codex exec …` — or it blocks reading stdin and looks hung.
 
 ## What the answer is worth
 
