@@ -1,5 +1,6 @@
 import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
 import { inPlace } from './in-place-files'
+import { verdictPackageFiles } from './toolchain-packages'
 
 /**
  * `tao test` spends most of a run validating and compiling Tao apps into TypeScript that the last
@@ -123,9 +124,13 @@ async function profileIdentity(toolchainRoot: string): Promise<string> {
   return await FS.realPath(FS.resolvePath('.devenv/profile', toolchainRoot)).catch(() => '<none>')
 }
 
-/** toolchainIdentity hashes every visible file of every package, plus the root dependency pins. */
+/**
+ * toolchainIdentity hashes every package file a compiled app can depend on, plus the root
+ * dependency pins. `toolchain-packages.ts` owns which groups are left out and why a verdict cannot
+ * depend on them.
+ */
 async function toolchainIdentity(toolchainRoot: string): Promise<string> {
-  const packageFiles = await Repo.filesUnder(FS.resolvePath('packages', toolchainRoot))
+  const packageFiles = await verdictPackageFiles(FS.resolvePath('packages', toolchainRoot))
   const rootFiles = []
   for (const name of ['bun.lock', 'package.json']) {
     const path = FS.resolvePath(name, toolchainRoot)

@@ -164,7 +164,7 @@ tests written in Tao, green in Current, for every construct introduced.
   - Closed by `34132956`: the journey ran ten consecutive green normal-terminal runs and
     `studio-smoke-simulated-user` is an ordinary member of `VERIFY_FULL_GATES` again, with
     `VERIFY_FULL_SKIPPED` now empty. `just studio-smoke
-    packages/dev/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
+    packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` still runs it alone.
   - The editor-ownership, source-identity, canvas geometry, pointer-release, drag-one-in, and sketch
     transaction defects it found landed with focused coverage along the way.
   - Standing rule for whoever touches the stub preview next: do not widen `previewOriginPath`. The

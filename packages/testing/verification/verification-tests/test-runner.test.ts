@@ -245,6 +245,44 @@ Describe('test runner suite registry', () => {
     Expect(serialPlan?.shards.map(shard => shard.length).toSorted()).toEqual([1, 3])
   })
 
+  // The package restructure renamed every suite at once. Each one lost the recorded duration held
+  // under its old name, so each ran as a single process, and the lane reported an ordinary green
+  // while running at a fraction of the machine. Nothing said a word for hours.
+  Test('says so when a suite runs whole because its recorded duration is under another name', () => {
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, units) => ({ args: [], command: 'true', files: units })
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+    const noHistory = { nodes: {}, version: 1 as const }
+
+    const plan = TestNodes.build({
+      ledger: { tests: {}, version: 1 as const },
+      selected: [{ buildProcess, files, name: 'cli/tao-cli' }],
+      timings: noHistory,
+    })
+
+    Expect(plan.plans[0]?.shards.length).toBe(1)
+    Expect(plan.warnings).toHaveLength(1)
+    Expect(plan.warnings[0]).toContain('cli/tao-cli')
+    Expect(plan.warnings[0]).toContain('12 units')
+  })
+
+  // A small suite running whole is ordinary, and a warning on every one of them is a warning nobody
+  // reads. Only a suite big enough to have been split is worth the line.
+  Test('stays quiet about a suite too small to have been sharded anyway', () => {
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, units) => ({ args: [], command: 'true', files: units })
+
+    const plan = TestNodes.build({
+      ledger: { tests: {}, version: 1 as const },
+      selected: [{
+        buildProcess,
+        files: ['packages/demo/demo-tests/a.test.ts', 'packages/demo/demo-tests/b.test.ts'],
+        name: 'demo',
+      }],
+      timings: { nodes: {}, version: 1 as const },
+    })
+
+    Expect(plan.warnings).toEqual([])
+  })
+
   Test('gives a suite that declares no bound one work-denominated timeout', async () => {
     const { byName } = await discover()
 

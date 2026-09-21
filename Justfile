@@ -115,33 +115,33 @@ test-host *ARGS:
 
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
-studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
+studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
 [group('Host proofs')]
-studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
+studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
 [group('Host proofs')]
 studio-host-control-smoke run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-host-control.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 
 # Probe external Studio accessibility and physical input through Appium Mac2
 [group('Host proofs')]
 studio-mac2-acceptance run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-mac2-acceptance.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
 
 # Export WordFlower and prove its physical keyboard path in real headless Chrome
 [group('Host proofs')]
 keyboard-navigation-smoke run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
 [group('Host proofs')]
@@ -530,7 +530,7 @@ _git-hooks:
     ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
-    bun run packages/dev/dev-src/doctor/DependencyHealth.ts
+    bun run packages/testing/verification/verification-src/DependencyHealth.ts
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:

@@ -337,9 +337,9 @@ Not macOS-only, but broken on Windows or outside a checkout:
   Separating the shipped loop from the repository loop is the largest single piece of work in this
   item, and it is not an OS problem.
 - `tao review` launches Chrome over CDP, so it needs a browser on the host. It is not optional
-  today: `tao-cli.ts` reaches it through `await import('tao-dev/studio-review')`, which pulls
-  Studio, the CDP client, and the rest of the `packages/dev` graph into the binary already measured
-  at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
+  today: `tao-cli.ts` reaches it through `await import('tao-studio-tooling/studio-review')`, which
+  pulls Studio, the CDP client, and the rest of the `packages/ides/studio-tooling` graph into the
+  binary already measured at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
 - Android needs a JDK, the SDK, and an emulator image — `A8`'s requirement graph.
 
 Honest platform claim for `R4`: **`create`, `check`, `fmt`, `fix`, `compile`, `test`, and the web
@@ -497,7 +497,7 @@ checkout.
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
-**4. A shipped dev loop.** Cut `@expo-dev-loop` free of `Repo.getRoot()`, `just`,
+**4. A shipped dev loop.** Cut `@expo-host/dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through
 `process.execPath`; re-anchor the four repository-relative values `expo-config.ts` and
 `expo-server.ts` hand Expo — `__UNSAFE_EXPO_HOME_DIRECTORY`, `EXPO_LOG_PATH`,

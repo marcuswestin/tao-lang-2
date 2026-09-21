@@ -112,7 +112,7 @@ anyone outside this repository.
 - Shape: remove or gate the Expo Go paths, point the device loop at the Tao-published development
   build, and correct every document and message that still promises Expo Go.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` (the lane table and
-  slice 4), `packages/dev/dev-src/expo-dev-loop/`, `packages/ides/studio-companion-app`.
+  slice 4), `packages/apps/expo-host/expo-host-src/dev-loop/`, `packages/ides/studio-companion-app`.
 - Waits on: the host-scope decision (`R7`) for the full prebuilt-host lane; retiring the broken
   promise does not.
 - Done: no surface offers Expo Go, and the documented device path is one a newcomer can complete.

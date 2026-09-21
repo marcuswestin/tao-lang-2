@@ -40,6 +40,8 @@
         "@react-native-picker/picker": "2.11.4",
         "@react-native-segmented-control/segmented-control": "2.5.7",
         "@testing-library/react-native": "^13.3.3",
+        "better-opn": "^3.0.2",
+        "chokidar": "^5.0.0",
         "expo": "~57.0.23",
         "expo-build-properties": "~57.0.18",
         "expo-clipboard": "~57.0.2",
@@ -141,17 +143,22 @@
         "@bomb.sh/tab": "^0.0.22",
         "@commander-js/extra-typings": "^15.0.0",
         "commander": "^15.0.0",
+        "ink": "^7.1.1",
+        "react": "^19.2.8",
         "tao-ast-utils": "workspace:*",
         "tao-cli-kit": "workspace:*",
         "tao-compiler": "workspace:*",
-        "tao-dev": "workspace:*",
         "tao-expo-host": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
+        "tao-studio-tooling": "workspace:*",
         "tao-update-server": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.18",
       },
     },
     "packages/compiler": {
@@ -168,22 +175,15 @@
       "name": "tao-dev",
       "dependencies": {
         "@commander-js/extra-typings": "^15.0.0",
-        "better-opn": "^3.0.2",
-        "chokidar": "^5.0.0",
         "commander": "^15.0.0",
-        "ink": "^7.1.1",
-        "react": "^19.2.8",
-        "tao-appium-driver": "workspace:*",
         "tao-cli-kit": "workspace:*",
         "tao-e2e-testing": "workspace:*",
-        "tao-generation": "workspace:*",
-        "tao-host-control": "workspace:*",
+        "tao-expo-host": "workspace:*",
         "tao-shared": "workspace:*",
-        "tao-studio": "workspace:*",
+        "tao-studio-tooling": "workspace:*",
         "tao-verification": "workspace:*",
       },
       "devDependencies": {
-        "@types/react": "^19.2.18",
         "tao-compiler": "workspace:*",
         "tao-formatter": "workspace:*",
       },
@@ -267,6 +267,21 @@
       },
       "devDependencies": {
         "@types/react": "~19.2.0",
+      },
+    },
+    "packages/ides/studio-tooling": {
+      "name": "tao-studio-tooling",
+      "dependencies": {
+        "better-opn": "^3.0.2",
+        "chokidar": "^5.0.0",
+        "tao-appium-driver": "workspace:*",
+        "tao-compiler": "workspace:*",
+        "tao-expo-host": "workspace:*",
+        "tao-generation": "workspace:*",
+        "tao-host-control": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-studio": "workspace:*",
+        "tao-verification": "workspace:*",
       },
     },
     "packages/language/ast-utils": {
@@ -2866,6 +2881,8 @@
     "tao-studio": ["tao-studio@workspace:packages/ides/studio"],
 
     "tao-studio-companion-app": ["tao-studio-companion-app@workspace:packages/ides/studio-companion-app"],
+
+    "tao-studio-tooling": ["tao-studio-tooling@workspace:packages/ides/studio-tooling"],
 
     "tao-update-server": ["tao-update-server@workspace:packages/services/update-server"],
 

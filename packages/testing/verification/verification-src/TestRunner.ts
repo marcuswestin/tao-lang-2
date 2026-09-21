@@ -272,7 +272,7 @@ async function testNodesFor(options: {
   reportRoot?: string
   repositoryRoot: string
   timings?: TimingsStore
-}): Promise<{ plans: readonly ShardPlan[]; states: SuiteState[] }> {
+}): Promise<{ plans: readonly ShardPlan[]; states: SuiteState[]; warnings: readonly string[] }> {
   const { selected } = selectSuites(
     await suiteRegistry(options.repositoryRoot),
     selectionFor(options.prepared),
@@ -285,7 +285,7 @@ async function testNodesFor(options: {
       : Promise.resolve(options.timings),
   ])
   const plan = TestNodes.build({ ledger, proved: options.proved, selected, timings })
-  return { plans: plan.plans, states: plan.states as SuiteState[] }
+  return { plans: plan.plans, states: plan.states as SuiteState[], warnings: plan.warnings }
 }
 
 /** runTests discovers, runs, reports, and records one `./dev test` invocation: every suite, optionally name-filtered. */

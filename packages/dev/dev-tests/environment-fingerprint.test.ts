@@ -8,7 +8,7 @@ import {
   formatFingerprint,
   safeToken,
   toolVersion,
-} from '../dev-src/doctor/EnvironmentFingerprint'
+} from '@verification/EnvironmentFingerprint'
 import { RepositoryDoctorCommand } from '../dev-src/doctor/RepositoryDoctorCommand'
 
 /**
