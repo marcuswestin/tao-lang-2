@@ -17,7 +17,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Delegation
 
 - Delegate work whose input is large and whose conclusion is small, and work that can run in the background while you carry on. Name a model tier for every subagent instead of letting it inherit yours. Treat a returned report as a claim: check one cited `file:line`, command, or diff before building on it.
-- Never message another agent, session, or subagent without Ro's approval in the current request; a subagent's own return is the one agent-to-agent channel that needs none. When an exchange would genuinely help, ask Ro first — name the recipient, what you would send, and what it buys — and take the answer as covering that message alone.
+- Message a subagent you spawned whenever it helps; that never needs approval. Never message any other agent or session without Ro's approval in the current request. When such an exchange would genuinely help, ask Ro first — name the recipient, what you would send, and what it buys — and take the answer as covering that message alone.
 - The `delegation` skill owns the decision rule, the routing table and tiers, the brief, and the return contract. Read it before the first delegation of a task.
 
 ## Responses to Ro

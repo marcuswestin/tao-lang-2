@@ -51,6 +51,7 @@
       "Bash(which *)",
       "Bash(xcrun simctl list *)",
       "Read(~/code/tao-lang/**)",
+      "SendMessage",
       "WebFetch",
       "WebSearch",
       "mcp__Claude_Browser__*",
@@ -69,7 +70,6 @@
       "Bash(./agent land-unlock --force*)",
       "Bash(./dev land-unlock --force*)",
       "Bash(just land-unlock --force*)",
-      "SendMessage",
       "mcp__ccd_session_mgmt__send_message"
     ]
   },
