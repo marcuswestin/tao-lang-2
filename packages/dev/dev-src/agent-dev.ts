@@ -3,6 +3,7 @@ import { registerAgentHelpCommand } from './cli/agent-help'
 import { runWithCommands } from './cli/run-with-commands'
 
 const JUST_COMMANDS = [
+  'admission-experiment',
   'bench',
   'board',
   'capabilities',
