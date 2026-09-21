@@ -944,8 +944,8 @@ Describe('Tao Companion shell configuration', () => {
     const fmtPlugin = config.expo.plugins?.[2]
     Expect(typeof fmtPlugin).toBe('string')
     const pluginSource = await FS.readText(FS.resolvePath(String(fmtPlugin), packageRoot))
-    Expect(pluginSource).toContain("require('../../runtime-toolchain/plugins/with-ios-fmt-compat.cjs')")
-    Expect(await FS.isFile(Repo.resolvePath('packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs'))).toBe(true)
+    Expect(pluginSource).toContain("require('../../../apps/expo-host/plugins/with-ios-fmt-compat.cjs')")
+    Expect(await FS.isFile(Repo.resolvePath('packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs'))).toBe(true)
   })
 
   Test('the shell entry registers a root component and carries no Studio logic', async () => {

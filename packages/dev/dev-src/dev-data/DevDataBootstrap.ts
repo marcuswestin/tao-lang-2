@@ -2,7 +2,7 @@ import { Platform } from '@shared'
 
 /**
  * The bootstrap facts a development build needs to find the dev data server: mirrored by
- * `packages/stdlib/@tao/data/providers/dev/Dev.ts`, which reads them from the Expo manifest, and
+ * `packages/apps/stdlib/@tao/data/providers/dev/Dev.ts`, which reads them from the Expo manifest, and
  * kept in step with it by hand because a stdlib sidecar imports nothing from this package.
  */
 export const DevDataProtocol = {

@@ -12,8 +12,8 @@ function fullRunReason(selection: ChangedSelection, ledger: TestLedgerStore): st
   }
   if (
     paths.some(path =>
-      path.startsWith('packages/runtime/')
-      || path.startsWith('packages/runtime-toolchain/')
+      path.startsWith('packages/apps/runtime/')
+      || path.startsWith('packages/apps/expo-host/')
       || path.endsWith('/verify-release-bundle.ts')
     )
   ) {

@@ -130,7 +130,7 @@ Tao Studio process
                          Tao Companion development build
 ```
 
-- Add a fixed Expo development-build project under `packages/studio-companion-app`. Keep it on the repo's
+- Add a fixed Expo development-build project under `packages/ides/studio-companion-app`. Keep it on the repo's
   SDK 54 line for this slice and install the SDK-matched `expo-dev-client ~6.0.21`; an SDK upgrade is a
   separate repository-wide change.
 - Give the shell its own development bundle identifier and generated dev-client scheme. Its native binary
@@ -202,7 +202,7 @@ names the chosen Metro host, gateway host, ports, runtime, device, and failure l
 
 ### Slice 1 implementation boundaries
 
-- **Native shell:** `packages/studio-companion-app` app config, entry, fixed identity, dev client, local-network
+- **Native shell:** `packages/ides/studio-companion-app` app config, entry, fixed identity, dev client, local-network
   declarations, placeholder disconnected screen, and install recipe.
 - **Studio lifecycle:** extend `StudioPreviewRuntime` and its Expo session with a custom-runtime device URL;
   add install/open actions without adding a second watcher, compiler, or Metro.

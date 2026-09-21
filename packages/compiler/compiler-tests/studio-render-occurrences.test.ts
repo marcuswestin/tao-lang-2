@@ -1,8 +1,8 @@
 import { ASTUtils } from '@ast-utils'
+import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 
 const tsFence = '```ts'
 const fence = '```'

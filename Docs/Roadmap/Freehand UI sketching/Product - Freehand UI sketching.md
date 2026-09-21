@@ -761,8 +761,8 @@ it does not add a second editing protocol.
   `tao review` will render it once that command exists, and a journey can mount the same view with
   the same handle once the runner executes fixtures and scenarios, which it does not yet. Coverage of the
   sketching features themselves is a Tao behavior test per language construct under
-  `Apps/Test Apps/AGENTS.md`, and a Studio journey per gesture in `packages/studio/studio-tests` and
-  the smoke lanes `packages/studio/README.md` describes.
+  `Apps/Test Apps/AGENTS.md`, and a Studio journey per gesture in `packages/ides/studio/studio-tests` and
+  the smoke lanes `packages/ides/studio/README.md` describes.
 
 ## Ways to meet each need
 

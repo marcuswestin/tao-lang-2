@@ -468,9 +468,9 @@ supplies `Layout`, `Tag`, optional caller `children`, and the declared named-slo
 foreign component owns its native root and must render each accepted content channel exactly once.
 Occurrence-level `render inject` remains a separate supported mechanism.
 
-The runtime-toolchain copies the sidecar's transitive relative TypeScript, TSX, JavaScript, JSX, and JSON
-module graph while leaving installed packages external. `@tao/code-editor` is the implemented reusable
-foreign component for CodeMirror 6: it accepts Tao-owned content and selection, publishes change/selection
+The expo host copies the sidecar's transitive relative TypeScript, TSX, JavaScript, JSX, and JSON
+module graph while leaving installed packages external. Studio's code editor (`studio-src/code-editor/`)
+is the implemented reusable foreign component for CodeMirror 6: it accepts Tao-owned content and selection, publishes change/selection
 actions, and can attach the existing JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
 the production editor slot. The legacy workbench editor remains as the hidden controller for file lifecycle,
 draft synchronization, tabs, diagnostics, and source actions while a typed ProductHost protocol mirrors its
@@ -588,10 +588,10 @@ relocated Node plus native-library closure rather than relying on the developer 
 
 ## Executable Tao client strangler
 
-`packages/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
+`packages/ides/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
 named ProductHost slots render the real StudioServer file hierarchy through recursive Tao `FileTree` and
 Studio-local `Disclosure` views, mount the stdlib Components and manifest-derived project View/Screen
-inventories, expose parser-owned DesignTokens, mount the `@tao/code-editor` foreign view, and compose the
+inventories, expose parser-owned DesignTokens, mount the code editor foreign view, and compose the
 inspector's live Layout/Style/Data/Actions and scenario-environment contexts. Create, rename, confirmed
 delete, palette insertion, screen opening, inspector actions, and undo call the trusted workbench
 controller. Style changes use server-canonical proposal/review/apply; stale active-cell environment edits
@@ -624,7 +624,7 @@ separately hosted cross-origin Tao surface would need corresponding write-origin
 
 ## Current boundary
 
-`packages/studio/README.md` owns the operational guide around Studio: launch modes and their
+`packages/ides/studio/README.md` owns the operational guide around Studio: launch modes and their
 options, ports, artifact roots, launch manifests, `doctor`, the smoke lanes, the native canary, and
 the release steps. This section states what Studio implements.
 
@@ -724,7 +724,7 @@ Studio compilation with actionable messages. This satisfies the current mount-or
 boundary without publishing blank cells or silently substituting the selected app's default route.
 
 A physical iPhone or iPad renders one cell through the Tao Companion development build
-(`packages/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
+(`packages/ides/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
 starts one `tao-studio-device-v1` gateway beside the loopback server, bound to every interface on an
 ephemeral port and carrying pairing, project/app identity, scenario bootstrap, revision state, and
 device reports; the loopback server, its Host validation, and the per-project Metro are unchanged. The

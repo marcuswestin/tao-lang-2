@@ -1,6 +1,6 @@
 import ts from 'typescript'
 
-const runtimeRoot = 'packages/runtime/TaoRuntime-src/'
+const runtimeRoot = 'packages/apps/runtime/TaoRuntime-src/'
 const helperPath = `${runtimeRoot}core/Arrays.ts`
 const operations = new Map([
   ['sort', 'Arrays.sorted (or Arrays.sortInPlace for intentional mutation)'],

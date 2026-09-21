@@ -5,34 +5,37 @@ import { type SuiteInventory, TestSelection } from '../dev-src/repository-tests/
 
 /**
  * A small workspace with the shapes the real one has: a leaf everything imports (`shared`), a
- * chain (`parser` -> `compiler` -> `workspace`), the CLI the Tao behavior tests run through, and a
- * package nothing imports (`studio`).
+ * chain (`language/parser` -> `compiler` -> `workspace`), the CLI the Tao behavior tests run
+ * through, and a package nothing imports (`studio`). The grouped packages — `apps/runtime`,
+ * `apps/expo-host`, `apps/stdlib`, `cli/tao-cli`, `language/formatter`, `language/parser` — keep
+ * the real two-segment ids, because `TestSelection`'s own `TAO_APPS_PACKAGES` and
+ * `LANGUAGE_PERFORMANCE_PACKAGES` match on those exact ids.
  */
 const graph: PackageGraph = {
   imports: new Map<string, ReadonlySet<string>>([
-    ['compiler', new Set(['parser', 'shared'])],
+    ['compiler', new Set(['language/parser', 'shared'])],
     ['dev', new Set(['shared'])],
-    ['formatter', new Set()],
-    ['parser', new Set(['shared'])],
-    ['runtime', new Set()],
-    ['runtime-toolchain', new Set(['runtime', 'shared'])],
+    ['language/formatter', new Set()],
+    ['language/parser', new Set(['shared'])],
+    ['apps/runtime', new Set()],
+    ['apps/expo-host', new Set(['apps/runtime', 'shared'])],
     ['shared', new Set()],
-    ['stdlib', new Set(['shared'])],
+    ['apps/stdlib', new Set(['shared'])],
     ['studio', new Set(['shared', 'workspace'])],
-    ['tao-cli', new Set(['dev', 'workspace'])],
+    ['cli/tao-cli', new Set(['dev', 'workspace'])],
     ['workspace', new Set(['compiler'])],
   ]),
   packages: [
     'compiler',
     'dev',
-    'formatter',
-    'parser',
-    'runtime',
-    'runtime-toolchain',
+    'language/formatter',
+    'language/parser',
+    'apps/runtime',
+    'apps/expo-host',
     'shared',
-    'stdlib',
+    'apps/stdlib',
     'studio',
-    'tao-cli',
+    'cli/tao-cli',
     'workspace',
   ],
 }
@@ -44,14 +47,14 @@ const inventory: SuiteInventory = {
   packageSuites: [
     'compiler',
     'dev',
-    'formatter',
-    'parser',
-    'runtime',
-    'runtime-toolchain',
+    'language/formatter',
+    'language/parser',
+    'apps/runtime',
+    'apps/expo-host',
     'shared',
-    'stdlib',
+    'apps/stdlib',
     'studio',
-    'tao-cli',
+    'cli/tao-cli',
     'workspace',
   ],
 }
@@ -101,7 +104,7 @@ Describe('changed suite plan', () => {
     Expect([...result.selected.keys()]).toEqual([
       'compiler',
       'studio',
-      'tao-cli',
+      'cli/tao-cli',
       'workspace',
       'performance-checks',
       'tao-apps',
@@ -125,19 +128,19 @@ Describe('changed suite plan', () => {
 
   Test('a changed test file selects only the suite that runs it', () => {
     Expect([...plan(['packages/shared/shared-tests/FS.test.ts']).selected.keys()]).toEqual(['shared'])
-    Expect([...plan(['packages/runtime/TR-tests/TR.test.ts']).selected.keys()]).toEqual(['runtime'])
-    Expect([...plan(['packages/tao-cli/cli-tests/cli.test.ts']).selected.keys()]).toEqual(['tao-cli'])
-    Expect([...plan(['packages/runtime-toolchain/runtime-toolchain-tests/nav.jest-test.tsx']).selected.keys()])
+    Expect([...plan(['packages/apps/runtime/TR-tests/TR.test.ts']).selected.keys()]).toEqual(['apps/runtime'])
+    Expect([...plan(['packages/cli/tao-cli/cli-tests/cli.test.ts']).selected.keys()]).toEqual(['cli/tao-cli'])
+    Expect([...plan(['packages/apps/expo-host/expo-host-tests/nav.jest-test.tsx']).selected.keys()])
       .toEqual(['runtime-jest'])
     Expect([...plan(['packages/dev/performance-checks/language-performance.test.ts']).selected.keys()])
       .toEqual(['performance-checks'])
   })
 
   Test('runtime and toolchain sources reach the Jest suite and every Tao app', () => {
-    const result = plan(['packages/runtime/TaoRuntime-src/TR.ts'])
+    const result = plan(['packages/apps/runtime/TaoRuntime-src/TR.ts'])
 
-    Expect(result.selected.get('runtime-jest')).toBe('imports runtime')
-    Expect(result.selected.get('tao-apps')).toBe('runtime changed directly')
+    Expect(result.selected.get('runtime-jest')).toBe('imports apps/runtime')
+    Expect(result.selected.get('tao-apps')).toBe('apps/runtime changed directly')
     Expect(result.taoAppPaths).toEqual(['Apps'])
   })
 
@@ -148,14 +151,16 @@ Describe('changed suite plan', () => {
       'Apps/WordFlower/README.md',
     ])
 
-    Expect([...result.selected.keys()]).toEqual(['formatter', 'runtime-toolchain', 'runtime-jest', 'tao-apps'])
+    Expect([...result.selected.keys()]).toEqual(['language/formatter', 'apps/expo-host', 'runtime-jest', 'tao-apps'])
     Expect(result.taoAppPaths).toEqual(['Apps/Skillet', 'Apps/WordFlower'])
     Expect(result.selected.get('tao-apps')).toBe('Apps/Skillet changed, Apps/WordFlower changed')
   })
 
   Test('a Tao file outside Apps and packages widens the app run to every app', () => {
     Expect(plan(['Docs/Tutorials/example.tao']).taoAppPaths).toEqual(['Apps'])
-    Expect(plan(['Apps/WordFlower/Design.tao', 'packages/stdlib/stdlib-src/Text.tao']).taoAppPaths).toEqual(['Apps'])
+    Expect(plan(['Apps/WordFlower/Design.tao', 'packages/apps/stdlib/stdlib-src/Text.tao']).taoAppPaths).toEqual([
+      'Apps',
+    ])
   })
 
   Test('repository workflow files select the developer suite that proves them', () => {
@@ -193,7 +198,7 @@ Describe('changed suite plan', () => {
   })
 
   Test('a path no rule owns widens the run to every suite and names the path', () => {
-    const result = plan(['packages/parser/parser-tests/Parser.test.ts', 'scripts/mystery.sh'])
+    const result = plan(['packages/language/parser/parser-tests/Parser.test.ts', 'scripts/mystery.sh'])
 
     Expect(result.everything).toBe('scripts/mystery.sh')
     Expect(result.selected.size).toBe(inventory.packageSuites.length + 3)
@@ -212,12 +217,14 @@ Describe('changed suite plan', () => {
   Test('selected suites keep the inventory order so the printed plan reads like a run', () => {
     const result = plan(['packages/workspace/workspace-src/index.ts', 'packages/dev/dev-src/dev.ts'])
 
+    // `workspace` is not a language-performance package (only `compiler`, its merged home, is), so
+    // this path exercises order across a package suite, two importers, and the app suite — not
+    // `performance-checks`, which the compiler-change test above already covers.
     Expect([...result.selected.keys()]).toEqual([
       'dev',
       'studio',
-      'tao-cli',
+      'cli/tao-cli',
       'workspace',
-      'performance-checks',
       'tao-apps',
     ])
   })

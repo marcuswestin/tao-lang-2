@@ -1,6 +1,6 @@
+import { Workspace } from '@compiler/workspace'
 import { Expect, Test } from '@shared/test'
 import { withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
 
 Test('compiler: test-plan schema exposes a versioned public discriminated IR', async () => {
   await withTaoFiles(

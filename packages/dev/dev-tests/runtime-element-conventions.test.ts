@@ -1,8 +1,8 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { runtimeElementConventionIssues } from '../dev-src/repository-tests/RuntimeElementConventions'
 
-const runtimePath = 'packages/runtime/TaoRuntime-src/new-feature.tsx'
-const helperPath = 'packages/runtime/TaoRuntime-src/TR-create-element.ts'
+const runtimePath = 'packages/apps/runtime/TaoRuntime-src/new-feature.tsx'
+const helperPath = 'packages/apps/runtime/TaoRuntime-src/TR-create-element.ts'
 
 Describe('runtime element creation boundary', () => {
   Test('rejects React.createElement, the old createReactElement name, and JSX outside the helper', () => {

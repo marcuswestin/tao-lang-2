@@ -28,7 +28,7 @@ and reports a syntax error as `Expected: Tao source without syntax errors when a
 fixes` with no line, column, or description. Errors are most of what a person exploring a new
 language sees.
 
-- Context: `packages/validator`, `packages/tao-cli/cli-src`, the Errors section of `packages/AGENTS.md`, and the
+- Context: `packages/language/validator`, `packages/cli/tao-cli/cli-src`, the Errors section of `packages/AGENTS.md`, and the
   `tao check` entry under **Build the enforcement and diagnostics surface** in `Roadmap.md`.
 - Done: validation errors and parse errors reach the CLI with file, line, column, and a readable
   message; the exit code reflects failure; tests cover both kinds; the roadmap line that says
@@ -81,7 +81,7 @@ is `private`. Nobody outside the repository can install Tao.
   rather than embedded; Metro and the Expo CLI driven through the binary itself rather than a
   separate Bun or Node; an installer script, a Homebrew tap, and an npm wrapper; a per-project
   version pin so a project selects the Tao it was written against.
-- Context: `packages/tao-cli`, `packages/runtime-toolchain` (the `_gen_tao-app` host and its
+- Context: `packages/cli/tao-cli`, `packages/apps/expo-host` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
 - Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
   code signing certificates from `R8`, which owns where signing happens.
@@ -112,7 +112,7 @@ anyone outside this repository.
 - Shape: remove or gate the Expo Go paths, point the device loop at the Tao-published development
   build, and correct every document and message that still promises Expo Go.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` (the lane table and
-  slice 4), `packages/dev/dev-src/expo-dev-loop/`, `packages/studio-companion-app`.
+  slice 4), `packages/dev/dev-src/expo-dev-loop/`, `packages/ides/studio-companion-app`.
 - Waits on: the host-scope decision (`R7`) for the full prebuilt-host lane; retiring the broken
   promise does not.
 - Done: no surface offers Expo Go, and the documented device path is one a newcomer can complete.
@@ -123,7 +123,7 @@ These decide whether the people who do install Tao enjoy the first hour.
 
 ### A5 — Tutorials and examples that cannot rot
 
-The tutorial half has landed: `packages/tao-cli/cli-tests/tutorials.test.ts` replays
+The tutorial half has landed: `packages/cli/tao-cli/cli-tests/tutorials.test.ts` replays
 `Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
 step, reproduces the finished file from the steps, and runs its behavior test through the real
 `tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
@@ -136,19 +136,19 @@ with design material and test fixtures.
 - Shape: choose the public example set (starters, HNReader, WordFlower Current), polish it, and label
   everything else as design material or test fixture in the README that owns it.
 - Context: `Apps/Starters/README.md`, `Apps/HNReader/`, `Apps/WordFlower/README.md`,
-  `Apps/Test Apps/README.md`, `packages/tao-cli/cli-tests/tutorials.test.ts`.
+  `Apps/Test Apps/README.md`, `packages/cli/tao-cli/cli-tests/tutorials.test.ts`.
 - Done: every example a visitor is pointed at runs on a fresh install, and the documents that point
   at examples name only those.
 
 ### A6 — Release the IDE extension
 
 Syntax, diagnostics, formatting, source actions, go-to-definition, and references exist in
-`packages/ide-extension` and are unreachable outside this checkout. Editor support is a large part
+`packages/ides/ide-extension` and are unreachable outside this checkout. Editor support is a large part
 of whether a new language feels real.
 
 - Shape: packaging, versioning, and publication to the VS Code Marketplace and Open VSX, with the
   extension resolving a `tao` from the user's machine rather than a repository path.
-- Context: `packages/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
+- Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
 - Waits on: Ro creates the publisher accounts; the license decision (`R1`) applies here too.
 - Done: `ext install` on a clean machine gives working Tao editing.
 
@@ -195,7 +195,7 @@ sizes and licenses before it downloads anything.
   acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
   automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
   the same graph without installing.
-- Context: `packages/dev` doctor, `packages/tao-cli/cli-src/ship-*`, the environment discussion this
+- Context: `packages/dev` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.
 - Done: `tao run android` on a bare machine explains what it needs, asks, installs it, and works;
   nothing it installs requires `sudo` except the Xcode steps that inherently do.
@@ -208,8 +208,8 @@ native build from the development loop, which no virtualization approach can do.
 
 - Shape: build and publish host artifacts (iOS simulator app, Android APK, and the companion app
   for physical iPhones) in Tao's own CI; `tao dev` downloads, installs, and launches the right one.
-- Context: `packages/studio-companion-app` (Slice 1 and 2 records under
-  `Docs/Roadmap/Tao Studio companion app/`), `packages/runtime-toolchain`.
+- Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
+  `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
 - Waits on: `R7` — whether the host is the companion app itself, and how host versions relate to Tao
   versions.
 - Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone.

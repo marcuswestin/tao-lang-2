@@ -71,7 +71,7 @@ async function run(
 ): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const runtimeToolchainRoot = options.runtimeToolchainRoot
-    ?? FS.resolvePath('packages/runtime-toolchain', repositoryRoot)
+    ?? FS.resolvePath('packages/apps/expo-host', repositoryRoot)
   const artifactRoot = FS.resolvePath(
     options.artifactRoot ?? '.artifacts/native-module-check',
     repositoryRoot,

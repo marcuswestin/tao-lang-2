@@ -30,7 +30,7 @@ slots in place of any header; a Reading feed over locally persisted `ReadingEntr
 resolve; and the platform-neutral command that opens a story URL.
 
 **Does not belong here:** writes through a remote datasource, authentication, pagination beyond
-`limit`, provider or adapter diagnostics (those are package tests in `packages/runtime`), and
+`limit`, provider or adapter diagnostics (those are package tests in `packages/apps/runtime`), and
 WordFlower product behavior.
 
 ## Running it
@@ -61,7 +61,7 @@ skips the external launch while tests run.
 - **A bookmark resolves its story cold.** A bookmark synced from another device can name a story the
   front page never served, so both adapters declare a by-id shape and the reference asks for the row
   the first time it is read. The bookmark row renders `loading`, `missing`, and `error`, and
-  `packages/runtime/TR-tests/TR-data-references.test.ts` proves each of them; no journey forces them,
+  `packages/apps/runtime/TR-tests/TR-data-references.test.ts` proves each of them; no journey forces them,
   because nothing in the reader's own flow creates a bookmark to a story it has not shown.
 - **Bookmarks live in CloudKit.** CloudKit is Apple-native, so off a device the bookmarks keep working
   from their local checkpoint and the missing native side shows as a sync error. Checks replace the
@@ -70,7 +70,7 @@ skips the external launch while tests run.
   `ReadingEntry.Story` is the cross-store reference, and `OpenedAt` owns recency. Opening a story
   creates the row once and updates that same row thereafter. The HNReader journey proves that rows
   survive a relaunch of the deterministic behavior-test registry; it does not exercise device
-  storage. `packages/stdlib/stdlib-tests/data-providers.test.ts` separately holds `Local` to the
+  storage. `packages/apps/stdlib/stdlib-tests/data-providers.test.ts` separately holds `Local` to the
   provider conformance contract, including save/load through an injected storage boundary. Real
   device persistence remains device validation, not a claim derived from the journey. A missing or
   failed feed lookup leaves its history row intact and renders that reference state explicitly.

@@ -77,24 +77,25 @@ Describe('workspace package graph', () => {
   Test('the real workspace graph knows the imports the manifests forget', async () => {
     const graph = await PackageGraph.load()
 
-    // `validator` and `parser` import `@workspace` without declaring it; `compiler` imports
+    // `validator` and `parser` import `@compiler/workspace` without declaring it; `compiler` imports
     // `@runtime`. These are the edges Bun's own changed-file selection never follows.
-    Expect(graph.imports.get('validator')!.has('workspace')).toBe(true)
-    Expect(graph.imports.get('parser')!.has('workspace')).toBe(true)
-    Expect(graph.imports.get('compiler')!.has('runtime')).toBe(true)
-    Expect([...graph.imports.get('ide-extension')!].sort()).toEqual([
-      'formatter',
-      'parser',
+    Expect(graph.imports.get('language/validator')!.has('compiler')).toBe(true)
+    Expect(graph.imports.get('language/parser')!.has('compiler')).toBe(true)
+    Expect(graph.imports.get('compiler')!.has('apps/runtime')).toBe(true)
+    Expect([...graph.imports.get('ides/ide-extension')!].sort()).toEqual([
+      'compiler',
+      'language/formatter',
+      'language/parser',
+      'language/source-actions',
       'shared',
-      'source-actions',
-      'workspace',
     ])
-    Expect(graph.imports.get('code-editor')!.has('runtime')).toBe(true)
-    Expect(graph.imports.get('stdlib')!.has('icloud-native')).toBe(true)
+    // `code-editor` merged into `studio`; the edge it carried is now studio's own.
+    Expect(graph.imports.get('ides/studio')!.has('apps/runtime')).toBe(true)
+    Expect(graph.imports.get('apps/stdlib')!.has('providers/icloud')).toBe(true)
     // Shared re-exports the shipped, host-neutral Effects core instead of copying it.
-    Expect([...graph.imports.get('shared')!]).toEqual(['runtime'])
+    Expect([...graph.imports.get('shared')!]).toEqual(['apps/runtime'])
     const fromShared = PackageGraph.affected(graph, ['shared']).map(entry => entry.package)
-    for (const name of ['compiler', 'dev', 'studio', 'tao-cli', 'runtime-toolchain']) {
+    for (const name of ['compiler', 'dev', 'ides/studio', 'cli/tao-cli', 'apps/expo-host']) {
       Expect(fromShared).toContain(name)
     }
   })

@@ -50,7 +50,7 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
     EXPO_STOP_TIMEOUT_MS: 3_000,
     IOS_BOOT_POLL_MS: 1_000,
     IOS_BOOT_TIMEOUT_MS: 120_000,
-    RUNTIME_TOOLCHAIN_PATH: 'packages/runtime-toolchain',
+    RUNTIME_TOOLCHAIN_PATH: 'packages/apps/expo-host',
     WEB_BROWSER_APP_NAME,
   } as const
 }

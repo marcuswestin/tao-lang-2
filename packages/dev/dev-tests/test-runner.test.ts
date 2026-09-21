@@ -131,8 +131,8 @@ Describe('test runner suite registry', () => {
         argsOf(byName, suite).find(argument => argument.startsWith('--timeout='))?.slice('--timeout='.length),
       )
 
-    Expect(argsOf(byName, 'validator')).toContain('--concurrent')
-    Expect(timeoutOf('validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(argsOf(byName, 'language/validator')).toContain('--concurrent')
+    Expect(timeoutOf('language/validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     Expect(timeoutOf('dev')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // A suite whose tests run one at a time keeps the budget, which is what catches a regression.
     Expect(argsOf(byName, 'shared')).not.toContain('--concurrent')
@@ -215,7 +215,7 @@ Describe('test runner suite registry', () => {
           samples: 1,
           source: 'wall' as const,
         },
-        validator: {
+        'language/validator': {
           emaMs: 8_600,
           lastMs: 8_600,
           lastRunAt: '2026-01-01T00:00:00.000Z',
@@ -227,10 +227,10 @@ Describe('test runner suite registry', () => {
     }
 
     const concurrentPlan = TestNodes.build({
-      ledger: skewedLedgerFor('validator'),
-      selected: [{ buildProcess, files, name: 'validator' }],
+      ledger: skewedLedgerFor('language/validator'),
+      selected: [{ buildProcess, files, name: 'language/validator' }],
       timings,
-    }).plans.find(plan => plan.suite === 'validator')
+    }).plans.find(plan => plan.suite === 'language/validator')
     const serialPlan = TestNodes.build({
       ledger: skewedLedgerFor('shared'),
       selected: [{ buildProcess, files, name: 'shared' }],
@@ -252,7 +252,7 @@ Describe('test runner suite registry', () => {
     // judgment depend on how busy the machine is rather than on what the test did. Studio is the
     // suite that exposed it: its client bundle measures 1.4s alone and was killed at 5s beside
     // three other lanes. Every Bun suite therefore carries an explicit bound.
-    const bounds = argsOf(byName, 'studio').filter(argument => argument.startsWith('--timeout='))
+    const bounds = argsOf(byName, 'ides/studio').filter(argument => argument.startsWith('--timeout='))
     Expect(bounds).toHaveLength(1)
     Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(7_500)
   })
@@ -395,11 +395,11 @@ Describe('test runner suite registry', () => {
     Expect(byName.get('tao-apps')?.node.cost).toBe(8)
     Expect(byName.get('tao-apps')?.node.priority).toBe(5)
     Expect(byName.get('runtime-jest')?.node.cost).toBe(3)
-    Expect(byName.get('runtime-toolchain')?.node.cost).toBe(2)
+    Expect(byName.get('apps/expo-host')?.node.cost).toBe(2)
     // An untuned Bun suite is one unsharded process that cannot use more than one core, so it
     // reserves one slot and the scheduler packs the rest of the run around it.
-    Expect(byName.get('parser')?.node.cost).toBeUndefined()
-    Expect(byName.get('parser')?.node.serial).toBe(true)
+    Expect(byName.get('language/parser')?.node.cost).toBeUndefined()
+    Expect(byName.get('language/parser')?.node.serial).toBe(true)
     // A suite that declares a width is not serial: it says so precisely because one of its
     // processes uses more than one core, which is what the reservation is for.
     Expect(byName.get('dev')?.node.cost).toBe(2)
@@ -418,7 +418,7 @@ Describe('test runner suite registry', () => {
     Expect(byName.get('dev')?.node.needs).toContain('_fix-tao')
     Expect(byName.get('dev')?.node.needs).not.toContain('_fix-just-fmt')
     // stdlib references no `.tao` source, no app, and no generated tree, so it waits for dprint alone.
-    Expect(byName.get('stdlib')?.node.needs).toEqual(['_fix-dprint'])
+    Expect(byName.get('apps/stdlib')?.node.needs).toEqual(['_fix-dprint'])
   })
 
   Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
@@ -438,7 +438,7 @@ Describe('test runner suite registry', () => {
     states[0]!.testReport = { format: 'bun-junit', path: '/missing.xml', suite: 'dev' }
     states[0]!.testObservations = undefined
     Expect(TestRunner.noTestsMatched('a name nothing has', [{
-      file: 'packages/runtime-toolchain/runtime-toolchain-tests/example.jest-test.ts',
+      file: 'packages/apps/expo-host/expo-host-tests/example.jest-test.ts',
       name: 'not selected',
       outcome: 'skipped',
       suite: 'runtime-jest',
@@ -546,7 +546,7 @@ Describe('test runner suite registry', () => {
         suite: 'dev',
       },
       {
-        file: 'packages/runtime-toolchain/runtime-toolchain-tests/example.jest-test.ts',
+        file: 'packages/apps/expo-host/expo-host-tests/example.jest-test.ts',
         name: 'not selected',
         outcome: 'skipped' as const,
         suite: 'runtime-jest',
@@ -562,7 +562,7 @@ Describe('test runner suite registry', () => {
     Expect((await TestRunner.testFile('packages/shared/shared-tests/shared.test.ts')).suite).toBe('shared')
     Expect(
       (await TestRunner.testFile(
-        'packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx',
+        'packages/apps/expo-host/expo-host-tests/navigation-e2e.jest-test.tsx',
       )).suite,
     ).toBe('runtime-jest')
   })

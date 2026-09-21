@@ -3,7 +3,7 @@
 ## Remove code
 
 - Search `@shared` before adding a helper; a helper two packages need lives there once.
-  `packages/runtime` imports nothing, so a mirrored copy there names its original.
+  `packages/apps/runtime` imports nothing, so a mirrored copy there names its original.
 - One home per constant. Repeated literals (`'main'`, `'origin'`, app names, env-var names) are the
   cheap finds.
 - Families of near-identical functions collapse onto one parameterized helper (the `findOwning*`

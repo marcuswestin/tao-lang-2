@@ -12,11 +12,11 @@ numbers are reproduced verbatim so a later reader can tell measurement from opin
 
 ## The problem, stated precisely
 
-- `tao` is a zsh wrapper that execs `bun` on `packages/tao-cli/cli-src/tao-cli.ts`. It locates
+- `tao` is a zsh wrapper that execs `bun` on `packages/cli/tao-cli/cli-src/tao-cli.ts`. It locates
   itself with the zsh-only `${0:A:h}` expansion, so it needs this checkout, its devenv profile, and
   zsh.
 - All twenty packages under `packages/` carry `"private": true`.
-- `tao dev` compiles into `packages/runtime-toolchain/_gen_tao-app` and runs Metro in that package,
+- `tao dev` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
 - The dev loop it drives is the _repository's_ dev loop: it calls `just`,
   `bun run packages/dev/dev-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
@@ -29,7 +29,7 @@ Nobody outside this repository can install Tao, and nothing in the dev loop woul
 
 ### F1 — The whole CLI already compiles into one binary, and most of it already works
 
-`bun build --compile packages/tao-cli/cli-src/tao-cli.ts` bundles **1249 modules** with no errors
+`bun build --compile packages/cli/tao-cli/cli-src/tao-cli.ts` bundles **1249 modules** with no errors
 and produces a 67.8 MB binary. Langium, Commander, `@bomb.sh/tab`, the compiler, the validator, and
 the formatter all survive bundling; the `await import('./create/create-command')` lazy loads are
 static specifiers and bundle fine.
@@ -128,14 +128,14 @@ Metro, Jest, `tsc`, or the user's editor.
 **Embed — only the binary reads these.**
 
 - The CLI's own TypeScript, 1249 modules across `packages/*/…-src`. This is the binary (F1).
-- The generated Langium parser, `packages/parser/parser-src/_gen_tao-parser`. Generation must run
+- The generated Langium parser, `packages/language/parser/parser-src/_gen_tao-parser`. Generation must run
   before `--compile`: a fresh worktree has none, and every Tao command then fails with a bare
   `Something went wrong.`
 - The dprint TypeScript `plugin.wasm`, which `@dprint/typescript` hands over through `getPath()` and
   `FS.readFile`. Bun embeds it automatically — verified by formatting an inject fence from the
   binary (F1).
 - The generated TextMate grammar,
-  `packages/ide-extension/…/_gen_syntaxes/tao-lang.tmLanguage.json`, read by Shiki for `tao review`.
+  `packages/ides/ide-extension/…/_gen_syntaxes/tao-lang.tmLanguage.json`, read by Shiki for `tao review`.
   It is embeddable as a text asset once `StudioHighlight` stops resolving it from the Git root.
 
 **Nothing to ship.** The starter plans (`cli-src/create/starter-plans.ts`) and `PROJECT_TSCONFIG`
@@ -143,19 +143,20 @@ are TypeScript values, not templates on disk.
 
 **Unpack — a child process has to resolve these.**
 
-- stdlib `.tao` sources: 24 files, about 34 KB, under `packages/stdlib/@tao`. The Tao package
+- stdlib `.tao` sources: 24 files, about 34 KB, under `packages/apps/stdlib/@tao`. The Tao package
   resolver walks that root with `FS.isDirectory` and `Repo.directoriesUnder`; there is no directory
   in `/$bunfs` to walk.
-- stdlib sidecars in the same tree: 16 `.ts` and one `.tsx`
-  (`@tao/code-editor/CodeEditor.tsx` — a `**/*.ts` glob silently drops it). **Metro** resolves them
-  inside the user's project. The whole `@tao` tree is 228 KB.
-- `@tao/runtime` (`packages/runtime/TaoRuntime-src`, 1.3 MB). **Metro** resolves it, and so does the
+- stdlib sidecars in the same tree: 16 `.ts` files (a `**/*.ts` glob covers them all now that no
+  stdlib sidecar is a `.tsx`). **Metro** resolves them inside the user's project. The whole `@tao`
+  tree is smaller now that `@tao/code-editor` moved into Studio's own source; re-measure before
+  relying on this figure.
+- `@tao/runtime` (`packages/apps/runtime/TaoRuntime-src`, 1.3 MB). **Metro** resolves it, and so does the
   project's `tsconfig.json` through the `node_modules/@tao/runtime` link.
 - The Expo host files, about 2.1 MB without `node_modules`. `expo start` needs `package.json`,
   `app.config.js`, `app-config.cjs`, `metro.config.cjs`, `app.json`, `index.ts`, `plugins/`, and
   `assets/` (1.9 MB, nearly all of it the two app icons). `tao test` additionally needs
   `jest.tao-test.config.cjs` and the `jest.shared.config.cjs` it requires, `jest.config.cjs`,
-  `tsconfig.json`, `runtime-toolchain-src/testing/`, and every `runtime-toolchain-tests/` file the
+  `tsconfig.json`, `expo-host-src/testing/`, and every `expo-host-tests/` file the
   config names through `testMatch`, `moduleNameMapper`, or `setupFilesAfterEnv` — today the
   fallback entrypoint, the journey harness, and two module mocks (a further 212 KB). Read the
   config rather than this list when building the payload; it changes. Omitting this group is the
@@ -169,7 +170,7 @@ the file's contents from inside a compiled binary — but it buys little: the Ta
 total about **3.6 MB**, so one unconditional unpack per version is simpler than two mechanisms and is
 what the package resolver and every child process need anyway.
 
-`packages/tao-cli/modules/@tao/` already exists for this, holds only `.gitkeep`, and
+`packages/cli/tao-cli/modules/@tao/` already exists for this, holds only `.gitkeep`, and
 `TaoAppModules.packageRuntime()` is already written to fill it. `DEVENV-058` records that no recipe
 calls it. That is the seam to build on rather than replace.
 
@@ -254,7 +255,7 @@ harness changes. Nothing else in the toolchain needs one.
 
 ### F6 — The Expo host: measured, and why it is not an archive
 
-The host is `packages/runtime-toolchain`'s dependency closure. Installed clean into a scratch
+The host is `packages/apps/expo-host`'s dependency closure. Installed clean into a scratch
 directory, with the workspace dependencies removed:
 
 | Measure                                                                     | Value                   |
@@ -306,7 +307,7 @@ Genuinely macOS-only, and correctly guarded already:
   (`paletteFromBmp`) is already ours and platform-free; only the decode-to-BMP step is `sips`.
 - The Apple Foundation Models lane. `creation-lanes.ts` offers it only when
   `platform === 'darwin' && arch === 'arm64'` **and** `Repo.tryGetRoot()` finds
-  `packages/generation/generation-native/AppleFoundationModelsServer.swift`, so it silently
+  `packages/ai/generation/generation-native/AppleFoundationModelsServer.swift`, so it silently
   disappears outside a checkout — the CLI never tries to compile Swift it does not have.
   `Docs/Roadmap/Tao create.md` already names the follow-up: _"`tao create` outside a repository
   checkout: the Apple lane compiles its Swift helper from source, so a shipped CLI needs a
@@ -346,7 +347,7 @@ Honest platform claim for `R4`: **`create`, `check`, `fmt`, `fix`, `compile`, `t
 
 ### F8 — Binaries build for every target from one macOS machine
 
-With Bun 1.4.2, cross-compiling `packages/tao-cli/cli-src/tao-cli.ts`:
+With Bun 1.4.2, cross-compiling `packages/cli/tao-cli/cli-src/tao-cli.ts`:
 
 | Target             | Size    | gzip    | Build |
 | ------------------ | ------- | ------- | ----- |
@@ -414,7 +415,7 @@ Embed the host `package.json` and `bun.lock`. On the first command that needs a 
 `~/.tao/cache` as the package cache. Every project on the machine shares that one install; only the
 generated app and the Metro cache are per project.
 
-This replaces `packages/runtime-toolchain/_gen_tao-app` as the single global output directory. A
+This replaces `packages/apps/expo-host/_gen_tao-app` as the single global output directory. A
 per-project generated root is required anyway — two `tao dev` sessions in different projects
 currently write to the same place.
 
@@ -485,7 +486,7 @@ checkout — which F1 shows is almost true already.
 
 **2. One resource root.** The `TaoResources` seam, the three anchors plus the grammar path, the
 embedded resource payload, and the unpack-with-verification. Fills
-`packages/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
+`packages/cli/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
 `DEVENV-058` — and it must copy rather than link, because `DEVENV-057` records that a directory
 symlink at exactly that path makes `GreenTree.hashTree` exit 128 before any gate runs. Done when
 `tao create` completes and `tao compile` produces a generated app from the binary, outside a
@@ -493,7 +494,7 @@ checkout.
 
 **3. A Tao home and a versioned host.** The `~/.tao` layout, the embedded host lockfile,
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
-replacing `packages/runtime-toolchain/_gen_tao-app`. Done when two projects compile against one
+replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
 **4. A shipped dev loop.** Cut `@expo-dev-loop` free of `Repo.getRoot()`, `just`,
@@ -580,7 +581,7 @@ overlap with `A3` and `A8`.
 
 ## Notes for whoever implements this
 
-- A fresh worktree has no `packages/parser/parser-src/_gen_tao-parser`, and every Tao command fails
+- A fresh worktree has no `packages/language/parser/parser-src/_gen_tao-parser`, and every Tao command fails
   with a bare `Something went wrong.` until `just _parser-gen` runs. The build entry point in slice 1
   must generate before it compiles, and the diagnostic is worth fixing under `A1`.
 - Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets

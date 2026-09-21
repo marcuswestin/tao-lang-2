@@ -151,7 +151,7 @@ studio-canary project="Apps/HNReader" app="HNReader":
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]
 ship-bundle-proof:
-    bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
+    bun run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts
 
 # Compile every repository native module for the iOS simulator; intentionally outside routine verification
 [group('Host proofs')]
@@ -232,7 +232,7 @@ retry: test-retry
 # Run the focused Tao Studio package suite
 [group('Dev')]
 test-studio:
-    ./dev test-file packages/studio/studio-tests
+    ./dev test-file packages/ides/studio/studio-tests
 
 # Both ledger reports read the same recorded outcomes and answer the same question — which tests to
 # distrust — so they are one command rather than two names to remember. One `limit` bounds both
@@ -565,11 +565,11 @@ _compile-word-flower-app: _parser-gen
     bun run packages/dev/dev-src/repository-tests/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
 
 _ide-extension-build: _parser-gen
-    cd packages/ide-extension && bun esbuild.config.ts
+    cd packages/ides/ide-extension && bun esbuild.config.ts
 
 _ide-extension-package: _ide-extension-build
     mkdir -p .artifacts/build
-    cd packages/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check
@@ -585,7 +585,7 @@ _repo-lint:
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
 # editor's tsserver and `bunx tsc` still need its JavaScript API, which 7.0 does not ship.
 _typecheck:
-    bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json
+    bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json
 
 # `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
 # all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the

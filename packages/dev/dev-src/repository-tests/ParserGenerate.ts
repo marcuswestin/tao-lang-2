@@ -135,7 +135,7 @@ type ParserGenerateFileHooks = Pick<
 /** runParserGenerate regenerates the parser and fails on any diagnostic that is not documented. */
 export async function runParserGenerate(options: ParserGenerateOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
-  const parserRoot = FS.resolvePath('packages/parser', repositoryRoot)
+  const parserRoot = FS.resolvePath('packages/language/parser', repositoryRoot)
   const stampPath = FS.resolvePath(STAMP_PATH, repositoryRoot)
   const inputs = await parserGenerateInputHash(parserRoot)
   if (await parserGenerateIsUpToDate(parserRoot, repositoryRoot, stampPath, inputs)) {
@@ -166,7 +166,7 @@ async function runParserGenerateLocked(
   // removal and rename for provenance-bearing worktree directories. Generate into a disposable
   // host-temporary package instead, then publish files into the existing directory shape.
   const stagingRepositoryRoot = await createParserGenerateStagingRepository(parserRoot)
-  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  const stagingParserRoot = FS.resolvePath('packages/language/parser', stagingRepositoryRoot)
   const generate = options.generate
     ?? (async () => await runLangiumGenerate(stagingParserRoot, repositoryRoot, parserRoot))
   let outcome: number | undefined
@@ -264,7 +264,7 @@ async function validateDeclaredOutputBoundaries(
  */
 async function createParserGenerateStagingRepository(parserRoot: string): Promise<string> {
   const stagingRepositoryRoot = await FS.mkTmpDir('tao-parser-generate-')
-  const stagingParserRoot = FS.resolvePath('packages/parser', stagingRepositoryRoot)
+  const stagingParserRoot = FS.resolvePath('packages/language/parser', stagingRepositoryRoot)
   try {
     await FS.copyFile(
       FS.resolvePath(LANGIUM_CONFIG, parserRoot),

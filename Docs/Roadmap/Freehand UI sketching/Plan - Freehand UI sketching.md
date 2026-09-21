@@ -30,8 +30,8 @@ FS-D1–FS-D20 or reordering the FS-D20 sequence.
   lanes check it without rewriting it (FS-D3).
 - Use `.test.tao` journeys for observable language behavior. Use package tests only for grammar,
   validation, source-action mechanics, native/module boundaries, generated IR, and the harness.
-  Every Studio gesture receives a journey in `packages/studio/studio-tests` or the smoke lane that
-  `packages/studio/README.md` assigns it.
+  Every Studio gesture receives a journey in `packages/ides/studio/studio-tests` or the smoke lane that
+  `packages/ides/studio/README.md` assigns it.
 - Run focused tests during each slice and `./agent verify` before every commit. Preserve the task's
   developer-environment ledger and distinguish implementation, contract, browser, native, and
   physical-device evidence.
@@ -173,7 +173,7 @@ that no move/resize/retype writes the Tao render tree. Browser smoke covers real
 capture and file/catalog reload.
 
 **Reconcile.** `Docs/Spec/Tao Studio.md` gains the implemented sketch catalog, generated view, trust,
-and current-boundary contract; `packages/studio/README.md` gains artifact/recovery and smoke steps.
+and current-boundary contract; `packages/ides/studio/README.md` gains artifact/recovery and smoke steps.
 
 **Open before starting.** None. Gesture mechanics must preserve platform selection and canvas
 scrolling, but their product meaning is settled.
@@ -576,7 +576,7 @@ one guide pass (a drawing that snaps to guides projects without a proposal). Eve
 that no gesture other than Snap writes the Tao render tree.
 
 **Reconcile.** `Docs/Spec/Tao Studio.md` (gesture and key contract, rename, delete, sketch resize),
-`packages/studio/README.md`.
+`packages/ides/studio/README.md`.
 
 **Size.** L overall: a S, b M, c S, d M, e M, f M, g M, h M, i S. **Depends on.** Stride 0.
 
@@ -700,7 +700,7 @@ A decision discovered during implementation joins the next round with Ro; it is 
 
 ### Verification
 
-Each stride lands with a Studio journey per gesture in `packages/studio/studio-tests`, its smoke-lane
+Each stride lands with a Studio journey per gesture in `packages/ides/studio/studio-tests`, its smoke-lane
 steps green on a host with Chrome, `./agent verify` green, and the Studio spec and README reconciled
 to what landed. Corpus numbers are reported as measured, never rounded up to the threshold.
 

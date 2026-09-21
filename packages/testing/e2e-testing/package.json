@@ -1,0 +1,22 @@
+{
+  "name": "tao-e2e-testing",
+  "private": true,
+  "type": "module",
+  "main": "HostTestingCommand.ts",
+  "module": "HostTestingCommand.ts",
+  "exports": {
+    ".": "./HostTestingCommand.ts"
+  },
+  "dependencies": {
+    "@playwright/test": "1.63.0",
+    "tao-icloud": "workspace:*",
+    "tao-host-control": "workspace:*",
+    "tao-appium-driver": "workspace:*",
+    "tao-playwright-driver": "workspace:*",
+    "tao-runtime": "workspace:*",
+    "tao-expo-host": "workspace:*",
+    "tao-compiler": "workspace:*",
+    "tao-shared": "workspace:*",
+    "typescript": "5.9.3"
+  }
+}

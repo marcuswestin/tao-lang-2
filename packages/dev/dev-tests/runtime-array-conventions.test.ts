@@ -1,7 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { runtimeArrayConventionIssues } from '../dev-src/repository-tests/RuntimeArrayConventions'
 
-const runtimePath = 'packages/runtime/TaoRuntime-src/new-feature.ts'
+const runtimePath = 'packages/apps/runtime/TaoRuntime-src/new-feature.ts'
 
 Describe('runtime array ordering boundary', () => {
   Test('rejects mutating and unavailable ordering methods, including extracted members', () => {
@@ -41,7 +41,7 @@ Describe('runtime array ordering boundary', () => {
 
   Test('allows the implementation boundary and does not inspect comments or emitted text', () => {
     Expect(runtimeArrayConventionIssues([
-      { path: 'packages/runtime/TaoRuntime-src/core/Arrays.ts', source: 'return [...values].sort(compare)' },
+      { path: 'packages/apps/runtime/TaoRuntime-src/core/Arrays.ts', source: 'return [...values].sort(compare)' },
       { path: 'packages/dev/tool.ts', source: 'values.toSorted()' },
       {
         path: runtimePath,

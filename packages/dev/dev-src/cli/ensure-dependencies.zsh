@@ -30,7 +30,13 @@ mkdir -p "$TAO_DEPENDENCY_BUILD" "$TAO_DEPENDENCY_TEMP_ROOT"
 TAO_DEPENDENCY_TEMP="$(tao_bun_temp_dir "$TAO_DEPENDENCY_TEMP_ROOT")"
 typeset -a TAO_DEPENDENCY_INSTALL_ARGS
 tao_bun_install_args "$TAO_DEPENDENCY_ROOT"
-TAO_DEPENDENCY_INSTALL_ARGS=("${reply[@]}" --frozen-lockfile)
+# Every install is frozen except the one a person or agent asks for by name: a change to the
+# workspace set or to a package.json has to reach `bun.lock` somewhere, and this is that place.
+if [[ "$TAO_DEPENDENCY_MODE" == --refresh-lockfile ]]; then
+  TAO_DEPENDENCY_INSTALL_ARGS=("${reply[@]}")
+else
+  TAO_DEPENDENCY_INSTALL_ARGS=("${reply[@]}" --frozen-lockfile)
+fi
 
 function tao_dependency_state() {
   if [[ ! -d "$TAO_DEPENDENCY_ROOT/node_modules" ]]; then
@@ -131,7 +137,7 @@ function tao_ensure_dependencies_locked() {
     return 0
   fi
 
-  if [[ "$state" != current ]]; then
+  if [[ "$state" != current || "$TAO_DEPENDENCY_MODE" == --refresh-lockfile ]]; then
     tao_repair_dependencies
     return
   fi

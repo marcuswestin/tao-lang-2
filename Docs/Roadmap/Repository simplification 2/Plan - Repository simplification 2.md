@@ -63,7 +63,7 @@ and the `repo-lint` convention table. Its Documentation and Command-surface part
 
 | Branch                             | Do not edit                                                                                                                                                                                           |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `feat/real-host-testing-prototype` | `packages/e2e-testing`, `packages/host-control*`, `packages/runtime/TaoRuntime-src/core`, the test compiler, `MachineLanes.ts`, `Docs/Roadmap/Real-host testing*`, `Tao host control architecture.md` |
+| `feat/real-host-testing-prototype` | `packages/testing/e2e-testing`, `packages/testing/host-control*`, `packages/apps/runtime/TaoRuntime-src/core`, the test compiler, `MachineLanes.ts`, `Docs/Roadmap/Real-host testing*`, `Tao host control architecture.md` |
 | `feat/landing-pool-lock`           | `repository-tests/` (but see 1.a), `doctor/Board.ts`, `Docs/Roadmap/Parallel agents on one machine.md`                                                                                                |
 | both                               | the developer-environment ledger and its entries                                                                                                                                                      |
 
@@ -93,17 +93,42 @@ Shared-edit files (`AGENTS.md`, `Justfile`, `dev.ts`, `agent-dev.ts`, `tsconfig.
 
 ## Packages after consolidation
 
-| Package                                                   | Holds                                                                        |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `shared`                                                  | unchanged, plus `Platform.Crypto` and shared guards                          |
-| `language`                                                | `parser`, `ast-utils`, `validator`, `formatter`, `source-actions` as folders |
-| `compiler`                                                | `compiler`, `generation`, `workspace`                                        |
-| `editor`                                                  | `code-editor`, `ide-extension`                                               |
-| `runtime`                                                 | unchanged; imports nothing, which is why `stdlib` stays out                  |
-| `stdlib`, `runtime-toolchain`, `studio`, `tao-cli`, `dev` | unchanged as packages                                                        |
-| `update-server`, `icloud-native`, `studio-companion-app`  | unchanged; each is its own deployable (`tao-update-server` has a `bin`)      |
+```
+packages/
+├── shared/                    unchanged
+├── compiler/                  unchanged location; absorbs workspace
+├── language/
+│   ├── parser/
+│   ├── ast-utils/
+│   ├── validator/
+│   ├── formatter/
+│   └── source-actions/
+├── apps/
+│   ├── runtime/
+│   ├── expo-host/             was runtime-toolchain (tao-expo-host)
+│   └── stdlib/
+├── providers/
+│   └── icloud/                was icloud-native (tao-icloud)
+├── ides/
+│   ├── studio/                absorbs code-editor
+│   ├── studio-companion-app/
+│   └── ide-extension/
+├── ai/
+│   └── generation/
+├── cli/
+│   └── tao-cli/
+├── services/
+│   └── update-server/
+├── testing/
+│   ├── host-control/
+│   ├── appium-driver/         was host-control-appium (tao-appium-driver)
+│   ├── playwright-driver/     was host-control-playwright (tao-playwright-driver)
+│   └── e2e-testing/
+└── dev/                        unchanged in this slice
+```
 
-"Langium only inside parser" becomes a folder rule inside `language`.
+"Langium only inside parser" becomes a folder rule inside `language`. `compiler`, `shared`, and `dev`
+do not move.
 
 ## Waves
 
@@ -250,3 +275,58 @@ Five implementers, one file set each, measured on net lines removed rather than 
   the approval rule for other agents and sessions stays in `AGENTS.md` and the `delegation` skill.
 - Merged `main` added six packages, four of them host-testing code inside the fence. The
   consolidation table above predates them and is redone before that pass.
+
+## Package restructure
+
+The consolidation table above is superseded by the decided tree, settled with Ro on 2026-09-21 and
+recorded in `.artifacts/restructure-map.md` for the move itself.
+
+The language packages (`parser`, `ast-utils`, `validator`, `formatter`, `source-actions`) become a
+group, `packages/language/`, not a merge into one package. A merge would share one gate run and one
+test cache across all five, so a change to `formatter` would rerun `validator`'s suite too; a group
+keeps each package's gate cached and sharded on its own. It also keeps each package's declared
+dependencies as the enforcement point for the layering between them — `validator` importing
+`parser` is a stated dependency a merge would erase — and keeps every consumer's dependency
+declaration honest about which of the five it actually uses, rather than depending on one bundle
+that always resolves. The same reasoning holds for the other new groups (`apps`, `ides`, `cli`,
+`testing`, `services`, `providers`, `ai`): each gathers packages that belong together conceptually
+without merging their gates, caches, or dependency graphs.
+
+Two packages do merge, because each already had the shape of an internal folder of its host rather
+than a package with its own consumers. `workspace` merges into `compiler` (`compiler/compiler-src/
+workspace/`): `compiler` already depends on `workspace` and is its only front door, so the two
+gated and cached separately for no consumer that reaches one without the other. `code-editor`
+merges into `studio` (`ides/studio/studio-src/code-editor/`): it has exactly one real importer,
+`studio`, so a package boundary between them protected nothing.
+
+Three packages rename along with their move, so a folder name states what it is rather than what it
+used to be relative to: `runtime-toolchain` becomes `expo-host` (`tao-runtime-toolchain` →
+`tao-expo-host`), `icloud-native` becomes `icloud` under `providers/` (`tao-icloud-native` →
+`tao-icloud`, native identifiers such as the podspec name and the `TaoICloudModule` Swift module
+stay as they are), and the two `host-control-*` packages become `appium-driver` and
+`playwright-driver` under `testing/` (`tao-host-control-appium` → `tao-appium-driver`,
+`tao-host-control-playwright` → `tao-playwright-driver`).
+
+Alias rule: an import alias names the package's last folder (`@parser`, `@validator`, `@runtime`,
+`@studio`, `@shared`, `@generation`, …). An alias whose folder name did not change keeps its name;
+only the renamed or merged packages get a new alias, and no deprecated alias is kept alongside the
+new one.
+
+Vocabulary, now in `packages/AGENTS.md`: **provider** is one of several interchangeable
+implementations of a contract Tao defines, chosen by configuration; **bridge** is the language
+mechanism by which Tao code binds to a TypeScript value, and nothing else is a bridge; **adapter**
+is a mapping a Tao user writes to fit an external system to a Tao contract (the Http datasource's
+`Adapter`), and nothing else is an adapter; **test driver** is a component that operates an
+external automation tool (Appium, Playwright) for `host-control`; **service** is a long-running
+process that answers requests; **TypeScript implementation** is the TypeScript file behind a
+stdlib `.tao` declaration.
+
+Later slices, in order:
+
+1. **CLI restructure**, dissolving `dev` into `packages/cli/{cli-kit,dev-cli,agent-cli}` and
+   `packages/testing/verification`.
+2. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
+   package next to `core`, with a surface snapshot test and a gate that apps import only the SDK,
+   never runtime internals.
+3. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
+4. **A vocabulary pass on "host"**, which today names more than one thing.

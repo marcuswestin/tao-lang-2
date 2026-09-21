@@ -1,0 +1,18 @@
+{
+  "name": "tao-icloud",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "icloud-src/icloud-native.ts",
+  "module": "icloud-src/icloud-native.ts",
+  "exports": {
+    ".": "./icloud-src/icloud-native.ts",
+    "./cloudkit": "./icloud-src/cloudkit-native.ts",
+    "./app.plugin": "./app.plugin.js",
+    "./app.plugin.js": "./app.plugin.js"
+  },
+  "dependencies": {
+    "expo": "~57.0.23",
+    "tao-shared": "workspace:*"
+  }
+}

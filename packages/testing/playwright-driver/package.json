@@ -1,0 +1,15 @@
+{
+  "name": "tao-playwright-driver",
+  "private": true,
+  "type": "module",
+  "main": "playwright-driver-src/host-control-playwright.ts",
+  "module": "playwright-driver-src/host-control-playwright.ts",
+  "exports": {
+    ".": "./playwright-driver-src/host-control-playwright.ts"
+  },
+  "dependencies": {
+    "playwright": "1.63.0",
+    "tao-host-control": "workspace:*",
+    "tao-shared": "workspace:*"
+  }
+}

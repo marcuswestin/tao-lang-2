@@ -31,6 +31,17 @@
         "*-tests/**/*.{ts,tsx}"
       ]
     },
+    "packages/*/*": {
+      "entry": [
+        "cli-src/subprocess-test-api.ts",
+        "*-tests/**/*.{test,jest,live}.{ts,tsx}",
+        "*-tests/**/*-fixture.{ts,tsx}"
+      ],
+      "project": [
+        "*-src/**/*.{ts,tsx}",
+        "*-tests/**/*.{ts,tsx}"
+      ]
+    },
     "packages/dev": {
       "entry": [
         "dev-src/dev.ts",
@@ -55,7 +66,7 @@
         "studio-smoke/**/*.{ts,tsx}"
       ]
     },
-    "packages/e2e-testing": {
+    "packages/testing/e2e-testing": {
       "entry": [
         "playwright.config.ts",
         "**/*.host.spec.ts",
@@ -65,7 +76,7 @@
         "**/*.{ts,tsx}"
       ]
     },
-    "packages/generation": {
+    "packages/ai/generation": {
       "entry": [
         "generation-tests/**/*.test.{ts,tsx}",
         "generation-live/**/*.live.{ts,tsx}"
@@ -76,7 +87,7 @@
         "generation-live/**/*.{ts,tsx}"
       ]
     },
-    "packages/host-control": {
+    "packages/testing/host-control": {
       "entry": [
         "host-control-src/host-control.ts",
         "host-control-tests/**/*.test.ts"
@@ -86,25 +97,25 @@
         "host-control-tests/**/*.ts"
       ]
     },
-    "packages/host-control-playwright": {
+    "packages/testing/playwright-driver": {
       "entry": [
-        "host-control-playwright-src/host-control-playwright.ts"
+        "playwright-driver-src/host-control-playwright.ts"
       ],
       "project": [
-        "host-control-playwright-src/**/*.ts"
+        "playwright-driver-src/**/*.ts"
       ]
     },
-    "packages/host-control-appium": {
+    "packages/testing/appium-driver": {
       "entry": [
-        "appium-src/appium.ts",
-        "appium-tests/**/*.test.ts"
+        "appium-driver-src/appium.ts",
+        "appium-driver-tests/**/*.test.ts"
       ],
       "project": [
-        "appium-src/**/*.ts",
-        "appium-tests/**/*.ts"
+        "appium-driver-src/**/*.ts",
+        "appium-driver-tests/**/*.ts"
       ]
     },
-    "packages/ide-extension": {
+    "packages/ides/ide-extension": {
       "entry": [
         "esbuild.config.ts",
         "ide-extension-src/extension/main.ts",
@@ -117,7 +128,7 @@
         "ide-extension-tests/**/*.{ts,tsx}"
       ]
     },
-    "packages/runtime": {
+    "packages/apps/runtime": {
       "entry": [
         "TaoRuntime-src/host-testing/RuntimeHostTestControl.ts",
         "TaoRuntime-src/host-testing/NativeHostTestControl.ts",
@@ -128,22 +139,22 @@
         "TR-tests/**/*.{ts,tsx}"
       ]
     },
-    "packages/runtime-toolchain": {
+    "packages/apps/expo-host": {
       "entry": [
-        "runtime-toolchain-src/testing/compile-app.tsx",
-        "runtime-toolchain-src/testing/render-app.tsx",
-        "runtime-toolchain-src/testing/tao-test-plan.tsx",
-        "runtime-toolchain-src/testing/test-runner.tsx",
-        "runtime-toolchain-src/testing/test-compiler/WorkerProcess.ts",
-        "runtime-toolchain-src/testing/device-module-mocks/*.setup.ts",
-        "runtime-toolchain-tests/**/*.{test,jest}.{ts,tsx}"
+        "expo-host-src/testing/compile-app.tsx",
+        "expo-host-src/testing/render-app.tsx",
+        "expo-host-src/testing/tao-test-plan.tsx",
+        "expo-host-src/testing/test-runner.tsx",
+        "expo-host-src/testing/test-compiler/WorkerProcess.ts",
+        "expo-host-src/testing/device-module-mocks/*.setup.ts",
+        "expo-host-tests/**/*.{test,jest}.{ts,tsx}"
       ],
       "project": [
-        "runtime-toolchain-src/**/*.{ts,tsx}",
-        "runtime-toolchain-tests/**/*.{ts,tsx}"
+        "expo-host-src/**/*.{ts,tsx}",
+        "expo-host-tests/**/*.{ts,tsx}"
       ]
     },
-    "packages/stdlib": {
+    "packages/apps/stdlib": {
       "entry": [
         "@tao/**/*.{ts,tsx}",
         "stdlib-tests/**/*.test.{ts,tsx}"
@@ -155,7 +166,7 @@
       ],
       "includeEntryExports": true
     },
-    "packages/studio": {
+    "packages/ides/studio": {
       "entry": [
         "studio-src/TaoStudioBrowser.tsx",
         "studio-tests/**/*.test.{ts,tsx}"

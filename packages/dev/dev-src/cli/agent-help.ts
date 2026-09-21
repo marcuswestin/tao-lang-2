@@ -57,9 +57,9 @@ Examples:
   ./agent bench 25
   ./agent test
   ./agent test "formats imports"
-  ./agent test packages/parser/parser-tests/Parser.test.ts
+  ./agent test packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-all
-  ./agent test-file packages/parser/parser-tests/Parser.test.ts
+  ./agent test-file packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-changed
   ./agent test-retry
   ./agent verify-changed

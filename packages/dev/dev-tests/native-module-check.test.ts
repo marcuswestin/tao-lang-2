@@ -40,7 +40,7 @@ Describe('native module compiler check', () => {
     Expect(exitCode).toBe(0)
     Expect(events).toEqual([
       'create:/repo/.artifacts/native-module-check',
-      'prepare:/repo/packages/runtime-toolchain:/repo/.artifacts/native-module-check/run-1/host',
+      'prepare:/repo/packages/apps/expo-host:/repo/.artifacts/native-module-check/run-1/host',
       'command:Expo prebuild',
       'command:CocoaPods install',
       'discover:/repo',
@@ -166,7 +166,7 @@ Describe('native module compiler check', () => {
     Expect(await NativeModuleCheck.run({ repositoryRoot: '/repo' }, dependencies)).toBe(1)
     Expect(events).toEqual([
       'create:/repo/.artifacts/native-module-check',
-      'prepare:/repo/packages/runtime-toolchain:/repo/.artifacts/native-module-check/run-1/host',
+      'prepare:/repo/packages/apps/expo-host:/repo/.artifacts/native-module-check/run-1/host',
       'command:Expo prebuild',
     ])
     Expect(output.join('\n')).toContain('failed during Expo prebuild')

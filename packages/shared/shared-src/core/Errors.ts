@@ -112,7 +112,7 @@ export function isTaoError(error: unknown): error is TaoError {
 /**
  * messageOf reads the message out of an unknown thrown value for a surface that shows it
  * verbatim, such as a status line or an inline alert. `formatForUser` is the terminal rendering.
- * `packages/runtime/TaoRuntime-src/TR-errors.ts` keeps `errorMessage` as its mirror.
+ * `packages/apps/runtime/TaoRuntime-src/TR-errors.ts` keeps `errorMessage` as its mirror.
  */
 export function messageOf(error: unknown): string {
   return errorDetail(error) ?? describeThrownValue(error)

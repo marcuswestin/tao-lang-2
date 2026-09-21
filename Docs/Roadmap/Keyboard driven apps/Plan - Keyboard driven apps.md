@@ -129,9 +129,9 @@ back. Fallback if `store device` proves heavier than expected: ephemeral app sta
 
 **Language.**
 
-- `packages/parser/parser-grammar/views.langium`: `SceneDeclaration` mirroring `ViewDeclaration`
+- `packages/language/parser/parser-grammar/views.langium`: `SceneDeclaration` mirroring `ViewDeclaration`
   (parameters, optional `responds`, body or foreign implementation); shares the view body grammar.
-- `packages/stdlib/@tao/Prelude.tao`: `primitive scene is view with { Title text is "", Toolbar list
+- `packages/apps/stdlib/@tao/Prelude.tao`: `primitive scene is view with { Title text is "", Toolbar list
   of action() is [] }` — both slots move off `view`; `primitive nav is scene with { implement }`.
 - Validator (`views-validator.ts`, `declaration-slots-validator.ts`, navigation validators): a scene
   may not appear in render position ("a scene is presented, never composed", at the render site);
@@ -140,7 +140,7 @@ back. Fallback if `store device` proves heavier than expected: ephemeral app sta
   read `Title`.
 - Formatter and source actions: `scene` formats as `view`; a source action "convert view to scene"
   for views that fill `Title`/`Toolbar`.
-- Frame kind: `packages/stdlib/@tao/nav/native/Navigation.tao` and `basic/Navigation.tao` gain
+- Frame kind: `packages/apps/stdlib/@tao/nav/native/Navigation.tao` and `basic/Navigation.tao` gain
   `FrameNav` (follows `StackNav`/`SlotNav`/`SelectionNav`/`SplitNav`; the retired `frame` view keyword
   is unrelated and the §10 amendment says so) with keyed edge slots, each `{ Label text, Content view?
   , Width?/Height?, Resizable? }`; `native/NavKinds.ts` exports `FrameNavKind = () =>
@@ -197,7 +197,7 @@ no commands today; the document commands T4's journeys need (e.g. a `Finish` com
 
 **Language.**
 
-- `packages/parser/parser-grammar/blocks.langium` (where `CommandDeclaration` lives today):
+- `packages/language/parser/parser-grammar/blocks.langium` (where `CommandDeclaration` lives today):
   `CommandDeclaration: 'command' name=ID block=CommandBlock`. **Placement:** module level or a view
   body — the same rule as `action`; a view-body command closes over the view's parameters, state,
   and actions. The block holds slot declarations, member fills, and exactly one `DoClause: 'do'
@@ -215,7 +215,7 @@ no commands today; the document commands T4's journeys need (e.g. a `Finish` com
   Key shortcut is none, Enabled boolean is yes }`. **`shortcut`** is the new value type (`key` is
   taken: it is the slot-key type in `SelectionNav { Initial key }` and a reserved parameter name);
   `primary + "n"` is a shortcut value, and a bare string literal in `Key` position is a shortcut
-  literal (the §2 precedent of a bare number in size position). `packages/ast-utils` `Type.ts` and
+  literal (the §2 precedent of a bare number in size position). `packages/language/ast-utils` `Type.ts` and
   `Units.ts` gain `shortcut`; the validator rejects platform-named modifiers.
 - `Value with { … }` on a command fills slots and overrides `Label`/`Icon`/`Key`/`Enabled`;
   overriding `Title` is a diagnostic. `do <command> [with { … }]` invokes; `do` with an unfilled
@@ -411,7 +411,7 @@ entities from the catalog, KEY-D9 narrowing over labels). Allocation
 (`TR-interaction-allocation.ts`): label-derived first free letter → next distinctive → two-letter
 sequences; locale-aware; never a reserved key; assigned by identity; deterministic. Keyboard-presence
 gate: affordances after the first hardware keypress. Design: element defaults `Hint` and `Overview`
-in the design's `styles { }`. Studio's `StudioCommandPalette.filter` (`packages/studio/studio-src/
+in the design's `styles { }`. Studio's `StudioCommandPalette.filter` (`packages/ides/studio/studio-src/
 client/StudioProductPanels.ts`) adopts the same narrowing rule in a later Studio slice; until then
 the two knowingly differ.
 

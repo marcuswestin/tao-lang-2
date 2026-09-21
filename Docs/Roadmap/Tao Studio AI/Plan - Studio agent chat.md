@@ -269,15 +269,15 @@ Existing seams to reuse unchanged or nearly so:
 
 | Seam                                                                                                                    | Where                                                       | Used by                                                       |
 | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
-| Semantic snapshot and queries (`overview`, `inspect`, `trace`, `fieldStory`, `resolveTarget`, literal texts on renders) | `packages/studio/studio-src/agent-chat/SemanticSnapshot.ts` | all stories                                                   |
+| Semantic snapshot and queries (`overview`, `inspect`, `trace`, `fieldStory`, `resolveTarget`, literal texts on renders) | `packages/ides/studio/studio-src/agent-chat/SemanticSnapshot.ts` | all stories                                                   |
 | Checkpointed multi-file apply and undo                                                                                  | `session.applyAgentFiles`, `session.undoAgentFiles`         | stories 2, 3                                                  |
 | Typed feature planner and lowering, reword guardrail                                                                    | `agent-chat/FeaturePlan.ts`                                 | story 3 as tools                                              |
 | Before/after test verdict with duplicate-record folding                                                                 | `agent-chat/FeatureVerdict.ts`, `StudioTestRunner`          | stories 2, 3                                                  |
-| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/generation`         | story 2                                                       |
+| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/ai/generation`         | story 2                                                       |
 | Preview manifest (scenarios, fixtures, cells) and grid refresh                                                          | `StudioPreviewManifest.ts`, `/api/preview/*`                | story 2                                                       |
 | Source-action bus (versioned, undoable, conflict-checked edits)                                                         | `/api/source-action/*`                                      | stories 2, 3 (implementer's choice against `applyAgentFiles`) |
 
-New for this slice, suggested as `packages/studio/studio-src/agent-chat/`:
+New for this slice, suggested as `packages/ides/studio/studio-src/agent-chat/`:
 
 - **The loop.** One AI SDK agent per chat session, held server-side, with the conversation as its
   state. A turn is: append the person's message, run the loop until the model stops, the budget trips,
@@ -438,7 +438,7 @@ demonstrated by asking for a state the app cannot reach, with the agent stopping
 - The Browser pane's launch entries open Studio on `127.0.0.1`; Studio rejects a `localhost` origin.
 - A blank preview with a clean compile was the bundler's stale file map; the startup ordering fix is on
   this branch and `/api/preview/diagnosis` explains a bundle failure over the frame.
-- Focused tests: `bun test packages/studio/studio-tests/<file>.test.ts`. The `./dev test <pattern>`
+- Focused tests: `bun test packages/ides/studio/studio-tests/<file>.test.ts`. The `./dev test <pattern>`
   argument is a test-name regex, not a file selector, and a pattern that matches nothing still reports
   success; prefer `bun test` with a file path while iterating.
 
@@ -460,7 +460,7 @@ To be numbered into the exploration document's ledger as they are settled:
 
 ## Implementation record
 
-The slice is implemented in `packages/studio/studio-src/agent-chat/`, which now also owns the
+The slice is implemented in `packages/ides/studio/studio-src/agent-chat/`, which now also owns the
 snapshot, lowering, apply and verdict seams the retired on-device proof of concept left behind. What follows is what was built, what changed from the plan
 above, and — most importantly — what is still unproven.
 

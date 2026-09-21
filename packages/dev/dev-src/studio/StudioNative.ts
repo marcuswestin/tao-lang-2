@@ -1,8 +1,8 @@
+import type { Mac2HostController } from '@appium-driver'
+import { Workspace } from '@compiler/workspace'
 import type { HostController } from '@host-control'
-import type { Mac2HostController } from '@host-control/appium'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
-import { Workspace } from '@workspace'
 import { delimiter as pathDelimiter } from 'node:path'
 import {
   MachineLanes,
@@ -716,7 +716,7 @@ function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
   return {
     name: namespace,
     setup(build) {
-      build.onResolve({ filter: /^@runtime-toolchain$/ }, args =>
+      build.onResolve({ filter: /^@expo-host$/ }, args =>
         args.importer.endsWith('/StudioClientAssets.ts')
           ? { namespace, path: args.path }
           : undefined)
@@ -738,7 +738,7 @@ function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
 
 /** validateStudioRelease applies the compiler's targeted release gates before native packaging mutates output. */
 async function validateStudioRelease(): Promise<void> {
-  await Workspace.compile(Repo.resolvePath('packages/studio/studio-src/TaoStudioClient.tao'), {
+  await Workspace.compile(Repo.resolvePath('packages/ides/studio/studio-src/TaoStudioClient.tao'), {
     validationMode: 'release',
   })
 }
@@ -777,7 +777,7 @@ async function materializeStudioServicePayload(
       packageRoots.set(packageJson['name'], root)
     }
   }
-  const required = new Set<string>(['tao-runtime-toolchain'])
+  const required = new Set<string>(['tao-expo-host'])
   const pending = [...required]
   while (pending.length > 0) {
     const name = pending.shift()!
@@ -934,13 +934,13 @@ async function materializeStudioNodeRuntime(
 }
 
 async function validatePackagedTestRuntime(payloadRoot: string): Promise<void> {
-  const runtimeToolchainRoot = FS.resolvePath('packages/runtime-toolchain', payloadRoot)
+  const runtimeToolchainRoot = FS.resolvePath('packages/apps/expo-host', payloadRoot)
   const nodePath = FS.resolvePath('bin/node', payloadRoot)
   const result = await CLI.run(nodePath, {
     args: [FS.resolvePath('test-command.js', payloadRoot), Repo.resolvePath('Apps/Test Apps/Data MVP')],
     cwd: payloadRoot,
     env: {
-      TAO_STDLIB_ROOT: FS.resolvePath('packages/stdlib', payloadRoot),
+      TAO_STDLIB_ROOT: FS.resolvePath('packages/apps/stdlib', payloadRoot),
       TAO_TEST_IN_PROCESS: 'true',
       TAO_TEST_JEST_PATH: FS.resolvePath('node_modules/jest/bin/jest.js', payloadRoot),
       TAO_TEST_NODE_PATH: nodePath,
@@ -987,7 +987,7 @@ async function installStudioServicePayload(
       'install',
       '--production',
       '--frozen-lockfile',
-      '--filter=tao-runtime-toolchain',
+      '--filter=tao-expo-host',
       '--linker=hoisted',
       '--backend=copyfile',
     ],
@@ -1059,14 +1059,14 @@ async function materializePayloadSymlinks(payloadRoot: string): Promise<void> {
 
 async function validateStudioServicePayload(payloadRoot: string): Promise<void> {
   const required = [
-    'packages/runtime-toolchain/app.json',
-    'packages/runtime-toolchain/index.ts',
-    'packages/runtime-toolchain/metro.config.cjs',
+    'packages/apps/expo-host/app.json',
+    'packages/apps/expo-host/index.ts',
+    'packages/apps/expo-host/metro.config.cjs',
     'studio.js',
     'node_modules/expo/package.json',
     'node_modules/tao-runtime/package.json',
     'node_modules/tao-shared/package.json',
-    'node_modules/tao-workspace/package.json',
+    'node_modules/tao-compiler/package.json',
   ]
   for (const relativePath of required) {
     if (!await FS.isFile(FS.resolvePath(relativePath, payloadRoot))) {

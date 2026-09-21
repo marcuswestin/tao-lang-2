@@ -1,6 +1,6 @@
 import ts from 'typescript'
 
-const runtimeRoot = 'packages/runtime/TaoRuntime-src/'
+const runtimeRoot = 'packages/apps/runtime/TaoRuntime-src/'
 const helperPath = `${runtimeRoot}TR-create-element.ts`
 
 const ELEMENT_CALL_DETAIL = 'builds an element outside `TR-create-element`; use `createElement` from'
