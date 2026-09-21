@@ -412,6 +412,11 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   for (const excluded of proved.excluded) {
     summary.warnings = [...summary.warnings, GreenTree.describeExclusion(excluded)]
   }
+  // A suite that lost its sharding is still green, so nothing else in this summary would say a word
+  // about it; the lane just runs at a fraction of the machine and looks normal.
+  for (const warning of testPlan?.warnings ?? []) {
+    summary.warnings = [...summary.warnings, warning]
+  }
   // The readers proved the tree as it stood when the prepare phase ended. Anything that changed it
   // after that — a concurrent agent's edit, not this run's own fixers — means this is not evidence.
   const finalTree = verifiedTree === undefined ? undefined : await fingerprintOf(location.repositoryRoot)

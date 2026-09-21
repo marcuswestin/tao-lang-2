@@ -34,6 +34,15 @@ export type ShardPlan = {
   /** One line naming the measurements that produced this count, for the run summary. */
   reason: string
   suite: string
+  /**
+   * Set only when a suite runs whole because the planner had nothing to plan with, never when it
+   * ran whole on a measurement. The two read alike in `reason` and mean opposite things: a suite
+   * under the floor is one shard because that is cheapest, while a suite with no recorded duration
+   * is one shard because its history is missing — which is what a renamed suite looks like, and
+   * what cost this repository a silent 40s a lane when the package restructure changed every suite
+   * id at once. A caller warns on this; nothing should warn on the others.
+   */
+  unshardedCause?: 'no-recorded-duration'
 }
 
 export type PlanShardsOptions = {
@@ -77,7 +86,7 @@ function planShards(options: PlanShardsOptions): ShardPlan {
     return whole('one unit')
   }
   if (options.measuredMs === undefined) {
-    return whole('no recorded duration yet')
+    return { ...whole('no recorded duration yet'), unshardedCause: 'no-recorded-duration' }
   }
   if (options.measuredMs < MIN_SHARDABLE_MS) {
     return whole(`${formatSeconds(options.measuredMs)} measured, under the ${formatSeconds(MIN_SHARDABLE_MS)} floor`)
