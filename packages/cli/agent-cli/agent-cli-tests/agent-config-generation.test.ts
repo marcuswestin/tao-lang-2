@@ -125,4 +125,30 @@ Describe('agent config generation', () => {
       await FS.remove(root)
     }
   })
+
+  Test('session-start hides successful setup warnings and reports setup failures', async () => {
+    const root = await mkTestDir('tao-agent-session-start-')
+    try {
+      const scriptPath = 'packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh'
+      const script = FS.resolvePath(scriptPath, root)
+      await FS.writeText(script, await FS.readText(Repo.resolvePath(scriptPath)))
+      await FS.chmod(script, 0o755)
+      const agent = FS.resolvePath('agent', root)
+      await FS.writeText(agent, '#!/bin/zsh\necho "detached HEAD warning" >&2\nexit 0\n')
+      await FS.chmod(agent, 0o755)
+
+      const success = await CLI.run(script, { cwd: root })
+      Expect(success.exitCode).toBe(0)
+      Expect(success.stdout).toBe('')
+      Expect(success.stderr).toBe('')
+
+      await FS.writeText(agent, '#!/bin/zsh\necho "setup failed"\necho "recovery detail" >&2\nexit 7\n')
+      const failure = await CLI.run(script, { cwd: root })
+      Expect(failure.exitCode).toBe(7)
+      Expect(failure.stderr).toContain('setup failed')
+      Expect(failure.stderr).toContain('recovery detail')
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })
