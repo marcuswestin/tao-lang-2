@@ -432,8 +432,10 @@ Phase 0 — remove the defects (days; no design decisions; unblocks every lane i
    Done.
 3. ~~Build the union of a workspace's entries in one pass and validate each entry over the shared,
    linked graph (5.3).~~ Done; check 1.22s and fix 0.80s on the fixture, not the 0.5s projected below,
-   for the two reasons 5.3 ends on. Teach `./agent bench` to assert a budget so this cannot regress
-   silently.
+   for the two reasons 5.3 ends on. `./agent bench` now measures a whole-app check beside parse,
+   validate, compile, and format, and fails when a steady-state median passes its budget. The
+   budgets are loose on purpose — about 2.5 times what a machine at load 40 measured — so they catch
+   a defect of ten times and not one of two; the tests that count work rather than time hold those.
 4. ~~Keep Jest's configuration still across compiles (5.5).~~ Done for the entrypoint directory, which
    was 70% of it. Remaining: compile what test variants share once per run root.
 5. Give a packaged CLI a version-keyed cache in a user cache directory (5.6).

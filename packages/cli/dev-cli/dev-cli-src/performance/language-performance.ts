@@ -6,8 +6,43 @@ import { Assert, Errors, FS, HCI, Platform, Repo } from '@shared'
 const fixtureRelativePath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
 const defaultIterations = 10
 
+type Stage = 'parse' | 'validate' | 'check' | 'compile' | 'format'
+type Strategy = 'one-shot' | 'session'
 type Operation = () => Promise<unknown>
 type OperationFactory = () => Operation | Promise<Operation>
+
+/**
+ * BUDGETS_MS is the ceiling on each case's steady-state median; the bench fails when one is passed.
+ *
+ * They are deliberately loose. Each is about two and a half times the slowest median seen across two
+ * runs on the busiest machine this was measured on — load 40 on 18 cores — so a loaded machine does
+ * not trip them, and a bench that cries wolf is one nobody runs. The defects they exist for were not
+ * subtle: a session parse of this fixture took 1,600ms before the scope provider remembered what a
+ * `use` statement resolves to, and about 20s before the physical-path guard stopped asking the file
+ * system per reference. What a budget this loose cannot see is a regression of two times, and the
+ * tests that count work rather than time are what hold those: documents read once per batch
+ * (`workspace-batch.test.ts`), one physical-path lookup per imported file (`packages.test.ts`).
+ */
+const BUDGETS_MS: Readonly<Record<`${Stage} ${Strategy}`, number>> = {
+  'parse one-shot': 1_300,
+  'parse session': 400,
+  'validate one-shot': 1_100,
+  'validate session': 450,
+  'check one-shot': 1_700,
+  'check session': 1_300,
+  'compile one-shot': 2_300,
+  'compile session': 1_300,
+  'format one-shot': 100,
+  'format session': 100,
+}
+
+/** BudgetBreach is one case whose steady-state median passed its budget. */
+export type BudgetBreach = {
+  budgetMs: number
+  medianMs: number
+  stage: Stage
+  strategy: Strategy
+}
 
 export type PerformanceSampleSummary = {
   medianMs: number
@@ -15,8 +50,8 @@ export type PerformanceSampleSummary = {
 }
 
 export type LanguagePerformanceResult = {
-  stage: 'parse' | 'validate' | 'compile' | 'format'
-  strategy: 'one-shot' | 'session'
+  stage: Stage
+  strategy: Strategy
   coldMs: number
   samplesMs: readonly number[]
   summary: PerformanceSampleSummary
@@ -83,6 +118,20 @@ export async function runLanguagePerformance(iterations = defaultIterations): Pr
     }),
   )
 
+  // What `tao check` does with a whole app: every file an entry of its own, built once.
+  const entryFiles = (await Repo.filesUnder(fixtureDirectory)).filter(path => FS.extname(path) === '.tao')
+  results.push(
+    await measureCase('check', 'one-shot', iterations, async () => async () => {
+      await (await Workspace.open(fixtureDirectory)).validateFiles(entryFiles)
+    }),
+  )
+  results.push(
+    await measureCase('check', 'session', iterations, async () => {
+      const workspace = await Workspace.open(fixtureDirectory)
+      return async () => await workspace.validateFiles(entryFiles)
+    }),
+  )
+
   results.push(
     await measureCase('compile', 'one-shot', iterations, async () => async () => {
       await Workspace.compile(fixturePath, { appName: 'WordFlower' })
@@ -122,14 +171,31 @@ export async function runLanguagePerformance(iterations = defaultIterations): Pr
   }
 }
 
-/** renderLanguagePerformance renders benchmark metadata plus cold, median, and p95 latency. */
+/** budgetFor returns the ceiling on one case's steady-state median. */
+export function budgetFor(stage: Stage, strategy: Strategy): number {
+  return BUDGETS_MS[`${stage} ${strategy}`]
+}
+
+/** budgetBreaches lists the cases whose steady-state median passed its budget, in report order. */
+export function budgetBreaches(report: Pick<LanguagePerformanceReport, 'results'>): BudgetBreach[] {
+  return report.results.flatMap(result => {
+    const budgetMs = budgetFor(result.stage, result.strategy)
+    return result.summary.medianMs > budgetMs
+      ? [{ budgetMs, medianMs: result.summary.medianMs, stage: result.stage, strategy: result.strategy }]
+      : []
+  })
+}
+
+/** renderLanguagePerformance renders benchmark metadata plus cold, median, and p95 latency against each budget. */
 export function renderLanguagePerformance(report: LanguagePerformanceReport): string {
   const lines = [
     'Language service performance',
     `fixture ${report.fixturePath} (${report.fixtureLines} lines, ${report.fixtureBytes} bytes)`,
     `steady-state iterations ${report.iterations}`,
     '',
-    `${'stage'.padEnd(10)}${'strategy'.padEnd(12)}${'cold'.padStart(10)}${'median'.padStart(10)}${'p95'.padStart(10)}`,
+    `${'stage'.padEnd(10)}${'strategy'.padEnd(12)}${'cold'.padStart(10)}${'median'.padStart(10)}${'p95'.padStart(10)}${
+      'budget'.padStart(10)
+    }`,
   ]
 
   for (const result of report.results) {
@@ -137,9 +203,24 @@ export function renderLanguagePerformance(report: LanguagePerformanceReport): st
       `${result.stage.padEnd(10)}${result.strategy.padEnd(12)}`
         + `${formatElapsed(result.coldMs).padStart(10)}`
         + `${formatElapsed(result.summary.medianMs).padStart(10)}`
-        + `${formatElapsed(result.summary.p95Ms).padStart(10)}`,
+        + `${formatElapsed(result.summary.p95Ms).padStart(10)}`
+        + `${formatElapsed(budgetFor(result.stage, result.strategy)).padStart(10)}`,
     )
   }
+
+  const breaches = budgetBreaches(report)
+  lines.push(
+    '',
+    breaches.length === 0
+      ? 'every steady-state median is within its budget'
+      : `over budget: ${
+        breaches.map(breach =>
+          `${breach.stage} ${breach.strategy} median ${formatElapsed(breach.medianMs)} against ${
+            formatElapsed(breach.budgetMs)
+          }`
+        ).join('; ')
+      }`,
+  )
 
   lines.push(
     '',
@@ -214,7 +295,11 @@ function formatElapsed(elapsedMs: number): string {
 async function run(): Promise<void> {
   try {
     const iterations = parseIterations(Platform.runtimeProcess.argv[2])
-    HCI.write(renderLanguagePerformance(await runLanguagePerformance(iterations)))
+    const report = await runLanguagePerformance(iterations)
+    HCI.write(renderLanguagePerformance(report))
+    if (budgetBreaches(report).length > 0) {
+      Platform.runtimeProcess.setExitCode(1)
+    }
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
     Platform.runtimeProcess.setExitCode(1)
