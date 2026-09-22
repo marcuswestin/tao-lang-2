@@ -7,6 +7,12 @@ control, and nothing in this package knows about either. Its identity (`Tao Comp
 `packages/ides/studio-tooling/studio-tooling-src/StudioCompanionIdentity.ts`; `app.json` repeats the same values and a
 test keeps them equal.
 
+This is also, today, the only way a Tao app reaches a physical iPhone or iPad. Since 2026-09-03,
+Expo Go 57 on iOS requires the developer to be logged in to both the Expo CLI and the Expo Go app,
+and `tao dev`'s Metro server runs under a repository-local Expo home directory that a developer's
+own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. The iOS
+Simulator, the Android emulator, and physical Android are unaffected and keep using Expo Go.
+
 ## Install once
 
 ```sh
