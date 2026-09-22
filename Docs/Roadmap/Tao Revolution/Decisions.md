@@ -2199,9 +2199,9 @@ contracts do not settle distributed atomicity, automatic retry, or rollback of e
 
 ```swift
 fixture HomeKitchen {
-   account Ro { Name: "Ro", Email: "ro@example.com" }
-   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
-   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
+   account Mira { Name: "Mira", Email: "ro@example.com" }
+   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Mira)
+   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Mira
 }
 ```
 
@@ -2270,7 +2270,7 @@ expect Shakshuka is Private
   test writes _as_ someone and watches the store refuse:
 
 ```swift
-as Ro update Shakshuka { Shared }
+as Mira update Shakshuka { Shared }
 expect refused
 expect Shakshuka is Private
 ```
@@ -2304,7 +2304,7 @@ action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both
   within the runtime's real capabilities.** `prepare { update Me { Units: Imperial } }` is just data.
   `locale "es"` on a scenario lowers to mocking the localization module (expo-localization) in the
-  Jest environment, which is the standard, supported move — so no account-scoped `set X for Ro`
+  Jest environment, which is the standard, supported move — so no account-scoped `set X for Mira`
   statement exists, and nothing pretends to change the OS.
 - **Pseudolocale is a scenario mode, exactly as the platform does it.** Xcode runs an app in
   Double-Length, Accented, or Right-to-Left _pseudolanguages_ as scheme diagnostics — review modes,

@@ -138,7 +138,7 @@ app SkilletPreview = Skillet with {
    Name "Skillet Preview"
    Datasource Memory
    Seed HomeKitchen // the test fixture, so the preview has a kitchen to show
-   Accounts simulated (signed in as "Ro")
+   Accounts simulated (signed in as "Mira")
    Notifications simulated
    Places simulated
    Restore fresh

@@ -30,15 +30,15 @@ const ROOT = '/repo'
 function fake(overrides: Partial<FakeState> = {}) {
   const state: FakeState = {
     ancestry: [],
-    branch: 'dev/ro',
+    branch: 'dev/mira',
     conflicts: [],
-    existingBranches: ['main', 'dev/ro'],
-    identity: 'Ro Example',
+    existingBranches: ['main', 'dev/mira'],
+    identity: 'Mira Example',
     mainHead: 'main00000000000000000000000000000000000000',
     mergeExitCode: 0,
     remoteMainHead: 'main00000000000000000000000000000000000000',
     status: '',
-    worktreeBranches: [{ branch: 'dev/ro', path: ROOT }],
+    worktreeBranches: [{ branch: 'dev/mira', path: ROOT }],
     ...overrides,
   }
   // A detached mirror keeps its own HEAD: main moving does not move it, which is the point of the
@@ -153,12 +153,12 @@ Describe('developer workflow', () => {
   Test('creates the dev branch from main the first time and switches to it afterwards', async () => {
     const first = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('', first.dependencies)
-    Expect(first.calls.map(call => call.args.join(' '))).toContain('switch --create dev/ro main')
-    Expect(first.lines).toContain("PASS  Created 'dev/ro' from main and switched to it.")
+    Expect(first.calls.map(call => call.args.join(' '))).toContain('switch --create dev/mira main')
+    Expect(first.lines).toContain("PASS  Created 'dev/mira' from main and switched to it.")
 
     const again = fake({ branch: 'local/primary' })
     await DeveloperBranchCommand.run('', again.dependencies)
-    Expect(again.calls.map(call => call.args.join(' '))).toContain('switch dev/ro')
+    Expect(again.calls.map(call => call.args.join(' '))).toContain('switch dev/mira')
   })
 
   Test('names the branch from the argument, the environment, then the Git identity', async () => {
@@ -174,13 +174,13 @@ Describe('developer workflow', () => {
   Test('prefers tao.devBranch in Git config over the Git identity', async () => {
     const configured = fake({
       branch: 'local/primary',
-      configuredBranch: 'dev/ro',
+      configuredBranch: 'dev/mira',
       existingBranches: ['main'],
       identity: 'Marcus Westin',
       worktreeBranches: [],
     })
     await DeveloperBranchCommand.run('', configured.dependencies)
-    Expect(configured.calls.map(call => call.args.join(' '))).toContain('switch --create dev/ro main')
+    Expect(configured.calls.map(call => call.args.join(' '))).toContain('switch --create dev/mira main')
 
     const identityOnly = fake({
       branch: 'local/primary',
@@ -195,7 +195,7 @@ Describe('developer workflow', () => {
   Test('says so rather than switching when the branch lives in another worktree', async () => {
     const taken = fake({
       branch: 'local/primary',
-      worktreeBranches: [{ branch: 'dev/ro', path: '/elsewhere' }],
+      worktreeBranches: [{ branch: 'dev/mira', path: '/elsewhere' }],
     })
     await Expect(DeveloperBranchCommand.run('', taken.dependencies)).rejects.toThrow('checked out in /elsewhere')
     Expect(taken.calls.some(call => call.args[0] === 'switch')).toBe(false)
@@ -204,7 +204,7 @@ Describe('developer workflow', () => {
   Test('reports the uncommitted work it carried onto the branch', async () => {
     const dirty = fake({ branch: 'local/primary', status: ' M notes.md\n' })
     await DeveloperBranchCommand.run('', dirty.dependencies)
-    Expect(dirty.lines).toContain("NOTE  Uncommitted changes came with you onto 'dev/ro'.")
+    Expect(dirty.lines).toContain("NOTE  Uncommitted changes came with you onto 'dev/mira'.")
   })
 
   Test('fast-forwards main, moves a clean mirror behind it, and merges into the branch', async () => {
@@ -221,7 +221,7 @@ Describe('developer workflow', () => {
     )
     Expect(moved.state.mirrorHead).toBe('new-main')
     Expect(moved.lines).toContain('PASS  Moved the main mirror at /mirror to new-main.')
-    Expect(moved.lines).toContain("PASS  Merged main into 'dev/ro'.")
+    Expect(moved.lines).toContain("PASS  Merged main into 'dev/mira'.")
   })
 
   Test('leaves a mirror someone is working in alone', async () => {
@@ -246,7 +246,7 @@ Describe('developer workflow', () => {
     const outcome = await SyncMainCommand.run(conflicted.dependencies)
 
     Expect(outcome.conflicted).toBe(true)
-    Expect(conflicted.lines).toContain("FAIL  main conflicts with 'dev/ro' in 2 file(s):")
+    Expect(conflicted.lines).toContain("FAIL  main conflicts with 'dev/mira' in 2 file(s):")
     Expect(conflicted.lines).toContain('      packages/dev/README.md')
     Expect(conflicted.lines.at(-1)).toContain('just my-resolve')
   })
@@ -264,8 +264,8 @@ Describe('developer workflow', () => {
     try {
       await git(root, ['init', '--bare', remoteRoot])
       await git(root, ['clone', remoteRoot, checkout])
-      await git(checkout, ['config', 'user.name', 'Ro Example'])
-      await git(checkout, ['config', 'user.email', 'ro@example.test'])
+      await git(checkout, ['config', 'user.name', 'Mira Example'])
+      await git(checkout, ['config', 'user.email', 'mira@example.test'])
       await FS.writeText(FS.resolvePath('base.txt', checkout), 'base\n')
       await git(checkout, ['add', 'base.txt'])
       await git(checkout, ['commit', '-m', 'Base'])
@@ -289,7 +289,7 @@ Describe('developer workflow', () => {
         writeLine: line => lines.push(line),
       }
       await DeveloperBranchCommand.run('', dependencies)
-      Expect((await gitResult(checkout, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()).toBe('dev/ro')
+      Expect((await gitResult(checkout, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()).toBe('dev/mira')
 
       await FS.writeText(FS.resolvePath('mine.txt', checkout), 'mine\n')
       await git(checkout, ['add', 'mine.txt'])
