@@ -14,6 +14,12 @@ const stateValidationMessages = {
     `Compound set '${operator}' requires state '${state}' to be number, got ${actual}.`,
   toggleStateType: (state: string, actual: string) =>
     `\`toggle\` requires state '${state}' to be boolean, got ${actual}.`,
+  mutableSetTypeMismatch: (name: string, expected: string, actual: string) =>
+    `Writable value '${name}' expects ${expected}, got ${actual}.`,
+  mutableCompoundType: (name: string, operator: AST.SetOperator, actual: string) =>
+    `Compound set '${operator}' requires writable value '${name}' to be number, got ${actual}.`,
+  mutableToggleType: (name: string, actual: string) =>
+    `\`toggle\` requires writable value '${name}' to be boolean, got ${actual}.`,
   persistedOnlyInApp: (state: string) => `Persisted state '${state}' is only allowed directly inside an app.`,
   appStateMustPersist: (state: string) => `App state '${state}' must declare (persist).`,
   persistedTypeRequired: (state: string) => `Persisted state '${state}' must declare its type with 'is'.`,
@@ -74,7 +80,7 @@ function isPersistableType(
     list: type => type.element === undefined || isPersistableType(type.element, nextSeen),
     item: type =>
       type.item !== undefined
-      && type.item.properties.every(property => isPersistableType(Type.ofProperty(property), nextSeen)),
+      && Type.itemFields(type.item).every(field => isPersistableType(Type.itemFieldType(field), nextSeen)),
     entity: () => false,
     enum: () => true,
     union: type => type.members.every(member => isPersistableType(member, nextSeen)),
@@ -89,16 +95,20 @@ function persistableNominal(type: ASTUtils.TaoType): AST.TypeDefinition | undefi
 }
 
 function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext): void {
-  const state = toggle.target.ref
-  if (!state) {
+  const target = toggle.target.ref
+  if (!AST.isMutableDeclaration(target)) {
     return
   }
-  const stateType = Type.ofExpression(state.value)
-  if (stateType.kind === 'unresolved') {
+  const targetType = mutationTargetType(target, toggle.members)
+  if (targetType.kind === 'unresolved') {
     return
   }
-  if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
-    ctx.error(toggle, stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)))
+  if (targetType.kind !== 'primitive' || targetType.primitive !== 'boolean') {
+    const name = mutationTargetName(target, toggle.members)
+    const message = AST.isStateDeclaration(target) && toggle.members.length === 0
+      ? stateValidationMessages.toggleStateType(target.name, Type.displayName(targetType))
+      : stateValidationMessages.mutableToggleType(name, Type.displayName(targetType))
+    ctx.error(toggle, message)
   }
 }
 
@@ -120,7 +130,7 @@ function reportStateMutationTargetReferenceOrder(
   ctx: ValidationContext,
 ): void {
   const target = mutation.target.ref
-  if (isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
+  if (AST.isStateDeclaration(target) && isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
     ctx.error(mutation, stateValidationMessages.usedBeforeDeclaration(target.name))
   }
 }
@@ -148,12 +158,12 @@ function isInvalidStateMutationTargetReferenceOrder(
 
 /** reportSetStatementTypes requires `set` values to match the target state's type. */
 function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: ValidationContext): void {
-  const state = setStatement.target.ref
-  if (!state) {
+  const target = setStatement.target.ref
+  if (!AST.isMutableDeclaration(target)) {
     return
   }
 
-  const expected = Type.ofValueDeclaration(state)
+  const expected = mutationTargetType(target, setStatement.members)
   const actual = Type.ofExpression(setStatement.value)
   if (expected.kind === 'unresolved' || actual.kind === 'unresolved') {
     return
@@ -161,10 +171,20 @@ function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: Validation
 
   // A compound operator reads the state as a number, so the operator itself is the whole error and
   // the assignment check below would only restate it.
-  if (setStatement.operator !== '=' && !isPlainNumberType(expected)) {
+  if (
+    setStatement.operator !== '='
+    && !isPlainNumberType(expected)
+    && !(setStatement.operator === '+=' && isPlainTextType(expected))
+  ) {
     ctx.error(
       setStatement,
-      stateValidationMessages.compoundStateType(state.name, setStatement.operator, Type.displayName(expected)),
+      AST.isStateDeclaration(target) && setStatement.members.length === 0
+        ? stateValidationMessages.compoundStateType(target.name, setStatement.operator, Type.displayName(expected))
+        : stateValidationMessages.mutableCompoundType(
+          mutationTargetName(target, setStatement.members),
+          setStatement.operator,
+          Type.displayName(expected),
+        ),
     )
     return
   }
@@ -172,18 +192,32 @@ function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: Validation
   if (!Type.isAssignable(actual, expected)) {
     ctx.error(
       setStatement.value,
-      stateValidationMessages.setTypeMismatch(
-        state.name,
-        Type.displayName(expected),
-        Type.displayName(actual),
-      ),
+      AST.isStateDeclaration(target) && setStatement.members.length === 0
+        ? stateValidationMessages.setTypeMismatch(target.name, Type.displayName(expected), Type.displayName(actual))
+        : stateValidationMessages.mutableSetTypeMismatch(
+          mutationTargetName(target, setStatement.members),
+          Type.displayName(expected),
+          Type.displayName(actual),
+        ),
     )
   }
+}
+
+function mutationTargetType(target: AST.MutableDeclaration, members: readonly string[]): ASTUtils.TaoType {
+  return Type.atMemberPath(Type.ofValueDeclaration(target), members)
+}
+
+function mutationTargetName(target: AST.MutableDeclaration, members: readonly string[]): string {
+  return [Type.declarationName(target), ...members].join('.')
 }
 
 /** isPlainNumberType returns whether a type is `number` itself rather than a refinement of it. */
 function isPlainNumberType(type: ASTUtils.TaoType): boolean {
   return type.kind === 'primitive' && type.nominal === undefined && type.primitive === 'number'
+}
+
+function isPlainTextType(type: ASTUtils.TaoType): boolean {
+  return type.kind === 'primitive' && type.primitive === 'text'
 }
 
 /** reportStateDeclarationTypes checks a state's declared type and rejects stored actions. */

@@ -1,0 +1,80 @@
+use BoundReactiveEditing, ReactiveEditing from ./
+
+test "Reactive Editing" {
+   test "shares a writable child parameter with its parent in both directions" {
+      run ReactiveEditing
+      enter "Child" into #sharedInput
+      expect #sharedInput input value "Child"
+      expect text "Shared parent: Child"
+      press #parentAppend
+      expect #sharedInput input value "ChildA"
+      expect text "Shared parent: ChildA"
+      press #sharedAppend
+      expect #sharedInput input value "ChildAA"
+      expect text "Shared parent: ChildAA"
+   }
+   test "shares a direct writable action argument with its caller" {
+      run ReactiveEditing
+      press #sharedAction
+      expect text "Shared parent: SharedA"
+      expect #sharedInput input value "SharedA"
+   }
+   test "retains caller storage through a configured command fill" {
+      run ReactiveEditing
+      press #boundAppendCommand
+      expect text "Shared parent: SharedA"
+      expect #sharedInput input value "SharedA"
+   }
+   test "keeps writable literal occurrences independent across a parent rerender" {
+      run ReactiveEditing
+      enter "One" into #firstLiteralInput
+      enter "Two" into #secondLiteralInput
+      press #firstLiteralAppend
+      expect #firstLiteralInput input value "OneA"
+      expect #secondLiteralInput input value "Two"
+      press #rerender
+      expect text "Literal render: 1"
+      expect #firstLiteralInput input value "OneA"
+      expect #secondLiteralInput input value "Two"
+   }
+   test "initializes a copy parameter once and keeps it detached from later parent changes" {
+      run ReactiveEditing
+      enter "Local" into #copyInput
+      press #changeSource
+      expect text "Source: Changed source"
+      press #rerender
+      expect #copyInput input value "Local"
+      press #copyAppend
+      expect #copyInput input value "LocalA"
+      expect text "Source: Changed source"
+   }
+   test "copies action parameters before mutating them" {
+      run ReactiveEditing
+      press #copyAction
+      expect text "Source: Source"
+      expect text "Copied action result: SourceA"
+   }
+   test "detaches a copied configured command slot from its caller" {
+      run ReactiveEditing
+      press #boundCopyCommand
+      expect text "Command source: Command source"
+      expect text "Copied command result: Command sourceA"
+   }
+   test "writes a child field lens without dropping sibling item fields" {
+      run ReactiveEditing
+      enter "Marie" into #profileFirstName
+      expect text "Profile: Marie Lovelace"
+      press #setProfileFirstName
+      expect #profileFirstName input value "Grace"
+      expect text "Profile: Grace Lovelace"
+   }
+   test "retains caller storage through a configured root view binding" {
+      run BoundReactiveEditing
+      enter "Changed" into #boundViewInput
+      expect #boundViewInput input value "Changed"
+      press #boundViewAppend
+      expect #boundViewInput input value "ChangedA"
+      relaunch
+      expect #boundViewInput input value "ChangedA"
+   }
+}

@@ -1,4 +1,4 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import type { TaoDataConnection, TaoDataSchemaDefinition, TaoKeyValueStorage } from '../TaoRuntime-src/TR-data'
 import { memoryKeyValueStorage } from '../TaoRuntime-src/TR-data-provider'
 import {
@@ -252,6 +252,57 @@ Describe('granular sync over the snapshot bridge', () => {
     Expect(rows((await connection.load()) ?? '').Note).toEqual(expected)
   })
 
+  Test('replays an explicitly submitted same-value field over a buffered remote change', async () => {
+    let remote: TaoSyncObserver | undefined
+    const pushed: TaoChangeSet[] = []
+    const clocks = [10_000, 20_000]
+    const snapshots: string[] = []
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: changeSet => {
+            pushed.push(changeSet)
+          },
+          subscribe: observer => {
+            remote = observer
+            return () => undefined
+          },
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { now: () => clocks.shift()!, origin: 'aaaaaaaa', storage: memoryKeyValueStorage() },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: value => snapshots.push(value ?? '') })
+    const mine = snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'Mine' }], Paragraph: [] })
+    await connection.save(mine)
+    await settle()
+
+    const theirs: TaoChangeSet = {
+      id: stampAt(15_000, 'bbbbbbbb'),
+      ops: [{
+        entity: 'Note',
+        fields: { Title: { stamp: stampAt(15_000, 'bbbbbbbb'), value: 'Theirs' } },
+        kind: 'upsert',
+        row: { id: 'Note-1', origin: 'aaaaaaaa' },
+      }],
+      origin: 'bbbbbbbb',
+      stamp: stampAt(15_000, 'bbbbbbbb'),
+    }
+    const folded = remote!.remote(theirs)
+    const saved = connection.save(mine, [{ entity: 'Note', fields: ['Title'], id: 'Note-1' }])
+    await Promise.all([folded, saved])
+    await settle()
+
+    const replay = pushed.at(-1)!
+    Expect(replay.ops).toContainEqual(Expect['objectContaining']({
+      entity: 'Note',
+      fields: { Title: Expect['objectContaining']({ value: 'Mine' }) },
+      kind: 'upsert',
+    }))
+    Expect(rows((await connection.load()) ?? '').Note).toEqual([{ Id: 'Note-1', Pinned: false, Title: 'Mine' }])
+  })
+
   Test('rolls back a remote fold whose checkpoint failed, so the same batch can be retried', async () => {
     let remote: TaoSyncObserver | undefined
     let rejectPersist = true
@@ -341,6 +392,289 @@ Describe('granular sync over the snapshot bridge', () => {
 
     Expect(new Set(attempts).size).toBe(2)
     Expect(attempts.filter(id => id === refused).length).toBeGreaterThan(1)
+  })
+
+  Test('persists failed change-sets, projects mixed entity status, and retries the recorded payload', async () => {
+    let observer: TaoSyncObserver | undefined
+    let acceptFailed = false
+    let failedId: string | undefined
+    const attempts: TaoChangeSet[] = []
+    const storage = memoryKeyValueStorage()
+    const provider: TaoSyncProvider = {
+      connect: () => ({
+        push: changeSet => {
+          attempts.push(changeSet)
+          failedId ??= changeSet.id
+          if (changeSet.id !== failedId) {
+            return
+          }
+          if (!acceptFailed) {
+            throw new HostEnvironmentError('offline')
+          }
+          observer?.accepted(changeSet.id)
+        },
+        subscribe: next => {
+          observer = next
+          return () => undefined
+        },
+      }),
+    }
+    const connect = () =>
+      snapshotConnectionOverSync(
+        provider,
+        { configuration: {}, schema: definition, storageKey: 'Notes' },
+        { origin: 'aaaaaaaa', storage },
+      )
+    const first = connect()
+    await first.load()
+    first.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await first.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await first.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: true, Title: 'Second' }], Paragraph: [] }))
+    await settle()
+
+    const failedPayload = attempts[0]!
+    const initialStatus = first.writes.status('Note', 'Note-1')
+    Expect(initialStatus).toMatchObject({ failed: 1, queued: 1 })
+    Expect(initialStatus.records[0]).toEqual({ id: failedPayload.id, message: 'offline' })
+    Expect(JSON.parse(storage.values.get('tao-sync:["default","Notes"]')!) as { failures: unknown[] })
+      .toMatchObject({ failures: [{ changeSetId: failedPayload.id, message: 'offline' }] })
+
+    first.close?.()
+    const relaunched = connect()
+    await relaunched.load()
+    // Check before transport startup can fail the same record again: this proves the failure itself restored.
+    Expect(relaunched.writes.status('Note', 'Note-1')).toMatchObject({ failed: 1, queued: 1 })
+    relaunched.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await settle()
+    Expect(relaunched.writes.status('Note', 'Note-1')).toMatchObject({ failed: 1, queued: 1 })
+
+    acceptFailed = true
+    const retryStart = attempts.length
+    relaunched.writes.retry('Note', 'Note-1')
+    await settle()
+
+    Expect(attempts.slice(retryStart).find(changeSet => changeSet.id === failedPayload.id)).toEqual(failedPayload)
+    // Only the acknowledged record clears; the later unacknowledged mutation remains unresolved.
+    Expect(relaunched.writes.status('Note', 'Note-1')).toMatchObject({ failed: 0, queued: 1 })
+  })
+
+  Test('does not expose a queued retry or drop an acknowledgement when checkpoint persistence fails', async () => {
+    let observer: TaoSyncObserver | undefined
+    let rejectCheckpoint = false
+    const attempts: TaoChangeSet[] = []
+    const values = new Map<string, string>()
+    const storage: TaoKeyValueStorage = {
+      getItem: async key => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        if (rejectCheckpoint) {
+          throw new HostEnvironmentError('checkpoint unavailable')
+        }
+        values.set(key, value)
+      },
+    }
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: changeSet => {
+            attempts.push(changeSet)
+            throw new HostEnvironmentError('offline')
+          },
+          subscribe: next => {
+            observer = next
+            return () => undefined
+          },
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage },
+    )
+    const errors: unknown[] = []
+    const statuses: Array<{ failed: number; queued: number }> = []
+    await connection.load()
+    connection.subscribe!({ error: error => errors.push(error), snapshot: () => undefined })
+    const stop = connection.writes.subscribe(() => {
+      const status = connection.writes.status('Note', 'Note-1')
+      statuses.push({ failed: status.failed, queued: status.queued })
+    })
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await settle()
+    const recorded = attempts[0]!
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 1, queued: 0 })
+
+    rejectCheckpoint = true
+    const beforeRetry = attempts.length
+    connection.writes.retry('Note', 'Note-1')
+    await settle()
+    Expect(attempts).toHaveLength(beforeRetry)
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 1, queued: 0 })
+    Expect(statuses.at(-1)).toEqual({ failed: 1, queued: 0 })
+
+    // An acknowledgement is also rolled back until its checkpoint write succeeds.
+    observer!.accepted(recorded.id)
+    await settle()
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 1, queued: 0 })
+    Expect(errors.map(error => error instanceof Error ? error.message : String(error))).toContain(
+      'checkpoint unavailable',
+    )
+
+    rejectCheckpoint = false
+    connection.writes.retry('Note', 'Note-1')
+    await settle()
+    Expect(attempts.slice(beforeRetry).filter(changeSet => changeSet.id === recorded.id)).toHaveLength(1)
+    Expect(statuses).toContainEqual({ failed: 0, queued: 1 })
+    stop()
+  })
+
+  Test('does not expose a queued write until its checkpoint persists', async () => {
+    const values = new Map<string, string>()
+    const entered = Deferred<void>()
+    const release = Deferred<void>()
+    let delayWrite = false
+    const storage: TaoKeyValueStorage = {
+      getItem: async key => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        if (delayWrite) {
+          entered.resolve()
+          await release.promise
+        }
+        values.set(key, value)
+      },
+    }
+    const connection = snapshotConnectionOverSync(
+      { connect: () => ({ push: () => undefined, subscribe: () => () => undefined }) },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    delayWrite = true
+    const saving = connection.save(
+      snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'Pending' }], Paragraph: [] }),
+    )
+    await entered.promise
+
+    Expect(connection.writes.status('Note', 'Note-1')).toEqual({ failed: 0, queued: 0, records: [] })
+
+    release.resolve()
+    await saving
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 0, queued: 1 })
+  })
+
+  Test('skips an explicit retry whose queued automatic push was acknowledged first', async () => {
+    let observer: TaoSyncObserver | undefined
+    let recover = false
+    const attempts: TaoChangeSet[] = []
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: changeSet => {
+            attempts.push(changeSet)
+            if (!recover) {
+              throw new HostEnvironmentError('offline')
+            }
+            observer?.accepted(changeSet.id)
+          },
+          subscribe: next => {
+            observer = next
+            return () => undefined
+          },
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage: memoryKeyValueStorage() },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await settle()
+    const failed = attempts[0]!
+
+    recover = true
+    observer!.online()
+    connection.writes.retry('Note', 'Note-1')
+    await settle()
+
+    Expect(attempts.filter(changeSet => changeSet.id === failed.id)).toHaveLength(2)
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 0, queued: 0 })
+  })
+
+  Test('holds an automatically retried write until its later acceptance before sending it again', async () => {
+    let observer: TaoSyncObserver | undefined
+    let recover = false
+    const attempts: TaoChangeSet[] = []
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => ({
+          push: changeSet => {
+            attempts.push(changeSet)
+            if (!recover) {
+              throw new HostEnvironmentError('offline')
+            }
+          },
+          subscribe: next => {
+            observer = next
+            return () => undefined
+          },
+        }),
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage: memoryKeyValueStorage() },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await settle()
+    const failed = attempts[0]!
+
+    recover = true
+    observer!.online()
+    connection.writes.retry('Note', 'Note-1')
+    await settle()
+
+    Expect(attempts.filter(changeSet => changeSet.id === failed.id)).toHaveLength(2)
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 0, queued: 1 })
+
+    observer!.accepted(failed.id)
+    await settle()
+    Expect(connection.writes.status('Note', 'Note-1')).toMatchObject({ failed: 0, queued: 0 })
+  })
+
+  Test('reoffers an unresolved push after reconnecting from a transport that never settles', async () => {
+    const entered = Deferred<void>()
+    const release = Deferred<void>()
+    const attempts: TaoChangeSet[] = []
+    let connections = 0
+    const connection = snapshotConnectionOverSync(
+      {
+        connect: () => {
+          connections += 1
+          return {
+            push: changeSet => {
+              attempts.push(changeSet)
+              if (connections === 1) {
+                entered.resolve()
+                return release.promise
+              }
+              return undefined
+            },
+            subscribe: () => () => undefined,
+          }
+        },
+      },
+      { configuration: {}, schema: definition, storageKey: 'Notes' },
+      { origin: 'aaaaaaaa', storage: memoryKeyValueStorage() },
+    )
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'First' }], Paragraph: [] }))
+    await entered.promise
+
+    connection.close?.()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await settle()
+
+    Expect(attempts).toHaveLength(2)
+    release.resolve()
   })
 
   Test('keeps a checkpoint across schema-name changes and structurally separates scope/key pairs', async () => {
