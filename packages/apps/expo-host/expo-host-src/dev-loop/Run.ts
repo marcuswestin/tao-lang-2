@@ -1,14 +1,20 @@
 import { CLI, Errors, Repo, Text } from '@shared'
+import Runtime from '../runtime'
+import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import CommandRunner from './CommandRunner'
 import { DevLoopOutput } from './DevLoopOutput'
 import type { ExpoRunnerSession } from './expo-runner/ExpoRunner'
 
 /** runJust runs a repo-root Just recipe with prefixed output. */
 async function runJust(args: readonly string[]): Promise<void> {
+  const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
+  if (toolchainRepo === undefined) {
+    Errors.throwHostEnvironment('This developer control requires a Tao source checkout.')
+  }
   const recipe = args[0]
   const processLabel = recipe ? JUST_LABELS[recipe] ?? 'just' : 'just'
   const result = await CLI.run('just', {
-    args: ['--justfile', Repo.resolvePath('Justfile'), ...args],
+    args: ['--justfile', Repo.resolvePath('Justfile', toolchainRepo), ...args],
     onOutput: DevLoopOutput.devLoopOutputHandler(processLabel),
   })
   if (result.exitCode !== 0 || result.error !== undefined) {
@@ -33,13 +39,14 @@ type CompileAppOptions = {
   appName?: string
   reason: string
   shouldRunParserGen: boolean
+  runtimeRoot: string
 }
 
 /** runTests runs repository tests in line-output mode for the Expo dev-loop dashboard. */
 async function runTests(repoRoot: string): Promise<void> {
   await runJust(['_compile-word-flower-app'])
   const result = await CLI.run('bun', {
-    args: ['run', Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev.ts'), 'test', '--output', 'lines'],
+    args: ['run', Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev.ts', repoRoot), 'test', '--output', 'lines'],
     cwd: repoRoot,
     onOutput: DevLoopOutput.devLoopOutputHandler('test'),
   })
@@ -65,24 +72,14 @@ async function compileApp(options: CompileAppOptions): Promise<boolean> {
 
 /** compileAppWithoutCommandLock compiles the selected Tao app while the caller owns command exclusivity. */
 async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise<boolean> {
-  const { repoRoot, appPath, appName, reason, shouldRunParserGen } = options
+  const { appPath, appName, reason, runtimeRoot, shouldRunParserGen } = options
   DevLoopOutput.logDevLoop('dev', `compiling (${reason})`)
   try {
     if (shouldRunParserGen) {
       await runJust(['_parser-gen'])
     }
-    const result = await CLI.run(Repo.resolvePath('tao'), {
-      args: ['compile', appPath, ...(appName ? ['--app', appName] : [])],
-      cwd: repoRoot,
-      onOutput: DevLoopOutput.devLoopOutputHandler('compile'),
-    })
-    if (result.exitCode !== 0 || result.error !== undefined) {
-      DevLoopOutput.recordFailure('compile', formatCommandOutput(result) ?? Errors.formatForLog(result.error))
-      return false
-    }
-    if (!result.stdout.trim()) {
-      DevLoopOutput.logDevLoop('compile', 'compiled')
-    }
+    await Runtime.generateApp(appPath, { appName, runtimePackageRoot: runtimeRoot })
+    DevLoopOutput.logDevLoop('compile', 'compiled')
     DevLoopOutput.clearFailure('compile')
     return true
   } catch (error) {
@@ -116,6 +113,7 @@ async function recompileAndReload(
   appPath: string,
   expo: ExpoRunnerSession,
   appName?: string,
+  runtimeRoot?: string,
 ): Promise<void> {
   CommandRunner.assertCommandRunning('recompile and reload')
   const compiled = await compileAppWithoutCommandLock({
@@ -124,6 +122,7 @@ async function recompileAndReload(
     appName,
     reason: 'manual reload',
     shouldRunParserGen: true,
+    runtimeRoot: runtimeRoot ?? Repo.resolvePath('packages/apps/expo-host'),
   })
   if (!compiled) {
     Errors.throwUserInput('Reload skipped because compile failed.')

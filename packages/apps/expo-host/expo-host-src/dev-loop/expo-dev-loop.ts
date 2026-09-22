@@ -1,10 +1,13 @@
-import { Errors, HCI, Platform, Repo } from '@shared'
-import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
+import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
+import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
 import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
+import { DevRuntime } from './DevRuntime'
 import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
 import { ExpoRunner, type ExpoRunnerSession } from './expo-runner/ExpoRunner'
+import type { DevStartupTarget } from './expo-runner/run-targets'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
 import Run from './Run'
@@ -26,8 +29,9 @@ export type DevLoopOutcome =
 /** createDevLoopExpoSession reserves the preferred port or an OS-selected free alternative. */
 export async function createDevLoopExpoSession(
   preferredPort: number = PREFERRED_EXPO_PORT,
+  stateRoot?: string,
 ): Promise<ExpoRunnerSession> {
-  return await ExpoRunner.createSessionWithAvailablePort(preferredPort)
+  return await ExpoRunner.createSessionWithAvailablePort(preferredPort, { stateRoot })
 }
 
 /**
@@ -40,35 +44,45 @@ export async function createDevLoopExpoSession(
 export async function runDevLoop(
   selection: DevAppSelection,
   reporter: DevLoopReporter = lineDevLoopReporter(),
+  startupTargets: readonly DevStartupTarget[] = [],
 ): Promise<DevLoopOutcome> {
   const restoreDevLoopReporter = setDevLoopReporter(reporter)
   try {
-    return await runDevLoopWithActiveReporter(selection)
+    return await runDevLoopWithActiveReporter(selection, startupTargets)
   } finally {
     restoreDevLoopReporter()
   }
 }
 
-async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise<DevLoopOutcome> {
-  const repoRoot = Repo.getRoot()
+async function runDevLoopWithActiveReporter(
+  selection: DevAppSelection,
+  startupTargets: readonly DevStartupTarget[],
+): Promise<DevLoopOutcome> {
+  const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
+  const repoRoot = toolchainRepo ?? selection.projectRoot
+  const repositoryControlsAvailable = toolchainRepo !== undefined
+    && FS.pathIsWithin(selection.projectRoot, toolchainRepo)
   const { appName, appPath } = selection
+  const stateRoot = FS.resolvePath('.tao/dev', selection.projectRoot)
+  const runtime = await DevRuntime.prepare(selection.projectRoot)
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
   const devDataApp = devDataAppKey(selection.projectRoot, appName)
   const devData = await DevDataServer.start({
     log: line => DevLoopOutput.logDevLoop('data', line),
-    rootDir: Repo.resolvePath(DEV_DATA_ROOT_PATH),
+    rootDir: FS.resolvePath('data', stateRoot),
   })
   let expo: ExpoRunnerSession
   try {
-    expo = await createDevLoopExpoSession()
+    expo = await createDevLoopExpoSession(PREFERRED_EXPO_PORT, stateRoot)
   } catch (error) {
     await devData.stop().catch(() => {})
     throw error
   }
-  const runtimeToolchainRoot = Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
-  const expoServer = expo.createServer(runtimeToolchainRoot, {
+  const expoServer = expo.createServer(runtime.root, {
     env: devDataEnvironment(devData.port, devDataApp, devData.capability),
+    logRoot: FS.resolvePath('logs', stateRoot),
+    runtimeToolchainSourceRoot: runtime.sourceRoot,
   })
   const output = DevLoopOutput.start()
   let keyInput: HCI.RawKeySession | undefined
@@ -143,6 +157,8 @@ async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise
         expo,
         finish: exitCode => finish({ kind: 'exit', exitCode }),
         repoRoot,
+        repositoryControlsAvailable,
+        runtimeRoot: runtime.root,
         restart: () => finish({ kind: 'restart' }),
         selectApp: () => finish({ kind: 'select-app' }),
         stopServices,
@@ -158,7 +174,8 @@ async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise
       appPath,
       appName,
       reason: 'initial compile',
-      shouldRunParserGen: true,
+      shouldRunParserGen: false,
+      runtimeRoot: runtime.root,
     })
     if (shouldStop()) {
       return await done
@@ -167,7 +184,14 @@ async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise
       return { kind: 'exit', exitCode: 1 }
     }
     watcher = new DevFileWatcher(selection.projectRoot, shouldRunParserGen => {
-      void Run.compileApp({ repoRoot, appPath, appName, reason: 'file change', shouldRunParserGen })
+      void Run.compileApp({
+        repoRoot,
+        appPath,
+        appName,
+        reason: 'file change',
+        shouldRunParserGen,
+        runtimeRoot: runtime.root,
+      })
     })
     await expoServer.start()
     if (shouldStop()) {
@@ -179,7 +203,7 @@ async function runDevLoopWithActiveReporter(selection: DevAppSelection): Promise
     if (shouldStop()) {
       return await done
     }
-    void expo.openStartupTargets(shouldStop)
+    void expo.openStartupTargets(startupTargets, shouldStop)
     return await done
   } catch (error) {
     DevLoopOutput.recordFailure('dev', Run.formatFailure(error))
