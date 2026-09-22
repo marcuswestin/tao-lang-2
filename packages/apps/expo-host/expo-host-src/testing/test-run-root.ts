@@ -76,6 +76,28 @@ const RETAINED_CACHE_BYTES = 256 * 1024 * 1024
  */
 const RETAINED_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * COMPILED_STORE_DIRECTORY_NAME names the content-addressed store of compiled apps beside a
+ * category's run roots. The leading dot keeps it out of `RUN_ROOT_NAME` and `CATEGORY_NAME`.
+ *
+ * A compiled app used to live inside its run root, at a path that changed with every compile. Jest
+ * keys its transform cache by path, so every compile re-transformed every compiled module — about
+ * three hundred for WordFlower's eight test apps — although most of them had not changed and five of
+ * the eight apps shared one module tree byte for byte. Here a module tree is stored once under the
+ * hash of its contents, and an app is stored under the hash of its own files plus that tree, with
+ * `modules` a relative symlink to the tree. A path in this store names immutable bytes: a compile
+ * that produces the same output lands at the same path and is reused by Jest's cache, one that
+ * produces different output lands at a different path, and a manifest that names a path can never
+ * come to describe newer output than it was fingerprinted for.
+ */
+const COMPILED_STORE_DIRECTORY_NAME = '.compiled'
+
+/** MODULES_DIRECTORY_NAME is what the compiler names the module tree beside a generated `App.tsx`. */
+const MODULES_DIRECTORY_NAME = 'modules'
+
+/** COMPILED_ENTRY_NAME matches the store's directory names, which are content hashes. */
+const COMPILED_ENTRY_NAME = /^[0-9a-f]{64}$/
+
 /** LAST_USED_FILE_NAME records when a run root was last handed to a run, reused roots included. */
 const LAST_USED_FILE_NAME = 'last-used'
 
@@ -92,9 +114,11 @@ type CachedRun = {
 
 /** TestRunRoot owns the lifecycle of the directories runtime test runs compile into. */
 export const TestRunRoot = {
+  COMPILED_STORE_DIRECTORY_NAME,
   create,
   DIRECTORY_NAME,
   discard,
+  intern,
   lookup,
   MANIFEST_FILE_NAME,
   prune,
@@ -140,6 +164,98 @@ async function create(category: string, options: TestRunRootOptions = {}): Promi
 }
 
 /**
+ * intern moves one compiled app out of its run root into the content-addressed store and returns
+ * the stable path of its `App.tsx`. `generatedRoot` is the directory the compiler wrote, holding
+ * `App.tsx` beside a `modules` tree, somewhere inside `runRoot`; afterwards it is gone and the
+ * caller's compiled-app directory under the run root is removed with it.
+ *
+ * The module tree is stored first, then the app around a symlink to it. Both land by rename, so a
+ * reader sees a whole entry or none; an entry that already exists is kept and the newly compiled
+ * copy discarded, since equal hashes are equal bytes.
+ */
+async function intern(runRoot: string, generatedRoot: string): Promise<string> {
+  const runRootPath = FS.resolvePath(runRoot)
+  const categoryRoot = FS.dirname(runRootPath)
+  Assert.input(
+    RUN_ROOT_NAME.test(FS.basename(runRootPath)) && CATEGORY_NAME.test(FS.basename(categoryRoot)),
+    `Compiled apps are interned beside a categorized run root; '${runRoot}' is not one.`,
+  )
+  const generatedPath = FS.resolvePath(generatedRoot)
+  Assert.input(
+    FS.pathIsWithin(generatedPath, runRootPath) && generatedPath !== runRootPath,
+    `A compiled app is interned from inside its run root; '${generatedRoot}' is not inside '${runRoot}'.`,
+  )
+  const storeRoot = FS.resolvePath(COMPILED_STORE_DIRECTORY_NAME, categoryRoot)
+  await FS.mkdir(storeRoot)
+
+  const modulesPath = FS.resolvePath(MODULES_DIRECTORY_NAME, generatedPath)
+  const treeHash = await FS.filesIdentity(
+    (await walkedFiles(modulesPath)).map(path => [FS.relativePath(modulesPath, path), path]),
+  )
+  await moveIntoStore(modulesPath, FS.resolvePath(treeHash, storeRoot))
+
+  const ownFiles = (await FS.listDir(generatedPath)).filter(name => name !== MODULES_DIRECTORY_NAME)
+  const appHash = FS.contentIdentity([
+    await FS.filesIdentity(ownFiles.map(name => [name, FS.resolvePath(name, generatedPath)])),
+    `${MODULES_DIRECTORY_NAME}\n${treeHash}`,
+  ])
+  // Relative, so the store survives a moved or renamed checkout.
+  await FS.symlink(`../${treeHash}`, modulesPath)
+  await moveIntoStore(generatedPath, FS.resolvePath(appHash, storeRoot))
+
+  // What the compiler was given as its package root is now empty of anything but that directory.
+  await removeEmptyDirectoriesUpTo(FS.dirname(generatedPath), runRootPath)
+  return FS.resolvePath('App.tsx', FS.resolvePath(appHash, storeRoot))
+}
+
+/**
+ * moveIntoStore renames a finished directory to its content-addressed place, or removes it when an
+ * equal entry is already there. Two compiles that produced the same bytes at once therefore leave
+ * exactly one entry, and the rename fails closed: a directory that cannot be moved onto an existing
+ * one is the loser of that race, not a defect.
+ *
+ * An entry found already there is touched, because its age is what decides whether pruning may
+ * take it once nothing names it: an entry every run keeps producing is one the next run wants.
+ */
+async function moveIntoStore(fromPath: string, storePath: string): Promise<void> {
+  if (!await FS.isDirectory(storePath)) {
+    try {
+      await FS.move(fromPath, storePath)
+      return
+    } catch (error) {
+      if (!await FS.isDirectory(storePath)) {
+        throw error
+      }
+    }
+  }
+  await FS.remove(fromPath)
+  await FS.setModifiedTimeMs(storePath, Date.now()).catch(() => undefined)
+}
+
+/** removeEmptyDirectoriesUpTo removes `path` and each empty ancestor below `stopAt`, stopping at the first that is not empty. */
+async function removeEmptyDirectoriesUpTo(path: string, stopAt: string): Promise<void> {
+  let current = path
+  while (FS.pathIsWithin(current, stopAt) && current !== stopAt) {
+    if ((await listDirectory(current)).length > 0) {
+      return
+    }
+    await removeQuietly(current)
+    current = FS.dirname(current)
+  }
+}
+
+async function walkedFiles(root: string): Promise<string[]> {
+  const files: string[] = []
+  if (!await FS.isDirectory(root)) {
+    return files
+  }
+  for await (const path of FS.walk(root, { includeHidden: true })) {
+    files.push(path)
+  }
+  return files
+}
+
+/**
  * lookup returns the compiled output a passing run published under `fingerprint`, or undefined.
  *
  * Every reason to doubt the entry — an unreadable or unparsable index file, a run root that is no
@@ -164,6 +280,13 @@ async function lookup(
   const manifestPath = FS.resolvePath(MANIFEST_FILE_NAME, runRoot)
   if (!isRunRoot(runRoot, generatedRoot) || !await FS.isFile(manifestPath)) {
     return undefined
+  }
+  // The compiled apps the manifest names live in the store beside the run root; one that is gone,
+  // however it went, makes this a run that cannot be replayed rather than one that fails to load.
+  for (const modulePath of await manifestModulePaths(runRoot)) {
+    if (!await FS.isFile(modulePath)) {
+      return undefined
+    }
   }
   await markUsed(runRoot)
   await writeCacheEntry(cacheEntryPath(categoryRoot, fingerprint), { ...entry, usedAt: new Date().toISOString() })
@@ -211,21 +334,56 @@ async function publish(
 }
 
 /**
- * contentBytes sums the bytes of everything under one run root, skipping whatever it cannot read.
+ * contentBytes sums the bytes of everything under one run root and of every compiled app its
+ * manifest names, following each app's symlink to its module tree, skipping whatever it cannot read.
  *
- * An undercount costs the budget nothing it cannot recover on the next prune, so a file that
- * vanishes under a concurrent cleanup is simply not counted rather than failing a publish.
+ * A module tree several apps share is counted once per app, and one several run roots share once
+ * per run root, so the budget spends more than the disk does; it is a bound on retained output, not
+ * an account of it. An undercount costs the budget nothing it cannot recover on the next prune, so a
+ * file that vanishes under a concurrent cleanup is simply not counted rather than failing a publish.
  */
 async function contentBytes(runRoot: string): Promise<number> {
   let total = 0
-  try {
-    for await (const path of FS.walk(runRoot, { includeHidden: true })) {
-      total += await FS.byteSize(path).catch(() => 0)
+  const roots = [runRoot, ...new Set((await manifestModulePaths(runRoot)).map(path => FS.dirname(path)))]
+  for (const root of roots) {
+    try {
+      for await (const path of FS.walk(root, { followSymlinks: true, includeHidden: true })) {
+        total += await FS.byteSize(path).catch(() => 0)
+      }
+    } catch {
+      continue
     }
-  } catch {
-    return total
   }
   return total
+}
+
+/**
+ * manifestModulePaths lists the compiled `App.tsx` paths one run root's manifest names, each once.
+ * A manifest that cannot be read, or is not shaped as one, names nothing.
+ */
+async function manifestModulePaths(runRoot: string): Promise<readonly string[]> {
+  let manifest: unknown
+  try {
+    manifest = await FS.readJson<unknown>(FS.resolvePath(MANIFEST_FILE_NAME, runRoot))
+  } catch {
+    return []
+  }
+  const paths = new Set<string>()
+  const files = Json.isRecord(manifest) && Array.isArray(manifest['files']) ? manifest['files'] : []
+  for (const file of files) {
+    const suites = Json.isRecord(file) && Array.isArray(file['suites']) ? file['suites'] : []
+    for (const suite of suites) {
+      const checks = Json.isRecord(suite) && Array.isArray(suite['checks']) ? suite['checks'] : []
+      for (const check of checks) {
+        const app = Json.isRecord(check) ? check['app'] : undefined
+        const modulePath = Json.isRecord(app) ? app['modulePath'] : undefined
+        if (typeof modulePath === 'string') {
+          paths.add(modulePath)
+        }
+      }
+    }
+  }
+  return [...paths]
 }
 
 /**
@@ -260,11 +418,61 @@ async function pruneAtStartup(generatedRoot: string): Promise<void> {
 async function pruneGeneratedRoot(generatedRoot: string): Promise<void> {
   const now = Date.now()
   for (const [category, runRoots] of await findRunRootsByCategory(generatedRoot)) {
-    await pruneEntrypointPlans(FS.resolvePath(category, generatedRoot), now)
+    const categoryRoot = FS.resolvePath(category, generatedRoot)
+    await pruneEntrypointPlans(categoryRoot, now)
     const cached = await pruneCacheEntries(generatedRoot, category, now)
     const unreferenced = runRoots.filter(runRoot => !cached.has(runRoot.path))
-    for (const runRoot of staleRunRoots(unreferenced, now)) {
-      await removeQuietly(runRoot.path)
+    const stale = new Set(staleRunRoots(unreferenced, now).map(runRoot => runRoot.path))
+    for (const path of stale) {
+      await removeQuietly(path)
+    }
+    if (category !== '') {
+      await pruneCompiledStore(
+        categoryRoot,
+        runRoots.filter(runRoot => !stale.has(runRoot.path)).map(runRoot => runRoot.path),
+        now,
+      )
+    }
+  }
+}
+
+/**
+ * pruneCompiledStore removes the store entries no surviving run root of the category names, once
+ * nothing has produced them for the grace period either. An entry a surviving manifest names is
+ * kept however old it is, and so is the module tree that entry's symlink points at; a surviving run
+ * root is exactly one that may still be replayed or read, so what it names must stay. An entry
+ * nothing names is a passing run's output that was discarded rather than published, kept while runs
+ * keep producing it so that Jest's transform cache keeps hitting it between one run and the next.
+ */
+async function pruneCompiledStore(
+  categoryRoot: string,
+  survivingRunRoots: readonly string[],
+  now: number,
+): Promise<void> {
+  const storeRoot = FS.resolvePath(COMPILED_STORE_DIRECTORY_NAME, categoryRoot)
+  const referenced = new Set<string>()
+  for (const runRoot of survivingRunRoots) {
+    for (const modulePath of await manifestModulePaths(runRoot)) {
+      const appRoot = FS.dirname(modulePath)
+      if (FS.dirname(appRoot) !== storeRoot) {
+        continue
+      }
+      referenced.add(FS.basename(appRoot))
+      const modulesPath = FS.resolvePath(MODULES_DIRECTORY_NAME, appRoot)
+      const target = await FS.realPath(modulesPath).catch(() => undefined)
+      if (target !== undefined && FS.dirname(target) === storeRoot) {
+        referenced.add(FS.basename(target))
+      }
+    }
+  }
+  for (const name of await listDirectory(storeRoot)) {
+    if (!COMPILED_ENTRY_NAME.test(name) || referenced.has(name)) {
+      continue
+    }
+    const path = FS.resolvePath(name, storeRoot)
+    const writtenMs = await FS.modifiedTimeMs(path).catch(() => now)
+    if (now - writtenMs >= ACTIVE_RUN_GRACE_MS) {
+      await removeQuietly(path)
     }
   }
 }

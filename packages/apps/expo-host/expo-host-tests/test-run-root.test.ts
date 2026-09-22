@@ -85,6 +85,37 @@ async function publishedRunRoot(runtimePackageRoot: string, fingerprint: string,
   return runRoot
 }
 
+/**
+ * compiledApp writes what the compiler leaves under a run root for one app — `App.tsx` beside a
+ * `modules` tree — and interns it, returning the stable `App.tsx` path the store hands back.
+ */
+async function compiledApp(
+  runRoot: string,
+  contents: { app: string; modules: Record<string, string> },
+): Promise<string> {
+  const generatedRoot = FS.resolvePath(`app-${Math.random().toString(36).slice(2)}/_gen_tao-app`, runRoot)
+  await FS.writeText(FS.resolvePath('App.tsx', generatedRoot), contents.app)
+  for (const [name, code] of Object.entries(contents.modules)) {
+    await FS.writeText(FS.resolvePath(`modules/${name}`, generatedRoot), code)
+  }
+  return await TestRunRoot.intern(runRoot, generatedRoot)
+}
+
+/** manifestNaming gives a run root a manifest whose one check runs the app at `modulePath`. */
+async function manifestNaming(runRoot: string, modulePath: string): Promise<string> {
+  await FS.writeJson(FS.resolvePath(TestRunRoot.MANIFEST_FILE_NAME, runRoot), {
+    files: [{ suites: [{ checks: [{ app: { modulePath } }] }] }],
+  })
+  return runRoot
+}
+
+function storeRoot(runtimePackageRoot: string): string {
+  return FS.resolvePath(
+    `${TestRunRoot.DIRECTORY_NAME}/tao-test-command/${TestRunRoot.COMPILED_STORE_DIRECTORY_NAME}`,
+    runtimePackageRoot,
+  )
+}
+
 async function listGenerated(runtimePackageRoot: string, relativePath = ''): Promise<string[]> {
   const path = FS.resolvePath([TestRunRoot.DIRECTORY_NAME, relativePath].filter(Boolean).join('/'), runtimePackageRoot)
   return await FS.isDirectory(path) ? await FS.listDir(path) : []
@@ -446,6 +477,89 @@ Describe('reusing a generated test run root', () => {
 
       const cacheRoot = FS.resolvePath(`${TestRunRoot.DIRECTORY_NAME}/tao-test-command/.cache`, runtimePackageRoot)
       Expect(await FS.listDir(cacheRoot)).toEqual([])
+    })
+  })
+
+  // Jest keys its transform cache by path, so a compiled app is stored by what it contains: the same
+  // output compiled again, from another run root, is the same path and the same cache entry.
+  Test('stores a compiled app by its contents and hands back one path for one output', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const first = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const second = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const output = { app: 'import "./modules/a"', modules: { 'a.tsx': 'export const a = 1' } }
+
+      const firstPath = await compiledApp(first, output)
+      const secondPath = await compiledApp(second, output)
+
+      Expect(secondPath).toBe(firstPath)
+      Expect(FS.dirname(FS.dirname(firstPath))).toBe(storeRoot(runtimePackageRoot))
+      Expect(await FS.readText(firstPath)).toBe(output.app)
+      Expect(await FS.readText(FS.resolvePath('modules/a.tsx', FS.dirname(firstPath)))).toBe('export const a = 1')
+      // The run roots hold nothing of the compiled app any more; only what the run itself writes.
+      Expect(await FS.listDir(first)).toEqual([])
+      Expect(await FS.listDir(second)).toEqual([])
+    })
+  })
+
+  // Five of WordFlower's eight test apps compile to one module tree byte for byte; only `App.tsx`
+  // differs. The tree is stored once and each app links to it, so an edit that changes the tree
+  // costs one re-transform of it rather than one per app.
+  Test('shares one module tree between apps that differ only in App.tsx', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const modules = { 'a.tsx': 'export const a = 1', 'nested/b.tsx': 'export const b = 2' }
+
+      const one = await compiledApp(runRoot, { app: 'one', modules })
+      const two = await compiledApp(runRoot, { app: 'two', modules })
+
+      Expect(one).not.toBe(two)
+      const treeOf = async (appPath: string) => await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath)))
+      Expect(await treeOf(one)).toBe(await treeOf(two))
+      Expect(FS.dirname(await treeOf(one))).toBe(storeRoot(runtimePackageRoot))
+      Expect(await FS.isSymbolicLink(FS.resolvePath('modules', FS.dirname(one)))).toBe(true)
+      Expect((await FS.listDir(storeRoot(runtimePackageRoot))).length).toBe(3)
+    })
+  })
+
+  Test('keeps the store entries a surviving run root names and prunes the rest once they are old', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const kept = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 9 * HOUR_MS)
+      const named = await compiledApp(kept, { app: 'named', modules: { 'a.tsx': 'shared' } })
+      await manifestNaming(kept, named)
+      const scratch = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const oldOrphan = await compiledApp(scratch, { app: 'old orphan', modules: { 'a.tsx': 'orphaned' } })
+      const youngOrphan = await compiledApp(scratch, { app: 'young orphan', modules: { 'a.tsx': 'shared' } })
+      await TestRunRoot.discard(scratch, { runtimePackageRoot })
+      const entryOf = (appPath: string) => FS.basename(FS.dirname(appPath))
+      const treeOf = async (appPath: string) =>
+        FS.basename(await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath))))
+      const orphanedTree = await treeOf(oldOrphan)
+      for (const entry of [entryOf(oldOrphan), orphanedTree]) {
+        await FS.setModifiedTimeMs(FS.resolvePath(entry, storeRoot(runtimePackageRoot)), Date.now() - 2 * HOUR_MS)
+      }
+
+      await TestRunRoot.prune({ runtimePackageRoot })
+
+      const remaining = await FS.listDir(storeRoot(runtimePackageRoot))
+      Expect(remaining).toContain(entryOf(named))
+      Expect(remaining).toContain(await treeOf(named))
+      Expect(remaining).toContain(entryOf(youngOrphan))
+      Expect(remaining).not.toContain(entryOf(oldOrphan))
+      Expect(remaining).not.toContain(orphanedTree)
+      Expect(await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot })).toBeDefined()
+    })
+  })
+
+  Test('hands nothing back for a published run root whose compiled app is gone', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const runRoot = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 0)
+      const appPath = await compiledApp(runRoot, { app: 'gone', modules: { 'a.tsx': 'x' } })
+      await manifestNaming(runRoot, appPath)
+      Expect(await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot })).toBeDefined()
+
+      await FS.remove(FS.dirname(appPath))
+
+      Expect(await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot })).toBeUndefined()
     })
   })
 
