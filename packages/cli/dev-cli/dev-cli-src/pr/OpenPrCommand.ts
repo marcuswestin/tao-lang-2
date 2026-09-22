@@ -2,10 +2,11 @@ import { CLI, Errors, FS, HCI, Repo } from '@shared'
 
 /*
  * `open-pr` is the one command that pushes a feature branch, opens (or reuses) its pull request
- * against `main`, and stays attached to watch its checks. Ro runs it by hand and an agent runs it
- * unattended, so every `git` and `gh` invocation is behind the injected `run` seam below rather than
- * a direct `CLI.run` call — the house pattern `android.ts`'s `compatibility.requireAdb ?? requireAdb`
- * uses for the same reason: a test can script every answer without a real remote or a real `gh`.
+ * against `main`, and stays attached to watch its checks. The Developer runs it by hand and an agent
+ * runs it unattended, so every `git` and `gh` invocation is behind the injected `run` seam below
+ * rather than a direct `CLI.run` call — the house pattern `android.ts`'s `compatibility.requireAdb ??
+ * requireAdb` uses for the same reason: a test can script every answer without a real remote or a
+ * real `gh`.
  *
  * It never merges, never enables auto-merge, and never force-pushes; those stay a person's or
  * `./dev land`'s decision, not this command's.

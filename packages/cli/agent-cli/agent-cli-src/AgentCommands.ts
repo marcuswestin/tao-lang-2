@@ -33,7 +33,8 @@ export const JUST_COMMANDS = [
   'landed',
   'ledger-index',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
-  // the one command both Ro and an agent run to get GitHub's own CI signal without a second spelling.
+  // the one command both the Developer and an agent run to get GitHub's own CI signal without a
+  // second spelling.
   'open-pr',
   'parser-gen',
   'reclaim',

@@ -507,7 +507,7 @@ en7: flags=8863
       result: {
         devices: [
           {
-            deviceProperties: { name: 'roPhone' },
+            deviceProperties: { name: 'example-phone' },
             hardwareProperties: { deviceType: 'iPhone', reality: 'physical', udid: 'UDID-1' },
             identifier: 'ID-1',
           },
@@ -521,19 +521,19 @@ en7: flags=8863
           },
         ],
       },
-    })).toEqual([{ id: 'UDID-1', name: 'roPhone' }])
+    })).toEqual([{ id: 'UDID-1', name: 'example-phone' }])
   })
 
   Test('keeps a physical device whose Xcode 26 report omits reality', () => {
     Expect(iosPhysicalDevicesFromDevicectl({
       result: {
         devices: [{
-          deviceProperties: { name: 'roPhone' },
+          deviceProperties: { name: 'example-phone' },
           hardwareProperties: { deviceType: 'iPhone', udid: '00008140-00163CD81481801C' },
           identifier: 'E4795A5B-C1B6-55BB-A855-1E96A66F15CF',
         }],
       },
-    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'roPhone' }])
+    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'example-phone' }])
   })
 
   Test('builds an Expo Go URL for the detected host', () => {
@@ -541,13 +541,13 @@ en7: flags=8863
   })
 
   Test('sends a physical iPhone to the Tao Companion instead of the Expo Go account wall', () => {
-    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'roPhone' })
+    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'example-phone' })
 
     Expect(message).toBe(
-      'Cannot open this Tao app on roPhone: Expo Go on iPhone now requires an Expo account signed in both on '
+      'Cannot open this Tao app on example-phone: Expo Go on iPhone now requires an Expo account signed in both on '
         + 'the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that '
-        + 'sign-in never reaches it. Run this app on roPhone through the Tao Companion development build '
-        + 'instead: `just studio-companion-install device="roPhone"` once from a Tao checkout with Xcode, then '
+        + 'sign-in never reaches it. Run this app on example-phone through the Tao Companion development build '
+        + 'instead: `just studio-companion-install device="example-phone"` once from a Tao checkout with Xcode, then '
         + "open the app from Tao Studio's Device popover.",
     )
   })
@@ -569,7 +569,7 @@ en7: flags=8863
             lanLookups += 1
             return '192.168.1.20'
           },
-          listIosDevices: async () => [{ id: 'PHONE-1', name: 'roPhone' }],
+          listIosDevices: async () => [{ id: 'PHONE-1', name: 'example-phone' }],
         },
       )
     )
@@ -578,7 +578,7 @@ en7: flags=8863
     Expect(lanLookups).toBe(0)
     const output = `${captured.stdout}${captured.stderr}`
     Expect(output).toContain('requires an Expo account signed in both on the phone and in the terminal')
-    Expect(output).toContain('just studio-companion-install device="roPhone"')
+    Expect(output).toContain('just studio-companion-install device="example-phone"')
     Expect(output).not.toContain('opened Expo Go')
   })
 
