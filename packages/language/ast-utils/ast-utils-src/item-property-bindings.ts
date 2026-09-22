@@ -1,23 +1,23 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { Type } from './Type'
+import { type ItemShapeField, Type } from './Type'
 import { type BindingDiagnostic, resolveBindings } from './type-binding-matches'
 
 export type ItemPropertyBindingPair = {
   property: AST.ItemProperty
-  expected: AST.TypeProperty
+  expected: ItemShapeField
 }
 
 export type ItemPropertyBindingDiagnostic =
-  | { kind: 'duplicate-property-type'; expected: AST.TypeProperty; type: string }
+  | { kind: 'duplicate-property-type'; expected: ItemShapeField; type: string }
   | { kind: 'duplicate-provided-property-type'; property: AST.ItemProperty; type: string }
   | { kind: 'unknown-named-property'; property: AST.ItemProperty; name: string }
-  | { kind: 'duplicate-named-property'; property: AST.ItemProperty; expected: AST.TypeProperty }
-  | { kind: 'named-property-type'; property: AST.ItemProperty; expected: AST.TypeProperty }
-  | { kind: 'ambiguous-property'; property: AST.ItemProperty; expected: readonly AST.TypeProperty[] }
-  | { kind: 'ambiguous-field'; expected: AST.TypeProperty; properties: readonly AST.ItemProperty[] }
+  | { kind: 'duplicate-named-property'; property: AST.ItemProperty; expected: ItemShapeField }
+  | { kind: 'named-property-type'; property: AST.ItemProperty; expected: ItemShapeField }
+  | { kind: 'ambiguous-property'; property: AST.ItemProperty; expected: readonly ItemShapeField[] }
+  | { kind: 'ambiguous-field'; expected: ItemShapeField; properties: readonly AST.ItemProperty[] }
   | { kind: 'unmatched-property'; property: AST.ItemProperty }
-  | { kind: 'missing-property'; expected: AST.TypeProperty }
+  | { kind: 'missing-property'; expected: ItemShapeField }
 
 export type ItemPropertyBindingResult = {
   pairs: ItemPropertyBindingPair[]
@@ -26,20 +26,20 @@ export type ItemPropertyBindingResult = {
 
 /** resolveItemPropertyBindings binds item constructor property values to item type fields by type. */
 export function resolveItemPropertyBindings(
-  expectedProperties: readonly AST.TypeProperty[],
+  expectedProperties: readonly ItemShapeField[],
   properties: readonly AST.ItemProperty[],
 ): ItemPropertyBindingResult {
-  const resolution = resolveBindings<AST.ItemProperty, AST.TypeProperty>({
+  const resolution = resolveBindings<AST.ItemProperty, ItemShapeField>({
     candidates: properties,
-    targets: expectedProperties.filter(property => !Type.propertyIsFilled(property)),
+    targets: expectedProperties.filter(property => !Type.itemFieldIsFilled(property)),
     targetOrder: expectedProperties,
     candidateLabel: property => property.label,
     targetName: expected => expected.name,
     candidateType: property => Type.ofExpression(property.value),
-    targetType: expected => Type.ofProperty(expected),
+    targetType: expected => Type.itemFieldType(expected),
     namedTypeAccepts: (actual, expected) => Type.isCastCompatible(actual, expected),
     duplicateTargetTypesOnlyWithCandidates: true,
-    targetRequiresValue: expected => Type.propertyRequiresValue(expected),
+    targetRequiresValue: expected => Type.itemFieldRequiresValue(expected),
     unresolvedCandidatesExcuseMissing: true,
   })
   return {
@@ -49,9 +49,9 @@ export function resolveItemPropertyBindings(
 }
 
 function itemPropertyDiagnostic(
-  diagnostic: BindingDiagnostic<AST.ItemProperty, AST.TypeProperty>,
+  diagnostic: BindingDiagnostic<AST.ItemProperty, ItemShapeField>,
 ): ItemPropertyBindingDiagnostic {
-  return Switch.kind<BindingDiagnostic<AST.ItemProperty, AST.TypeProperty>, ItemPropertyBindingDiagnostic>(diagnostic, {
+  return Switch.kind<BindingDiagnostic<AST.ItemProperty, ItemShapeField>, ItemPropertyBindingDiagnostic>(diagnostic, {
     'duplicate-target-type': ({ target, type }) => ({ kind: 'duplicate-property-type', expected: target, type }),
     'duplicate-candidate-type': ({ candidate, type }) => ({
       kind: 'duplicate-provided-property-type',

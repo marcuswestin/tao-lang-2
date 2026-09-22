@@ -63,9 +63,9 @@ Describe('compiler: functional core', () => {
     `)
 
     const code = compiled.files[0]?.code ?? ''
-    Expect(code).toContain('_ViewProps.Title ?? TR.Value("Welcome")')
-    Expect(code).toContain('_ViewProps.Gap ?? TR.Value(8)')
-    Expect(code).toContain('_TaoActionArg0 ?? TR.Value("Saved")')
+    Expect(code).toContain('_ViewProps.Title ?? TR.Readonly(TR.Alias(() => TR.Value("Welcome")))')
+    Expect(code).toContain('_ViewProps.Gap ?? TR.Readonly(TR.Alias(() => TR.Value(8)))')
+    Expect(code).toContain('_TaoActionArg0 ?? TR.Readonly(TR.Alias(() => TR.Value("Saved")))')
     Expect(code).toContain('_TaoFunctionArg0 ?? TR.Value("Save")')
   })
 

@@ -7,6 +7,7 @@ import {
   type InlineInjection,
   inlineInjectionBindingName,
 } from './injection-plan'
+import { compileNativeParameter } from './reactive-parameters'
 
 export const InjectionsCompiler = {
   /** Injection calls an isolated generated module with only explicitly declared values. */
@@ -63,7 +64,13 @@ function CompileInjectionParameter(argument: AST.InjectionArgument): Compiled {
   }
   const expression = argument.value
   Assert.defined(expression, 'validated ordinary injection argument has a Tao expression')
-  return gen`${gen.Name({ name })}: ${CompileExpressionJsType(expression)}`
+  const parameter = AST.isValueReference(expression) ? expression.target.ref : undefined
+  const type = CompileExpressionJsType(expression)
+  return gen`${gen.Name({ name })}: ${
+    AST.isParameterDeclaration(parameter) && parameter.mutable
+      ? gen`{ value: ${type}; change(next: ${type}): void }`
+      : type
+  }`
 }
 
 function CompileInjectionValue(argument: AST.InjectionArgument, ambientProps: Compiled): Compiled {
@@ -72,7 +79,10 @@ function CompileInjectionValue(argument: AST.InjectionArgument, ambientProps: Co
   }
   const expression = argument.value
   Assert.defined(expression, 'validated ordinary injection argument has a Tao expression')
-  return gen`${Compile.Expression(expression)}.jsValue`
+  const parameter = AST.isValueReference(expression) ? expression.target.ref : undefined
+  return AST.isParameterDeclaration(parameter) && parameter.mutable
+    ? compileNativeParameter(parameter)
+    : gen`${Compile.Expression(expression)}.jsValue`
 }
 
 function CompileAmbientParameterType(ambient: AST.RenderAmbientChannel): Compiled {

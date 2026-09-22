@@ -190,6 +190,8 @@ type StudioContextPanelSlotProps = Readonly<{
   InspectorBusy?: TR.Value<boolean>
   InspectorCanUndo?: TR.Value<boolean>
   InspectorInspection?: TR.Value<string>
+  LensLines?: TR.Value<readonly string[]>
+  LensJourneyPath?: TR.Value<string>
   InspectorSelection?: TR.Value<string>
   ActiveFileContent?: TR.Value<string>
   ActiveFilePath?: TR.Value<string>
@@ -381,6 +383,8 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       InspectorBusy: TR.Value(hostState.inspector?.busy ?? false),
       InspectorCanUndo: TR.Value(hostState.inspector?.canUndo ?? false),
       InspectorInspection: TR.Value(JSON.stringify(hostState.inspector?.inspection ?? null)),
+      LensLines: TR.Value(hostState.lensLines ?? []),
+      LensJourneyPath: TR.Value(hostState.lensJourneyPath ?? ''),
       InspectorSelection: TR.Value(JSON.stringify(hostState.inspector?.selection ?? null)),
       ActiveFileContent: TR.Value(activeFile?.content ?? ''),
       ActiveFilePath: TR.Value(activeFile?.path ?? ''),

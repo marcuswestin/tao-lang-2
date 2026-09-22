@@ -19,11 +19,13 @@ import {
 } from './TR-data-registry'
 import type { TaoDataCapture } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
+import type { TaoSyncWriteRecovery } from './TR-data-sync'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
+import { useStudioLensScope } from './TR-studio-lens'
 
 export { testProvider } from './TR-data-provider'
 
@@ -136,6 +138,8 @@ export type TaoFillOps = {
  * belong to a future provider family rather than leaking into this full-snapshot contract.
  */
 export type TaoDataConnection = {
+  /** Local durable write records, when the provider implements recorded mutation recovery. */
+  writes?: TaoSyncWriteRecovery
   /**
    * automaticReset lets the runtime run `reset` itself when a starting snapshot fails to parse,
    * instead of offering that destructive reset through the recovery overlay. Only a disposable
@@ -159,9 +163,16 @@ export type TaoDataConnection = {
   load(): Promise<string | undefined> | string | undefined
   /** reset is optional because remote providers may not permit destructive recovery. */
   reset?(): Promise<void> | void
-  save(snapshot: string): Promise<void> | void
+  save(snapshot: string, intents?: readonly TaoDataWriteIntent[]): Promise<void> | void
   subscribe?(observer: TaoDataConnectionObserver): () => void
 }
+
+/** TaoDataWriteIntent preserves an authored same-value update through a snapshot-backed sync bridge. */
+export type TaoDataWriteIntent = Readonly<{
+  entity: string
+  fields: readonly string[]
+  id: string
+}>
 
 /** TaoDataConnectionObserver receives provider snapshots and failures after the initial load. */
 export type TaoDataConnectionObserver = Readonly<{
@@ -388,7 +399,34 @@ export const DataControls = {
   },
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
-    React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
+    const lensScope = useStudioLensScope()
+    const observedPlan = React.useRef(plan)
+    const fillStartedAt = React.useRef<number | undefined>(undefined)
+    observedPlan.current = plan
+    const subscribe = React.useCallback((notify: () => void) => {
+      if (lensScope === undefined) {
+        return schema.subscribe(notify)
+      }
+      return schema.subscribe(() => {
+        const activePlan = observedPlan.current
+        const fill = schema.fillState(activePlan)
+        let providerWaitMs: number | undefined
+        if (fill?.status === 'filling' && fillStartedAt.current === undefined) {
+          fillStartedAt.current = performance.now()
+        } else if (fill?.status !== 'filling' && fillStartedAt.current !== undefined) {
+          providerWaitMs = Math.max(0, performance.now() - fillStartedAt.current)
+          fillStartedAt.current = undefined
+        }
+        lensScope?.mark({
+          entity: activePlan.entity,
+          kind: 'data',
+          ...(providerWaitMs === undefined ? {} : { providerWaitMs }),
+          schema: schema.name,
+        })
+        notify()
+      })
+    }, [lensScope, schema])
+    React.useSyncExternalStore(subscribe, schema.snapshot, schema.snapshot)
     // A fill-capable provider is offered each live query's descriptor: on mount, and again
     // whenever the descriptor itself changes (a different row, order, or limit).
     const activationKey = schema.queryActivationKey(plan)
@@ -412,6 +450,25 @@ export const DataControls = {
     const handle = entityHandle(row.evaluate().jsValue)
     RuntimeAssert.input(handle, 'Data update expects an entity handle.')
     metadataOf(handle).schema.update(handle, evaluatedFields(fields))
+  },
+
+  /** UpdateWith submits every own supplied input field and preserves omitted fields. */
+  UpdateWith(row: Evaluable, input: Evaluable): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data update expects an entity handle.')
+    const fields = input.evaluate().jsValue
+    RuntimeAssert.input(
+      fields !== null && typeof fields === 'object' && !Array.isArray(fields),
+      'Data update expects an input item.',
+    )
+    metadataOf(handle).schema.update(handle, Object.fromEntries(Object.entries(fields)))
+  },
+
+  /** Retry repeats the provider's original recorded write, without rerunning its Tao action. */
+  Retry(row: Evaluable): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data retry expects an entity handle.')
+    metadataOf(handle).schema.retryWrites(handle)
   },
 
   Delete(row: Evaluable): void {

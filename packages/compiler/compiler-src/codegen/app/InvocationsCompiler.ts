@@ -4,6 +4,7 @@ import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockContainsRespond, actionBlockRequiresAsync } from './action-control-flow'
+import { compileReactiveArgument } from './reactive-parameters'
 
 export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -40,7 +41,7 @@ export const InvocationsCompiler = {
       (use): use is AST.RenderSlotUse & { render: AST.ViewRender } => use.render !== undefined,
     )
     if (block && slotFills.length > 0) {
-      return Compile.RenderWithSlots(view, renderArguments, taoProps, block, slotFills, options)
+      return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
     }
     const children = AST.statementsOf(block).filter(statement =>
       !AST.isEventHandler(statement)
@@ -48,17 +49,21 @@ export const InvocationsCompiler = {
       && !(AST.isRenderSlotUse(statement) && statement.render)
     )
     if (children.length === 0) {
-      return gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`
+      return studioLensRender(render, gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`, options)
     }
     Assert.defined(block, 'render with child statements has a child block')
 
-    return gen`
+    return studioLensRender(
+      render,
+      gen`
       <${gen.scopeName(view)}${renderArguments}${taoProps}>
         {TR.BlockScope(_Scope, _Scope => {
           ${Compile.RenderBlockBody(block, options)}
         })}
       </${gen.scopeName(view)}>
-    `
+    `,
+      options,
+    )
   },
 
   /**
@@ -70,9 +75,13 @@ export const InvocationsCompiler = {
   RenderOccurrence(render: AST.Render, target: ASTUtils.RenderTarget, options: CodegenOptions = {}): Compiled {
     Assert(target.kind !== 'view', 'a view target compiles as an invocation')
     const declaration = target.kind === 'nav' ? target.declaration : target.parameter
-    return gen`<TR.Navigation.Occurrence name=${gen.jsLiteral(ASTUtils.renderTargetName(target))} value={${
-      Compile.ValueDeclarationReference(declaration)
-    }}${Compile.RenderTaoProps(render, options)} />`
+    return studioLensRender(
+      render,
+      gen`<TR.Navigation.Occurrence name=${gen.jsLiteral(ASTUtils.renderTargetName(target))} value={${
+        Compile.ValueDeclarationReference(declaration)
+      }}${Compile.RenderTaoProps(render, options)} />`,
+      options,
+    )
   },
 
   /** RenderArguments compiles render invocation arguments into JSX props. */
@@ -86,6 +95,7 @@ export const InvocationsCompiler = {
 
   /** RenderWithSlots scopes call-site setup once and separates named fills from unnamed content. */
   RenderWithSlots(
+    render: AST.Render,
     view: AST.ViewDeclaration,
     renderArguments: Compiled,
     taoProps: Compiled,
@@ -101,9 +111,15 @@ export const InvocationsCompiler = {
       <>
         {TR.BlockScope(_Scope, _Scope => {
           ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
-          return <${gen.scopeName(view)}${renderArguments}${taoProps}${Compile.RenderSlotProps(slotFills, options)}>
+          return ${
+      studioLensRender(
+        render,
+        gen`<${gen.scopeName(view)}${renderArguments}${taoProps}${Compile.RenderSlotProps(slotFills, options)}>
             ${Compile.RenderBlockFragments(content, options)}
-          </${gen.scopeName(view)}>
+          </${gen.scopeName(view)}>`,
+        options,
+      )
+    }
         })}
       </>
     `
@@ -126,12 +142,27 @@ export const InvocationsCompiler = {
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
   InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
+    let value = Compile.Argument(pair.argument)
+    const render = pair.argument.$container?.$container
+    if (pair.parameter.mutable && Type.parameterName(pair.parameter) === 'Value' && AST.isRender(render)) {
+      const invocation = ASTUtils.resolveRenderInvocation(render)
+      const event = invocation.eventPairs.find(candidate => Type.parameterName(candidate.parameter) === 'Change')
+      const argument = invocation.pairs.find(candidate => Type.parameterName(candidate.parameter) === 'Change')
+      const change = event
+        ? Compile.EventHandlerAction(event)
+        : argument
+        ? Compile.Argument(argument.argument)
+        : undefined
+      if (change) {
+        value = gen`TR.Mapped(() => ${Compile.Expression(pair.argument.value)}, ${change})`
+      }
+    }
+    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${value}}`
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
   Argument(argument: AST.Argument): Compiled {
-    return Compile.Expression(argument.value)
+    return compileReactiveArgument(argument.value)
   },
 
   /** EventHandlerArgument compiles an explicit control event into its action-valued prop. */
@@ -172,10 +203,29 @@ export const InvocationsCompiler = {
 
   /** ImplicitChangeArgument compiles TextInput-style direct state binding. */
   ImplicitChangeArgument(binding: ASTUtils.ImplicitChangeBinding): Compiled {
+    if (
+      binding.parameter.$container.parameters.some(parameter =>
+        parameter.mutable && Type.parameterName(parameter) === 'Value'
+      )
+    ) {
+      return gen`${
+        gen.Name({ name: Type.parameterName(binding.parameter) })
+      }={TR.Action((_value: TR.Value<any>) => {})}`
+    }
     return gen`
       ${gen.Name({ name: Type.parameterName(binding.parameter) })}={TR.Action(
-        (_TaoEventValue: TR.Value<string>) => TR.Set(${gen.scopeName(binding.state)}, () => _TaoEventValue),
+        (_TaoEventValue: TR.Value<any>) => TR.Set(${compileReactiveArgument(binding.value)}, () => _TaoEventValue),
       )}
     `
   },
 } as const
+
+/** studioLensRender wraps exactly each preview occurrence while leaving test and production output untouched. */
+function studioLensRender(render: AST.Render, child: Compiled, options: CodegenOptions): Compiled {
+  if (options.studio !== true) {
+    return child
+  }
+  return gen`<TR.Studio.LensRender identity={${
+    Compile.StudioRenderIdentity(render, options.projectRoot)
+  }}>${child}</TR.Studio.LensRender>`
+}

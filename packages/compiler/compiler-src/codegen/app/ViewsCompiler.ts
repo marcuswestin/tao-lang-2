@@ -5,6 +5,7 @@ import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { foreignViewBindingName } from './injection-plan'
+import { compileNativeParameter, compileReactiveArgument, nativeParameterName } from './reactive-parameters'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ViewsCompiler = {
@@ -110,9 +111,22 @@ export const ViewsCompiler = {
   /** ViewParameterBinding compiles one view parameter into the current generated scope. */
   ViewParameterBinding(parameter: AST.ParameterDeclaration): Compiled {
     const name = { name: Type.parameterName(parameter) }
-    return parameter.defaultValue === undefined
-      ? gen`${gen.scopeName(name)} = _ViewProps.${gen.Name(name)}`
-      : gen`${gen.scopeName(name)} = _ViewProps.${gen.Name(name)} ?? ${Compile.Expression(parameter.defaultValue)}`
+    const initial = parameter.defaultValue === undefined
+      ? gen`_ViewProps.${gen.Name(name)}`
+      : gen`_ViewProps.${gen.Name(name)} ?? ${compileReactiveArgument(parameter.defaultValue)}`
+    const binding = parameter.copy || ASTUtils.parameterRequiresWritable(parameter)
+      ? gen`TR.UseParameterCell(${initial}, { copy: ${parameter.copy} })`
+      : initial
+    return gen`
+      ${gen.scopeName(name)} = ${binding}
+      ${
+      parameter.mutable
+        ? gen`const ${nativeParameterName(parameter)} = TR.UseNativeMutationLease(TR.Action(
+        (next: ${Compile.ParameterType(parameter)}) => TR.Set(${gen.scopeName(name)}, () => next),
+      ))`
+        : gen.noop()
+    }
+    `
   },
 
   /** CallerContentStatement places the opaque unnamed React content supplied by this occurrence. */
@@ -262,7 +276,9 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
           ${
     gen.list(AST.parametersOf(view), parameter => {
       const name = Type.parameterName(parameter)
-      return gen`${name}={_Scope.${name}.evaluate().jsValue}`
+      return gen`${name}={${
+        parameter.mutable ? compileNativeParameter(parameter) : gen`_Scope.${name}.evaluate().jsValue`
+      }}`
     })
   }
           Layout={TR.VisualLayout(${ambientProps})}

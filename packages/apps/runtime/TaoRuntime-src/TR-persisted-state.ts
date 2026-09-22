@@ -84,6 +84,17 @@ export function registerPersistedEnumCase(value: PersistedEnumCaseIdentity): voi
   declarationCases.set(value.caseName, value)
 }
 
+/** isPersistedEnumCase recognizes only the canonical enum token the runtime registered. */
+export function isPersistedEnumCase(value: unknown): value is PersistedEnumCaseIdentity {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+  const candidate = value as Partial<PersistedEnumCaseIdentity>
+  return typeof candidate.caseName === 'string'
+    && typeof candidate.declaration === 'string'
+    && enumCases.get(candidate.declaration)?.get(candidate.caseName) === value
+}
+
 /** RuntimePersistedState owns one device-local value independently of preference semantics. */
 export class RuntimePersistedState<T> implements TaoWritableState<T> {
   readonly key: string

@@ -44,10 +44,9 @@ document owns the _program-level_ process only; the tranche mechanics — the fo
   Start()/Running`, duration literals like `10.min`).
 - **Automations are not MVP.** Provider-owned scheduled work, notifications, and interruption
   levels wait for the app expansion (Skillet's timers and reminders force them honestly).
-- **Open scope question, settled at step 4 (MVP derivation):** whether the authority cluster —
-  `access` rules, transactions, invites, `publish`, presence — enters MVP through collaborative
-  WordFlower workspaces, or waits for the app expansion. Neither answer is assumed; `Coverage.md`
-  carries the cluster as unassigned until this is decided.
+- **Authority cluster deferred (Ro, 2026-09-22).** `access` rules, named transactions, invites,
+  `publish`, and presence wait for the app expansion. MVP WordFlower keeps its single-user writes;
+  collaborative workspaces do not enter MVP. `Coverage.md` assigns the deferred rows Post-MVP.
 
 ## The sequence
 
@@ -81,8 +80,8 @@ path. The language-level `Assistant` design remains future contract, not impleme
   dialect; the remaining groups are recorded in `Apps/Tao Future/README.md`. Write `Coverage.md`'s
   remaining rows during this pass — gaps surface while porting.
 - **Step 4 — re-derive `3 - MVP` by omission.** From the rewritten Revolution tier: same
-  spellings, fewer capabilities. Include the focused-writing mode; exclude automations; settle the
-  authority-cluster scope question. The result plus Skillet's future milestone defines v1-done.
+  spellings, fewer capabilities. Include the focused-writing mode; exclude automations and the
+  deferred authority cluster. The result plus Skillet's future milestone defines v1-done.
 - **Step 5 — the tranche loop.** Cut tranches from the Current ↔ MVP gap, one at a time, until
   Current ≡ MVP. Then expand to the Tao Future apps and continue toward Revolution the same way.
   The focused writing tranche is the first of these and is closed

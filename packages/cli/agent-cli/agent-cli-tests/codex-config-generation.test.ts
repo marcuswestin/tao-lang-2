@@ -1,4 +1,4 @@
-import { FS, Platform, Repo } from '@shared'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../agent-cli-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
@@ -14,6 +14,7 @@ const canonicalRules = `{
       "git merge *": "allow",
       "just studio-smoke *": "allow",
       "git status *": "allow",
+      "just *": "allow",
       "bun install *": "deny",
     },
     "read": {
@@ -22,6 +23,9 @@ const canonicalRules = `{
       "**/.env.*": "deny",
       "~/.ssh/**": "deny",
     },
+  },
+  "codex": {
+    "outsideSandboxCommands": ["just land"],
   },
   "claudecode": {
     "sandbox": {
@@ -39,6 +43,7 @@ const canonicalRules = `{
         "kill -TERM *",
         "git merge *",
         "just studio-smoke *",
+        "just land",
       ],
     },
   },
@@ -153,7 +158,7 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders only fixed host command shapes as project-local command rules', () => {
+  Test('renders fixed host commands and explicit landing exceptions only', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
     Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
@@ -161,9 +166,21 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
     Expect(rendered).not.toContain('pattern=["git","merge"]')
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
+    Expect(rendered).toContain('pattern=["just","land"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["just"]')
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
     Expect(rendered).toContain('Use ./agent setup')
+  })
+
+  Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {
+    const permissions = CodexConfigGenerator.parsePermissions(
+      canonicalRules.replace(
+        '"outsideSandboxCommands": ["just land"]',
+        '"outsideSandboxCommands": ["just unreviewed"]',
+      ),
+    )
+    Expect(() => CodexConfigGenerator.renderRules(permissions)).toThrow()
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -211,7 +228,7 @@ Describe('Codex config generation', () => {
         onSkip: message => skipped.push(message),
         root,
         writeText: async path => {
-          throw Object.assign(new Error('blocked'), { code: 'EPERM', path })
+          throw Object.assign(new Errors.HostEnvironmentError('blocked'), { code: 'EPERM', path })
         },
       })
 
@@ -297,6 +314,11 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
     Expect(rules).not.toContain('studio-smoke')
+    Expect(rules).toContain('pattern=["just","land"], decision="allow"')
+    Expect(rules).toContain('pattern=["./dev","land"], decision="allow"')
+    Expect(rules).toContain('pattern=["just","merge-with-main"], decision="allow"')
+    Expect(rules).toContain('pattern=["./dev","merge-with-main"], decision="allow"')
+    Expect(rules).toContain('pattern=["just","my-land"], decision="allow"')
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
   })
 })

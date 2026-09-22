@@ -32,7 +32,14 @@ export function actionBlockRequiresAsync(
     return true
   }
   return block?.statements.some(statement => {
-    if (AST.isAskStatement(statement) || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)) {
+    if (AST.isSetStatement(statement) || AST.isToggleStatement(statement)) {
+      // A parameter may be an action-backed native mapping. Owned state commits synchronously.
+      return AST.isParameterDeclaration(statement.target.ref)
+    }
+    if (
+      AST.isAskStatement(statement)
+      || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)
+    ) {
       return true
     }
     return AST.isDoStatement(statement) && actionInvocationRequiresAsync(statement, seen)

@@ -15,6 +15,25 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: language lowering', () => {
+  Test('lowers copied projected inputs and bulk updates through the runtime copy and update APIs', async () => {
+    const compiled = await Compiler.compileCode(`
+      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      type DocumentInput is Document { Title, Body }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Document) {
+        state Input = copy Document as DocumentInput
+        let Draft = DocumentInput { Title: "Draft", Body: "" }
+        action Save() { update Document with Input }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `)
+
+    Expect(compiled.code).toContain('TR.Copy(_Scope.Document.evaluate(), ["Title","Body"])')
+    Expect(compiled.code).toContain('TR.Data.UpdateWith(_Scope.Document.evaluate(), _Scope.Input.evaluate())')
+  })
+
   Test('preserves release project metadata in generated source provenance', async () => {
     const compiled = await Compiler.compileCode(`
       project {
@@ -52,11 +71,14 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.code).toContain('_Scope.ChangeExpanded = TR.Action(')
     Expect(compiled.code).toContain('TR.Navigation.BindView(')
-    Expect(compiled.code).toContain('["Expanded"]: TR.Alias(() => _Scope.Expanded.evaluate())')
-    Expect(compiled.code).toContain('["ChangeExpanded"]: TR.Alias(() => _Scope.ChangeExpanded.evaluate())')
+    Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_StackNav, {')
+    Expect(compiled.code).toContain('["Expanded"]: _Scope.Expanded')
+    Expect(compiled.code).toContain(
+      '["ChangeExpanded"]: TR.Alias(() => _Scope.ChangeExpanded.evaluate())',
+    )
   })
 
-  Test('keeps synchronous actions synchronous and marks ask responses as queue interrupts', async () => {
+  Test('keeps owned state actions synchronous and marks ask responses as queue interrupts', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       use Button, Text from @tao/ui
@@ -1360,7 +1382,29 @@ Describe('compiler: language lowering', () => {
     )
     Expect(code).toContain('TR.Interaction.RegisterCommands({ module: "@workspace/source", commands: [')
     Expect(code).toContain('name: "Document", type: "Document", entity: true,')
-    Expect(code).toContain('TR.Do(_Scope.Finish.evaluate(), _Scope.Document.evaluate())')
+    Expect(code).toContain('TR.Do(_Scope.Finish.evaluate(), TR.Readonly(TR.Alias(() => _Scope.Document.evaluate())))')
+  })
+
+  Test('copies a command slot before its command action mutates it', async () => {
+    const compiled = await Compiler.compileCode(`
+      app HostApp { view Home }
+      action Change(Value text) { set Value += "!" }
+      command Edit(copy Value text) {
+        Title "Edit"
+        do Change(Value)
+      }
+      view Home() {
+        state Draft = "draft"
+        let EditDraft = Edit with { Value: Draft }
+        action Run() { do EditDraft() }
+        render Empty()
+      }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain('_Scope.Value = TR.Cell(TR.Copy(_TaoFills["Value"]))')
+    Expect(code).toContain('TR.Interaction.Bind( _Scope.Edit, { "Value": _Scope.Draft, },')
   })
 
   Test('resolves a command action lazily when the action is declared later in its view', async () => {

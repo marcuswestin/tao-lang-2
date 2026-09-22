@@ -31,6 +31,9 @@ their own product.
   - Governing principle: the first impression must be that Tao is open source and that there is no
     danger whatsoever in using it to build products. Restrictions exist only as the mechanism that
     prevents a company repackaging Tao as a competing product.
+- **Decided 2026-09-22 — timing, not the final licence.** Keep the current AGPL during development;
+  settle and apply the app-safe licence structure **before the first public release**. Publishing
+  0.x under the current repository-wide AGPL and relicensing afterward is not the plan.
 - **To resolve at that consideration:** LGPL is the copyleft named above, but LGPL has no network
   clause — its obligation concerns relinking a modified library, not offering software as a service.
   A company could host the Tao stack as a product without triggering it. The licences that do bind a
@@ -58,19 +61,19 @@ committed `secrets/secrets.jsonc`.
   community around Tao, and a curated or split repository works against that — contributors cannot
   send a pull request to a mirror, and a one-way sync makes every outside change a manual port.
   Publishing everything is what makes contribution possible at all.
-- What that accepts, from `Report - Publication audit.md`: the agent instruction set and the
-  `Response format` section (`P1`), the "never mention an agent identity" rule (`P2`), the sandbox
-  policy as a map of what agents may do (`P3`), `Roadmap.md`'s two personal sections (`P7`, `P8`),
-  the September remediation record (`P9`), the developer-environment backlog (`P10`), and commit
-  authorship in perpetuity (`P20`). The audit judged none of these unsafe — only candid.
-- What it does **not** waive, because publishing as-is makes these mandatory rather than optional:
+- The whole-repository choice includes the agent instruction set (`P1`–`P3`), `Roadmap.md`'s two
+  personal sections (`P7`, `P8`), the September remediation record (`P9`), the developer-environment
+  backlog (`P10`), and commit authorship in perpetuity (`P20`). The audit judged the written material
+  candid rather than unsafe.
+- **Decided 2026-09-22 — public wording.** Edit the candid agent guidance and roadmap material for
+  a public audience before publication, keeping the repository whole. Editing the current tree does
+  not remove older wording from Git history.
+- What whole-repository publication does **not** waive, regardless of the public-audience edits:
   `P15` (untrack the App Store Connect identifiers and rotate that key), `P16` (`roPhone`), `P17`
   and `P18` (the machine-specific paths), and `P24` (the licence structure). These were the audit's
   prerequisites under every option and they are now the only blocking work.
-- Worth doing deliberately rather than by omission: the audit's per-entry recommendations for `P1`,
-  `P2`, and `P7`–`P10` assumed a curated repository was available as an out. It no longer is, so
-  each becomes a choice to publish as written, to edit before publishing, or to move out of the
-  repository — decide them as a set rather than one at a time.
+- Apply the audit's `P1`, `P2`, and `P7`–`P10` findings through that public-audience edit. The
+  mandatory `P15`–`P18` and `P24` fixes above remain separate prerequisites.
 
 ### R3 — Launch timing, positioning, and the stability promise
 
@@ -80,9 +83,9 @@ do we say it?
 - Blocks: `A3`'s pitch and honesty page; how much of `A13` must land first.
 - Options: launch now on "build small iOS and web apps with data, navigation, and tests, in one
   language"; wait until Current equals MVP; wait for the design system.
-- **Recommended:** launch before MVP is complete, with an explicit 0.x promise — expect breaking
-  changes, `tao fix` migrates what it can. Outside feedback should shape the tranches still to come,
-  and it cannot if it arrives after they are cut.
+- **Decided 2026-09-22:** invite outside developers before MVP is complete, with an explicit 0.x
+  promise: expect breaking changes, and `tao fix` migrates what it can. Feedback should shape the
+  remaining tranches.
 
 ### R4 — What we claim about platforms
 
@@ -92,10 +95,9 @@ and web work everywhere.
 - Blocks: `A3`'s install instructions and `A8`'s target matrix.
 - Options: say macOS-only for now; say macOS for iOS and full support elsewhere for web and Android;
   invest first in making Linux a first-class development platform.
-- **Recommended:** the middle option. It is true today and it does not turn away the Linux
-  developers who would otherwise try the web lane.
-- Concrete form: `Plan - Standalone Tao CLI.md` question 3 asks which of the five buildable targets
-  are release targets, and F7 there records exactly what is macOS-only today.
+- **Decided 2026-09-22:** the first public standalone CLI supports **macOS on Apple Silicon only**.
+  Do not claim Linux, Windows, or Intel Mac support in that release. The other buildable targets in
+  `Plan - Standalone Tao CLI.md` remain later expansion work, not first-release targets.
 
 ## Decide next — these unblock program and device work
 
@@ -108,8 +110,8 @@ answered.
 
 - Blocks: Process step 4, and therefore the tranche list in `A13`.
 - Options: in MVP through collaborative workspaces; deferred to the app expansion with Skillet.
-- **Recommended:** defer it. The release needs an installable, explorable Tao, and the authority
-  cluster is the largest remaining capability that no first-hour experience touches.
+- **Decided 2026-09-22:** defer the authority cluster to the later app expansion with Skillet. It
+  does not enter MVP through collaborative WordFlower workspaces.
 
 ### R6 — The three deferred runtime contracts
 
@@ -118,8 +120,8 @@ replay, and fixture-through-action result and handle semantics. The implemented 
 each area is working code, not an adopted language contract.
 
 - Blocks: any tranche that reaches them; nothing in the first hour.
-- **Recommended:** leave them deferred for the release and label the areas experimental, rather than
-  settling three contracts under launch pressure.
+- **Decided 2026-09-22:** keep all three contracts deferred at 0.x launch and label the affected
+  areas experimental. Settle each when a forcing slice reaches it.
 
 ### R7 — Host scope and versioning
 
@@ -130,9 +132,9 @@ that host the companion app itself, and does one host serve several Tao versions
 - Options: the companion app is the host, with rare shell releases and a compatibility check against
   the bundle; a separate host built per Tao version; both, with the companion adding the
   Studio-pairing features on top of the same shell.
-- **Recommended:** one shell, released rarely, with an explicit bundle-compatibility check. The
-  companion plan already assumes rare shell releases, and `tao ship`'s OTA path already carries a
-  compatibility fingerprint that this can reuse.
+- **Decided 2026-09-22:** the companion app is the shared host, with infrequent native-shell
+  releases and an explicit compatibility check against the Tao bundle. One host is not built for
+  every Tao version. The first public-release companion is an invitation beta (`R12`).
 
 ### R8 — Where builds run, and where signing happens
 
@@ -168,8 +170,7 @@ GitHub Issues and Discussions, a Discord, or something else. Small, but it is th
 the release.
 
 - Blocks: half of `A7`.
-- **Recommended:** GitHub Issues and Discussions only, to start. One place, no moderation load, and
-  it keeps reports next to the code.
+- **Decided 2026-09-22:** use GitHub Issues and Discussions only for early feedback.
 
 ### R11 — Hosted services for the release
 
@@ -178,11 +179,15 @@ InstantDB application for the WordFlower demo (`A16`), and later the Tao Lang se
 app's membership model assumes.
 
 - Blocks: `A16`, and any demo of sync or over-the-air updates.
-- Decide for the release: who runs the update service and at what scale, and whether the public demo
-  uses a hosted Instant application you own.
-- A fourth service joins them once `A2` lands: `Plan - Standalone Tao CLI.md` question 7 asks who
-  hosts the release binaries, their checksums, and the version index. One answer probably serves
-  both.
+- **Decided 2026-09-22:** defer Tao-hosted app updates from the first public release. The update
+  server is implemented but remains unhosted for outside developers in that release.
+- **Decided 2026-09-22:** develop WordFlower against local Instant; use Instant Cloud for the
+  production demo. [Instant says](https://www.instantdb.com/essays/instant_team_joins_openai) new
+  cloud signups are closed and its cloud apps shut down on August 31, 2027. Production therefore
+  needs an existing account and a migration before that date; the replacement is not decided here.
+- **Decided 2026-09-22:** put standalone CLI release binaries, checksums, and the version index on
+  GitHub Releases in the planned public repository. This does not host the separate app-update
+  service.
 
 ### R12 — What the public story includes
 
@@ -190,27 +195,23 @@ Which surfaces the release presents: the CLI alone, the CLI plus Studio, the com
 extension. Studio is the most impressive and the least finished.
 
 - Blocks: `A3`'s scope and `A5`'s example set.
-- **Recommended:** CLI and IDE extension as the product, Studio shown as a video or screenshots and
-  offered to anyone who asks. Studio's own reliability gate closed with `A15`, so this is now a
-  question of how finished Studio feels to a stranger rather than of whether it is proved.
-- Also part of the story's edge: `Plan - Standalone Tao CLI.md` question 8 asks whether `tao review`
-  ships in the first release, since it needs a local Chrome.
+- **Decided in the Studio dialogue, recorded 2026-09-21:** ship a supported, publicly downloadable
+  native macOS Studio in the first public release. Its packaging and release proof remain work.
+- **Decided 2026-09-22:** publish the IDE extension to the VS Code Marketplace and Open VSX at
+  launch. Offer the companion host as an invitation beta, with physical-device acceptance still to
+  prove. Defer `tao review` from the first standalone CLI binary; excluding its imported Studio
+  graph requires a packaging slice.
 
 ### R13 — The standalone CLI's remaining questions
 
-`Plan - Standalone Tao CLI.md` measured what a shipped `tao` binary takes and left eight questions
-that are yours. Four are already covered above — 3 under `R4`, 6 under `R1` and `R2`, 7 under `R11`,
-8 under `R12` — and these four have no other home:
+`Plan - Standalone Tao CLI.md` measured what a shipped `tao` binary takes and posed eight questions.
+Questions 3, 6, 7, and 8 are covered by `R4`, `R1`/`R2`, `R11`, and `R12` above. The remaining
+first-release choices were **decided 2026-09-22**:
 
-- **Question 1:** does `tao test` ship with a managed Node (about 50 MB per version), or does the
-  test harness change so nothing needs Node? The plan recommends a managed Node first and a harness
-  change as the durable answer.
-- **Question 2:** is the Expo host installed from a pinned lockfile on first run, shipped as a
-  per-platform archive, or both? The lockfile needs registry access; the archive needs hosting.
-- **Question 4:** is the per-project version pin exact, and may `tao` download a missing version
-  without asking? rustup downloads silently; 90 MB unannounced may not be what you want.
-- **Question 5:** which distribution channels the first release carries — an install script alone,
-  or script plus Homebrew plus npm. Each is a surface that has to keep working.
+- **Question 1:** ship `tao test` with a managed Node first; a harness change can remove it later.
+- **Question 2:** install the Expo host on first use from a pinned lockfile, with registry access.
+- **Question 4:** pin an exact Tao version per project, and ask before downloading a missing one.
+- **Question 5:** offer an install script only. Homebrew and npm distribution wait for later releases.
 
 ### R14 — The spellings the Tao Future consolidation had to choose
 

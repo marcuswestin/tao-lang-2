@@ -1,10 +1,10 @@
 # Plan - Tao Studio companion app
 
-Status: product direction settled; the development foundation, Slice 1, and the packet-23 trust and
-rediscovery hardening are implemented in software (protocol, gateway, cross-process trust/revocation,
-native host, authenticated Bonjour, QR/deep-link fallback, companion shell, Studio popover, and install
-tooling) with focused tests. Physical cable/LAN evidence remains separate and unverified here; later
-product slices remain planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
+Status: product direction settled; the development foundation, Slices 1 and 2, and the packet-23 trust and
+rediscovery hardening are implemented in software. Slice 3's Tao Lens is implemented in this branch;
+its selected-render browser and physical-device acceptance runs remain to be proved. Physical cable/LAN
+evidence remains separate and unverified here; later product slices remain planned. This plans a
+Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.

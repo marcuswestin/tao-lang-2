@@ -35,7 +35,7 @@ export type DevLoopReporter = {
 
 export const DEV_LOOP_CONTROLS: DevLoopControl[] = [
   { key: 'q', label: 'quit' },
-  { key: 'd', label: 'Tao desktop app (not yet available)' },
+  { key: 'd', label: 'open Tao desktop app' },
   { key: 'p', label: 'open connected physical device' },
   { key: 'x', label: 'restart dev process' },
   { key: 'r', label: 'reload app' },

@@ -141,14 +141,21 @@ FormButton("Save") {
 
 `on press` and `on submit` satisfy `action()` slots. `on change` satisfies `action(text)` and an inline handler may name that text payload after `->`. A named action reference must have the same callback contract. Configuring the same event twice, combining an event with an ordinary argument for the same slot, or using an event on a view without the standard slot is an error.
 
-For a text control with `Value is text, Change action(text)`, omitting `on change` synthesizes the usual two-way update only when the explicitly labeled `Value:` expression directly references writable text `state`:
+For `TextInput(mutable Value text, Change action(text), ...)`, a writable argument shares
+storage with the caller. This includes state, ordinary item fields, and parameters whose writable
+requirement is inferred. Literal arguments instead create storage owned by the mounted control.
 
 ```tao
 state Draft = ""
-TextInput(Value: Draft, Label: "Title")
+TextInput(Value: Draft, Label: "Title") {
+   on submit Save
+}
 ```
 
-Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
+Computed values, readonly aliases, and entity fields need an explicit `on change` mapping or a
+copy. An explicit handler receives the proposed value and controls the write; it replaces automatic
+assignment. Disabled controls suppress native press/change/submit delivery. Native mutation
+callbacks are revoked on unmount and execute writes through Tao actions.
 
 `ScrollView` is a scrollable container, `Spinner` is a loading indicator, and `Progress` is a
 progress indicator. Rendering a collection remains language-owned through `loop`; Tao deliberately

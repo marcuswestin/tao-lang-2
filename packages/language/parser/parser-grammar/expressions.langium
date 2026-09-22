@@ -89,7 +89,7 @@ DeclarationSlotPostfixExpression infers Expression:
     DeclarationSlotPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
 
 DeclarationSlotPrimaryExpression infers Expression:
-    WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
+    CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
     | ConfigurationConstructor | ListLiteral | MemberAccessExpression
     | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
     | FunctionCallExpression | RefinementExpression | ValueReference;
@@ -130,7 +130,10 @@ PostfixExpression infers Expression:
     PrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+    '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+
+CopyExpression:
+    'copy' value=PostfixExpression ('as' type=TypeReference)?;
 
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.

@@ -25,7 +25,7 @@ type ExpoTargetContext = {
   config: ExpoSessionConfig
   metro: ExpoMetroSession
 }
-export type DevStartupTarget = 'android' | 'ios' | 'web'
+export type DevStartupTarget = 'android' | 'ios' | 'web' | 'desktop'
 
 /** createExpoTargets binds Expo runtime launchers to one Expo session. */
 export function createExpoTargets(
@@ -123,6 +123,7 @@ async function openStartupTargets(
     web: () => openWeb(context),
     ios: () => openIosSimulator(context, shouldStop),
     android: () => openAvailableAndroid(context),
+    desktop: async () => false,
   }
   await Promise.all(requested.map(async target => {
     if (shouldStop()) {
