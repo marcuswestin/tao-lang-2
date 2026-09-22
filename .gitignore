@@ -22,7 +22,7 @@ local.properties
 !.artifacts/.gitkeep
 _gen_*
 **/.tao-project/studio/sketches.jsonc.*.tmp
-**/.tao-project/lock.jsonc
+Apps/WordFlower/1 - Current/.tao-project/lock.jsonc
 # Project-local development sessions and generated runtime state.
 **/.tao/
 

@@ -51,7 +51,7 @@ their own product.
 ### R2 — What becomes public
 
 Publishing this repository as it stands also publishes the agent instruction set, the subagent and
-skill definitions, `Roadmap.md` including `the Developer STACK` section, machine-specific files, and a
+skill definitions, `Roadmap.md` including its personal working list, machine-specific files, and a
 committed `secrets/secrets.jsonc`.
 
 - Blocks: `A3` (what the README addresses), and the disposition of `A10`'s audit findings.

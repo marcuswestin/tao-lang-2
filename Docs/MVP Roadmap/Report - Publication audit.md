@@ -169,7 +169,7 @@ at a glance and is not.
 `Roadmap.md` is 393 lines. `Docs/Roadmap/` is 206 tracked files and roughly 271,000 words, 138 of
 them active and 33 archived.
 
-### P7 — `Roadmap.md`'s `the Developer STACK` section — High
+### P7 — `Roadmap.md`'s personal `STACK` section — High
 
 Lines 15–31 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
 deep links, "Enable Codex to interact with studio on its own", work through the environment ledger.
@@ -178,11 +178,11 @@ deep links, "Enable Codex to interact with studio on its own", work through the 
 It is undated, unordered, and mixes a one-line chore with a multi-week workstream. It reads as
 someone's notes-to-self, because it is.
 
-- **Recommendation:** do not publish. Move `the Developer STACK` into an untracked or separately-tracked private
+- **Recommendation:** do not publish. Move the `STACK` list into an untracked or separately-tracked private
   file before publication. It carries no information a public reader can use and it sets the tone for
   everything after it.
 
-### P8 — `Roadmap.md`'s `the Developer's stack` section — High
+### P8 — `Roadmap.md`'s personal backlog section — High
 
 Lines 262–357 are the product and codebase backlog, "unordered", and they are frank in a way that
 will be quoted. Specifics that publish as written: "Roughly two dozen raw `Error`s handed to a

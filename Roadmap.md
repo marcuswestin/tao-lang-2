@@ -31,7 +31,7 @@ Two scoped passes over the repository's own records. Both are bookkeeping, not l
 neither blocks a tranche.
 
 - [ ] Reorganize this roadmap by category and size
-  - `Toward v1` and `the Developer's stack` are flat lists that mix multi-week workstreams with one-line
+  - `Toward v1` and `Backlog` are flat lists that mix multi-week workstreams with one-line
     follow-ups, so nothing can be scanned for what to pick up next. Group entries by area and mark
     their rough size, keeping this file the single index of open work.
 - [ ] Rework the rest of the markdown set
@@ -305,9 +305,10 @@ Product and codebase backlog, unordered.
       the active app entry file on the only path a client can reach. What is missing is the affordance: the tree offers the
       action and the server refuses it, instead of not offering it.
     - **Raw `Error`s handed to a promise rejection.** `repo-lint` ratchets them through
-      `CONVENTION_RULES.rejectedRawError` per file rather than per count, so the set of files cannot
-      grow while the sites inside a listed file remain. Each reaches a Tao author exactly as a throw
-      would. Heaviest in `studio-src/client/StudioMatrixView.ts`.
+      `CONVENTION_RULES.rawError` per allowlisted site rather than per count, so the set of files
+      cannot grow while the sites inside a listed file remain. Most reach a Tao author exactly as a
+      throw would; the test fixtures among them do not. Heaviest in
+      `studio-src/client/StudioMatrixView.ts`.
     - **Already-typed `throw new Errors.*` guards in the studio files** that would collapse to a
       one-line `Assert.input` now that `Assert` narrows the expression it is given. Invisible to
       repo-lint because they are already typed; purely a readability win.
@@ -400,6 +401,8 @@ Product and codebase backlog, unordered.
   - What to share, what to serialize, what is duplicated per worktree for no reason, and where a
     single orchestrator does and does not help live in
     `Docs/Roadmap/Parallel agents on one machine.md`.
+- [ ] Let Codex drive Tao Studio on its own, for testing and for developing Studio itself.
+- [ ] Shorten the TUI tests' main timer from 0.5 s to 0.1 s.
 
 ### Smaller follow-ups
 

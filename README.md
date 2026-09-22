@@ -45,32 +45,33 @@ whole app are declared the same way. [Your First Tao App](<Docs/Tutorials/Your F
 builds a complete reading-list app in nine steps, about thirty minutes.
 
 Tao compiles to TypeScript for Expo and React Native, so a Tao app runs on iOS, Android, and the
-web, and ships through the platforms' own stores.
+web.
 
 ## Install
 
 <!-- The standalone CLI release replaces this section with its one-line install (macOS on Apple Silicon first). -->
 
 The standalone `tao` command for macOS on Apple Silicon is on its way. Until it ships, run Tao from
-a checkout:
+a checkout on macOS with [Nix](https://nixos.org), [direnv](https://direnv.net), and
+[devenv](https://devenv.sh) installed:
 
 ```sh
 git clone <repository> tao && cd tao
-./agent setup
+direnv allow && direnv exec . ./agent setup
 ./tao create "A reading list"
 ```
 
-`./agent setup` installs the pinned toolchain into the checkout and touches nothing else on your
-machine. Then:
+The first `./agent setup` builds the pinned toolchain into the checkout; from then on `direnv`
+activates it whenever you enter the directory, and `./agent setup` alone keeps it current. Then:
 
-| Command      | What it does                                                           |
-| ------------ | ---------------------------------------------------------------------- |
-| `tao create` | Creates a new project from a one-line description                      |
-| `tao dev`    | Runs the app on the web, a simulator, or your phone, reloading on save |
-| `tao check`  | Reports syntax and validation errors, and canonical form               |
-| `tao fix`    | Applies every source fix: formatting, organized imports, migrations    |
-| `tao test`   | Runs the behavior tests declared in `.tao` files                       |
-| `tao ship`   | Builds and ships to TestFlight                                         |
+| Command      | What it does                                                                          |
+| ------------ | ------------------------------------------------------------------------------------- |
+| `tao create` | Creates a new project from a one-line description                                     |
+| `tao dev`    | Runs the app on the web, an iOS simulator, Android, or the desktop, reloading on save |
+| `tao check`  | Reports syntax and validation errors, and canonical form                              |
+| `tao fix`    | Applies every automatic source fix: formatting and organized `use`s                   |
+| `tao test`   | Runs the behavior tests declared in `.tao` files                                      |
+| `tao ship`   | Builds and ships to TestFlight                                                        |
 
 ## Where things are
 
@@ -83,9 +84,9 @@ machine. Then:
 
 ## Preview status
 
-Tao is 0.x. Expect breaking changes between versions; `tao fix` migrates what it can, and each
-release says what it could not. What is built is tested; what is designed but not built is marked as
-such in the specification and the decisions.
+Tao is 0.x. Expect breaking changes between versions, each named in the release notes. What is
+built is tested; what is designed but not built is marked as such in the specification and the
+decisions.
 
 Tao is built by its author working with coding agents. Commit trailers are omitted for a clean
 history.

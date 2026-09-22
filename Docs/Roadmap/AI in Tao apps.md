@@ -67,7 +67,7 @@ for every guarantee the rest of Tao already makes.
 - **Concurrency reuses the general `runs` vocabulary.** `generate … runs latest` consumes the
   decided-but-unimplemented `runs single / runs latest` policy from `Decisions.md` §8. That
   decision is general to actions, not AI-scoped; the AI work consumes it, never forks it. A
-  separate spike implements it (noted in `Roadmap.md`, the Developer's stack).
+  separate spike implements it (noted in `Roadmap.md`'s backlog).
 - **Prompt inputs are explicit at the call site.** The developer chooses what the model reads:
   field paths, and inline projections for rows and lists. Rich generations use a clause block
   (see the surface below). There is no app-level `Sees` registry for direct generation — that
@@ -352,7 +352,7 @@ cross-platform support — platforms graduate one at a time:
 2. **The `generate` tranche**: grammar, validator, formatter, compiler lowering, the runtime
    multi-state value, and the scripted-model test surface — in scope together, since the keyword
    without `model answers` is untestable. Mode 3 (`runs latest`) waits for the separate
-   concurrency spike (`Roadmap.md`, the Developer's stack); the slice is complete without it.
+   concurrency spike (`Roadmap.md`'s backlog); the slice is complete without it.
 3. **WordFlower "Suggest a title"**: the first product use, one generation behind a button,
    written in Tao, tested with the scripted model, demoed in Studio.
 4. Later, in tranche order as decided: `Sees` enforcement, agent grouping over the undo tranche,
