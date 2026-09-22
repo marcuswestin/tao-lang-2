@@ -1,4 +1,4 @@
-import { AST, Langium, type PackageResolver, Parser } from '@parser'
+import { AST, type PackageResolver, Parser } from '@parser'
 import { FS, Repo, TaoFiles } from '@shared'
 import { Stdlib } from '@stdlib'
 
@@ -150,7 +150,11 @@ export namespace Packages {
     const requestedRoot = FS.resolvePath(projectRoot)
     const resolvedRoot = await containingProjectRoot(requestedRoot) ?? requestedRoot
     const scanRoot = await FS.realPath(resolvedRoot).catch(() => resolvedRoot)
-    const discoveredProjectRoots = await discoverProjectRoots(resolvedRoot)
+    // One discovery answers every question below. Opening a workspace used to ask Git five times —
+    // for the project roots, the package directories, and each package's sources — at about 30ms
+    // a spawn on a busy machine, which was most of what opening cost.
+    const listing = await Repo.listUnder(scanRoot)
+    const discoveredProjectRoots = await discoverProjectRoots(resolvedRoot, scanRoot, listing)
     const projectRoots = discoveredProjectRoots.length === 0 ? [resolvedRoot] : discoveredProjectRoots
     const packages = new Map<string, string[]>()
     const record = (path: string) => {
@@ -174,12 +178,12 @@ export namespace Packages {
           record(projectGeneratedPackage)
         }
       }
-      for (const scannedPath of await Repo.directoriesUnder(scanRoot, { namePrefix: '@' })) {
+      for (const scannedPath of listing.directories({ namePrefix: '@' })) {
         const path = FS.resolvePath(FS.relativePath(scanRoot, scannedPath), resolvedRoot)
         if (FS.basename(path) === '@') {
           continue
         }
-        if (await containsTaoSource(path)) {
+        if (containsTaoSource(listing, scannedPath)) {
           record(path)
         }
       }
@@ -190,13 +194,12 @@ export namespace Packages {
     return { projectRoot: resolvedRoot, projectRoots, packages }
   }
 
-  async function containsTaoSource(path: string): Promise<boolean> {
-    return (await Repo.filesUnder(path, { extensions: ['.tao'] })).length > 0
+  function containsTaoSource(listing: Repo.Listing, directory: string): boolean {
+    return listing.files({ extensions: ['.tao'] }).some(path => FS.pathIsWithin(path, directory))
   }
 
   /**
-   * ProjectRootSweep memoizes the directories one sweep has already asked about, and carries the
-   * parser context those answers were produced with.
+   * ProjectRootSweep memoizes the directories one sweep has already asked about.
    *
    * Deciding whether a directory declares a project means reading and parsing every `.tao` file in
    * it, and the walk from a file to its project root passes through the same ancestors as the walk
@@ -206,17 +209,16 @@ export namespace Packages {
    */
   export type ProjectRootSweep = {
     readonly declarations: Map<string, Promise<boolean>>
-    readonly parserContext: Parser.Context
   }
 
   /** createProjectRootSweep opens a memo for one sweep of project-root lookups. */
   export function createProjectRootSweep(): ProjectRootSweep {
-    return { declarations: new Map(), parserContext: Parser.createContext() }
+    return { declarations: new Map() }
   }
 
   /**
    * containingProjectRoot finds the nearest ancestor directory that directly declares a project.
-   * Pass a `sweep` when resolving many paths at once so they share both the memo and one parser.
+   * Pass a `sweep` when resolving many paths at once so they share the memo.
    */
   export async function containingProjectRoot(start: string, sweep?: ProjectRootSweep): Promise<string | undefined> {
     const memo = sweep ?? createProjectRootSweep()
@@ -246,52 +248,45 @@ export namespace Packages {
     if (asked !== undefined) {
       return await asked
     }
-    const pending = directoryDeclaresProject(directory, sweep.parserContext)
+    const pending = directoryDeclaresProject(directory)
     sweep.declarations.set(directory, pending)
     return await pending
   }
 
-  async function directoryDeclaresProject(directory: string, parserContext: Parser.Context): Promise<boolean> {
+  async function directoryDeclaresProject(directory: string): Promise<boolean> {
     for (const name of await FS.listDir(directory).catch(() => [])) {
       const path = FS.resolvePath(name, directory)
       if (FS.extname(path) !== '.tao' || !await FS.isFile(path)) {
         continue
       }
-      const source = await FS.readText(path)
-      if (!source.includes('project')) {
-        continue
-      }
-      const parsed = await Parser.parseSource(parserContext, source, {
-        uri: Langium.URI.file(path),
-        validation: false,
-      })
-      if (parsed.entry.ast.statements.some(AST.isProjectDeclaration)) {
+      if (await fileDeclaresProject(path)) {
         return true
       }
     }
     return false
   }
 
-  async function discoverProjectRoots(root: string): Promise<string[]> {
-    const parserContext = Parser.createContext()
+  /**
+   * fileDeclaresProject reads one file and asks its syntax alone. Whether a file declares a project
+   * needs no import resolved and no reference linked, so a syntax parse on the shared context is
+   * enough; a parser context of its own per question built a Langium container per question.
+   */
+  async function fileDeclaresProject(path: string): Promise<boolean> {
+    const source = await FS.readText(path)
+    return source.includes('project')
+      && Parser.parseSyntax(source).ast.statements.some(AST.isProjectDeclaration)
+  }
+
+  async function discoverProjectRoots(root: string, scanRoot: string, listing: Repo.Listing): Promise<string[]> {
     const roots = new Set<string>()
-    const scanRoot = await FS.realPath(root).catch(() => root)
     for (
-      const scannedPath of await Repo.filesUnder(scanRoot, {
+      const scannedPath of listing.files({
         excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
         extensions: ['.tao'],
       })
     ) {
       const path = FS.resolvePath(FS.relativePath(scanRoot, scannedPath), root)
-      const source = await FS.readText(path)
-      if (!source.includes('project')) {
-        continue
-      }
-      const parsed = await Parser.parseSource(parserContext, source, {
-        uri: Langium.URI.file(path),
-        validation: false,
-      })
-      if (parsed.entry.ast.statements.some(AST.isProjectDeclaration)) {
+      if (await fileDeclaresProject(path)) {
         roots.add(FS.dirname(path))
       }
     }

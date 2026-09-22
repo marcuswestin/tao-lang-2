@@ -215,9 +215,18 @@ for WordFlower's 28 files, 0.34s against 0.17s for the build itself — because 
 genuinely read the entry's graph (navigation reachability, selection keys, datasource membership,
 global commands), so a file cannot simply be validated once. Separating file-local validators, which
 are most of them, from graph-reading ones would remove most of it and is a change to the validator's
-contract rather than a defect. And opening a workspace costs 0.10-0.15s before any file is read:
-`Packages.createContext` scans the project for package directories, 2.2s of the repository's 6.6s
+contract rather than a defect. And opening a workspace cost 0.10-0.15s before any file was read:
+`Packages.createContext` scanned the project for package directories, 2.2s of the repository's 6.6s
 across 20 workspaces, paid again by every test that opens one.
+
+**Opening a workspace, fixed since.** Counting child processes, not time, found that opening one
+workspace asked Git five times — once for the project roots, once for the package directories, once
+per package for its sources — and built two Langium containers to ask whether a file declares a
+project, a question its syntax alone answers. One `git ls-files` now serves every question
+(`Repo.listUnder`), and the project question is a syntax parse on the shared context. Measured on
+WordFlower at the same load: `Workspace.open` 181ms → 37ms, a package context 458ms → 23ms once
+warm, one spawn where there were five. This was also the cause of the "opens one root concurrently"
+test's timeouts under load, which `main` had since covered by raising every test wait's budget.
 
 ### 5.4 Every command is a cold process, including the ones in a loop
 
