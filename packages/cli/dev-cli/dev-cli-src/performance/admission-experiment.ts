@@ -351,7 +351,7 @@ export function positionalRoots(argv: readonly string[]): string[] {
  * The checkouts are either provisioned by this run or named by the caller, and never discovered.
  *
  * `git worktree list` routinely shows more than thirty checkouts on this machine, worked in
- * concurrently by other agents and by Ro, and running a lane inside one of them would write another
+ * concurrently by other agents and by the Developer, and running a lane inside one of them would write another
  * agent's tree. `--provision` makes its own under one run-scoped root and removes exactly those;
  * anything else has to be named by someone who knows it is disposable.
  */

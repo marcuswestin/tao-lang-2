@@ -1,9 +1,10 @@
 # Plan - Tao Studio companion app
 
 Status: product direction settled; the development foundation, Slices 1 and 2, and the packet-23 trust and
-rediscovery hardening are implemented in software. Slice 3's Tao Lens is implemented in this branch;
+rediscovery hardening are implemented in software. Slice 3's Tao Lens has landed;
 its selected-render browser and physical-device acceptance runs remain to be proved. Physical cable/LAN
-evidence remains separate and unverified here; later product slices remain planned. This plans a
+evidence remains separate and unverified here. Slice 4 is deferred until after the public MVP;
+later product slices remain planned. This plans a
 Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
@@ -379,7 +380,7 @@ deterministic-simulation program defines the path from best-effort reproduction 
 
 One story can name several instances and personas:
 
-> On Ro's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
+> On the Developer's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
 
 Studio renders a lane per device/account plus one shared provider/world lane. It can pause all devices at a
 barrier, allow deliberate concurrency, partition the network, and assert convergence or authority refusal.
@@ -439,7 +440,11 @@ and report whether compatible state survived refresh. A device journey is part o
 Acceptance: select one slow render and reach its source, invalidating state/data, resolved style, provider
 wait, and covering journey without manual correlation.
 
-### 4. Record and replay a semantic journey
+### 4. Record and replay a semantic journey (after public MVP)
+
+The Developer deferred this entire slice on 2026-09-22. The saved source shape, expectation authoring,
+unresolved native or foreign step behavior, and draft editing scope remain open decisions for when
+the slice resumes. Its acceptance below is not a public-MVP release gate.
 
 - Live semantic script, editing, expectations, replay, and reviewed test/journey proposal.
 - Preserve unresolved foreign/native steps honestly.

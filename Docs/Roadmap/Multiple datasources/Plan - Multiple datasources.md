@@ -1,7 +1,7 @@
 # Plan - Multiple datasources
 
-Status: **implemented, with named gaps**. Ro asked for a plan and delegated every decision it raises;
-the decisions below are taken, and where one departs from Ro's sketch the departure is named and the
+Status: **implemented, with named gaps**. The Developer asked for a plan and delegated every decision it raises;
+the decisions below are taken, and where one departs from the Developer's sketch the departure is named and the
 reason given. `Docs/Roadmap/Tao Revolution/Decisions.md` §6 carries the amendment,
 `Docs/Spec/Tao Data.md` the contract, and `Docs/Roadmap/Tao Revolution/Coverage.md` the rows HNReader
 proves. The revision notes at the end record what implementation and two reviews changed, and what
@@ -277,7 +277,7 @@ All five slices landed. What the implementation settled, changed, or found:
    A patched name parses as an ordinary `Name with { … }` entry, so it is resolved by name rather than
    linked, and a block counts as a list once it holds a bare name or a patched name that resolves.
    Membership in such a patch is still refused; whether `Data` should become an ordinary patchable
-   slot, which needs the partition to move per app or onto the entity, is open with Ro.
+   slot, which needs the partition to move per app or onto the entity, is open with the Developer.
 
 ## Revision — second review
 
@@ -603,7 +603,7 @@ Trigger iCloud Sync_ to push changes between simulators.
 
 - Apple platforms only. A mount elsewhere fails loudly with a host-environment error; an app that
   also targets Android or the web binds another datasource in a variant for those targets. Whether
-  the validator should refuse such a target at compile time is a decision for Ro.
+  the validator should refuse such a target at compile time is a decision for the Developer.
 - Single account, many devices. iCloud Drive offers no server-side rule evaluation, no accounts of
   its own, and no sharing of a data-scope document, so the §3 access rules have nowhere to run and
   the household demos are out of scope. Sharing arrives with CloudKit in the granular family.
@@ -787,7 +787,7 @@ saves, and the fold is projected back into the snapshot the store already loads.
 1. Two devices on one iCloud account with a CloudKit-entitled development build: create, update,
    delete, relaunch, and conflict scenarios against the real `CKSyncEngine`, including a kill
    between fetch and acknowledgement to prove the inbox replays.
-2. Settle open questions 1, 2, and 5 with Ro and adjust the fold if the answers differ from the
+2. Settle open questions 1, 2, and 5 with the Developer and adjust the fold if the answers differ from the
    assumptions above; decide the tombstone retention and purge.
 3. Decide whether CloudKit or InstantDB carries the household demos, which need sharing and
    server-side rules the private database cannot provide.

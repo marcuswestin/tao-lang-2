@@ -1,6 +1,6 @@
 # Reminders
 
-Dated things worth raising with Ro when their day comes. `./agent board` prints every reminder whose
+Dated things worth raising with the Developer when their day comes. `./agent board` prints every reminder whose
 date has arrived, so one reaches a person through a command they already run rather than through
 memory. Some work can only be judged after time has passed, and a note left in a plan is read by
 whoever opens that plan, which is nobody on the day it matters.

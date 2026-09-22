@@ -49,7 +49,7 @@ Status: archived. Every item completed before the navigation MVP shipped.
 - [x] `git diff --check` passes.
 - [x] `./agent verify` passes.
 - [x] Final staged/unstaged audit confirms the complete intended tree is staged with unrelated changes separated or intentionally included.
-- [x] Ro receives the completed checklist and explicit remaining deferrals before any commit.
+- [x] the Developer receives the completed checklist and explicit remaining deferrals before any commit.
 
 ## Required Before Merge
 

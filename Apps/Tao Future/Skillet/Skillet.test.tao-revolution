@@ -7,22 +7,22 @@
 // so there is no assertion sub-language to learn.
 
 fixture HomeKitchen {
-   account Ro { Name: "Ro", Email: "ro@example.com" }
+   account Mira { Name: "Mira", Email: "mira@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
-   signed in as Ro
+   signed in as Mira
 
-   Home = create Household { Name: "Home", TimeZone: "America/New_York" } through StartKitchen(Ro)
-   RoMember = exactly one Home.Memberships where Person is Ro
-   SamMember = create Membership { Household: Home, Person: Sam, Role: Cook } for Ro
+   Home = create Household { Name: "Home", TimeZone: "America/New_York" } through StartKitchen(Mira)
+   MiraMember = exactly one Home.Memberships where Person is Mira
+   SamMember = create Membership { Household: Home, Person: Sam, Role: Cook } for Mira
 
-   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Course: Dinner, Servings: 2 } for Ro
-   Eggs = create Ingredient { Recipe: Shakshuka, Name: "Eggs", Amount: 4, Unit: "piece", Aisle: Dairy } for Ro
-   Tomatoes = create Ingredient { Recipe: Shakshuka, Name: "Tomatoes", Amount: 400, Unit: "g", Aisle: Produce } for Ro
-   Soften = create Step { Recipe: Shakshuka, Text: "Soften the onion and pepper." } for Ro
-   Simmer = create Step { Recipe: Shakshuka, Text: "Simmer the tomatoes.", Timer: 20.minutes } for Ro
-   Crack = create Step { Recipe: Shakshuka, Text: "Crack in the eggs and cover." } for Ro
-   Pancakes = create Recipe { Household: Home, Title: "Pancakes", Course: Breakfast, Servings: 4 } for Ro
-   TomorrowsShakshuka = create Meal { Household: Home, Recipe: Shakshuka, Day: today + 1.day, Course: Dinner, Servings: 4 } for Ro
+   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Course: Dinner, Servings: 2 } for Mira
+   Eggs = create Ingredient { Recipe: Shakshuka, Name: "Eggs", Amount: 4, Unit: "piece", Aisle: Dairy } for Mira
+   Tomatoes = create Ingredient { Recipe: Shakshuka, Name: "Tomatoes", Amount: 400, Unit: "g", Aisle: Produce } for Mira
+   Soften = create Step { Recipe: Shakshuka, Text: "Soften the onion and pepper." } for Mira
+   Simmer = create Step { Recipe: Shakshuka, Text: "Simmer the tomatoes.", Timer: 20.minutes } for Mira
+   Crack = create Step { Recipe: Shakshuka, Text: "Crack in the eggs and cover." } for Mira
+   Pancakes = create Recipe { Household: Home, Title: "Pancakes", Course: Breakfast, Servings: 4 } for Mira
+   TomorrowsShakshuka = create Meal { Household: Home, Recipe: Shakshuka, Day: today + 1.day, Course: Dinner, Servings: 4 } for Mira
 }
 
 fixture NewCook {
@@ -33,13 +33,13 @@ fixture NewCook {
 // The kitchen with a week already on the list, for the folded shopping scenarios.
 fixture WeekShopped {
    fixture HomeKitchen
-   Listed = do AddMealToList(TomorrowsShakshuka) for Ro
+   Listed = do AddMealToList(TomorrowsShakshuka) for Mira
 }
 
 // The kitchen with a timer already counting down, for the cooking scenarios.
 fixture TimerRunning {
    fixture HomeKitchen
-   Counting = create Timer { Household: Home, Step: Simmer, StartedBy: Ro, EndsAt: now + 12.minutes, Running } for Ro
+   Counting = create Timer { Household: Home, Step: Simmer, StartedBy: Mira, EndsAt: now + 12.minutes, Running } for Mira
 }
 
 test "Skillet" {
@@ -136,7 +136,7 @@ test "Skillet" {
       press "Edit"
       enter "Shakshuka for four" into #title
       // Independent fields, so field-wise last-write-wins is the right answer and no dialogue is owed.
-      // Sam's servings change lands; Ro's title keeps what Ro typed.
+      // Sam's servings change lands; Mira's title keeps what Mira typed.
       collaborator Sam { update Shakshuka { Servings: 6 } }
       expect Shakshuka.Servings is 6
       select #title { expect text "Shakshuka for four" }
@@ -239,7 +239,7 @@ test "Skillet" {
       expect missing text "Edit"
 
       // Revoking rotates the code, so the link already sent is dead for good.
-      signed in as Ro
+      signed in as Mira
       run Skillet at RecipeLink(Shakshuka)
       press "Manage link"
       press #revokeLink
@@ -276,7 +276,7 @@ test "Skillet" {
    test "losing access mid-session is an honest state, not a blank" on laptop with HomeKitchen {
       signed in as Sam
       run Skillet at RecipeLink(Shakshuka)
-      collaborator Ro { delete SamMember }
+      collaborator Mira { delete SamMember }
       // Nothing in Recipes.tao-revolution writes this screen: `guard default` supplies it.
       expect text "You don't have access to this"
    }
@@ -330,13 +330,13 @@ test "Skillet" {
       press #confirm
       expect text "A kitchen needs an owner. Make someone else an owner first."
 
-      // Make Sam an owner first (Ro is still an owner and may), then step down.
+      // Make Sam an owner first (Mira is still an owner and may), then step down.
       update SamMember { Role: Owner }
-      update RoMember { Role: Cook }
+      update MiraMember { Role: Cook }
       press "Delete my account"
       press #confirm
       expect text "Skillet" // signed out, back at Welcome
       expect (Households where Name is "Home").Count is 1
-      expect (Memberships where Person is Ro).Count is 0
+      expect (Memberships where Person is Mira).Count is 0
    }
 }

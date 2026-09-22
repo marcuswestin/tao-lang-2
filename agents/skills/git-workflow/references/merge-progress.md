@@ -1,7 +1,7 @@
 # Merge Progress
 
 Land the finished part of a long task on `main` mid-flight and carry the rest on a fresh branch.
-Reach for this whenever a long task crosses a slice boundary, not only when Ro asks to merge what is
+Reach for this whenever a long task crosses a slice boundary, not only when the Developer asks to merge what is
 done so far, says to bring the work to a good state and merge now, or invokes `/merge-progress`.
 
 A branch that sits un-integrated gets more expensive every hour: `main` moves several times a day
@@ -18,7 +18,7 @@ the evidence and message format; this reference owns only the mid-task cut.
 
 The landing lock is machine-wide and a landing queues behind every other lane on the machine — waits
 of twenty minutes and more are ordinary — so a slice has to be worth one. Propose a landing only when
-all four hold, and it is then Ro's to accept or defer:
+all four hold, and it is then the Developer's to accept or defer:
 
 - The finished side is independently complete by the cut rule below.
 - It is at least two commits, or one that touches a surface other branches also edit: root
@@ -28,8 +28,8 @@ all four hold, and it is then Ro's to accept or defer:
 - You have not proposed a landing in the last half hour. One proposal per boundary, not per commit.
 
 Say in the proposal which of these made it worth asking, and check `./agent board` first: when a
-landing already holds the lock, say so and name the wait, because that is the fact Ro is trading
-against. Never land on the strength of this section alone — root `AGENTS.md` requires Ro's explicit
+landing already holds the lock, say so and name the wait, because that is the fact the Developer is trading
+against. Never land on the strength of this section alone — root `AGENTS.md` requires the Developer's explicit
 yes, which may have been given in advance for a named slice.
 
 ## Choosing the cut
@@ -43,7 +43,7 @@ finished side is empty, say so and do not merge.
 ## Bringing the branch to a good state
 
 Before touching `main`: land every finished change as commits so `git status` is clean (an
-in-progress change may be committed too, only if inert — not reachable from anything Ro would run);
+in-progress change may be committed too, only if inert — not reachable from anything the Developer would run);
 reverse anything in progress that is not inert, restoring the previous state; leave loud markers (a
 quarantine entry) exactly where they were, note updated to say where work now stands; refresh the
 documents the landed work changed; run `./agent verify --complete` plus the reachable host lanes,
@@ -64,13 +64,13 @@ then, without waiting to be asked: create the follow-up branch from the `main` t
 merge, in a fresh worktree; carry the in-progress work onto it, preferring to re-apply it from the
 landed base over cherry-picking a commit whose context has moved; and continue — the follow-up branch
 is an ordinary feature branch from here. A later cut is proposed the same way, against the same four
-conditions — the rhythm is Ro's to set by answering, not yours to set by cutting.
+conditions — the rhythm is the Developer's to set by answering, not yours to set by cutting.
 
 ## The checkpoint
 
 `.artifacts/checkpoint/<branch>.md` is what a slice boundary leaves behind, refreshed at every one of
 them whether or not a landing is proposed. It exists because the two ways a long task continues —
-Ro compacting the thread, or a fresh thread taking the branch — both destroy conversation and keep
+the Developer compacting the thread, or a fresh thread taking the branch — both destroy conversation and keep
 the repository. A model-written summary drops the constraint that mattered; a file does not.
 
 It is ignored by Git and lives only in this worktree, which is the right scope: it carries a branch
@@ -78,7 +78,7 @@ across a context boundary, while work that has to survive the branch goes in the
 under "Handing over the rest". Keep it short enough to stay true: the goal in a sentence; decisions taken and what they rule out;
 the evidence already green, with the lane and its timestamp, so the next thread does not re-run it;
 paths this branch owns; what is open, each with its next concrete step; and what has been proposed to
-Ro and not yet answered. Replace it rather than appending — a checkpoint is the current state, not a
+the Developer and not yet answered. Replace it rather than appending — a checkpoint is the current state, not a
 log — and write it before saying that this is a good point to compact, because after the compaction
 it is the only thing that remembers.
 
@@ -87,5 +87,5 @@ it is the only thing that remembers.
 The remaining work lives in the repository, not in a reply: every open item goes in the task's
 roadmap document with the exact reproduction, the last thing tried, and why it is still open (a
 defect found while landing the finished side goes here too); the follow-up branch's name appears
-there so the next agent can find the work from `main` alone. Ro's reply gets the cut and nothing
+there so the next agent can find the work from `main` alone. The Developer's reply gets the cut and nothing
 else: what landed, what did not, and what runs next.

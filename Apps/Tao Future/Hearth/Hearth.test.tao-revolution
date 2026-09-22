@@ -3,28 +3,28 @@
 // Steps select by visible text or `#tag` only; store checks are ordinary queries over plain values.
 
 fixture PineStreet {
-   account Ro { Name: "Ro", Email: "ro@example.com" }
+   account Mira { Name: "Mira", Email: "mira@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
-   signed in as Ro
+   signed in as Mira
 
    Garden = create Place { Name: "Community garden", Coordinate: 40.7122, -74.0064 }
    Pharmacy = create Place { Name: "Canal Pharmacy", Coordinate: 40.7180, -74.0002 }
 
-   PineStreet = create Home { Name: "Pine Street", TimeZone: "America/New_York", Accent: Moss } through CreateHome(Ro)
-   RoMember = exactly one PineStreet.Memberships where Person is Ro
-   SamMember = create Membership { Home: PineStreet, Person: Sam, Role: Adult } for Ro
+   PineStreet = create Home { Name: "Pine Street", TimeZone: "America/New_York", Accent: Moss } through CreateHome(Mira)
+   MiraMember = exactly one PineStreet.Memberships where Person is Mira
+   SamMember = create Membership { Home: PineStreet, Person: Sam, Role: Adult } for Mira
 
    // `CreateHome` seeds "Things to do" and "Shopping"; the plans list is this fixture's own.
    ChoresList = exactly one PineStreet.Lists where Name is "Things to do"
    ShoppingList = exactly one PineStreet.Lists where Name is "Shopping"
-   PlansList = create HearthList { Home: PineStreet, Name: "Plans", Kind: Plans, Color: Sky } for Ro
+   PlansList = create HearthList { Home: PineStreet, Name: "Plans", Kind: Plans, Color: Sky } for Mira
 
-   EggsBreakfast = create HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 4, Unit: "piece", CreatedBy: Ro } for Ro
+   EggsBreakfast = create HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 4, Unit: "piece", CreatedBy: Mira } for Mira
    EggsBaking = create HearthItem { HearthList: ShoppingList, Title: "Eggs", Quantity: 2, Unit: "piece", CreatedBy: Sam } for Sam
-   Milk = create HearthItem { HearthList: ShoppingList, Title: "Milk", Quantity: 1, Unit: "l", CreatedBy: Ro } for Ro
-   Plants = create HearthItem { HearthList: PlansList, Title: "Water the plants", Note: "The fern likes the rain barrel.", Due: 2027-04-12 09:00 America/New_York, Place: Garden, Assignee: Sam, CreatedBy: Ro } for Ro
+   Milk = create HearthItem { HearthList: ShoppingList, Title: "Milk", Quantity: 1, Unit: "l", CreatedBy: Mira } for Mira
+   Plants = create HearthItem { HearthList: PlansList, Title: "Water the plants", Note: "The fern likes the rain barrel.", Due: 2027-04-12 09:00 America/New_York, Place: Garden, Assignee: Sam, CreatedBy: Mira } for Mira
    Prescription = create HearthItem { HearthList: PlansList, Title: "Collect prescription", Due: 2027-04-12 17:00 America/New_York, Place: Pharmacy, CreatedBy: Sam } for Sam
-   Bins = create HearthItem { HearthList: ChoresList, Title: "Take the bins out", Due: 2027-04-13 07:30 America/New_York, CreatedBy: Ro } for Ro
+   Bins = create HearthItem { HearthList: ChoresList, Title: "Take the bins out", Due: 2027-04-13 07:30 America/New_York, CreatedBy: Mira } for Mira
 }
 
 fixture NewPerson {
@@ -65,7 +65,7 @@ test "Hearth" {
       expect EggsBreakfast.Complete is yes
       expect EggsBaking.Complete is yes
       // The stamp is on every source row, including the one Sam created.
-      expect (HearthItems where Title is "Eggs" and CompletedBy is Ro and CreatedBy is Sam).Count is 1
+      expect (HearthItems where Title is "Eggs" and CompletedBy is Mira and CreatedBy is Sam).Count is 1
    }
 
    test "an item's fields write through, and a remote change lands without a dialogue" on laptop with PineStreet {
@@ -167,7 +167,7 @@ test "Hearth" {
       expect text "Water the plants"
       expect text "Community garden"
       expect missing text "The fern likes the rain barrel."
-      signed in as Ro
+      signed in as Mira
       run Hearth at ListLink(PlansList)
       press "Manage link"
       press #revokeLink
@@ -253,7 +253,7 @@ test "Hearth" {
    }
 
    test "a person with two homes switches by a write" on phone with PineStreet {
-      Cabin = create Home { Name: "The cabin", TimeZone: "America/Denver" } through CreateHome(Ro)
+      Cabin = create Home { Name: "The cabin", TimeZone: "America/Denver" } through CreateHome(Mira)
       run Hearth
       press "Settings"
       press #switchHome

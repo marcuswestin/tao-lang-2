@@ -1216,7 +1216,7 @@ async function pairedDevice(env: Env): Promise<TestDevice> {
 function hello(env: Env, target: { metroPort?: number; sessionId?: string }): Record<string, unknown> {
   const identity = StudioDeviceTrust.generateIdentity()
   return {
-    device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' },
+    device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' },
     devicePublicKey: identity.publicKey,
     ephemeralPublicKey: StudioDeviceTrust.generateEphemeral().publicKey,
     ...(Object.keys(target).length === 0 ? { metroPort: env.metroPort } : target),
@@ -1233,7 +1233,7 @@ type Incoming =
 
 /** TestDevice is the phone side of tao-studio-device-v1, written against the trust primitives only. */
 class TestDevice {
-  readonly description = { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' }
+  readonly description = { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' }
   keys: TaoStudioDeviceSessionKeys | undefined
   lastConfirm: string | undefined
   receiveSeq = 1
