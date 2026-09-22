@@ -1,15 +1,40 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
-import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { startStudioClientDevReload, StudioClientDevReload } from '../studio-tooling-src/StudioClientDevReload'
-import { createRecentProjectStore, runStudioDev, StudioDev } from '../studio-tooling-src/StudioDev'
+import {
+  createRecentProjectStore,
+  openStudioProjectResource,
+  runStudioDev,
+  StudioDev,
+} from '../studio-tooling-src/StudioDev'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 import { packagedExpoCommand, startStudioPackagedService } from '../studio-tooling-src/StudioPackagedService'
 import { StudioPreviewRuntime } from '../studio-tooling-src/StudioPreviewRuntime'
 import { StudioSmoke } from '../studio-tooling-src/StudioSmoke'
 import { StudioTestProcessOutput, StudioTestProcessRunner } from '../studio-tooling-src/StudioTestProcessRunner'
+
+Describe('Studio project ownership', () => {
+  Test('refuses a project owned by a CLI session before starting Expo', async () => {
+    const root = await mkTestDir('tao-studio-owned-project-')
+    await FS.writeText(FS.resolvePath('Project.tao', root), 'project { id "owned" name "Owned" }')
+    const owner = await ProjectDevSession.acquire(root, 'cli')
+    try {
+      await Expect(async () =>
+        openStudioProjectResource({ projectPath: root }, {
+          entryPath: undefined,
+          isStopping: () => false,
+          stop: () => {},
+        })
+      ).toThrow(`already owned by cli session ${owner.record.id}`)
+    } finally {
+      await owner.release()
+      await FS.remove(root)
+    }
+  })
+})
 
 Describe('Studio test process output', () => {
   Test('bounds displayed output while retaining structured failure locations', () => {

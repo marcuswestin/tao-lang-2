@@ -112,11 +112,12 @@ Describe('App Store Connect client', () => {
       Http.jsonResponse({ data: [build('VALID')] }),
     ])
 
+    // `clock` is an injected fake, so this budget is denominated in fake ms with no real wall time spent.
     const result = await clientWith(recorded.fetch, clock).waitForProcessedBuild({
       appId: 'app-42',
       buildNumber: '202609021122',
       pollIntervalMs: 100,
-      timeoutMs: 1_000,
+      timeoutMs: 1_000, // budget-ok: fake clock, no real wall time.
     })
 
     Expect(result.id).toBe('build-7')

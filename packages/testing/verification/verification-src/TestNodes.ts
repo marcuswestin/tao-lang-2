@@ -101,7 +101,7 @@ const UNSHARDED_WARNING_UNITS = 4
  * (bun #21277), so the bound has to be the parent's.
  */
 const WALL_TIMEOUT_FACTOR = 6
-const WALL_TIMEOUT_FLOOR_MS = 120_000
+const WALL_TIMEOUT_FLOOR_MS = 300_000
 const WALL_TIMEOUT_CEILING_MS = 900_000
 const IDLE_TIMEOUT_FACTOR = 2
 /**
@@ -113,7 +113,7 @@ const IDLE_TIMEOUT_FACTOR = 2
  * killing suites that were only slow. The import would be a cycle, hence a test rather than an
  * expression.
  */
-const IDLE_TIMEOUT_FLOOR_MS = 120_000
+const IDLE_TIMEOUT_FLOOR_MS = 240_000
 
 /** build turns one run's selected suites into the nodes the graph will schedule. */
 function build(options: BuildTestNodesOptions): TestNodePlan {

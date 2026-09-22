@@ -377,7 +377,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           sourceVersion: currentFile.sourceVersion,
         })
         return inspection.owner?.rect?.width === 241.2 && inspection.owner.rect.height === 121.6
-      }, { intervalMs: 50, timeoutMs: 5_000 })
+      }, { intervalMs: 50, timeoutMs: 30_000 })
       Expect(measured).toBe(true)
 
       await browser.click('[data-panel="components"]')

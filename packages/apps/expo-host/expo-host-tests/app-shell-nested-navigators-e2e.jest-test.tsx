@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import type { screen as Screen } from '@testing-library/react-native'
 import * as RN from 'react-native'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
@@ -16,6 +17,15 @@ function resetInsets(): void {
   ;(require('react-native-safe-area-context') as {
     setSafeAreaInsetsForTests(value: typeof insets): void
   }).setSafeAreaInsetsForTests({ bottom: 0, left: 0, right: 0, top: 0 })
+}
+
+function hasScrollViewAncestor(instance: ReturnType<typeof Screen.UNSAFE_getAllByType>[number]): boolean {
+  for (let current = instance.parent; current; current = current.parent) {
+    if (current.type === RN.ScrollView) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -142,6 +152,126 @@ Describe('Expo runtime: nested window-owning navigators', () => {
               paddingTop: 12 + insets.top,
             })
           }
+        },
+      )
+    } finally {
+      resetInsets()
+    }
+  })
+
+  Test('frames a SplitNav by its panes when one pane holds a window-owning navigator', async () => {
+    setInsets()
+    try {
+      await testCompileApp(
+        `
+          use SplitNav, StackNav from @tao/nav
+          use Text from @tao/ui
+
+          nav MainStack = StackNav { Initial MainHome }
+
+          app SplitPaneApp {
+            Name "Split Pane"
+            Navigator SplitNav {
+              @sidebar {
+                Content Sidebar
+                Width 240
+                Resizable false
+              }
+              @main {
+                Content MainStack
+                Width 640
+                Resizable false
+              }
+            }
+          }
+
+          view Sidebar() {
+            render Text("Sidebar body")
+          }
+
+          scene MainHome() {
+            Title "Main Home"
+            render Text("Main Home body")
+          }
+        `,
+        screen => {
+          ExpectScreen(screen).toHaveText('Sidebar body')
+          ExpectScreen(screen).toHaveText('Main Home body')
+          // The stack pane frames its own screen, so the app host must not frame the whole split
+          // around it: the split takes the window and frames the plain sidebar pane itself. Each
+          // pane insets only the window edges it meets — the sidebar its left edge, the stack's
+          // screen its right — and neither the edge they share.
+          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
+          Expect(scrollViews).toHaveLength(2)
+          const paddings = scrollViews.map(scrollView => RN.StyleSheet.flatten(scrollView.props.contentContainerStyle))
+          Expect(paddings).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+              paddingBottom: 12 + insets.bottom,
+              paddingLeft: 12 + insets.left,
+              paddingRight: 12,
+              paddingTop: 12 + insets.top,
+            }),
+            expect.objectContaining({
+              paddingBottom: 12 + insets.bottom,
+              paddingLeft: 12,
+              paddingRight: 12 + insets.right,
+              paddingTop: 12 + insets.top,
+            }),
+          ]))
+          for (const scrollView of scrollViews) {
+            Expect(hasScrollViewAncestor(scrollView)).toBe(false)
+          }
+        },
+      )
+    } finally {
+      resetInsets()
+    }
+  })
+
+  Test('adds no second live inset to a window-owning navigator a scene renders inline', async () => {
+    setInsets()
+    try {
+      await testCompileApp(
+        `
+          use StackNav from @tao/nav
+          use Col, Text from @tao/ui
+
+          nav Inner = StackNav { Initial InnerHome }
+
+          app InlineNavApp {
+            Name "Inline Nav"
+            view Shell
+          }
+
+          view Shell() {
+            render Col() [fill] {
+              Text("Shell body")
+              Inner() [fill]
+            }
+          }
+
+          scene InnerHome() {
+            Title "Inner Home"
+            render Text("Inner Home body")
+          }
+        `,
+        screen => {
+          ExpectScreen(screen).toHaveText('Shell body')
+          ExpectScreen(screen).toHaveText('Inner Home body')
+          // The shell's own frame, from the app host, already stands between the inline stack and
+          // the window: the stack's screen keeps its fixed gutter and adds no live inset of its own.
+          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
+          Expect(scrollViews).toHaveLength(2)
+          const paddings = scrollViews.map(scrollView => RN.StyleSheet.flatten(scrollView.props.contentContainerStyle))
+          Expect(paddings).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+              paddingBottom: 12 + insets.bottom,
+              paddingLeft: 12 + insets.left,
+              paddingRight: 12 + insets.right,
+              paddingTop: 12 + insets.top,
+            }),
+            expect.objectContaining({ paddingBottom: 12, paddingLeft: 12, paddingRight: 12, paddingTop: 12 }),
+          ]))
         },
       )
     } finally {

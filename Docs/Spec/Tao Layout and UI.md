@@ -560,13 +560,35 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
   frames each of its own screens the same way. Nesting one inside another — a stack held as another
   stack's or a `SlotNav`'s `Initial` value — insets exactly once, never twice, and an app auxiliary
   insets independently of whatever the main navigator does with its own window.
-- `ask`, the inline shape of `as sheet`, and `as toast` are edge-safe without double-padding: their
-  overlay lane detects whether its enclosing navigator already sits inside an `AppSurfaceFrame` (a
-  navigator that does not own its window) and adds no further inset there — the frame's own padding
-  already reaches the edge — but adds the live safe-area inset itself when the enclosing navigator
-  owns its window, where the overlay lane is a sibling of the per-entry frames and fills the true
-  window directly. A toast is always the second case: it renders as a sibling of the app host's own
-  frame regardless of what the main navigator does, so it always adds the live inset.
+- `ask` renders through the nearest window layer — the app host's for the root window, a native
+  sheet's own for the window it presents — rather than in its navigator's overlay lane, so its
+  scrim dims the whole window whatever navigator asked, and it keeps its centred card off the notch
+  and the home indicator by adding the live safe-area inset itself. The app host's layer sits above
+  the content and the auxiliaries and beneath the toast layer, so a toast stays readable over a
+  dimmed screen. The ask keeps what its presenter's place in the tree gave it: its outline region
+  stays under the presenter's, so attention treats it as the presenter's, and whatever level hides
+  the presenter — a covered stack entry, an inactive selection item — hides the ask too. An ask asked
+  from a navigator no window layer encloses — one mounted outside an app host — draws in that
+  navigator's overlay lane instead, under the lane's own inset rule below.
+- The inline shape of `as sheet` (a runtime without a native modal host) and `as toast` are
+  edge-safe without double-padding: the overlay lane detects whether its enclosing navigator already
+  sits inside an `AppSurfaceFrame` (a navigator that does not own its window) and adds no further
+  inset there — the frame's own padding already reaches the edge — but adds the live safe-area inset
+  itself when the enclosing navigator owns its window, where the overlay lane is a sibling of the
+  per-entry frames and fills the true window directly. A toast is always the second case: it renders
+  as a sibling of the app host's own frame regardless of what the main navigator does, so it always
+  adds the live inset.
+- A `SplitNav` one of whose panes holds a window-owning navigator takes true window bounds itself,
+  a verdict read once at mount from the panes' declared content: that pane's navigator frames its
+  own screens, and the split frames each other pane — including a pane whose `SlotNav` is showing a
+  plain view — itself. Every frame inside a pane, the split's own or a nested navigator's, insets
+  only the window edges the pane meets: top and bottom always, left in the first pane, right in the
+  last. A split whose panes are all plain content stays inside the app host's one frame, scrolling
+  as one. Inside a native tab's screen, the frames a window-owning entry draws take the platform's
+  insets, as the frame the tab would otherwise draw around it does.
+- A frame inside a frame adds no live inset: a window-owning navigator a scene renders inline keeps
+  the fixed 12-pixel gutter around each of its screens, and the safe-area inset comes from the
+  scene's own frame, once.
 - A sheet presented through the platform's native modal host is a separate native window — on iOS a
   `pageSheet`'s card starts below the status bar, so its own top inset differs from the app's root
   window — so that presentation nests its own `SafeAreaProvider`, with no `initialMetrics`, and reads
@@ -583,28 +605,22 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
 A plain `present … as overlay` (no `ask`, no `as sheet`, no `as toast`) is full-bleed by decision:
 it is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach the window
 edges, so the runtime adds no inset and its content is the author's to inset (`Decisions.md` §10).
+It draws in its navigator's overlay lane, which fills that navigator's own surface: the true window
+under a navigator that owns its window, and the padded content box under one that does not, where
+the lane sits inside the enclosing `AppSurfaceFrame` and so stops short of the window edges by at
+least the frame's own padding.
 
-Known, pre-existing limitation, not addressed here: an ask's dimming scrim sits inside the same
-scrollable content an enclosing `AppSurfaceFrame` already padded, when its navigator does not own its
-window. Absolute positioning there is relative to the content container, which sizes to content and
-can be shorter or taller than the true viewport, so the scrim does not reliably reach the actual
-window edges in that configuration — it is inset from them by at least the frame's own padding either
-way, but does not necessarily cover them exactly. Seen on an iPhone 17 simulator on 2026-09-21: under
-a root `SlotNav`, the scrim dims the padded content box only, leaving the status bar, the side
-margins, the Back affordance, and the home-indicator strip undimmed. The fix is to render `ask` in
-the app host's window-level layer, beside the toast layer, rather than in the navigator's overlay lane.
-
-Also seen there: a plain `as overlay` presented from inside a native sheet. The sheet hides while a
-later entry tops the overlay stack, so the overlay's content renders full-bleed over the root screen,
-under the status bar — the decided full-bleed behavior applied literally, with the sheet's own
-content gone. Whether an overlay presented from a sheet should stay inside the sheet's window is an
-open presentation question, not an inset one.
+Seen on an iPhone 17 simulator on 2026-09-21: a plain `as overlay` presented from inside a native
+sheet. The sheet hides while a later entry tops the overlay stack, so the overlay's content renders
+full-bleed over the root screen, under the status bar — the decided full-bleed behavior applied
+literally, with the sheet's own content gone. Whether an overlay presented from a sheet should stay
+inside the sheet's window is an open presentation question, not an inset one.
 
 Not yet covered, and not decided by what exists today:
 
-- A `SplitNav` pane whose `Content` is itself a window-owning navigator is not yet guarded against a
-  double inset the way a `StackNav` or `SlotNav` entry is; `SplitNav` renders every pane's content
-  through one shared frame regardless of what is nested inside a pane.
+- Whether a plain `as overlay` under a navigator that does not own its window should reach the
+  window edges through the window layer the way `ask` does, or keep covering only the navigator
+  that presented it.
 - Android's keyboard resize behavior (`softwareKeyboardLayoutMode` and equivalents) is unset; only
   the iOS `KeyboardAvoidingView` `behavior` is chosen explicitly.
 

@@ -1,4 +1,5 @@
 import { Repo } from '@shared'
+import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import CommandRunner from './CommandRunner'
 import {
   type DebouncedWatcher,
@@ -54,6 +55,11 @@ function startDebouncedWatcher(
 }
 
 function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
+  const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
+  if (toolchainRepo === undefined) {
+    return [{ label: 'compile', paths: [projectRoot], shouldRunParserGen: false }]
+  }
+  const repoPath = (path: string) => Repo.resolvePath(path, toolchainRepo)
   // Watching the whole project keeps recompiles working for project files outside the
   // current dependency tree, e.g. newly created or not-yet-imported .tao files.
   // Separate watcher groups keep grammar generation unconditional for grammar edits and avoid path classification.
@@ -61,8 +67,8 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
     {
       label: 'grammar',
       paths: [
-        Repo.resolvePath('packages/language/parser/langium-config.json'),
-        Repo.resolvePath('packages/language/parser/parser-grammar'),
+        repoPath('packages/language/parser/langium-config.json'),
+        repoPath('packages/language/parser/parser-grammar'),
       ],
       shouldRunParserGen: true,
     },
@@ -70,20 +76,20 @@ function watcherSpecs(projectRoot: string): DevWatcherSpec[] {
       label: 'compile',
       paths: [
         projectRoot,
-        Repo.resolvePath('Justfile'),
-        Repo.resolvePath('packages/language/ast-utils'),
-        Repo.resolvePath('packages/compiler'),
+        repoPath('Justfile'),
+        repoPath('packages/language/ast-utils'),
+        repoPath('packages/compiler'),
         // `tao dev`'s own reporter and command wiring, which this loop runs through
         // (`@expo-host/dev-loop/expo-dev-loop` is called only from `packages/cli/tao-cli`); the
         // dev loop's own code under `packages/apps/expo-host` is already covered below.
-        Repo.resolvePath('packages/cli/tao-cli/cli-src/dev'),
-        Repo.resolvePath('packages/language/parser/parser-src'),
-        Repo.resolvePath('packages/apps/runtime'),
-        Repo.resolvePath('packages/apps/expo-host'),
-        Repo.resolvePath('packages/shared/shared-src'),
-        Repo.resolvePath('packages/apps/stdlib'),
-        Repo.resolvePath('packages/tsconfig.base.json'),
-        Repo.resolvePath('packages/language/validator'),
+        repoPath('packages/cli/tao-cli/cli-src/dev'),
+        repoPath('packages/language/parser/parser-src'),
+        repoPath('packages/apps/runtime'),
+        repoPath('packages/apps/expo-host'),
+        repoPath('packages/shared/shared-src'),
+        repoPath('packages/apps/stdlib'),
+        repoPath('packages/tsconfig.base.json'),
+        repoPath('packages/language/validator'),
       ],
       shouldRunParserGen: false,
     },

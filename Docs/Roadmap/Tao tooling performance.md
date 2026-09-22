@@ -253,14 +253,23 @@ files and nothing a compile produced, so they now live beside the run roots unde
 function of the plan alone, and the run-root lifecycle is untouched: a compile after an edit adds
 650 files instead of 2,135.
 
-The 650 that remain are the compiled apps: WordFlower's eight test variants each carry their own
-copy of the same compiled standard-library modules, in a directory whose name changes with every
-compile. Making those paths stable is not safe the simple way. A directory per variant that compiles
-overwrite in place would let a run read a mixture while another compile writes, and would let a
-published run root's manifest come to name newer output than it was fingerprinted for — a stale
-green. The sound reduction is to compile what variants share once per run root, which cuts the 650
-to roughly a hundred on every run without any path outliving its compile. The cache itself never
-evicts anything and held 3.49 million files when counted; the ledger has the entry.
+The 650 that remained were the compiled apps: WordFlower's eight test apps each carried their own
+copy of the same compiled modules, in a directory whose name changed with every compile, and five
+of the eight compiled to one module tree byte for byte. Making those paths stable the simple way —
+a fixed directory per app that each compile overwrites — would have been unsound: a run could read
+a mixture while another compile wrote, and a published run root's manifest could come to name newer
+output than it was fingerprinted for, a stale green. What was built instead is a content-addressed
+store beside the run roots (`TestRunRoot.intern`): everything the compiler writes beside `App.tsx`
+is stored once as a tree under the hash of its contents, an app under the hash of its `App.tsx`
+plus that tree with each entry of the tree a relative symlink beside `App.tsx`, and a path in the
+store names immutable bytes. A run root now holds only its manifest. Counted the same way: a fresh
+run root with nothing changed adds **0** files to Jest's cache, and an edit to one WordFlower source
+file adds **116** — the one tree that changed and the three apps that link to it — where it added
+650, and 2,135 before that. Jest resolves a symlink to its real path, so the shared tree is one
+cache entry however many apps link to it, and a module's import of `../../NavKinds`, a file the
+compiler writes beside `App.tsx`, resolves inside the tree; the first cut shared only `modules/` and
+broke exactly there, which is why the tree's boundary is `App.tsx` and nothing narrower. The cache
+itself never evicts anything and held 3.49 million files when counted; the ledger has the entry.
 
 ### 5.6 A Tao developer outside this repository has no cache at all
 
@@ -436,9 +445,12 @@ Phase 0 — remove the defects (days; no design decisions; unblocks every lane i
    validate, compile, and format, and fails when a steady-state median passes its budget. The
    budgets are loose on purpose — about 2.5 times what a machine at load 40 measured — so they catch
    a defect of ten times and not one of two; the tests that count work rather than time hold those.
-4. ~~Keep Jest's configuration still across compiles (5.5).~~ Done for the entrypoint directory, which
-   was 70% of it. Remaining: compile what test variants share once per run root.
-5. Give a packaged CLI a version-keyed cache in a user cache directory (5.6).
+4. ~~Keep Jest's configuration and the compiled apps' paths still across compiles (5.5).~~ Done: the
+   entrypoint directory beside the run roots, then a content-addressed store for the compiled apps.
+   An unchanged run re-transforms nothing; an edit re-transforms the one module tree it changed.
+5. ~~Give a packaged CLI a version-keyed cache in a user cache directory (5.6).~~ Dropped by Ro on
+   2026-09-21: no packaged CLI exists yet, and a published `tao` pays the uncached cost, 1.2s for
+   WordFlower, until the standalone CLI plan gives it a home.
 
 Expected on the fixture: check 20s → about 0.5s, fix 9s → about 0.5s, compile 3.2s → about 0.5s,
 test after an edit 26s → about 5s; `_tao-check`, `_fix-tao`, and the `tao-cli`, `tao-apps`,
@@ -466,12 +478,13 @@ core (7.2), each opened only by its named trigger.
 ## 9. Judgments that are Ro's
 
 1. **Is a lower-fidelity inner test loop acceptable?** Option C runs journeys against a stub of
-   React Native. Recommended: yes, as the default for `tao test` while iterating, with the Jest run
-   as the gate that proves a journey against real React Native JavaScript.
-2. **May the CLI rely on a resident process?** Decided by Ro on 2026-09-21: yes, it may. The order
-   stays watch modes and the in-process dev loop first, which need no daemon, and a shared background
-   service only if cold one-shot commands still feel slow after Phase 0, because daemons cost
-   lifecycle bugs.
+   React Native. Decided by Ro on 2026-09-21: yes. Headless is `tao test`'s default while iterating,
+   and the Jest run stays the gate in `verify` that proves a journey against real React Native
+   JavaScript. Phase 2 opens after Phase 1's first slice.
+2. **May the CLI rely on a resident process?** Decided by Ro on 2026-09-21: yes, it may. Also decided
+   the same day: Phase 1 starts with `tao dev` compiling in-process, before watch modes, because the
+   1-2s edit-to-preview bar is the one people feel; a shared background service comes only if cold
+   one-shot commands still feel slow after that, because daemons cost lifecycle bugs.
 3. **Does the runtime stay React-shaped after MVP?** The hybrid core is the only option here that
    improves the loop _and_ opens native renderers. Recommended: decide nothing now; open a
    time-boxed spike after MVP, informed by what Phase 2's headless runner had to stub.

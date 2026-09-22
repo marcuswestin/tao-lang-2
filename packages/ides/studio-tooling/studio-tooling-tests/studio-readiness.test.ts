@@ -21,6 +21,7 @@ async function readRecords(path: string): Promise<StudioLifecycleRecord[]> {
 Describe('Studio readiness', () => {
   Test('waits until the advertised page answers before reporting ready', async () => {
     let attempts = 0
+    // budget-ok: `sleep` is an injected no-op, so this budget is never actually waited out.
     const ready = await waitForReadyUrl('http://127.0.0.1:42100/sessions/abc', {
       fetchUrl: async () => {
         attempts += 1
@@ -28,7 +29,7 @@ Describe('Studio readiness', () => {
       },
       pollMs: 1,
       sleep: async () => {},
-      timeoutMs: 100,
+      timeoutMs: 100, // budget-ok: `sleep` is an injected no-op, never actually waited out.
     })
 
     Expect(ready).toBe(true)
@@ -36,13 +37,14 @@ Describe('Studio readiness', () => {
   })
 
   Test('reports not ready rather than throwing when the page never answers', async () => {
+    // budget-ok: `sleep` is an injected no-op, so this budget is never actually waited out.
     const ready = await waitForReadyUrl('http://127.0.0.1:42100/sessions/abc', {
       fetchUrl: async () => {
         Errors.throwHostEnvironment('connection refused')
       },
       pollMs: 1,
       sleep: async () => {},
-      timeoutMs: 5,
+      timeoutMs: 5, // budget-ok: `sleep` is an injected no-op, never actually waited out.
     })
 
     Expect(ready).toBe(false)

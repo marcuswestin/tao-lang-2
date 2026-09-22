@@ -1,4 +1,4 @@
-import { Platform, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 
 const WEB_BROWSER_APP_NAME = 'Google Chrome'
 const EXPO_HOME_PATH = '.artifacts/cache/expo'
@@ -9,6 +9,8 @@ export type ExpoPlatform = 'android' | 'ios' | 'web'
 export type ExpoConfigOptions = {
   /** A custom URI scheme Expo CLI uses for dev-client deep links (`/_expo/link?choice=expo-dev-client`). */
   scheme?: string
+  /** Project-owned writable Expo state; repository callers keep the historic default. */
+  stateRoot?: string
 }
 
 /** ExpoSessionConfig collects the Expo URLs and process options for one Metro session. */
@@ -43,7 +45,9 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
       EXPO_NO_TELEMETRY: '1',
       NODE_ENV: Platform.runtimeProcess.env['NODE_ENV'],
       OPEN_MATCH_HOST_ONLY: 'true',
-      __UNSAFE_EXPO_HOME_DIRECTORY: Repo.resolvePath(EXPO_HOME_PATH),
+      __UNSAFE_EXPO_HOME_DIRECTORY: options.stateRoot === undefined
+        ? Repo.tryResolvePath(EXPO_HOME_PATH) ?? FS.resolvePath('tao-expo-home', FS.tmpdir())
+        : FS.resolvePath('expo-home', options.stateRoot),
     },
     EXPO_START_POLL_MS: 1_000,
     EXPO_START_TIMEOUT_MS: 60_000,

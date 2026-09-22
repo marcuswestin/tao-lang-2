@@ -18,6 +18,7 @@ import * as LocalSocket from './LocalSocket'
 import * as Platform from './Platform'
 import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
+import { ProjectDevSession } from './ProjectDevSession'
 import * as Repo from './Repo'
 import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
@@ -50,6 +51,7 @@ export {
   Platform,
   ProcessListeners,
   ProcessTree,
+  ProjectDevSession,
   Repo,
   SecretsFile,
   Switch,

@@ -2,6 +2,7 @@ import type Workspace from '@compiler/workspace'
 import { Diagnostics, FS } from '@shared'
 import type { RuntimeApp } from '../RuntimeApp'
 import { TestRunId } from '../test-run-id'
+import { TestRunRoot } from '../test-run-root'
 import { Worker as CompilerWorker } from './Worker'
 
 type CompiledTestPlan = Awaited<ReturnType<typeof Workspace.compileTestPlan>>
@@ -271,12 +272,16 @@ async function appModulePath(appSourcePath: string, appName: string, context: Te
   if (pending !== undefined) {
     return await pending
   }
+  // Compiled into a directory of its own under the run root, then moved into the content-addressed
+  // store beside it: the path handed back names those exact bytes wherever they were compiled from,
+  // so Jest's transform cache reuses them across runs and the run root holds only the manifest.
   const compile = compileApp(appSourcePath, {
     appName,
     runtimePackageRoot: FS.resolvePath(`app-${TestRunId.create()}`, context.runRoot),
-  }).then(outputPath => {
-    context.appModulePaths.set(cacheKey, outputPath)
-    return outputPath
+  }).then(async outputPath => {
+    const modulePath = await TestRunRoot.intern(context.runRoot, FS.dirname(outputPath))
+    context.appModulePaths.set(cacheKey, modulePath)
+    return modulePath
   })
   inflight.set(cacheKey, compile)
   return await compile
