@@ -1,7 +1,6 @@
 # DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance
 
-- **Status:** Candidate, reopened 2026-09-22 for the Tao test compiled store.
-- **Section:** External
+- **Status:** Resolved
 - **Area:** Generated artifacts
 - **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
   parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
@@ -25,6 +24,9 @@
   `packages/apps/expo-host/_gen_tao-app-test/tao-test-command/.compiled`. An empty-directory rename
   failed both inside `.artifacts` and this generated tree, including through a reviewed unsandboxed
   command; the same operation succeeded under `/private/tmp`. File creation and rename still worked.
+  After moving the Tao test store to host temp and teaching Jest the runtime package's module path,
+  `./tao test Apps/HNReader` passed 8/8 journeys, WordFlower passed 29/29, the tutorial CLI test
+  passed, and the focused runtime Jest checkbox test passed.
 - **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
   at the same source revision and verify that its generator reports `up to date`. Focused tests that
   do not copy and recursively remove provenance-marked trees remain usable. Keep disposable runtime
@@ -36,19 +38,23 @@
   `.artifacts/dev/studio-preview`: `expo start` requires `typescript` to resolve from the project
   root, and only a root inside the repository reaches its hoisted `node_modules` (a host-temp root
   failed every `./dev studio` launch). Preserve those boundaries, and separately identify why that
-  task namespace prevents directory lifecycle operations. Remaining: move the Tao test command's
-  compiled store and run-root lifecycle out of the managed worktree, or publish its content through
-  the existing file-only transaction while preserving Jest module resolution and cache identity.
+  task namespace prevents directory lifecycle operations. The Tao test command and default runtime
+  test workers now use a stable host-temporary compiled store keyed by runtime package; explicit
+  fixture runtime roots keep their isolated output location. Jest resolves workspace packages from
+  the runtime package's installed links even when the generated app lives outside its ancestor path.
 - **Change made:** `FS.synchronizeDirectoryFileSets` publishes multiple generated roots under one lock,
   retains host-temporary backups until every move and stale-file removal succeeds, and restores the
   prior file set on failure. Runtime app generation and IDE bundle-plus-syntax publication now stage
   outside the checkout before using that transaction. Forced `EPERM` and `EFAULT` tests compare the
   entire prior output graph byte-for-byte after failure; focused shared, runtime-toolchain, and IDE
-  suites pass 79, 22, and 15 tests respectively.
+  suites pass 79, 22, and 15 tests respectively. The 2026-09-22 Tao test recovery adds an external
+  generated-root option to `TestRunRoot`, selects host temp for default runtime test workers and the
+  Tao test CLI, and supplies Jest with the runtime package's `node_modules` path.
 - **Dependencies:** None.
-- **Acceptance:** Previously met for the repository-owned publication boundary: forced cleanup denial leaves all
+- **Acceptance:** Met for the repository-owned publication boundary: forced cleanup denial leaves all
   persistent runtime and IDE outputs byte-for-byte intact and reports one failure, while successful
-  publication removes stale files across both IDE roots as one transaction. Remaining: ordinary
-  `./tao test Apps/HNReader` and the app shard preparation complete inside the managed task
-  namespace without directory-rename or directory-removal denial.
+  publication removes stale files across both IDE roots as one transaction. The managed task
+  namespace now completes ordinary HNReader and WordFlower `tao test` runs without generated
+  directory-rename or directory-removal denial; the real lane's shared preparation also passed.
 - **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
+- **Archived:** 2026-09-22

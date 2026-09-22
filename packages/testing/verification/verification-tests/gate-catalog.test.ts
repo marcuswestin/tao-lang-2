@@ -281,9 +281,8 @@ Describe('gate catalog metadata', () => {
     // Every other runner is bounded by the graph itself — a shard's one slot, or `--maxWorkers`.
     Expect(GateCatalog.suiteTuning('cli/dev-cli').budgetEnvKeys).toBeUndefined()
     Expect(GateCatalog.suiteTuning('runtime-jest').budgetEnvKeys).toBeUndefined()
-    // Its startup dominates, so it declares the measured startup; a Bun suite starts far faster and
-    // uses the shared default.
-    Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(6_000)
+    // Shared preparation pays compiler startup once; a shard pays only its warm CLI overhead.
+    Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(800)
     Expect(GateCatalog.suiteTuning('tao-apps').shardCost).toBe(2)
     // Jest's own pool already parallelizes its whole run, so splitting it only adds startups.
     Expect(GateCatalog.suiteTuning('runtime-jest').shardable).toBe(false)

@@ -25,6 +25,9 @@ function createRuntimeJestConfig(options) {
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
   return {
     preset: 'jest-expo',
+    // Generated Tao apps may live outside the package's ancestor chain. Resolve workspace packages
+    // from this runtime package's installed links.
+    modulePaths: ['<rootDir>/node_modules'],
     testTimeout: starvationAdjustedTimeoutMs(options.testTimeout ?? JOURNEY_BUDGET_MS),
     testMatch: options.testMatch,
     // Jest builds the file map it discovers tests from by crawling `roots`, and `roots` defaults to
@@ -58,6 +61,10 @@ function createRuntimeJestConfig(options) {
       '^react-native$': `${dependencyRoot}/react-native`,
       '^react-native-safe-area-context$': '<rootDir>/expo-host-tests/safe-area-context-mock.tsx',
       '^@react-native-async-storage/async-storage$': '<rootDir>/expo-host-tests/async-storage-mock.ts',
+      // Tao journeys exercise the portable controls. Installed optional native hosts are present
+      // on development machines but cannot provide their device UI through react-test-renderer.
+      '^@(react-native-community/(datetimepicker|slider)|react-native-picker/picker|react-native-segmented-control/segmented-control)$':
+        '<rootDir>/expo-host-tests/optional-native-host-mock.cjs',
     },
     // Bun isolated installs put React Native's ESM Jest setup under node_modules/.bun,
     // outside the path shape handled by jest-expo's default transform allowlist.

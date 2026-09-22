@@ -110,9 +110,11 @@ export async function runSharedTaoTestRun(
       `Shared Tao test handoff belongs to ${FS.displayPath(handoff.runtimeRoot)}, not this runtime root.`,
     )
   }
-  const opened = await RuntimeTesting.TestRunRoot.open(TestCache.CATEGORY, handoff.runRoot, {
-    runtimePackageRoot: runtimeRoot,
-  })
+  const opened = await RuntimeTesting.TestRunRoot.open(
+    TestCache.CATEGORY,
+    handoff.runRoot,
+    testRunRootOptions(runtimeRoot),
+  )
   if (opened === undefined || opened.manifestPath !== handoff.manifestPath) {
     return Errors.throwUserInput(
       `Shared Tao test handoff does not name a usable Tao test run: ${FS.displayPath(handoffPath)}.`,
@@ -157,9 +159,11 @@ export async function finalizeSharedTaoTestRun(handoffPath: string): Promise<voi
       `Shared Tao test handoff belongs to ${FS.displayPath(handoff.runtimeRoot)}, not this runtime root.`,
     )
   }
-  const opened = await RuntimeTesting.TestRunRoot.open(TestCache.CATEGORY, handoff.runRoot, {
-    runtimePackageRoot: runtimeRoot,
-  })
+  const opened = await RuntimeTesting.TestRunRoot.open(
+    TestCache.CATEGORY,
+    handoff.runRoot,
+    testRunRootOptions(runtimeRoot),
+  )
   if (opened === undefined || opened.manifestPath !== handoff.manifestPath) {
     return Errors.throwUserInput(
       `Shared Tao test handoff does not name a usable Tao test run: ${FS.displayPath(handoffPath)}.`,
@@ -270,9 +274,11 @@ async function reusedTaoTests(
   if (fingerprint === undefined) {
     return undefined
   }
-  const cached = await RuntimeTesting.TestRunRoot.lookup(TestCache.CATEGORY, fingerprint, {
-    runtimePackageRoot: runtimeRoot,
-  })
+  const cached = await RuntimeTesting.TestRunRoot.lookup(
+    TestCache.CATEGORY,
+    fingerprint,
+    testRunRootOptions(runtimeRoot),
+  )
   if (cached === undefined) {
     return undefined
   }
@@ -292,7 +298,10 @@ async function keepOrDiscardRunRoot(compiled: CompiledTaoTests, fingerprint: str
   if (compiled.reused === true) {
     return
   }
-  const options = { runtimePackageRoot: compiled.runtimeRoot }
+  if (compiled.runtimeRoot === undefined) {
+    return Errors.throwUnexpected('Compiled Tao tests have no runtime root.')
+  }
+  const options = testRunRootOptions(compiled.runtimeRoot)
   const published = fingerprint !== undefined
     && await RuntimeTesting.TestRunRoot.publish(TestCache.CATEGORY, fingerprint, compiled.runRoot, options)
   if (!published) {
@@ -421,7 +430,7 @@ async function validateAndCompileTaoTests(
     }
 
     HCI.logProcessInfo('test', 'Compiling apps')
-    const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
+    const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, testRunRootOptions(runtimeRoot))
     const filesByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
@@ -450,7 +459,7 @@ async function validateAndCompileTaoTestsInProcess(
     return 'validation-failed'
   }
   HCI.logProcessInfo('test', 'Compiling apps')
-  const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
+  const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, testRunRootOptions(runtimeRoot))
   const context: RuntimeTesting.TestCompiler.Context = { appModulePaths: new Map(), runRoot }
   const files = []
   for (const testPath of testPaths) {
@@ -506,7 +515,8 @@ function maxTestWorkers(): number {
  *   switches off; a lane running `--no-cache` sets it, because a memoized compile is not fresh work.
  * - `TAO_TEST_JEST_PATH`: the test runner entrypoint to execute instead of the resolved one.
  * - `TAO_TEST_NODE_PATH`: the Node executable that runs it instead of the pinned repository Node.
- * - `TAO_TEST_RUNTIME_ROOT`: the expo-host package root one run compiles into.
+ * - `TAO_TEST_RUNTIME_ROOT`: an explicit expo-host package root for an isolated fixture; without
+ *   one, the runtime stays at the installed package while generated run roots live in host temp.
  * - `TAO_TEST_RUNTIME_MANIFEST`: set by this command for its child; `RuntimeTesting` owns the name.
  * - `TAO_TEST_RUNTIME_ENTRYPOINTS`: set by this command for its child, naming the generated Jest
  *   entrypoints its run is split into; `TestHarnessFiles` owns the name.
@@ -787,6 +797,18 @@ async function testNodePath(): Promise<string> {
 
 function testRuntimeRoot(): string {
   return Platform.runtimeProcess.env['TAO_TEST_RUNTIME_ROOT'] ?? RuntimeToolchainPaths.packageRoot
+}
+
+/** Keep Jest's runtime path while placing disposable compiled output where directory moves work. */
+function testRunRootOptions(runtimeRoot: string): { generatedRoot?: string; runtimePackageRoot: string } {
+  if (Platform.runtimeProcess.env['TAO_TEST_RUNTIME_ROOT'] !== undefined) {
+    // An explicit runtime root is also the CLI tests' isolated output root.
+    return { runtimePackageRoot: runtimeRoot }
+  }
+  return {
+    generatedRoot: RuntimeTesting.TestRunRoot.hostGeneratedRoot(runtimeRoot),
+    runtimePackageRoot: runtimeRoot,
+  }
 }
 
 function writeTaoTestValidationErrors(errors: readonly TaoTestValidationError[]): void {

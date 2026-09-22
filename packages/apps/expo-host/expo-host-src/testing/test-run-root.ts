@@ -3,7 +3,7 @@ import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { TestHarnessFiles } from './test-harness-files'
 import { TestRunId } from './test-run-id'
 
-/** DIRECTORY_NAME names the ignored runtime-toolchain directory that holds every generated run root. */
+/** DIRECTORY_NAME names the directory holding one runtime's generated test runs. */
 const DIRECTORY_NAME = '_gen_tao-app-test'
 
 /** MANIFEST_FILE_NAME names the compiled-file manifest a run writes at the top of its run root. */
@@ -103,8 +103,10 @@ const COMPILED_ENTRY_NAME = /^[0-9a-f]{64}$/
 /** LAST_USED_FILE_NAME records when a run root was last handed to a run, reused roots included. */
 const LAST_USED_FILE_NAME = 'last-used'
 
-/** TestRunRootOptions locates the runtime package whose generated run roots are in play. */
+/** TestRunRootOptions locates the generated store independently of the Jest runtime package. */
 type TestRunRootOptions = {
+  /** Override generated output without moving Jest's runtime package root. */
+  generatedRoot?: string
   runtimePackageRoot?: string
 }
 
@@ -121,6 +123,7 @@ export const TestRunRoot = {
   DIRECTORY_NAME,
   discard,
   intern,
+  hostGeneratedRoot,
   lookup,
   MANIFEST_FILE_NAME,
   open,
@@ -425,8 +428,8 @@ async function manifestModulePaths(runRoot: string): Promise<readonly string[]> 
 /**
  * discard removes the run root a finished suite created.
  *
- * `options` must name the same runtime package root the run root was created under: a recursive
- * removal happens only for a path this module could have generated *there*, so a same-shaped
+ * `options` must resolve the same generated root the run was created under: a recursive
+ * removal happens only for a path this module could have generated there, so a same-shaped
  * directory somewhere else on disk is refused rather than deleted.
  */
 async function discard(runRoot: string, options: TestRunRootOptions = {}): Promise<void> {
@@ -741,7 +744,16 @@ function isRunRoot(path: string, generatedRoot: string): boolean {
 }
 
 function resolveGeneratedRoot(options: TestRunRootOptions): string {
-  return FS.resolvePath(DIRECTORY_NAME, options.runtimePackageRoot ?? RuntimeToolchainPaths.packageRoot)
+  return options.generatedRoot
+    ?? (options.runtimePackageRoot === undefined
+      ? hostGeneratedRoot(RuntimeToolchainPaths.packageRoot)
+      : FS.resolvePath(DIRECTORY_NAME, options.runtimePackageRoot))
+}
+
+/** A stable per-runtime cache outside managed worktrees, where directory moves are permitted. */
+function hostGeneratedRoot(runtimePackageRoot: string): string {
+  const identity = FS.contentIdentity([FS.resolvePath(runtimePackageRoot)]).slice(0, 16)
+  return FS.resolvePath(`tao-test-runs/${identity}/${DIRECTORY_NAME}`, FS.tmpdir())
 }
 
 function requireCategory(category: string): string {
