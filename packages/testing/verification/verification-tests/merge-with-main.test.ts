@@ -410,6 +410,30 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 }
 
 Describe('merge-with-main', () => {
+  Test('refreshes main while waiting, then verifies the refreshed tree only after acquiring the lock', async () => {
+    const originalMain = 'main000000000000000000000000000000000000'
+    const movedMain = 'movedmain000000000000000000000000000000000'
+    const fake = fakeDependencies({
+      ancestorExitCodes: [0, 1, 0, 0],
+      remoteMainHead: originalMain,
+      remoteMainSequence: [originalMain, movedMain, movedMain, movedMain],
+    })
+    const acquire = fake.dependencies.acquireLease
+    fake.dependencies.acquireLease = async options => {
+      await options.onQueueWait?.()
+      return await acquire(options)
+    }
+
+    await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
+
+    const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+    Expect(operations).toContain(`git merge --no-edit ${movedMain}`)
+    Expect(operations.indexOf(`git merge --no-edit ${movedMain}`)).toBeLessThan(
+      operations.indexOf('just verify-full'),
+    )
+    Expect(operations.filter(operation => operation === 'just verify-full')).toHaveLength(1)
+  })
+
   Test('landed report reads the broker archive instead of stale local refs', async () => {
     const fake = fakeDependencies()
     const queried: string[][] = []
