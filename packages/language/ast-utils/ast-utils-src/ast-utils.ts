@@ -46,6 +46,7 @@ import {
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
+import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
 import { Type } from './Type'
@@ -55,6 +56,9 @@ export { design, Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  parameterRequiresWritable,
+  writableExpression,
+  literalExpression,
   appBoundDatasources,
   effectiveAppConfiguration,
   listedEntryOf,
@@ -123,6 +127,7 @@ export namespace ASTUtils {
   export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
   export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult
   export type ItemShape = import('./Type').ItemShape
+  export type ItemShapeField = import('./Type').ItemShapeField
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
   export type LayoutTermValue = import('./layouts').LayoutTermValue
   export type OutlineControlDescriptor = import('./interaction-outline').OutlineControlDescriptor

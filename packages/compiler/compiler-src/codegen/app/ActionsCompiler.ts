@@ -11,6 +11,7 @@ import {
 } from './action-control-flow'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
+import { compileReactiveArgument, compileWritableTarget } from './reactive-parameters'
 
 type ActionParameter = {
   index: number
@@ -52,9 +53,11 @@ export const ActionsCompiler = {
     const bindSlots = gen.list(slots, slot => {
       const fill = gen`_TaoFills[${gen.jsLiteral(slot.name)}]`
       const defaultValue = slot.parameter.defaultValue
-      return defaultValue === undefined
-        ? gen`${gen.scopeName({ name: slot.name })} = ${fill}`
-        : gen`${gen.scopeName({ name: slot.name })} = ${fill} ?? ${Compile.Expression(defaultValue)}`
+      const initial = defaultValue === undefined
+        ? fill
+        : gen`${fill} ?? ${compileReactiveArgument(defaultValue)}`
+      const binding = slot.parameter.copy ? gen`TR.Cell(TR.Copy(${initial}))` : initial
+      return gen`${gen.scopeName({ name: slot.name })} = ${binding}`
     })
     const inFills = (body: Compiled) =>
       gen`_TaoFills => TR.BlockScope(_Scope, _Scope => {
@@ -137,9 +140,10 @@ export const ActionsCompiler = {
   ActionParameterBinding(parameter: ActionParameter): Compiled {
     const name = { name: Type.parameterName(parameter.parameter) }
     const runtimeParameter = actionRuntimeParameterName(parameter.index)
-    return parameter.parameter.defaultValue === undefined
-      ? gen`${gen.scopeName(name)} = ${runtimeParameter}`
-      : gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${Compile.Expression(parameter.parameter.defaultValue)}`
+    const initial = parameter.parameter.defaultValue === undefined
+      ? gen`${runtimeParameter}`
+      : gen`${runtimeParameter} ?? ${compileReactiveArgument(parameter.parameter.defaultValue)}`
+    return gen`${gen.scopeName(name)} = ${parameter.parameter.copy ? gen`TR.Cell(TR.Copy(${initial}))` : initial}`
   },
 
   /** ActionRuntimeParameter compiles one action callback parameter. */
@@ -157,6 +161,7 @@ export const ActionsCompiler = {
       AskStatement: Compile.AskStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
+      RetryStatement: Compile.RetryStatement,
       DeclarationSlotFill: Compile.DeclarationSlotFill,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
@@ -253,7 +258,9 @@ export const ActionsCompiler = {
   ToggleStatement(statement: AST.ToggleStatement): Compiled {
     const state = statement.target.ref
     Assert.defined(state, 'validated toggle targets a state')
-    return gen`TR.Toggle(${gen.scopeName(state)})`
+    return gen`${AST.isParameterDeclaration(state) ? gen`await ` : gen``}TR.Toggle(${
+      compileWritableTarget(state, statement.members)
+    })`
   },
 
   /** GuardActionStatement stops only its enclosing action-block callback after a match. */

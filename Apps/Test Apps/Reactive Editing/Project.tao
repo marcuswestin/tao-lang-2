@@ -1,0 +1,5 @@
+project {
+   id "reactive-editing"
+   name "Reactive Editing"
+   version "0.1.0"
+}

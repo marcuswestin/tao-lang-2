@@ -4,6 +4,7 @@ import { Assert, Errors, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
+import { compileWritableTarget } from './reactive-parameters'
 
 export const StateCompiler = {
   /** StateDeclaration compiles a view-local Tao state value. */
@@ -23,17 +24,17 @@ export const StateCompiler = {
   /** SetStatement compiles Tao state mutation. */
   SetStatement(setStatement: AST.SetStatement): Compiled {
     const state = resolveRef(setStatement.target)
+    const target = compileWritableTarget(state, setStatement.members)
+    const awaitKeyword = AST.isParameterDeclaration(state) ? gen`await ` : gen``
     const compileCompoundSet = (operator: AST.SetOperator) =>
       gen`
-        TR.Set(
-          ${gen.scopeName(state)},
-          () => TR.CompoundSet(${gen.scopeName(state)}, ${gen.jsLiteral(operator)}, ${
-        Compile.Expression(setStatement.value)
-      }),
+        ${awaitKeyword}TR.Set(
+          ${target},
+          () => TR.CompoundSet(${target}, ${gen.jsLiteral(operator)}, ${Compile.Expression(setStatement.value)}),
         )
       `
     return Switch(setStatement.operator, {
-      '=': () => gen`TR.Set(${gen.scopeName(state)}, () => ${Compile.Expression(setStatement.value)})`,
+      '=': () => gen`${awaitKeyword}TR.Set(${target}, () => ${Compile.Expression(setStatement.value)})`,
       '+=': compileCompoundSet,
       '-=': compileCompoundSet,
       '*=': compileCompoundSet,
@@ -64,10 +65,10 @@ function compilePersistedType(type: ASTUtils.TaoType): Compiled {
       type.item
         ? gen`{ kind: "item", properties: {
       ${
-          gen.list(type.item.properties, property =>
+          gen.list(Type.itemFields(type.item), property =>
             gen`
         ${gen.jsLiteral(property.name)}: { optional: ${property.optional}, type: ${
-              compilePersistedType(Type.ofProperty(property))
+              compilePersistedType(Type.itemFieldType(property))
             } },
       `)
         }

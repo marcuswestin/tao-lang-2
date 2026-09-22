@@ -19,6 +19,7 @@ import {
 } from './TR-data-registry'
 import type { TaoDataCapture } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
+import type { TaoSyncWriteRecovery } from './TR-data-sync'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
@@ -136,6 +137,8 @@ export type TaoFillOps = {
  * belong to a future provider family rather than leaking into this full-snapshot contract.
  */
 export type TaoDataConnection = {
+  /** Local durable write records, when the provider implements recorded mutation recovery. */
+  writes?: TaoSyncWriteRecovery
   /**
    * automaticReset lets the runtime run `reset` itself when a starting snapshot fails to parse,
    * instead of offering that destructive reset through the recovery overlay. Only a disposable
@@ -159,9 +162,16 @@ export type TaoDataConnection = {
   load(): Promise<string | undefined> | string | undefined
   /** reset is optional because remote providers may not permit destructive recovery. */
   reset?(): Promise<void> | void
-  save(snapshot: string): Promise<void> | void
+  save(snapshot: string, intents?: readonly TaoDataWriteIntent[]): Promise<void> | void
   subscribe?(observer: TaoDataConnectionObserver): () => void
 }
+
+/** TaoDataWriteIntent preserves an authored same-value update through a snapshot-backed sync bridge. */
+export type TaoDataWriteIntent = Readonly<{
+  entity: string
+  fields: readonly string[]
+  id: string
+}>
 
 /** TaoDataConnectionObserver receives provider snapshots and failures after the initial load. */
 export type TaoDataConnectionObserver = Readonly<{
@@ -412,6 +422,25 @@ export const DataControls = {
     const handle = entityHandle(row.evaluate().jsValue)
     RuntimeAssert.input(handle, 'Data update expects an entity handle.')
     metadataOf(handle).schema.update(handle, evaluatedFields(fields))
+  },
+
+  /** UpdateWith submits every own supplied input field and preserves omitted fields. */
+  UpdateWith(row: Evaluable, input: Evaluable): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data update expects an entity handle.')
+    const fields = input.evaluate().jsValue
+    RuntimeAssert.input(
+      fields !== null && typeof fields === 'object' && !Array.isArray(fields),
+      'Data update expects an input item.',
+    )
+    metadataOf(handle).schema.update(handle, Object.fromEntries(Object.entries(fields)))
+  },
+
+  /** Retry repeats the provider's original recorded write, without rerunning its Tao action. */
+  Retry(row: Evaluable): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data retry expects an entity handle.')
+    metadataOf(handle).schema.retryWrites(handle)
   },
 
   Delete(row: Evaluable): void {

@@ -27,6 +27,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     PostfixMemberAccess: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
     CaseTestExpression: expressionValueReferences,
+    CopyExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
     InterpolatedString: expressionValueReferences,

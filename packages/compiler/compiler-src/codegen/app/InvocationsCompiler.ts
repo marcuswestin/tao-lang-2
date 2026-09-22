@@ -4,6 +4,7 @@ import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockContainsRespond, actionBlockRequiresAsync } from './action-control-flow'
+import { compileReactiveArgument } from './reactive-parameters'
 
 export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -126,12 +127,27 @@ export const InvocationsCompiler = {
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
   InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
+    let value = Compile.Argument(pair.argument)
+    const render = pair.argument.$container?.$container
+    if (pair.parameter.mutable && Type.parameterName(pair.parameter) === 'Value' && AST.isRender(render)) {
+      const invocation = ASTUtils.resolveRenderInvocation(render)
+      const event = invocation.eventPairs.find(candidate => Type.parameterName(candidate.parameter) === 'Change')
+      const argument = invocation.pairs.find(candidate => Type.parameterName(candidate.parameter) === 'Change')
+      const change = event
+        ? Compile.EventHandlerAction(event)
+        : argument
+        ? Compile.Argument(argument.argument)
+        : undefined
+      if (change) {
+        value = gen`TR.Mapped(() => ${Compile.Expression(pair.argument.value)}, ${change})`
+      }
+    }
+    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${value}}`
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
   Argument(argument: AST.Argument): Compiled {
-    return Compile.Expression(argument.value)
+    return compileReactiveArgument(argument.value)
   },
 
   /** EventHandlerArgument compiles an explicit control event into its action-valued prop. */
@@ -172,9 +188,18 @@ export const InvocationsCompiler = {
 
   /** ImplicitChangeArgument compiles TextInput-style direct state binding. */
   ImplicitChangeArgument(binding: ASTUtils.ImplicitChangeBinding): Compiled {
+    if (
+      binding.parameter.$container.parameters.some(parameter =>
+        parameter.mutable && Type.parameterName(parameter) === 'Value'
+      )
+    ) {
+      return gen`${
+        gen.Name({ name: Type.parameterName(binding.parameter) })
+      }={TR.Action((_value: TR.Value<any>) => {})}`
+    }
     return gen`
       ${gen.Name({ name: Type.parameterName(binding.parameter) })}={TR.Action(
-        (_TaoEventValue: TR.Value<string>) => TR.Set(${gen.scopeName(binding.state)}, () => _TaoEventValue),
+        (_TaoEventValue: TR.Value<any>) => TR.Set(${compileReactiveArgument(binding.value)}, () => _TaoEventValue),
       )}
     `
   },

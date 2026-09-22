@@ -19,6 +19,12 @@ export const typeValidationMessages = {
   derivedSlotReopened: (name: string) => `Derived slot '${name}' cannot reopen a filled base slot.`,
   derivedSlotType: (name: string, expected: string, actual: string) =>
     `Derived slot '${name}' must narrow ${expected}, got ${actual}.`,
+  projectedItemBase: () => 'An input type must select fields from a data entity.',
+  projectedItemField: (entity: string, name: string) => `Data entity '${entity}' has no field named '${name}'.`,
+  duplicateProjectedItemField: (name: string) => `Input type selects field '${name}' more than once.`,
+  copyInputSource: (input: string, entity: string) => `Copy as '${input}' expects a ${entity} row.`,
+  copyInputField: (input: string, field: string) => `Copy as '${input}' needs a compatible '${field}' field.`,
+  copyUnsupportedValue: (type: string) => `Copy cannot directly copy ${type} values in this runtime.`,
   ...configuredItemValidationMessages,
   typeFixIncompatible: (type: string) => `Value cannot be type-fixed as '${type}'.`,
   cyclicType: (name: string) => `Type '${name}' cannot reference itself through its type definition.`,
@@ -34,11 +40,13 @@ export const typeValidationChecks = {
   [AST.TypeDeclaration.$type]: validateTypeDeclaration,
   [AST.DerivedTypeExpression.$type]: validateDerivedType,
   [AST.ItemTypeExpression.$type]: validateItemType,
+  [AST.ProjectedItemTypeExpression.$type]: validateProjectedItemType,
   [AST.TypeProperty.$type]: validateTypeProperty,
   [AST.NamedTypeReference.$type]: validateNamedTypeReference,
   [AST.ParameterDeclaration.$type]: validateParameter,
   [AST.ParameterizedDeclaration.$type]: validateDefaultParameterOrder,
   [AST.TypedConstructor.$type]: validateTypedConstructor,
+  [AST.CopyExpression.$type]: validateCopyExpression,
   ...configuredItemValidationChecks,
   [AST.MemberAccessExpression.$type]: validateMemberAccess,
 } satisfies NodeValidationChecks
@@ -52,6 +60,9 @@ function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: Validati
 function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationContext): void {
   if (parameter.inlineType && typeDefinitionHasCycle(parameter.inlineType, parameter.inlineType, new Set())) {
     ctx.error(parameter.inlineType, typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)))
+  }
+  if (parameter.copy && isUnsupportedCopyValueType(Type.ofParameter(parameter))) {
+    ctx.error(parameter, typeValidationMessages.copyUnsupportedValue(copyValueTypeName(Type.ofParameter(parameter))))
   }
   if (!parameter.defaultValue) {
     return
@@ -92,6 +103,81 @@ function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext):
     }
     seen.add(property.name)
   }
+}
+
+function validateProjectedItemType(type: AST.ProjectedItemTypeExpression, ctx: ValidationContext): void {
+  const base = Type.ofReference(type.base)
+  if (base.kind !== 'entity') {
+    ctx.error(type.base, typeValidationMessages.projectedItemBase())
+    return
+  }
+  const selected = type.fields.length > 0 ? type.fields : type.excludedFields
+  const seen = new Set<string>()
+  for (const name of selected) {
+    if (seen.has(name)) {
+      ctx.error(type, typeValidationMessages.duplicateProjectedItemField(name))
+      continue
+    }
+    seen.add(name)
+    if (!Type.dataFields(base.entity).some(field => field.name === name)) {
+      ctx.error(type, typeValidationMessages.projectedItemField(Type.dataEntityName(base.entity), name))
+    }
+  }
+}
+
+function validateCopyExpression(copy: AST.CopyExpression, ctx: ValidationContext): void {
+  const source = Type.ofExpression(copy.value)
+  if (isUnsupportedCopyValueType(source)) {
+    ctx.error(copy, typeValidationMessages.copyUnsupportedValue(copyValueTypeName(source)))
+    return
+  }
+  if (!copy.type) {
+    return
+  }
+  const target = Type.ofReference(copy.type)
+  const entity = Type.projectedEntityOf(target)
+  if (!entity) {
+    if (!Type.isCastCompatible(source, target)) {
+      ctx.error(copy.value, typeValidationMessages.typeFixIncompatible(Type.displayName(target)))
+    }
+    return
+  }
+  if (source.kind === 'entity') {
+    if (source.entity !== entity) {
+      ctx.error(
+        copy.value,
+        typeValidationMessages.copyInputSource(Type.displayName(target), Type.dataEntityName(entity)),
+      )
+    }
+    return
+  }
+  const sourceEntity = Type.projectedEntityOf(source)
+  if (sourceEntity && sourceEntity !== entity) {
+    ctx.error(copy.value, typeValidationMessages.copyInputSource(Type.displayName(target), Type.dataEntityName(entity)))
+    return
+  }
+  if (source.kind !== 'item' || !source.item) {
+    ctx.error(copy.value, typeValidationMessages.copyInputSource(Type.displayName(target), Type.dataEntityName(entity)))
+    return
+  }
+  if (target.kind !== 'item' || !target.item) {
+    return
+  }
+  for (const targetField of target.item.dataFields ?? []) {
+    const sourceField = Type.itemFields(source.item).find(field => field.name === targetField.name)
+    if (!sourceField || !Type.isAssignable(Type.itemFieldType(sourceField), Type.dataFieldType(targetField))) {
+      ctx.error(copy.value, typeValidationMessages.copyInputField(Type.displayName(target), targetField.name))
+    }
+  }
+}
+
+function isUnsupportedCopyValueType(type: ASTUtils.TaoType): boolean {
+  return type.kind === 'primitive'
+    && ['app', 'data', 'datasource', 'design', 'nav', 'scene', 'view'].includes(type.primitive)
+}
+
+function copyValueTypeName(type: ASTUtils.TaoType): string {
+  return type.kind === 'primitive' ? type.primitive : Type.displayName(type)
 }
 
 function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: ValidationContext): void {
@@ -263,7 +349,7 @@ function validateItemConstructor(
   expected: ASTUtils.ItemShape,
   ctx: ValidationContext,
 ): void {
-  const result = ASTUtils.resolveItemPropertyBindings(expected.properties, item.properties)
+  const result = ASTUtils.resolveItemPropertyBindings(Type.itemFields(expected), item.properties)
   for (const diagnostic of result.diagnostics) {
     Switch.kind(diagnostic, {
       'missing-property': diagnostic => {
@@ -298,7 +384,7 @@ function validateItemConstructor(
           diagnostic.property,
           typeValidationMessages.namedPropertyType(
             diagnostic.expected.name,
-            Type.displayName(Type.ofProperty(diagnostic.expected)),
+            Type.displayName(Type.itemFieldType(diagnostic.expected)),
             Type.displayName(Type.ofExpression(diagnostic.property.value)),
           ),
         )
@@ -359,6 +445,9 @@ function typeExpressionReferencesRoot(
   if (AST.isDerivedTypeExpression(type)) {
     return typeReferenceReferencesRoot(root, type.base, new Set(seen))
       || type.slots.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
+  }
+  if (AST.isProjectedItemTypeExpression(type)) {
+    return typeReferenceReferencesRoot(root, type.base, seen)
   }
   if (AST.isCaseSetTypeExpression(type) || AST.isYesNoTypeExpression(type)) {
     return false
@@ -432,6 +521,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
         typeName = 'text'
         continue
       }
+      const builtin = Type.entityBuiltinMemberType(member)
+      if (builtin) {
+        current = builtin
+        typeName = Type.displayName(current)
+        continue
+      }
       const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
       if (!field) {
         ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
@@ -445,12 +540,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       ctx.error(memberAccess, typeValidationMessages.memberNotItem(member))
       return
     }
-    const property = current.item.properties.find(candidate => candidate.name === member)
+    const property = Type.itemFields(current.item).find(candidate => candidate.name === member)
     if (!property) {
       ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
       return
     }
-    current = Type.ofPropertyRead(property)
+    current = AST.isEntityDataField(property) ? Type.dataFieldType(property) : Type.ofPropertyRead(property)
     if (current.kind === 'unresolved') {
       return
     }

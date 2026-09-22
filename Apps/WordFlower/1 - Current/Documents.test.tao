@@ -37,7 +37,10 @@ test "WordFlower documents" {
       expect text "Saved title: Draft the intro"
       enter "Polish the intro" into #editDocumentTitle
       enter "Set the scene with intent" into #editDocumentBody
-      expect text "Words: 5" // the explicit change action keeps the live word count reactive
+      expect text "Words: 5" // a field binding keeps the local copy reactive
+      expect text "Saved title: Draft the intro" // editing has not written the entity
+      expect text "Saved body: "
+      expect checkbox #markFinal unchecked
       press #saveDocument
       expect {
          text "Saved title: Polish the intro"

@@ -184,7 +184,9 @@ perform actions, data writes, presentation, asks, or injection.
 
 `action()` accepts no values; `action(text)` accepts one text value; further inputs are
 comma-separated. Contracts are structural. Named actions infer their callback signature, and an
-action with incompatible value types or required arity is rejected.
+action with incompatible value types or required arity is rejected. A named action that mutates an
+input also carries an inferred writable requirement. It cannot be passed through a readonly
+`action(text)` callback contract; use a copied input when the callback only needs local mutation.
 
 ```tao
 view Editor() {
@@ -200,9 +202,46 @@ view Editor() {
 
 `on press|change|submit` configures the matching action-valued control slot. It accepts a named action
 or an inline handler; `on change -> Entered { ... }` introduces the supplied text payload in the
-handler scope. A direct writable-state `Value:` reference receives synthesized two-way change
-behavior only when no explicit change handler exists. Computed values, aliases, parameters, and
-entity fields require an explicit handler.
+handler scope. A mutable native `Value` parameter receives shared writable storage from state,
+ordinary item field paths, or a writable parameter. An explicit change handler supplies a Tao
+action-backed mapping instead. Computed values, readonly aliases, and entity fields require that
+mapping or an explicit copy before mutation.
+
+### Reactive parameters and copies
+
+View and action arguments keep live reads. Mutating a parameter with `set` or `toggle`, or
+forwarding it to a mutating parameter, infers a writable requirement throughout the calling chain.
+A view called with a literal owns storage for that occurrence; rerendering does not reset it.
+Computed expressions and `let` aliases remain readonly. Pure function parameters remain immutable.
+
+```tao
+view Editor(Value text) {
+   render TextInput(Value: Value, Label: "Title") {
+      on submit -> { }
+   }
+}
+view LocalEditor(copy Value text) {
+   render Editor(Value)
+}
+```
+
+`copy` parameters detach ordinary values: once per mounted view or per action invocation. Nested
+items and lists are copied; entity handles retain their identity, and enum/action values preserve
+their opaque identities. `copy Value` also works as an expression. Direct copies of configured
+UI/navigation, app, provider, and design values are not supported by this implementation. Native declarations use `mutable` explicitly and receive a current value plus a Tao
+action callback; callbacks cannot write after their control unmounts.
+
+### Projected input items
+
+```tao
+type DocumentInput is Document { Title, Body }
+type DocumentEditable is Document without { Owner, CreatedAt }
+```
+
+These declarations produce ordinary item types with the selected data fields and their types.
+They carry no saved-row identity. `copy Document as DocumentInput` creates detached editable
+values from an existing row. `update Document with Input` writes every supplied input field and
+preserves omitted fields; it does not infer which fields the user changed.
 
 ### Persisted app state
 
