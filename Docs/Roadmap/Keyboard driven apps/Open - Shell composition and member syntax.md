@@ -1,6 +1,6 @@
 # Resolved — shell composition and member syntax
 
-Two design questions raised by Ro after T1/T2 landed (2026-09-02), both concerning decisions the
+Two design questions raised by the Developer after T1/T2 landed (2026-09-02), both concerning decisions the
 tranche had already implemented. **Both were resolved the same day in favour of the recommendations
 below and implemented as the "revised" tranche** (`7ac87001` makes the shell a view and retires the
 frame; `27f6884b` moves a command's slots into a parameter list). The reasoning stays here as the
@@ -69,7 +69,7 @@ the frame:
 | 6 | Native safe areas under a docked bar                       | **Bites either way.** The frame deferred per-edge insets too                                                                                                           |
 | 7 | The app composition root is a less complete one-page map   | Readability, not correctness                                                                                                                                           |
 
-Ro judged constrained-(b) too costly at the time. That judgement was made before the frame existed;
+The Developer judged constrained-(b) too costly at the time. That judgement was made before the frame existed;
 the frame turned out to cost more than these rules would have.
 
 **What retiring the frame would also retire.** Module-level `query` was introduced _only_ because
@@ -80,7 +80,7 @@ configuration reactive: `TR.Deferred`, absence-unification in `Type.commonType`,
 assignability. The last two are general improvements worth keeping regardless; the first exists
 only for configured members.
 
-**Also settled by Ro in this exchange:** the `@name` sigil belongs to named _render_ slots — content
+**Also settled by the Developer in this exchange:** the `@name` sigil belongs to named _render_ slots — content
 a caller passes into a view that lays it out and owns the interaction — and the frame's edges are
 not that. Whatever shape the shell takes, it should not spell its edges `@top` / `@bottom`.
 
@@ -122,7 +122,7 @@ Three ways out, in increasing cost:
 
 ### On requiring a trailing comma
 
-Ro proposed requiring a comma after every tuple in a list, to collapse this class of problem.
+The Developer proposed requiring a comma after every tuple in a list, to collapse this class of problem.
 Findings:
 
 - **The case named — an argument list followed by a render block — is already unambiguous**, and

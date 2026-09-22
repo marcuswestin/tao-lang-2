@@ -1,7 +1,7 @@
 # AI in Tao apps — design exploration
 
 Status: **exploration with recorded direction**. The Framing and the sketches began as a
-thousand-mile overview; the Direction section records what dialogue with Ro has since settled as
+thousand-mile overview; the Direction section records what dialogue with the Developer has since settled as
 working direction for the first implementation slice. Nothing here is language law until it
 reaches `Tao Revolution/Decisions.md`, which wins wherever the two collide.
 
@@ -42,7 +42,7 @@ form is where types direct schemas, guides are copy, projections are checkable, 
 composes, and tests script. The surface is not decoration on the SDK; it is the collection point
 for every guarantee the rest of Tao already makes.
 
-## Direction settled so far (2026-08-30, with Ro)
+## Direction settled so far (2026-08-30, with the Developer)
 
 - **Platform-provided AI only, for now.** The first slice targets each platform's own on-device
   model (Apple Foundation Models first). No custom `model` provider bindings, no bundled local
@@ -67,7 +67,7 @@ for every guarantee the rest of Tao already makes.
 - **Concurrency reuses the general `runs` vocabulary.** `generate … runs latest` consumes the
   decided-but-unimplemented `runs single / runs latest` policy from `Decisions.md` §8. That
   decision is general to actions, not AI-scoped; the AI work consumes it, never forks it. A
-  separate spike implements it (noted in `Roadmap.md`, Ro's stack).
+  separate spike implements it (noted in `Roadmap.md`, the Developer's stack).
 - **Prompt inputs are explicit at the call site.** The developer chooses what the model reads:
   field paths, and inline projections for rows and lists. Rich generations use a clause block
   (see the surface below). There is no app-level `Sees` registry for direct generation — that
@@ -352,7 +352,7 @@ cross-platform support — platforms graduate one at a time:
 2. **The `generate` tranche**: grammar, validator, formatter, compiler lowering, the runtime
    multi-state value, and the scripted-model test surface — in scope together, since the keyword
    without `model answers` is untestable. Mode 3 (`runs latest`) waits for the separate
-   concurrency spike (`Roadmap.md`, Ro's stack); the slice is complete without it.
+   concurrency spike (`Roadmap.md`, the Developer's stack); the slice is complete without it.
 3. **WordFlower "Suggest a title"**: the first product use, one generation behind a button,
    written in Tao, tested with the scripted model, demoed in Studio.
 4. Later, in tranche order as decided: `Sees` enforcement, agent grouping over the undo tranche,

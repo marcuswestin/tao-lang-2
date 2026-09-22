@@ -7,14 +7,14 @@ Describe('parser: fixtures and scenarios', () => {
     const result = await testParseCode(`
       data Households / Household { Name text }
       data Recipes / Recipe { Household Title text Servings number }
-      action StartKitchen(Ro item) { }
+      action StartKitchen(Sam item) { }
       view Main() { }
       app Skillet { view Main }
 
       fixture HomeKitchen {
-        account Ro { Name: "Ro", Email: "ro@example.com" }
-        Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
-        Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
+        account Sam { Name: "Sam", Email: "ro@example.com" }
+        Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Sam)
+        Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Sam
       }
 
       scenarios Skillet "devices" {

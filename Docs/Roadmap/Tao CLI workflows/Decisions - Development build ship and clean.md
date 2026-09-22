@@ -206,7 +206,7 @@ give priority order, not a rule against all parallel preparation.
 6. Local Android APK builds.
 7. Beta-only OTA shipping and rollback.
 
-For slice 2, Ro may approve landing on green automated checks before a live smoke of the served web
+For slice 2, the Developer may approve landing on green automated checks before a live smoke of the served web
 artifact and opened desktop `.app`. Perform that smoke after landing and track any failure as
 follow-up work; the landing report must say plainly that visible runtime behavior was not yet
 proved. Do not infer from this exception that mocked Apple responses prove TestFlight, signing, or

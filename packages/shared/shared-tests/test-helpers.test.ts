@@ -163,9 +163,9 @@ Describe('Shared test terminal helpers', () => {
     const answer = HCI.askText({ message: 'Name', ...terminal })
 
     await settle()
-    terminal.input.write('Ro\n')
+    terminal.input.write('the Developer\n')
 
-    Expect(await answer).toBe('Ro')
+    Expect(await answer).toBe('the Developer')
   })
 
   Test('withCapturedOutput records process output and restores the streams afterward', async () => {

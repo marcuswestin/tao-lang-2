@@ -1,6 +1,6 @@
 # Plan - Figma-at-home strides
 
-Status: adopted 2026-09-04 with Ro's rulings recorded in the decisions section; implementation in
+Status: adopted 2026-09-04 with the Developer's rulings recorded in the decisions section; implementation in
 progress. It builds on the landed foundation of `feat/freehand-ui-sketching-implementation` and does not reopen FS-D1–FS-D20 or
 reorder the remaining slices in `Plan - Freehand UI sketching.md`. It names the first strides that
 make Studio feel like home to a person fluent in Figma: the reflexes they bring with them (keys,
@@ -238,7 +238,7 @@ undo stack is what Slice 4's cell edits will join.
 
 ## Decisions
 
-Settled by Ro on 2026-09-04, taking the recommendations.
+Settled by the Developer on 2026-09-04, taking the recommendations.
 
 - **A. When to land the branch.** Moot: the foundation landed on `main` as `13d2577c` before this
   plan was adopted.
@@ -251,7 +251,7 @@ Settled by Ro on 2026-09-04, taking the recommendations.
 - **E. Stride order.** 0, 1, 2, 3, 4. Taking Feed first was declined; every later gesture reuses
   selection, keys, and undo.
 
-A decision discovered during implementation joins the next round with Ro; it is not decided silently.
+A decision discovered during implementation joins the next round with the Developer; it is not decided silently.
 
 ## Sizes and dependencies
 

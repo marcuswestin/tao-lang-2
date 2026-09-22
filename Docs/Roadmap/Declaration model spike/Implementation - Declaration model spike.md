@@ -1,12 +1,12 @@
 # Implementation - Declaration Model Spike
 
-Historical design record. It records decisions Ro settled in dialogue on 2026-08-14 and the
+Historical design record. It records decisions the Developer settled in dialogue on 2026-08-14 and the
 collisions they created with scheduled work. WordFlower Tranche 4 subsequently resolved Q11:
 reusable navigation and datasource types bind protocols with `implement inject nav|provider`, inline
 or by sidecar path. The superseded `implement is "./X.ts"` proposal is not current Tao syntax.
 
 Everything still unresolved lives in `Open questions - Declaration model spike.md`. Do not
-guess at those; several of them would change the shape of what you build. Ask Ro if one blocks you.
+guess at those; several of them would change the shape of what you build. Ask the Developer if one blocks you.
 
 ## The model
 
@@ -28,7 +28,7 @@ type Employee is Person with { Team text }     // narrow by adding a slot
 let Years  = Age 37                            // type + fill
 let Title  = "WordFlower"                      // fill alone, type inferred
 let Marcus = Person { Name "Marcus", Age 37 }
-let Ro     = Employee Marcus with { Team "Language" }
+let the Developer     = Employee Marcus with { Team "Language" }
 ```
 
 Three sub-rules carry most of the weight:
@@ -254,7 +254,7 @@ item-specific one.
 - `Docs/Archive/Reports/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
 - `./agent verify` before every commit. Branch `feat/<name>`; never commit from detached HEAD.
 - Many worktrees share this repo and other agents work concurrently — preserve changes you did not
-  make, and do not touch the Git index unless Ro asks.
+  make, and do not touch the Git index unless the Developer asks.
 - `Docs/Archive/` is frozen.
-- Ask Ro on language semantics and ambiguous product behavior. Resolve routine implementation choices
+- Ask the Developer on language semantics and ambiguous product behavior. Resolve routine implementation choices
   from repository evidence.

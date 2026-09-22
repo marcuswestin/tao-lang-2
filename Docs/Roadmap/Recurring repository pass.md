@@ -52,9 +52,9 @@ notes after each completed pass; Git history is the longer record.
 1. Create a dedicated worktree and branch from current `main`. Read this document, inspect the
    commits after the recorded boundary, and read the current documents governing the affected
    areas. Account for what the previous pass covered, omitted, and suggested next.
-2. Propose a concise high-level pass to Ro before starting it. Name the checks worth doing now, why
+2. Propose a concise high-level pass to the Developer before starting it. Name the checks worth doing now, why
    they are useful, their commit/package/seam scope, how subagents would divide the work, intentional
-   overlap, and what the pass would leave out. Wait for Ro's comments or approval.
+   overlap, and what the pass would leave out. Wait for the Developer's comments or approval.
 3. After approval, orchestrate the pass with focused subagents. Review assignments may overlap
    commits or paths when different specialties need the same evidence. Keep assessment subagents
    read-only until their findings have been checked and reconciled; use a later implementation phase

@@ -59,7 +59,7 @@ copy the probe file to `packages/parser/parser-tests/dialect-spike.test.ts`, `ju
   `(Recipe)`, and mixed lists. Chevrotain distinguishes the bare-name and name-plus-type forms
   without help.
 - **The `action (optional)` ambiguity — moot, and the spelling changed.** It parsed cleanly with a
-  trailing `TraitList`, so there was never a parser problem; but Ro replaced the spelling anyway,
+  trailing `TraitList`, so there was never a parser problem; but the Developer replaced the spelling anyway,
   because a parenthesis directly after an action type reads as that type's parameter list to a
   _human_. Optionality is now a postfix `?` (`Press action?`, `Meal?`, `Photo text?`), verified
   parsing on parameters and item fields. Every other trait keeps the parenthesized list.
@@ -84,7 +84,7 @@ copy the probe file to `packages/parser/parser-tests/dialect-spike.test.ts`, `ju
   it cannot be `ID`: `packages/parser/parser-src/tao-token-builder.ts` unshifts a contextual
   `BOOLEAN_NO_ALIAS` token _ahead of every keyword and `ID`_, matching any word that follows
   `yes / no` on the same line, so `negativeName=ID?` fails with "Expecting end of file". Rather than
-  propagate that hack to every new yes/no site, Ro moved the alias before `no`
+  propagate that hack to every new yes/no site, the Developer moved the alias before `no`
   (`Shared yes / Private no`, Decisions §2). Verified: with `'yes' '/' negativeName=ID? 'no'` the
   keyword terminates the alias, the contextual token is **deleted** — grammar terminal and token
   builder both — and `Favorite yes / no`, `Shared yes / Private no`, and multi-field blocks all
@@ -190,7 +190,7 @@ consequences for this tranche are:
    `relation` was briefly dropped during implementation, on the reading that §2's juxtaposition
    (`Person Account`) covered differently-named relation fields. It does not: inside a `data` block
    fields are separated by layout alone, so `Workspace` / `Paragraphs (owned)` on two lines reads
-   equally as one field or two and the grammar has no newline sensitivity. Ro ruled the trait stays,
+   equally as one field or two and the grammar has no newline sensitivity. The Developer ruled the trait stays,
    required only when the field name differs from the entity, and §2 now records why.
 2. **The parenthesized trait list belongs to `data` declarations only.** Parameters take no trait
    list — a default keeps its existing bare spelling, `view Status(Message text, Tone default

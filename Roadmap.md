@@ -9,8 +9,8 @@ language target and the program that reaches it — first MVP, then Revolution �
 app feature and Tao test proves each capability).
 
 The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
-agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
-judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
+agents can execute without a new decision, and `Docs/MVP Roadmap/Developer MVP Roadmap.md` for the
+judgments that are the Developer's. Both point back into this file and into `Docs/Roadmap/` for context.
 
 ## Tao tooling performance
 
@@ -31,7 +31,7 @@ Two scoped passes over the repository's own records. Both are bookkeeping, not l
 neither blocks a tranche.
 
 - [ ] Reorganize this roadmap by category and size
-  - `Toward v1` and `Ro's stack` are flat lists that mix multi-week workstreams with one-line
+  - `Toward v1` and `the Developer's stack` are flat lists that mix multi-week workstreams with one-line
     follow-ups, so nothing can be scanned for what to pick up next. Group entries by area and mark
     their rough size, keeping this file the single index of open work.
 - [ ] Rework the rest of the markdown set
@@ -49,7 +49,7 @@ neither blocks a tranche.
 How agents in this repository delegate, and at which model tier. The guidance, the profiles, the
 three harnesses' defaults, and the fan-out and second-opinion procedures have landed;
 `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns what is left and the
-calibration period that ends the ask-Ro clause.
+calibration period that ends the "ask the Developer" clause.
 
 - [ ] Decide whether the two fan-outs get saved `Workflow` scripts. The plan states the case against
       shipping them unasked: one harness only, unprovable without a supervised run, and a fan-out at
@@ -57,7 +57,7 @@ calibration period that ends the ask-Ro clause.
 - [ ] Benchmark a few representative tasks with and without delegation, once load-aware admission
       lands and the machine is quiet enough for the measurement to mean anything.
 - [ ] End calibration when the delegation log says the routing table is right, then delete the
-      ask-Ro clause and the three logging hooks.
+      "ask the Developer" clause and the three logging hooks.
 
 ## The Tao Revolution program
 
@@ -76,7 +76,7 @@ tests written in Tao, green in Current, for every construct introduced.
     (§9 says yes, §10's own example and the implementation say no, and `3 - MVP` inherits whichever
     wins), whether the visibility ladder is §1's two words or the implemented five, and whether
     `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority cluster, is `R5` in
-    `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
+    `Docs/MVP Roadmap/Developer MVP Roadmap.md` rather than a new question. Three internal contradictions in
     `Decisions.md` were amended in the same change: `TabNav` → `SelectionNav`, the missing `overlay`
     presentation mode, and two parameter lists still written `Name is Type`.
   - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
@@ -94,20 +94,20 @@ tests written in Tao, green in Current, for every construct introduced.
     SplitNav/windows, semantic design recipes, concurrency policy — are now scoped by
     `Coverage.md`'s tier column.
 - [ ] Decide the runtime action-transaction contract
-  - Deferred by Ro on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
+  - Deferred by the Developer on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
     transaction, state/data use private read-your-writes overlays, commits apply deltas to the latest
     snapshot through prepare/publish phases, and publish failures restore already-published resources.
   - Keep external effects explicitly non-rollbackable and do not treat the implemented Studio runtime
     behavior as a settled distributed-atomicity or automatic-retry language contract.
 - [ ] Decide the semantic failure capture and replay contract
-  - Deferred by Ro on 2026-08-31. Settle the versioned artifact and domain-registry contract, domain
+  - Deferred by the Developer on 2026-08-31. Settle the versioned artifact and domain-registry contract, domain
     compatibility and restore timing, credential and opaque-state exclusions, Studio cell-environment
     participation, and validation of loaded or pasted artifacts.
   - Automatic render-failure containment and guarded recovery are adopted independently. Do not treat the
     implemented `action-history`, `data`, `navigation`, `persisted-state`, or Studio replay behavior as an
     adopted language contract until this decision is resumed.
 - [ ] Decide fixture-through-action result and handle semantics
-  - Deferred by Ro on 2026-08-31. Keep `through` setup fail-closed until result multiplicity, fixture-handle
+  - Deferred by the Developer on 2026-08-31. Keep `through` setup fail-closed until result multiplicity, fixture-handle
     identity, transaction and rollback behavior, capture/replay, and test-harness seeding are settled.
   - Successful captured-fixture source writing is not evidence that the current runner can execute that
     setup path; do not infer the language contract from Studio's transient capture workflow.
@@ -212,7 +212,7 @@ tests written in Tao, green in Current, for every construct introduced.
     a device loads the scenario rather than the canvas frame. Its acceptance is not complete — running
     one journey on the device is a fork rather than a task, and capture/restore has no UI on any
     surface. Status, what was proven live, and the open decisions are in
-    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`. Ro deferred
+    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`. The Developer deferred
     the entire record-and-replay Slice 4 until after the public MVP on 2026-09-22; its design
     details remain open and its acceptance is not an MVP release gate.
 - [x] Add `tao create` project scaffold
@@ -232,7 +232,7 @@ tests written in Tao, green in Current, for every construct introduced.
   - The family's runtime machinery (change-sets, fold, bridge, conformance suite) and a `CloudKit`
     provider over `CKSyncEngine` landed as a stab under three stated assumptions; see the
     "CloudKit" section of `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`. Open
-    questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md` need Ro's answers before the fold
+    questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md` need the Developer's answers before the fold
     is more than a working assumption.
 - [ ] Finish the multiple-datasources follow-ups
   - Binding several datasources to one app landed: a datasource names the collections it stores, an

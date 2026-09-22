@@ -11,7 +11,7 @@ and SAI-Q046 onward in this document's own "Implementation record".
 Like its predecessor, this plan does not amend `Docs/Roadmap/Tao Revolution/Decisions.md` and does
 not define a supported Studio or compiler API. The implementation landed on `main` on 2026-09-04 as
 a proof of concept behind the Agent rail panel; it remains disposable, and nothing else in the
-repository may depend on its modules or routes. Ro decides language semantics, roadmap priority, and product behavior; the implementing agent
+repository may depend on its modules or routes. The Developer decides language semantics, roadmap priority, and product behavior; the implementing agent
 decides everything else here from repository evidence and its own judgment.
 
 ## Why a second approach, and why it coexists with the first
@@ -164,7 +164,7 @@ which inverts where correctness comes from, and which SAI-D024/D025 above genera
 
 ## The three user stories
 
-Ro selected these three, with the caveats recorded under each. They are the acceptance target: each
+The Developer selected these three, with the caveats recorded under each. They are the acceptance target: each
 one is done when a person can do what the story says in Studio, against HNReader and WordFlower,
 without touching source by hand.
 
@@ -176,7 +176,7 @@ without touching source by hand.
 > exact source in Studio. I follow up with "which of that is covered by tests?" and "where does the
 > green come from?"
 
-Ro's caveat: the chat must also answer **advisory and structural** questions, not only relational ones:
+The Developer's caveat: the chat must also answer **advisory and structural** questions, not only relational ones:
 
 - "Give me an overview of what this app does and how it is structured, in terms of files and so on."
 - "What are areas of improvement to tackle next?"
@@ -201,7 +201,7 @@ answers come from the same graph plus the file list and per-file declaration out
 > say "the empty one should say 'Nothing yet' - make that a test," and the agent writes a behavior test
 > that pins it, runs it, and shows it red until I fix the view.
 
-Ro's caveats:
+The Developer's caveats:
 
 - The person describes the scenario they want to develop against or test; Studio works out which
   scenario entries, fixtures, subjects, and environment clauses are required to produce it.
@@ -343,7 +343,7 @@ The phases are a suggested order, not a contract. The implementer should reorder
 when the evidence says to, and should record why in the findings ledger. The suggested order is
 story 1, then story 3, then story 2: story 1 builds the loop and panel cheaply against read-only tools;
 story 3 proves the write-tool pattern and surfaces the Tao-fluency risk early; story 2 adds the most
-Studio-specific tools once that pattern is trusted. Ro is equally happy with story 2 before story 3.
+Studio-specific tools once that pattern is trusted. The Developer is equally happy with story 2 before story 3.
 
 ### Phase 0 - Spike the loop
 
@@ -433,7 +433,7 @@ demonstrated by asking for a state the app cannot reach, with the agent stopping
 - Studio launched from the agent's own sandboxed shell cannot reach a hosted model: egress is limited
   to an allowlist owned by `.rulesync/permissions.jsonc`, and the policy is not to be widened to route
   around a violation. For demonstrations, the person runs Studio from their own terminal with the key
-  set, or Ro decides to allow the provider host. Tests never need the network.
+  set, or the Developer decides to allow the provider host. Tests never need the network.
 - `direnv exec .` fails in a sandboxed shell; use `export PATH="$PWD/.devenv/profile/bin:$PATH"`.
 - The Browser pane's launch entries open Studio on `127.0.0.1`; Studio rejects a `localhost` origin.
 - A blank preview with a clean compile was the bundler's stale file map; the startup ordering fix is on

@@ -1620,13 +1620,13 @@ reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe f
   without the source asking: `ask`, `as sheet`, and `as toast` are the safe modes. A plain
   `as overlay` is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach
   the window edges, so the runtime adds no inset and what it contains is the author's to inset.
-  _(Decided by Ro, 2026-09-21.)_ **An overlay covers the navigator that presented it**, not the
+  _(Decided by the Developer, 2026-09-21.)_ **An overlay covers the navigator that presented it**, not the
   window: its lane fills that navigator's own surface, so under a navigator inside the app frame
   it reaches the frame's padded box and no further; only `ask` goes to the window. **An entry
   presented while a sheet is showing stays in the sheet's window** — an overlay or ask from the
   sheet's content draws inside the sheet, which stays up beneath it; a second sheet replaces the
   first on screen as before — and a `SplitNav` frames every pane whose content does not frame its
-  own screens, so panes scroll independently. _(Decided by Ro, 2026-09-22.)_
+  own screens, so panes scroll independently. _(Decided by the Developer, 2026-09-22.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
