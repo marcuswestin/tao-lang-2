@@ -177,7 +177,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
         .some(element => element.textContent?.trim() === '1')`,
     )
     await replaceEditorSource(browser, `${movedSource.trimEnd()}\n\n// recovered after invalid draft\n`)
-    await waitForCompileAfter(browser, movedRevision)
+    const recoveredRevision = await waitForCompileAfter(browser, movedRevision)
     await waitForPreview(
       browser,
       previewUrl,
@@ -212,6 +212,26 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       sawPending: false,
       token: 'retained-preview-realm',
     })
+    // Adding a scenario changes the cell contract. Unlike a compatible render edit above, it
+    // deliberately resets every retained preview so old interaction state cannot cross it.
+    const expandedSource = movedSource.replace(
+      /scenario "default" \{\s*render MainView\(\)\s*\}/,
+      '$&\n   scenario "second" { render MainView() }',
+    )
+    Expect(expandedSource).not.toBe(movedSource)
+    await replaceEditorSource(
+      browser,
+      expandedSource,
+    )
+    await waitForCompileAfter(browser, recoveredRevision)
+    await waitForPreview(
+      browser,
+      previewUrl,
+      `[...document.querySelectorAll('[data-tao-studio]')]
+        .some(element => element.textContent?.trim() === '0')`,
+    )
+    const afterReset = await browser.evaluate<Readonly<{ loads: number }>>('window.__taoFastRefreshFrameProbe')
+    Expect(afterReset.loads).toBeGreaterThan(0)
     Expect(browser.browserFailures()).toEqual([])
   } finally {
     await browser?.close()

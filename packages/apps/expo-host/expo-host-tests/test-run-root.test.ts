@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
 import { TestRunRoot } from '../expo-host-src/testing/test-run-root'
 
@@ -32,11 +33,9 @@ const OTHER_FINGERPRINT = 'b'.repeat(64)
 const THIRD_FINGERPRINT = 'c'.repeat(64)
 
 /**
- * SHARDS_IN_A_LANE stands for one sharded suite's worth of fingerprints. A shard's set of test paths
- * is part of what a run is fingerprinted by, so each of them publishes an entry of its own. An
- * observed `tao-apps` lane ran four, and the shard planner's own startup cap allowed six on the
- * measured numbers; the count is derived per checkout from recorded durations, so it rises with the
- * corpus and no fixed retained count is large enough by construction.
+ * SHARDS_IN_A_LANE is the former verification-lane width: before sharing one compiled corpus,
+ * each of eight app scopes could publish its own fingerprint. Direct partial `tao test` calls may
+ * still produce those distinct entries, so retention is tested across more than one scope.
  */
 const SHARDS_IN_A_LANE = 8
 
@@ -128,6 +127,52 @@ async function listGenerated(runtimePackageRoot: string, relativePath = ''): Pro
 }
 
 Describe('generated test run roots', () => {
+  Test('the default runtime stores compiled apps outside the checkout', async () => {
+    const runRoot = await TestRunRoot.create('tao-test-command')
+    const appPath = await compiledApp(runRoot, {
+      app: 'export default function App() { return null }\n',
+      files: { 'modules/probe.ts': 'export const probe = true\n' },
+    })
+
+    Expect(FS.pathIsWithin(runRoot, FS.tmpdir())).toBe(true)
+    Expect(TestRunRoot.generatedRoot()).toBe(TestRunRoot.hostGeneratedRoot(RuntimeToolchainPaths.packageRoot))
+    Expect(await FS.isFile(appPath)).toBe(true)
+    Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
+    await TestRunRoot.discard(runRoot)
+    Expect(await FS.exists(runRoot)).toBe(false)
+  })
+
+  Test('keeps the default generated store outside a managed worktree', async () => {
+    const runRoot = await TestRunRoot.create('tao-test-default-root')
+    try {
+      Expect(FS.pathIsWithin(runRoot, FS.tmpdir())).toBe(true)
+    } finally {
+      await TestRunRoot.discard(runRoot)
+    }
+  })
+
+  Test('uses an external generated root while preserving the runtime package identity', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const generatedRoot = await mkTestDir('tao-test-generated-root-')
+      try {
+        const options = { generatedRoot, runtimePackageRoot }
+        const runRoot = await TestRunRoot.create('tao-test-command', options)
+        await writeManifest(runRoot)
+
+        Expect(FS.pathIsWithin(runRoot, generatedRoot)).toBe(true)
+        Expect(await TestRunRoot.open('tao-test-command', runRoot, options)).toEqual({
+          manifestPath: FS.resolvePath(TestRunRoot.MANIFEST_FILE_NAME, runRoot),
+          runRoot,
+        })
+        Expect(await TestRunRoot.publish('tao-test-command', FINGERPRINT, runRoot, options)).toBe(true)
+        Expect((await TestRunRoot.lookup('tao-test-command', FINGERPRINT, options))?.runRoot).toBe(runRoot)
+        Expect(await TestRunRoot.open('tao-test-command', runRoot, { runtimePackageRoot })).toBeUndefined()
+      } finally {
+        await FS.remove(generatedRoot)
+      }
+    })
+  })
+
   Test('creates a run root inside its category', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })

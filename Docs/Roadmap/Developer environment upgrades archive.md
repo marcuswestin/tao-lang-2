@@ -61,6 +61,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-093 — Ready branches convoy behind each other, each re-verifying the whole tree](<Developer environment upgrades/Archive/DEVENV-093-landing-branches-convoy-behind-each-other.md>) — Closed
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
+- [DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27](<Developer environment upgrades/Archive/DEVENV-096-the-devenv-bun-cannot-produce-a-runnable-compiled-binary.md>) — Resolved
 - [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/Archive/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
 - [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/Archive/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Resolved
@@ -68,5 +69,6 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
+- [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved

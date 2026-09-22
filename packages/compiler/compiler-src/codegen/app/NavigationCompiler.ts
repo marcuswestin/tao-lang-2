@@ -65,11 +65,9 @@ export const NavigationCompiler = {
     return gen`[${gen.jsLiteral(Type.parameterName(pair.parameter))}]: ${Compile.Argument(pair.argument)},`
   },
 
-  /** BoundViewArgument keeps configuration-time view arguments live across app rerenders. */
+  /** BoundViewArgument keeps configuration-time view arguments live without hiding writable storage. */
   BoundViewArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen`[${gen.jsLiteral(Type.parameterName(pair.parameter))}]: TR.Alias(() => ${
-      Compile.Argument(pair.argument)
-    }),`
+    return gen`[${gen.jsLiteral(Type.parameterName(pair.parameter))}]: ${Compile.Argument(pair.argument)},`
   },
 } as const
 

@@ -22,12 +22,10 @@ export type RunLocation = {
 
 /** FinishRunOptions describes the completed run whose artifacts are being written. */
 export type FinishRunOptions = {
+  /** A busy machine may teach only nodes with trustworthy direct-child CPU measurements. */
+  cpuOnly?: boolean
   location: RunLocation
-  /**
-   * False for a run that shared the machine, whose durations measure the contention rather than
-   * the work. Ordering has a cold-start fallback; an estimate poisoned by a neighbouring worktree
-   * has none, and it mis-orders every later run in this checkout.
-   */
+  /** False when this run must not teach durations, such as a partial test selection. */
   recordTimings?: boolean
   states: readonly WorkState[]
   /**
@@ -132,6 +130,7 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
   await refreshLatest(options.location)
   if (options.recordTimings !== false) {
     await RunTimings.record({
+      cpuOnly: options.cpuOnly,
       durations: new Map([...measuredDurations(options.states), ...options.extraDurations ?? []]),
       lane: options.location.lane,
       repositoryRoot: options.location.repositoryRoot,

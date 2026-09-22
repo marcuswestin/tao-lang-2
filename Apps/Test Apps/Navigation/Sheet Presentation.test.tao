@@ -19,13 +19,13 @@ test "Sheet presentation" {
          missing text "Sheet content"
          text "Sheet Presentation"
    }  }
-   test "hides a covered sheet and restores it when the cover dismisses" {
+   test "keeps a sheet showing beneath a cover presented from inside it, until the cover dismisses" {
       run SheetPresentation
       press #openSheet
       press #openCover
       expect {
          text "Cover content"
-         missing text "Sheet content"
+         text "Sheet content"
       }
       press #closeCover
       expect {

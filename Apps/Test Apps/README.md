@@ -82,9 +82,10 @@ the folder, one or more per source file, and each check picks its app with `run`
   item while each stack keeps its position; a plain-view item titled by its `Label`; the test
   `relaunch` step restoring both.
 - _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
-  presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;
-  dismissing with Back; a covered sheet hiding and restoring when its cover dismisses — a sheet
-  behaving as an overlay does for every navigation operation.
+  presentation; `present X as overlay` from inside one, drawing inside the sheet's window while the
+  sheet stays showing beneath it; dismissing from inside with `dismiss`; dismissing with Back; the
+  cover dismissing back to the sheet — a sheet behaving as an overlay does for every navigation
+  operation except that what it presents lives in its window.
 - _Split_ (`Resizable Split.tao`): `SplitNav` with keyed `Content`, numeric `Width`, and
   `Resizable`; an app-level `state Name is number = default (persist)` read by a pane and
   changed by an app-level action — the journey observes the value, not the resulting geometry; simultaneous pane rendering; the test `relaunch` step,
@@ -143,6 +144,14 @@ Exercise controlled text input, event configuration, and form feedback.
 
 **Does not belong here:** durable collections, relationships, filtering, or ordering; navigation; invocation, selector, or event diagnostics.
 
+## Reactive Editing
+
+Exercise settled writable and copied parameters through ordinary controls and action bodies.
+
+**Belongs here:** direct writable parameter forwarding through a child `TextInput`; parent and child writes over the same value; independent writable literal occurrences surviving a parent rerender; `copy` view parameters that initialize once and detach from later caller changes; copied action and command parameters whose mutations do not change their input; configured command fills retaining caller storage; and configured root views writing persisted app state.
+
+**Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
+
 ## Data MVP
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
@@ -191,7 +200,7 @@ collection transforms beyond the shipped list members and iteration.
 
 Exercise bracketed layout clauses and the default app-shell baseline.
 
-**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
+**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
 
 **Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 

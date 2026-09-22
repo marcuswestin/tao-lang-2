@@ -38,6 +38,7 @@ export const StatementsFormatter = {
 
   /** ParameterDeclaration formats either a bare named type or an inline `Name is Type` declaration. */
   ParameterDeclaration(f) {
+    f.oneSpaceAfter('copy', 'mutable')
     f.oneSpaceBeforeProperty('defaultValue')
   },
 

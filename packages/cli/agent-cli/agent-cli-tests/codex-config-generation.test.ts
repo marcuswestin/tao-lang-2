@@ -1,4 +1,4 @@
-import { FS, Platform, Repo } from '@shared'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../agent-cli-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
@@ -14,6 +14,8 @@ const canonicalRules = `{
       "git merge *": "allow",
       "just studio-smoke *": "allow",
       "git status *": "allow",
+      "./agent *": "allow",
+      "just *": "allow",
       "bun install *": "deny",
     },
     "read": {
@@ -22,6 +24,9 @@ const canonicalRules = `{
       "**/.env.*": "deny",
       "~/.ssh/**": "deny",
     },
+  },
+  "codex": {
+    "outsideSandboxCommands": ["./agent land"],
   },
   "claudecode": {
     "sandbox": {
@@ -34,6 +39,8 @@ const canonicalRules = `{
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
       "excludedCommands": [
+        "./agent land",
+        "./agent land *",
         "ps -o pid=,command= -p *",
         "ps -axo pid=,ppid=,lstart=,command=",
         "kill -TERM *",
@@ -153,7 +160,7 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders only fixed host command shapes as project-local command rules', () => {
+  Test('renders fixed host commands and explicit landing exceptions only', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
     Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
@@ -161,9 +168,22 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
     Expect(rendered).not.toContain('pattern=["git","merge"]')
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
+    Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["just"]')
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
     Expect(rendered).toContain('Use ./agent setup')
+  })
+
+  Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {
+    const permissions = CodexConfigGenerator.parsePermissions(
+      canonicalRules.replace(
+        '"outsideSandboxCommands": ["./agent land"]',
+        '"outsideSandboxCommands": ["just unreviewed"]',
+      ),
+    )
+    Expect(() => CodexConfigGenerator.renderRules(permissions)).toThrow()
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -194,7 +214,7 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('**/.env*"')
   })
 
-  Test('writes the profile and continues when a sandbox denies the output', async () => {
+  Test('skips unchanged outputs but reports a stale protected output as a blocking host write', async () => {
     const root = await mkTestDir('tao-codex-config-')
     try {
       await FS.writeText(FS.resolvePath('.rulesync/permissions.jsonc', root), canonicalRules)
@@ -211,14 +231,27 @@ Describe('Codex config generation', () => {
         onSkip: message => skipped.push(message),
         root,
         writeText: async path => {
-          throw Object.assign(new Error('blocked'), { code: 'EPERM', path })
+          throw Object.assign(new Errors.HostEnvironmentError('blocked'), { code: 'EPERM', path })
         },
       })
+      Expect(skipped).toEqual([])
 
-      Expect(skipped).toEqual([
-        `Skipped codexcli permissions: ${FS.resolvePath('.codex/config.toml', root)} is not writable.`,
-        `Skipped codexcli permissions: ${FS.resolvePath('.codex/rules/tao.rules', root)} is not writable.`,
-      ])
+      await FS.writeText(
+        FS.resolvePath('.rulesync/permissions.jsonc', root),
+        canonicalRules.replace(
+          '"ps -axo pid=,ppid=,lstart=,command=": "allow"',
+          '"ps -axo pid=,ppid=,lstart=,command=": "ask"',
+        ),
+      )
+      await Expect(CodexConfigGenerator.generate({
+        onSkip: message => skipped.push(message),
+        root,
+        writeText: async path => {
+          throw Object.assign(new Errors.HostEnvironmentError('blocked'), { code: 'EPERM', path })
+        },
+      })).rejects.toThrow('Codex permissions are stale')
+
+      Expect(skipped).toHaveLength(1)
     } finally {
       await FS.remove(root)
     }
@@ -297,6 +330,11 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
     Expect(rules).not.toContain('studio-smoke')
+    Expect(rules).not.toContain('pattern=["just","land"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["./dev","land"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["just","merge-with-main"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["./dev","merge-with-main"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["just","my-land"], decision="allow"')
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
   })
 })

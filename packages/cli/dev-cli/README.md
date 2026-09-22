@@ -82,14 +82,15 @@ read-only lane: the same readers with `_tao-check` and `_dprint-check` in place 
 
 `tao-cli`, `studio`, and the other long suites were single processes, so a 25s suite was a 25s floor
 on the whole run however idle the machine was. A suite is now split into processes of a few seconds
-each, and nothing about the split is hand-written: the count comes from the suite's recorded duration
+each. Once measured, the count comes from the suite's recorded duration
 (`.artifacts/timings/durations.json`) and the files are balanced by their recorded per-test cost
-(`.artifacts/testing/ledger.json`), so a suite that grows re-shards itself on the next run. A cold
-checkout shards nothing and runs each suite whole.
+(`.artifacts/testing/ledger.json`), so a suite that grows re-shards itself on the next run. A new
+checkout starts `cli/tao-cli` and `tao-apps` at measured, conservative widths before local timing
+history exists; other suites start whole.
 
-Sharding is not free — every shard pays the suite's process startup again — and that declared cost is
-what caps the count: a shard must carry at least as much work as it spends starting up, or it is
-mostly overhead. The cap is deliberately not "stop when the next shard costs more total CPU than it
+Sharding is not free — every shard pays its runner's process startup again, though Tao app compilation
+is shared across its shards — and that declared cost caps the count: a shard must carry at least as
+much work as it spends starting up, or it is mostly overhead. The cap is deliberately not "stop when the next shard costs more total CPU than it
 saves": a verification lane leaves most of an 18-core machine idle, so what it is short of is wall
 time, not cores, and trading cores for wall time is the point.
 
@@ -104,10 +105,12 @@ and that is a measurement, not a guess. Both of the long ones were measured dire
   for a reason that does not name it (`DEVENV-090`).
 - **`./tao test` does not, so it shards.** Its compiler worker pool parallelizes the compile and not
   the run, and its shards are app roots because roots are what the command takes. The whole corpus in
-  one process is 49.7s; the same corpus as two concurrent halves is 27.8s — 44% less wall for 13%
-  more CPU, which is the trade this whole exercise is for. Its startup, the language-service load, is
-  6.0s (`./tao test Apps/HNReader`, one journey), and that is what caps the count. Shrinking it is
-  what the workspace daemon in `Docs/Roadmap/` would change, and it would raise the cap as well.
+  one process measured 49.7s; the same corpus as two concurrent halves measured 27.8s — 44% less
+  wall for 13% more CPU. A verification lane now validates and compiles the union of app roots once,
+  passes the compiled run to each shard, and publishes the cache only after all shards pass. The
+  measured 6.0s language-service startup previously occurred in every shard; after this change it
+  occurs once per lane, outside the shards. The current per-shard startup estimate is 0.8s, from a
+  warm 3.58s WordFlower run with 2.76s in Jest; the next quiet full run should re-measure it.
 
 A suite whose numbers say sharding is a loss declares `shardable: false` with the measurement beside
 it, so nobody re-derives the conclusion from a duration recorded on a busy machine.
@@ -170,9 +173,10 @@ regression. Lanes therefore sample the machine while they run and say what they 
   marked `retried` and is accepted as green gate evidence only because the exclusive run removed
   peer-machine load; a deterministic assertion on retry is a repository failure even though the
   original attempt timed out.
-- A contended run does not write `.artifacts/timings/durations.json`, and failed or interrupted gates
-  do not update their estimates. Ordering has a cold-start fallback; neither a neighbouring worktree
-  nor time spent waiting for a stopped child can poison later schedules.
+- A contended run records only plausible direct-process CPU samples in
+  `.artifacts/timings/durations.json`; it rejects wall-only measurements distorted by neighbouring
+  work. Failed or interrupted gates do not update their estimates. Ordering also has a cold-start
+  fallback for expensive suites with no trustworthy local history.
 
 A structured assertion or process-launch failure is never retried, however busy the machine is. A
 nonzero test process is eligible only when its own output contains a recognized test-framework

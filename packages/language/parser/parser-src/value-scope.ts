@@ -37,7 +37,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const isStateTargetReference = context.property === 'target'
       && (AST.isSetStatement(container) || AST.isToggleStatement(container))
     if (isStateTargetReference) {
-      return this.createStateScope(container)
+      return this.createMutableScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isDataWriteField(context.container.$container)) {
@@ -347,7 +347,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(response ? AST.caseSetCasesOf(response) : [])
   }
 
-  private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
+  private createMutableScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
     let scope = this.createScopeForNodes([])
 
     const app = owningAppDeclaration(statement)
@@ -357,6 +357,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     for (const block of AST.ancestorBlocks(statement).reverse()) {
       scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)
+    }
+
+    const view = AST.findOwningView(statement)
+    if (view) {
+      scope = this.createScopeForParameters(view, scope, statement)
+    }
+    const action = AST.findOwningAction(statement)
+    if (action) {
+      scope = this.createScopeForParameters(action, scope, statement)
+    }
+    const fn = AST.findOwningFunction(statement)
+    if (fn) {
+      scope = this.createScopeForParameters(fn, scope, statement)
     }
 
     return scope

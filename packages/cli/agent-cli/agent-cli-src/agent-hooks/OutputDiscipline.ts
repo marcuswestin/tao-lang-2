@@ -397,12 +397,18 @@ function firstJustOperand(words: readonly string[]): string | undefined {
  */
 function justRecipeDenial(stage: Stage): string | undefined {
   const [command, ...rest] = commandAfterWrappers(stage.words)
+  if (command === './dev' && (rest[0] === 'land' || rest[0] === 'merge-with-main')) {
+    return 'Use `./agent land` for an authorized landing; direct `./dev` landing bypasses the agent entry point.'
+  }
   if (command !== 'just') {
     return undefined
   }
   const recipe = firstJustOperand(rest)
   if (recipe === undefined) {
     return undefined
+  }
+  if (recipe === 'my-land' || recipe === 'merge-with-main') {
+    return 'Use `./agent land` for an authorized landing; direct landing recipes bypass the agent entry point.'
   }
   const agentCommand = EXPOSED_RECIPES.get(recipe)
   return agentCommand === undefined ? undefined : justRecipeRefusal(recipe, agentCommand)

@@ -1,4 +1,5 @@
 import { Assert, Errors } from '@shared/core'
+import { previewCompatibilitySignature } from '../../StudioPreviewCompatibility'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import { StudioProtocol } from '../../StudioProtocol'
 import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
@@ -31,6 +32,7 @@ export async function connectPreviews(
   Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
   const manifest = handshake.previewManifest
   if (manifest !== undefined && manifest.cells.length > 0) {
+    const compatibilitySignature = previewCompatibilitySignature(manifest)
     const connections = await Promise.all(manifest.cells.map(cell =>
       connectCellPreview(
         previewUrl,
@@ -41,6 +43,9 @@ export async function connectPreviews(
         signal,
       )
     ))
+    for (const connection of connections) {
+      connection.manifestCompatibilitySignature = compatibilitySignature
+    }
     renderConnectionGrid(parent, manifest, connections, previewUrl)
     StudioMatrixSketches.render(
       parent,
@@ -51,6 +56,9 @@ export async function connectPreviews(
     return connections
   }
   const wholeApp = await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)
+  if (manifest !== undefined) {
+    wholeApp.manifestCompatibilitySignature = previewCompatibilitySignature(manifest)
+  }
   StudioMatrixSketches.render(
     parent,
     handshake.identity.project,
@@ -189,6 +197,9 @@ export async function refreshCellPreviews(
 ): Promise<void> {
   const origin = StudioProtocol.messageOrigin(previewUrl)
   Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
+  const compatibilitySignature = previewCompatibilitySignature(manifest)
+  const resetRetained = previews[0]?.manifestCompatibilitySignature !== undefined
+    && previews[0].manifestCompatibilitySignature !== compatibilitySignature
   const wholeApp = previews.find(preview => preview.cell === undefined)
   const plan = previewMatrixPlan(manifest.cells.length, wholeApp !== undefined)
   if (plan === 'keep-whole-app') {
@@ -196,11 +207,19 @@ export async function refreshCellPreviews(
       StudioDrawCanvas.retain(parent, () => parent.replaceChildren(wholeApp!.iframe))
     }
     StudioDrawCanvas.ensure(parent)
+    if (wholeApp !== undefined) {
+      wholeApp.manifestCompatibilitySignature = compatibilitySignature
+      if (resetRetained) {
+        wholeApp.iframe.src = wholeApp.iframe.src
+      }
+    }
     return
   }
   if (plan === 'create-whole-app') {
     disconnectPreviews(previews, 'This app no longer declares scenarios, so its cells were replaced.')
-    previews.splice(0, previews.length, await connectWholeAppPreview(parent, previewUrl, origin, handshake))
+    const next = await connectWholeAppPreview(parent, previewUrl, origin, handshake)
+    next.manifestCompatibilitySignature = compatibilitySignature
+    previews.splice(0, previews.length, next)
     return
   }
   const previousByCell = new Map(
@@ -230,6 +249,9 @@ export async function refreshCellPreviews(
     disconnectPreviews([preview], 'The preview cell was removed before live data arrived.')
   }
   previews.splice(0, previews.length, ...nextConnections)
+  for (const preview of nextConnections) {
+    preview.manifestCompatibilitySignature = compatibilitySignature
+  }
   renderConnectionGrid(parent, manifest, nextConnections, previewUrl)
   StudioMatrixSketches.rerender(parent, StudioMatrixLayout.sketchSourceVersions(manifest))
 
@@ -279,4 +301,13 @@ export async function refreshCellPreviews(
     preview.refresh = (preview.refresh ?? Promise.resolve()).catch(() => {}).then(refresh)
     await preview.refresh
   }))
+  if (resetRetained) {
+    // A scenario contract change invalidates all browser interaction state. Metro's ordinary
+    // compatible refresh keeps the iframe realm; only this structural change reloads it.
+    for (const preview of nextConnections) {
+      if (previousByCell.has(preview.cell!.cellId)) {
+        preview.iframe.src = preview.iframe.src
+      }
+    }
+  }
 }

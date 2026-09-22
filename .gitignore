@@ -40,3 +40,5 @@ packages/ides/studio-companion-app/android
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local
+
+# Landing smoke test, 2026-09-22. This comment has no ignore-rule effect.

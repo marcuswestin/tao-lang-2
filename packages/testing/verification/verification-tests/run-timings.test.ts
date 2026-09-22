@@ -106,6 +106,30 @@ Describe('run timings store', () => {
     })
   })
 
+  Test('a contended run learns only trustworthy CPU work and never its stretched wall time', async () => {
+    await withRepository(async root => {
+      await RunTimings.record({
+        cpuOnly: true,
+        durations: new Map([
+          ['cpu-work', sample(12_000, { cpuMs: 8_000 })],
+          ['blocked-child', sample(12_000, { cpuMs: 100 })],
+          ['wall-only', sample(12_000)],
+        ]),
+        lane: 'verify',
+        repositoryRoot: root,
+        stamp: 'contended',
+      })
+
+      const store = await RunTimings.load({ repositoryRoot: root })
+      Expect(store.nodes['cpu-work']?.emaMs).toBe(8_000)
+      Expect(store.nodes['cpu-work']?.source).toBe('cpu')
+      Expect(store.nodes['blocked-child']).toBeUndefined()
+      Expect(store.nodes['wall-only']).toBeUndefined()
+      const history = await FS.readText(FS.resolvePath(RunTimings.HISTORY_PATH, root))
+      Expect(Object.keys(JSON.parse(history).nodes)).toEqual(['cpu-work'])
+    })
+  })
+
   Test('every run appends one history line naming its lane and node samples', async () => {
     await withRepository(async root => {
       await RunTimings.record({

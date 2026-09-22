@@ -27,12 +27,13 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Preferences incl. device scope (§2)                           | WordFlower · editor preferences                                         | MVP      | pending                   |
 | `secret` capability values and rotation (§2, §4)              | Skillet · a share code; Wayfare · a seat's invite code                  | Post-MVP | —                         |
 | Deleted-row / redacted-account refs (§2)                      | Hearth · a finished chore keeps who finished it after they leave        | Post-MVP | —                         |
-| Authority: access, audiences, through (§3)                    | Skillet · who cooks here (owner, cook, guest) and what each may write   | TBD      | —                         |
-| Holder-of-secret grants, invites (§3)                         | Skillet · an invitation that works once, for one address                | TBD      | —                         |
-| Public boundary: publish, projections (§4)                    | Skillet · the shared recipe as a different read-only type               | TBD      | —                         |
+| Authority: access, audiences, through (§3)                    | Skillet · who cooks here (owner, cook, guest) and what each may write   | Post-MVP | —                         |
+| Holder-of-secret grants, invites (§3)                         | Skillet · an invitation that works once, for one address                | Post-MVP | —                         |
+| Public boundary: publish, projections (§4)                    | Skillet · the shared recipe as a different read-only type               | Post-MVP | —                         |
 | Projection with a filtered relation (§4)                      | Hearth · a shared list shows open items and nothing finished            | Post-MVP | —                         |
 | Generated publication preview (§4)                            | Skillet · "this is what crosses the boundary" before creating the link  | Post-MVP | —                         |
-| Transactions, for-caller, write verbs (§5)                    | WordFlower · document operations (single-user subset)                   | TBD      | —                         |
+| Direct write verbs (§5)                                       | WordFlower · document operations (single-user subset)                   | MVP      | —                         |
+| Named transactions, for-caller (§5)                           | Skillet · StartKitchen and membership operations                        | Post-MVP | —                         |
 | One atomic commit across rows (§5)                            | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat | Post-MVP | —                         |
 | Bulk write verbs (`update each`, `delete each`) (§5)          | Skillet · clear what was bought; Hearth · clear a finished list         | Post-MVP | —                         |
 | Guard default, effect outcomes (§5)                           | WordFlower · document availability                                      | MVP      | partially in Current      |

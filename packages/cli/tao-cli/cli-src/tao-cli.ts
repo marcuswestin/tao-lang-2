@@ -93,7 +93,7 @@ function createCommands(): Command {
     .option('--ios', 'Open an iOS simulator after Metro starts.')
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
-    .option('--desktop', 'Open the Tao desktop app after Metro starts (not yet available).')
+    .option('--desktop', 'Open the Tao desktop app after Metro starts.')
     .description('Start Metro for a Tao app without opening a target unless requested.')
     .action(
       async (
@@ -101,12 +101,11 @@ function createCommands(): Command {
         options: { android?: boolean; app?: string; desktop?: boolean; ios?: boolean; web?: boolean },
       ) => {
         try {
-          if (options.desktop === true) {
-            Errors.throwUserInput('The Tao desktop development host is not available yet.')
-          }
           // Command implementations load lazily so completion and help paths stay fast.
           const { runTaoDev } = await import('./dev-command')
-          const startupTargets = (['ios', 'android', 'web'] as const).filter(target => options[target] === true)
+          const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
+            options[target] === true
+          )
           Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app, startupTargets }))
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
@@ -114,6 +113,55 @@ function createCommands(): Command {
         }
       },
     )
+
+  commands
+    .command('build')
+    .argument('[path]', 'Tao project file or directory to build.', '.')
+    .option('--app <name>', 'Select a named app.')
+    .option('--web', 'Export a static web artifact.')
+    .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--ios', 'Show the status of local iOS builds.')
+    .option('--android', 'Show the status of local Android builds.')
+    .option('--compile-only', 'Retain generated source without exporting or packaging.')
+    .description('Build fresh, retained local artifacts for selected targets.')
+    .action(
+      async (
+        path: string,
+        options: {
+          app?: string
+          web?: boolean
+          desktop?: boolean
+          ios?: boolean
+          android?: boolean
+          compileOnly?: boolean
+        },
+      ) => {
+        try {
+          const { runTaoBuild } = await import('./build-command')
+          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          Platform.runtimeProcess.setExitCode(
+            await runTaoBuild(path, { appName: options.app, compileOnly: options.compileOnly, targets }),
+          )
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      },
+    )
+
+  commands
+    .command('clean')
+    .argument('[path]', 'Tao project file or directory whose retained local builds should be listed.', '.')
+    .description('Interactively select retained local builds to remove.')
+    .action(async (path: string) => {
+      try {
+        const { runTaoClean } = await import('./clean-command')
+        await runTaoClean(path)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('review')
@@ -299,6 +347,9 @@ function createCommands(): Command {
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
         + ' pattern. For a scheduler running one pattern across many suites.',
     )
+    .option('--shared-prepare <handoff-path>', 'Internal: validate and compile a shared Tao test run into a handoff.')
+    .option('--shared-run <handoff-path>', 'Internal: run one shard from a prepared Tao test handoff.')
+    .option('--shared-finalize <handoff-path>', 'Internal: settle a shared Tao test handoff after every shard passed.')
     .option(
       '--watch',
       'Run the selected tests, then rerun them on any change under the selected paths or the project'
@@ -314,17 +365,55 @@ function createCommands(): Command {
           name?: string
           output?: string
           passWithNoTests?: boolean
+          sharedFinalize?: string
+          sharedPrepare?: string
+          sharedRun?: string
           watch?: boolean
         },
       ) => {
         try {
-          const { TestOutput } = await import('./test-output')
+          const sharedModes = [options.sharedPrepare, options.sharedRun, options.sharedFinalize]
+            .filter(path => path !== undefined)
+          if (sharedModes.length > 1) {
+            Errors.throwUserInput('Pass only one shared Tao test phase at a time.')
+          }
+          if (options.watch && sharedModes.length > 0) {
+            Errors.throwUserInput('--watch cannot run a shared Tao test phase.')
+          }
           const testPaths = paths.length > 0 ? paths : ['.']
+          if (options.sharedPrepare !== undefined) {
+            const { prepareSharedTaoTestRun } = await import('./test-command')
+            const outcome = await prepareSharedTaoTestRun(testPaths, options.sharedPrepare)
+            if (outcome.failed) {
+              Platform.runtimeProcess.exit(1)
+            }
+            return
+          }
+          if (options.sharedFinalize !== undefined) {
+            if (paths.length > 0) {
+              Errors.throwUserInput('--shared-finalize takes no Tao test paths.')
+            }
+            const { finalizeSharedTaoTestRun } = await import('./test-command')
+            await finalizeSharedTaoTestRun(options.sharedFinalize)
+            return
+          }
+          const { TestOutput } = await import('./test-output')
           const testOptions = {
             journeyObservationsPath: options.journeyObservations,
             name: options.name,
             output: TestOutput.resolveMode(options.output),
             passWithNoTests: options.passWithNoTests,
+          }
+          if (options.sharedRun !== undefined) {
+            if (paths.length === 0) {
+              Errors.throwUserInput('--shared-run requires one or more shard roots.')
+            }
+            const { runSharedTaoTestRun } = await import('./test-command')
+            const outcome = await runSharedTaoTestRun(options.sharedRun, testPaths, testOptions)
+            if (outcome.failed) {
+              Platform.runtimeProcess.exit(1)
+            }
+            return
           }
           if (options.watch) {
             const { runTestWatchCommand } = await import('./test-watch')

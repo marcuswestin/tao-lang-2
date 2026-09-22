@@ -26,7 +26,7 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 //       `validate` / `required` / `together`, `local only`, case types with text-literal cases
 //   §5  direct write verbs, the one `guard default` read net, `when do` effect outcomes
 //   §6  live `query … from <path>`, field selection, relation traversal
-//   §7  write-through `bind` and the draft flavours
+//   §7  reactive parameters, explicit copies, projected input items, and document write recovery
 //   §8  commands with parameter-list slots, private actions, `check` early exit, `when` / `if`,
 //       `Key primary + "…"`, `runs single`
 //   §9  one renderable kind with `scene is view`, clause lists, conditional styling, `Interval`
@@ -815,11 +815,13 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    render ScrollView() [screen] {
       Col() [width max wideColumn, centered, gap sm] {
          Text("Workspace: { Workspace.Name }") [title]
-         // §7. One rule, two binding targets. A direct bind writes through on every keystroke, with
-         // validate, together, and access still holding, so a workspace rename needs no save button
-         // and no draft.
+         // Entity writes stay explicit. The action maps each proposed text value to a data update;
+         // it does not expose database fields as ordinary writable state.
          #workspaceTitle
-         TextInput(Value: bind Workspace.Name, Label: "Workspace title", Placeholder: "Workspace title")
+         TextInput(Value: Workspace.Name, Label: "Workspace title", Placeholder: "Workspace title") {
+            on change -> Name { update Workspace { Name } }
+            on submit -> { }
+         }
          Text("{ SectionLabel }: { Drafts.Count }")
          #pushTwice
          FormButton("Push this workspace twice") {
@@ -992,12 +994,11 @@ scene DocumentScreen(Document) {
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
 //
-// §7's second binding target: a body this long is a composed edit rather than a keystroke write, so
-// the editor holds a draft of the row and saves it as one unit. The draft carries the entity's own
-// `validate` and `required` rather than restating them, and an unhandled rejection invalidates the
-// draft so the sentence shows beside the field.
+// §7: unsaved properties are an ordinary copied item, while Document is the saved entity.
+// Server validation and conflict comparison remain future work with unsettled presentation APIs.
+type DocumentInput is Document { Title, Body }
 view DocumentEditor(Document) {
-   draft Edit = Document from Document
+   state Input = copy Document as DocumentInput
    state ParagraphText = ""
    state DetachedParagraphText = ""
    state SaveCount = 0
@@ -1012,11 +1013,8 @@ view DocumentEditor(Document) {
    action SaveDocument() runs single {
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
-      // An unhandled `save` rejection invalidates the draft, so the sentence shows beside the field
-      // rather than anywhere else — the one write outcome with a defined home. `check` then stops
-      // the action, so a refused save neither counts nor announces itself.
-      save Edit
-      check Edit.Invalid is no
+      check Input.Title is not empty
+      update Document with Input
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking.
       present SavedToast(Revert: -> {
@@ -1048,17 +1046,23 @@ view DocumentEditor(Document) {
    render Col() [gap sm, pad md] {
       Text(DocumentLabel(Document.Title)) [title, width fill]
       #documentTitle
-      TextInput(Value: bind Edit.Title, Label: "Document title", Placeholder: "Document title") {
+      TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
       #documentBody
-      TextInput(Value: bind Edit.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
+      TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
       }
-      // A field-by-field comparison component is generated from the entity, not authored here, so
-      // `DocumentConflict` has no declaration in this file.
-      if Edit.Conflicted { DocumentConflict(Edit) }
-      WordCount(Edit.Body)
+      if Document.WritesFailed > 0 {
+         Text(Document.WriteError)
+         if Document.CanRetryWrites {
+            FormButton("Retry saved write") { on press -> { retry Document } }
+         }
+      }
+      if Document.WritesQueued > 0 { Text("Waiting to sync") }
+      // A future comparison surface must compare server and local fields explicitly; no entity
+      // draft or generated DocumentConflict value is implied by the copied input item.
+      WordCount(Input.Body)
       #focusSession
       FocusStarter()
       #markFinal

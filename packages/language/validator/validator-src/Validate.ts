@@ -27,6 +27,7 @@ import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
+import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
 import { ResponsesValidator } from './validators/responses-validator'
 import {
   scenarioValidationChecks,
@@ -49,6 +50,7 @@ const nodeValidationChecks = NodeValidation.compile(
     ViewsValidator.checks,
     ActionsValidator.checks,
     StateValidator.checks,
+    ReactiveParametersValidator.checks,
     AliasesValidator.checks,
     LayoutValidator.checks,
     injectionValidationChecks,

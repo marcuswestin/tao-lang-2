@@ -3,17 +3,21 @@
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
 shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
+opening, retained `.tao/builds/` records, and interactive build cleanup; it does not yet package
+or publish the standalone CLI, or implement native builds and shipping.
 The findings below are the historical pre-implementation baseline; packaging and publishing a
 relocatable CLI remain in this standalone program. The decided command behavior is in
 [`../Roadmap/Tao CLI workflows/Decisions - Development build ship and clean.md`](../Roadmap/Tao%20CLI%20workflows/Decisions%20-%20Development%20build%20ship%20and%20clean.md).
 
-The plan for `A2 — A standalone cross-platform tao executable` in `Agent MVP Roadmap.md`. It writes
-no code; it records what the toolchain actually reads at runtime, what was measured rather than
-assumed, the recommended shape, what is still uncertain, the slice sequence, and the questions that
-are Ro's.
+The plan for `A2 — A standalone tao executable` in `Agent MVP Roadmap.md`. It writes no code; it
+records what the toolchain actually reads at runtime, what was measured rather than assumed, the
+recommended shape, what is still uncertain, the slice sequence, and Ro's release decisions. The
+five-target engineering survey below is broader than the decided first release: **macOS arm64, via
+an install script only**. Later targets and channels remain possible, not committed release scope.
 
 Everything under **Findings** was verified on this machine on 2026-09-17 — macOS 27.0 (26A428),
-arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun is 1.3.13; F3
+arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun was 1.3.13; F3
 explains why every other measurement was taken with an official Bun 1.4.2 instead. Commands and
 numbers are reproduced verbatim so a later reader can tell measurement from opinion.
 
@@ -115,9 +119,8 @@ Across versions, same `hello.ts`, same host:
 | 1.4.0           | invalid       | killed (137)                                                                     |
 | **1.4.2**       | **valid**     | **runs**                                                                         |
 
-Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 is a
-precondition for slice 1**, and it is a repository-wide change that has to be verified against the
-existing suites, not a local choice for this work.
+Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 was a
+precondition for slice 1**, and the changed profile must be verified against the existing suites.
 
 Re-signing a 1.4.2 binary for notarization works:
 
@@ -125,6 +128,12 @@ Re-signing a 1.4.2 binary for notarization works:
 $ codesign --force --sign - --options runtime tao-bin      # hardened runtime
 $ tao-bin check .                                          # still runs, exit 0
 ```
+
+The 2026-09-22 upgrade also exposed a macOS 27 watcher regression: with the same CLI watch tests,
+Bun 1.3.13 delivered native file-edit events and 1.4.2 did not, including with host access.
+Chokidar polling delivered the edits. Tao's shared debounced watcher therefore uses polling on
+macOS with Bun 1.4.2, preserving `tao test --watch` and the development loop without changing
+the backend for other runtime versions.
 
 ### F4 — What the CLI reads at runtime, and whether it can be embedded
 
@@ -433,14 +442,18 @@ currently write to the same place.
 `Repo.resolvePath(...)` to `~/.tao` and the project root. `DevFileWatcher`'s repository watch list
 becomes the project's own source tree when the loop is running outside a checkout.
 
-`tao test` keeps its explicit runner resolution and gains a managed Node (or the harness changes —
-question 1 below). Everything else runs in-process or through the binary.
+`tao test` keeps its explicit runner resolution and gains a managed Node for the first release. A
+harness change can remove that dependency later. Everything else runs in-process or through the
+binary.
 
 ### Distribution
 
+These are the channels evaluated by the survey. Only the install script for macOS arm64 is in the
+first public release; Homebrew, npm, and other platforms are later possibilities.
+
 - **Install script.** `curl -fsSL https://<host>/install.sh | sh` detects platform and
   architecture, downloads `tao-<version>-<target>`, verifies a published SHA-256, installs the shim
-  into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin for Windows.
+  into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin would be needed for Windows later.
 - **Homebrew tap.** `taolang/homebrew-tao` with a formula that installs the prebuilt binary per
   platform. Ro creates the tap repository.
 - **npm wrapper.** `tao` with `optionalDependencies` on `@tao-lang/cli-darwin-arm64`,
@@ -470,9 +483,9 @@ third:
 
 `~/.tao/bin/tao` is a shim, not the toolchain. On each invocation it walks up from the working
 directory for `.tao-project/lock.jsonc`, reads `toolchain.version`, and execs
-`~/.tao/versions/<version>/tao`, fetching that version first if it is missing. `TAO_VERSION`
-overrides it; `tao +0.4.1 <command>` is the explicit form. A project with no pin uses the installed
-default, and `tao create` writes the pin it used.
+`~/.tao/versions/<version>/tao`. The pin is exact, and the shim asks before downloading a missing
+version. `TAO_VERSION` overrides the pin; `tao +0.4.1 <command>` is the explicit form. A project
+with no pin uses the installed default, and `tao create` writes the pin it used.
 
 This is rustup's model with the toolchain declaration inside the lock Tao already owns, rather than
 a second file beside it. The shim has to stay fast enough that the exec is invisible; the 66 ms
@@ -483,21 +496,20 @@ that.
 
 Each slice ends somewhere honest — a thing that works, not a refactor that compiles.
 
-**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 — a `devenv.lock` nixpkgs
-update or an explicit `bun.package` override, since nothing pins a version string — and verify the
-existing suites against it (F3 — this is the precondition, it is repository-wide, and it moves every
-worktree on the machine at once). Add a build entry point that runs `_parser-gen` and then
-`bun build --compile` for the host platform. Done when `tao --help`,
-`tao fmt`, `tao check`, and `tao create --ai none --yes --skip-tests` run from the binary outside any
-checkout — which F1 shows is almost true already.
+**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 with a dedicated
+`bun.package` pin so the other toolchain packages stay fixed, and verify the existing suites
+against it (F3). Add a build entry point that runs `_parser-gen` and then `bun build --compile`
+for the host platform. Done when `tao --help`, `tao fmt`, and `tao check` run from the binary
+outside any checkout on a self-contained Tao project. A project created by `tao create` needs the
+runtime module installed on disk, so its acceptance belongs to slice 2.
 
 **2. One resource root.** The `TaoResources` seam, the three anchors plus the grammar path, the
 embedded resource payload, and the unpack-with-verification. Fills
 `packages/cli/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
 `DEVENV-058` — and it must copy rather than link, because `DEVENV-057` records that a directory
 symlink at exactly that path makes `GreenTree.hashTree` exit 128 before any gate runs. Done when
-`tao create` completes and `tao compile` produces a generated app from the binary, outside a
-checkout.
+`tao create --ai none --yes --skip-tests` completes and `tao compile` produces a generated app
+from the binary, outside a checkout.
 
 **3. A Tao home and a versioned host.** The `~/.tao` layout, the embedded host lockfile,
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
@@ -512,27 +524,29 @@ shared host install.
 `tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
-**5. `tao test` off the checkout.** Resolve the runner per Tao version (managed Node, or the harness
-change — question 1), remove the `.devenv/profile/bin` fallbacks in `test-command.ts` and
-`test-compiler/Worker.ts`, and make `tao create`'s post-create test run work outside the repository.
-Done when `tao create` without `--skip-tests` finishes green on a clean machine.
+**5. `tao test` off the checkout.** Resolve the managed Node runner per Tao version, remove the
+`.devenv/profile/bin` fallbacks in `test-command.ts` and `test-compiler/Worker.ts`, and make
+`tao create`'s post-create test run work outside the repository. Done when `tao create` without
+`--skip-tests` finishes green on a clean machine.
 
-**6. Cross-platform correctness.** Windows-aware `commandPath`/`commandOnPath`, junction-or-copy
+**6. Cross-platform correctness (later).** Windows-aware `commandPath`/`commandOnPath`, junction-or-copy
 instead of symlink, `lsof`-free port diagnostics, platform-correct browser opening, and a Linux and
 Windows CI lane running `create`, `check`, `fmt`, `compile`, `test`, and the web `dev` lane.
 
-**7. Release engineering.** Cross-compile all five targets, publish checksums, macOS signing and
-notarization, Windows Authenticode, the install script, the Homebrew tap, and the npm wrapper with
-per-platform optional dependencies.
+**7. Release engineering.** For the first release, build macOS arm64, publish its checksum and
+version index with the binary on GitHub Releases in the public repository, sign and notarize it,
+and publish the install script. Later releases may add the other four targets, Windows signing,
+Homebrew, and an npm wrapper with per-platform optional dependencies.
 
 **8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
 resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
 
 **9. The macOS payload and the remaining gaps.** The prebuilt, signed Apple Foundation Models helper
-(needs the Developer ID certificate), the `tao review` browser requirement, and an honest statement of whatever
-is still absent.
+(needs the Developer ID certificate), removal of `tao review` and its Studio graph from the first
+binary, and an honest statement of whatever is still absent. `tao review` may return later.
 
-Slices 1–4 are the release-blocking path: they are what `A2`'s _done_ line asks for. Slices 5–9 can
+Slices 1–5, first-release parts of 7–9, and the macOS payload are the standalone release path.
+Slice 6 and the other-platform and other-channel parts of 7 wait for later releases. Work can
 overlap with `A3` and `A8`.
 
 ## Uncertain, and how to settle it
@@ -562,38 +576,31 @@ overlap with `A3` and `A8`.
    other-platform `hermesc` slices (40 MB) are candidates, but pruning a `bun install` result fights
    the package manager. Worth measuring only if first-run time becomes a complaint.
 
-## Questions that are Ro's
+## First-public-release decisions
 
-1. **Does `tao test` ship with a managed Node, or does the harness change?** A managed Node per Tao
-   version is the fastest path and costs roughly 50 MB per version plus a download step; fixing the
-   Jest graph or moving off Jest removes the dependency entirely but is open-ended work.
-   _(Recommendation: managed Node for the first release, harness change as the durable answer.)_
-2. **Expo host by `bun install` from a pinned lockfile, by per-platform archive, or both?** The
-   lockfile needs registry access on first run; the archive needs a host Ro pays for and five
-   artifacts per version. _(Recommendation: lockfile first, archive as the offline fallback.)_
-3. **Which targets are release targets for the first public release?** Five are buildable today.
-   This is `R4`'s platform claim in concrete form.
-4. **Is the version pin exact, and may `tao` download a missing version without asking?** rustup
-   downloads silently; a language toolchain fetching 90 MB unannounced may not be what you want.
-5. **Which distribution channels for the first release?** Install script alone, or script plus
-   Homebrew plus npm. Each is a surface to keep working.
-6. **Which packages become public npm packages, and under what license?** The npm wrapper publishes
-   the toolchain. This is `R1` and `R2` arriving at a concrete list.
-7. **Who hosts the release artifacts, the checksums, and the version index?** `R11` already asks a
-   version of this for the update service; the same answer probably serves both.
-8. **Does the first release include `tao review`?** It needs a local Chrome, which is a real host
-   requirement to put in front of a stranger. Note that leaving it out is not free: it is imported
-   from `tao-cli.ts` today and pulls the whole developer-CLI graph into the binary, so excluding it
-   is a bundling change with its own slice.
+Ro settled the plan's eight questions on 2026-09-22. `Ro MVP Roadmap.md` owns the product decisions;
+this list makes their effect on the implementation sequence explicit.
+
+1. Ship `tao test` with a managed Node; consider a Node-free harness after the first release.
+2. Install the Expo host from a pinned lockfile on first use. Registry access is required.
+3. Release the macOS arm64 target only. Linux, Windows, and Intel Mac support come later.
+4. Pin an exact per-project Tao version and ask before downloading a missing version.
+5. Distribute through an install script only. Homebrew and npm wrappers come later.
+6. Do not publish an npm CLI wrapper in the first release. The final app-safe licence structure for
+   the repository and any future public packages must be settled before public publication (`R1`).
+7. Host release binaries, checksums, and the version index on GitHub Releases in the public repo.
+   App OTA updates are separate and deferred from the first release (`R11`).
+8. Leave `tao review` out of the first binary. Its dynamic import pulls in the Studio graph today,
+   so this choice requires a packaging change rather than only hiding the command (`R12`).
 
 ## Notes for whoever implements this
 
 - A fresh worktree has no `packages/language/parser/parser-src/_gen_tao-parser`, and every Tao command fails
   with a bare `Something went wrong.` until `just _parser-gen` runs. The build entry point in slice 1
   must generate before it compiles, and the diagnostic is worth fixing under `A1`.
-- Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets
-  `languages.javascript.bun.enable = true` and the version comes from `devenv.lock`'s nixpkgs input.
-  Slice 1's bump is therefore a nixpkgs update or an explicit `bun.package` override, and it moves
-  every worktree on the machine at once. The signing failure it fixes is `DEVENV-096`.
+- Slice 1 pins Bun 1.4.2 through a dedicated `bun-nixpkgs` input and
+  `languages.javascript.bun.package`, leaving the other nixpkgs packages on their existing pin.
+  A worktree sees the new Bun when its devenv profile is refreshed. The signing failure it fixes is
+  `DEVENV-096`.
 - The prototypes behind every measurement here were run in `.artifacts/tmp/standalone-proto/` and
   the session scratchpad, and were removed afterwards.

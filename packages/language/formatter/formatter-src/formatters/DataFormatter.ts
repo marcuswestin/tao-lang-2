@@ -104,6 +104,7 @@ export const DataFormatter = {
 
   UpdateStatement(f) {
     f.oneSpaceAfter('update')
+    f.oneSpaceAround('with')
   },
 
   DeleteStatement(f) {

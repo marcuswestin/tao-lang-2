@@ -366,8 +366,9 @@ Product and codebase backlog, unordered.
     language-server root (`ide-extension-src/extension/workspace-server-roots.ts`), so it should reuse
     Studio's `resolveStudioProjectRoot` once that moves somewhere both can import.
 - [ ] Implement styling, and then all of `Docs/Spec/Tao Layout and UI.md`.
-  - Consider declaration-level style defaults that a caller may override, and settle how the two
-    merge — in particular how a caller clears a default rather than adding to it:
+  - Declaration-level style defaults are decided (R9, 2026-09-22, `Decisions.md` §13): the header
+    clause is the declaration's public defaults, a caller's clause replaces them, the root render's
+    own clauses are private, and `none` clears a clause:
     ```tao
     view Foo() [pad 12, bg red] {
        render Text("Foo")

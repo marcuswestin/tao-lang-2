@@ -56,11 +56,18 @@ type TaoPropsFields = {
 }
 
 function compileTaoPropsForRenderStatement(fields: TaoPropsFields, render: AST.RenderStatement): Compiled {
-  const inheritsCallerProps = AST.isBlock(render.$container)
-    && AST.isViewDeclaration(render.$container.$container)
+  const owningBlock = render.$container
+  const owningView = AST.isBlock(owningBlock) && AST.isViewDeclaration(owningBlock.$container)
+    ? owningBlock.$container
+    : undefined
+  const inheritsCallerProps = owningView !== undefined
+  // A declaration header resolves into the root render's caller chain ahead of the caller's own
+  // clause (Decisions §R9); a nested `render` statement never reaches its enclosing view's header
+  // because it is never the root (`owningView` is undefined there).
+  const callerChain = owningView?.layoutClause ? gen`_DeclarationProps` : gen`_ViewProps.__tao`
   // Nested `render` statements must still advance the generated-view depth. They intentionally
   // omit the full caller-props chain, matching ViewRender, because only a view's root inherits it.
-  const callerProps = gen`, _ViewProps.__tao${inheritsCallerProps ? gen`` : gen`, false`}`
+  const callerProps = gen`, ${callerChain}${inheritsCallerProps ? gen`` : gen`, false`}`
   return gen` __tao={TR.ViewTaoProps(${compileTaoPropsObject(fields)}${callerProps})}`
 }
 
