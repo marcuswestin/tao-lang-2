@@ -12,7 +12,7 @@ Describe('parser: fixtures and scenarios', () => {
       app Skillet { view Main }
 
       fixture HomeKitchen {
-        account Sam { Name: "Sam", Email: "ro@example.com" }
+        account Sam { Name: "Sam", Email: "sam@example.com" }
         Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Sam)
         Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Sam
       }
