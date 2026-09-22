@@ -17,6 +17,8 @@ export type CapabilityReport = {
   version: 1
 }
 
+const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service'])
+
 export type ProbeResult = {
   error?: unknown
   exitCode: number | null
@@ -126,6 +128,11 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
 /** detectSandbox reports whether this command runs under a harness sandbox policy. */
 function detectSandbox(env: Readonly<Record<string, string | undefined>>): boolean {
   return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
+}
+
+/** Required probes, rather than an inherited harness marker, decide whether landing can run host gates. */
+export function unavailableLandingCapabilities(report: CapabilityReport): readonly CapabilityCheck[] {
+  return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
 }
 
 /** readAgentCapabilities probes host seams without editing files, opening apps, or signalling processes. */

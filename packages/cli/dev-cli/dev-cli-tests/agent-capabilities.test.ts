@@ -1,6 +1,10 @@
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { classifyCapability, readAgentCapabilities } from '../dev-cli-src/doctor/AgentCapabilities'
+import {
+  classifyCapability,
+  readAgentCapabilities,
+  unavailableLandingCapabilities,
+} from '../dev-cli-src/doctor/AgentCapabilities'
 
 const probe = {
   args: ['-p', '42'],
@@ -80,6 +84,28 @@ Describe('agent capabilities', () => {
       .toMatchObject({ sandboxDetected: true })
     Expect(await readAgentCapabilities({ env: { SANDBOX_RUNTIME: '' }, runProbe: availableProbe }))
       .toMatchObject({ sandboxDetected: false })
+  })
+
+  Test('lets successful host probes override an inherited sandbox marker for landing', async () => {
+    const report = await readAgentCapabilities({
+      env: { CODEX_SANDBOX: 'seatbelt' },
+      runProbe: availableProbe,
+    })
+
+    Expect(report.sandboxDetected).toBe(true)
+    Expect(unavailableLandingCapabilities(report)).toEqual([])
+  })
+
+  Test('names only unavailable capabilities required by landing', async () => {
+    const report = await readAgentCapabilities({
+      env: {},
+      runProbe: async candidate =>
+        candidate.name === 'CoreSimulator service'
+          ? { exitCode: 1, stderr: 'service unavailable', stdout: '' }
+          : availableProbe(),
+    })
+
+    Expect(unavailableLandingCapabilities(report).map(check => check.name)).toEqual(['CoreSimulator service'])
   })
 
   Test('classifies every declared probe from its own result', async () => {
