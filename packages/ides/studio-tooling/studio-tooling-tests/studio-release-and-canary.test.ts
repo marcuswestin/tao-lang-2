@@ -27,9 +27,24 @@ const payload: PayloadInventory = {
 }
 
 const artifacts: ArtifactInventory = {
-  names: ['stable-1.0.0-update.json', 'Tao Studio.dmg', 'stable-1.0.0.tar.zst', 'stable-1.0.0.patch'],
+  names: [
+    'stable-macos-arm64-update.json',
+    'Tao Studio.dmg',
+    'stable-macos-arm64-TaoStudio.app.tar.zst',
+    'stable-macos-arm64.patch',
+  ],
   releaseBaseUrl: 'https://releases.example.com/tao-studio',
   root: '/build/artifacts',
+  updateManifest: {
+    schemaVersion: 1,
+    identifier: 'dev.tao-lang.studio',
+    channel: 'stable',
+    version: '1.0.0',
+    hash: 'abc123',
+    platform: 'macos',
+    arch: 'arm64',
+    artifact: { file: 'stable-macos-arm64-TaoStudio.app.tar.zst' },
+  },
 }
 
 const gates: ExternalGateResults = { deepSigned: true, diskImageValid: true, notarized: true }
@@ -62,12 +77,16 @@ Describe('Studio release validation', () => {
   Test('reads the artifact names from disk rather than from the caller', async () => {
     const root = await mkTestDir('tao-release-artifacts-')
     try {
-      await FS.writeText(FS.resolvePath('stable-1.0.0-update.json', root), '{}')
-      await FS.writeText(FS.resolvePath('stable-1.0.0.tar.zst', root), 'archive')
+      await FS.writeJson(FS.resolvePath('stable-macos-arm64-update.json', root), artifacts.updateManifest)
+      await FS.writeText(FS.resolvePath('stable-macos-arm64-TaoStudio.app.tar.zst', root), 'archive')
       const inventory = await readArtifactInventory(root, 'https://releases.example.com/tao-studio')
 
-      Expect(inventory.names).toEqual(['stable-1.0.0-update.json', 'stable-1.0.0.tar.zst'])
+      Expect(inventory.names).toEqual([
+        'stable-macos-arm64-TaoStudio.app.tar.zst',
+        'stable-macos-arm64-update.json',
+      ])
       Expect(inventory.root).toBe(root)
+      Expect(inventory.updateManifest).toEqual(artifacts.updateManifest)
       // A name nobody produced cannot be claimed, because nothing accepts a claimed name.
       Expect(inventory.names).not.toContain('fictional-9.9.9-update.json')
     } finally {
@@ -105,11 +124,29 @@ Describe('Studio release validation', () => {
       .toBe('node plus 1 native library')
   })
 
-  Test('fails an update manifest that is not published over HTTPS', () => {
+  Test('fails an update manifest without a configured HTTPS release host', () => {
     const insecure = releaseValidation(payload, { ...artifacts, releaseBaseUrl: 'http://releases.example.com' }, gates)
 
     Expect(check(insecure, 'update manifest')?.status).toBe('failed')
     Expect(check(insecure, 'update manifest')?.detail).not.toContain('http://releases.example.com')
+  })
+
+  Test('rejects malformed or disconnected update metadata despite a matching file name', async () => {
+    const malformedRoot = await mkTestDir('tao-release-malformed-manifest-')
+    try {
+      await FS.writeText(FS.resolvePath('stable-macos-arm64-update.json', malformedRoot), '{')
+      const malformed = await readArtifactInventory(malformedRoot, artifacts.releaseBaseUrl)
+      Expect(check(releaseValidation(payload, malformed, gates), 'update manifest')?.status).toBe('failed')
+    } finally {
+      await FS.remove(malformedRoot)
+    }
+
+    const disconnected = releaseValidation(payload, {
+      ...artifacts,
+      names: artifacts.names.filter(name => !name.endsWith('.tar.zst')),
+    }, gates)
+    Expect(check(disconnected, 'update manifest')?.status).toBe('failed')
+    Expect(check(disconnected, 'update manifest')?.detail).toContain('matching local macOS update archive')
   })
 
   Test('treats a missing differential patch as unverified, not a failure', () => {

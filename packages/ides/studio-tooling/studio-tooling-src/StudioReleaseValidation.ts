@@ -52,6 +52,8 @@ export type ArtifactInventory = {
   releaseBaseUrl?: string
   /** The directory the names were read from, for the report. */
   root?: string
+  updateManifest?: unknown
+  updateManifestError?: string
 }
 
 /** ExternalGateResults are the outcomes of the Apple tools, or undefined when a tool is absent. */
@@ -148,8 +150,8 @@ function nodeRuntimeCheck(payload: PayloadInventory): ReleaseCheck {
 }
 
 function updateManifestCheck(artifacts: ArtifactInventory): ReleaseCheck {
-  const manifest = artifacts.names.find(name => name.endsWith('-update.json'))
-  if (manifest === undefined) {
+  const manifestName = artifacts.names.find(name => name.endsWith('-update.json'))
+  if (manifestName === undefined) {
     return {
       detail: artifacts.root === undefined
         ? 'no artifact directory was inspected, so no update manifest could be found'
@@ -162,13 +164,54 @@ function updateManifestCheck(artifacts: ArtifactInventory): ReleaseCheck {
   if (artifacts.releaseBaseUrl === undefined || !isHttpsUrl(artifacts.releaseBaseUrl)) {
     return {
       // The host is named, never any credential that reaches it.
-      detail: `${manifest} was produced, but its release host is not an HTTPS URL`,
+      detail: `${manifestName} was produced, but its release host is not an HTTPS URL`,
       name: 'update manifest',
       remediation: 'Pass an https:// --release-base-url; updates are fetched over it.',
       status: 'failed',
     }
   }
-  return { detail: `${manifest} published over HTTPS`, name: 'update manifest', status: 'passed' }
+  const manifest = artifacts.updateManifest
+  if (artifacts.updateManifestError !== undefined || !isRecord(manifest)) {
+    return {
+      detail: `${manifestName} could not be read as a valid update manifest`,
+      name: 'update manifest',
+      remediation: 'Inspect the generated update metadata before distributing this build.',
+      status: 'failed',
+    }
+  }
+  const artifact = manifest['artifact']
+  const expectedName = `${manifest['channel']}-${manifest['platform']}-${manifest['arch']}-update.json`
+  const artifactFile = isRecord(artifact) ? artifact['file'] : undefined
+  if (
+    manifest['schemaVersion'] !== 1
+    || manifest['channel'] !== 'stable' && manifest['channel'] !== 'canary'
+    || manifest['platform'] !== 'macos'
+    || manifest['arch'] !== 'arm64' && manifest['arch'] !== 'x64'
+    || typeof manifest['identifier'] !== 'string' || manifest['identifier'] === ''
+    || typeof manifest['version'] !== 'string' || manifest['version'] === ''
+    || typeof manifest['hash'] !== 'string' || !/^[a-z0-9]{1,13}$/.test(manifest['hash'])
+    || manifestName !== expectedName
+    || typeof artifactFile !== 'string'
+    || !artifactFile.startsWith(`${manifest['channel']}-${manifest['platform']}-${manifest['arch']}-`)
+    || !artifactFile.endsWith('.tar.zst')
+    || !artifacts.names.includes(artifactFile)
+  ) {
+    return {
+      detail: `${manifestName} does not describe a matching local macOS update archive`,
+      name: 'update manifest',
+      remediation: 'Rebuild this channel and check the generated manifest and archive together.',
+      status: 'failed',
+    }
+  }
+  return {
+    detail: `${manifestName} describes ${artifactFile} for the configured HTTPS release host`,
+    name: 'update manifest',
+    status: 'passed',
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function differentialUpdateCheck(artifacts: ArtifactInventory): ReleaseCheck {
@@ -253,7 +296,21 @@ export async function readArtifactInventory(
   for await (const path of FS.walk(artifactsRoot)) {
     names.push(FS.relativePath(artifactsRoot, path))
   }
-  return { names: names.sort(), releaseBaseUrl, root: artifactsRoot }
+  const manifestName = names.find(name => name.endsWith('-update.json'))
+  if (manifestName === undefined) {
+    return { names: names.sort(), releaseBaseUrl, root: artifactsRoot }
+  }
+  try {
+    const updateManifest: unknown = JSON.parse(await FS.readText(FS.resolvePath(manifestName, artifactsRoot)))
+    return { names: names.sort(), releaseBaseUrl, root: artifactsRoot, updateManifest }
+  } catch {
+    return {
+      names: names.sort(),
+      releaseBaseUrl,
+      root: artifactsRoot,
+      updateManifestError: 'The generated update metadata could not be read as JSON.',
+    }
+  }
 }
 
 /** readExternalGates runs Apple's own validators, reporting undefined when one is unavailable. */

@@ -499,7 +499,8 @@ The artifact names are read from the directory the build wrote, never from the c
 name nobody produced cannot pass a check.
 
 The validation reports a standalone payload (no `bunx`, no repository paths, no devenv profile), the
-packaged Node runtime and native library inventory, an HTTPS update manifest, differential updates,
+packaged Node runtime and native library inventory, a valid local update manifest naming an archive
+in the build, an HTTPS release-host setting, differential updates,
 and — through Apple's own tools — deep signing, notarization, and disk image validity. A gate whose
 tool is missing is reported **UNVERIFIED**, never as passed, and an unverified gate **fails the
 command**: a build nobody could confirm was signed is not publishable. `--allow-unverified` exits
@@ -553,7 +554,8 @@ whether each name is set — and none of them belongs in a file that is committe
    `just studio-release-check` as above.
 
 7. **Publish yourself.** Upload the artifacts and the update manifest to the release host. No command
-   here publishes anything.
+   here publishes anything or proves that the remote host serves them. After upload, fetch the hosted
+   update manifest and its named archive from a separate machine before announcing the release.
 
 These variable names are Electrobun's, not Apple's own tooling's; see
 <https://framework.blackboard.sh/electrobun/guides/code-signing/>.
