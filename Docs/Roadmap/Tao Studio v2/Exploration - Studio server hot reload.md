@@ -7,7 +7,7 @@ from Tao project edits, whose preview loop retains compatible interaction state.
 
 ## What reloads today, and what does not
 
-`startStudioClientDevReload` watches Studio and Studio-tooling source for `.tao`, `.ts` and `.tsx` changes.
+`startStudioClientDevReload` watches the Studio package, Studio-tooling, and `Apps/Tao Studio` for `.tao`, `.ts` and `.tsx` changes.
 For a browser-client-only edit it rebuilds the bundle in a subprocess, publishes it after the build, and
 the page polls `/studio-dev/revision` to reload itself. This covers the editor, matrix view, and client
 agent panel.
