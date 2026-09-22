@@ -1,6 +1,6 @@
 import { type DevDataManifest, DevDataProtocol } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
+import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { Errors, FS, HCI, Json, Repo } from '@shared'
-import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
 const runtimeFiles = [
   'index.ts',
@@ -101,7 +101,7 @@ function previewAppConfig(
     ...appConfig,
     expo: {
       ...expo,
-      scheme: StudioCompanionIdentity.scheme,
+      scheme: CompanionIdentity.scheme,
       ...(Object.keys(bootstrap).length === 0 ? {} : { extra: { ...extra, ...bootstrap } }),
     },
   }

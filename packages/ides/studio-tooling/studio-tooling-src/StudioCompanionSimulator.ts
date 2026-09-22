@@ -1,11 +1,11 @@
 import { presentIosSimulator } from '@expo-host/dev-loop/IosSimulatorPresentation'
+import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   companionInstallArgs,
   companionInstallEnv,
   throwStudioDeviceFailure,
 } from './StudioCompanionDevice'
-import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
 /**
  * iOS Simulator tooling for the Tao Companion development build. A simulator runs on this Mac, so
@@ -47,9 +47,9 @@ type SimctlDevice = {
 /** createStudioCompanionSimulator binds the companion identity and a process runner to the simctl commands. */
 export function createStudioCompanionSimulator(options: StudioCompanionSimulatorOptions = {}) {
   const run = options.run ?? CLI.run
-  const bundleIdentifier = options.bundleIdentifier ?? StudioCompanionIdentity.bundleIdentifier
+  const bundleIdentifier = options.bundleIdentifier ?? CompanionIdentity.bundleIdentifier
   const repoRoot = () => options.repoRoot ?? Repo.getRoot()
-  const packageRoot = () => options.packageRoot ?? FS.resolvePath(StudioCompanionIdentity.packagePath, repoRoot())
+  const packageRoot = () => options.packageRoot ?? FS.resolvePath(CompanionIdentity.packagePath, repoRoot())
 
   const simctl = async (args: readonly string[]): Promise<CLI.CommandResult> => {
     const result = await run('xcrun', { args: ['simctl', ...args], stdio: 'pipe' })
@@ -116,7 +116,7 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
     if (result.exitCode !== 0) {
       throwStudioDeviceFailure(
         'simulator',
-        `Could not open ${StudioCompanionIdentity.name} at ${input.url} on simulator ${input.id}: ${
+        `Could not open ${CompanionIdentity.name} at ${input.url} on simulator ${input.id}: ${
           result.stderr.trim() || `simctl exited ${result.exitCode}`
         }`,
       )
@@ -129,7 +129,7 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
     if (!await FS.isDirectory(FS.resolvePath('node_modules/expo', root))) {
       throwStudioDeviceFailure(
         'expo',
-        `${StudioCompanionIdentity.name} dependencies are not installed under ${FS.displayPath(root)}. `
+        `${CompanionIdentity.name} dependencies are not installed under ${FS.displayPath(root)}. `
           + 'Run `./agent setup` at the repository root, then retry.',
       )
     }
@@ -163,7 +163,7 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
       }
       throwStudioDeviceFailure(
         'expo',
-        `Expo could not build and install ${StudioCompanionIdentity.name} on simulator ${input.id} `
+        `Expo could not build and install ${CompanionIdentity.name} on simulator ${input.id} `
           + `(exit ${result.exitCode}). The Expo output above names the failing step.`,
         { details: { exitCode: result.exitCode, signal: result.signal } },
       )
@@ -258,11 +258,11 @@ export async function runStudioCompanionInstallOnSimulator(
   }
   HCI.logProcessInfo(
     'companion',
-    `Installing ${StudioCompanionIdentity.name} on the ${target.name} simulator (${target.runtime}) `
+    `Installing ${CompanionIdentity.name} on the ${target.name} simulator (${target.runtime}) `
       + 'with expo run:ios --no-bundler; Studio stays the only Metro.',
   )
   await simulator.install({ id: target.id })
-  HCI.writeSuccess(`Installed ${StudioCompanionIdentity.name} on the ${target.name} simulator.\n`)
+  HCI.writeSuccess(`Installed ${CompanionIdentity.name} on the ${target.name} simulator.\n`)
   HCI.writeLine('Now run `just studio <project>` and press Open on device.')
   return 0
 }

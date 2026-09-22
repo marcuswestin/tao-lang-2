@@ -248,9 +248,16 @@ from the development loop, which no virtualization approach can do.
   CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
   opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
-- Remaining: the Android side of the Companion shell, the host compatibility check, `tao dev`
-  obtaining and launching a host, building and publishing hosts, and the proofs on each lane. The
-  entitlements need the iCloud container and push enabled on the app id before a device build signs.
+- Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
+  a debug APK into `.artifacts/hosts/<version>/android/` beside a `tao-host.json` naming its native
+  kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
+  place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
+  the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
+- Remaining: the iOS Simulator host (its build waits on CoreSimulator, unavailable on this Mac until
+  a restart); publishing hosts to GitHub Releases and downloading them into `~/.tao/hosts`; physical
+  Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
+  retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
+  enabled on the app id before a device build signs.
 
 ### A10 — Publication hygiene audit — **done**
 
