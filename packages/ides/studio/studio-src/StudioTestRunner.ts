@@ -1,3 +1,4 @@
+import type { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { Text } from '@shared'
 
 export type StudioTestFailure = {
@@ -14,6 +15,7 @@ export type StudioTestRun = {
   failures: readonly StudioTestFailure[]
   finishedAt: string
   id: string
+  journeyObservations?: RuntimeTesting.JourneyObservationsArtifact
   output: string
   passed: number
   status: 'cancelled' | 'failed' | 'no-tests' | 'passed'

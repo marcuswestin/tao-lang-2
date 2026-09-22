@@ -293,6 +293,7 @@ function createCommands(): Command {
       'Report the run as streamed lines or as a quiet summary with a log file (tui streams lines).'
         + ' Defaults to lines in a terminal and quiet otherwise.',
     )
+    .option('--journey-observations <path>', 'Write versioned live render observations for this test run.')
     .option(
       '--pass-with-no-tests',
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
@@ -308,12 +309,19 @@ function createCommands(): Command {
     .action(
       async (
         paths: string[],
-        options: { name?: string; output?: string; passWithNoTests?: boolean; watch?: boolean },
+        options: {
+          journeyObservations?: string
+          name?: string
+          output?: string
+          passWithNoTests?: boolean
+          watch?: boolean
+        },
       ) => {
         try {
           const { TestOutput } = await import('./test-output')
           const testPaths = paths.length > 0 ? paths : ['.']
           const testOptions = {
+            journeyObservationsPath: options.journeyObservations,
             name: options.name,
             output: TestOutput.resolveMode(options.output),
             passWithNoTests: options.passWithNoTests,

@@ -1,12 +1,12 @@
 import type { StudioRenderInspection } from '@source-actions'
 import type { EditorView } from 'codemirror'
-import type { StudioDeviceLog } from '../../device/StudioDeviceStatus'
+import type { StudioDeviceLog, StudioDeviceStatus } from '../../device/StudioDeviceStatus'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import type { StudioInspectorSelection } from '../../StudioInspector'
 import { publishStudioProductHostState } from '../../StudioProductHostProtocol'
 import type { StudioTestStatus } from '../../StudioTestRunner'
 import type { StudioCompileState, StudioFile } from '../StudioApiClient'
-import { absoluteSourcePath } from '../StudioEditor'
+import { absoluteSourcePath, projectRelativePath } from '../StudioEditor'
 import {
   StudioJourneyRecorder,
   type StudioPreviewConnection,
@@ -16,6 +16,7 @@ import {
 import { StudioPanelProjection } from '../StudioPanelProjection'
 import type { StudioDrawerTab } from '../StudioProductPanels'
 import type { StudioSearchResult } from '../StudioRailPanels'
+import { coveringJourneys, projectStudioLensLines } from './StudioLensProjection'
 
 export type StudioDataPanelSnapshot = Readonly<{
   error: string | undefined
@@ -36,6 +37,7 @@ export type StudioHostSnapshot = Readonly<{
   canUndo: boolean
   compile: StudioCompileState
   data: StudioDataPanelSnapshot
+  deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']>
   deviceLogs: readonly StudioDeviceLog[]
   drawerTab: StudioDrawerTab
   editor: EditorView | undefined
@@ -79,6 +81,18 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
   const cellSource = preview?.cell === undefined
     ? undefined
     : { cellId: preview.cell.cellId, cellRevision: preview.cell.cellRevision }
+  const selectedRender = inspected === undefined
+    ? undefined
+    : {
+      path: inspected.identity.path,
+      renderId: inspected.renderId,
+      sourceVersion: inspected.identity.sourceVersion,
+    }
+  const journeySource = coveringJourneys(selectedRender, snapshot.tests.status?.lastRun?.journeyObservations)[0]
+    ?.checkSource.filePath
+  const relativeJourneyPath = journeySource === undefined
+    ? undefined
+    : projectRelativePath(snapshot.project, journeySource)
   publishStudioProductHostState({
     activeCell: preview?.cell === undefined
       ? undefined
@@ -124,6 +138,17 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
       inspection: snapshot.inspection,
       selection: inspected,
     },
+    lensLines: projectStudioLensLines(
+      selectedRender,
+      preview?.lensSamples ?? [],
+      snapshot.inspection,
+      snapshot.tests.status?.lastRun?.journeyObservations,
+      snapshot.deviceLensSamples,
+    ),
+    lensJourneyPath: relativeJourneyPath !== undefined
+        && snapshot.projectFiles.some(file => file.path === relativeJourneyPath)
+      ? relativeJourneyPath
+      : undefined,
     panels: StudioPanelProjection.project({
       compile: snapshot.compile,
       data: snapshot.data.result,
@@ -140,12 +165,6 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
       testStatus: snapshot.tests.status,
       testWatch: snapshot.tests.watch,
     }),
-    selectedRender: inspected === undefined
-      ? undefined
-      : {
-        path: inspected.identity.path,
-        renderId: inspected.renderId,
-        sourceVersion: inspected.identity.sourceVersion,
-      },
+    selectedRender,
   })
 }

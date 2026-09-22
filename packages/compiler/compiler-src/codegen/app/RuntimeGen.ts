@@ -7,6 +7,7 @@ type TaoFileCompileOptions = {
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
   importLines?: string[]
+  journeyObservations?: boolean
   localDataCatalog?: boolean
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>

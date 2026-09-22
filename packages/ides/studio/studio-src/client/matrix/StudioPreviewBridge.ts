@@ -235,6 +235,7 @@ export async function handlePreviewMessage(
     'preview-journey-replay-failed': type => receiveJourneyReplay(preview, received(message, type)),
     'preview-journey-replay-settled': type => receiveJourneyReplay(preview, received(message, type)),
     'preview-journey-step-recorded': type => receiveJourneyRecording(preview, received(message, type), actions),
+    'preview-lens-render': type => receiveLensRender(preview, received(message, type), actions),
     'preview-layout-measurements': async type => {
       await StudioApiClient.previewLayoutMeasurements(received(message, type)).catch(ignoreSupersededMeasurement)
     },
@@ -272,6 +273,25 @@ function receiveDebug(
 ): void {
   preview.debug = StudioDebugEvents.receive(preview.debug ?? StudioDebugEvents.empty(), message.event)
   actions.changed?.()
+}
+
+function receiveLensRender(
+  preview: StudioPreviewConnection,
+  message: StudioWindowMessageOf<'preview-lens-render'>,
+  actions: StudioPreviewMessageActions,
+): void {
+  if (preview.cellIdentity !== undefined && !matchesExactPreviewCellIdentity(preview, message.identity)) {
+    return
+  }
+  preview.lensSamples = [...(preview.lensSamples ?? []), message.sample].slice(-1_000)
+  if (preview.lensNotifyQueued) {
+    return
+  }
+  preview.lensNotifyQueued = true
+  queueMicrotask(() => {
+    preview.lensNotifyQueued = false
+    actions.changed?.()
+  })
 }
 
 function receiveJourneyRecording(

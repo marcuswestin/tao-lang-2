@@ -17,6 +17,7 @@ import {
   type TaoStudioDeviceDescription,
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
+  type TaoStudioDeviceLensSample,
   type TaoStudioDeviceLogEntry,
   type TaoStudioDeviceManifest,
   type TaoStudioDeviceMoveRender,
@@ -180,6 +181,8 @@ export type StudioDeviceClient = {
   selectSource(occurrence: TaoStudioDeviceOccurrence): void
   /** Streams a batch of console lines from the phone to Studio's output. */
   log(entries: readonly TaoStudioDeviceLogEntry[]): void
+  /** Streams bounded public React Profiler observations from the active device cell. */
+  lens(samples: readonly TaoStudioDeviceLensSample[]): void
   /** Asks Studio to put this device's cell under a named network condition. */
   setNetwork(network: TaoStudioDeviceNetworkCondition): void
   /** Asks Studio to edit the project from the device; returns the request id the result names. */
@@ -873,6 +876,40 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       }
       if (batch.length > 0) {
         sendSealed(current, { entries: batch, type: 'device.log' })
+      }
+    },
+    lens(samples) {
+      if (samples.length === 0 || current === undefined || !current.welcomed) {
+        return
+      }
+      let batch: TaoStudioDeviceLensSample[] = []
+      for (const sample of samples) {
+        if (batch.length === TaoStudioDeviceProtocol.lensBatchLimit) {
+          sendSealed(current, { samples: batch, type: 'device.lens' })
+          batch = []
+        }
+        const candidate = [...batch, sample]
+        if (sealedText(current, { samples: candidate, type: 'device.lens' }) !== undefined) {
+          batch = candidate
+          continue
+        }
+        if (batch.length > 0) {
+          sendSealed(current, { samples: batch, type: 'device.lens' })
+          batch = []
+        }
+        if (sealedText(current, { samples: [sample], type: 'device.lens' }) !== undefined) {
+          batch = [sample]
+        } else {
+          update({
+            lastError: {
+              code: 'oversized',
+              message: `A device Lens observation does not fit the ${frameLimitBytes}-byte sealed-frame limit.`,
+            },
+          })
+        }
+      }
+      if (batch.length > 0) {
+        sendSealed(current, { samples: batch, type: 'device.lens' })
       }
     },
     setNetwork(network) {
