@@ -122,6 +122,7 @@ export const TestRunRoot = {
   create,
   DIRECTORY_NAME,
   discard,
+  generatedRoot: resolveGeneratedRoot,
   intern,
   lookup,
   MANIFEST_FILE_NAME,
@@ -160,7 +161,7 @@ const startupPrunes = new Map<string, Promise<void>>()
 
 /** create makes a fresh run root for one harness run, pruning stale roots once per process first. */
 async function create(category: string, options: TestRunRootOptions = {}): Promise<string> {
-  const generatedRoot = resolveGeneratedRoot(options)
+  const generatedRoot = await prepareGeneratedRoot(options)
   await pruneAtStartup(generatedRoot)
   const runRoot = FS.resolvePath(`${requireCategory(category)}/${TestRunId.create()}`, generatedRoot)
   await FS.mkdir(runRoot)
@@ -287,7 +288,7 @@ async function lookup(
   fingerprint: string,
   options: TestRunRootOptions = {},
 ): Promise<CachedRun | undefined> {
-  const generatedRoot = resolveGeneratedRoot(options)
+  const generatedRoot = await prepareGeneratedRoot(options)
   const categoryRoot = FS.resolvePath(requireCategory(category), generatedRoot)
   const entry = await readCacheEntry(cacheEntryPath(categoryRoot, fingerprint))
   if (entry === undefined) {
@@ -721,8 +722,29 @@ function isRunRoot(path: string, generatedRoot: string): boolean {
     || (FS.dirname(parent) === generatedRoot && CATEGORY_NAME.test(FS.basename(parent)))
 }
 
-function resolveGeneratedRoot(options: TestRunRootOptions): string {
-  return FS.resolvePath(DIRECTORY_NAME, options.runtimePackageRoot ?? RuntimeToolchainPaths.packageRoot)
+function resolveGeneratedRoot(options: TestRunRootOptions = {}): string {
+  const runtimePackageRoot = FS.resolvePath(options.runtimePackageRoot ?? RuntimeToolchainPaths.packageRoot)
+  if (runtimePackageRoot === RuntimeToolchainPaths.packageRoot) {
+    // Managed worktrees can write generated files but deny directory rename and removal. The
+    // content-addressed store needs both, so keep the default runtime's generated tree in the
+    // writable host temp directory. The package path keeps that cache private to this checkout.
+    const checkoutKey = FS.contentIdentity([runtimePackageRoot])
+    return FS.resolvePath(`tao-test-runs/${checkoutKey}/${DIRECTORY_NAME}`, FS.tmpdir())
+  }
+  return FS.resolvePath(DIRECTORY_NAME, runtimePackageRoot)
+}
+
+/** Give compiled modules outside the package the same workspace dependencies they had beside it. */
+async function prepareGeneratedRoot(options: TestRunRootOptions): Promise<string> {
+  const generatedRoot = resolveGeneratedRoot(options)
+  const runtimePackageRoot = FS.resolvePath(options.runtimePackageRoot ?? RuntimeToolchainPaths.packageRoot)
+  if (runtimePackageRoot === RuntimeToolchainPaths.packageRoot) {
+    await FS.replaceSymlink(
+      FS.resolvePath('node_modules', runtimePackageRoot),
+      FS.resolvePath('node_modules', FS.dirname(generatedRoot)),
+    )
+  }
+  return generatedRoot
 }
 
 function requireCategory(category: string): string {

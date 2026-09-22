@@ -17,6 +17,20 @@ export const Protocol = {
 
 function failureFromError(error: unknown): TestCompiler.Worker.WorkerFailure {
   if (!Errors.isTaoError(error)) {
+    const rename = error instanceof Error ? error as NodeJS.ErrnoException & { dest?: unknown } : undefined
+    if (
+      rename?.syscall === 'rename'
+      && (rename.code === 'EPERM' || rename.code === 'EACCES' || rename.code === 'EFAULT')
+      && typeof rename.path === 'string'
+      && typeof rename.dest === 'string'
+    ) {
+      return {
+        category: 'host',
+        message: safeWorkerMessage(
+          `Test compiler could not rename '${rename.path}' to '${rename.dest}' (${rename.code}).`,
+        ),
+      }
+    }
     return { category: 'unexpected', message: 'Something went wrong while compiling Tao tests.' }
   }
   const category = error instanceof Errors.UserInputError
