@@ -71,9 +71,10 @@ Ask `./agent landed [branch]` whether a branch landed; never infer it. The landi
 behind a wrapper, and every other signal is ambiguous: a stopped wrapper, a task reported failed
 because the shell it was piped into exited non-zero, a `summary.json` read while the lane was still
 writing it. `merge-with-main` pushes `merged/<name>` on success and at no other time, so that ref is
-the fact and the command reads it from the local remote-tracking refs after a fetch — `git ls-remote`
-authenticates, and credential paths are denied inside the agent sandbox. Guessing costs more than
-asking: one branch was re-landed twice in a session because a successful landing read as a failure.
+the fact. The command reads it through the same credential-isolated broker as landing, falling back
+to a direct remote query where the broker is unavailable. A failed remote query reports an error,
+never "not landed." Guessing costs more than asking: one branch was re-landed twice in a session
+because a successful landing read as a failure.
 
 `--abort <snapshot>` restores only command-owned local state while the snapshot still matches. Once a
 snapshot says `push-started`, the remote result may be ambiguous and automatic rewriting is forbidden
