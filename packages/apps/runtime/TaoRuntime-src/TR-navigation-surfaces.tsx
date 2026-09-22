@@ -215,6 +215,20 @@ function sheetModalSurfaceInsetStyle(insets: SafeAreaInsets): Record<string, num
 
 const sheetSurfacePadding = 20
 
+/** What a native sheet hosts: the rendered entries presented while it showed, how many, and whether one is modal. */
+type SheetHosted = { hosted: React.ReactNode[] | null; hostedCount: number; hostedModal: boolean }
+
+/**
+ * A native dismissal — the iOS page sheet swiped down, Android's back press on the modal — takes the
+ * whole sheet: the platform has already taken its window, so the sheet's own entry must go with
+ * everything it hosts, top entry first, or the stack would keep a sheet nothing shows any more.
+ */
+function dismissSheet(navigation: TaoNavigationValue, taoProps: TaoProps | undefined, entries: number): void {
+  for (let index = 0; index < entries; index += 1) {
+    dismissOverlay(navigation, taoProps)
+  }
+}
+
 function modalSheet(
   content: React.ReactNode,
   navigation: TaoNavigationValue,
@@ -223,10 +237,12 @@ function modalSheet(
   // Only the inline (no-Modal) branch below uses this: it shares the app's own window, so it takes
   // the caller's insets. The native-Modal branch is its own window and reads its own (ModalSheetContent).
   inlineInsets: SafeAreaInsets,
+  // Only the native-Modal branch hosts entries; an inline sheet has no window of its own to host them in.
+  sheetHosted: SheetHosted,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
-  const dismiss = () => dismissOverlay(navigation, taoProps)
+  const dismiss = () => dismissSheet(navigation, taoProps, 1 + sheetHosted.hostedCount)
   if (!modal) {
     // Without a modal host the sheet renders inline, inside the app's own window and its
     // KeyboardAvoidingView; the enclosing level hides it when covered.
@@ -262,6 +278,7 @@ function modalSheet(
     createElement(ModalSheetSurface, {
       accessibilityProps: modalAccessibilityProps(navigation, taoProps, visible),
       children: content,
+      sheetHosted,
       taoProps,
     }),
   )
@@ -286,6 +303,7 @@ function modalSheet(
 function ModalSheetSurface(props: {
   accessibilityProps: Record<string, unknown>
   children: React.ReactNode
+  sheetHosted: SheetHosted
   taoProps: TaoProps | undefined
 }): React.ReactNode {
   const SafeAreaContext = requireSafeAreaContext()
@@ -308,6 +326,7 @@ function ModalSheetSurface(props: {
 function ModalSheetContent(props: {
   accessibilityProps: Record<string, unknown>
   children: React.ReactNode
+  sheetHosted: SheetHosted
   taoProps: TaoProps | undefined
   windowLayer: WindowLayerRegistry
 }): React.ReactNode {
@@ -316,10 +335,12 @@ function ModalSheetContent(props: {
   // Reads the provider this component is itself nested in (see ModalSheetSurface above), which
   // measures the modal's own window rather than the app's.
   const insets = requireSafeAreaContext().useSafeAreaInsets()
-  // The window layer sits inside the keyboard avoidance, so an ask asked from the sheet clears the
-  // keyboard the way the sheet's own content does — and inside the view that carries the modal
-  // accessibility props, since a screen reader ignores the siblings of a modal view, and the ask
-  // must not be one of them.
+  const { hosted, hostedModal } = props.sheetHosted
+  // The sheet's own overlay lane and window layer sit inside the keyboard avoidance, so an entry
+  // presented from the sheet clears the keyboard the way the sheet's own content does — and inside
+  // the view that carries the modal accessibility props, since a screen reader ignores the siblings
+  // of a modal view, and a hosted entry must not be one of them. The card hides from accessibility
+  // beneath a hosted modal entry, exactly as a navigator's content does beneath its own.
   return createElement(
     runtime.KeyboardAvoidingView,
     { behavior: platformOS === 'ios' ? 'padding' : undefined, style: sheetModalKeyboardStyle },
@@ -329,6 +350,8 @@ function ModalSheetContent(props: {
       createElement(
         runtime.View,
         {
+          accessibilityElementsHidden: hostedModal,
+          importantForAccessibility: hostedModal ? 'no-hide-descendants' : 'auto',
           style: [
             sheetModalSurfaceBaseStyle,
             sheetModalSurfaceInsetStyle(insets),
@@ -337,6 +360,7 @@ function ModalSheetContent(props: {
         },
         props.children,
       ),
+      hosted === null ? null : createElement(runtime.View, { children: hosted, style: overlayLayerStyle }),
       createElement(WindowLayer, { registry: props.windowLayer }),
     ),
   )
@@ -360,57 +384,23 @@ function OverlayInsets(props: { children: (insets: SafeAreaInsets) => React.Reac
   return props.children(AppSurfaceInsetContext.use() ? zeroInsets : insets)
 }
 
-/** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
-export function NavigationSurface(props: {
+type NavigationSurfaceProps = {
   content?: React.ReactNode
   navigation: TaoNavigationValue
   overlays: OverlayEntry[]
   taoProps?: TaoProps
-}): React.JSX.Element {
+}
+
+/** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
+export function NavigationSurface(props: NavigationSurfaceProps): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   const contentHidden = props.overlays.some(modalOverlay)
-  const overlays = props.overlays.length > 0
-    ? createElement(runtime.View, {
-      children: props.overlays.map((entry, index) => {
-        const visible = index === props.overlays.length - 1
-        const content = entry.presentable.render(
-          entry.arguments,
-          entry.response
-            ? askProps(props.taoProps, props.navigation, entry.response)
-            : navigationProps(props.taoProps, props.navigation),
-        )
-        const region = presentedOccurrenceRegion(
-          props.navigation,
-          entry,
-          entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
-        )
-        const level = (hidden: boolean) =>
-          createElement(NavigationLevel, {
-            children: entry.response
-              ? createElement(OverlayInsets, {
-                children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
-              })
-              : entry.sheet
-              ? createElement(OverlayInsets, {
-                children: insets => modalSheet(content, props.navigation, props.taoProps, visible, insets),
-              })
-              : content,
-            fill: true,
-            hidden,
-            key: entry.instanceId,
-            region,
-          })
-        // An ask dims the whole window it is shown in, not the padded content box its navigator may
-        // be drawing inside, so it goes through the nearest window layer. A sheet is a window of its
-        // own, and a plain overlay stays where its navigator draws it, full-bleed within that lane
-        // (Decisions §10).
-        return entry.response
-          ? createElement(WindowAsk, { hidden: !visible, key: entry.instanceId, level })
-          : level(!visible)
-      }),
-      style: overlayLayerStyle,
-    })
-    : null
+  // An entry presented while a native sheet is showing is hosted by that sheet: it draws in the
+  // sheet's window and the sheet stays up beneath it (decided 2026-09-22). Without a native modal
+  // host a sheet is inline, and a later entry covers it as any overlay covers the one before.
+  const hostsFollowers = (runtime as { Modal?: unknown }).Modal !== undefined
+  const lane = renderOverlayLevel(overlayTree(props.overlays, hostsFollowers), true, props)
+  const overlays = lane === null ? null : createElement(runtime.View, { children: lane, style: overlayLayerStyle })
   return createElement(
     runtime.View,
     {
@@ -433,6 +423,89 @@ export function NavigationSurface(props: {
 
 const navigationContentStyle = { flex: 1 } as const
 const pointerTransparentStyle = { pointerEvents: 'box-none' } as const
+
+/** One overlay entry and the entries a sheet hosts: everything presented while it was showing. */
+type OverlayNode = { entry: OverlayEntry; hosted: OverlayNode[] }
+
+function overlayTree(overlays: readonly OverlayEntry[], hostsFollowers: boolean): OverlayNode[] {
+  const roots: OverlayNode[] = []
+  let host: OverlayNode | undefined
+  for (const entry of overlays) {
+    const node: OverlayNode = { entry, hosted: [] } // Only an overlay or an ask nests inside the sheet that showed it. A sheet is never hosted:
+     // presented from another sheet it replaces that sheet on screen, as any later entry did before,
+    // and hosts what follows it — so no native Modal ever renders inside another.
+    ;(entry.sheet || host === undefined ? roots : host.hosted).push(node)
+    if (hostsFollowers && entry.sheet) {
+      host = node
+    }
+  }
+  return roots
+}
+
+function hostedEntryCount(node: OverlayNode): number {
+  return node.hosted.reduce((count, hosted) => count + 1 + hostedEntryCount(hosted), 0)
+}
+
+/**
+ * renderOverlayLevel renders the entries of one level, top-most last. An entry is visible when it is
+ * the last of its level and the sheet hosting that level is itself visible; a sheet stays visible
+ * while it hosts entries, since they draw inside its window rather than over it.
+ */
+function renderOverlayLevel(
+  nodes: readonly OverlayNode[],
+  hostVisible: boolean,
+  props: NavigationSurfaceProps,
+): React.ReactNode[] | null {
+  if (nodes.length === 0) {
+    return null
+  }
+  return nodes.map((node, index) => {
+    const { entry } = node
+    const visible = hostVisible && index === nodes.length - 1
+    const content = entry.presentable.render(
+      entry.arguments,
+      entry.response
+        ? askProps(props.taoProps, props.navigation, entry.response)
+        : navigationProps(props.taoProps, props.navigation),
+    )
+    const region = presentedOccurrenceRegion(
+      props.navigation,
+      entry,
+      entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
+    )
+    const hosted = renderOverlayLevel(node.hosted, visible, props)
+    const hostedModal = node.hosted.some(hostedNode => modalOverlay(hostedNode.entry))
+    const hostedCount = hostedEntryCount(node)
+    const level = (hidden: boolean) =>
+      createElement(NavigationLevel, {
+        children: entry.response
+          ? createElement(OverlayInsets, {
+            children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
+          })
+          : entry.sheet
+          ? createElement(OverlayInsets, {
+            children: insets =>
+              modalSheet(content, props.navigation, props.taoProps, visible, insets, {
+                hosted,
+                hostedCount,
+                hostedModal,
+              }),
+          })
+          : content,
+        fill: true,
+        hidden,
+        key: entry.instanceId,
+        region,
+      })
+    // An ask dims the whole window it is shown in, not the padded content box its navigator may be
+    // drawing inside, so it goes through the nearest window layer. A sheet is a window of its own,
+    // and a plain overlay stays where its navigator draws it, full-bleed within that lane (Decisions
+    // §10).
+    return entry.response
+      ? createElement(WindowAsk, { hidden: !visible, key: entry.instanceId, level })
+      : level(!visible)
+  })
+}
 
 function appInProps(props: TaoProps | undefined): TaoProps['app'] {
   return props?.app ?? (props?.callerProps ? appInProps(props.callerProps) : undefined)

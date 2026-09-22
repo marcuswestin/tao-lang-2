@@ -159,7 +159,139 @@ Describe('Expo runtime: nested window-owning navigators', () => {
     }
   })
 
-  Test('frames a SplitNav by its panes when one pane holds a window-owning navigator', async () => {
+  Test('frames a SplitNav with only plain panes pane by pane, on the window edges each pane meets', async () => {
+    setInsets()
+    try {
+      await testCompileApp(
+        `
+          use SplitNav from @tao/nav
+          use Text from @tao/ui
+
+          app PlainSplitApp {
+            Name "Plain Split"
+            Navigator SplitNav {
+              @sidebar {
+                Content Sidebar
+                Width 240
+                Resizable false
+              }
+              @main {
+                Content Main
+                Width 640
+                Resizable false
+              }
+            }
+          }
+
+          view Sidebar() {
+            render Text("Sidebar body")
+          }
+
+          view Main() {
+            render Text("Main body")
+          }
+        `,
+        screen => {
+          ExpectScreen(screen).toHaveText('Sidebar body')
+          ExpectScreen(screen).toHaveText('Main body')
+          // A split always takes the window and frames each pane itself, so the panes scroll
+          // independently; each insets only the window edges it meets and never the shared one.
+          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
+          Expect(scrollViews).toHaveLength(2)
+          const paddings = scrollViews.map(scrollView => RN.StyleSheet.flatten(scrollView.props.contentContainerStyle))
+          Expect(paddings).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+              paddingBottom: 12 + insets.bottom,
+              paddingLeft: 12 + insets.left,
+              paddingRight: 12,
+              paddingTop: 12 + insets.top,
+            }),
+            expect.objectContaining({
+              paddingBottom: 12 + insets.bottom,
+              paddingLeft: 12,
+              paddingRight: 12 + insets.right,
+              paddingTop: 12 + insets.top,
+            }),
+          ]))
+          for (const scrollView of scrollViews) {
+            Expect(hasScrollViewAncestor(scrollView)).toBe(false)
+          }
+        },
+      )
+    } finally {
+      resetInsets()
+    }
+  })
+
+  Test("insets a SplitNav nested in another split's pane on the edges both splits say it meets", async () => {
+    setInsets()
+    try {
+      await testCompileApp(
+        `
+          use SplitNav from @tao/nav
+          use Text from @tao/ui
+
+          nav InnerSplit = SplitNav {
+            @left {
+              Content InnerLeft
+              Width 200
+              Resizable false
+            }
+            @right {
+              Content InnerRight
+              Width 300
+              Resizable false
+            }
+          }
+
+          app NestedSplitApp {
+            Name "Nested Split"
+            Navigator SplitNav {
+              @sidebar {
+                Content Sidebar
+                Width 240
+                Resizable false
+              }
+              @main {
+                Content InnerSplit
+                Width 640
+                Resizable false
+              }
+            }
+          }
+
+          view Sidebar() {
+            render Text("Sidebar body")
+          }
+
+          view InnerLeft() {
+            render Text("Inner left")
+          }
+
+          view InnerRight() {
+            render Text("Inner right")
+          }
+        `,
+        screen => {
+          ExpectScreen(screen).toHaveText('Inner left')
+          // The inner split frames its own panes; its left pane sits on the outer split's shared
+          // edge, not the window's, so it takes no left inset — the defaults compose, never replace.
+          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
+          Expect(scrollViews).toHaveLength(3)
+          const paddings = scrollViews.map(scrollView => RN.StyleSheet.flatten(scrollView.props.contentContainerStyle))
+          Expect(paddings).toEqual(expect.arrayContaining([
+            expect.objectContaining({ paddingLeft: 12 + insets.left, paddingRight: 12 }),
+            expect.objectContaining({ paddingLeft: 12, paddingRight: 12 }),
+            expect.objectContaining({ paddingLeft: 12, paddingRight: 12 + insets.right }),
+          ]))
+        },
+      )
+    } finally {
+      resetInsets()
+    }
+  })
+
+  Test('leaves a SplitNav pane that holds a window-owning navigator to frame its own screens', async () => {
     setInsets()
     try {
       await testCompileApp(
