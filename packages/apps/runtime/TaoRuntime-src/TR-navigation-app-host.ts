@@ -21,6 +21,7 @@ import type { Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
+import { WindowLayer, WindowLayerProvider, WindowLayerRegistry } from './TR-window-layer'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   return createElement(
@@ -57,6 +58,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   usePlatformBack(props.app)
   const runtime = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const [windowLayer] = React.useState(() => new WindowLayerRegistry())
   const appTaoProps = { ...props.__tao, app: props.app }
   const focusedAuxiliary = auxiliaries.findLast(auxiliary => auxiliary.historyDepth() > 0)
   const navigatorTaoProps = {
@@ -136,6 +138,9 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
         ? mainContent
         : createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, mainContent),
       ...auxiliaryContent,
+      // The root window's layer: an ask dims the whole window from here, above the content and the
+      // auxiliaries and beneath the toasts, which stay readable over a dimmed screen.
+      createElement(WindowLayer, { key: 'app-window-layer', registry: windowLayer }),
       React.Children.count(toasts) > 0
         ? createElement(runtime.View, {
           children: toasts,
@@ -160,7 +165,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     style: navigationAppHostStyle,
     tabIndex: runtime.Platform?.OS === 'web' ? 0 : undefined,
   })
-  return createElement(runtime.View, hostProps)
+  return createElement(WindowLayerProvider, { registry: windowLayer }, createElement(runtime.View, hostProps))
 }
 
 type TaoAppHostKeyEvent =

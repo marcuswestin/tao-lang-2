@@ -25,6 +25,7 @@ type ExpoTargetContext = {
   config: ExpoSessionConfig
   metro: ExpoMetroSession
 }
+export type DevStartupTarget = 'android' | 'ios' | 'web'
 
 /** createExpoTargets binds Expo runtime launchers to one Expo session. */
 export function createExpoTargets(
@@ -38,7 +39,8 @@ export function createExpoTargets(
     openIosSimulator: (shouldStop?: () => boolean) => openIosSimulator(context, shouldStop),
     openPhysicalDevice: () => openPhysicalDevice(config, metro, android),
     openPreparedAndroid: (url?: string) => openPreparedAndroid(context, url),
-    openStartupTargets: (shouldStop?: () => boolean) => openStartupTargets(context, shouldStop),
+    openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
+      openStartupTargets(context, requested, shouldStop),
     openWeb: () => openWeb(context),
   }
 }
@@ -114,20 +116,22 @@ export function simulatorOpenFailure(
 /** openStartupTargets opens startup targets while keeping Android limited to already-available devices. */
 async function openStartupTargets(
   context: ExpoTargetContext,
+  requested: readonly DevStartupTarget[] = [],
   shouldStop: () => boolean = () => false,
 ): Promise<void> {
-  await Promise.all(([
-    ['web', () => openWeb(context)],
-    ['iOS', () => openIosSimulator(context, shouldStop)],
-    ['Android', () => openAvailableAndroid(context)],
-  ] as const).map(async ([label, open]) => {
+  const openers = {
+    web: () => openWeb(context),
+    ios: () => openIosSimulator(context, shouldStop),
+    android: () => openAvailableAndroid(context),
+  }
+  await Promise.all(requested.map(async target => {
     if (shouldStop()) {
       return
     }
     try {
-      await open()
+      await openers[target]()
     } catch (error) {
-      DevLoopOutput.logDevLoop('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`, 'warn')
+      DevLoopOutput.logDevLoop('dev', `skipped ${target} launch: ${Errors.formatForUser(error)}`, 'warn')
     }
   }))
 }

@@ -1,13 +1,12 @@
 # Slice 2 - Everyday development canvas
 
-Status: in progress. This records what is built, what was proven live, and what is waiting on a
-decision. It extends the settled contract in
+Status: in progress. This records what is built and what was proven live. It extends the settled contract in
 [Slice 1 - Device protocol and trust](./Slice%201%20-%20Device%20protocol%20and%20trust.md); nothing
 here replaces a Slice 1 seam.
 
 Slice 2's acceptance, from [the plan](./Plan%20-%20Tao%20Studio%20companion%20app.md): _"edit Mac to
-native frame, select both ways, capture/restore WordFlower state, run one journey, and report whether
-compatible state survived refresh."_
+native frame, select both ways, capture/restore WordFlower state through Studio, and report whether
+compatible state survived refresh."_ The device journey moved to Slice 4.
 
 ## Built
 
@@ -39,6 +38,13 @@ device.runtimeCaptureFailed  requestId, error
 
 `POST /api/device/capture` drives it from the loopback API. The client takes the capture as an
 injected seam, the way it already takes its socket, storage and timers.
+
+Studio's Device panel can explicitly open the current app on a device, remount its selected scenario,
+capture that complete runtime artifact, and download a JSON file carrying
+the project, app, and scenario identity. It can restore the current capture or load that file later.
+Restore checks the identity, fetches the latest cell revision, and reconfigures the cell with replay;
+the gateway's existing re-assignment delivers it to the connected device. Named scenario fixture
+captures remain a separate source-authoring path.
 
 Every capture domain — action history, persisted state, navigation, data, scheme, environment —
 registers at module scope, so a paired device always had a complete artifact to give; nothing could
@@ -108,13 +114,16 @@ own output. Mirrored, not moved: the lines still print on the device, so a dropp
 the mirror and not the log. A runaway render loop is capped at 200 buffered lines and says how many
 it dropped rather than exhausting memory on the phone.
 
-Studio's Logs drawer is bound to a browser preview connection, so device lines do not appear there
-yet; that needs a decision about whether a device counts as a preview connection for panel purposes.
-Studio's terminal output is where they land today, which is already the thing that was missing:
-watching a phone previously meant watching Metro's terminal, which is not where a person driving
-Studio is looking, and is not available at all with the cable pulled.
+The gateway also retains 500 trusted device lines per Studio session and sends them over its existing
+device-state subscription. The Logs drawer labels and combines those lines with active browser-preview
+logs; clearing the drawer hides the device lines already received in this Studio session.
 
 ## Proven live on the simulator
+
+This is the earlier simulator run of the gateway and runtime paths. The new Device-panel controls and
+Logs-drawer presentation have focused tests but no new simulator run: CoreSimulatorService is currently
+unavailable on this Mac (DEVENV-059). Physical iPhone, cable link-local, and distributed Companion
+behavior remain separate acceptance work.
 
 - A reconfigure carrying a new environment reaches the device and re-assigns it with a live instance;
   its next acknowledgement is accepted rather than refused as stale.
@@ -276,30 +285,29 @@ taken. One unambiguous instance was fixed in the app: WordFlower's `Card` let it
 compress, because a heading beside an action does not fit at its natural width on a phone and both
 were running off the card.
 
-## Not attempted, and why
+## Remaining scope and boundaries
 
-**Run one journey.** Journeys are `*.test.tao` files beside the app, compiled by a Mac-side worker
+**Run one journey (Slice 4).** Journeys are `*.test.tao` files beside the app, compiled by a Mac-side worker
 (`TestCompiler.Worker.compileTestPlan`) and executed by a runner that depends on
 `@testing-library/react-native` and mounts its own tree. The device's preview bundle carries only
 `TaoApp.tsx`, `TaoStudioManifest.ts` and `modules/` — no compiled journey travels to the phone. So
 this is a fork, not a task: bundle a test library into the companion and run headless, or build a
 driver that drives the live cell through the real touch pipeline (which is what the plan means by
-"on the real renderer, show each step"). Ro's call.
+"on the real renderer, show each step"). This work is now in Slice 4.
 
-**Project, app, variant, and persona switching.** `persona` and `variant` have no definition anywhere
-outside the plan — zero occurrences in `packages/` or `Docs/Spec/`. Project and app switching is
-architecturally blocked rather than unbuilt: a connection binds to one session at handshake and the
-Metro bundle a device loaded _is_ the project, so switching means relaunching the device into another
-bundle, not sending a control message.
+**Variant and persona switching.** `persona` and `variant` have no definition anywhere outside the
+plan — zero occurrences in `packages/` or `Docs/Spec/`. A connection binds to one project session
+and its Metro bundle. Studio's explicit **Open this app on device** action terminates the current
+Companion process and opens the current project's bundle; choosing a Studio project alone does not
+move the device. The cross-project switch needs a live run before it is accepted.
 
 **Checkpoint restore.** `checkpoint` in `StudioProjectSession` means the source-action undo group, not
 a state checkpoint; the state mechanism is called `replay`. The bullet is ambiguous between them.
 
-## Discovered and not addressed
+## Follow-ups discovered by Slice 2
 
-The handoff list. Everything the slice's work surfaced and did not close, with enough context to
-decide whether it is worth taking and roughly where the work would land. None of it blocks Slice 2's
-acceptance, and the order is rough leverage, not priority — picking is the next worker's call.
+The slice surfaced the following issues. Closed items say so; the remaining items need separate
+decisions or device evidence. The order is rough leverage, not priority.
 
 **A device and the canvas lay the same tree out differently.** `Col` and `Row` default to `fill`
 (`Docs/Spec/Tao Layout and UI.md`, UI Defaults), so on a device every container shares its parent's
@@ -335,19 +343,18 @@ what a device can be and what only a canvas can frame is currently a rule in the
 proposal makes it structural in the grammar. Needs a Revolution decision and a tranche. Also recorded
 under LANG-028.
 
-**Device console lines never reach the Logs drawer.** They are mirrored to Studio's stdout only, so
-the one panel built for reading them shows the browser cell alone. Diagnosing the scenario-switch
-freeze needed those lines and they were in a terminal. Blocked on deciding whether a device counts as
-a preview connection for panel purposes — see "Next in this area".
+**Device console lines reach the Logs drawer.** The gateway retains a bounded, session-scoped history
+from trusted devices and publishes it with device status. Studio labels each line with its device name
+beside browser preview lines. Clearing the Logs drawer hides the lines already received in that Studio
+session. The gateway still mirrors them to stdout for terminal diagnosis.
 
-**Nothing in Studio drives capture or restore.** `POST /api/device/capture` and the restore path both
-work and are tested, and neither has a control anywhere: capture/restore is command-line only, so the
-slice's own acceptance sentence is exercised by curl. The fan-out menu is the established place for
-device-side actions and the drawer for Mac-side ones.
+**Studio drives capture and restore.** The Device panel requests a full runtime capture, downloads a
+project/app/scenario-bound JSON file, and restores from the current capture or a saved file. It refuses
+a different app or scenario. This is a Mac-side control; the phone's fan-out menu remains for actions
+done while looking at the device.
 
-**No test command from the fan-out menu.** `POST /api/tests/run` exists; this is a menu item and a
-result line rather than new plumbing, and it is the smallest remaining piece of the phone as a real
-canvas.
+**No test command from the fan-out menu.** `POST /api/tests/run` exists, but the phone journey and its
+device-facing results belong to Slice 4.
 
 **A journey cannot run on the device.** The preview bundle carries no compiled journey, so this is a
 fork rather than a task — bundle a test library into the companion and run headless, or drive the
