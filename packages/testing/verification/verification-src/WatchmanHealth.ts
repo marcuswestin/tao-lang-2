@@ -137,7 +137,11 @@ function launchAgentChecks(facts: WatchmanFacts): DoctorCheck[] {
   const name = 'watchman launch agent'
   // launchd restarts the server only after a crash, not after it is told to stop, and only from
   // the path Watchman wrote when it last started. A path that is gone leaves it stopped.
-  const rewrite = `From a terminal outside any agent sandbox: watchman shutdown-server; ${facts.stableClient} version`
+  // Both halves name the pinned client: a bare `watchman` resolves through whatever PATH the terminal
+  // has, and one that misses this server leaves the old LaunchAgent in place. Stopping the server drops
+  // every dev server's subscriptions on the machine, hence the timing.
+  const rewrite = `While no dev server is running, from a terminal outside any agent sandbox: `
+    + `${facts.stableClient} shutdown-server; ${facts.stableClient} version`
   if (!agent.programPresent) {
     return [{
       detail: `launchd restarts Watchman from ${FS.displayPath(agent.program)}, which no longer exists`,
