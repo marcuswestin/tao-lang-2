@@ -39,10 +39,22 @@ export const InjectionsCompiler = {
 
 function CompileRawInjection(injection: AST.Injection): Compiled {
   const argumentList = AST.injectionArgumentsOf(injection)
-  const values = gen.join(argumentList, CompileInjectionValue)
+  const ambientProps = injectionAmbientProps(injection)
+  const values = gen.join(argumentList, argument => CompileInjectionValue(argument, ambientProps))
   const binding = { name: inlineInjectionBindingName(injection) }
 
   return gen`Reflect.apply(${gen.Name(binding)}, undefined, [${values}])`
+}
+
+/**
+ * injectionAmbientProps resolves the props a `render inject` root's `@@layout`/`@@tag` ambients
+ * read. `render inject` is only ever the sole root render statement of its owning view (validated),
+ * so that view's own header -- once merged with what it received from its own caller -- is exactly
+ * the occurrence-root chain those ambients should see (Decisions §R9).
+ */
+function injectionAmbientProps(injection: AST.Injection): Compiled {
+  const owningView = AST.findOwningView(injection)
+  return owningView?.layoutClause ? gen`_DeclarationProps` : gen`_ViewProps.__tao`
 }
 
 function CompileInjectionParameter(argument: AST.InjectionArgument): Compiled {
@@ -61,9 +73,9 @@ function CompileInjectionParameter(argument: AST.InjectionArgument): Compiled {
   }`
 }
 
-function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
+function CompileInjectionValue(argument: AST.InjectionArgument, ambientProps: Compiled): Compiled {
   if (AST.isNamedInjectionArgument(argument) && argument.ambient) {
-    return CompileAmbientValue(argument.ambient)
+    return CompileAmbientValue(argument.ambient, ambientProps)
   }
   const expression = argument.value
   Assert.defined(expression, 'validated ordinary injection argument has a Tao expression')
@@ -81,11 +93,11 @@ function CompileAmbientParameterType(ambient: AST.RenderAmbientChannel): Compile
   })
 }
 
-function CompileAmbientValue(ambient: AST.RenderAmbientChannel): Compiled {
+function CompileAmbientValue(ambient: AST.RenderAmbientChannel, ambientProps: Compiled): Compiled {
   return Switch(ambient.channel, {
     '@@content': () => gen`_ViewProps.children`,
-    '@@layout': () => gen`TR.VisualLayout(_ViewProps.__tao)`,
-    '@@tag': () => gen`TR.VisualTag(_ViewProps.__tao)`,
+    '@@layout': () => gen`TR.VisualLayout(${ambientProps})`,
+    '@@tag': () => gen`TR.VisualTag(${ambientProps})`,
   })
 }
 

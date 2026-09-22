@@ -7,6 +7,7 @@ import { StudioEditorTabs } from '../StudioEditorTabs'
 import { showOpenFile, type StudioClientView } from '../StudioShell'
 import { showSourceActionError } from '../StudioVisualEditing'
 import { type StudioOpenDiagnostic, StudioStatusLine } from './StudioCompileEvents'
+import { StudioPhoneSaveGate } from './StudioPhoneSaveGate'
 
 export type StudioOpenFile = {
   editor: EditorView
@@ -47,6 +48,7 @@ export class StudioEditorSession {
   readonly #deps: StudioEditorSessionDeps
   readonly #lifecycle = new StudioOpenFileLifecycle()
   readonly #order: StudioEditorTabs
+  readonly #phoneSaveGate: StudioPhoneSaveGate
   readonly #tabs = new Map<string, StudioOpenEditorTab>()
   #activePath: string | undefined
   #highlightRevision = 0
@@ -59,6 +61,20 @@ export class StudioEditorSession {
   constructor(deps: StudioEditorSessionDeps, projectFiles: readonly StudioFile[]) {
     this.#deps = deps
     this.#projectFiles = projectFiles
+    this.#phoneSaveGate = new StudioPhoneSaveGate({
+      onUnsynced: revision => {
+        deps.view.status.dataset['state'] = 'idle'
+        deps.view.status.dataset['phoneUnsyncedRevision'] = String(revision)
+        deps.view.status.title = `The paired phone has not applied preview revision ${revision}.`
+        deps.view.status.textContent =
+          `Phone did not apply revision ${revision}; continuing browser-only. The phone is unsynced.`
+      },
+      onWaiting: revision => {
+        deps.view.status.dataset['state'] = 'compiling'
+        deps.view.status.textContent = `Save queued; waiting for the phone to apply revision ${revision}…`
+      },
+      status: async () => await StudioApiClient.deviceStatus(AbortSignal.timeout(1_000)),
+    })
     this.#order = new StudioEditorTabs({
       appName: deps.identity.appName,
       availablePaths: projectFiles.map(file => file.path),
@@ -145,7 +161,7 @@ export class StudioEditorSession {
         this.#renderTabs()
         StudioStatusLine.draftResult(view.status, result, this.#deps.compileState(), this.#deps.openCompileDiagnostic)
       },
-      write: StudioApiClient.draft,
+      write: async request => await this.#phoneSaveGate.run(async () => await StudioApiClient.draft(request)),
     })
     let fileTab!: StudioOpenEditorTab
     const fileEditor = new EditorView({
@@ -405,6 +421,7 @@ export class StudioEditorSession {
 
   dispose(): void {
     clearTimeout(this.#highlightTimer)
+    this.#phoneSaveGate.close()
     for (const tab of this.#tabs.values()) {
       tab.editor.destroy()
     }

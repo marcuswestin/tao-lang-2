@@ -70,9 +70,13 @@ view Toolbar() {
 // A view surrounds caller content with its own fixed siblings. Putting `@@content` inside an
 // explicit inner host means caller layout applies to the caller's children rather than to the
 // wrapper's own structure. `@actions` is a named slot with a default, so callers may omit it.
-view Card(Title text) {
+//
+// The header clause is the card's public surface: its padding and panel look are defaults a caller
+// may replace or clear (`Card("…") [pad none, border none]`), while the root's own `gapSmall` is
+// private to the card's structure.
+view Card(Title text) [padMedium, panel] {
    @actions = empty
-   render Col() [gapSmall, padMedium, panel] {
+   render Col() [gapSmall] {
       // The title claims the row and compresses: a card action sits beside a heading that is as
       // long as the writer's own words, and on a phone the two do not both fit at their natural
       // widths. Without this the heading keeps its width and both run off the card.

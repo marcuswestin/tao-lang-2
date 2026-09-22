@@ -41,6 +41,86 @@ Describe('compiler: minimal design', () => {
     Expect(compiled.code).toContain('designDefault: "Text"')
   })
 
+  Test('wraps a declaration header clause into DeclarationTaoProps for its root render', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      app Demo { view Card }
+      view Card() [pad 12, bg none] {
+        render Surface()
+      }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain(
+      'const _DeclarationProps = TR.DeclarationTaoProps(_ViewProps.__tao, TR.Design.Spec([["pad",12],["bg","none"]]))',
+    )
+    Expect(code).toContain(', _DeclarationProps)}')
+  })
+
+  Test('emits no declaration wrapper for a view without a header clause', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      app Demo { view Card }
+      view Card() {
+        render Surface()
+      }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(compiled.code).not.toContain('_DeclarationProps')
+  })
+
+  Test("routes a declaration header into an inject-rooted view's @@layout/@@tag ambients", async () => {
+    const compiled = await TestCompiler.compileCode(`
+      app Demo { view Card }
+      view Card() [pad 12, bg none] {
+        render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+          return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
+        \`\`\`
+      }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain(
+      'const _DeclarationProps = TR.DeclarationTaoProps(_ViewProps.__tao, TR.Design.Spec([["pad",12],["bg","none"]]))',
+    )
+    Expect(code).toContain(
+      '[_ViewProps.children, TR.VisualLayout(_DeclarationProps), TR.VisualTag(_DeclarationProps)]',
+    )
+  })
+
+  Test(
+    'does not emit an unconsumed declaration wrapper for a headered inject-rooted view with no ambient',
+    async () => {
+      const compiled = await TestCompiler.compileCode(`
+      app Demo { view Card }
+      view Card() [pad 12] {
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+
+      Expect(compiled.code).not.toContain('_DeclarationProps')
+    },
+  )
+
+  Test("carries a declaration header's source path in a studio build", async () => {
+    const compiled = await TestCompiler.compileCode(
+      `
+        app Demo { view Card }
+        view Card() [pad 12] {
+          render Surface()
+        }
+        view Surface() { render inject \`\`\`ts return null \`\`\` }
+      `,
+      { studio: true },
+    )
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain(
+      'const _DeclarationProps = TR.DeclarationTaoProps(_ViewProps.__tao, TR.Design.Source(TR.Design.Spec([["pad",12]]), {',
+    )
+    Expect(code).toContain('kind: "declaration"')
+  })
+
   Test('emits declarative tokens, source-ordered specs, lazy app design, and occurrence specs', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav

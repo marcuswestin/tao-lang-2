@@ -524,11 +524,29 @@ Describe('TR.TaoProps', () => {
       start: 10,
     }
     Expect(TR.TaoContext({
+      declarationSpec: TR.Design.Spec([['pad', 12]]),
       layout: TR.Layout.create([['gap', 9]]),
       studio,
       testTag: 'outer',
       callerProps: { app, navigation, response },
     })).toEqual({ app, navigation, response })
+  })
+
+  Test('carries a declaration header to the render root without disturbing its caller props', () => {
+    const header = TR.Design.Spec([['pad', 12], ['bg', 'paper']])
+    const callerProps: TR.TaoProps = {
+      designSpec: TR.Design.Spec([['pad', 0]]),
+      testTag: 'card',
+    }
+
+    Expect(TR.DeclarationTaoProps(callerProps, header)).toEqual({ ...callerProps, declarationSpec: header })
+    Expect(TR.DeclarationTaoProps(undefined, header)).toEqual({ declarationSpec: header })
+    // A second declaration one level down replaces the header rather than stacking onto it.
+    const nested = TR.Design.Spec([['pad', 4]])
+    Expect(TR.DeclarationTaoProps(TR.DeclarationTaoProps(callerProps, header), nested)).toEqual({
+      ...callerProps,
+      declarationSpec: nested,
+    })
   })
 })
 

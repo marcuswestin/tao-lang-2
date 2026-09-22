@@ -5,7 +5,7 @@ import { previewUrlMarker } from './StudioClientSnapshotProcess'
 
 type StudioClientChangeListener = (change: StudioClientChange) => Promise<void>
 
-/** What changed, so a rebuild can say when rebuilding is not enough. */
+/** A server edit makes client publication unsafe until the process is deliberately restarted. */
 type StudioClientChange = { serverSourcesChanged: boolean }
 
 export type StudioClientDevReloadOptions = {
@@ -37,6 +37,9 @@ export const StudioClientDevReload = {
  */
 function isStudioServerSource(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
+  if (normalized.includes('/studio-tooling-src/')) {
+    return true
+  }
   if (normalized.includes('/Apps/Tao Studio/')) {
     return false
   }
@@ -59,27 +62,29 @@ export async function startStudioClientDevReload(
   let attempt = 0
   let closed = false
   let publishedRevision = 0
+  let serverSourcesStale = false
   let reloadLane = Promise.resolve()
   const refresh = (change: StudioClientChange = { serverSourcesChanged: false }): Promise<void> => {
     const requestedAttempt = ++attempt
+    if (change.serverSourcesChanged && !serverSourcesStale) {
+      serverSourcesStale = true
+      HCI.logProcessInfo(
+        'studio-client',
+        'Studio server sources changed; restart ./dev studio to load them. Keeping the current client until restart.',
+      )
+    }
     const reload = reloadLane.then(async () => {
+      if (serverSourcesStale) {
+        return
+      }
       const nextAssets = await loadAssets(requestedAttempt)
       await nextAssets.bundle()
-      if (closed) {
+      if (closed || serverSourcesStale) {
         return
       }
       activeAssets = nextAssets
       publishedRevision = requestedAttempt
       HCI.logProcessInfo('studio-client', `Reloading Studio client revision ${publishedRevision}.`)
-      if (change.serverSourcesChanged) {
-        // Only the browser bundle is rebuilt here. Server modules were loaded when the process started, so a
-        // reloaded page can call an endpoint the running server does not have yet, and the failure it gets
-        // back is confusing rather than obviously stale.
-        HCI.logProcessInfo(
-          'studio-client',
-          'Studio server sources changed; restart ./dev studio to load them. The reloaded page is newer than the running server.',
-        )
-      }
     })
     reloadLane = reload.catch(onError)
     return reloadLane
@@ -147,6 +152,7 @@ function studioClientAssetSnapshot(snapshot: StudioClientAssetSnapshot): StudioC
 async function subscribeStudioClientSources(listener: StudioClientChangeListener): Promise<() => Promise<void>> {
   const roots = [
     Repo.resolvePath('packages/ides/studio/studio-src'),
+    Repo.resolvePath('packages/ides/studio-tooling/studio-tooling-src'),
     Repo.resolvePath('Apps/Tao Studio'),
   ]
   const watcher = watch(roots, { ignoreInitial: true })

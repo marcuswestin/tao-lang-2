@@ -199,7 +199,7 @@ collection transforms beyond the shipped list members and iteration.
 
 Exercise bracketed layout clauses and the default app-shell baseline.
 
-**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
+**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
 
 **Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 

@@ -76,6 +76,9 @@ export const ViewsFormatter = {
 
   /** LayoutColorLiteral is a single token with no interior formatting. */
   LayoutColorLiteral() {},
+
+  /** LayoutNoneLiteral is a single token with no interior formatting. */
+  LayoutNoneLiteral() {},
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
@@ -84,6 +87,9 @@ function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.noSpaceBefore('(')
   f.oneSpaceBefore('responds')
   f.oneSpaceAfter('responds')
+  // The header clause sits between the parameters (or `responds`) and the body, spaced as a render
+  // site's clause is.
+  f.oneSpaceBeforeProperty('layoutClause')
   // The pass-through alias form: `view Name = ns.Member`.
   f.oneSpaceAround('=')
 }

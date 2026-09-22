@@ -71,34 +71,51 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('lets caller layout override wrapper view root layout', async () => {
+  Test("lets caller layout override a header default but never a wrapper root's own layout", async () => {
     await testCompileApp(
       `
         app WrapperLayoutOverride {
             view MainView
         }
 
-        use Row, Text from @tao/ui
+        use Col, Row, Text from @tao/ui
 
-        view Screen() {
+        // The header is the declaration's public default; the root's own clause is private (R9).
+        view Public() [gap 12] {
+            render Row()[content spread center] {
+                Text("Public gap")
+                @@content
+            }
+        }
+
+        view Private() {
             render Row()[gap 12, content spread center] {
-                Text("Wrapped gap")
+                Text("Private gap")
                 @@content
             }
         }
 
         view MainView() {
-            render Screen()[gap 8]
+            render Col() {
+                Public()[gap 8]
+                Private()[gap 8]
+            }
         }
       `,
       screen => {
-        const viewStyles = screen.UNSAFE_getAllByType(RN.View)
-          .map(view => RN.StyleSheet.flatten(view.props.style))
-          .filter(Boolean)
+        const gapOf = (label: string): number | undefined => {
+          for (let current = screen.getByText(label).parent; current; current = current.parent) {
+            const gap = RN.StyleSheet.flatten(current.props.style)?.gap
+            if (gap !== undefined) {
+              return gap
+            }
+          }
+          return undefined
+        }
 
-        ExpectScreen(screen).toHaveText('Wrapped gap')
-        Expect(viewStyles.some(style => style.gap === 8)).toBe(true)
-        Expect(viewStyles.some(style => style.gap === 12)).toBe(false)
+        ExpectScreen(screen).toHaveText('Public gap')
+        Expect(gapOf('Public gap')).toBe(8)
+        Expect(gapOf('Private gap')).toBe(12)
       },
     )
   })
