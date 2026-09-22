@@ -42,6 +42,7 @@ export type StudioPreviewConnection = {
   frame?: HTMLElement
   iframe: HTMLIFrameElement
   interactionMode: StudioInteractionMode
+  manifestCompatibilitySignature?: string
   expectedRevision?: number
   origin: string
   previewInstanceId: string
