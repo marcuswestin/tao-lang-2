@@ -1,4 +1,4 @@
-import { Time } from '@shared/core'
+import { Errors, Time } from '@shared/core'
 import type { StudioDeviceStatus } from '../../device/StudioDeviceStatus'
 import type { StudioDraftSyncResult } from '../../StudioDraftSync'
 
@@ -23,6 +23,9 @@ export class StudioPhoneSaveGate {
   readonly #sleep: (ms: number) => Promise<void>
   readonly #status: () => Promise<PhoneStatus>
   readonly #timeoutMs: number
+  readonly #closedSignal: Promise<void>
+  #close: () => void = () => {}
+  #closed = false
   #lane: Promise<void> = Promise.resolve()
   #pendingPhone: Promise<void> = Promise.resolve()
   #pendingRevision: number | undefined
@@ -35,18 +38,31 @@ export class StudioPhoneSaveGate {
     this.#sleep = options.sleep ?? Time.sleep
     this.#status = options.status
     this.#timeoutMs = options.timeoutMs ?? 5_000
+    this.#closedSignal = new Promise(resolve => {
+      this.#close = resolve
+    })
+  }
+
+  close(): void {
+    this.#closed = true
+    this.#close()
   }
 
   run(write: () => Promise<StudioDraftSyncResult>): Promise<StudioDraftSyncResult> {
     const operation = this.#lane.then(async () => {
+      this.#throwIfClosed()
       if (this.#pendingRevision !== undefined) {
         this.#onWaiting?.(this.#pendingRevision)
       }
-      await this.#pendingPhone
+      await Promise.race([this.#pendingPhone, this.#closedSignal])
+      this.#throwIfClosed()
       const result = await write()
-      if (result.saved && result.compile?.status === 'compiled') {
+      if (!this.#closed && result.saved && result.compile?.status === 'compiled') {
         const revision = result.compile.compileRevision
         const status = await this.#readStatus()
+        if (this.#closed) {
+          return result
+        }
         if (status?.connection?.state === 'connected' && (status.connection.appliedRevision ?? 0) < revision) {
           this.#pendingRevision = revision
           this.#pendingPhone = this.#awaitPhone(revision)
@@ -60,9 +76,15 @@ export class StudioPhoneSaveGate {
 
   async #awaitPhone(revision: number): Promise<void> {
     let disconnectedAt: number | undefined
-    while (true) {
-      await this.#sleep(this.#pollMs)
+    while (!this.#closed) {
+      await Promise.race([this.#sleep(this.#pollMs), this.#closedSignal])
+      if (this.#closed) {
+        break
+      }
       const status = await this.#readStatus()
+      if (this.#closed) {
+        break
+      }
       if (status?.connection?.state === 'connected') {
         if ((status.connection.appliedRevision ?? 0) >= revision) {
           this.#pendingRevision = undefined
@@ -77,6 +99,13 @@ export class StudioPhoneSaveGate {
         this.#onUnsynced?.(revision)
         return
       }
+    }
+    this.#pendingRevision = undefined
+  }
+
+  #throwIfClosed(): void {
+    if (this.#closed) {
+      throw Errors.abortError('The Studio editor session closed before this Save could run.')
     }
   }
 

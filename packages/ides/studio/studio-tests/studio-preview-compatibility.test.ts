@@ -1,5 +1,5 @@
 import { Expect, Test } from '@shared/test'
-import { previewCompatibilitySignature } from '../studio-src/StudioPreviewCompatibility'
+import { previewCompatibilitySignature } from '@studio'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { systemLightScheme } from './test-studio-fixtures'
 

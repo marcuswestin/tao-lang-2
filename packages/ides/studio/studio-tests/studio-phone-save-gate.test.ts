@@ -100,3 +100,44 @@ Test('Studio releases a queued Save after phone disconnect timeout and marks the
   Expect(writes).toEqual([1, 2])
   Expect(unsynced).toEqual([1])
 })
+
+Test('closing an editor session cancels its queued Save without waiting for a connected phone', async () => {
+  const writes: number[] = []
+  const waiting = Deferred<void>()
+  const gate = new StudioPhoneSaveGate({
+    sleep: () => waiting.promise,
+    status: async () => ({
+      connection: { appliedRevision: 0, state: 'connected' } as StudioDeviceConnection,
+    }),
+  })
+  await gate.run(async () => {
+    writes.push(1)
+    return compiled(1)
+  })
+  const second = gate.run(async () => {
+    writes.push(2)
+    return compiled(2)
+  })
+
+  gate.close()
+
+  await Expect(second).rejects.toThrow('closed before this Save could run')
+  Expect(writes).toEqual([1])
+})
+
+Test('closing after a Save reached the server preserves its successful result', async () => {
+  const statusCalled = Deferred<void>()
+  const status = Deferred<{ connection?: StudioDeviceConnection }>()
+  const gate = new StudioPhoneSaveGate({
+    status: async () => {
+      statusCalled.resolve()
+      return await status.promise
+    },
+  })
+  const saved = gate.run(async () => compiled(1))
+  await statusCalled.promise
+  gate.close()
+  status.resolve({ connection: { appliedRevision: 0, state: 'connected' } as StudioDeviceConnection })
+
+  Expect((await saved).saved).toBe(true)
+})

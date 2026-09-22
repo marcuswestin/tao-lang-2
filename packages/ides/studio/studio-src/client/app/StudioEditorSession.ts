@@ -421,6 +421,7 @@ export class StudioEditorSession {
 
   dispose(): void {
     clearTimeout(this.#highlightTimer)
+    this.#phoneSaveGate.close()
     for (const tab of this.#tabs.values()) {
       tab.editor.destroy()
     }
