@@ -163,7 +163,7 @@ Describe('parser: types', () => {
     const parseResult = await testParseCode(`
       type Person is { Name text, Role text }
       type Admin is Person with { Role is "admin", Access number }
-      let Admin = { Name "Ro", Access 3 }
+      let Admin = { Name "the Developer", Access 3 }
       let Renamed = Admin with { Name "Grace" }
       view MainView() { }
     `)

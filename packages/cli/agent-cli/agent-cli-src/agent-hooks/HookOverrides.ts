@@ -1,7 +1,7 @@
 /**
  * Records every `# hook-ok:` override, so the refusal rules can be tuned against what actually
  * misfires rather than against argument. A denial that an agent has to talk its way past is a
- * denial nobody can measure; a denial it can pass by writing down why leaves a list Ro can read.
+ * denial nobody can measure; a denial it can pass by writing down why leaves a list the Developer can read.
  *
  * Nothing here may fail a tool call. A hook that threw because a log directory was missing would
  * turn its own bookkeeping into a broken Bash tool, so every failure is swallowed deliberately.
@@ -9,7 +9,7 @@
 
 import { FS } from '@shared'
 
-/** The log every worktree appends to, beside the lane logs Ro already reads. */
+/** The log every worktree appends to, beside the lane logs the Developer already reads. */
 export const OVERRIDE_LOG = '.artifacts/logs/hook-overrides.jsonl'
 
 export type HookOverride = {

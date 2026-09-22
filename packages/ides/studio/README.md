@@ -43,7 +43,7 @@ separate device gateway.
 1. **Install once, and again only when native dependencies or app configuration change:**
 
    ```bash
-   just studio-companion-install device="roPhone"
+   just studio-companion-install device="<name>"
    ```
 
    ```bash

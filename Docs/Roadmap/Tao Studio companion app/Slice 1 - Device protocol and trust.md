@@ -324,7 +324,7 @@ What the launcher does today is still Wi-Fi-only by construction: `orderMetroHos
 `candidates[0]`, so with Wi-Fi up the cable is never offered. Reaching it means building the URL by
 hand, as that proof did.
 
-**That is now a deliberate default, not an oversight.** Ro's call: a session bound to Wi-Fi survives
+**That is now a deliberate default, not an oversight.** The Developer's call: a session bound to Wi-Fi survives
 plugging and unplugging the cable, while one bound to `169.254.x.x` dies the moment the cable comes
 out — the address is transient and comes back different on the next connection (two measurements an
 hour apart: `169.254.217.159`, then `169.254.61.95`). Preferring the cable would trade a stable

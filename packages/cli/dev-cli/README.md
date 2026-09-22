@@ -328,7 +328,7 @@ gates use the same live dashboard as a direct `just verify-full` or `just verify
 merge keeps the durable report: it prints the local start time for each admitted gate before that
 gate's completion and log path.
 
-`just merge-with-main` runs only when Ro asks for it in the current request, never on an agent's own
+`just merge-with-main` runs only when the Developer asks for it in the current request, never on an agent's own
 initiative. It takes no flag to do its job: the plain invocation performs the landing, and its flags
 only remove work. `--skip-verify-full` omits `just verify-full` on the feature branch, so the staged
 squash gets `just verify --complete` instead; `--skip-verify` omits that staged-squash pass;

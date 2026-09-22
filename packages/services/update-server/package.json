@@ -1,5 +1,6 @@
 {
   "name": "tao-update-server",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "update-server-src/update-service.ts",

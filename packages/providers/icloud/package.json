@@ -2,6 +2,7 @@
   "name": "tao-icloud",
   "private": true,
   "version": "1.0.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "icloud-src/icloud-native.ts",
   "module": "icloud-src/icloud-native.ts",

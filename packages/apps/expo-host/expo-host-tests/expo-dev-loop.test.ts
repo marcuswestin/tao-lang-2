@@ -5,7 +5,7 @@ import {
   expoGoSupportsSdk,
   expoGoVersionFromPackageInfo,
 } from '@expo-host/dev-loop/expo-runner/android'
-import { createExpoConfig } from '@expo-host/dev-loop/expo-runner/expo-config'
+import { createExpoConfig, expoSdkMajor } from '@expo-host/dev-loop/expo-runner/expo-config'
 import { ExpoServer, formatExpoExitFailure } from '@expo-host/dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
@@ -56,7 +56,8 @@ Describe('Expo dev-loop output severity', () => {
 
     Expect(message).toBe(
       'iPhone 17 Pro did not open exp://192.168.50.107:8081: no app installed on it handles that URL'
-        + ' — install the development build or Expo Go there first',
+        + ' — that simulator has no runtime for Expo SDK 57;'
+        + ' `bunx expo start --ios` in packages/apps/expo-host installs one',
     )
     Expect(message.includes('\n')).toBe(false)
   })
@@ -506,7 +507,7 @@ en7: flags=8863
       result: {
         devices: [
           {
-            deviceProperties: { name: 'roPhone' },
+            deviceProperties: { name: 'example-phone' },
             hardwareProperties: { deviceType: 'iPhone', reality: 'physical', udid: 'UDID-1' },
             identifier: 'ID-1',
           },
@@ -520,31 +521,34 @@ en7: flags=8863
           },
         ],
       },
-    })).toEqual([{ id: 'UDID-1', name: 'roPhone' }])
+    })).toEqual([{ id: 'UDID-1', name: 'example-phone' }])
   })
 
   Test('keeps a physical device whose Xcode 26 report omits reality', () => {
     Expect(iosPhysicalDevicesFromDevicectl({
       result: {
         devices: [{
-          deviceProperties: { name: 'roPhone' },
+          deviceProperties: { name: 'example-phone' },
           hardwareProperties: { deviceType: 'iPhone', udid: '00008140-00163CD81481801C' },
           identifier: 'E4795A5B-C1B6-55BB-A855-1E96A66F15CF',
         }],
       },
-    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'roPhone' }])
+    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'example-phone' }])
   })
 
   Test('builds an Expo Go URL for the detected host', () => {
     Expect(expoGoUrl('169.254.37.4')).toBe('exp://169.254.37.4:8081')
   })
 
-  Test('rejects App Store Expo Go on a generic physical iPhone for Expo 57', () => {
-    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'roPhone' })
+  Test('sends a physical iPhone to the Tao Companion instead of the Expo Go account wall', () => {
+    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'example-phone' })
 
     Expect(message).toBe(
-      'Cannot open this Tao app on roPhone: App Store Expo Go does not support Expo SDK 57. '
-        + 'Use Android Expo Go or an iOS Simulator; physical iOS needs a maintained Tao development client.',
+      'Cannot open this Tao app on example-phone: Expo Go on iPhone now requires an Expo account signed in both on '
+        + 'the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that '
+        + 'sign-in never reaches it. Run this app on example-phone through the Tao Companion development build '
+        + 'instead: `just studio-companion-install device="example-phone"` once from a Tao checkout with Xcode, then '
+        + "open the app from Tao Studio's Device popover.",
     )
   })
 
@@ -565,7 +569,7 @@ en7: flags=8863
             lanLookups += 1
             return '192.168.1.20'
           },
-          listIosDevices: async () => [{ id: 'PHONE-1', name: 'roPhone' }],
+          listIosDevices: async () => [{ id: 'PHONE-1', name: 'example-phone' }],
         },
       )
     )
@@ -573,7 +577,8 @@ en7: flags=8863
     Expect(captured.result).toBe(false)
     Expect(lanLookups).toBe(0)
     const output = `${captured.stdout}${captured.stderr}`
-    Expect(output).toContain('App Store Expo Go does not support Expo SDK 57')
+    Expect(output).toContain('requires an Expo account signed in both on the phone and in the terminal')
+    Expect(output).toContain('just studio-companion-install device="example-phone"')
     Expect(output).not.toContain('opened Expo Go')
   })
 
@@ -619,7 +624,20 @@ en7: flags=8863
     Expect(expoGoSupportsSdk(undefined)).toBe(false)
   })
 
-  Test('replaces stale Expo Go and blocks it from the prepared Android production paths', async () => {
+  Test('measures every runtime against the Expo SDK the host package itself pins', async () => {
+    // The loop sideloads an Expo Go of this generation onto Android and tells a simulator which
+    // generation it is missing. Both sentences are wrong the moment this constant and the host
+    // package's own Expo dependency disagree, and an SDK upgrade touches only the latter.
+    const manifest = await FS.readJson<{ dependencies?: Record<string, string> }>(
+      Repo.resolvePath('packages/apps/expo-host/package.json'),
+    )
+    const pinned = manifest.dependencies?.['expo']
+
+    Expect(pinned).toBeDefined()
+    Expect(expoSdkMajor(pinned?.replace(/^[^0-9]*/u, '') ?? '')).toBe(expoSdkMajor())
+  })
+
+  Test('installs a missing or stale Expo Go on the prepared Android path rather than refusing it', async () => {
     const config = createExpoConfig(8_099)
     let installedVersion: string | undefined = '56.0.8'
     const installs: string[] = []
@@ -642,15 +660,45 @@ en7: flags=8863
     Expect(installs).toEqual(['phone-1'])
 
     const stalePrepared = await withCapturedOutput(() => android.prepareAvailableExpoGo())
-    Expect(stalePrepared.result).toBe(false)
-    Expect(stalePrepared.stdout).toContain('does not support SDK 57.0.0')
-    Expect(reversed).toEqual([])
+    Expect(stalePrepared.result).toBe(true)
+    Expect(stalePrepared.stdout).toContain('Replacing incompatible Expo Go 56.0.8 on emulator-5554')
+    Expect(installs).toEqual(['phone-1', 'emulator-5554'])
+    Expect(reversed).toEqual(['emulator-5554'])
 
     installedVersion = '57.0.9'
     await withCapturedOutput(() => android.ensureExpoGoOnSerial('phone-2'))
-    Expect(installs).toEqual(['phone-1'])
+    Expect(installs).toEqual(['phone-1', 'emulator-5554'])
     Expect((await withCapturedOutput(() => android.prepareAvailableExpoGo())).result).toBe(true)
-    Expect(reversed).toEqual(['emulator-5554'])
+    Expect(reversed).toEqual(['emulator-5554', 'emulator-5554'])
+  })
+
+  Test('leaves Android skipped with its reason when the Expo Go install fails', async () => {
+    const config = createExpoConfig(8_099)
+    const reversed: string[] = []
+    const android = createAndroid(config, {} as ExpoMetroSession, {
+      findRunningEmulator: async () => 'emulator-5554',
+      // The real failure this path meets is the APK download refusing, which `android.ts` reports
+      // as user input so the reason survives `formatForUser`.
+      installExpoGo: async () => {
+        Errors.throwUserInput('Failed to download Expo Go APK: 503 Service Unavailable')
+      },
+      installedExpoGoVersion: async () => undefined,
+      isEmulatorBooted: async () => true,
+      requireAdb: async () => {},
+      reverseMetroPort: async (_config, serial) => {
+        reversed.push(serial)
+        return true
+      },
+    })
+
+    const captured = await withCapturedOutput(() => android.prepareAvailableExpoGo())
+
+    Expect(captured.result).toBe(false)
+    Expect(`${captured.stdout}${captured.stderr}`).toContain(
+      'Could not install an Expo Go for SDK 57.0.0 on emulator-5554:'
+        + ' Failed to download Expo Go APK: 503 Service Unavailable',
+    )
+    Expect(reversed).toEqual([])
   })
 
   Test('reads a devicectl JSON report through a temporary file and removes the file afterwards', async () => {

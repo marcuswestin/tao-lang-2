@@ -4,14 +4,14 @@
 message format, and how a red lane is classified.
 
 Remote inspection and push automatically use the host-owned landing broker when installed. If the
-command says it is unavailable, ask Ro to run `just landing-setup` in a normal terminal; never grant
+command says it is unavailable, ask the Developer to run `just landing-setup` in a normal terminal; never grant
 the repository direct access to `~/.config/gh`. The broker exposes only this repository's fixed HTTPS
 remote and an atomic, lease-checked main/archive update, not a general Git or credential API.
 
 The only preapproved unsandboxed write command for agents is `./agent land`. Its canonical Codex
 and Claude exceptions in `.rulesync/permissions.jsonc` give the entire landing process host access.
-Use it only after Ro authorizes landing this named slice; that authorization persists for retries in
-the same thread unless Ro revokes it. Direct `just` and `./dev` landing aliases are human/recovery
+Use it only after the Developer authorizes landing this named slice; that authorization persists for retries in
+the same thread unless the Developer revokes it. Direct `just` and `./dev` landing aliases are human/recovery
 entry points, not agent host-access exceptions.
 Codex loads project-local rules only for a trusted project and at task startup, so a task that
 predates a rule change may need restarting before it can use the new permission.
@@ -23,7 +23,9 @@ The command runs the whole landing as one process with a bounded agent report. D
 36-44 minutes against 5-15 minutes of lane time, and the gap was model turns between commands, not
 compute. One process closes the gap without making any step faster.
 
-**Before the lock**, unlocked, it settles what might need an author: this is a clean `feat/*` or
+**Before the queue**, it rejects a sandboxed shell or missing host capabilities for full verification.
+Pause and ask the Developer for the exact needed intervention; do not retry with alternate commands or skip
+the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
 `dev/*` branch checked out only here, no worktree has `main`, the archive branch is free, and
 `.artifacts/merge/<branch>.msg` exists and validates. On the first call it drafts a missing message
 and refuses, having taken no lock; read and edit the draft, then rerun `./agent land`. A small
@@ -32,7 +34,13 @@ again; an already-written message for an older HEAD is handled the same way. Do 
 merely to prepare this authorized landing: it could integrate and
 verify outside the lock, then lose that proof to another landing.
 
-**Inside the lock**, in one `try`/`finally`, it then fetches `origin/main`, merges it into the
+**While queued**, the process keeps its FIFO position, refreshes from new `main` tips, and does not
+run full verification. New broad lanes yield to ready landings, but running lanes finish normally.
+A queued merge conflict removes this request from the queue without taking the lock: resolve and
+commit it here, then rerun `./agent land`. A dead waiter is pruned; the lock itself is never stolen.
+`./agent board` shows the live queue and holder.
+
+**Inside the lock**, in one `try`/`finally`, it rechecks the preflight, fetches `origin/main`, merges it into the
 branch, fast-forwards local `main`, runs the cheap-gate barrier, runs `verify-full`, squashes,
 pushes, archives, and releases. Local `main` being behind, or the branch not yet containing `main`,
 is no longer a precondition — that requirement is what made a landing lose a race it had already
@@ -76,7 +84,7 @@ never waits on somebody else's landing.
 `integrating`, `cheap gates`, `repository tests`, `host proof`, `push`, `cleanup`. That is what
 separates a lock doing useful work from one waiting on an agent — `held for 36m by a landing, cheap
 gates: 34m so far` is a stuck command, `host proof: 9m so far` is a landing earning its turn. Nothing
-reclaims a lock on a timer; forcing one is still Ro's call, and `board` is what to bring to Ro.
+reclaims a lock on a timer; forcing one is still the Developer's call, and `board` is what to bring to the Developer.
 
 Ask `./agent landed [branch]` whether a branch landed; never infer it. The landing runs for minutes
 behind a wrapper, and every other signal is ambiguous: a stopped wrapper, a task reported failed

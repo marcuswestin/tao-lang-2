@@ -1,5 +1,6 @@
 {
   "name": "tao-parser",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "parser-src/parser.ts",

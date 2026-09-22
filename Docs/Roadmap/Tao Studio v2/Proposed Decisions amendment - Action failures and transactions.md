@@ -1,6 +1,6 @@
 # Proposed Decisions amendment - Action failures and transactions
 
-Status: partially adopted by Ro on 2026-08-31. Native `fail` inference, foreign declaration-head `fails`,
+Status: partially adopted by the Developer on 2026-08-31. Native `fail` inference, foreign declaration-head `fails`,
 foreign `runs latest`, and automatic containment are incorporated into
 `Docs/Roadmap/Tao Revolution/Decisions.md` §§8 and 15. The runtime action-transaction model and generalized
 semantic capture/replay contract are explicitly deferred in `Roadmap.md`.

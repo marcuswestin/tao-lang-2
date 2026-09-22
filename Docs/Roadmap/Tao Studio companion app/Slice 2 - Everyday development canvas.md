@@ -201,7 +201,7 @@ only in Studio's terminal output, which is the wrong place for the one panel bui
 
 **Scenario and preview as separate declarations.** The split above is drawn at the boundary between
 what a device can be and what only a canvas can frame, and it is drawn in the runtime rather than in
-the language. Ro's proposal is to draw it in the language instead: a `scenario` owns the fixture,
+the language. The Developer's proposal is to draw it in the language instead: a `scenario` owns the fixture,
 subject and steps, and one or more `preview` entries under it own the frame — screen size and the
 like — laid out horizontally in Studio. That would make the rule structural rather than a list of
 which clauses travel, and it would let one scenario be previewed at several sizes without repeating
@@ -339,7 +339,7 @@ declaring `locale "de"` renders exactly as one that does not. Either wire them (
 them until something does — accepting a clause that does nothing is worse than not having it.
 
 **Scenario and preview as separate declarations.** See "Next in this area" above. The split between
-what a device can be and what only a canvas can frame is currently a rule in the runtime; Ro's
+what a device can be and what only a canvas can frame is currently a rule in the runtime; the Developer's
 proposal makes it structural in the grammar. Needs a Revolution decision and a tranche. Also recorded
 under LANG-028.
 

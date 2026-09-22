@@ -258,8 +258,8 @@ export function studioDeviceFailureLayer(error: unknown): StudioDeviceFailureLay
 
 /**
  * companionDeviceNameFromArgument reads the device name a person typed. `just` has no named
- * arguments, so `just studio-companion-install device="roPhone"` hands the recipe the literal
- * `device=roPhone`; the documented spelling and the bare `roPhone` both name the same device.
+ * arguments, so `just studio-companion-install device="<name>"` hands the recipe the literal
+ * `device=<name>`; the documented spelling and the bare `<name>` both name the same device.
  */
 export function companionDeviceNameFromArgument(argument: string): string {
   return argument.trim().replace(/^device=/, '').trim()

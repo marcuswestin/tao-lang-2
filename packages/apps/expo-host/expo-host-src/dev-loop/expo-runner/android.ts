@@ -1,10 +1,15 @@
 import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
-import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
+import { EXPO_SDK_VERSION, ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
-export const EXPO_GO_SDK_VERSION = '57.0.0'
+/**
+ * Android is the platform where Expo Go still serves Tao: Expo publishes an APK for each SDK
+ * generation outside the Play Store, and this loop sideloads the one matching `EXPO_SDK_VERSION`.
+ * The phone lane Expo closed is iOS, and `physical-device.ts` says why.
+ */
+const EXPO_GO_SDK_VERSION = EXPO_SDK_VERSION
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
 const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'
@@ -158,13 +163,16 @@ async function prepareAvailableExpoGo(
     DevLoopOutput.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
     return false
   }
-  const installedVersion = await (compatibility.installedExpoGoVersion ?? installedExpoGoVersion)(serial)
-  if (!expoGoSupportsSdk(installedVersion)) {
+  // A newcomer opening Android from `tao dev` has no `./dev` to run first, so this path installs the
+  // matching client itself; `ensureExpoGoOnSerial` announces the download. A failure leaves Android
+  // skipped with its reason rather than ending the dev loop.
+  try {
+    await ensureExpoGoOnSerial(serial, compatibility)
+  } catch (error) {
     DevLoopOutput.logDevLoop(
       'dev',
-      installedVersion === undefined
-        ? `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`
-        : `Expo Go ${installedVersion} on ${serial} does not support SDK ${EXPO_GO_SDK_VERSION}; run ./dev android-expo-go to replace it.`,
+      `Could not install an Expo Go for SDK ${EXPO_GO_SDK_VERSION} on ${serial}: ${Errors.formatForUser(error)}`,
+      'warn',
     )
     return false
   }
@@ -322,8 +330,8 @@ export function expoGoSupportsSdk(
   version: string | undefined,
   sdkVersion = EXPO_GO_SDK_VERSION,
 ): boolean {
-  const installedMajor = version?.match(/^(\d+)\./u)?.[1]
-  const sdkMajor = sdkVersion.match(/^(\d+)\./u)?.[1]
+  const installedMajor = version === undefined ? undefined : expoSdkMajor(version)
+  const sdkMajor = expoSdkMajor(sdkVersion)
   return installedMajor !== undefined && sdkMajor !== undefined && installedMajor === sdkMajor
 }
 

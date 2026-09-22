@@ -58,7 +58,7 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 //
 // Packaging and modules
 //   - Direct package references without imports (LANG-002)
-//   - Namespaces, and exporting types and values from one default export (Roadmap.md, Ro's STACK)
+//   - Namespaces, and exporting types and values from one default export (Roadmap.md, the Developer's STACK)
 // Type system
 //   - Overloaded declarations via `match` cases (Docs/Spec/Tao Type System.md, future design)
 //   - Structural `like` types, heterogeneous list element unions (Docs/Spec/Tao Type System.md)
@@ -76,7 +76,7 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 //     The authority cluster — `access`, `audience`, `transaction`, `publish`, `presence` — is
 //     decided (§3, §4) but deliberately unused here: whether WordFlower is the app that forces it
 //     is an open product question (`Open questions.md` Q1), and inventing collaborative workspaces
-//     would answer it without Ro.
+//     would answer it without the Developer.
 //   - Schema migrations (Docs/Spec/Tao Data.md)
 // Events and control flow
 //   - Declared events with `does`/`did`/`on` and inferred event names (LANG-020)

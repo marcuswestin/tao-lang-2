@@ -1620,13 +1620,13 @@ reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe f
   without the source asking: `ask`, `as sheet`, and `as toast` are the safe modes. A plain
   `as overlay` is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach
   the window edges, so the runtime adds no inset and what it contains is the author's to inset.
-  _(Decided by Ro, 2026-09-21.)_ **An overlay covers the navigator that presented it**, not the
+  _(Decided by the Developer, 2026-09-21.)_ **An overlay covers the navigator that presented it**, not the
   window: its lane fills that navigator's own surface, so under a navigator inside the app frame
   it reaches the frame's padded box and no further; only `ask` goes to the window. **An entry
   presented while a sheet is showing stays in the sheet's window** — an overlay or ask from the
   sheet's content draws inside the sheet, which stays up beneath it; a second sheet replaces the
   first on screen as before — and a `SplitNav` frames every pane whose content does not frame its
-  own screens, so panes scroll independently. _(Decided by Ro, 2026-09-22.)_
+  own screens, so panes scroll independently. _(Decided by the Developer, 2026-09-22.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
@@ -2209,9 +2209,9 @@ contracts do not settle distributed atomicity, automatic retry, or rollback of e
 
 ```swift
 fixture HomeKitchen {
-   account Ro { Name: "Ro", Email: "ro@example.com" }
-   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
-   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
+   account Mira { Name: "Mira", Email: "mira@example.com" }
+   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Mira)
+   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Mira
 }
 ```
 
@@ -2280,7 +2280,7 @@ expect Shakshuka is Private
   test writes _as_ someone and watches the store refuse:
 
 ```swift
-as Ro update Shakshuka { Shared }
+as Mira update Shakshuka { Shared }
 expect refused
 expect Shakshuka is Private
 ```
@@ -2314,7 +2314,7 @@ action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both
   within the runtime's real capabilities.** `prepare { update Me { Units: Imperial } }` is just data.
   `locale "es"` on a scenario lowers to mocking the localization module (expo-localization) in the
-  Jest environment, which is the standard, supported move — so no account-scoped `set X for Ro`
+  Jest environment, which is the standard, supported move — so no account-scoped `set X for Mira`
   statement exists, and nothing pretends to change the OS.
 - **Pseudolocale is a scenario mode, exactly as the platform does it.** Xcode runs an app in
   Double-Length, Accented, or Right-to-Left _pseudolanguages_ as scheme diagnostics — review modes,

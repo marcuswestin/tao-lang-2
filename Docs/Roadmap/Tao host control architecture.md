@@ -3,7 +3,7 @@
 ## Status and recommendation
 
 Research and repository inspection on 2026-09-19 support one Tao-owned API for interactive development
-and real-host testing, with target-specific drivers underneath. Ro delegated the recommendation using
+and real-host testing, with target-specific drivers underneath. The Developer delegated the recommendation using
 simplicity, maintainability, ease of use, debugging, and parallel development as the priorities.
 The additive first implementation now lives in `packages/testing/host-control`,
 `packages/testing/playwright-driver`, and `packages/testing/e2e-testing/journey`; existing coverage remains.

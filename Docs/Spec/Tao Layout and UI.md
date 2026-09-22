@@ -616,7 +616,7 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
   every other pane — including one whose `SlotNav` is showing a plain view, read live — gets the
   split's frame. Every frame inside a pane, the split's own or a nested navigator's, insets only the
   window edges the pane meets: top and bottom always, left in the first pane, right in the last
-  (decided by Ro, 2026-09-22). Inside a native tab's screen, the frames a window-owning entry draws
+  (decided by the Developer, 2026-09-22). Inside a native tab's screen, the frames a window-owning entry draws
   take the platform's insets, as the frame the tab would otherwise draw around it does.
 - A frame inside a frame adds no live inset: a window-owning navigator a scene renders inline keeps
   the fixed 12-pixel gutter around each of its screens, and the safe-area inset comes from the
@@ -641,12 +641,12 @@ It draws in its navigator's overlay lane, which fills that navigator's own surfa
 under a navigator that owns its window, and the padded content box under one that does not, where
 the lane sits inside the enclosing `AppSurfaceFrame` and so stops short of the window edges by at
 least the frame's own padding. That is the decided behavior, not a gap: an overlay covers the
-navigator that presented it, and only `ask` goes to the window (decided by Ro, 2026-09-22).
+navigator that presented it, and only `ask` goes to the window (decided by the Developer, 2026-09-22).
 
 An entry presented while a native sheet is showing — an overlay or an ask from the sheet's own
 content or from a navigator inside it — is hosted by that sheet: it draws in the sheet's window,
 inside the sheet's own overlay lane or window layer, and the sheet stays showing beneath it rather
-than hiding while a later entry tops the presenter's stack (decided by Ro, 2026-09-22). Back and
+than hiding while a later entry tops the presenter's stack (decided by the Developer, 2026-09-22). Back and
 `dismiss` still take the top entry first, and a native dismissal of the sheet itself — swiped down —
 takes the sheet with everything it hosts. A second sheet is never hosted: presented from a sheet it
 replaces that sheet on screen, as before. Without a native modal host the sheet is inline in the

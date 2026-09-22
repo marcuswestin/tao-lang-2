@@ -24,7 +24,7 @@
   2026-09-19, the landing half: the unsandboxed retry that rescues the dry run does not rescue the
   landing. `just merge-with-main` with the sandbox off is refused by the Claude Code auto-mode
   classifier before it runs (`Blocked by classifier`), and sandboxed it fails on the same
-  `git ls-remote` as the dry run. So on a branch Ro has asked an agent to land, both routes are shut:
+  `git ls-remote` as the dry run. So on a branch the Developer has asked an agent to land, both routes are shut:
   the agent can prove the branch is landable and cannot land it. `./dev merge-with-main --dry-run`
   unsandboxed still passes its whole preflight, so what is denied is the mutation, not the query.
 
@@ -35,7 +35,7 @@
   HTTPS removes the SSH-agent and `known_hosts` dependency, but it cannot by itself give a
   repository process access to account credentials.
 - **Workaround:** Run the dry run unsandboxed to confirm the branch, and run `finalize` unsandboxed
-  too — or fetch `origin` first — so its containment check reads a current `main`. Then have Ro run
+  too — or fetch `origin` first — so its containment check reads a current `main`. Then have the Developer run
   `just merge-with-main` in their own terminal.
 - **Proposed change:** Keep account credentials denied to repository processes. Give agents a narrow,
   host-owned landing capability that validates this repository, the expected old and new refs, and

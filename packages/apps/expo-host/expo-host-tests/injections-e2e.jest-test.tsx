@@ -17,7 +17,7 @@ Describe('Tao injection runtime', () => {
             view MainView
         }
 
-        let UserName = "Ro"
+        let UserName = "the Developer"
         let Count = 3
 
         view MainView() {
@@ -34,7 +34,7 @@ Describe('Tao injection runtime', () => {
         }
       `,
       screen => {
-        ExpectScreen(screen).toHaveText('Hello Ro 3')
+        ExpectScreen(screen).toHaveText('Hello the Developer 3')
       },
     )
   })

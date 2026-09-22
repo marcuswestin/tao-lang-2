@@ -32,6 +32,10 @@ export const JUST_COMMANDS = [
   // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
   'landed',
   'ledger-index',
+  // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
+  // the one command both the Developer and an agent run to get GitHub's own CI signal without a
+  // second spelling.
+  'open-pr',
   'parser-gen',
   'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
