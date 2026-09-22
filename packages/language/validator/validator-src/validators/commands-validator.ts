@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { ActionsValidator, reportActionBindingDiagnostic } from './ActionsValidator'
+import { ReactiveParametersValidator } from './ReactiveParametersValidator'
 import { primitiveSlots } from './workspace-index'
 
 /**
@@ -99,6 +100,12 @@ function reportSlotBinding(
   }
   const actual = Type.ofExpression(value)
   if (slot.type.kind === 'unresolved' || actual.kind === 'unresolved' || Type.isAssignable(actual, slot.type)) {
+    if (
+      ASTUtils.parameterRequiresWritable(slot.parameter)
+      && !ASTUtils.writableExpression(value)
+    ) {
+      ctx.error(entry, ReactiveParametersValidator.messages.readonlyArgument(slot.name))
+    }
     return
   }
   ctx.error(

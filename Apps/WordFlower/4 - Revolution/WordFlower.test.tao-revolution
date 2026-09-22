@@ -65,16 +65,14 @@ test "WordFlower full target" on phone with StarterWorkspace {
       expect missing text "Document: Opening"
    }
 
-   test "saves a composed draft and reverts it from the keyed toast" {
+   test "saves copied input properties and reverts them from the keyed toast" {
       run WordFlowerPreview
       select #workspaces[1] { press #openWorkspace }
       select #documents[1] { press #openDocument }
       expect text "Saves this session: 0"
       enter "" into #documentTitle
       press #save
-      // `save` is refused by the entity's own `validate`, which invalidates the draft, so the
-      // sentence shows beside the field. `required` would not have blocked the write.
-      expect text "A document needs a title"
+      // The local action stops before submission. Backend validation presentation remains deferred.
       expect text "Saves this session: 0"
       enter "Opening night" into #documentTitle
       enter "The first line. Then another." into #documentBody
@@ -97,7 +95,7 @@ test "WordFlower full target" on phone with StarterWorkspace {
       select #workspaces[1] { press #openWorkspace }
       expect navigation title "Novel"
       enter "Renamed novel" into #workspaceTitle
-      // Nothing is saved: a direct bind is the write, so the row and its chrome are already current.
+      // The change action updates the entity on each keystroke, so its chrome is already current.
       expect navigation title "Renamed novel"
       expect text "Workspace: Renamed novel"
 

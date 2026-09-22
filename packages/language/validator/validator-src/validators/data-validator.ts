@@ -141,7 +141,7 @@ function validateEntityField(
   field: AST.EntityDataField,
   ctx: ValidationContext,
 ): void {
-  if (field.name === 'Id') {
+  if (['Id', 'WritesQueued', 'WritesFailed', 'WriteError', 'CanRetryWrites'].includes(field.name)) {
     ctx.error(field, dataValidationMessages.reservedField(entity.singularName, field.name))
   }
   const traits = field.traits?.traits ?? []

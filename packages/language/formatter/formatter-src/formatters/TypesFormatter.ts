@@ -54,6 +54,12 @@ export const TypesFormatter = {
     f.oneSpaceAround('with')
   },
 
+  ProjectedItemTypeExpression(f) {
+    f.oneSpaceAround('without')
+    f.oneSpaceBefore('{')
+    f.commaSpacedList()
+  },
+
   /** TypeProperty formats `Name Type`, shorthand `Type`, and optional `is value` fills. */
   TypeProperty(f) {
     f.oneSpaceAfter('optional')
