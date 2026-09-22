@@ -3,7 +3,7 @@
 // Steps select by visible text or `#tag` only; store checks are ordinary queries over plain values.
 
 fixture PineStreet {
-   account Mira { Name: "Mira", Email: "ro@example.com" }
+   account Mira { Name: "Mira", Email: "mira@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
    signed in as Mira
 

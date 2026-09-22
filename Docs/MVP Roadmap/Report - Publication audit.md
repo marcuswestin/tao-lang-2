@@ -386,8 +386,8 @@ No other real email address is tracked. Every other address found is an `example
 `example.test`, or `example.invalid` fixture.
 
 - **Recommendation:** decide the pen-name question now, because it is the one finding that history
-  makes irreversible. The pen name this audit found in use, "Ro", has since been replaced throughout
-  this repository's prose by "the Developer"; if a single pen name is still meant to be the public
+  makes irreversible. The pen name this audit found in use has since been replaced throughout this
+  repository's prose by "the Developer"; if a single pen name is still meant to be the public
   identity, set `user.name` and `user.email` to the identity you want before the first public push and
   accept that history carries the old one — or,
   if it matters enough, rewrite author metadata across the 1,451 commits while the repository is

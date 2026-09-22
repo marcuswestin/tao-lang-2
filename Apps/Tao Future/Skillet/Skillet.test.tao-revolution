@@ -7,7 +7,7 @@
 // so there is no assertion sub-language to learn.
 
 fixture HomeKitchen {
-   account Mira { Name: "Mira", Email: "ro@example.com" }
+   account Mira { Name: "Mira", Email: "mira@example.com" }
    account Sam { Name: "Sam", Email: "sam@example.com" }
    signed in as Mira
 

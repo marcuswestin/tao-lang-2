@@ -2199,7 +2199,7 @@ contracts do not settle distributed atomicity, automatic retry, or rollback of e
 
 ```swift
 fixture HomeKitchen {
-   account Mira { Name: "Mira", Email: "ro@example.com" }
+   account Mira { Name: "Mira", Email: "mira@example.com" }
    Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Mira)
    Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Mira
 }

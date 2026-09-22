@@ -21,7 +21,7 @@ A file-level fixture declares a reusable identity and data graph:
 fixture HNStories {
    account Mira {
       Name: "Mira",
-      Email: "ro@example.com"
+      Email: "mira@example.com"
    }
    LeadStory = create Story {
       Title: "Tao Studio"
