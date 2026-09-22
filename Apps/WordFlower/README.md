@@ -80,19 +80,22 @@ just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
 The first three commands are automated verification paths. The final two commands launch the Expo
 development path for interactive use.
 
-`WordFlowerInstantDB` is the experimental synced variant. It expects the repository's local
-InstantDB fixture at `http://localhost:9020`, using its seeded app ID. Start that fixture before
-launching the variant:
+`WordFlowerInstantDB` is the experimental synced demo variant. It uses Instant Cloud with the
+hard-coded app ID in `WordFlower.tao`; it needs no local server. The hosted app must exist in the
+Instant dashboard before using this variant on a device.
+
+For local development, `WordFlowerLocalInstantDB` uses the repository's fixture at
+`http://localhost:9020` with the same seeded app ID. Start that fixture before launching it:
 
 ```sh
 just start-local-instantdb
-just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
+just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerLocalInstantDB
 ```
 
 Stop the fixture with `just stop-local-instantdb`. Its Docker volumes are preserved, so the next
 start keeps the local database.
 
-The configured `localhost` endpoints work from web and the iOS Simulator. A physical device or
+The local variant's `localhost` endpoints work from web and the iOS Simulator. A physical device or
 Android emulator needs endpoints using an address from which it can reach the Mac. The ordinary
 `WordFlower` app continues to use device-local storage.
 

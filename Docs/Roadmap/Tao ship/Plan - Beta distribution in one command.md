@@ -104,8 +104,9 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 - WordFlower already declares what the command derives from: `project { id "wordflower" name
   "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
-  WordFlowerInstantDBStore }`. Its InstantDB datasource points at `localhost:9020`, so the first
-  real beta needs a hosted Instant app id; the local stack is not reachable from a tester's phone.
+  WordFlowerInstantDBStore }`. Its datasource uses Instant Cloud and the existing app ID; the
+  separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. A real beta
+  still needs that app ID confirmed on Instant Cloud and live device sync acceptance.
 - The release bundle proof rejects Studio markers before native packaging.
 - The previous repository ran a development client on physical devices with `expo prebuild` and
   `expo run:ios --device`, and pinned `eas-cli` as a dependency. Its `app.json` is a usable
@@ -286,9 +287,10 @@ developer still clicks the activation email; and the hosted InstantDB app for th
 WordFlowerInstantDB acceptance run. For that run the Developer provided the app id
 `9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f` on 2026-09-02 and allows the implementer any action on
 it, including deleting its data. It is the id the repository already seeds into the local
-InstantDB stack, so the implementer first confirms it exists on the hosted service at
-https://www.instantdb.com/dash and otherwise creates a hosted app and records that id in the
-lock; a phone on TestFlight cannot reach `localhost:9020`. Not needed at all: an Expo account.
+InstantDB stack and uses for the hosted demo variant, so the implementer first confirms it exists
+on the hosted service at https://www.instantdb.com/dash and otherwise creates a hosted app and
+updates the source app ID; a phone on TestFlight cannot reach the local variant's `localhost:9020`.
+Not needed at all: an Expo account.
 
 Xcode cannot create the App Store Connect API key: keys exist only on the App Store Connect
 website, under Users and Access, Integrations, Team Keys, and an Admin makes them. Xcode's own
