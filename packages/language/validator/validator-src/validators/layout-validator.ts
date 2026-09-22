@@ -7,6 +7,7 @@ import { type LayoutConflictItem, LayoutConflictValidator } from './layout-confl
 
 /** layoutValidationMessages declares layout clause diagnostics. */
 const layoutValidationMessages = {
+  clearsNoValue: (entry: string) => `Layout entry '${entry}' has no value for 'none' to clear.`,
   duplicateEntry: (key: string) => `Layout property '${key}' is declared more than once.`,
   conflictingEntries: (left: string, right: string) =>
     `Layout properties '${left}' and '${right}' cannot be used together.`,
@@ -43,10 +44,11 @@ type WeightedRigidClaim = {
   readonly rigid: AST.LayoutEntry
 }
 
-/** LayoutValidator validates render-site layout clauses. */
+/** LayoutValidator validates render-site and declaration-header layout clauses. */
 export const LayoutValidator = {
   checks: {
     [AST.Render.$type]: validateRender,
+    [AST.ViewDeclaration.$type]: validateViewDeclarationLayout,
   } satisfies NodeValidationChecks,
   effectiveWeightedRigidClaim,
   entrySlots: layoutEntrySlots,
@@ -120,6 +122,13 @@ function validateRender(render: AST.Render, ctx: ValidationContext): void {
   }
 }
 
+/** validateViewDeclarationLayout runs the same layout checks a render site's clause gets over a declaration's public header clause. */
+function validateViewDeclarationLayout(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  if (view.layoutClause) {
+    validateLayoutClause(view.layoutClause, ctx)
+  }
+}
+
 function validateLayoutClause(layoutClause: AST.LayoutClause, ctx: ValidationContext): void {
   for (const entry of layoutClause.entries) {
     // A single unknown word may be a mounted-design bundle, while the visual heads share this
@@ -169,9 +178,9 @@ function validateLayoutEntry(
   }
 
   Switch(headValue, {
-    claim: () => validateSingleNumber(entry, ctx, false),
+    claim: () => validateSingleNumber(entry, ctx, { allowNone: false, allowToken: false, allowZero: false }),
     content: () => validateContent(entry, ctx),
-    gap: () => validateSingleNumber(entry, ctx, true),
+    gap: () => validateSingleNumber(entry, ctx, { allowNone: true, allowToken: true, allowZero: true }),
     margin: () => validateSpacing(entry, ctx, 'margin'),
     pad: () => validateSpacing(entry, ctx, 'pad'),
     width: () => validateDimension(entry, ctx, { supportsMaximum: true }),
@@ -190,6 +199,12 @@ function validateContent(
   ctx: ValidationContext,
 ): void {
   const terms = entry.terms
+  // `content` is a keyword head: it names a claimed side or axis, not a value, so it has nothing
+  // for `none` to clear (Decisions §R9).
+  if (terms.length === 1 && AST.isLayoutNoneLiteral(terms[0])) {
+    ctx.error(entry, layoutValidationMessages.clearsNoValue(layoutEntryText(entry)))
+    return
+  }
   if (terms.length < 1 || terms.length > 2 || !terms.every(AST.isLayoutWord)) {
     ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
@@ -198,37 +213,59 @@ function validateContent(
   validateContentTermConflicts(entry, contentTerms, ctx)
 }
 
-function validateSingleNumber(entry: AST.LayoutEntry, ctx: ValidationContext, allowToken: boolean): void {
+function validateSingleNumber(
+  entry: AST.LayoutEntry,
+  ctx: ValidationContext,
+  options: { allowNone: boolean; allowToken: boolean; allowZero: boolean },
+): void {
   const terms = entry.terms
+  if (terms.length === 1 && AST.isLayoutNoneLiteral(terms[0])) {
+    if (!options.allowNone) {
+      ctx.error(entry, layoutValidationMessages.clearsNoValue(layoutEntryText(entry)))
+    }
+    return
+  }
   if (
     terms.length !== 1
-    || (!AST.isLayoutNumberLiteral(terms[0]) && !(allowToken && isDesignSizeReference(terms[0])))
+    || (!AST.isLayoutNumberLiteral(terms[0]) && !(options.allowToken && isDesignSizeReference(terms[0])))
   ) {
     ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   if (AST.isLayoutNumberLiteral(terms[0])) {
-    validatePositiveNumber(entry, terms[0], ctx)
+    validatePositiveNumber(entry, terms[0], ctx, { allowZero: options.allowZero })
   }
 }
 
+/**
+ * A spacing or gap value may be zero — `pad 0` sets zero, a value like any other (Decisions §R9) —
+ * while a weight or a dimension must stay positive. `NUMBER` carries no sign, so with zero allowed
+ * there is nothing left to refuse.
+ */
 function validatePositiveNumber(
   entry: AST.LayoutEntry,
   term: AST.LayoutNumberLiteral,
   ctx: ValidationContext,
+  options: { allowZero: boolean } = { allowZero: false },
 ): void {
-  if (term.value <= 0) {
+  if (!options.allowZero && term.value <= 0) {
     ctx.error(entry, layoutValidationMessages.positiveNumber(layoutEntryText(entry)))
   }
 }
 
 function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: 'margin' | 'pad'): void {
   const terms = entry.terms
-  if (terms.length === 1 && (AST.isLayoutNumberLiteral(terms[0]) || isDesignSizeReference(terms[0]))) {
-    if (AST.isLayoutNumberLiteral(terms[0])) {
-      validatePositiveNumber(entry, terms[0], ctx)
+  if (terms.length === 1) {
+    // A bare `none` clears every side at once, matching the one-value set-every-side form.
+    if (AST.isLayoutNoneLiteral(terms[0])) {
+      return
     }
-    return
+    if (AST.isLayoutNumberLiteral(terms[0]) || isDesignSizeReference(terms[0])) {
+      if (AST.isLayoutNumberLiteral(terms[0])) {
+        validatePositiveNumber(entry, terms[0], ctx, { allowZero: true })
+      }
+      return
+    }
   }
   if (terms.length < 2 || terms.length % 2 !== 0) {
     ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
@@ -240,12 +277,13 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     const sideTerm = terms[index]
     const value = terms[index + 1]
     const side = sideTerm && AST.isLayoutWord(sideTerm) ? padSideValue(sideTerm) : undefined
-    if (!side || !value || (!AST.isLayoutNumberLiteral(value) && !isDesignSizeReference(value))) {
+    const clearsSide = value !== undefined && AST.isLayoutNoneLiteral(value)
+    if (!side || !value || (!clearsSide && !AST.isLayoutNumberLiteral(value) && !isDesignSizeReference(value))) {
       ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
       return
     }
     if (AST.isLayoutNumberLiteral(value)) {
-      validatePositiveNumber(entry, value, ctx)
+      validatePositiveNumber(entry, value, ctx, { allowZero: true })
     }
     for (const physicalSide of padPhysicalSides(side)) {
       sideConflictItems.push({ keys: [physicalSide], label: `${head} ${physicalSide}`, node: entry })
@@ -275,6 +313,9 @@ function validateDimension(
     return
   }
   const value = terms[0]!
+  if (AST.isLayoutNoneLiteral(value)) {
+    return
+  }
   if (AST.isLayoutNumberLiteral(value)) {
     validatePositiveNumber(entry, value, ctx)
     return
@@ -290,6 +331,12 @@ function validateDimension(
 }
 
 function validateBareEntry(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+  // A bare keyword head (fill, hug, compress, rigid, centered) carries no value of its own for
+  // `none` to clear (Decisions §R9).
+  if (entry.terms.length === 1 && AST.isLayoutNoneLiteral(entry.terms[0])) {
+    ctx.error(entry, layoutValidationMessages.clearsNoValue(layoutEntryText(entry)))
+    return
+  }
   if (entry.terms.length > 0) {
     ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
   }
@@ -300,6 +347,10 @@ function validateAligned(
   ctx: ValidationContext,
 ): void {
   const terms = entry.terms
+  if (terms.length === 1 && AST.isLayoutNoneLiteral(terms[0])) {
+    ctx.error(entry, layoutValidationMessages.clearsNoValue(layoutEntryText(entry)))
+    return
+  }
   if (terms.length !== 1 || !AST.isLayoutWord(terms[0])) {
     ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return

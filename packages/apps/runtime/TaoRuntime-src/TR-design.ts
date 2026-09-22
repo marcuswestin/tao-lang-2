@@ -1,6 +1,12 @@
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
-import { LayoutControls, type TaoLayout, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
+import {
+  LayoutControls,
+  LayoutRuntime,
+  type TaoLayout,
+  type TaoLayoutEntry,
+  type TaoResolvedLayoutStyle,
+} from './TR-layout'
 import type { TaoScheme } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
 
@@ -9,7 +15,7 @@ export type TaoDesignSpecEntry = readonly [string, ...TaoDesignSpecTerm[]]
 
 export type TaoDesignSource = Readonly<{
   end?: number
-  kind: 'element-default' | 'inline' | 'legacy-style' | 'style' | 'text-style'
+  kind: 'declaration' | 'element-default' | 'inline' | 'legacy-style' | 'style' | 'text-style'
   member?: string
   path?: string
   start?: number
@@ -155,18 +161,26 @@ function resolve(
   elementDefault?: string,
   scheme: TaoScheme = 'light',
   condition?: TaoDesignCondition,
+  declarationSpec?: TaoDesignSpec,
 ): TaoResolvedDesignSpec {
   const defaultSpec = elementDefault === undefined || design?.bundles[elementDefault] === undefined
     ? undefined
     : DesignControls.Spec([[elementDefault]], { kind: 'element-default', member: elementDefault })
-  if (defaultSpec === undefined && (!spec || spec.entries.length === 0)) {
+  const headerSpec = declarationSpec === undefined || declarationSpec.entries.length === 0
+    ? undefined
+    : declarationSpec.source === undefined
+    ? DesignControls.Source(declarationSpec, { kind: 'declaration' })
+    : declarationSpec
+  if (defaultSpec === undefined && headerSpec === undefined && (!spec || spec.entries.length === 0)) {
     return {}
   }
 
   const layoutEntries: TaoLayoutEntry[] = []
   const style: TaoResolvedLayoutStyle = {}
   const provenance: TaoDesignProvenance[] = []
-  for (const effectiveSpec of [defaultSpec, spec]) {
+  // A declaration's header clause is the view's own public default: the stdlib element default is
+  // weaker still, and the caller's render-site clauses beat both.
+  for (const effectiveSpec of [defaultSpec, headerSpec, spec]) {
     if (effectiveSpec === undefined) {
       continue
     }
@@ -187,7 +201,9 @@ function resolve(
   }
 
   const layout = layoutEntries.length > 0 ? LayoutControls.create(layoutEntries) : undefined
-  assertEffectiveLayoutCompatibility(layout)
+  // One spec's own contradiction is worth reporting where it was written, even though the whole
+  // occurrence is only checked once every layer has met, in LayoutRuntime.resolveProps.
+  LayoutRuntime.assertCompatibleEntries(layout?.entries ?? [])
 
   return {
     ...(layout ? { layout } : {}),
@@ -196,16 +212,6 @@ function resolve(
       : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
   }
-}
-
-function assertEffectiveLayoutCompatibility(layout: TaoLayout | undefined): void {
-  const entries = layout?.entries ?? []
-  const growth = entries.findLast(entry => ['fill', 'claim', 'hug'].includes(entry[0]))
-  const shrink = entries.findLast(entry => ['compress', 'rigid'].includes(entry[0]))
-  RuntimeAssert.input(
-    growth?.[0] !== 'claim' || shrink?.[0] !== 'rigid',
-    "Design entries 'claim' and 'rigid' cannot remain effective together.",
-  )
 }
 
 function* expandEntries(
@@ -298,30 +304,51 @@ function applyVisualEntry(
   scheme: TaoScheme,
 ): void {
   const head = entry[0]
+  // `bg none` clears the slot instead of setting one, so every head names its style keys once and
+  // a cleared value is `undefined` rather than a second table of keys to delete.
+  const cleared = isClearingEntry(entry)
   RuntimeSwitch<TaoDesignVisualHead, void>(head, {
     bg: () => {
-      style['backgroundColor'] = resolveColorToken(design, entry, scheme)
+      assignVisualStyle(style, 'backgroundColor', cleared ? undefined : resolveColorToken(design, entry, scheme))
     },
     border: () => {
-      style['borderColor'] = resolveColorToken(design, entry, scheme)
-      style['borderWidth'] = 1
+      assignVisualStyle(style, 'borderColor', cleared ? undefined : resolveColorToken(design, entry, scheme))
+      assignVisualStyle(style, 'borderWidth', cleared ? undefined : 1)
     },
     fg: () => {
-      style['color'] = resolveColorToken(design, entry, scheme)
+      assignVisualStyle(style, 'color', cleared ? undefined : resolveColorToken(design, entry, scheme))
     },
     line: () => {
-      style['lineHeight'] = numericVisualValue(entry)
+      assignVisualStyle(style, 'lineHeight', cleared ? undefined : numericVisualValue(entry))
     },
     radius: () => {
-      style['borderRadius'] = numericVisualValue(entry)
+      assignVisualStyle(style, 'borderRadius', cleared ? undefined : numericVisualValue(entry))
     },
     size: () => {
-      style['fontSize'] = numericVisualValue(entry)
+      assignVisualStyle(style, 'fontSize', cleared ? undefined : numericVisualValue(entry))
     },
     weight: () => {
-      style['fontWeight'] = String(fontWeightValue(entry))
+      assignVisualStyle(style, 'fontWeight', cleared ? undefined : String(fontWeightValue(entry)))
     },
   })
+}
+
+/** isClearingEntry reads the decided `none` form: one `none` and nothing else after the head. */
+function isClearingEntry(entry: TaoDesignSpecEntry): boolean {
+  return entry.length === 2 && entry[1] === 'none'
+}
+
+/**
+ * A cleared key is written as an explicit `undefined` rather than deleted: the layer that set it may
+ * be another link's element default or a caller's clause, resolved on its own and merged later, so
+ * the clear has to outlive this spec to reach it. The final merge drops the key.
+ */
+function assignVisualStyle(
+  style: TaoResolvedLayoutStyle,
+  key: string,
+  value: number | string | undefined,
+): void {
+  style[key] = value
 }
 
 function isVisualHead(head: string): head is TaoDesignVisualHead {
@@ -386,7 +413,8 @@ function resolveSizeTerms(design: TaoDesign | undefined, entry: TaoDesignSpecEnt
     ? (entry[1] === 'max' ? [2] : [1])
     : []
   return entry.map((term, index) => {
-    if (!sizeIndexes.includes(index) || typeof term !== 'string' || term === 'fill') {
+    // `none` clears the slot further down instead of naming a size, so it passes through untouched.
+    if (!sizeIndexes.includes(index) || typeof term !== 'string' || term === 'fill' || term === 'none') {
       return term
     }
     // Multi-app validation deliberately defers private design lookup to the mounted occurrence.

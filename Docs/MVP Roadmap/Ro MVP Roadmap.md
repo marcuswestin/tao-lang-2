@@ -155,6 +155,12 @@ overrides, and how a caller clears a default rather than adding to it (`render F
 none]`).
 
 - Blocks: part of the design system MVP in `A14`.
+- **Decided 2026-09-22.** A declaration's defaults live in a header clause (`view Foo() [pad 12, bg
+  red] {`), the declaration's public style surface; precedence is design element default → header
+  → caller, later value wins; the root render's own clauses are private and win over that chain; a
+  caller may give any clause; `none` clears a clause (`bg none`, `pad left none`); `pad 0` sets zero
+  and a raw `0` is not design exploration. Recorded in `Decisions.md` §13 and the layout spec's
+  "Declaration Style Defaults".
 
 ### R10 — Where feedback happens
 

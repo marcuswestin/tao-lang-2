@@ -271,6 +271,32 @@ render UserCard() {
 
 The compiler classifies each entry from syntax and the receiving declaration surface before type matching. A child cannot disappear into a same-typed property when a declaration evolves.
 
+### Declaration Style Defaults
+
+A declaration's style defaults live in a header clause after its parameters and any `responds`,
+on `view` and `scene` alike. The header applies to the occurrence root of every render branch and
+is the declaration's public style surface: a caller's clause replaces a header value, and what a
+`render` inside the body sets stays private, winning over the caller. `none` after a head clears
+that clause rather than setting it:
+
+```tao
+view Card(Title text) [pad 12, bg paper] {
+   render Col() [gap 8] {
+      Text(Title)
+      @@content
+   }
+}
+
+render Card("Notes")                  // pad 12, bg paper, gap 8
+render Card("Notes") [pad 0, bg none] // no padding, no background; gap 8 is the root's, private
+render Card("Notes") [gap 0]          // still gap 8: the header never declared gap
+```
+
+The resolution order is one left-to-right list — the design's element default, the header, the
+caller — with the later same-clause value replacing the earlier, and the root render's own clauses
+applied last. A caller may give any clause, declared in the header or not; it takes effect unless
+the root privately sets the same slot.
+
 ## Layout Properties
 
 Below are Tao's current layout properties:
@@ -641,12 +667,14 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 - `WrappingRow`: `[content baseline left, compress, hug]`
   - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, flexGrow: 0, flexShrink: 1, flexWrap: wrap }`
 
-A caller layout clause overlays the render site's defaults. Named clause bundles and direct clauses
-form one left-to-right list. The last specification of a given clause replaces the earlier value;
-unrelated clauses remain. Bare `fill` is lowered as the two growth and stretch effects described
-above, so a later specialized clause can replace one effect without erasing the other. After
-replacement, the validator rejects a resolved set containing semantically incompatible
-clauses—source order cannot make incompatible categories valid:
+At one site, the design's element default, the declaration's header clause, named clause bundles,
+and direct clauses form one left-to-right list. The last specification of a given clause replaces
+the earlier value; unrelated clauses remain; `none` removes the clause from the list. Bare `fill`
+is lowered as the two growth and stretch effects described above, so a later specialized clause
+can replace one effect without erasing the other. The root render's own clauses are applied after
+the whole caller chain ("Declaration Style Defaults" above). After replacement, the validator
+rejects a resolved set containing semantically incompatible clauses—source order cannot make
+incompatible categories valid:
 
 ```tao
 Row() [content spread center, compress] {
@@ -749,7 +777,8 @@ Some things are known to belong in or near Tao layout, but still need their own 
 The main unresolved ownership questions:
 
 - When does outside spacing belong to the parent, and when does it belong to the child?
-- When can a reusable declaration expose layout of its private internals?
+- When can a reusable declaration expose layout of its private internals? (The header clause —
+  "Declaration Style Defaults" — exposes the occurrence root only; anything deeper stays private.)
 - When do slots and caller content merge layout with the callee?
 
 Those are language-design questions, not things this document should settle by accident.

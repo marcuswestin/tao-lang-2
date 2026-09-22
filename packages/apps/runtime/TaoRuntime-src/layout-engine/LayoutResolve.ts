@@ -143,6 +143,9 @@ function applyContent(
 }
 
 function applyGap(style: TaoResolvedLayoutStyle, entry: TaoLayoutGapEntry): void {
+  if (entry[1] === 'none') {
+    return
+  }
   style['gap'] = entry[1]
 }
 
@@ -156,12 +159,19 @@ function applySpacing(
   entry: TaoLayoutSpacingEntry,
 ): void {
   const firstTerm = entry[1]
+  // A cleared slot lowers to nothing at all: the merge already dropped every layer that set it.
+  if (firstTerm === 'none') {
+    return
+  }
   if (typeof firstTerm === 'number') {
     style[propertyPrefix] = firstTerm
     return
   }
 
   for (const [side, amount] of LayoutTerms.spacingPairs(entry)) {
+    if (amount === 'none') {
+      continue
+    }
     for (const property of LayoutTerms.spacingProperties(propertyPrefix, side)) {
       style[property] = amount
     }
@@ -176,6 +186,9 @@ function applyDimension(
   state: LayoutSemanticState,
 ): void {
   const [dimension, term] = entry
+  if (term === 'none') {
+    return
+  }
   if (dimension === 'width' && term === 'max') {
     // A centered cross-axis child needs an explicit fluid width because centering disables the
     // parent's default stretch. On a row's main axis, 100% would instead over-claim sibling space.

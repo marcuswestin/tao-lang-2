@@ -1954,6 +1954,22 @@ design SkilletDesign {
   without colour) are stated here as review criteria the gallery surfaces, never as pass/fail.
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
+- **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
+  `view Card(Title text) [pad 12, bg paper] { … }`, after the parameters and any `responds`, applied
+  to the occurrence root of every render branch, on `view` and `scene` alike. The header is the
+  declaration's public style surface; what a `render` inside the body sets is private.
+- **Precedence is one left-to-right list: design element default, then the header, then the caller.**
+  The later same-clause value replaces the earlier and unrelated clauses remain — the rule bundles
+  and direct clauses already follow. A caller may give any clause, declared in the header or not.
+- **The root render's own clauses win over that public chain.** `view Card() [hug] { render Col()
+  [bg red] { … } }` rendered as `Card() [fill, bg none]` fills, and stays red: `hug` was public and
+  the caller replaced it, `bg red` was private and the caller cannot reach it. To let a caller
+  change something, declare it in the header.
+- **`none` after a clause head clears it**: `bg none`, `border none`, `pad none`, `pad left none`.
+  The merged list ends without that slot, so the element renders as if the clause were never given;
+  a later `pad 8` sets it again. `pad 0` stays "set to zero", and a raw `0` is not inline design
+  exploration for the release check — `none` is the way to remove a clause, `0` a value like any
+  other.
 
 ---
 
