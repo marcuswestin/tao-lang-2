@@ -32,6 +32,15 @@
           }
         }
       ],
+      [
+        "tao-icloud",
+        {
+          "services": [
+            "CloudDocuments",
+            "CloudKit"
+          ]
+        }
+      ],
       "./plugins/with-ios-fmt-compat.cjs"
     ],
     "experiments": {

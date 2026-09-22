@@ -13,6 +13,31 @@ and `tao dev`'s Metro server runs under a repository-local Expo home directory t
 own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. The iOS
 Simulator, the Android emulator, and physical Android are unaffected and keep using Expo Go.
 
+## What the shell carries
+
+Because a development build runs the bundle Metro serves it, the shell — not the bundle — decides
+which native modules exist and which entitlements are granted. Two consequences are worth knowing
+before a Tao app is run here.
+
+Its dependencies must cover every native module a Tao app can require.
+`packages/testing/verification/verification-tests/companion-native-parity.test.ts` fails when a
+dependency of `packages/apps/expo-host/package.json` that ships native code is missing here or
+pinned to a different version, because the alternative is a crash at require time rather than a
+readable failure.
+
+Its entitlements are the ones Tao is experimenting with: `app.json` applies the `tao-icloud` plugin
+with both iCloud services, which grants iCloud Documents, CloudKit, the ubiquity containers, and the
+`aps-environment` that CloudKit's silent pushes need. The container is derived from this shell's own
+bundle identifier, so **a Tao app run in the Companion reads and writes
+`iCloud.dev.tao-lang.studio.companion`, never the container the app itself declares** — iCloud
+container identifiers admit no wildcard, so no host binary can lend an app its own. That is
+sufficient for exercising the iCloud code paths in development and is not a substitute for running
+the app's own build.
+
+This costs something on the Apple side: the app id needs the iCloud capability with that container,
+and CloudKit brings Push Notifications with it, so a build signed by a team without push enabled
+will fail to provision.
+
 ## Install once
 
 ```sh
