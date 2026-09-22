@@ -164,7 +164,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/tests/status')
   Expect(bundle).toContain('/api/tests/run')
   Expect(bundle).toContain('capture-runtime')
-  Expect(bundle).toContain('No console messages from the active preview.')
+  Expect(bundle).toContain('No console messages from the active preview or device.')
   Expect(bundle).toContain('Refresh data')
   Expect(bundle).toContain('Capture fixture')
   Expect(bundle).toContain('Run tests')

@@ -1,5 +1,7 @@
+import { Errors } from '@shared/core'
 import { Expect, Test, until } from '@shared/test'
 import { StudioApiError, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioDeviceCapture } from '../studio-src/client/StudioDeviceCapture'
 import {
   createStudioDevicePanel,
   type StudioDevicePanelApi,
@@ -10,6 +12,7 @@ import { studioShellMarkup } from '../studio-src/client/StudioShell'
 import type { StudioDeviceLaunchInfo } from '../studio-src/device/StudioDeviceLauncher'
 import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import { cellEnvironment } from './test-studio-fixtures'
 
 const phone = { model: 'iPhone 16 Pro', name: 'Ro’s iPhone', os: 'iOS 19.1' }
 const phoneKey = 'ZGV2aWNlLXB1YmxpYy1rZXk='
@@ -48,6 +51,12 @@ const manifest = {
 const handshake: Pick<StudioHandshake, 'compile' | 'previewManifest'> = {
   compile: { appliedRevision: 5, compileRevision: 5, diagnostics: [], message: 'Compiled.', status: 'compiled' },
   previewManifest: manifest,
+}
+
+const unusedCaptureApi = {
+  deviceCapture: async () => ({ error: 'Capture is not available in this test.' }),
+  previewCell: async () => Errors.throwUnexpected('Preview cell is not available in this test.'),
+  reconfigureCell: async () => Errors.throwUnexpected('Reconfigure is not available in this test.'),
 }
 
 Test('Studio device panel model explains a missing gateway and hides device facts', () => {
@@ -261,12 +270,97 @@ Test('Studio shell places the Device button before Beta ship and a hidden popove
   Expect(markup.indexOf('studio-device-popover')).toBeLessThan(markup.indexOf('class="studio-body"'))
 })
 
+Test('Studio device capture saves an app-bound artifact and restores through a fresh cell identity', async () => {
+  const dom = installFakeDocument()
+  try {
+    const captureManifest = {
+      ...manifest,
+      cells: [{ ...manifest.cells[0]!, environment: cellEnvironment() }],
+      project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/tmp/garden' },
+    } as StudioPreviewManifestV2
+    const artifact = { capturedAt: 42, domains: [], version: 1 as const }
+    const downloads: { name: string; content: string }[] = []
+    const requests: unknown[] = []
+    const identity = {
+      appName: 'Garden',
+      cellId: 'cell-home',
+      cellRevision: 7,
+      compileRevision: 9,
+      manifestRevision: 'latest',
+      project: '/tmp/garden',
+    }
+    const api: StudioDevicePanelApi = {
+      ...unusedCaptureApi,
+      deviceCapture: async () => ({ capture: artifact }),
+      deviceConfirmPairing: async () => ({ accepted: true }),
+      deviceDeclinePairing: async () => ({ declined: true }),
+      deviceLaunch: async () => launchInfo,
+      deviceLaunchOpen: async () => ({ hostName: 'Ro’s iPhone', launched: true, url: deviceUrl }),
+      deviceOpenPairing: async () => ({ expiresAt: new Date().toISOString() }),
+      deviceReconnect: async () => ({ requested: true }),
+      deviceRevoke: async () => ({ revoked: true }),
+      deviceSelectCell: async () => ({ requested: true }),
+      previewCell: async () => ({ cell: captureManifest.cells[0]!, identity }),
+      reconfigureCell: async body => {
+        requests.push(body)
+        return { cell: captureManifest.cells[0]!, identity }
+      },
+    }
+    const button = dom.element('button') as unknown as HTMLButtonElement
+    const popover = dom.element('section') as unknown as HTMLElement
+    popover.hidden = true
+    const panel = createStudioDevicePanel({
+      api,
+      button,
+      handshake: { ...handshake, previewManifest: captureManifest },
+      popover,
+      downloadCapture: (name, content) => downloads.push({ name, content }),
+    })
+    panel.setStatus({
+      ...idleStatus,
+      connection: { cellId: 'cell-home', device: phone, fingerprint: 'F1', state: 'connected', transport: 'lan' },
+    })
+    panel.open()
+    dom.click(dom.find(popover, 'studio-device-capture')!)
+    await until(() => downloads.length === 1)
+    Expect(downloads[0]!.name).toContain('Garden-home-42.json')
+    const saved = StudioDeviceCapture.parse(JSON.parse(downloads[0]!.content))
+    Expect(saved).toMatchObject({ appName: 'Garden', project: '/tmp/garden', scenarioId: 'home' })
+    await until(() => dom.find(popover, 'studio-device-restore')?.disabled === false)
+    dom.click(dom.find(popover, 'studio-device-restore')!)
+    await until(() => requests.length === 1)
+    Expect(requests[0]).toMatchObject({ ...identity, replay: { capturedAt: 42, version: 1 } })
+    await until(() => dom.find(popover, 'studio-device-remount')?.disabled === false)
+    dom.click(dom.find(popover, 'studio-device-remount')!)
+    await until(() => requests.length === 2)
+    Expect(requests[1]).toEqual(identity)
+    const file = dom.find(popover, 'studio-device-capture-file')!
+    Object.defineProperty(file, 'files', {
+      configurable: true,
+      value: [{ text: async () => JSON.stringify({ ...saved, appName: 'Other' }) }],
+    })
+    file.dispatchEvent({ target: file, type: 'change' })
+    await until(() =>
+      dom.find(popover, 'studio-device-status')?.textContent
+        === 'Choose a device cell from the same app and scenario as this capture.'
+    )
+    Expect(requests).toHaveLength(2)
+    panel.dispose()
+  } finally {
+    dom.restore()
+  }
+})
+
 Test('Studio device panel drives pairing, launch, scenario, and revoke requests through the API', async () => {
   const dom = installFakeDocument()
   try {
     const calls: string[] = []
     let launchDescriptions = 0
     const api: StudioDevicePanelApi = {
+      async deviceCapture() {
+        calls.push('capture')
+        return { error: 'The device is not ready to capture.' }
+      },
       async deviceConfirmPairing(key) {
         calls.push(`confirm:${key}`)
         return { accepted: true }
@@ -298,6 +392,12 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
       async deviceSelectCell(cellId) {
         calls.push(`select:${cellId}`)
         return { requested: true }
+      },
+      async previewCell() {
+        Errors.throwUnexpected('No capture selected.')
+      },
+      async reconfigureCell() {
+        Errors.throwUnexpected('No capture selected.')
       },
     }
     const button = dom.element('button') as unknown as HTMLButtonElement
@@ -340,9 +440,9 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
     await until(() => calls.includes(`confirm:${phoneKey}`))
     await until(() => dom.find(popover, 'studio-device-status')?.textContent === 'Trusted Ro’s iPhone (iPhone 16 Pro).')
     const lanOpen = dom.find(popover, 'studio-device-open')!
-    Expect(lanOpen.textContent).toBe('Open over LAN')
+    Expect(lanOpen.textContent).toBe('Open this app on device · LAN')
     Expect(lanOpen.parent?.children.find(child => child.dataset['route'] === 'cable')?.textContent).toBe(
-      'Open over cable',
+      'Open this app on device · cable',
     )
     dom.click(lanOpen)
     await until(() => calls.includes('open:host-1:auto'))
@@ -397,6 +497,7 @@ Test(
     try {
       let pairAttempts = 0
       const api: StudioDevicePanelApi = {
+        ...unusedCaptureApi,
         deviceConfirmPairing: async () => ({ accepted: true }),
         deviceDeclinePairing: async () => ({ declined: true }),
         deviceLaunch: async () => {
@@ -480,6 +581,7 @@ Test('Studio device panel renders the dev-client URL as an SVG QR and copies it 
   try {
     const copied: string[] = []
     const api: StudioDevicePanelApi = {
+      ...unusedCaptureApi,
       deviceConfirmPairing: async () => ({ accepted: true }),
       deviceDeclinePairing: async () => ({ declined: true }),
       deviceLaunch: async () => launchInfo,

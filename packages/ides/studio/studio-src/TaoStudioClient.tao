@@ -1207,12 +1207,12 @@ view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
    render Col() {
       StudioPanelCommand(Label: "Clear logs", Command: Logs.ClearAction, Dispatch: Dispatch, Disabled: false)
       when Logs.Source {
-         empty -> { Text("Select a preview cell to inspect console history.") }
-         otherwise -> { Text("Active cell: { Logs.Source }") }
+         empty -> { Text("Device console history; select a preview cell for browser logs.") }
+         otherwise -> { Text("Active cell: { Logs.Source }; connected device lines are labeled below.") }
       }
       Text("Showing { Logs.RetainedCount } of { Logs.TotalCount } messages")
       when Logs.Rows {
-         empty -> { Text("No console messages from the active preview.") }
+         empty -> { Text("No console messages from the active preview or device.") }
          otherwise -> { loop Logs.Rows / Row {
             Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
          } }

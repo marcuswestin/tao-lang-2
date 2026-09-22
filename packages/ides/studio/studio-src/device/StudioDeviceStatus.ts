@@ -59,9 +59,19 @@ export type StudioDeviceSourceSelection = {
   start: number
 }
 
+export type StudioDeviceLog = {
+  deviceName: string
+  level: 'debug' | 'error' | 'info' | 'warn'
+  message: string
+  sequence: number
+  timestamp: number
+}
+
 /** StudioDeviceStatus is the snapshot the workbench renders and the `device-state` event carries. */
 export type StudioDeviceStatus = {
   connection?: StudioDeviceConnection
+  /** Recent trusted device lines, bounded by the gateway and scoped to this Studio session. */
+  logs?: readonly StudioDeviceLog[]
   gateway: {
     /** The gateway listens on every interface; these are the candidate hosts a phone may reach. */
     hosts: readonly string[]
