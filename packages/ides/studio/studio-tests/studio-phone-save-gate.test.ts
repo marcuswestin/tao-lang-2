@@ -75,6 +75,7 @@ Test('Studio releases a queued Save after phone disconnect timeout and marks the
       connected
         ? { connection: { appliedRevision: 0, state: 'connected' } as StudioDeviceConnection }
         : { connection: undefined },
+    // budget-ok: the injected clock advances only when the test resolves each in-memory wait.
     timeoutMs: 10,
   })
 
