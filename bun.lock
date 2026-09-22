@@ -23,6 +23,13 @@
         "tao-shared": "workspace:*",
       },
     },
+    "packages/ai/tao-skills": {
+      "name": "tao-skills",
+      "version": "1.0.0",
+      "dependencies": {
+        "tao-shared": "workspace:*",
+      },
+    },
     "packages/apps/expo-host": {
       "name": "tao-expo-host",
       "version": "1.0.0",
@@ -181,6 +188,7 @@
         "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
+        "tao-skills": "workspace:*",
         "tao-source-actions": "workspace:*",
         "tao-studio-tooling": "workspace:*",
         "tao-update-server": "workspace:*",
@@ -2807,6 +2815,8 @@
     "tao-runtime": ["tao-runtime@workspace:packages/apps/runtime"],
 
     "tao-shared": ["tao-shared@workspace:packages/shared"],
+
+    "tao-skills": ["tao-skills@workspace:packages/ai/tao-skills"],
 
     "tao-source-actions": ["tao-source-actions@workspace:packages/language/source-actions"],
 
