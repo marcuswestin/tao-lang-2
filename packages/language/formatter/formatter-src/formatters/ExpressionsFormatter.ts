@@ -34,6 +34,11 @@ export const ExpressionsFormatter = {
     f.oneSpaceBeforeProperty('patchBlock')
   },
 
+  CopyExpression(f) {
+    f.oneSpaceAfter('copy')
+    f.oneSpaceAround('as')
+  },
+
   /** ValueReference preserves a single value-namespace identifier. */
   ValueReference() {},
 

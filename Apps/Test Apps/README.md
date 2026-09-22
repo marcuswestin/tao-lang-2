@@ -143,6 +143,14 @@ Exercise controlled text input, event configuration, and form feedback.
 
 **Does not belong here:** durable collections, relationships, filtering, or ordering; navigation; invocation, selector, or event diagnostics.
 
+## Reactive Editing
+
+Exercise settled writable and copied parameters through ordinary controls and action bodies.
+
+**Belongs here:** direct writable parameter forwarding through a child `TextInput`; parent and child writes over the same value; independent writable literal occurrences surviving a parent rerender; `copy` view parameters that initialize once and detach from later caller changes; copied action and command parameters whose mutations do not change their input; configured command fills retaining caller storage; and configured root views writing persisted app state.
+
+**Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
+
 ## Data MVP
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.

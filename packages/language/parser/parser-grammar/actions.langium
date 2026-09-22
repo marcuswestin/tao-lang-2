@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | FailStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | FailStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
@@ -46,7 +46,7 @@ RespondStatement:
     'respond' case=[CaseSetCase:ID]?;
 
 ToggleStatement:
-    'toggle' target=[StateDeclaration:ID];
+    'toggle' target=[MutableDeclaration:ID] ('.' members+=ID)*;
 
 GuardActionStatement:
     'guard' subject=SubjectExpression (caseBlock=GuardActionCaseBlock | single=GuardActionBranch);
@@ -61,7 +61,7 @@ IfActionStatement:
     'if' condition=Expression block=ActionBlock;
 
 SetStatement:
-    'set' target=[StateDeclaration:ID] operator=SetOperator value=Expression;
+    'set' target=[MutableDeclaration:ID] ('.' members+=ID)* operator=SetOperator value=Expression;
 
 SetOperator returns string:
     '=' | '+=' | '-=' | '*=' | '/=';
@@ -78,3 +78,7 @@ ActionTargetExpression:
 // A verb named at the invocation: a value by name, or a member reached through one.
 NamedActionTarget:
     MemberAccessExpression | ValueReference;
+
+// Retry resubmits an unresolved recorded data mutation, never its originating action.
+RetryStatement:
+    'retry' target=DataRowExpression;

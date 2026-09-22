@@ -8,6 +8,7 @@ import type {
   TaoDataField,
   TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
+  TaoDataWriteIntent,
   TaoDescriptorValue,
   TaoEntityAvailability,
   TaoQueryDescriptor,
@@ -67,10 +68,19 @@ type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefine
 
 type ActionDataOverlay = {
   base: StoredData
+  intents: Map<string, TaoDataWriteIntent>
   prepared?: StoredData
   previous?: StoredData
   working: StoredData
 }
+
+/** TaoEntityWriteStatus is the row-local view of a provider's durable mutation recovery records. */
+type TaoEntityWriteStatus = Readonly<{
+  Failed: number
+  Message: string
+  Queued: number
+  Supported: boolean
+}>
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
 function evaluatedDatasourceConfiguration(
@@ -139,6 +149,7 @@ export class RuntimeDataSchema {
   private fills = new Map<string, FillState>()
   private generation = 0
   private pendingFills = new Set<Promise<void>>()
+  private pendingWriteIntents = new Map<string, TaoDataWriteIntent>()
   private handles = new Map<string, RuntimeEntityHandle>()
   /**
    * linkedStores are the stores compiled into the same project as this one, which is the only set a
@@ -157,6 +168,7 @@ export class RuntimeDataSchema {
   private hasUsableSnapshot = false
   private providerBinding: ProviderBinding
   private providerUnsubscribe: (() => void) | undefined
+  private writeUnsubscribe: (() => void) | undefined
   private saveQueue: Promise<void> = Promise.resolve()
   private status: DataStatus = 'loading'
   private version = 0
@@ -348,6 +360,8 @@ export class RuntimeDataSchema {
     const generation = ++this.generation
     this.providerUnsubscribe?.()
     this.providerUnsubscribe = undefined
+    this.writeUnsubscribe?.()
+    this.writeUnsubscribe = undefined
     const previousConnection = this.connection
     if (previousConnection !== connection) {
       // Queued saves already hold committed data, so the outgoing connection closes only after
@@ -357,10 +371,16 @@ export class RuntimeDataSchema {
     }
     this.connection = connection
     this.providerBinding = providerBinding
+    this.writeUnsubscribe = connection.writes?.subscribe(() => {
+      if (generation === this.generation && connection === this.connection) {
+        this.emit()
+      }
+    })
     this.bufferedRemoteSnapshot = undefined
     this.committedData = emptyData(this.definition)
     this.handles.clear()
     this.fills.clear()
+    this.pendingWriteIntents.clear()
     // A placeholder belongs to the connection that was asked for its row; a new one asks again.
     this.referencePlaceholders.clear()
     this.error = ''
@@ -770,6 +790,7 @@ export class RuntimeDataSchema {
       entity: metadata.entity,
     })
     const fields = partialRowValues(metadata.entity, entity, values, this)
+    this.recordWriteIntent(metadata.entity, metadata.id, Object.keys(fields))
     this.data = {
       nextId: this.data.nextId,
       rows: {
@@ -812,6 +833,21 @@ export class RuntimeDataSchema {
     if (member === 'Id') {
       return metadata.id
     }
+    if (
+      member === 'WritesQueued' || member === 'WritesFailed' || member === 'WriteError' || member === 'CanRetryWrites'
+    ) {
+      const writeStatus = this.writeStatus(handle)
+      if (member === 'WritesQueued') {
+        return writeStatus.Queued
+      }
+      if (member === 'WritesFailed') {
+        return writeStatus.Failed
+      }
+      if (member === 'WriteError') {
+        return writeStatus.Message
+      }
+      return writeStatus.Supported && writeStatus.Failed > 0
+    }
     const row = this.storedRow(metadata.entity, metadata.id)
     const entity = this.definition.entities[metadata.entity]
     const inverse = entity?.inverseFields?.[member]
@@ -829,6 +865,35 @@ export class RuntimeDataSchema {
       return value
     }
     return this.storedRow(field.relation, value) ? this.handle(field.relation, value) : undefined
+  }
+
+  writeStatus(handle: RuntimeEntityHandle): TaoEntityWriteStatus {
+    const metadata = this.requireOwnedHandle(handle)
+    const writes = this.connection.writes
+    if (writes === undefined) {
+      return { Failed: 0, Message: '', Queued: 0, Supported: false }
+    }
+    const status = writes.status(metadata.entity, metadata.id)
+    return {
+      Failed: status.failed,
+      Message: status.records.flatMap(record => record.message === undefined ? [] : [record.message]).join('\n'),
+      Queued: status.queued,
+      Supported: true,
+    }
+  }
+
+  retryWrites(handle: RuntimeEntityHandle): void {
+    const metadata = this.requireOwnedHandle(handle)
+    const writes = this.connection.writes
+    if (writes === undefined) {
+      throw new UserInputError(
+        `Cannot retry writes for data schema '${this.name}' because its provider does not record them.`,
+        {
+          datasource: this.name,
+        },
+      )
+    }
+    writes.retry(metadata.entity, metadata.id)
   }
 
   /** linkStores records the stores one compiled project mounts, so references resolve among them. */
@@ -921,7 +986,11 @@ export class RuntimeDataSchema {
       return this.placeholderAvailability(metadata.entity, placeholder)
     }
     return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
-      error: () => ({ message: this.error, status: 'error' }),
+      error: () =>
+        this.errorRecoverable && metadata.generation === this.generation
+          && this.storedRow(metadata.entity, metadata.id)
+          ? { status: 'available' }
+          : { message: this.error, status: 'error' },
       loading: () => ({ status: 'loading' }),
       ready: () => {
         if (metadata.generation !== this.generation) {
@@ -1012,7 +1081,7 @@ export class RuntimeDataSchema {
     }
   }
 
-  private commit(): void {
+  private commit(intents?: ReadonlyMap<string, TaoDataWriteIntent>): void {
     if (this.committedAccessDepth === 0 && existingTransactionResource<ActionDataOverlay>(this)) {
       return
     }
@@ -1020,10 +1089,14 @@ export class RuntimeDataSchema {
     const connection = this.connection
     const saveSequence = ++this.nextSaveSequence
     const serialized = JSON.stringify(envelope(this.data, this.definition))
+    const submitted = intents === undefined ? [...this.pendingWriteIntents.values()] : [...intents.values()]
+    if (intents === undefined) {
+      this.pendingWriteIntents.clear()
+    }
     this.emit()
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await connection.save(serialized)
+        await connection.save(serialized, submitted)
         if (
           generation === this.generation
           && this.status === 'error'
@@ -1058,16 +1131,17 @@ export class RuntimeDataSchema {
       this,
       () => ({
         base: cloneStoredData(this.committedData),
+        intents: new Map(),
         working: cloneStoredData(this.committedData),
       }),
       overlay => {
         RuntimeAssert.defined(overlay.prepared, 'an action data transaction prepares its deltas before committing')
         overlay.previous = this.committedData
         this.committedData = overlay.prepared
-        this.commit()
+        this.commit(overlay.intents)
       },
       overlay => {
-        overlay.prepared = applyStoredDataDelta(overlay.base, overlay.working, this.committedData)
+        overlay.prepared = applyStoredDataDelta(overlay.base, overlay.working, this.committedData, overlay.intents)
       },
       overlay => {
         if (overlay.previous) {
@@ -1087,6 +1161,20 @@ export class RuntimeDataSchema {
     const buffered = this.bufferedRemoteSnapshot
     this.bufferedRemoteSnapshot = undefined
     this.receiveSnapshot(generation, buffered.stored)
+  }
+
+  private recordWriteIntent(entity: string, id: string, fields: readonly string[]): void {
+    if (fields.length === 0) {
+      return
+    }
+    const key = handleKey(entity, id)
+    const intents = existingTransactionResource<ActionDataOverlay>(this)?.intents ?? this.pendingWriteIntents
+    const prior = intents.get(key)
+    intents.set(key, {
+      entity,
+      fields: [...new Set([...(prior?.fields ?? []), ...fields])],
+      id,
+    })
   }
 
   private emit(): void {
@@ -1383,7 +1471,12 @@ function cloneStoredData(data: StoredData): StoredData {
 }
 
 /** Applies field/row deltas to the latest committed snapshot, never publishing the private overlay. */
-function applyStoredDataDelta(base: StoredData, working: StoredData, current: StoredData): StoredData {
+function applyStoredDataDelta(
+  base: StoredData,
+  working: StoredData,
+  current: StoredData,
+  intents: ReadonlyMap<string, TaoDataWriteIntent>,
+): StoredData {
   const rows: Record<string, StoredRow[]> = {}
   for (const entity of Object.keys(current.rows)) {
     const baseRows = new Map((base.rows[entity] ?? []).map(row => [row.Id, row]))
@@ -1402,8 +1495,9 @@ function applyStoredDataDelta(base: StoredData, working: StoredData, current: St
         `Cannot commit action update because ${entity} '${id}' was deleted concurrently.`,
         { entity },
       )
+      const submitted = new Set(intents.get(handleKey(entity, id))?.fields)
       for (const [field, value] of Object.entries(workingRow)) {
-        if (!Object.is(value, baseRow[field])) {
+        if (!Object.is(value, baseRow[field]) || submitted.has(field)) {
           currentRow[field] = value
         }
       }

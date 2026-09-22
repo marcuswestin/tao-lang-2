@@ -24,6 +24,8 @@ export const dataWriteValidationMessages = {
   unknownWriteLabel: (entity: string, name: string) =>
     `Entity '${entity}' has no field named '${name}'; labels resolve only the written owner's fields, not visible types.`,
   rowTarget: (operation: string) => `${operation} expects a row handle produced by a Tao query.`,
+  updateInput: (entity: string) => `Update of '${entity}' expects an input item copied from that entity.`,
+  updateInputField: (entity: string, field: string) => `Update of '${entity}' cannot write projected field '${field}'.`,
 } as const
 
 export const dataWriteValidationChecks = {
@@ -31,6 +33,9 @@ export const dataWriteValidationChecks = {
   [AST.UpdateStatement.$type]: validateUpdate,
   [AST.DeleteStatement.$type]: (deleteStatement, ctx) => {
     validateRowTarget(deleteStatement.target, 'delete', ctx)
+  },
+  [AST.RetryStatement.$type]: (retryStatement, ctx) => {
+    validateRowTarget(retryStatement.target, 'retry', ctx)
   },
 } satisfies NodeValidationChecks
 
@@ -45,7 +50,27 @@ function validateUpdate(update: AST.UpdateStatement, ctx: ValidationContext): vo
   if (type?.kind !== 'entity') {
     return
   }
-  validateWriteFields(type.entity, update.block.fields, ctx, { requireAll: false })
+  if (update.block) {
+    validateWriteFields(type.entity, update.block.fields, ctx, { requireAll: false })
+    return
+  }
+  if (!update.source) {
+    return
+  }
+  const source = Type.ofExpression(update.source)
+  if (Type.projectedEntityOf(source) !== type.entity) {
+    ctx.error(update.source, dataWriteValidationMessages.updateInput(Type.dataEntityName(type.entity)))
+    return
+  }
+  const fields = source.kind === 'item' ? source.item?.dataFields ?? [] : []
+  for (const field of fields) {
+    if (Type.dataFieldType(field).kind === 'list') {
+      ctx.error(
+        update.source,
+        dataWriteValidationMessages.updateInputField(Type.dataEntityName(type.entity), field.name),
+      )
+    }
+  }
 }
 
 function validateRowTarget(

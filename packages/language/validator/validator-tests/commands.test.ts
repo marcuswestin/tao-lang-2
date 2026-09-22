@@ -3,6 +3,7 @@ import { ActionsValidator } from '../validator-src/validators/ActionsValidator'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { commandValidationMessages } from '../validator-src/validators/commands-validator'
 import { declarationSlotValidationMessages } from '../validator-src/validators/declaration-slots-validator'
+import { ReactiveParametersValidator } from '../validator-src/validators/ReactiveParametersValidator'
 import { accepts, rejects } from './test-validate'
 
 const leaf = stubView('Leaf')
@@ -116,6 +117,44 @@ Describe('validator: commands as configured values', () => {
         render Leaf()
       }
     `),
+  )
+
+  Test(
+    'retains writable state when binding a mutating command slot',
+    accepts(`
+      ${leaf}
+      action Change(Value text) { set Value += "!" }
+      command Edit(Value text) {
+        Title "Edit"
+        do Change(Value)
+      }
+      view Home() {
+        state Draft = "draft"
+        let EditDraft = Edit with { Value: Draft }
+        action Run() { do EditDraft() }
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'rejects a readonly alias bound to a mutating command slot',
+    rejects(
+      `
+        ${leaf}
+        action Change(Value text) { set Value += "!" }
+        command Edit(Value text) {
+          Title "Edit"
+          do Change(Value)
+        }
+        view Home() {
+          let Draft = "draft"
+          let EditDraft = Edit with { Value: Draft }
+          render Leaf()
+        }
+      `,
+      ReactiveParametersValidator.messages.readonlyArgument('Value'),
+    ),
   )
 
   Test(

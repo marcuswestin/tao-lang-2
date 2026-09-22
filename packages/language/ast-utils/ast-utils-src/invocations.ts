@@ -4,6 +4,7 @@ import {
   type RenderInvocationPair,
   resolveArgumentBindings,
 } from './argument-bindings'
+import { writableExpression } from './reactive-parameters'
 import { type TaoType, Type } from './Type'
 
 /** RenderEventBindingPair declares one explicit control event bound to its action-valued parameter. */
@@ -15,7 +16,7 @@ export type RenderEventBindingPair = {
 /** ImplicitChangeBinding declares the writable state synthesized for an omitted Change handler. */
 export type ImplicitChangeBinding = {
   parameter: AST.ParameterDeclaration
-  state: AST.StateDeclaration
+  value: AST.Expression
 }
 
 export type RenderEventBindingDiagnostic =
@@ -210,17 +211,8 @@ function resolveImplicitChangeBinding(
   }
 
   const value = valuePair.argument.value
-  const state = valuePair.argument.label === 'Value' && AST.isValueReference(value)
-    ? value.target.ref
-    : undefined
-  const valueType = Type.ofExpression(value)
-  if (
-    state
-    && AST.isStateDeclaration(state)
-    && valueType.kind === 'primitive'
-    && valueType.primitive === 'text'
-  ) {
-    return { parameter: changeParameter, state }
+  if (valueParameter?.mutable || writableExpression(value)) {
+    return { parameter: changeParameter, value }
   }
 
   diagnostics.push({

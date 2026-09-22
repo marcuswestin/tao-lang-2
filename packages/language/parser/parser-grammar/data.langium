@@ -71,7 +71,7 @@ CreateStatement:
     'create' entity=[EntityDataDeclaration:ID] block=DataWriteBlock;
 
 UpdateStatement:
-    'update' target=DataRowExpression block=DataWriteBlock;
+    'update' target=DataRowExpression (block=DataWriteBlock | 'with' source=Expression);
 
 DeleteStatement:
     'delete' target=DataRowExpression;
