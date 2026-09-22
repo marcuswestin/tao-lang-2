@@ -1,11 +1,44 @@
 # Tao Companion
 
 The Expo development build that renders a Tao project on a real iPhone or iPad while Tao Studio runs
-on the Mac. It is a shell: Studio's own Metro serves the bundle, Studio's device gateway carries
-control, and nothing in this package knows about either. Its identity (`Tao Companion`,
-`tao-studio-companion`, `taostudiocompanion://`, `dev.tao-lang.studio.companion`) is fixed in
-`packages/ides/studio-tooling/studio-tooling-src/StudioCompanionIdentity.ts`; `app.json` repeats the same values and a
-test keeps them equal.
+on the Mac, and the prebuilt host `tao dev` opens Android emulator apps in. It is a shell: a Metro
+server serves the bundle, and nothing in this package knows which one. Its identity (`Tao
+Companion`, `tao-studio-companion`, `taostudiocompanion://`, `dev.tao-lang.studio.companion` on iOS
+and `dev.tao_lang.studio.companion` on Android, which admits no hyphen) is fixed in
+`packages/apps/expo-host/expo-host-src/dev-loop/prebuilt-host/CompanionIdentity.ts`; `app.json`
+repeats the same values and a test keeps them equal.
+
+This is also, today, the only way a Tao app reaches a physical iPhone or iPad. Since 2026-09-03,
+Expo Go 57 on iOS requires the developer to be logged in to both the Expo CLI and the Expo Go app,
+and `tao dev`'s Metro server runs under a repository-local Expo home directory that a developer's
+own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. The iOS
+Simulator and physical Android keep using Expo Go, and so does the Android emulator until an
+Android host is built (below).
+
+## What the shell carries
+
+Because a development build runs the bundle Metro serves it, the shell — not the bundle — decides
+which native modules exist and which entitlements are granted. Two consequences are worth knowing
+before a Tao app is run here.
+
+Its dependencies must cover every native module a Tao app can require.
+`packages/testing/verification/verification-tests/companion-native-parity.test.ts` fails when a
+dependency of `packages/apps/expo-host/package.json` that ships native code is missing here or
+pinned to a different version, because the alternative is a crash at require time rather than a
+readable failure. A built host records the same set as its native kit (see below).
+
+Its entitlements are the ones Tao is experimenting with: `app.json` applies the `tao-icloud` plugin
+with both iCloud services, which grants iCloud Documents, CloudKit, the ubiquity containers, and the
+`aps-environment` that CloudKit's silent pushes need. The container is derived from this shell's own
+bundle identifier, so **a Tao app run in the Companion reads and writes
+`iCloud.dev.tao-lang.studio.companion`, never the container the app itself declares** — iCloud
+container identifiers admit no wildcard, so no host binary can lend an app its own. That is
+sufficient for exercising the iCloud code paths in development and is not a substitute for running
+the app's own build.
+
+This costs something on the Apple side: the app id needs the iCloud capability with that container,
+and CloudKit brings Push Notifications with it, so a build signed by a team without push enabled
+will fail to provision.
 
 ## Install once
 
@@ -40,6 +73,27 @@ lines appear with device labels in Studio's Logs drawer.
 
 Run the install again only after a native dependency, config plugin, entitlement, or `app.json`
 change. Tao, TypeScript, and UI changes never need a rebuild.
+
+## The Android host
+
+```sh
+just companion-host-build             # arm64-v8a and x86_64
+just companion-host-build --abi arm64-v8a
+```
+
+Expo prebuilds the `android/` project here, Gradle assembles a debug APK, and the APK lands in
+`.artifacts/hosts/<version>/android/` beside `tao-host.json`, a manifest naming the native kit it was
+built with: every native-code dependency and the version it was built from, plus a hash of the
+native sources of Tao's own unpublished packages, whose versions never move. From then on
+`tao dev --android`, or `a` in a running dev loop, installs that APK on the emulator (only when the
+installed copy's bytes differ) and opens the app in it rather than in Expo Go. A host whose kit does
+not cover the one `tao dev` computes from `packages/apps/expo-host` is passed over by name and Expo
+Go is used instead; the directory name decides nothing. `tao dev` also looks under `~/.tao/hosts`
+(`$TAO_HOME/hosts`), where downloaded hosts will go.
+
+Gradle ignores `HTTPS_PROXY`, so the build hands it to the JVM itself, which lets it run behind a
+proxy and inside the agent sandbox. The first launch shows the development client's one-time menu
+introduction over the app.
 
 ## The local-network prompt
 

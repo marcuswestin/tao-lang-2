@@ -1,5 +1,6 @@
 {
   "name": "tao-appium-driver",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "main": "appium-driver-src/appium.ts",

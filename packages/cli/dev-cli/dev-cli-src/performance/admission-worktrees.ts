@@ -4,7 +4,7 @@ import { Assert, CLI, Errors, FS, HCI, Repo } from '@shared'
  * Disposable checkouts for the admission experiment, and nothing else.
  *
  * Ten lanes need ten checkouts, and this machine routinely carries more than thirty worktrees that
- * belong to other agents and to Ro. So the rule this module exists to enforce is that the experiment
+ * belong to other agents and to the Developer. So the rule this module exists to enforce is that the experiment
  * creates its own and removes only those: every path is built under one run-scoped root, the paths
  * are remembered as they are created rather than rediscovered afterwards, and removal refuses any
  * path that is not under the root this run made. A cleanup that globs or scans is how somebody

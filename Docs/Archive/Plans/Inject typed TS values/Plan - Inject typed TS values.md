@@ -31,8 +31,8 @@ Type soundness is split across the two type systems:
 
 ## Assumptions
 
-- Syntax is `inject <PrimitiveType> <InjectionArgumentList?> <TS_CODE_BLOCK>` in expression position, approved by Ro in chat (26-06-11). The fence is a function body and must `return` a value, consistent with render injections.
-- Injection expressions are allowed anywhere an `Expression` is allowed (alias values, render arguments, injection argument values). If implementation shows a position should be restricted, the restriction is a validator rule and a Ro decision.
+- Syntax is `inject <PrimitiveType> <InjectionArgumentList?> <TS_CODE_BLOCK>` in expression position, approved by the Developer in chat (26-06-11). The fence is a function body and must `return` a value, consistent with render injections.
+- Injection expressions are allowed anywhere an `Expression` is allowed (alias values, render arguments, injection argument values). If implementation shows a position should be restricted, the restriction is a validator rule and a decision by the Developer.
 - The render-injection statement grammar (`render inject ...`) is unchanged; only expressions gain the typed form. The parser distinguishes the two by context (statement vs expression position).
 - Parser and compiler tests pin the intended syntax directly, so the injection examples land in focused fixtures and test apps before executable Kitchen Sink coverage.
 - The old repo has no comparable typed-value-injection feature to port; render-injection mechanics in this repo are the reference.

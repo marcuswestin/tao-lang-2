@@ -1,6 +1,6 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GreenTree, type GreenTreeRecord } from '@verification/GreenTree'
-import { LandingLock, type LandingLockRecord } from '@verification/LandingLock'
+import { LandingLock, type LandingLockRecord, type LandingQueueWaiter } from '@verification/LandingLock'
 import { type LaneRecord, MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
 import { formatReminders, readDueReminders, type Reminder } from './Reminders'
 
@@ -88,6 +88,8 @@ type BoardMachine = {
   cpuCount: number
   /** Who holds the machine-wide landing lock, when anyone does. */
   landingLock?: LandingLockRecord
+  landingQueue: readonly LandingQueueWaiter[]
+  landingQueueError?: string
   lanes: readonly LaneRecord[]
   loadAverage: number
   registryAvailable: boolean
@@ -204,6 +206,12 @@ function formatMachineSection(machine: BoardMachine): string {
       ? '  landing lock: free'
       : `  landing lock: held by ${LandingLock.describe(machine.landingLock)}`,
   )
+  for (const [index, waiter] of machine.landingQueue.entries()) {
+    lines.push(`  ready landing ${index + 1}: ${waiter.holder} (pid ${waiter.pid})`)
+  }
+  if (machine.landingQueueError !== undefined) {
+    lines.push(`  landing queue unreadable: ${machine.landingQueueError}`)
+  }
   // A held lock used to say only who took it and when, so a lock waiting on an agent between
   // commands looked exactly like a lock running a 15-minute host lane. The phase breakdown is the
   // whole difference, and it is the reason to read `board` before deciding a lock is wedged.
@@ -515,9 +523,13 @@ async function readBoardMachine(
     readResourceLeases(root),
   ])
   const landingLock = await LandingLock.inspect(root).catch(() => undefined)
+  const queue = await LandingLock.inspectQueue(root)
+    .then(landingQueue => ({ landingQueue }))
+    .catch((error: unknown) => ({ landingQueue: [], landingQueueError: String(error) }))
   return {
     cpuCount: cpuCount(),
     ...(landingLock === undefined ? {} : { landingLock }),
+    ...queue,
     lanes,
     loadAverage: loadAverage(),
     registryAvailable: inspection.available,

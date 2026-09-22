@@ -3,7 +3,7 @@
 Status: **exploration, dialogue open**. This is the thousand-mile overview for running whole Tao
 apps as fully deterministic simulations — simulated clock, scripted network, scripted providers —
 plus property testing derived from declared constraints, deterministic replay, time-travel, and
-executable design rules across scenario cells. Direction settled with Ro is recorded in dated
+executable design rules across scenario cells. Direction settled with the Developer is recorded in dated
 sections as the dialogue proceeds. Nothing here is language law until it reaches
 `Tao Revolution/Decisions.md`, which wins wherever the two collide.
 

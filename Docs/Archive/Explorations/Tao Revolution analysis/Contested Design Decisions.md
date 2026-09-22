@@ -12,7 +12,7 @@ showing each design's answer as real code taken from its demos.
 | **D** | `tao-revolution-synthesis-da6265`   | `~/code/tao-lang-2/.claude/worktrees/tao-revolution-synthesis-da6265`          |
 
 > **Status: every item is resolved.** All 38 items, the product-scope tier, and the minor-spelling
-> table have been decided by Ro and recorded — with full rationale, provider research, and worked
+> table have been decided by the Developer and recorded — with full rationale, provider research, and worked
 > examples — in `Final Decisions.md`, which is now the single authoritative record. Decided items
 > were removed from this document as they settled, so nothing contested remains in it.
 >

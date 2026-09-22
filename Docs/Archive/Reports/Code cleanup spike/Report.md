@@ -12,7 +12,7 @@ commits. No Tao
 language behavior, grammar, diagnostic text, generated-code semantics, public API, stdlib surface,
 dependency, WordFlower tier, or archived roadmap content changed.
 
-Ro directed the spike to wrap after the already-identified reviewer-launch cleanup. Structural
+The Developer directed the spike to wrap after the already-identified reviewer-launch cleanup. Structural
 Sweep A then found no further qualifying R1/R2/R3/R10/R11 work. Repo-conformance Sweep B found eight
 new, non-urgent R4/R5 groups. This follow-up completed seven of those groups in six commits and
 rejected the Switch helper after stack-parity revalidation; no item remains deferred. The original
@@ -204,7 +204,7 @@ was uncovered that warranted handoff outside the rulebook.
   tests were too indirect.
 - The final branch diff contains no `.langium`, `_gen_`, `Apps/WordFlower`, or `Docs/Roadmap/Archive`
   path.
-- Ro's concurrent `Apps/WordFlower/2 - Next` work was never edited, staged, or committed by the
+- The Developer's concurrent `Apps/WordFlower/2 - Next` work was never edited, staged, or committed by the
   cleanup follow-up. Its current eleven file hashes are:
 
 | File                       | SHA-256                                                            |

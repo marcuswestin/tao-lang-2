@@ -19,6 +19,9 @@
         }
       }
     },
+    "android": {
+      "package": "dev.tao_lang.studio.companion"
+    },
     "updates": {
       "enabled": false
     },
@@ -30,6 +33,15 @@
           "ios": {
             "enableSceneSupport": true
           }
+        }
+      ],
+      [
+        "tao-icloud",
+        {
+          "services": [
+            "CloudDocuments",
+            "CloudKit"
+          ]
         }
       ],
       "./plugins/with-ios-fmt-compat.cjs"

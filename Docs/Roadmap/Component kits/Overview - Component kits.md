@@ -1,7 +1,7 @@
 # Overview - Component kits
 
 Working draft. The mechanism, styling fallback, conformance model, and navigation-surface split
-below were settled with Ro in conversation; spellings marked _proposed_ are still mine to lose.
+below were settled with the Developer in conversation; spellings marked _proposed_ are still mine to lose.
 
 ## The three targets
 

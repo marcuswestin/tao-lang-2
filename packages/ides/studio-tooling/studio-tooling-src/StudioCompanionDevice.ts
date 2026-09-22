@@ -5,9 +5,9 @@ import {
   iosPhysicalDevicesFromDevicectl,
   runDevicectlJson,
 } from '@expo-host/dev-loop/expo-runner/physical-device'
+import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import type { StudioDeviceLaunchDiagnostic } from '@studio'
-import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
 /**
  * Physical-device tooling for the Tao Companion development build: discovery, installed-app check,
@@ -50,9 +50,9 @@ const PROFILE_BIN_PATH = '.devenv/profile/bin'
 /** createStudioCompanionDevice binds the companion identity and a process runner to the devicectl and Expo commands. */
 export function createStudioCompanionDevice(options: StudioCompanionDeviceOptions = {}) {
   const run = options.run ?? CLI.run
-  const bundleIdentifier = options.bundleIdentifier ?? StudioCompanionIdentity.bundleIdentifier
+  const bundleIdentifier = options.bundleIdentifier ?? CompanionIdentity.bundleIdentifier
   const repoRoot = () => options.repoRoot ?? Repo.getRoot()
-  const packageRoot = () => options.packageRoot ?? FS.resolvePath(StudioCompanionIdentity.packagePath, repoRoot())
+  const packageRoot = () => options.packageRoot ?? FS.resolvePath(CompanionIdentity.packagePath, repoRoot())
   const devicectl = <T>(args: readonly string[]) => runDevicectlJson<T>(args, { run, tmpRoot: options.tmpRoot })
 
   async function listHosts(): Promise<CompanionHost[]> {
@@ -96,7 +96,7 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
     if (outcome.failure !== undefined) {
       throwStudioDeviceFailure(
         devicectlFailureLayer(outcome.failure),
-        describeDevicectlFailure(`open ${StudioCompanionIdentity.name} at ${input.url}`, outcome.failure),
+        describeDevicectlFailure(`open ${CompanionIdentity.name} at ${input.url}`, outcome.failure),
         { details: outcome.failure },
       )
     }
@@ -107,7 +107,7 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
     if (!await FS.isDirectory(FS.resolvePath('node_modules/expo', root))) {
       throwStudioDeviceFailure(
         'expo',
-        `${StudioCompanionIdentity.name} dependencies are not installed under ${FS.displayPath(root)}. `
+        `${CompanionIdentity.name} dependencies are not installed under ${FS.displayPath(root)}. `
           + 'Run `./agent setup` at the repository root, then retry.',
       )
     }
@@ -258,8 +258,8 @@ export function studioDeviceFailureLayer(error: unknown): StudioDeviceFailureLay
 
 /**
  * companionDeviceNameFromArgument reads the device name a person typed. `just` has no named
- * arguments, so `just studio-companion-install device="roPhone"` hands the recipe the literal
- * `device=roPhone`; the documented spelling and the bare `roPhone` both name the same device.
+ * arguments, so `just studio-companion-install device="<name>"` hands the recipe the literal
+ * `device=<name>`; the documented spelling and the bare `<name>` both name the same device.
  */
 export function companionDeviceNameFromArgument(argument: string): string {
   return argument.trim().replace(/^device=/, '').trim()
@@ -297,10 +297,10 @@ export async function runStudioCompanionInstall(
   }
   HCI.logProcessInfo(
     'companion',
-    `Installing ${StudioCompanionIdentity.name} on ${host.name} (${host.id}) with expo run:ios --no-bundler; Studio stays the only Metro.`,
+    `Installing ${CompanionIdentity.name} on ${host.name} (${host.id}) with expo run:ios --no-bundler; Studio stays the only Metro.`,
   )
   await device.install({ deviceName: host.name })
-  HCI.writeSuccess(`Installed ${StudioCompanionIdentity.name} on ${host.name}.\n`)
+  HCI.writeSuccess(`Installed ${CompanionIdentity.name} on ${host.name}.\n`)
   HCI.writeLine('Now run `just studio <project>` and press Open on device.')
   return 0
 }
@@ -309,8 +309,8 @@ function describeInstallFailure(deviceName: string, result: CLI.CommandResult): 
   const exit = result.signal !== null
     ? `was stopped by ${result.signal}`
     : `exited with code ${String(result.exitCode)}`
-  return `expo run:ios ${exit} while installing ${StudioCompanionIdentity.name} on "${deviceName}". `
+  return `expo run:ios ${exit} while installing ${CompanionIdentity.name} on "${deviceName}". `
     + 'Read the [expo] lines above for the Xcode or CocoaPods error. Common causes: the device is locked or has not trusted this Mac; '
-    + `no development team is selected for the Xcode project under ${StudioCompanionIdentity.packagePath}/ios (open it in Xcode once and pick one); `
+    + `no development team is selected for the Xcode project under ${CompanionIdentity.packagePath}/ios (open it in Xcode once and pick one); `
     + `CocoaPods could not resolve pods (\`pod\` comes from ${PROFILE_BIN_PATH}, so run \`./agent setup\` if it is missing).`
 }

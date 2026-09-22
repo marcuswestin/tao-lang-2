@@ -278,7 +278,7 @@ Describe('validator: types and expressions', () => {
       `
         type Person is { Name text, Role text is "member" }
         type Admin is Person with { Role is "admin", Access number is 1 }
-        let Admin = { Name "Ro" }
+        let Admin = { Name "the Developer" }
         let Renamed = Admin with { Name "Grace", Access 2 }
       `,
       'render Text(Renamed.Name)',
@@ -304,7 +304,7 @@ Describe('validator: types and expressions', () => {
     rejects(
       typeApp(`
         type Person is { Name text, Kind is "person" }
-        let Person = { Name "Ro" }
+        let Person = { Name "the Developer" }
         let Invalid = Person with { Kind "admin" }
       `),
       typeValidationMessages.filledProperty('Kind'),

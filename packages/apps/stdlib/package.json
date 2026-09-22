@@ -1,5 +1,6 @@
 {
   "name": "tao-stdlib",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "stdlib-src/stdlib.ts",

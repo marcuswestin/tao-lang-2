@@ -6,7 +6,7 @@ Build an additive reference implementation before replacing existing testing. E2
 or native OS host; a build or runtime-renderer test is a different kind of evidence. Start from HNReader
 and a new focused Clockwork fixture. Register new coverage with scoped patterns and import no existing testing
 infrastructure other than the HNReader subject. Keep existing suites and merge gates intact. Do not
-commit until requested. Ro subsequently authorized completing review and committing this milestone
+commit until requested. The Developer subsequently authorized completing review and committing this milestone
 in chunks on 2026-09-19, then authorized landing it on `main` on 2026-09-20.
 
 Implementation and commands: [E2E testing README](../../packages/testing/e2e-testing/README.md).
@@ -83,7 +83,7 @@ inspection and ownership sit above drivers; the driver is not the journey runner
 
 ## Parallel development and host testing
 
-Ro requested concurrent agents both testing and actively developing on real hosts, including visual
+The Developer requested concurrent agents both testing and actively developing on real hosts, including visual
 design iteration. The current implementation provides these foundations:
 
 - Hold an exclusive target lease across installation, UI interaction, and cleanup. Separate simulators
@@ -108,7 +108,7 @@ drivers isolate application IDs, artifacts, ports, revisions, and target leases,
 evidence still comes from coordinated single-target runs. A simultaneous multi-simulator host proof is
 required before claiming that capacity. Same-target driving remains serialized by design.
 
-Ro recalls an earlier decision against Playwright that has not yet been located. The subsequent
+The Developer recalls an earlier decision against Playwright that has not yet been located. The subsequent
 research recommends its library behind the Tao browser test driver to reduce locator/wait/debugging
 maintenance, while preserving existing direct-CDP callers and keeping raw CDP a narrow diagnostic
 or attach capability. This does not select Playwright Test as the universal runner; its use for

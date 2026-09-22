@@ -317,7 +317,7 @@ Describe('validator: actions and state', () => {
       ],
       [
         'allows compound text concatenation',
-        'state Name = "Ro"\naction Greet() { set Name += "!" }',
+        'state Name = "the Developer"\naction Greet() { set Name += "!" }',
         '',
       ],
     ] as const
@@ -477,7 +477,7 @@ Describe('validator: actions and state', () => {
 
   Test('reports the assignment error when text concatenation has a mismatched value', async () => {
     const result = await testValidateCodeWithErrors(
-      actionApp('state Name = "Ro"\naction BadCompound() { set Name += 1 }'),
+      actionApp('state Name = "the Developer"\naction BadCompound() { set Name += 1 }'),
     )
     Expect(validationErrorMessages(result)).toEqual([
       StateValidator.messages.setTypeMismatch('Name', 'text', 'number'),

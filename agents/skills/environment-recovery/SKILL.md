@@ -18,7 +18,7 @@ behind it.
   results as different declarations, and `./agent typecheck` fails with types that are not
   assignable to themselves (`Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`) naming no cause.
 - `./agent doctor`'s `worktree path` check names it. `git worktree move <given> <real>` fixes it,
-  and needs an unsandboxed shell: report the exact command and pause for Ro's approval. The rule is the symlink, not the location — worktrees under
+  and needs an unsandboxed shell: report the exact command and pause for the Developer's approval. The rule is the symlink, not the location — worktrees under
   `/private/tmp` are fine, and a symlinked home or network mount hits the same failure.
 
 ## The devenv profile
@@ -43,7 +43,7 @@ behind it.
   `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
   denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
   install and the same remediation. Only the tempdir case is resumable. For either protected-path
-  failure, report the denied path and exact `./agent setup` retry, then pause for Ro's approval of
+  failure, report the denied path and exact `./agent setup` retry, then pause for the Developer's approval of
   that unsandboxed write. Do not start `just session-unsandboxed` on your own.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
@@ -56,11 +56,11 @@ behind it.
   Codex reads the same profiles as `tao-review`, `tao-native`, `tao-local-services`, and
   `tao-release`, defaulting to `tao-workspace`.
 - On a sandbox violation, use the failed command's report and `./agent capabilities` to distinguish
-  a host requirement from a broken command. If a write needs host access, tell Ro the exact
-  operation and why, then pause until Ro explicitly approves it in the conversation. Tool-level
-  auto-review is not Ro's approval. Do not try alternate spellings, a host session, or a policy
+  a host requirement from a broken command. If a write needs host access, tell the Developer the exact
+  operation and why, then pause until the Developer explicitly approves it in the conversation. Tool-level
+  auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
   change to route around the denial. `./agent land` is the one standing host-write exception after
-  Ro authorizes landing that named slice.
+  the Developer authorizes landing that named slice.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Run them through
   `./agent studio-smoke` or `./agent studio-proof-real-app`; if the host blocks Chrome there,
   rerun only with explicit review, and never reuse an existing browser profile.

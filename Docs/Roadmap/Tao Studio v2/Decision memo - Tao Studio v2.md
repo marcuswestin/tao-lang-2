@@ -1,6 +1,6 @@
 # Decision memo - Tao Studio v2
 
-Status: active record of Ro's Studio v2 decisions and unresolved questions. This memo controls the
+Status: active record of the Developer's Studio v2 decisions and unresolved questions. This memo controls the
 remaining Studio v2 work, but it does not amend `Docs/Roadmap/Tao Revolution/Decisions.md` by itself.
 
 ## Adopted language decisions

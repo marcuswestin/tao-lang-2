@@ -12,10 +12,12 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
+import { readAgentCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -164,6 +166,22 @@ await runWithCommands(commands => {
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
     .action(async (options: LandCommandOptions = {}) => {
       try {
+        if (options.dryRun !== true && options.skipVerifyFull !== true) {
+          const host = await readAgentCapabilities()
+          const missing = host.checks.filter(check =>
+            ['Watchman socket', 'CoreSimulator service'].includes(check.name)
+            && check.status !== 'available'
+          )
+          if (host.sandboxDetected || missing.length > 0) {
+            Errors.throwHostEnvironment(
+              'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
+                + (host.sandboxDetected ? 'This shell is sandboxed. ' : '')
+                + missing.map(check => `${check.name}: ${check.detail}. `).join('')
+                + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
+                + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
+            )
+          }
+        }
         await LandCommand.run({
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -480,6 +498,20 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('open-pr')
+    .description(
+      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+    )
+    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .action(async (options: { pollIntervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await OpenPrCommand.run({
+          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
     .command('reclaim')
     .description(
       'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
@@ -683,6 +715,25 @@ await runWithCommands(commands => {
         }
         const { runStudioCompanionInstall } = await import('@studio-tooling/StudioCompanionDevice')
         Platform.runtimeProcess.exit(await runStudioCompanionInstall({ deviceName: options.device }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('companion-host-build')
+    .description(
+      'Build the Tao Companion as a prebuilt Android host into .artifacts/hosts, which tao dev installs on an emulator in place of Expo Go.',
+    )
+    .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
+    .action(async (options: { abi?: string }) => {
+      try {
+        const { runCompanionHostBuild } = await import('@studio-tooling/CompanionHostBuild')
+        const architectures = options.abi?.split(',').map(abi => abi.trim()).filter(Boolean)
+        Platform.runtimeProcess.exit(
+          await runCompanionHostBuild(architectures === undefined ? {} : { architectures }),
+        )
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
