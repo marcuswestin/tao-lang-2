@@ -574,27 +574,48 @@ Describe('tao test CLI', () => {
 
   // Jest hashes its whole configuration into the key of every transform it caches, and the
   // entrypoint directory is in that configuration. When it sat inside the run root, every compile
-  // moved it and the runner re-transformed React Native and everything else it loads.
-  Test('hands the test runner the same entrypoint directory after an edit compiles a new run root', async () => {
-    const entrypointsStub =
-      `process.stderr.write(\`entrypoints: \${process.env.${RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV}}\\n\`)\n`
-    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': entrypointsStub }, async rootDir => {
+  // moved it and the runner re-transformed React Native and everything else it loads. The compiled
+  // apps are stored by their contents for the same reason: a compile whose output is unchanged hands
+  // the runner the same module paths, and only an edit that changes the output moves them.
+  Test('hands the test runner the same entrypoints and module paths across compiles of unchanged output', async () => {
+    const envStub = [
+      `process.stderr.write(\`entrypoints: \${process.env.${RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV}}\\n\`)`,
+      `process.stderr.write(\`manifest: \${process.env.${RuntimeTesting.TEST_MANIFEST_ENV}}\\n\`)`,
+      '',
+    ].join('\n')
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': envStub }, async rootDir => {
       await withJestStub(rootDir, async () => {
         const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
         await withRuntimeRoot(runtimeRoot, async () => {
           const entrypointsOf = (output: string) => /entrypoints: (.+)/.exec(output)?.[1]
+          const modulePathsOf = async (output: string) => {
+            const manifestPath = /manifest: (.+)/.exec(output)?.[1]
+            Expect(manifestPath).toBeDefined()
+            const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(manifestPath!)
+            return manifest.files.flatMap(file =>
+              file.suites.flatMap(suite => suite.checks.map(check => check.app.modulePath))
+            )
+          }
 
           const first = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
           const firstRunRoots = await listRunRoots(runtimeRoot)
+          const firstModules = await modulePathsOf(outputText(first))
           await FS.writeText(FS.resolvePath('App.tao', rootDir), taoApp('Reported').replace('"Reported"', '"Edited"'))
           const second = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const secondModules = await modulePathsOf(outputText(second))
+          const third = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const thirdModules = await modulePathsOf(outputText(third))
 
-          Expect(first.exitCode).toBe(0)
-          Expect(second.exitCode).toBe(0)
+          Expect([first.exitCode, second.exitCode, third.exitCode]).toEqual([0, 0, 0])
           Expect(await listRunRoots(runtimeRoot)).not.toEqual(firstRunRoots)
           Expect(entrypointsOf(outputText(first))).toBeDefined()
           Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
           Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
+          Expect(firstModules.length).toBeGreaterThan(0)
+          const store = `/${RuntimeTesting.TestRunRoot.COMPILED_STORE_DIRECTORY_NAME}/`
+          Expect(firstModules.every(path => path.includes(store))).toBe(true)
+          Expect(secondModules).not.toEqual(firstModules)
+          Expect(thirdModules).toEqual(secondModules)
         })
       })
     })
