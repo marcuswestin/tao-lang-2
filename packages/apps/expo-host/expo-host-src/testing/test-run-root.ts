@@ -188,19 +188,25 @@ async function intern(runRoot: string, generatedRoot: string): Promise<string> {
   const storeRoot = FS.resolvePath(COMPILED_STORE_DIRECTORY_NAME, categoryRoot)
   await FS.mkdir(storeRoot)
 
+  // An app that reaches no module — one built of inline TSX alone, as test fixtures often are — has
+  // no tree to share and is stored whole.
   const modulesPath = FS.resolvePath(MODULES_DIRECTORY_NAME, generatedPath)
-  const treeHash = await FS.filesIdentity(
-    (await walkedFiles(modulesPath)).map(path => [FS.relativePath(modulesPath, path), path]),
-  )
-  await moveIntoStore(modulesPath, FS.resolvePath(treeHash, storeRoot))
+  const treeHash = await FS.isDirectory(modulesPath)
+    ? await FS.filesIdentity((await walkedFiles(modulesPath)).map(path => [FS.relativePath(modulesPath, path), path]))
+    : undefined
+  if (treeHash !== undefined) {
+    await moveIntoStore(modulesPath, FS.resolvePath(treeHash, storeRoot))
+  }
 
   const ownFiles = (await FS.listDir(generatedPath)).filter(name => name !== MODULES_DIRECTORY_NAME)
   const appHash = FS.contentIdentity([
     await FS.filesIdentity(ownFiles.map(name => [name, FS.resolvePath(name, generatedPath)])),
-    `${MODULES_DIRECTORY_NAME}\n${treeHash}`,
+    `${MODULES_DIRECTORY_NAME}\n${treeHash ?? 'none'}`,
   ])
-  // Relative, so the store survives a moved or renamed checkout.
-  await FS.symlink(`../${treeHash}`, modulesPath)
+  if (treeHash !== undefined) {
+    // Relative, so the store survives a moved or renamed checkout.
+    await FS.symlink(`../${treeHash}`, modulesPath)
+  }
   await moveIntoStore(generatedPath, FS.resolvePath(appHash, storeRoot))
 
   // What the compiler was given as its package root is now empty of anything but that directory.

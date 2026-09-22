@@ -501,6 +501,21 @@ Describe('reusing a generated test run root', () => {
     })
   })
 
+  // A fixture built of inline TSX reaches no module at all; it is stored whole, and stably.
+  Test('stores an app that has no module tree', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+
+      const first = await compiledApp(runRoot, { app: 'alone', modules: {} })
+      const again = await compiledApp(runRoot, { app: 'alone', modules: {} })
+
+      Expect(again).toBe(first)
+      Expect(await FS.readText(first)).toBe('alone')
+      Expect(await FS.exists(FS.resolvePath('modules', FS.dirname(first)))).toBe(false)
+      Expect((await FS.listDir(storeRoot(runtimePackageRoot))).length).toBe(1)
+    })
+  })
+
   // Five of WordFlower's eight test apps compile to one module tree byte for byte; only `App.tsx`
   // differs. The tree is stored once and each app links to it, so an edit that changes the tree
   // costs one re-transform of it rather than one per app.
