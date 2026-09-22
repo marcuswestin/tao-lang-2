@@ -29,6 +29,8 @@ Describe('Tao IDE extension smoke', () => {
     Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
     Expect(packageJson.contributes.languages[0]?.configuration).toBe('./language-configuration.json')
     Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
+    Expect(await FS.readText(FS.resolvePath('../LICENSE', import.meta.dir)))
+      .toBe(await FS.readText(FS.resolvePath('../../../../LICENSE', import.meta.dir)))
   })
 
   for (const errorCode of ['EPERM', 'EFAULT'] as const) {

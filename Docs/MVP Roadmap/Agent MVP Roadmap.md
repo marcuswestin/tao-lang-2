@@ -178,6 +178,10 @@ of whether a new language feels real.
 
 - Shape: packaging, versioning, and publication to the VS Code Marketplace and Open VSX, with the
   extension resolving a `tao` from the user's machine rather than a repository path.
+- Packaging progress: the VSIX carries a minified, bundled language server and standard library,
+  its own README, and the repository licence. The editor/CLI version relationship still needs to
+  follow the standalone CLI work; an isolated VS Code installation and both marketplace releases
+  remain unproved.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
 - Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
   Both marketplaces are in the first public-release scope (`R12`).

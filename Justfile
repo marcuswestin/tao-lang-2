@@ -597,9 +597,10 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
 
-_ide-extension-package: _ide-extension-build
+_ide-extension-package: _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && bun esbuild.config.ts --minify
+    cd packages/ides/ide-extension && bunx @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check
