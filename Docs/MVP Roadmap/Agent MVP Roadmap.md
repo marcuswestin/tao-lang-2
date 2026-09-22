@@ -355,7 +355,10 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 
 `WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
 `WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
-existence and live two-device sync still need confirmation before outside testers can use the demo.
+existence is confirmed. On 2026-09-22, a direct Expo web export of the hosted variant loaded an
+empty library, created a disposable workspace, retained it after reload, and delivered a second
+workspace to a second browser origin without reload. Physical-device sync still needs acceptance
+before outside testers can use the demo.
 
 - Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
   onboarding requires an existing account because new signups are closed, and the production demo
