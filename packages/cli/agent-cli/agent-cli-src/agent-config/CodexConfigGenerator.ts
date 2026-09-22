@@ -91,7 +91,7 @@ async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise
         throw error
       }
       const message = `Codex permissions are stale but ${output.path} is not writable. `
-        + 'Pause and ask Ro to approve an unsandboxed `./agent setup`; do not commit stale generated rules.'
+        + 'Pause and ask the Developer to approve an unsandboxed `./agent setup`; do not commit stale generated rules.'
       options.onSkip?.(message)
       Errors.throwHostEnvironment(message)
     }

@@ -3,7 +3,7 @@ name: simplify-repo
 description: >-
   Plan and run a repository-wide simplification pass: remove code through shared functions, bring
   code to the house patterns, shrink agent instructions and documentation, move written rules into
-  code that enforces them, and consolidate packages. Use when Ro asks to simplify the repo, run a
+  code that enforces them, and consolidate packages. Use when the Developer asks to simplify the repo, run a
   simplification or cleanup pass, reduce instructions or docs, or invokes /simplify-repo.
 ---
 
@@ -11,7 +11,7 @@ description: >-
 
 The goal is the best concluding state, not the smallest diff: current structure is no constraint.
 Each run has a plan under `Docs/Roadmap/Repository simplification <n>/`; this skill owns what every
-run shares. Standing decisions below are Ro's and are not reopened; anything new goes through
+run shares. Standing decisions below are the Developer's and are not reopened; anything new goes through
 `decision-rounds`.
 
 ## Sequence
@@ -23,7 +23,7 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 3. Find concurrent work with `./agent board`, read each branch's touched paths, and write them into
    the plan as fences. Files several branches edit belong to the orchestrator alone.
 4. Propose the top five projects from the audit, plus other focuses the numbers suggest, and settle
-   them with Ro through `decision-rounds`.
+   them with the Developer through `decision-rounds`.
 5. Write the plan: decisions, fences, projects, waves with exclusive path ownership and a model
    tier per agent, and a ledger. `delegation`'s `references/parallel-implementation.md` owns the
    fan-out mechanics.
