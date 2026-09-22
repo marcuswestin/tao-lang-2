@@ -1,6 +1,7 @@
 import { throwUserInput } from './core/Errors'
 import * as FS from './FS'
 import * as Platform from './Platform'
+import { TaoResources } from './TaoResources'
 
 /**
  * TaoStdlib owns the declared Tao stdlib root: the one input to a Tao compile that is not a path
@@ -48,7 +49,16 @@ export const TaoStdlib = {
 } as const
 
 /**
- * declaredRoot returns the stdlib root the environment declares, or undefined for the built-in one.
+ * declaredRoot returns the stdlib root in front of this process, or undefined for the built-in one.
+ * Two things can put one there: the environment variable, and an installed Tao's unpacked resource
+ * tree, which `TaoResources` finds beside the running binary. The variable wins, so a test or a
+ * packaged Studio can still redirect a real binary.
+ *
+ * Both answers go through this one function so that `declaredRootIdentity` covers both. An
+ * installed root that moved the stdlib without reaching the identity would be the exact failure
+ * this module exists to prevent, one layout later: a compile silently reused against a different
+ * stdlib. Inside a checkout neither source answers, the result is undefined, and every caller
+ * resolves as it always has.
  *
  * A relative value is refused rather than resolved, because the two halves of this variable's job
  * could not agree on what to resolve it against. `declaredRootIdentity` resolves it against the
@@ -67,7 +77,7 @@ function declaredRoot(): string | undefined {
         + 'directory, which are not the same tree.',
     )
   }
-  return declared
+  return declared ?? TaoResources.resolve(TaoResources.STDLIB_DIRECTORY)
 }
 
 /**

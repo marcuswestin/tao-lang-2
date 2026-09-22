@@ -1,7 +1,12 @@
-import { Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, TaoResources } from '@shared'
 import { inPlace } from './in-place-files'
 
-const CLI_PACKAGE_ROOT = FS.resolvePath('..', import.meta.dir)
+/**
+ * CLI_PACKAGE_ROOT is the tree that carries this CLI's `modules/@tao/*`. An installed binary's
+ * resource root is laid out as one, because inside the binary `import.meta.dir` names `/$bunfs`,
+ * which no project's TypeScript or Metro can resolve through a link.
+ */
+const CLI_PACKAGE_ROOT = TaoResources.declaredRoot() ?? FS.resolvePath('..', import.meta.dir)
 
 /**
  * PROJECT_TSCONFIG is the TypeScript project `tao create` writes. Sidecar files resolve `@tao/*`
