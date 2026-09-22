@@ -215,9 +215,18 @@ for WordFlower's 28 files, 0.34s against 0.17s for the build itself — because 
 genuinely read the entry's graph (navigation reachability, selection keys, datasource membership,
 global commands), so a file cannot simply be validated once. Separating file-local validators, which
 are most of them, from graph-reading ones would remove most of it and is a change to the validator's
-contract rather than a defect. And opening a workspace costs 0.10-0.15s before any file is read:
-`Packages.createContext` scans the project for package directories, 2.2s of the repository's 6.6s
+contract rather than a defect. And opening a workspace cost 0.10-0.15s before any file was read:
+`Packages.createContext` scanned the project for package directories, 2.2s of the repository's 6.6s
 across 20 workspaces, paid again by every test that opens one.
+
+**Opening a workspace, fixed since.** Counting child processes, not time, found that opening one
+workspace asked Git five times — once for the project roots, once for the package directories, once
+per package for its sources — and built two Langium containers to ask whether a file declares a
+project, a question its syntax alone answers. One `git ls-files` now serves every question
+(`Repo.listUnder`), and the project question is a syntax parse on the shared context. Measured on
+WordFlower at the same load: `Workspace.open` 181ms → 37ms, a package context 458ms → 23ms once
+warm, one spawn where there were five. This was also the cause of the "opens one root concurrently"
+test's timeouts under load, which `main` had since covered by raising every test wait's budget.
 
 ### 5.4 Every command is a cold process, including the ones in a loop
 
@@ -227,10 +236,15 @@ file changes this by less than the noise, because Bun already caches transpiled 
 evaluating Langium and building the parser, not finding files. It is paid:
 
 - once per `tao check`, `fix`, `compile` — tolerable alone;
-- on **every save** under `tao dev`, which spawns a new `tao compile` process per change and
-  recompiles the whole app (`packages/apps/expo-host/expo-host-src/dev-loop/Run.ts:74-78`) — 3s
-  before Metro saw a byte when measured, about 0.8s with 5.1 fixed, against roughly 0.2s for an
-  in-process incremental recompile;
+- on **every save** under `tao dev` — which, this report wrongly said, spawned a `tao compile`
+  process per change. It does not: `Run.compileApp` calls `Runtime.generateApp` in-process
+  (`packages/apps/expo-host/expo-host-src/dev-loop/Run.ts`), and only parser generation spawns.
+  What a save still pays is a fresh workspace per compile — new Langium services and a new package
+  context, about 0.1-0.15s — on top of the compile itself, measured on a live workspace at load 30
+  as parse 97ms, validate 44ms, codegen 65ms. A live workspace updated through
+  `DocumentBuilder.update` would take the fresh-services cost and most of the parse, roughly 0.1-0.15s
+  of a 0.3s save; validation and codegen, not parsing, are now the larger part. Metro's rebuild and
+  Fast Refresh, the other side of edit-to-preview, have not been measured;
 - several times per `tao test`: the CLI, a Bun worker per test directory, then Node and Jest.
 
 ### 5.5 `tao test` pays Jest, Babel, and React Native on every run
@@ -484,7 +498,11 @@ core (7.2), each opened only by its named trigger.
 2. **May the CLI rely on a resident process?** Decided by Ro on 2026-09-21: yes, it may. Also decided
    the same day: Phase 1 starts with `tao dev` compiling in-process, before watch modes, because the
    1-2s edit-to-preview bar is the one people feel; a shared background service comes only if cold
-   one-shot commands still feel slow after that, because daemons cost lifecycle bugs.
+   one-shot commands still feel slow after that, because daemons cost lifecycle bugs. That decision
+   rested on 5.4's claim that a save spawned a process, which was stale (see 5.4); the in-process
+   part already exists, and what a live workspace is worth is about 0.1-0.15s per save. Whether to
+   build it now, measure Metro's side first, or go to Phase 2 first was put back to Ro on 2026-09-22
+   and is open.
 3. **Does the runtime stay React-shaped after MVP?** The hybrid core is the only option here that
    improves the loop _and_ opens native renderers. Recommended: decide nothing now; open a
    time-boxed spike after MVP, informed by what Phase 2's headless runner had to stub.

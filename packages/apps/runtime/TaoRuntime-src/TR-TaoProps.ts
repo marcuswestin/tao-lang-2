@@ -72,6 +72,8 @@ export type TaoProps = TaoLayoutProps & {
   scheme?: TaoScheme
   /** studio is private occurrence identity lowered only onto the concrete native root. */
   studio?: TaoStudioIdentity
+  /** journeyObservation is test-only source identity read from the live mounted check tree. */
+  journeyObservation?: TaoJourneyRenderObservation
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
   /** designSource locates the concrete clause occurrence without changing Design.Spec's flat ABI. */
@@ -85,6 +87,14 @@ export type TaoProps = TaoLayoutProps & {
   /** viewDepth counts generated Tao view frames without inspecting argument identity. */
   viewDepth?: number
 }
+
+type TaoJourneyRenderObservation = Readonly<{
+  end: number
+  renderId: string
+  sourcePath: string
+  sourceVersion: string
+  start: number
+}>
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
 export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigationHostActive' | 'response' | 'scheme'>

@@ -25,6 +25,8 @@ export type CodegenOptions = {
   localDataCatalog?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
+  /** journeyObservations emits test-harness-only render source locators without Studio preview behavior. */
+  journeyObservations?: boolean
   studioDataCatalog?: boolean
   studio?: boolean
   /** debug emits a debugger gate before every action statement. */

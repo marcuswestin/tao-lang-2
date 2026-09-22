@@ -560,6 +560,52 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('keeps only acknowledged current-cell Lens samples with the published source version', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const assigned = await nextAssignedCell(device)
+      device.sendSealed({
+        appliedRevision: assigned.identity.compileRevision,
+        compileRevision: assigned.identity.compileRevision,
+        identity: assigned.identity,
+        type: 'device.applied',
+      })
+      await until(
+        () => env.gateway.status(env.sessionId).connection?.appliedRevision === assigned.identity.compileRevision,
+        { description: 'the assigned device cell acknowledgement' },
+      )
+      const path = 'Garden.tao'
+      const sourceVersion = env.session.previewManifest()!.sourceVersions[path]!
+      const sample = {
+        actualDurationMs: 17.25,
+        causes: [{ kind: 'state' as const }, { entity: 'Story', kind: 'data' as const, schema: 'Stories' }],
+        instanceId: 'phone-render',
+        occurrence: { end: 50, sourcePath: path, sourceVersion, start: 30 },
+        phase: 'update' as const,
+        timestamp: 100,
+      }
+      device.sendSealed({ samples: [sample], type: 'device.lens' })
+      Expect(
+        await until(
+          () => env.gateway.status(env.sessionId).lensSamples?.[0],
+          { description: 'the fresh device Lens observation' },
+        ),
+      ).toEqual({ ...sample, deviceName: device.description.name })
+
+      device.sendSealed({
+        samples: [{
+          ...sample,
+          instanceId: 'stale-render',
+          occurrence: { ...sample.occurrence, sourceVersion: 'old' },
+        }],
+        type: 'device.lens',
+      })
+      await new Promise(resolve => setTimeout(resolve, 10))
+      Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+    })
+  })
+
   Test('detaches a closed project session, its preview instance, and pending capture', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)

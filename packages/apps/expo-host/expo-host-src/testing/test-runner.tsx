@@ -6,8 +6,13 @@ import {
   type TaoJourneyEventAdapter,
   type TaoJourneyStep,
 } from '@runtime/TR-studio-journey'
-import { Errors, Switch, Text } from '@shared/core'
+import { Assert, Errors, Switch, Text } from '@shared/core'
 import { act, fireEvent, within } from '@testing-library/react-native'
+import {
+  type JourneyCheckObservation,
+  JourneyObservations,
+  type JourneyRenderObservation,
+} from './journey-observations'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
@@ -46,8 +51,11 @@ export async function runTestFile(file: TestCompiler.File): Promise<void> {
  * around it, so a caller may run one journey per test case or a file's journeys in a loop and get
  * the same behaviour either way.
  */
-export async function runTestCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
+export async function runTestCheck(suiteName: string, check: TestCompiler.Check): Promise<JourneyCheckObservation> {
   let app: RunningApp | undefined
+  const renders = new Map<string, JourneyRenderObservation>()
+  let status: JourneyCheckObservation['status'] = 'failed'
+  let observation: JourneyCheckObservation | undefined
   try {
     TR.Data.beginTest()
     // Every check gets a device nobody has used. Persisted state is declared at generated-module
@@ -60,10 +68,13 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     TR.Clock.beginTest()
     app = { modulePath: check.app.modulePath, screen: await launchApp(check.app.modulePath) }
     await settleData()
+    observeJourneyRenders(app.screen, renders)
     for (const step of check.steps) {
       await runStep(app, step)
       await settleData()
+      observeJourneyRenders(app.screen, renders)
     }
+    status = 'passed'
   } catch (error) {
     // Jest heads the report with `${name}: ${message}`, and this is the most-read error in the
     // product, so the name must not be internal vocabulary: `UserInputError:` would sit atop every
@@ -73,12 +84,53 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
       `Tao check failed: ${suiteName} > ${check.name}\n${formatSource(check.source)}\n${Errors.messageOf(error)}`,
     )
   } finally {
+    if (app !== undefined) {
+      observeJourneyRenders(app.screen, renders)
+    }
+    const completedObservation: JourneyCheckObservation = {
+      appSourcePath: check.app.sourcePath,
+      checkName: check.name,
+      checkSource: check.source,
+      renders: [...renders.values()],
+      status,
+      suiteName,
+    }
+    observation = completedObservation
     app?.screen.unmount()
     TR.Clock.endTest()
     TR.Navigation.endTest()
     TR.Persisted.endTest()
     TR.Data.endTest()
+    await JourneyObservations.record(completedObservation)
   }
+  Assert.defined(observation, 'completed Tao check has an observation')
+  return observation
+}
+
+/** observeJourneyRenders reads test-only generated props from the live React tree, never static source coverage. */
+function observeJourneyRenders(screen: RuntimeApp.Screen, renders: Map<string, JourneyRenderObservation>): void {
+  for (const instance of screen.UNSAFE_root.findAll(() => true)) {
+    const candidate = (instance.props as { __tao?: { journeyObservation?: unknown } }).__tao?.journeyObservation
+    if (!isJourneyRenderObservation(candidate)) {
+      continue
+    }
+    const previous = renders.get(candidate['renderId'])
+    if (previous === undefined) {
+      renders.set(candidate['renderId'], candidate)
+    }
+  }
+}
+
+function isJourneyRenderObservation(value: unknown): value is JourneyRenderObservation {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  const candidate = value as Record<string, unknown>
+  return typeof candidate['renderId'] === 'string'
+    && typeof candidate['sourcePath'] === 'string'
+    && typeof candidate['sourceVersion'] === 'string'
+    && Number.isInteger(candidate['start'])
+    && Number.isInteger(candidate['end'])
 }
 
 async function runStep(

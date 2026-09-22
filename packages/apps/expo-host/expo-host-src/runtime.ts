@@ -37,6 +37,8 @@ export type GenerateAppOptions = {
   preview?: GeneratePreviewOptions
   /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
   publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
+  /** journeyObservations emits test-harness-only render source locators without enabling Studio preview behavior. */
+  journeyObservations?: boolean
   runtimePackageRoot?: string
   ship?: ShipManifest
   validationMode?: 'development' | 'release'
@@ -120,6 +122,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
       debug: opts.preview !== undefined,
+      journeyObservations: opts.journeyObservations === true,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
     }

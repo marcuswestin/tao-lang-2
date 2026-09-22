@@ -47,12 +47,15 @@ import { captureStudioDeviceLogs, formatStack, type StudioDeviceLogConsole } fro
 import {
   type TaoStudioDeviceCellIdentity,
   type TaoStudioDeviceDescription,
+  type TaoStudioDeviceLensCause,
+  type TaoStudioDeviceLensSample,
   type TaoStudioDeviceNetworkCondition,
   type TaoStudioDeviceOccurrence,
   TaoStudioDeviceProtocol,
 } from './TR-studio-device-protocol'
 import { StudioDeviceTrust } from './TR-studio-device-trust'
 import { StudioEnvironmentControls, type TaoStudioCellRuntime } from './TR-studio-environment'
+import { StudioLensHost, type TaoStudioLensRenderSample } from './TR-studio-lens'
 import { StudioPreview } from './TR-studio-preview'
 
 export type TaoStudioDeviceHostPublication = {
@@ -60,6 +63,42 @@ export type TaoStudioDeviceHostPublication = {
   compileRevision: number
   project: string
   sourceVersions: Readonly<Record<string, string>>
+}
+
+/** Reduces the browser and native Lens shape to the sealed device contract. */
+export function deviceLensSample(
+  sample: TaoStudioLensRenderSample,
+  sourceVersions: Readonly<Record<string, string>>,
+): TaoStudioDeviceLensSample | undefined {
+  const sourceVersion = sourceVersions[sample.identity.sourcePath]
+  if (sourceVersion === undefined) {
+    return undefined
+  }
+  return {
+    actualDurationMs: sample.actualDurationMs,
+    causes: sample.causes.map(deviceLensCause),
+    instanceId: sample.instanceId,
+    occurrence: {
+      end: sample.identity.end,
+      ...(sample.identity.ownerName === undefined ? {} : { ownerName: sample.identity.ownerName }),
+      sourcePath: sample.identity.sourcePath,
+      sourceVersion,
+      start: sample.identity.start,
+    },
+    phase: sample.phase,
+    timestamp: sample.timestamp,
+  }
+}
+
+function deviceLensCause(cause: TaoStudioLensRenderSample['causes'][number]): TaoStudioDeviceLensCause {
+  return cause.kind === 'state'
+    ? { kind: 'state' }
+    : {
+      entity: cause.entity,
+      kind: 'data',
+      ...(cause.providerWaitMs === undefined ? {} : { providerWaitMs: cause.providerWaitMs }),
+      schema: cause.schema,
+    }
 }
 
 /** The cell runtime the generated adapter builds, plus the replay artifact the browser root also passes. */
@@ -842,6 +881,9 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       onError: handleCellError,
     })
     : createElement(DeviceOverlay, { client, presentation })
+  const observedContent = presentation.kind === 'cell'
+    ? createElement(StudioDeviceLens, { client, sourceVersions: props.publication.sourceVersions }, content)
+    : content
   // One provider for the whole host: the badge and sheet are its siblings, not descendants, of
   // `content`, so they need their own path to real insets too — see DeviceBadge and DeviceSheet.
   const safeArea = requireSafeAreaContext()
@@ -854,7 +896,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     createElement(
       RN.View,
       { style: rootStyle, testID: 'tao-studio-device-host' },
-      content,
+      observedContent,
       presentation.kind === 'cell' && !inspecting
         ? createElement(DeviceRemoteHighlight, { rects: remoteHighlight })
         : null,
@@ -895,6 +937,48 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
         : null,
     ),
   )
+}
+
+/** Batches profiler callbacks after commit so a chatty render does not make one sealed frame per callback. */
+function StudioDeviceLens(props: {
+  children?: React.ReactNode
+  client: StudioDeviceClient
+  sourceVersions: Readonly<Record<string, string>>
+}): React.JSX.Element {
+  const pending = React.useRef<TaoStudioDeviceLensSample[]>([])
+  const queued = React.useRef(false)
+  const live = React.useRef(true)
+  const flush = React.useCallback(() => {
+    queued.current = false
+    if (!live.current || pending.current.length === 0) {
+      return
+    }
+    const samples = pending.current
+    pending.current = []
+    props.client.lens(samples)
+  }, [props.client])
+  React.useEffect(() => {
+    live.current = true
+    return () => {
+      live.current = false
+      pending.current = []
+    }
+  }, [])
+  const publish = React.useCallback((sample: TaoStudioLensRenderSample) => {
+    const deviceSample = deviceLensSample(sample, props.sourceVersions)
+    if (deviceSample === undefined || !live.current) {
+      return
+    }
+    if (pending.current.length === TaoStudioDeviceProtocol.lensBatchLimit) {
+      flush()
+    }
+    pending.current.push(deviceSample)
+    if (!queued.current) {
+      queued.current = true
+      void Promise.resolve().then(flush)
+    }
+  }, [flush, props.sourceVersions])
+  return createElement(StudioLensHost, { publish }, props.children)
 }
 
 function StudioDeviceCell(props: {
