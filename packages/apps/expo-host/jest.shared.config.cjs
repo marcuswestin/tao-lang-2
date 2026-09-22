@@ -3,9 +3,10 @@ const os = require('node:os')
 // The per-journey budget an uncontended machine keeps. A Tao journey compiles and renders a whole
 // app, so its floor sits far above Jest's five-second default.
 const JOURNEY_BUDGET_MS = 30_000
-// Past this a deadline no longer tells a starved journey from a hung one; the bound the repository
-// already accepts as "only a hang trips it", and the same ceiling the Bun runner uses.
-const MAX_JOURNEY_DEADLINE_MS = 120_000
+// Past this a deadline no longer tells a starved journey from a hung one. It sits under the Bun
+// runner's 120s ceiling on purpose: tao test runs Jest inside a Bun test, and the inner bound has
+// to fire first so the journey, not the test around it, is what the report names.
+const MAX_JOURNEY_DEADLINE_MS = 90_000
 
 /**
  * Jest's deadline is wall time: the work a journey did plus the time it spent off CPU waiting for
@@ -64,4 +65,4 @@ function createRuntimeJestConfig(options) {
   }
 }
 
-module.exports = { createRuntimeJestConfig }
+module.exports = { MAX_JOURNEY_DEADLINE_MS, createRuntimeJestConfig }

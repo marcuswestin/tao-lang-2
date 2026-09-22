@@ -7,6 +7,10 @@ import { type SelectedSuite, TestNodes, type TestProcess } from '../verification
 import { TestResultSummary } from '../verification-src/TestResultSummary'
 import { type SuiteState, TestRunner, type TestRunRequest } from '../verification-src/TestRunner'
 import { WorkGraph } from '../verification-src/WorkGraph'
+// The Jest bound lives in a CommonJS config Jest loads itself; it is read here so the three runners'
+// ceilings are held together in one place.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as { MAX_JOURNEY_DEADLINE_MS: number }
 
 /** An empty history: no recorded duration means no suite is sharded, so a node is named for its suite. */
 const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { nodes: {}, version: 1 } as const }
@@ -146,6 +150,11 @@ Describe('test runner suite registry', () => {
     // deadline past half the idle floor would start killing suites that were only slow, and the
     // two constants live in modules that cannot import each other — so they are held together here.
     Expect(TestNodes.IDLE_TIMEOUT_FLOOR_MS).toBeGreaterThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS * 2)
+    // The bounds nest, inside out: a Jest journey inside a Bun test inside a node. Each outer bound
+    // sits strictly above the one it contains, so whatever hangs is named by the nearest bound and
+    // not swallowed by the one around it; the wall bound is armed before the process even spawns.
+    Expect(jestConfig.MAX_JOURNEY_DEADLINE_MS).toBeLessThan(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThan(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
   })
 
   Test('weighs Tao app shards by the source they compile, not by how many journeys they hold', async () => {
