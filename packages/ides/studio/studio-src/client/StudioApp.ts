@@ -4,6 +4,7 @@
  * knows how they connect, which is also why the Tao product host's action table lives here.
  */
 import { Assert, Errors } from '@shared/core'
+import type { StudioDeviceLog, StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import { StudioInspector, studioPaletteComponents } from '../StudioInspector'
 import { StudioPanelPayloads } from '../StudioPanelPayloads'
 import {
@@ -122,6 +123,16 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
     })
     configureInteractionMode(view.interactionMode, previews, handshake)
+    let deviceLogs: readonly StudioDeviceLog[] = []
+    let clearedDeviceSequence = 0
+    const receiveDeviceStatus = (status: StudioDeviceStatus): void => {
+      const incoming = (status.logs ?? []).filter(log => log.sequence > clearedDeviceSequence)
+      if ((incoming.at(-1)?.sequence ?? 0) >= (deviceLogs.at(-1)?.sequence ?? 0)) {
+        deviceLogs = incoming
+      }
+      devicePanel.setStatus(status)
+      drawer.renderIfLogs()
+    }
     const devicePanel = createStudioDevicePanel({
       api: StudioApiClient,
       button: view.device,
@@ -129,7 +140,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       popover: view.devicePopover,
     })
     partialDevicePanel = devicePanel
-    void StudioApiClient.deviceStatus(signal).then(status => devicePanel.setStatus(status)).catch(error => {
+    void StudioApiClient.deviceStatus(signal).then(receiveDeviceStatus).catch(error => {
       if (!StudioMountSignal.isAbortError(error)) {
         devicePanel.setGatewayUnavailable(StudioDevicePanelModel.gatewayUnavailableMessage(error))
       }
@@ -149,6 +160,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         canUndo: mutations.canUndo(),
         compile: compileState,
         data: drawer.data(),
+        deviceLogs,
         drawerTab: drawer.tab(),
         editor: session.editor(),
         inspected: inspection.selected(),
@@ -379,7 +391,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         drawer.loadDataIfVisible()
       },
       onDeviceState(status) {
-        devicePanel.setStatus(status)
+        receiveDeviceStatus(status)
         void navigation.revealDeviceSelection(status.selection)
       },
       onFiles(files) {
@@ -584,6 +596,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (preview !== undefined) {
             preview.runtimeLogs = []
           }
+          clearedDeviceSequence = Math.max(clearedDeviceSequence, ...deviceLogs.map(log => log.sequence))
+          deviceLogs = []
           publish()
           return
         }
