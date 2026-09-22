@@ -10,8 +10,6 @@ const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
 const runtimeToolchainNodeModules = nodeFs.realpathSync(nodePath.resolve(__dirname, 'node_modules'))
 const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
 const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'shared', 'shared-src', 'core')
-// Studio's client is a Tao app under Apps/, which no workspace package covers.
-const studioAppRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', '..', 'Apps', 'Tao Studio')
 
 // A Studio session bundles from a fresh, disposable copy of this project, which Metro keys its file
 // map by: no later session can ever read that map back. Left in the OS temp directory it is a couple
@@ -44,7 +42,6 @@ config.watchFolders = [
     runtimeToolchainNodeModules,
     runtimeSourceRoot,
     sharedCoreSourceRoot,
-    studioAppRoot,
   ]),
 ]
 config.resolver.nodeModulesPaths = [

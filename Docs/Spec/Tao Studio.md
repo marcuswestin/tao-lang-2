@@ -469,9 +469,11 @@ foreign component owns its native root and must render each accepted content cha
 Occurrence-level `render inject` remains a separate supported mechanism.
 
 The expo host copies the sidecar's transitive relative TypeScript, TSX, JavaScript, JSX, and JSON
-module graph while leaving installed packages external. Studio's code editor (`studio-src/code-editor/`)
-is the implemented reusable foreign component for CodeMirror 6: it accepts Tao-owned content and selection, publishes change/selection
-actions, and can attach the existing JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
+module graph while leaving installed packages external. Studio's own client declares the foreign view
+at `Apps/Tao Studio/@code-editor/CodeEditor.tsx`, a re-export backed by the CodeMirror component in
+`studio-src/code-editor/`, the implemented reusable foreign component for CodeMirror 6: it accepts
+Tao-owned content and selection, publishes change/selection actions, and can attach the existing
+JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
 the production editor slot. The legacy workbench editor remains as the hidden controller for file lifecycle,
 draft synchronization, tabs, diagnostics, and source actions while a typed ProductHost protocol mirrors its
 versioned ephemeral buffer and selection into Tao. The adopted named-slot declaration spelling is

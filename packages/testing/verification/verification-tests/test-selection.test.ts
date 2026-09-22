@@ -186,6 +186,12 @@ Describe('changed suite plan', () => {
     Expect(result.taoAppPaths).toEqual(['Apps/Tao Studio', 'Apps/Test Apps'])
   })
 
+  Test('an app-local TypeScript module also selects cli/tao-cli, which owns the Apps/tsconfig.json gate', () => {
+    const result = plan(['Apps/WordFlower/Foo.ts'])
+
+    Expect(result.selected.get('cli/tao-cli')).toBe('changed directly')
+  })
+
   Test('a Tao file outside Apps and packages widens the app run to every app', () => {
     Expect(plan(['Docs/Tutorials/example.tao']).taoAppPaths).toEqual(['Apps'])
     Expect(plan(['Apps/WordFlower/Design.tao', 'packages/apps/stdlib/stdlib-src/Text.tao']).taoAppPaths).toEqual([

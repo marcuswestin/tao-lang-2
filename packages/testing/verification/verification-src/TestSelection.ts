@@ -277,6 +277,10 @@ function planChangedSuites(
       if (root === STUDIO_APP_ROOT) {
         changedPackages.set(STUDIO_APP_PACKAGE, path)
       }
+      if (path.endsWith('.ts') || path.endsWith('.tsx')) {
+        // cli/tao-cli owns the Apps/tsconfig.json gate that typechecks every app-local TS module.
+        changedPackages.set('cli/tao-cli', path)
+      }
       continue
     }
     if (path.endsWith('.tao')) {

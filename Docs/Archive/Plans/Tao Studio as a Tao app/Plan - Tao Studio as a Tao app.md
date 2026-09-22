@@ -1,5 +1,8 @@
 # Plan - Tao Studio as a Tao app
 
+Landed 2026-09-22: the client and `Project.tao` moved into `Apps/Tao Studio`, the code editor became
+the app-local `@code-editor` package, and the local-InstantDB stack and client moved behind `packages/services/tao-cloud` and `packages/providers/instantdb`.
+
 Status: Not started. Split out of `Docs/Archive/Plans/Repository simplification 2/Plan - Repository
 simplification 2.md` (its "Package restructure" § "Later slices" item 2) as its own task, because it
 touches product-facing packages daily worked in and needs its own fences and sequencing rather than
