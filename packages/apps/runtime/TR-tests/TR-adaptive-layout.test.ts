@@ -121,4 +121,53 @@ Describe('TR adaptive layout', () => {
       width: '100%',
     })
   })
+
+  Test('clears one spacing side with `none` whichever side the clause names first', () => {
+    const clearedLast = TR.Layout.create([['pad', 'vertical', 4, 'horizontal', 'none']])
+    const clearedFirst = TR.Layout.create([['pad', 'horizontal', 'none', 'vertical', 4]])
+    const expected = { paddingBottom: 4, paddingTop: 4 }
+
+    Expect(TR.Layout.resolve({ entries: clearedLast.entries })).toEqual(expected)
+    Expect(TR.Layout.resolve({ entries: clearedFirst.entries })).toEqual(expected)
+  })
+
+  Test('carries a cleared slot through a later merge so a weaker layer cannot set it again', () => {
+    const merged = TR.Layout.merge(
+      TR.Layout.create([['pad', 12], ['gap', 8]]),
+      TR.Layout.create([['pad', 'left', 'none'], ['gap', 'none']]),
+    )
+
+    Expect(TR.Layout.resolve({ entries: merged?.entries ?? [] })).toEqual({
+      paddingBottom: 12,
+      paddingRight: 12,
+      paddingTop: 12,
+    })
+    // The clear stays in the list, because the layer it has to overrule may still be merged in.
+    Expect(TR.Layout.merge(TR.Layout.create([['gap', 4]]), merged)?.entries).toContainEqual(['gap', 'none'])
+    Expect(TR.Layout.resolve({
+      entries: TR.Layout.merge(TR.Layout.create([['gap', 4]]), merged)?.entries ?? [],
+    })).toEqual({
+      paddingBottom: 12,
+      paddingRight: 12,
+      paddingTop: 12,
+    })
+  })
+
+  Test('sets a slot again after a clear, by side and whole', () => {
+    const layout = TR.Layout.create([
+      ['pad', 12],
+      ['pad', 'none'],
+      ['pad', 'left', 4],
+      ['gap', 'none'],
+      ['gap', 6],
+    ])
+
+    Expect(TR.Layout.resolve({ entries: layout.entries })).toEqual({ gap: 6, paddingLeft: 4 })
+  })
+
+  Test('refuses `none` after a clause head that names no slot to clear', () => {
+    Expect(() => TR.Layout.create([['content', 'none'] as never])).toThrow(
+      "Layout clause 'content none' cannot clear a slot with 'none'.",
+    )
+  })
 })

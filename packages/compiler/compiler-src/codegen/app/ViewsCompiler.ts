@@ -173,6 +173,11 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
       ${gen.list(hostSlotFills, compileHostSlotFill)}
     })`
     : gen.noop()
+  const declarationProps = declarationTaoPropsBinding(
+    renderable,
+    options,
+    rootRenderConsumesDeclarationProps(renderStatements[0]),
+  )
   return gen`
     ${options.studio ? gen`function` : gen`${gen.scopeName(renderable)} = function`} ${
     gen.Name(functionName)
@@ -185,11 +190,51 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
         ${commandTable}
         ${commandSurface}
         ${hostSlots}
+        ${declarationProps}
         ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
       })
     }
     ${options.studio ? gen`${gen.scopeName(renderable)} = ${gen.Name(functionName)}` : gen.noop()}
   `
+}
+
+/**
+ * declarationTaoPropsBinding computes a declaration's public header spec once, ahead of its root
+ * render, so every root-render caller chain in the component can resolve it against the caller's
+ * own clause (Decisions §R9). It is never emitted without a consumer: an inject-rooted view whose
+ * injection reads neither `@@layout` nor `@@tag` has nothing to hand the header to.
+ */
+function declarationTaoPropsBinding(
+  view: AST.ViewDeclaration,
+  options: CodegenOptions,
+  hasConsumer: boolean,
+): Compiled {
+  if (!view.layoutClause || !hasConsumer) {
+    return gen.noop()
+  }
+  const spec = options.studio === true
+    ? gen`TR.Design.Source(${Compile.DesignSpec(view.layoutClause)}, ${Compile.DesignSpecSource(view.layoutClause)})`
+    : Compile.DesignSpec(view.layoutClause)
+  return gen`const _DeclarationProps = TR.DeclarationTaoProps(_ViewProps.__tao, ${spec})`
+}
+
+/**
+ * rootRenderConsumesDeclarationProps is false only for a `render inject` root whose injection asks
+ * for neither ambient the header could reach; every other root (an ordinary view/nav/parameter
+ * render, or an injection that reads `@@layout`/`@@tag`) has a caller-chain or ambient consumer.
+ */
+function rootRenderConsumesDeclarationProps(rootRender: AST.Statement | undefined): boolean {
+  if (!rootRender || !AST.isRenderStatement(rootRender)) {
+    return false
+  }
+  if (!rootRender.injection) {
+    return true
+  }
+  return AST.injectionArgumentsOf(rootRender.injection).some(argument =>
+    AST.isNamedInjectionArgument(argument)
+    && argument.ambient !== undefined
+    && (argument.ambient.channel === '@@layout' || argument.ambient.channel === '@@tag')
+  )
 }
 
 /** A view surface publishes promoted bound commands and explicit exclusions for this occurrence. */
@@ -214,6 +259,10 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
   const parameterList = Compile.ViewParameterList(view)
   const implementation = { name: foreignViewBindingName(view) }
   const functionName = { name: options.studio ? `TaoGeneratedView_${view.name}` : view.name }
+  // A foreign view IS its own occurrence root: its Layout/Tag props are always its consumer, so its
+  // header always resolves straight into the ambient props the wrapped native component reads.
+  const declarationProps = declarationTaoPropsBinding(view, options, true)
+  const ambientProps = view.layoutClause ? gen`_DeclarationProps` : gen`_ViewProps.__tao`
   return gen`
     ${options.studio ? gen`function` : gen`${gen.scopeName(view)} = function`} ${
     gen.Name(functionName)
@@ -222,6 +271,7 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(view), Compile.ViewParameterBinding)}
+        ${declarationProps}
         return <${gen.Name(implementation)}
           ${
     gen.list(AST.parametersOf(view), parameter => {
@@ -231,8 +281,8 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
       }}`
     })
   }
-          Layout={TR.VisualLayout(_ViewProps.__tao)}
-          Tag={TR.VisualTag(_ViewProps.__tao)}
+          Layout={TR.VisualLayout(${ambientProps})}
+          Tag={TR.VisualTag(${ambientProps})}
           ${AST.renderSlotDeclarationsOf(view).length > 0 ? gen`Slots={_ViewProps.__taoSlots}` : gen.noop()}
         >
           ${view.foreign?.content === 'content' ? gen`{_ViewProps.children}` : gen.noop()}

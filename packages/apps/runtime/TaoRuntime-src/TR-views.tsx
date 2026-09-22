@@ -389,7 +389,8 @@ function mergedWithLayoutEntries(
 
 function layoutGap(merged: MergedTaoViewProps): number {
   const gap = merged.props?.layout?.entries.find(entry => entry[0] === 'gap')
-  return gap?.[0] === 'gap' ? gap[1] : 0
+  // A `gap none` entry is a cleared slot, which spaces children exactly as no gap clause would.
+  return gap?.[0] === 'gap' && gap[1] !== 'none' ? gap[1] : 0
 }
 
 function directChildCount(children: React.ReactNode): number {
