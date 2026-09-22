@@ -1,15 +1,20 @@
 # Decisions — Tao development, build, ship, and clean
 
-Status: **decided future product behavior; not implemented**. These decisions were made in the
+Status: **decided product behavior; bare `tao dev` session implemented**. These decisions were made in the
 September 2026 CLI workflow dialogue. They supersede conflicting _forward-looking_ command designs
 in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
-`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; they do not describe the current
-CLI. The implementation must update those documents and the command help when behavior changes.
+`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; much of the remaining contract
+does not describe the current CLI. Implementation updates those documents and command help as behavior changes.
 
 This is the durable record of the choices, not an implementation. The planned CLI restructure has
 landed on `main`; implementation should start from that post-restructure state, not from the
 unrelated `feat/real-host-acceptance` history. The design discussion changed the personal dialogue
 skill separately; no skill change is part of this CLI work.
+
+The first implementation slice starts bare `tao dev` without opening a target, places its generated
+Expo host under the project, records session history at `.tao/sessions/`, and shares exclusive
+project ownership with Studio. The build, ship, invite, clean, desktop-host, and installer behavior
+below remains a target for later slices; the command help describes what is implemented now.
 
 ## Product boundary and architecture
 

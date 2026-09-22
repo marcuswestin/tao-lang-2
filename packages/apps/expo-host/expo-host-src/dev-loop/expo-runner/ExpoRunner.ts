@@ -12,6 +12,7 @@ import { ExpoServer } from './expo-server'
 import { createExpoMetro } from './metro'
 import { Ports } from './Ports'
 import { createExpoTargets } from './run-targets'
+import type { DevStartupTarget } from './run-targets'
 
 type ExpoServerProcess = {
   onUnexpectedExit: (listener: (message: string) => void) => void
@@ -64,7 +65,8 @@ function createSessionFromConfig(
     openAndroid: targets.openAndroid,
     openIosSimulator: targets.openIosSimulator,
     openPhysicalDevice: targets.openPhysicalDevice,
-    openStartupTargets: targets.openStartupTargets,
+    openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
+      targets.openStartupTargets(requested, shouldStop),
     openWeb: targets.openWeb,
     reloadExpoApps: metro.reloadExpoApps,
     releasePortReservation,

@@ -5,7 +5,7 @@ import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, SecretsFile, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ProjectDevSession, Repo, SecretsFile, Time } from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -488,8 +488,12 @@ export async function openStudioProjectResource(
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
+  const ownership = await ProjectDevSession.acquire(project.projectRoot, 'studio')
   const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort, {
     scheme: StudioCompanionIdentity.scheme,
+  }).catch(async error => {
+    await ownership.release()
+    throw error
   })
   let expoServer: ReturnType<typeof ExpoRunner.createServer> | undefined
   let previewRuntime: CreatedStudioPreviewRuntime | undefined
@@ -557,6 +561,7 @@ export async function openStudioProjectResource(
       () => preview?.close(),
       () => expo.releasePortReservation(),
       () => previewRuntime?.close(),
+      () => ownership.release(),
     ])
   } catch (error) {
     return await cleanupAfterFailure(error, [
@@ -566,6 +571,7 @@ export async function openStudioProjectResource(
       () => preview?.close(),
       () => expo.releasePortReservation(),
       () => previewRuntime?.close(),
+      () => ownership.release(),
     ])
   }
 }

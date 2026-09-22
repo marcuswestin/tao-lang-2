@@ -90,17 +90,30 @@ function createCommands(): Command {
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
-    .description('Discover and run Tao apps on an available Expo Metro port.')
-    .action(async (path: string, options: { app?: string }) => {
-      try {
-        // Command implementations load lazily so completion and help paths stay fast.
-        const { runTaoDev } = await import('./dev-command')
-        Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app }))
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.setExitCode(1)
-      }
-    })
+    .option('--ios', 'Open an iOS simulator after Metro starts.')
+    .option('--android', 'Open Android after Metro starts.')
+    .option('--web', 'Open the web app after Metro starts.')
+    .option('--desktop', 'Open the Tao desktop app after Metro starts (not yet available).')
+    .description('Start Metro for a Tao app without opening a target unless requested.')
+    .action(
+      async (
+        path: string,
+        options: { android?: boolean; app?: string; desktop?: boolean; ios?: boolean; web?: boolean },
+      ) => {
+        try {
+          if (options.desktop === true) {
+            Errors.throwUserInput('The Tao desktop development host is not available yet.')
+          }
+          // Command implementations load lazily so completion and help paths stay fast.
+          const { runTaoDev } = await import('./dev-command')
+          const startupTargets = (['ios', 'android', 'web'] as const).filter(target => options[target] === true)
+          Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app, startupTargets }))
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      },
+    )
 
   commands
     .command('review')
