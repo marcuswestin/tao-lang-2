@@ -106,24 +106,28 @@ The two names appear side by side.
 ## Step 3 — design
 
 Raw colors and sizes scattered through a UI are the thing you end up regretting. Tao's answer is a
-`design` declaration: **tokens** are names for values, and **bundles** are names for lists of the
-same clauses you would otherwise write inline.
+`design` declaration: its **colors** are names for values, and its **styles** are names for lists of
+the same clauses you would otherwise write inline.
 
 Add this declaration after `app`:
 
 ```tao edit after=app
 design ReadingListDesign {
-   // Flat tokens: a name bound to a value.
-   paper #fbfaf7
-   ink #1b1b1f
-   inkMuted #5f6470
-   line #e3e0d8
+   // Colors: a name bound to a value; the block says which kind of value every entry is.
+   colors {
+      paper #fbfaf7
+      ink #1b1b1f
+      inkMuted #5f6470
+      line #e3e0d8
+   }
 
-   // Named bundles: a reusable list of the same clauses a render site can write inline.
-   screen [fill, content top stretch, pad 16, bg paper]
-   title [size 28, weight 700, fg ink]
-   body [size 16, line 22, fg inkMuted]
-   card [pad 12, radius 8, bg paper, border line]
+   // Styles: a reusable list of the same clauses a render site can write inline.
+   styles {
+      screen [fill, content top stretch, pad 16, background paper]
+      title [size 28, weight 700, ink ink]
+      body [size 16, line 22, ink inkMuted]
+      card [pad 12, radius 8, background paper, border line]
+   }
 }
 ```
 
@@ -137,7 +141,7 @@ app ReadingList {
 }
 ```
 
-Now apply the bundles. A bundle goes in the same brackets as any other clause, and mixes with them:
+Now apply the styles. A style goes in the same brackets as any other clause, and mixes with them:
 
 ```tao edit
 scene BookList() {
@@ -151,8 +155,8 @@ scene BookList() {
 }  }  }  }
 ```
 
-`[card, gap 8]` is the `card` bundle plus one inline clause — there is no separate syntax for
-"styles" and "layout", because a bundle is only ever the clauses you could have typed yourself.
+`[card, gap 8]` is the `card` style plus one inline clause — there is no separate syntax for
+"styles" and "layout", because a style is only ever the clauses you could have typed yourself.
 
 The screen has a background, a heading, and a bordered card.
 
@@ -630,17 +634,21 @@ app ReadingList {
 }  }
 
 design ReadingListDesign {
-   // Flat tokens: a name bound to a value.
-   paper #fbfaf7
-   ink #1b1b1f
-   inkMuted #5f6470
-   line #e3e0d8
+   // Colors: a name bound to a value; the block says which kind of value every entry is.
+   colors {
+      paper #fbfaf7
+      ink #1b1b1f
+      inkMuted #5f6470
+      line #e3e0d8
+   }
 
-   // Named bundles: a reusable list of the same clauses a render site can write inline.
-   screen [fill, content top stretch, pad 16, bg paper]
-   title [size 28, weight 700, fg ink]
-   body [size 16, line 22, fg inkMuted]
-   card [pad 12, radius 8, bg paper, border line]
+   // Styles: a reusable list of the same clauses a render site can write inline.
+   styles {
+      screen [fill, content top stretch, pad 16, background paper]
+      title [size 28, weight 700, ink ink]
+      body [size 16, line 22, ink inkMuted]
+      card [pad 12, radius 8, background paper, border line]
+   }
 }
 
 data Books / Book {

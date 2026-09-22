@@ -313,6 +313,90 @@ Describe('validator: minimal design', () => {
     ),
   )
 
+  Test('warns for the legacy bg/fg spelling at a render site, anchored on the head', async () => {
+    const result = await Validator.validateCode(designApp(
+      'workspace design Theme { canvas #fff }',
+      'render Surface() [bg canvas]',
+    ))
+    const warnings = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.legacyVisualHead)
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.legacyVisualHead('bg', 'background'))
+    Expect(warnings[0]?.severity).toBe('warning')
+  })
+
+  Test('warns for the legacy bg/fg spelling in a declaration header clause, including a clearing entry', async () => {
+    const result = await Validator.validateCode(`
+      app Demo { view Card }
+      view Card() [bg none] {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const warnings = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.legacyVisualHead)
+
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.legacyVisualHead('bg', 'background'))
+  })
+
+  Test('warns for the legacy bg/fg spelling in a flat design bundle and a styles block entry', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        canvas #fff
+        card [bg canvas]
+        styles {
+          panel [fg canvas]
+        }
+      }
+    `)
+    const warnings = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.legacyVisualHead)
+
+    Expect(warnings.map(diagnostic => diagnostic.message)).toEqual([
+      messages.legacyVisualHead('bg', 'background'),
+      messages.legacyVisualHead('fg', 'ink'),
+    ])
+  })
+
+  Test('does not warn about a legacy visual head for the decided background and ink spellings', async () => {
+    const result = await Validator.validateCode(designApp(
+      'workspace design Theme { canvas #fff card [background canvas] }',
+      'render Surface() [card, background canvas]',
+    ))
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.legacyVisualHead))
+      .toEqual([])
+  })
+
+  Test('warns once, on the declaration, for a design with several flat catalog entries', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        canvas #fff
+        ink #111
+        card [background canvas]
+        panel [ink ink]
+      }
+    `)
+    const warnings = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.flatCatalog)
+
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.flatCatalog('Theme', 4))
+    Expect(warnings[0]?.severity).toBe('warning')
+  })
+
+  Test('does not warn about a flat catalog when every member lives in a typed block', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        colors { canvas #fff }
+        styles { card [background canvas] }
+      }
+    `)
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.flatCatalog))
+      .toEqual([])
+  })
+
   for (const color of ['#12', '#12345', '#1234567', '#xyz']) {
     Test(
       `rejects malformed contextual color ${color}`,
