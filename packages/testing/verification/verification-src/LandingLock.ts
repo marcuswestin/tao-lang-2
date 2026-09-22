@@ -7,12 +7,9 @@ import { VerificationLanes } from './VerificationLanes'
  * question — may I spend the machine on a merge-evidence lane and then move refs? — and everything
  * else about coordinating parallel agents falls out of that answer rather than being modelled.
  *
- * There is no queue. Any agent that is ready claims the lock; whoever claims it proceeds until it
- * releases. A queue would have to carry a position, and nothing ever reads a position: the only
- * decision any agent makes is the binary one, do I hold the lock or not. Ordering machinery in
- * service of a fact nobody consults is machinery that can only go wrong, and its absence is what
- * deletes head-of-line blocking as a concept. An agent that is mid-conflict simply does not claim,
- * and is not in anybody's way while it works.
+ * Ready landings register a process-scoped FIFO turn before waiting. A dead waiter is pruned, and
+ * a waiter that encounters a conflict leaves the queue; only the durable lock is never reclaimed.
+ * New broad lanes yield to ready landings, but a lane already holding the lock is never preempted.
  *
  * The lock is held by a **worktree**, not a process, and that is the whole reason this module is not
  * `MachineLanes.acquireResource`. An agent's session outlives any one command: it claims the lock,
@@ -152,6 +149,8 @@ export type AcquireLandingLockOptions = {
   landing?: boolean
   /** Called each time the wait is still going, with the holder and how long this call has waited. */
   onWaiting?: (holder: LandingLockRecord, waitedMs: number) => void
+  /** Work that can safely refresh a ready landing while another worktree owns the lock. */
+  onQueueWait?: () => Promise<void>
   registryRoot?: string
   repositoryRoot: string
   /** Give up after this long rather than waiting forever; 0 refuses immediately. */
@@ -176,6 +175,7 @@ export type ReleaseOutcome = 'not-held' | 'released' | 'still-held'
  * -not-own-this` is the property a test pins.
  */
 const LOCK_FILE = '.landing-lock.json'
+const QUEUE_FILE = '.landing-queue.json'
 const POLL_MS = 1_000
 /** How often a blocked caller is told it is still blocked, and by whom. */
 const WAIT_WARN_INTERVAL_MS = 5 * 60 * 1_000
@@ -234,6 +234,85 @@ async function canonicalHolder(path: string): Promise<string> {
 
 function lockPath(registryRoot: string): string {
   return FS.resolvePath(LOCK_FILE, registryRoot)
+}
+
+type LandingQueueEntry = { holder: string; label: string; pid: number; token: string }
+export type LandingQueueWaiter = Pick<LandingQueueEntry, 'holder' | 'pid'>
+
+function queuePath(registryRoot: string): string {
+  return FS.resolvePath(QUEUE_FILE, registryRoot)
+}
+
+/** A damaged queue cannot be treated as empty: that would let a later claimant jump ahead. */
+async function readQueue(registryRoot: string): Promise<LandingQueueEntry[]> {
+  const path = queuePath(registryRoot)
+  if (!await FS.exists(path)) {
+    return []
+  }
+  let value: unknown
+  try {
+    value = await FS.readJson<unknown>(path)
+  } catch (error) {
+    Errors.throwHostEnvironment(`The landing queue cannot be read: ${String(error)}`)
+  }
+  if (
+    !Array.isArray(value) || !value.every(entry =>
+      typeof entry === 'object' && entry !== null
+      && typeof entry.holder === 'string' && typeof entry.label === 'string'
+      && typeof entry.pid === 'number' && typeof entry.token === 'string'
+    )
+  ) {
+    Errors.throwHostEnvironment('The landing queue has an unrecognized shape; refusing to bypass it.')
+  }
+  return (value as LandingQueueEntry[]).filter(entry => Platform.processIsAlive(entry.pid))
+}
+
+async function writeQueue(registryRoot: string, entries: readonly LandingQueueEntry[]): Promise<void> {
+  const path = queuePath(registryRoot)
+  const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
+  try {
+    await FS.writeJson(temporary, entries)
+    await FS.move(temporary, path)
+  } finally {
+    await FS.remove(temporary).catch(() => {})
+  }
+}
+
+async function enqueue(registryRoot: string, repositoryRoot: string, token: string): Promise<void> {
+  const holder = await canonicalHolder(repositoryRoot)
+  await MachineLanes.withRegistryLock(registryRoot, async () => {
+    const queue = await readQueue(registryRoot)
+    await writeQueue(registryRoot, [...queue, {
+      holder,
+      label: 'ready landing',
+      pid: Platform.runtimeProcess.pid,
+      token,
+    }])
+  })
+}
+
+async function dequeue(registryRoot: string, token: string): Promise<void> {
+  await MachineLanes.withRegistryLock(registryRoot, async () => {
+    const queue = await readQueue(registryRoot)
+    await writeQueue(registryRoot, queue.filter(entry => entry.token !== token))
+  })
+}
+
+async function inspectQueue(registryRoot = MachineLanes.registryRoot()): Promise<LandingQueueWaiter[]> {
+  return (await readQueue(registryRoot)).map(({ holder, pid }) => ({ holder, pid }))
+}
+
+function queueHolder(entry: LandingQueueEntry): LandingLockRecord {
+  return {
+    acquiredAt: new Date().toISOString(),
+    durable: false,
+    holder: entry.holder,
+    label: entry.label,
+    landing: true,
+    phases: [],
+    pid: entry.pid,
+    scopedHolds: [],
+  }
 }
 
 /**
@@ -358,35 +437,46 @@ async function inspectState(registryRoot = MachineLanes.registryRoot()): Promise
  */
 async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockHold> {
   const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
+  const queueToken = options.landing === true ? Platform.randomUUID() : undefined
+  if (queueToken !== undefined) {
+    await enqueue(registryRoot, options.repositoryRoot, queueToken)
+  }
   const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
   const startedMs = Time.nowMs()
   const deadlineMs = startedMs + Math.max(0, waitTimeoutMs)
   let reportedAtMs = startedMs
   let reportedWaiting = false
 
-  while (true) {
-    const attempt = await claim(registryRoot, options)
-    if (attempt.hold !== undefined) {
-      return attempt.hold
+  try {
+    while (true) {
+      const attempt = await claim(registryRoot, options, queueToken)
+      if (attempt.hold !== undefined) {
+        return attempt.hold
+      }
+      const holder = attempt.holder
+      const waitedMs = Time.nowMs() - startedMs
+      if (Time.nowMs() >= deadlineMs) {
+        throw new LandingLockBusyError(
+          `The landing lock has been held by ${describe(holder)} for the whole ${
+            describeDuration(waitedMs)
+          } this command waited. A dead PID would not mean it was released, and waiting this long is `
+            + "not unusual on its own. Forcing it is Ro's call — bring the output of `./agent board` to "
+            + 'Ro rather than clearing it yourself.',
+          holder,
+        )
+      }
+      if (!reportedWaiting || Time.nowMs() - reportedAtMs >= WAIT_WARN_INTERVAL_MS) {
+        reportedWaiting = true
+        reportedAtMs = Time.nowMs()
+        options.onWaiting?.(holder, waitedMs)
+      }
+      await options.onQueueWait?.()
+      await Time.sleep(POLL_MS)
     }
-    const holder = attempt.holder
-    const waitedMs = Time.nowMs() - startedMs
-    if (Time.nowMs() >= deadlineMs) {
-      throw new LandingLockBusyError(
-        `The landing lock has been held by ${describe(holder)} for the whole ${
-          describeDuration(waitedMs)
-        } this command waited. A dead PID would not mean it was released, and waiting this long is `
-          + "not unusual on its own. Forcing it is Ro's call — bring the output of `./agent board` to "
-          + 'Ro rather than clearing it yourself.',
-        holder,
-      )
+  } finally {
+    if (queueToken !== undefined) {
+      await dequeue(registryRoot, queueToken)
     }
-    if (!reportedWaiting || Time.nowMs() - reportedAtMs >= WAIT_WARN_INTERVAL_MS) {
-      reportedWaiting = true
-      reportedAtMs = Time.nowMs()
-      options.onWaiting?.(holder, waitedMs)
-    }
-    await Time.sleep(POLL_MS)
   }
 }
 
@@ -394,6 +484,7 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
 async function claim(
   registryRoot: string,
   options: AcquireLandingLockOptions,
+  queueToken?: string,
 ): Promise<{ holder: LandingLockRecord; hold?: undefined } | { holder?: undefined; hold: LandingLockHold }> {
   const repositoryRoot = await canonicalHolder(options.repositoryRoot)
   return await MachineLanes.withRegistryLock(registryRoot, async () => {
@@ -423,6 +514,11 @@ async function claim(
       }
       await writeLock(registryRoot, record)
       return { hold: { acquired: false, record, ...(token === undefined ? {} : { token }) } }
+    }
+    const queue = await readQueue(registryRoot)
+    const first = queue[0]
+    if (first !== undefined && first.token !== queueToken) {
+      return { holder: queueHolder(first) }
     }
     const record: LandingLockRecord = {
       acquiredAt: new Date().toISOString(),
@@ -785,6 +881,7 @@ export const LandingLock = {
   heldForMs,
   holding,
   inspectState,
+  inspectQueue,
   holdingForLane,
   inspect,
   landingInProgress,
