@@ -335,6 +335,10 @@ function planOutputPaths(
   }
 
   const bySourcePath = new Map<string, PlannedSourceOutputs>()
+  // One foreign implementation file is one module, however many Tao files name it. The map spans
+  // every file so the second namer imports the first one's copy instead of getting a second copy,
+  // whose module-level state would be a separate instance of the same source at runtime.
+  const sidecarPathBySourcePath = new Map<string, string>()
   for (const file of sourceFiles) {
     const modulePath = modulePathBySourcePath.get(file.path)
     Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
@@ -361,7 +365,6 @@ function planOutputPaths(
         outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
         usedOutputPaths,
       )
-    const sidecarPathBySourcePath = new Map<string, string>()
     const sidecarCopies: PlannedSidecarCopy[] = []
     // A sidecar is named relative to the file that declares it, which an imported file may own, so
     // every path resolves against its own declaring document rather than this one.

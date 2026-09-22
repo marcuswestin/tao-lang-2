@@ -740,7 +740,7 @@ function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
 
 /** validateStudioRelease applies the compiler's targeted release gates before native packaging mutates output. */
 async function validateStudioRelease(): Promise<void> {
-  await Workspace.compile(Repo.resolvePath('packages/ides/studio/studio-src/TaoStudioClient.tao'), {
+  await Workspace.compile(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'), {
     validationMode: 'release',
   })
 }

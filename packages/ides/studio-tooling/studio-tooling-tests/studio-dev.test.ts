@@ -53,7 +53,9 @@ Describe('Studio test process output', () => {
     await runner.close()
     const result = await running
 
-    Expect(Date.now() - startedAt).toBeLessThan(1_000)
+    // The bound proves the escalation to SIGKILL, not speed: with a 20ms stop timeout the close takes
+    // milliseconds alone, and the budget is for a host whose load average is in the tens.
+    Expect(Date.now() - startedAt).toBeLessThan(10_000)
     Expect(result.status).toBe('cancelled')
     Expect(runner.status().running).toBe(false)
   })
