@@ -8,7 +8,7 @@ import { VerificationLanes } from './VerificationLanes'
 /*
  * "Finalize and prepare the merge" used to exist only as prose in AGENTS.md and the
  * verification-lanes skill, so an agent replayed the whole sequence from scratch on every re-entry
- * — and a branch re-enters finalization often, driven by Ro's corrections, a red lane, or an
+ * — and a branch re-enters finalization often, driven by the Developer's corrections, a red lane, or an
  * agent's own re-entry after a background job reports. `finalize` makes the sequence a command and
  * records enough evidence to make a re-entry cheap.
  *
@@ -792,7 +792,7 @@ async function verifyTree(
 
 /**
  * The merge message is the one artifact finalize cannot regenerate: it is what an author wrote and
- * what Ro may have read. So an existing message is never replaced except on an explicit `--redraft`,
+ * what the Developer may have read. So an existing message is never replaced except on an explicit `--redraft`,
  * and a message is drafted only when none exists. Recorded state decides nothing about writing any
  * more — it decides only whether the report can say the kept message is proved to cover this HEAD,
  * or has to hand that judgment to the author. This is deliberately asymmetric: finalize may keep a

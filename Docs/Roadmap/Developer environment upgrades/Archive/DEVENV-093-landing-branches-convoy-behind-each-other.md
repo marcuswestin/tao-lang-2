@@ -62,5 +62,5 @@
 - **Decision (2026-09-20):** Multi-branch integration was rejected. Continue landing and proving
   branches serially through the current machine-wide lock. Recorded by
   `feat/serial-verification-followups`.
-- **Source:** 2026-09-19 landing convoy, reported by Ro.
+- **Source:** 2026-09-19 landing convoy, reported by the Developer.
 - **Archived:** 2026-09-20

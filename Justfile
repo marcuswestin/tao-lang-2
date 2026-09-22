@@ -411,6 +411,11 @@ landed *ARGS:
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
 
+# Push this feature branch, open or reuse its pull request against main, then stream its checks
+[group('Dev')]
+open-pr *ARGS:
+    ./dev open-pr {{ ARGS }}
+
 # Report process, socket, simulator, and local-service capabilities without changing anything
 [group('Report')]
 capabilities *ARGS:

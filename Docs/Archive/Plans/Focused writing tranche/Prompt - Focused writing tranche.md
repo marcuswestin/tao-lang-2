@@ -27,7 +27,7 @@ Read these before planning or editing:
    done. Principle 4: not absorbed until behavior tests **written in Tao** cover every construct.
 4. `Docs/Roadmap/Focused writing tranche/Brief - Focused writing tranche.md` — the findings, the
    decisions taken at the cut, and the slices. Its first cut decision (`use time from @tao/time` as
-   a lowercase service import) must be confirmed with Ro before slice 3 begins; ask at the start,
+   a lowercase service import) must be confirmed with the Developer before slice 3 begins; ask at the start,
    not when you reach it.
 5. `Apps/WordFlower/2 - Next/WordFlower.tao-next`'s header — the decision list — then
    `2 - Next/@ui/Focus.tao-next`, `2 - Next/Focus.test.tao-next`, `2 - Next/@tao-next/`, and the
@@ -75,7 +75,7 @@ The brief's _Slices_ section is the order. In dependency order:
 - **If implementation proves a decision wrong**, amend `Decisions.md` in the same change with the
   reason, per Process principle 5 — and amend the Next contract first, then Current. Do not leave
   code and decisions divergent, and do not amend silently.
-- **Ask Ro** for the lowercase service import confirmation, and for anything that would change a
+- **Ask the Developer** for the lowercase service import confirmation, and for anything that would change a
   spelling the Next header fixes.
 
 ## Done when

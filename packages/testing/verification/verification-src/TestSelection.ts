@@ -60,6 +60,12 @@ const LANGUAGE_SAMPLE_APPS = 'Apps/Test Apps'
  */
 const STUDIO_APP_ROOT = 'Apps/Tao Studio'
 const STUDIO_APP_PACKAGE = 'ides/studio'
+/**
+ * The spec-dialect sources Tao discovery deliberately skips (`Apps/WordFlower/README.md` owns the
+ * mapping). No suite reads them, and selecting their root handed `./tao test` a shard root with no
+ * compiled tests — `Apps/Tao Future` holds nothing else — which it refuses.
+ */
+const UNDISCOVERED_TAO_EXTENSIONS = ['.tao-mvp', '.tao-next', '.tao-revolution']
 
 /** Packages whose language-service performance the `performance-checks` suite measures. */
 const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
@@ -267,7 +273,7 @@ function planChangedSuites(
       continue
     }
     if (path.startsWith('Apps/')) {
-      if (path.endsWith('.md')) {
+      if (path.endsWith('.md') || UNDISCOVERED_TAO_EXTENSIONS.some(extension => path.endsWith(extension))) {
         continue
       }
       const segments = path.split('/')

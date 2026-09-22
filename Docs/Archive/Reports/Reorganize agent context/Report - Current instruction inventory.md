@@ -13,7 +13,7 @@ The minimal agent-context reset is implemented on `feat/minimal-agent-context`.
 
 ## Current Structure
 
-- `AGENTS.md`: Tao identity, Ro's authority, command routing, autonomy, Git/index safety, nested routing, and final validation.
+- `AGENTS.md`: Tao identity, the Developer's authority, command routing, autonomy, Git/index safety, nested routing, and final validation.
 - `packages/AGENTS.md`: language-pipeline ownership, AST and dispatch boundaries, shared wrappers, exports, and behavioral testing.
 - `Apps/Test Apps/AGENTS.md`: positive executable examples and README-owned app scope.
 - `.claude/CLAUDE.md`: root instruction include.

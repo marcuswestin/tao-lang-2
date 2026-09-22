@@ -290,7 +290,7 @@ function harness(
   const client = createStudioDeviceClient({
     bootstrap: {
       candidates: ['ws://192.168.1.20:8790/device'],
-      device: { model: 'iPhone', name: 'roPhone', os: 'iOS 26' },
+      device: { model: 'iPhone', name: 'example-phone', os: 'iOS 26' },
       metroPort: 8081,
     },
     handshakeTimeoutMs: 5_000,
@@ -331,7 +331,7 @@ Describe('Studio device client handshake and pairing', () => {
     const hello = connection.hello()
     Expect(run.client.state().phase).toBe('handshaking')
     Expect(hello.metroPort).toBe(8081)
-    Expect(hello.device).toEqual({ model: 'iPhone', name: 'roPhone', os: 'iOS 26' })
+    Expect(hello.device).toEqual({ model: 'iPhone', name: 'example-phone', os: 'iOS 26' })
     Expect(hello.pinnedStudioKey).toBeUndefined()
     Expect(hello.devicePublicKey).toBe(run.storage.record()!.identity.publicKey)
 
@@ -432,7 +432,7 @@ Describe('Studio device client handshake and pairing', () => {
     const run = harness({
       bootstrap: {
         candidates: ['ws://10.0.0.5:8790/device', 'ws://169.254.7.7:8790/device', 'ws://192.168.1.20:8790/device'],
-        device: { model: 'iPhone', name: 'roPhone', os: 'iOS 26' },
+        device: { model: 'iPhone', name: 'example-phone', os: 'iOS 26' },
         metroPort: 8081,
       },
     })

@@ -1,8 +1,8 @@
 # Agent MVP Roadmap
 
 Everything that stands between today and a public MVP release and that an agent can execute without
-a new decision from Ro. The companion list of judgments only Ro can make is
-`Ro MVP Roadmap.md` beside this file; items here name the Ro decision they wait on where one exists.
+a new decision from the Developer. The companion list of judgments only the Developer can make is
+`Developer MVP Roadmap.md` beside this file; items here name the Developer decision they wait on where one exists.
 
 The release these items serve: a small number of outside developers — a Hacker News audience — can
 install Tao, build something, and tell us what they wanted. Tao does not need to be complete. It
@@ -15,7 +15,9 @@ An item is marked **done** here only once it is on `main`. Work in progress live
 this document deliberately does not name because they move faster than it does: `./agent board`
 reports every worktree, its branch, and whether it carries a merge message, which is where to look
 before starting an item so two agents do not build the same thing. As of 2026-09-19 that board shows
-branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`.
+branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`. The `A4` branch named there,
+`feat/expo-go-deprecation-30c509`, never landed and was written against package paths that have
+since moved; its work is superseded rather than pending.
 
 ## Release blockers
 
@@ -105,22 +107,45 @@ today, or how to start.
 - Context: `Docs/README.md`, `Docs/Tutorials/`, `Docs/Spec/`, `Docs/Roadmap/Tao Revolution/`.
 - Uses the decided 0.x positioning (`R3`) and whole-repository publication with public-audience
   edits (`R2`).
+- Landed 2026-09-22: the root `README.md` — the Developer's pitch, a first app from the tutorial,
+  the CLI's commands, install (the standalone binary marked as on its way, the checkout path until
+  then), the 0.x promise, a plain statement that Tao is built by its author with coding agents, and
+  the licence. `Docs/Spec/Tao Design.md` lost its WIP suffix, with each unimplemented section marked.
+  The Developer deferred the honest "works today" page and the language tour. Remaining: the one-line
+  install once `A2` ships.
 - Done: a visitor who reads only the README knows what Tao is, whether it fits them, and what to run
   first.
 
-### A4 — Retire Expo Go from the development loop
+### A4 — Retire Expo Go from the phone lane — **done**
 
-Tao moved to Expo SDK 57 on 2026-09-15, and the App Store's Expo Go carries SDK 54, which Expo has
-been unable to move past. `tao dev` still opens Expo Go, so the physical-device lane is broken for
-anyone outside this repository.
+Written on the premise that the App Store's Expo Go was stuck on SDK 54 while Tao had moved to SDK
+57. That premise expired: App Store Expo Go 57.0.9 shipped on 2026-09-02, and Expo publishes SDK 57
+clients for Android and the iOS Simulator as well. The lane that is actually closed to Tao is the
+physical iPhone, for a different reason. Since
+[2026-09-03](https://expo.dev/changelog/expo-go-57-login) Expo Go on iPhone requires an Expo account
+signed in both on the phone and in the terminal serving the bundle, and `expo-config.ts` gives Metro
+a repository-local Expo home, so a developer's own `expo login` never reaches it. Expo's own
+statement that "Login is not required for development builds" is the argument for `A9`.
 
-- Shape: remove or gate the Expo Go paths, point the device loop at the Tao-published development
-  build, and correct every document and message that still promises Expo Go.
+- Shape: refuse the physical iPhone with that reason and name the Companion instead; keep the
+  simulator, emulator and physical-Android Expo Go lanes, which work and need no account, until
+  `A9`'s prebuilt host replaces them; correct every document and message that rests on the SDK-54
+  claim.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` (the lane table and
   slice 4), `packages/apps/expo-host/expo-host-src/dev-loop/`, `packages/ides/studio-companion-app`.
-- Uses the shared companion host and compatibility-check decision (`R7`); retiring the broken
-  Expo Go promise does not wait on that host's completion.
-- Done: no surface offers Expo Go, and the documented device path is one a newcomer can complete.
+- Uses the shared companion host and compatibility-check decision (`R7`); retiring the broken phone
+  promise does not wait on that host's completion. **Decided 2026-09-22:** Expo Go stays on the
+  lanes where it works until the Companion beta exists, so "no surface offers Expo Go" is `A9`'s
+  completion rather than this item's.
+- Done: no surface offers Expo Go where Expo Go cannot work, every message and document gives the
+  real reason rather than the SDK gap, and the phone path a newcomer is pointed at is the one Tao
+  intends to support.
+- Landed 2026-09-22: a physical iPhone is refused with the account-wall reason and the
+  `studio-companion-install` command; the simulator remedy names the SDK it needs; Android installs
+  a matching Expo Go itself and falls back to a skipped lane with its reason if that fails.
+  `EXPO_SDK_VERSION` in `expo-config.ts` is the one SDK pin the loop measures clients against, and a
+  test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
+  research carry a dated correction of the SDK-54 claim.
 
 ## First-hour quality
 
@@ -154,7 +179,7 @@ of whether a new language feels real.
 - Shape: packaging, versioning, and publication to the VS Code Marketplace and Open VSX, with the
   extension resolving a `tao` from the user's machine rather than a repository path.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
-- Waits on: Ro creates the publisher accounts and the app-safe licence structure is settled (`R1`).
+- Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
   Both marketplaces are in the first public-release scope (`R12`).
 - Done: `ext install` on a clean machine gives working Tao editing.
 
@@ -218,20 +243,41 @@ from the development loop, which no virtualization approach can do.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
 - Uses the host-scope decision in `R7`; physical-device acceptance and beta distribution remain
-  implementation and release proofs.
-- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone.
+  implementation and release proofs. Carries the rest of `A4`: the simulator, emulator and
+  physical-Android Expo Go lanes are removed as this host replaces each one.
+- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone,
+  and no surface offers Expo Go.
+- Landed 2026-09-22: the Companion carries every native module an app host can reach, at the same
+  version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
+  CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
+  the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+- Remaining: the Android side of the Companion shell, the host compatibility check, `tao dev`
+  obtaining and launching a host, building and publishing hosts, and the proofs on each lane. The
+  entitlements need the iCloud container and push enabled on the app id before a device build signs.
 
-### A10 — Publication hygiene audit
+### A10 — Publication hygiene audit — **done**
 
-Whatever becomes public carries the agent instructions, Ro's roadmap notes, machine-specific files,
+Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
 and a committed `secrets/secrets.jsonc`.
+
+- Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
+  mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect
+  key it named is the Developer's manual step), `roPhone` and the personal absolute paths gone from
+  docs, comments, and fixtures (`P16`, `P18`), the full AGPL-3.0 text with a copyright holder and
+  `AGPL-3.0-only` declared in every `package.json` (`P24`; SPDX headers wait for `R1`'s split) — and
+  the public-audience edits: the instruction set, the skills, and every document say "the Developer"
+  rather than a name (`P1`), `Roadmap.md`'s personal sections are reworded (`P7`, `P8`), and the
+  README states plainly how Tao is built (`P2`). `P17` — the login name Watchman's socket path puts
+  in the generated harness config — is its own project, since neither harness accepts a
+  user-agnostic socket rule.
 
 - Shape: inventory what would become public and what it reveals; confirm the committed secrets file
   is encrypted and that history holds nothing else; list machine-specific files (`local.properties`,
   named devices in package READMEs) and personal references.
 - Context: the repository root, `.rulesync/`, `agents/`, `Roadmap.md`.
 - Waits on: nothing for the audit; `R2` decides what to do with its findings.
-- Done: Ro has one list of everything a public repository would expose, with a recommendation per
+- Done: The Developer has one list of everything a public repository would expose, with a recommendation per
   entry.
 
 ## Language program
@@ -242,7 +288,7 @@ agent-executable steps.
 ### A11 — Process step 2: rewrite the Revolution tier
 
 WordFlower's `4 - Revolution` re-expressed in the decided dialect, with the `Apps/Tao Future/` apps
-as sibling references. Transcription against a settled decision record, with Ro reviewing the result.
+as sibling references. Transcription against a settled decision record, with the Developer reviewing the result.
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
 - Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
@@ -260,10 +306,10 @@ as sibling references. Transcription against a settled decision record, with Ro 
 ### A12 — Process step 3: consolidate the Tao Future apps
 
 Landed. Skillet, Hearth, and Wayfare read as `Decisions.md` decides, and `Coverage.md` names a
-forcing feature for every capability — four of them `none — for Ro`, which are red flags for step 4
+forcing feature for every capability — four of them `none — for the Developer`, which are red flags for step 4
 rather than contrived features. What remains is not agent work: the ten spellings the port had to
 choose where `Decisions.md` is silent are listed in `Apps/Tao Future/README.md`, and the one place
-where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on Ro
+where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on the Developer
 as `R14`. Step 2's rewrite settled the other one this pass reported, retiring `TabNav` for
 `SelectionNav`.
 

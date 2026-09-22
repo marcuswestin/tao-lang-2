@@ -153,7 +153,7 @@ Install the companion once, then run Studio normally:
 
 ```sh
 just studio-companion-simulator simulator="iPhone 17"
-# or: just studio-companion-install device="roPhone"
+# or: just studio-companion-install device="<name>"
 ```
 
 Open **Device** in Studio, choose **Open** (or copy/show its URL), then **Pair a device**. Confirm only

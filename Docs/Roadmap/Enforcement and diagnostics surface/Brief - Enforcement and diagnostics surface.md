@@ -16,15 +16,15 @@ Two things follow from that:
   extended stretches by design. Neither is a problem to fix.
 - **Do not widen scope into language, runtime, or package-structure work.** Other work is already
   underway there — including a reorganization of `packages/dev` and a split of `packages/runtime`. If
-  you find yourself needing to change either, stop and ask Ro rather than absorbing it.
+  you find yourself needing to change either, stop and ask the Developer rather than absorbing it.
 
 ## Repo state
 
 - `main` is `6cfd88be`: six commits, green, content-current. `./agent verify` reports 14 suites, 782
   tests, 9.0s suite wall time, 30.8s suite-sum.
-- **`origin/main` is still `444b02ed`.** The push is Ro's to make. Until it lands, a hosted gate has
-  nothing current to run against — raise this with Ro before building one.
-- `Apps/WordFlower/2 - Next/` holds **uncommitted** files under Ro's review. Do not disturb or commit
+- **`origin/main` is still `444b02ed`.** The push is the Developer's to make. Until it lands, a hosted gate has
+  nothing current to run against — raise this with the Developer before building one.
+- `Apps/WordFlower/2 - Next/` holds **uncommitted** files under the Developer's review. Do not disturb or commit
   them.
 - Toolchain is nix/devenv + direnv + bun. A fresh worktree needs `direnv allow` then
   `direnv exec . ./agent setup`. Branch `feat/<name>`; never commit from detached HEAD.
@@ -63,7 +63,7 @@ Three constraints:
   branch designed to be red for weeks will simply be turned off.
 - A merge-readiness command (`./agent merge-feature-preflight`) exists today and is being **deleted**
   by concurrent work. It inspects read-only Git state — branch, dirtiness, upstream, ahead/behind
-  counts — and never runs the tests. Decide with Ro whether the gate should subsume any of that
+  counts — and never runs the tests. Decide with the Developer whether the gate should subsume any of that
   before it disappears.
 
 ## 2. Diagnostics CLI surface
@@ -122,14 +122,14 @@ a code could be displayed later if one arrives, and leave it at that.
 ## Sequencing
 
 The two are independent. Workstream 2 delivers value to concurrent work the moment it lands, which
-argues for doing it first. Workstream 1 partly depends on Ro pushing `main`, so it may be gated on
+argues for doing it first. Workstream 1 partly depends on the Developer pushing `main`, so it may be gated on
 something outside your control.
 
 ## What a plan should be explicit about
 
 - Whether the gate blocks or reports, per branch class, and who can turn it off.
 - Whether workstream 2 changes the meaning of an existing command or adds one — that is a
-  user-visible decision needing Ro's sign-off before implementation.
+  user-visible decision needing the Developer's sign-off before implementation.
 - Whether each is one branch or several, given `./agent verify` must pass before every commit.
   Baseline to hold: 14 suites, 782 tests, 9.0s.
 - Which findings here you disagree with after reading the code yourself.

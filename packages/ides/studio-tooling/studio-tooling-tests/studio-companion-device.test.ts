@@ -50,7 +50,7 @@ const DEVICE_LIST_FIXTURE = {
     devices: [
       {
         connectionProperties: { pairingState: 'paired', transportType: 'localNetwork', tunnelState: 'disconnected' },
-        deviceProperties: { name: 'roPhone', osVersionNumber: '26.6.1' },
+        deviceProperties: { name: 'example-phone', osVersionNumber: '26.6.1' },
         hardwareProperties: { deviceType: 'iPhone', platform: 'iOS', udid: PHONE_UDID },
         identifier: PHONE_IDENTIFIER,
       },
@@ -186,7 +186,7 @@ Describe('Studio companion device tooling', () => {
       const runner = scriptedRunner(() => ({ json: DEVICE_LIST_FIXTURE }))
       const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-      Expect(await device.listHosts()).toEqual([{ id: PHONE_UDID, name: 'roPhone' }])
+      Expect(await device.listHosts()).toEqual([{ id: PHONE_UDID, name: 'example-phone' }])
       Expect(runner.calls[0]?.command).toBe('xcrun')
       Expect(runner.calls[0]?.args.slice(0, 3)).toEqual(['devicectl', 'list', 'devices'])
       Expect(await FS.listDir(roots.tmpRoot)).toEqual([])
@@ -304,11 +304,11 @@ Describe('Studio companion device tooling', () => {
       const runner = scriptedRunner(() => ({}))
       const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-      await device.install({ deviceName: 'roPhone' })
+      await device.install({ deviceName: 'example-phone' })
 
       const call = runner.calls[0]
       Expect(call?.command).toBe('bunx')
-      Expect(call?.args).toEqual(['expo', 'run:ios', '--device', 'roPhone', '--no-bundler'])
+      Expect(call?.args).toEqual(['expo', 'run:ios', '--device', 'example-phone', '--no-bundler'])
       Expect(call?.args).toContain('--no-bundler')
       Expect(call?.args).not.toContain('start')
       Expect(call?.cwd).toBe(roots.packageRoot)
@@ -323,10 +323,10 @@ Describe('Studio companion device tooling', () => {
       const runner = scriptedRunner(() => ({ exitCode: 65 }))
       const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-      const error = await expectHostFailure(() => device.install({ deviceName: 'roPhone' }))
+      const error = await expectHostFailure(() => device.install({ deviceName: 'example-phone' }))
       Expect(studioDeviceFailureLayer(error)).toBe('expo')
       Expect(error.messageForUser).toContain('exited with code 65')
-      Expect(error.messageForUser).toContain('"roPhone"')
+      Expect(error.messageForUser).toContain('"example-phone"')
       Expect(error.messageForUser).toContain('development team')
     })
   })
@@ -337,7 +337,7 @@ Describe('Studio companion device tooling', () => {
       const runner = scriptedRunner(() => ({}))
       const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-      const error = await expectHostFailure(() => device.install({ deviceName: 'roPhone' }))
+      const error = await expectHostFailure(() => device.install({ deviceName: 'example-phone' }))
       Expect(studioDeviceFailureLayer(error)).toBe('expo')
       Expect(error.messageForUser).toContain('./agent setup')
       Expect(runner.calls).toEqual([])
@@ -381,9 +381,9 @@ Describe('Studio companion device tooling', () => {
   })
 
   Test('matches a host by exact name, then case-insensitively, then by id', () => {
-    const hosts = [{ id: 'UDID-A', name: 'roPhone' }, { id: 'UDID-B', name: 'Rophone' }]
-    Expect(matchCompanionHost(hosts, 'Rophone')?.id).toBe('UDID-B')
-    Expect(matchCompanionHost(hosts, 'ROPHONE')?.id).toBe('UDID-A')
+    const hosts = [{ id: 'UDID-A', name: 'example-phone' }, { id: 'UDID-B', name: 'Example-phone' }]
+    Expect(matchCompanionHost(hosts, 'Example-phone')?.id).toBe('UDID-B')
+    Expect(matchCompanionHost(hosts, 'EXAMPLE-PHONE')?.id).toBe('UDID-A')
     Expect(matchCompanionHost(hosts, ' UDID-B ')?.id).toBe('UDID-B')
     Expect(matchCompanionHost(hosts, 'iPad')).toBeUndefined()
   })
@@ -507,7 +507,7 @@ const LAN = {
 Describe('Studio device launcher', () => {
   Test('describes Expo’s own dev-client link first, with LAN and link-local hosts as further candidates', async () => {
     const fetched = scriptedFetch(linkRedirect(EXPO_LINK))
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device,
@@ -519,8 +519,8 @@ Describe('Studio device launcher', () => {
 
     Expect(info.url).toBe(EXPO_LINK)
     Expect(info.candidates).toEqual(['192.168.50.107', '169.254.37.4'])
-    Expect(info.hosts).toEqual([{ id: PHONE_UDID, installed: true, kind: 'device', name: 'roPhone' }])
-    Expect(info.installCommand).toBe('just studio-companion-install device="roPhone"')
+    Expect(info.hosts).toEqual([{ id: PHONE_UDID, installed: true, kind: 'device', name: 'example-phone' }])
+    Expect(info.installCommand).toBe('just studio-companion-install device="example-phone"')
     Expect(info.metroPort).toBe(8081)
     Expect(info.scheme).toBe('taostudiocompanion')
     Expect(info.bundleIdentifier).toBe('dev.tao-lang.studio.companion')
@@ -637,17 +637,17 @@ Describe('Studio device launcher', () => {
     const unreachable = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device: fakeDevice({
-        hosts: [{ id: PHONE_UDID, name: 'roPhone' }],
+        hosts: [{ id: PHONE_UDID, name: 'example-phone' }],
         probeProblem: { layer: 'network', problem: 'tunnel down' },
       }),
       fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
       lanAddresses: async () => LAN,
     })
     const unreachableInfo = await unreachable.describe({ metroOrigin: 'http://127.0.0.1:8081' })
-    Expect(unreachableInfo.hosts).toEqual([{ id: PHONE_UDID, kind: 'device', name: 'roPhone' }])
+    Expect(unreachableInfo.hosts).toEqual([{ id: PHONE_UDID, kind: 'device', name: 'example-phone' }])
     Expect(unreachableInfo.diagnostics).toEqual([{
       layer: 'network',
-      message: 'Could not tell whether Tao Companion is installed on roPhone: tunnel down',
+      message: 'Could not tell whether Tao Companion is installed on example-phone: tunnel down',
     }])
   })
 
@@ -667,7 +667,7 @@ Describe('Studio device launcher', () => {
   })
 
   Test('opens the installed shell on the resolved URL, terminating the running instance', async () => {
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device,
@@ -677,7 +677,7 @@ Describe('Studio device launcher', () => {
 
     const result = await launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
 
-    Expect(result).toEqual({ hostName: 'roPhone', launched: true, url: EXPO_LINK })
+    Expect(result).toEqual({ hostName: 'example-phone', launched: true, url: EXPO_LINK })
     Expect(device.opened).toEqual([{ hostId: PHONE_UDID, terminateExisting: true, url: EXPO_LINK }])
   })
 
@@ -688,7 +688,7 @@ Describe('Studio device launcher', () => {
    * the gateway over the link-local address.
    */
   Test('takes the cable when asked, and Wi-Fi when not', async () => {
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device,
@@ -711,7 +711,7 @@ Describe('Studio device launcher', () => {
   })
 
   Test('says so plainly when the cable is asked for and no cable is attached', async () => {
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device,
@@ -733,7 +733,10 @@ Describe('Studio device launcher', () => {
   })
 
   Test('refuses to open a device without the shell and names the install command', async () => {
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: false } })
+    const device = fakeDevice({
+      hosts: [{ id: PHONE_UDID, name: 'example-phone' }],
+      installed: { [PHONE_UDID]: false },
+    })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
       device,
@@ -745,7 +748,7 @@ Describe('Studio device launcher', () => {
       launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
     )
     Expect(error.messageForUser).toBe(
-      'Tao Companion is not installed on roPhone. Install it once with: just studio-companion-install device="roPhone"',
+      'Tao Companion is not installed on example-phone. Install it once with: just studio-companion-install device="example-phone"',
     )
     Expect(studioDeviceFailureLayer(error)).toBe('devicectl')
     Expect(device.opened).toEqual([])
@@ -754,20 +757,20 @@ Describe('Studio device launcher', () => {
   Test('refuses to open an unknown host and lists the connected ones', async () => {
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
-      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }] }),
+      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }] }),
       fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
       lanAddresses: async () => LAN,
     })
 
     const error = await expectHostFailure(() => launcher.open({ hostId: 'nope', metroOrigin: 'http://127.0.0.1:8081' }))
     Expect(error.messageForUser).toContain('No connected device has id nope')
-    Expect(error.messageForUser).toContain(`roPhone (${PHONE_UDID})`)
+    Expect(error.messageForUser).toContain(`example-phone (${PHONE_UDID})`)
   })
 
   Test('fails open in network terms when no URL can be resolved', async () => {
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
-      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } }),
+      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } }),
       fetch: scriptedFetch(() => new Response('', { status: 404 })).fetchImpl,
       lanAddresses: async () => ({ interfaces: [] }),
     })
@@ -788,7 +791,7 @@ Describe('Studio device launcher', () => {
     }
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
-      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], openError }),
+      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], openError }),
       fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
       lanAddresses: async () => LAN,
     })
@@ -797,7 +800,7 @@ Describe('Studio device launcher', () => {
       launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
     )
     Expect(error.messageForUser).toBe(
-      'devicectl could not open Tao Companion: app missing. If Tao Companion is not installed yet, run: just studio-companion-install device="roPhone"',
+      'devicectl could not open Tao Companion: app missing. If Tao Companion is not installed yet, run: just studio-companion-install device="example-phone"',
     )
   })
 
@@ -846,13 +849,13 @@ Describe('Studio device launcher', () => {
 
 Describe('Studio companion install command', () => {
   Test('asks for a device name when none was given', async () => {
-    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }] })
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }] })
     await Expect(runStudioCompanionInstall({ deviceName: '  ' }, device)).rejects.toBeInstanceOf(Errors.UserInputError)
   })
 
   Test('offers the connected names when the requested one is not connected', async () => {
     const installs: string[] = []
-    const device = { ...fakeDevice({ hosts: [{ id: 'A', name: 'roPhone' }, { id: 'B', name: 'Studio iPad' }] }) }
+    const device = { ...fakeDevice({ hosts: [{ id: 'A', name: 'example-phone' }, { id: 'B', name: 'Studio iPad' }] }) }
     device.install = async input => {
       installs.push(input.deviceName)
     }
@@ -864,14 +867,14 @@ Describe('Studio companion install command', () => {
       failure = error
     }
     Expect(failure).toBeInstanceOf(Errors.UserInputError)
-    Expect(Errors.formatForUser(failure)).toContain('"roPhone", "Studio iPad"')
-    Expect(Errors.formatForUser(failure)).toContain(companionInstallCommand('roPhone'))
+    Expect(Errors.formatForUser(failure)).toContain('"example-phone", "Studio iPad"')
+    Expect(Errors.formatForUser(failure)).toContain(companionInstallCommand('example-phone'))
     Expect(installs).toEqual([])
   })
 
   Test('fails in devicectl terms when nothing is connected', async () => {
     const error = await expectHostFailure(() =>
-      runStudioCompanionInstall({ deviceName: 'roPhone' }, fakeDevice({ hosts: [] }))
+      runStudioCompanionInstall({ deviceName: 'example-phone' }, fakeDevice({ hosts: [] }))
     )
     Expect(studioDeviceFailureLayer(error)).toBe('devicectl')
     Expect(error.messageForUser).toContain('No iPhone or iPad is connected')
@@ -879,31 +882,33 @@ Describe('Studio companion install command', () => {
 
   Test('accepts the just spelling, whose named argument arrives as a literal device= prefix', async () => {
     const installs: string[] = []
-    const device = { ...fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }] }) }
+    const device = { ...fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }] }) }
     device.install = async input => {
       installs.push(input.deviceName)
     }
 
-    const captured = await withCapturedOutput(() => runStudioCompanionInstall({ deviceName: 'device=roPhone' }, device))
+    const captured = await withCapturedOutput(() =>
+      runStudioCompanionInstall({ deviceName: 'device=example-phone' }, device)
+    )
 
     Expect(captured.result).toBe(0)
-    Expect(installs).toEqual(['roPhone'])
+    Expect(installs).toEqual(['example-phone'])
     Expect(companionDeviceNameFromArgument(' device= ')).toBe('')
     Expect(companionDeviceNameFromArgument('My Phone')).toBe('My Phone')
   })
 
   Test('installs on the matched device with its canonical name and prints the next step', async () => {
     const installs: string[] = []
-    const device = { ...fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }] }) }
+    const device = { ...fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }] }) }
     device.install = async input => {
       installs.push(input.deviceName)
     }
 
-    const captured = await withCapturedOutput(() => runStudioCompanionInstall({ deviceName: 'rophone' }, device))
+    const captured = await withCapturedOutput(() => runStudioCompanionInstall({ deviceName: 'EXAMPLE-PHONE' }, device))
 
     Expect(captured.result).toBe(0)
-    Expect(installs).toEqual(['roPhone'])
-    Expect(captured.stdout).toContain('Installed Tao Companion on roPhone.')
+    Expect(installs).toEqual(['example-phone'])
+    Expect(captured.stdout).toContain('Installed Tao Companion on example-phone.')
     Expect(captured.stdout).toContain('Now run `just studio <project>` and press Open on device.')
     Expect(captured.stdout).toContain('--no-bundler')
   })
@@ -936,12 +941,26 @@ Describe('Tao Companion shell configuration', () => {
         packageRoot,
       )),
     ).toBe(true)
-    Expect(config.expo.plugins?.[0]).toBe('expo-dev-client')
-    Expect(config.expo.plugins?.[1]).toEqual([
+    // By name rather than by position: the shell gains plugins as it gains capabilities, and an
+    // index assertion fails for the one reason that does not matter.
+    const plugins = config.expo.plugins ?? []
+    const pluginName = (plugin: unknown): string =>
+      typeof plugin === 'string' ? plugin : Array.isArray(plugin) ? String(plugin[0]) : ''
+    const declaredPlugin = (name: string): unknown => plugins.find(plugin => pluginName(plugin) === name)
+
+    Expect(plugins.map(pluginName)).toContain('expo-dev-client')
+    Expect(declaredPlugin('expo-build-properties')).toEqual([
       'expo-build-properties',
       { ios: { enableSceneSupport: true } },
     ])
-    const fmtPlugin = config.expo.plugins?.[2]
+    // A development build's entitlements come from the shell, not from the bundle it loads, so the
+    // Companion declares every iCloud service a Tao app can bind. The container is derived from this
+    // shell's own bundle identifier, which is why an app run here uses the Companion's container.
+    Expect(declaredPlugin('tao-icloud')).toEqual([
+      'tao-icloud',
+      { services: ['CloudDocuments', 'CloudKit'] },
+    ])
+    const fmtPlugin = plugins.find(plugin => typeof plugin === 'string' && plugin.startsWith('./'))
     Expect(typeof fmtPlugin).toBe('string')
     const pluginSource = await FS.readText(FS.resolvePath(String(fmtPlugin), packageRoot))
     Expect(pluginSource).toContain("require('../../../apps/expo-host/plugins/with-ios-fmt-compat.cjs')")
@@ -1051,7 +1070,7 @@ Describe('Tao Companion simulator tooling', () => {
       simulators: simulatorsFromSimctl(SIMCTL_LIST_FIXTURE),
     })
     const launcher = createStudioDeviceLauncher({
-      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } }),
+      device: fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } }),
       fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
       lanAddresses: async () => LAN,
       simulator,
@@ -1060,7 +1079,7 @@ Describe('Tao Companion simulator tooling', () => {
     const info = await launcher.describe({ metroOrigin: 'http://127.0.0.1:8081' })
 
     Expect(info.hosts).toEqual([
-      { id: PHONE_UDID, installed: true, kind: 'device', name: 'roPhone' },
+      { id: PHONE_UDID, installed: true, kind: 'device', name: 'example-phone' },
       { id: 'SIM-PAD', installed: true, kind: 'simulator', name: 'iPad (A16) (iOS 26.5 Simulator)' },
     ])
 

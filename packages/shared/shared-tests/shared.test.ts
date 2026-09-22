@@ -688,7 +688,7 @@ Describe('HCI', () => {
   })
 
   Test('asks for text with validation', async () => {
-    const streams = fakeTerminal(' \nRo\n')
+    const streams = fakeTerminal(' \nthe Developer\n')
 
     const value = await HCI.askText({
       message: 'Name',
@@ -696,7 +696,7 @@ Describe('HCI', () => {
       ...streams,
     })
 
-    Expect(value).toBe('Ro')
+    Expect(value).toBe('the Developer')
     Expect(streams.outputText()).toContain('Required')
   })
 
@@ -783,7 +783,9 @@ Describe('HCI', () => {
   })
 
   Test('uses defaults or rejects in non-interactive mode', async () => {
-    await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'Ro' })).resolves.toBe('Ro')
+    await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'the Developer' })).resolves.toBe(
+      'the Developer',
+    )
     await Expect(HCI.askConfirm({ message: 'Continue', interactive: false, defaultValue: false })).resolves.toBe(false)
     await Expect(
       HCI.askChoice({

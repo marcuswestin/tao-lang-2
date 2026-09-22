@@ -1,7 +1,7 @@
 ---
 name: git-workflow
 description: >-
-  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when Ro asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`) and landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`).
+  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when the Developer asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`) and landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`).
 ---
 
 # Git Workflow
@@ -12,7 +12,7 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 
 ## This repository has many worktrees
 
-`git worktree list` routinely shows fifteen or more checkouts sharing one object store, worked in concurrently by other agents and Ro.
+`git worktree list` routinely shows fifteen or more checkouts sharing one object store, worked in concurrently by other agents and the Developer.
 
 - Read `git worktree list` before any operation that moves a ref. A branch checked out elsewhere is not yours to move, and never write to another worktree's files, index, or branch.
 - In a linked worktree, `./agent` reuses the primary checkout's pinned devenv profile (run
@@ -21,7 +21,7 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
   files move, but protected paths stay dirty. Do not try alternate commands or switch to an
   unsandboxed shell to finish one. Diagnose the exact state read-only, report the write needed, and
-  pause for Ro's explicit approval. An authorized `./agent land` is the exception and performs its
+  pause for the Developer's explicit approval. An authorized `./agent land` is the exception and performs its
   own integration under the landing lock.
 
 ## Moving a branch ref
@@ -48,14 +48,14 @@ the SHA. It preserves Git's squash appendix on `main` — summary, bullets, a bl
 ## Merging a feature branch into `main`
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
-landing command's mechanics, evidence, and message format. After Ro authorizes landing this slice,
+landing command's mechanics, evidence, and message format. After the Developer authorizes landing this slice,
 run `./agent land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
 A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does, through the `Mine`
-`Justfile` recipes. Pushing is irreversible: confirm with Ro before pushing anything Ro did not ask
+`Justfile` recipes. Pushing is irreversible: confirm with the Developer before pushing anything the Developer did not ask
 to be pushed.
 
 ## Rebuilding history
@@ -73,5 +73,5 @@ git commit -F <message-file>
 `read-tree --reset -u` overwrites tracked files unconditionally — run it only in a worktree created
 for the rewrite. Assert after each commit that its tree equals the boundary ref's tree, and that the
 final branch diffs empty against the original tip before merging. Keep the original branches, or tag
-them, until Ro confirms the rewrite, and resolve any document that cites a commit hash leaving
+them, until the Developer confirms the rewrite, and resolve any document that cites a commit hash leaving
 `main`'s history.

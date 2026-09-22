@@ -457,7 +457,7 @@ Describe('finalize', () => {
   Test('keeps an existing merge message when recorded state proves it matches the current HEAD', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Hand-edited by Ro.\n')
+    fake.files.set(messagePath, 'Land example\n\n- Hand-edited by the Developer.\n')
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     const state: FinalizeState = {
       headSha: 'mainsha00000000000000000000000000000000000',
@@ -481,7 +481,7 @@ Describe('finalize', () => {
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by Ro.\n')
+    Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by the Developer.\n')
     Expect(outcome.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
     Expect(outcome.lines.some(line => line.includes('3. Merge message: kept — recorded as written for this HEAD')))
       .toBe(true)

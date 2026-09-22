@@ -5,7 +5,7 @@ import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
 import type { AndroidSession } from './android'
-import type { ExpoSessionConfig } from './expo-config'
+import { expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import type { ExpoMetroSession } from './metro'
 import { openPhysicalDevice } from './physical-device'
 
@@ -98,8 +98,10 @@ async function openIosSimulator(
  * `simctl openurl` reports its refusal as a four-line LaunchServices dump whose only readable
  * sentence is the one naming the URL, and the dev loop printed all four in the colour it uses for
  * real breakage. The common cause has a remedy worth naming instead: LaunchServices error 115 is
- * "no installed application handles this URL", which on a simulator means the development build or
- * Expo Go is not installed on it.
+ * "no installed application handles this URL", which on a simulator means no runtime for this SDK is
+ * installed on it. Expo Go still serves a simulator — Expo publishes a build per SDK generation and
+ * the account requirement its iPhone build carries does not apply there — but Tao never installs
+ * one, so the remedy names the command that does.
  */
 export function simulatorOpenFailure(
   simulatorName: string,
@@ -108,7 +110,9 @@ export function simulatorOpenFailure(
 ): string {
   const detail = result.stderr.trim() || result.error?.message || 'unknown error'
   const reason = /LSApplicationWorkspaceErrorDomain, code=115/.test(detail)
-    ? 'no app installed on it handles that URL — install the development build or Expo Go there first'
+    ? `no app installed on it handles that URL — that simulator has no runtime for Expo SDK ${
+      expoSdkMajor() ?? ''
+    }; \`bunx expo start --ios\` in packages/apps/expo-host installs one`
     : detail.split('\n').map(line => line.trim()).filter(line => line.length > 0).at(-1) ?? 'unknown error'
   return `${simulatorName} did not open ${link}: ${reason}`
 }

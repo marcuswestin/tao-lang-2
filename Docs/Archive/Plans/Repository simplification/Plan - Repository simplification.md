@@ -3,7 +3,7 @@
 Audited at commit `37c32830` (Complete Tao Studio v2), 2026-08-31. Every finding below was produced
 read-only and verified against code at that commit — file:line references drift, so re-verify each
 claim against the current tree before acting on it. Findings carry a **Done** / **Skipped** /
-**Blocked on Ro** marker as they land; where re-verification contradicted a finding, the tree won
+**Blocked on the Developer** marker as they land; where re-verification contradicted a finding, the tree won
 and the finding is corrected in place.
 
 ## Status
@@ -17,7 +17,7 @@ and the finding is corrected in place.
 | 3. Test-harness modules (2.6)             | **Partly done** — shared helpers landed; the three package-local `test-*.ts` modules and all adoption remain                                                                            |
 | 4. Test surface (2.1–2.5)                 | **Partly done** — four of five Test App merges landed (17 folders → 11); the TR, studio, pipeline, and dev/CLI passes remain                                                            |
 | 5. Production structure (Part 3)          | **Partly done** — the TR error consolidation, the generated-run lifecycle, and the preview symlink landed; the Studio protocol/route/guard consolidation and the god-file splits remain |
-| 6. Command surface (4.1)                  | **Not started**, and re-scoped: Ro's ruling keeps `./tao`, `Justfile`, and `./dev` distinct rather than collapsing them                                                                 |
+| 6. Command surface (4.1)                  | **Not started**, and re-scoped: The Developer's ruling keeps `./tao`, `Justfile`, and `./dev` distinct rather than collapsing them                                                                 |
 | 7. Conventions (Part 5)                   | **Partly done** — the error-handling redesign landed (451 raw throws → 16, all deliberate); the `ValidationContext` flip and the export/rename sweep remain                             |
 | 8. Documentation (Part 6)                 | **Not started**                                                                                                                                                                         |
 
@@ -45,7 +45,7 @@ same change.
   tests while working and `./agent verify` before every commit.
 - The guardrails below override individual findings. When a finding and a guardrail collide, the
   guardrail wins; note the skip rather than forcing the change.
-- Items marked **Ro decision** are collected in Part 7. Do not act on them without Ro's answer;
+- Items marked **the Developer decision** are collected in Part 7. Do not act on them without the Developer's answer;
   everything else is executable on repository evidence.
 - Test consolidations must keep every distinct behavior provable somewhere. Each removal names its
   surviving proof — if re-verification shows that proof is gone, keep the test.
@@ -70,10 +70,10 @@ overzealous cleanup:
 3. **`code-editor` stays its own package** — it is the stdlib foreign-view target (`@tao/code-editor`),
    a runtime-toolchain dependency, and pinned by `DependencyCompatibility`.
 4. **`workspace` and `stdlib` stay as-is** — composition root and RN-dependency isolation respectively.
-5. **The Studio strangler boundary stands — with one carve-out Ro has since made.** Promoting the
+5. **The Studio strangler boundary stands — with one carve-out the Developer has since made.** Promoting the
    Tao editor to document authority is strangler-plan work sequenced after the external
    browser/native validation gates in `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`; it is
-   not cleanup and is not in this plan's scope. **Superseded in part:** Ro decided Part 7 item 2, so
+   not cleanup and is not in this plan's scope. **Superseded in part:** The Developer decided Part 7 item 2, so
    the legacy standalone dev fallback — `buildDirectClientBundle`, `StudioClient.ts`, and the
    `embedded !== true` branches it kept alive — _is_ removed. Everything else about the boundary is
    unchanged.
@@ -194,14 +194,14 @@ noted.
   and `ParserGenerate.ts` already carries them in `ACCEPTED_DIAGNOSTICS` with reasons, matched by
   exact rule name at the reported line so a genuinely new dead rule still fails the gate.
 - Shared-facade functions exercised only by their own tests — `CLI.runSync`, `CLI.formatCommand`,
-  `HCI.askText`, `Log.setTransport`: **Ro decision** (Part 7) — delete, or keep deliberately as API
+  `HCI.askText`, `Log.setTransport`: **The Developer decision** (Part 7) — delete, or keep deliberately as API
   symmetry; decide once per facade rather than re-litigating per audit.
 
 ### Justfile / devenv (commands with zero references)
 
 - **Reverted — the finding's premise was wrong.** These four recipes (`just lint`, `just fmt`,
   `just studio-test`, `just studio-smoke-native`) were removed for having zero references, then
-  restored on Ro's ruling: _"Many human invoked recipes should be composed, and invocable
+  restored on the Developer's ruling: _"Many human invoked recipes should be composed, and invocable
   stand-alone trivially. The justfile should also do a good job at surfacing commonly useful dev
   options that would otherwise perhaps not be easily answered — e.g. `just` shows all recipes, and
   there should be a single just command that performs all fixing and gates, and then separate
@@ -209,11 +209,11 @@ noted.
   `just --list`, not through code references, so "zero references" does not mean dead here. The
   `./agent fmt` passthrough was restored with them. **Apply this rule to the whole Justfile:** do not
   delete a public recipe for lack of callers; judge it by whether a human would want it.
-- **Done** (Ro approved). Removed the unused devenv pins `oxlint`, `watchexec`, `jq`, `fd`, and
+- **Done** (the Developer approved). Removed the unused devenv pins `oxlint`, `watchexec`, `jq`, `fd`, and
   `npm.enable` from `devenv.nix`. All five had zero repository references (the only `fd` match was a
   `logFile.fd` property; no `npm`/`npx` command is invoked anywhere). Re-evaluated afterwards:
   devenv still builds and `node`, `bun`, `just`, `dprint`, and `git` all resolve.
-- `just bench` / `./agent bench` — **Ro decision** (Part 7): the regression policy already runs on
+- `just bench` / `./agent bench` — **the Developer decision** (Part 7): the regression policy already runs on
   every test pass via `performance-checks/language-performance.test.ts`; the module stays either way.
 
 ## Part 2 — Test surface
@@ -255,7 +255,7 @@ folder cannot see a project block that lives in another app's import closure —
 
 Resizable Split's persisted-width claim was **trimmed, not proved**: the Tao test-step grammar had no `resize` and no
 `relaunch` step. `relaunch` has since shipped and the entry now claims the persisted width across
-one; only the `resize` half still stands, and it remains Ro's call. The README now
+one; only the `resize` half still stands, and it remains the Developer's call. The README now
 claims only declaration, binding, and simultaneous pane rendering, and points resize at the adapter
 and persisted-state round-tripping at `packages/runtime/TR-tests/`.
 
@@ -304,7 +304,7 @@ landable; every cut names its surviving proof (re-verify each before cutting):
    `configuredSelection`/harness helpers.
 7. **Split `TR-data.test.ts`** (1,202 lines) at its existing `Describe` seams; do not merge it with
    `TR-data-fills` (different subjects). M.
-8. **React-element-harness policy** — **Ro decision** (Part 7): a further ~200 lines in
+8. **React-element-harness policy** — **the Developer decision** (Part 7): a further ~200 lines in
    `TR-views.test.ts`/`TR-navigation-identity.test.ts` monkey-patch React and assert element trees
    or RN vendor choice (`type === 'ActivityIndicator'`); the RN-test-renderer e2e tier owns that
    level. Cut only with that policy adopted.
@@ -520,7 +520,7 @@ decision.)
    `TR.Capture.recoveryBackup`.
 5. Rename the `'legacy-style'` design-spec kind to `'bundle'` across compiler/runtime/tests —
    bundles are decided current language; the name misleads. S.
-6. `@runtime/TR-studio` subpath split — **Ro decision** (Part 7): today every production app bundles
+6. `@runtime/TR-studio` subpath split — **the Developer decision** (Part 7): today every production app bundles
    ~2,400 lines of Studio/dev-menu runtime because `TR.ts` statically imports them. An emit-gated
    subpath keeps production bundles lean, but it needs a compiler emit change — schedule with a
    language tranche, not this cleanup.
@@ -550,7 +550,7 @@ decision.)
   invisibly coupled to the `TR.Studio.*` API. Interpolate `TaoStudioProtocolVersions` instead of the
   hardcoded channel/version literals (a protocol bump would silently miss the generated string). M.
 - Preview "compatibility copies" double every generated file write; only the revision copies join
-  the live import chain — **Ro decision** (Part 7): drop the inspectability copies?
+  the live import chain — **the Developer decision** (Part 7): drop the inspectability copies?
 - Metro `@shared/core` alias + watch folder: plausibly dead in the Metro path (only Jest-mapped
   consumers). Verify with one Metro bundle run, then delete the alias and its test assertion — or
   document it as the blessed sidecar seam. S, medium risk.
@@ -558,7 +558,7 @@ decision.)
   with one naming decision + comment. S.
 - Adopt the migration rule for the jest e2e tier: a jest e2e test stays only if it needs a
   native/module override, asserts generated-code shape, or exercises the harness itself; otherwise
-  new coverage lands in Tao and existing suites migrate opportunistically when touched. **Ro
+  new coverage lands in Tao and existing suites migrate opportunistically when touched. **The Developer
   decision** (Part 7) to adopt; do not schedule a wholesale rewrite.
 
 ### 3.4 Compiler / parser / validator / formatter / source-actions
@@ -605,7 +605,7 @@ decision.)
 - Fold the seven copies of the catch/format/exit block into one `runCliCommand(fn)` wrapper (one
   copy inconsistently uses `setExitCode`). S.
 - `dev-app-discovery.ts` re-implements `Runtime.appNames` — call it. S.
-- **Reframed, and needs Ro's call.** The finding said `dev-app-selection.ts` "bypasses
+- **Reframed, and needs the Developer's call.** The finding said `dev-app-selection.ts` "bypasses
   `HCI.askChoice`". It does not, and cannot: `askChoice` is readline/line-based (needs Enter),
   returns a `ValueT extends string`, and loops until a valid answer. The selector resolves on a
   single keypress, returns a three-way `{cancel} | {exit, exitCode} | {selected, app}`, keys
@@ -618,7 +618,7 @@ decision.)
   `on('data')` → `pause`, with the same "a resumed stdin keeps the process alive" hazard commented
   in both. The right unification is a shared raw-key primitive in `HCI`/`Platform` — note
   `dev-app-selection.ts` also supports a non-stdin `Readable` for tests that `RawKeyInput` does not.
-  **Ro's call, made and DONE: do it the right, clean way.** `HCI.startRawKeys` / `HCI.withRawKeys`
+  **The Developer's call, made and DONE: do it the right, clean way.** `HCI.startRawKeys` / `HCI.withRawKeys`
   now own raw-mode enable and restore, `resume`/`pause` with the process-stays-alive hazard, listener
   lifecycle, and chunk-to-key decoding. `RawKeyInput.ts` is deleted; the selector lost
   `withRawChoiceInput`, `readChoiceKey`, and `setCustomInputRawMode` (182 → 132 lines).
@@ -690,9 +690,9 @@ on drift) — no work needed there.
   worktrees). Keep: the devenv-profile activation, install stamp/lock/retry, and scratch pruning in
   `agent-worktree-profile.zsh` — they solve real observed failures and are well-tested. Update the
   dev-automation skill and the bootstrap tests in the same change.
-- **Revised by Ro — do NOT collapse the three command surfaces.** The original finding proposed one
+- **Revised by the Developer — do NOT collapse the three command surfaces.** The original finding proposed one
   canonical spelling per outcome and deleting the Just recipes that duplicate `./dev` and `./tao`.
-  Ro's ruling keeps all three, each with a distinct job:
+  The Developer's ruling keeps all three, each with a distinct job:
   - **`./tao`** — a pass-through to the intended _published_ CLI. It must give developers who prefer
     their own editor over Studio an excellent dev experience; this is product surface, not internal
     tooling.
@@ -738,7 +738,7 @@ on drift) — no work needed there.
   and it asserts the facts are non-empty so a partially installed tree cannot short-circuit it. The
   module stays (the doctor consumes it); the now-unreferenced recipe was removed with it.
 - `_runtime-pack-check` in every `check` and `verify` is release-readiness validation in the daily
-  lane — **Ro decision** (Part 7): demote to verify-only or a release lane.
+  lane — **the Developer decision** (Part 7): demote to verify-only or a release lane.
 - **Done.** `verify`'s `_tao-check` skip reason now states what actually holds — `fix` ran
   `./tao fix` over the tree and the tao-apps suite compiles it — instead of "covered by check",
   which nothing guaranteed.
@@ -760,7 +760,7 @@ on drift) — no work needed there.
   reported, so exemptions get cleaned up when the underlying work lands. The scan now walks `.tsx`
   as well as `.ts`, since one real violation lives in a `.jest-test.tsx`; the duplicate-describe rule
   still sees only `.test.ts`.
-- **Done** (Ro approved the dependency). `just dead-exports` runs `knip` through
+- **Done** (the Developer approved the dependency). `just dead-exports` runs `knip` through
   `DeadExports.ts`, which removes the findings this repo's own conventions explain. `ts-prune` was
   rejected: it is archived and its own README points at knip. Three structural blind spots were
   found, not one, and each is answered by restoring the missing import edge rather than muting a
@@ -832,9 +832,9 @@ imports, zero Langium leaks, zero barrel leakage). The debt is in the export/nam
 7. **Grouped-helpers pass**: the real "focused module surface" violations are the big Studio/TR
    surfaces (`TaoStudioProductHost.tsx` at 91 exported bindings, `TR-data-registry.ts` at 17) —
    fold into the Part 3 splits rather than a repo-wide sweep.
-8. **Error-handling redesign** (L, Ro-commissioned — **supersedes** the earlier "convert raw throws
+8. **Error-handling redesign** (L, commissioned by the Developer — **supersedes** the earlier "convert raw throws
    opportunistically in studio/dev only; runtime's raw throws are its own sanctioned convention").
-   Ro's ruling: _"Assertions should always use the shared Assert functions. If categories are needed
+   The Developer's ruling: _"Assertions should always use the shared Assert functions. If categories are needed
    for asserts, then implement that on top of the Assert API. The assert functions should definitely
    be throwing typed errors. We shouldn't ever have raw `throw Error` anywhere in the codebase,
    unless there's a specific good reason."_
@@ -861,7 +861,7 @@ imports, zero Langium leaks, zero barrel leakage). The debt is in the export/nam
       a judgment about what the user should see, which is the real work — the mechanical part is
       trivial.
 
-   The payoff is Ro's stated goal: a Tao developer should never meet a bare JavaScript error string
+   The payoff is the Developer's stated goal: a Tao developer should never meet a bare JavaScript error string
    from the runtime, and should always be able to tell _whose_ mistake an error reports.
 
    **Progress and what the sweeps taught.** `shared`, `runtime`, `studio`, and the pipeline tail
@@ -1014,7 +1014,7 @@ the tutorial. All cross-references resolve except one (noted below).
   work landed; the open items are the external validation gates — reword rather than silently
   checking).
 - "Rename UI to Scene" is checked done but no `scene` construct exists anywhere — the `ui` keyword
-  was retired into `view` by the unified-view tranche. **Ro decision**: fix the item's wording to
+  was retired into `view` by the unified-view tranche. **The Developer decision**: fix the item's wording to
   what actually happened, or reopen it if a Scene rename is still intended.
 - "Add `tao create` project scaffold" — `tao create` exists; re-scope the item to the missing parts
   (docs, dev/test scripts, open-and-run path) or check it off.
@@ -1026,11 +1026,11 @@ the tutorial. All cross-references resolve except one (noted below).
   markdown rework, export sweep, magical strings, utility grouping, `ValidationContext` argument
   order, imports/exports structure) by pointing them at this plan or checking them off.
 
-## Part 7 — Decisions for Ro
+## Part 7 — Decisions for the Developer
 
 Everything here gates work described above; nothing else in this plan needs a decision.
 
-1. ~~**`TR.Errors`**~~ — **DECIDED and DONE: kept and consolidated.** Ro: _"As long as we have one coherent
+1. ~~**`TR.Errors`**~~ — **DECIDED and DONE: kept and consolidated.** The Developer: _"As long as we have one coherent
    approach for interacting with errors at runtime, with structure that allows for logic and
    functionality about runtime errors to be mostly centralized and explorable and understood without
    looking in many different places of the codebase. Also, we should be able to easily grep the
@@ -1058,7 +1058,7 @@ Everything here gates work described above; nothing else in this plan needs a de
      production guard, which had none, came with it. **Resolved:** `TR.WarnUnhonoredLayout` now routes through
      `warnDesignDivergence`, a second named policy for a notice where nothing failed, and holds no
      production guard of its own.
-2. ~~**Legacy Studio client standalone dev fallback**~~ — **DECIDED and DONE.** Ro: _"Remove. We can
+2. ~~**Legacy Studio client standalone dev fallback**~~ — **DECIDED and DONE.** The Developer: _"Remove. We can
    reintroduce if this becomes a common issue."_ **This supersedes Guardrail 5's protection of the
    legacy `client/` tree**; the guardrail's other half stands — this was the fallback removal only,
    not broader strangler or document-authority work.
@@ -1075,7 +1075,7 @@ Everything here gates work described above; nothing else in this plan needs a de
    `StudioHighlight.ts` never had an `embedded` branch (its only hit is Shiki's `embeddedLangs`).
 
    Two follow-ups this surfaced:
-   - ~~**`/api/design` now has no client.**~~ **Done** (Ro approved). The route, its `designRequest`
+   - ~~**`/api/design` now has no client.**~~ **Done** (the Developer approved). The route, its `designRequest`
      helper, the handshake entry, and two stale assertions are gone — 13 lines, exactly the estimate.
      `session.inspectDesign` stays, since `StudioServerDatasource.ts:190` uses it for the Tao-owned
      `DesignTokens` panel. Correction to the reasoning first recorded here: the
@@ -1087,7 +1087,7 @@ Everything here gates work described above; nothing else in this plan needs a de
      it only ever disabled buttons that were never displayed. The Tao file tree has no equivalent, so
      this is a latent gap rather than a regression. **Deferred**, and recorded in `Roadmap.md`.
 3. ~~**`tao dev` and the dev-loop machinery**~~ — **DECIDED: keep and invest.** Retiring the
-   subtree is off the table. Ro wants two distinct dev loops, and this machinery is the foundation
+   subtree is off the table. The Developer wants two distinct dev loops, and this machinery is the foundation
    of the second:
    - **Repo-developer loop** — run Tao apps from inside this repo while watching the toolchain, so
      the app reloads when either the `.tao` source _or_ the compiler changes; run the test suite
@@ -1131,7 +1131,7 @@ Everything here gates work described above; nothing else in this plan needs a de
    **Stage 2 is DONE. Typir is gone** — `type-system.ts`, `TypeSystemHelpers.ts`,
    `expressions-validator.ts`, the service construction, the `Workspace.typir` getter, the
    `@validator/type-system` export, and both dependencies. Net `−584 / +78`, with `bun.lock` moving
-   exactly seven lines and no collateral churn. Ro accepted `text` over `stateful text`.
+   exactly seven lines and no collateral churn. The Developer accepted `text` over `stateful text`.
 
    **"Delete the Typir branch and let the fallback handle everything" would have shipped a
    regression, and only a probe caught it.** `reportSemanticSetStatementTypes` errored on _every_
@@ -1154,7 +1154,7 @@ Everything here gates work described above; nothing else in this plan needs a de
    Corpus coverage was thin here (only three set-type diagnostics), so a clean corpus diff would have
    been nearly vacuous; a 45-case probe corpus carried the real evidence, and six of those cases
    became permanent tests, vacuity-checked by perturbing the expected strings.
-5. ~~**Legacy root-view app form**~~ — **DECIDED and DONE: made sugar.** Ro: _"Could we remove most
+5. ~~**Legacy root-view app form**~~ — **DECIDED and DONE: made sugar.** The Developer: _"Could we remove most
    of it, by simply adding a root navigator that holds the view when the user does that? It almost
    becomes syntactic sugar."_ A root `view` statement now supplies the app's `Navigator` slot, seeded
    at the earliest point each side builds its app model, so neither the compiler nor the validator
@@ -1190,7 +1190,7 @@ Everything here gates work described above; nothing else in this plan needs a de
    directories during `include` expansion, doubling the program from 134 to 261 entries, so the link
    is excluded in `runtime-toolchain/tsconfig.json` (`exclude` overrides rather than merges, so the
    base entry is restated).
-8. ~~**`just bench` / `./agent bench`**~~ — **DECIDED: keep.** Ro's broader ruling on the Justfile:
+8. ~~**`just bench` / `./agent bench`**~~ — **DECIDED: keep.** The Developer's broader ruling on the Justfile:
    human-invoked recipes should be composed and each invocable stand-alone, and `just --list` should
    surface commonly useful dev options — one recipe for all fixing and gates, separate recipes for
    the smaller parts. A public recipe is therefore never dead merely for lacking callers.
@@ -1227,7 +1227,7 @@ Everything here gates work described above; nothing else in this plan needs a de
       `packages/studio/README.md` is the Chrome DevTools Protocol `Log` domain, not this module.)
 13. ~~**"Rename UI to Scene"**~~ — **DECIDED: dropped. Do not introduce `scene`.** Once it was clear
     there is no `ui` keyword and no `scene` construct — the unified-view tranche retired `ui` into
-    `view`, leaving only the stdlib package `@tao/ui` — Ro dropped the rename rather than churn a
+    `view`, leaving only the stdlib package `@tao/ui` — the Developer dropped the rename rather than churn a
     published import path. The Roadmap entry now records what actually happened instead of claiming
     a Scene rename.
 14. ~~**Grammar-only data traits**~~ (`touch on change`, `ordered`, `search`, `device`) — **DECIDED:
@@ -1246,10 +1246,10 @@ Everything here gates work described above; nothing else in this plan needs a de
 Each phase is independently valuable; later phases assume earlier ones only where noted.
 
 1. ~~**Dead code** (Part 1)~~ — **done**, one commit per group. `TR.Errors` and the shared-facade
-   symmetry question stayed blocked on Ro.
+   symmetry question stayed blocked on the Developer.
 2. ~~**Environment quick wins**~~ — **done**: parser-gen stamping, `_dependency-check` drop, the
    generated-run lifecycle with `just clean` coverage, and the 4.3 convention checks (in repo-lint).
-   The 4.3 dead-export check is deferred — it wants a new third-party dependency, which is Ro's call.
+   The 4.3 dead-export check is deferred — it wants a new third-party dependency, which is the Developer's call.
 3. **Test-harness modules** (2.6) — **shared helpers done**; the three package-local `test-*.ts`
    modules and all adoption remain, and belong with the Phase 4 passes that consume them. — land the shared helpers and the three package-local `test-*.ts`
    modules before the test cuts, so consolidations write against the new fixtures.

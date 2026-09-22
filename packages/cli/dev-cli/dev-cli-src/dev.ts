@@ -12,10 +12,12 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
+import { readAgentCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -164,6 +166,22 @@ await runWithCommands(commands => {
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
     .action(async (options: LandCommandOptions = {}) => {
       try {
+        if (options.dryRun !== true && options.skipVerifyFull !== true) {
+          const host = await readAgentCapabilities()
+          const missing = host.checks.filter(check =>
+            ['Watchman socket', 'CoreSimulator service'].includes(check.name)
+            && check.status !== 'available'
+          )
+          if (host.sandboxDetected || missing.length > 0) {
+            Errors.throwHostEnvironment(
+              'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
+                + (host.sandboxDetected ? 'This shell is sandboxed. ' : '')
+                + missing.map(check => `${check.name}: ${check.detail}. `).join('')
+                + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
+                + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
+            )
+          }
+        }
         await LandCommand.run({
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -477,6 +495,20 @@ await runWithCommands(commands => {
           : `${report.branch} has not landed: no ${report.archive} on origin as of this fetch.`,
       )
       Platform.runtimeProcess.setExitCode(report.landed ? 0 : 1)
+    })
+
+  commands
+    .command('open-pr')
+    .description(
+      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+    )
+    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .action(async (options: { pollIntervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await OpenPrCommand.run({
+          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
     })
 
   commands

@@ -1,8 +1,8 @@
 # Product - Freehand UI sketching
 
 Status: authoritative product and design record for freehand UI sketching in Tao Studio. Product
-discovery closed 2026-09-02 (FS-D1–FS-D20, Ro); the two L1 spellings FS-D7 and FS-D10 left open were
-settled by Ro on 2026-09-03 and are recorded below. It describes a Tao Studio capability from the
+discovery closed 2026-09-02 (FS-D1–FS-D20, the Developer); the two L1 spellings FS-D7 and FS-D10 left open were
+settled by the Developer on 2026-09-03 and are recorded below. It describes a Tao Studio capability from the
 perspectives that matter for designing and then implementing it: the person arriving from Figma, the
 language, Studio's architecture, example data, the companion app, and the developer working beside
 the designer. It carries user stories, wireframes, alternative ways to meet each need, and the
@@ -143,7 +143,7 @@ The following rulings are recorded verbatim from the project requirement authori
 > **FS-D5 — Rendering the rectangles.** The language direction is a positioned container, working
 > name `Canvas`, whose direct children carry an offset clause, working name `at x y`, with Studio's
 > own Tao client as the forcing feature. It is decided through the tranche process; its spelling is
-> settled with Ro in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
+> settled with the Developer in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
 > as a TypeScript overlay in the matrix view. Tao rendering must land before the companion slice.
 
 > **FS-D6 — What travels with a view.** Declarations that relate only to the view, its `scenarios`

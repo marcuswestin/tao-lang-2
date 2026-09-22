@@ -1,11 +1,17 @@
 import { CLI, Errors, FS, HCI, Json } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
-import { Android, type AndroidSession, EXPO_GO_SDK_VERSION } from './android'
-import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
+import { Android, type AndroidSession } from './android'
+import { ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { detectLanIPv4 } from './lan-host'
 import { ExpoMetro, type ExpoMetroSession } from './metro'
 
-const unsupportedPhysicalIosSdk = EXPO_GO_SDK_VERSION.split('.')[0]
+const taoSdkMajor = expoSdkMajor() ?? ''
+/**
+ * The command that puts a Tao runtime on a physical iPhone or iPad today. `StudioCompanionDevice.ts`
+ * owns this spelling for Studio's own surfaces, so the sentences below repeat the words rather than
+ * importing them back through a cycle.
+ */
+const COMPANION_INSTALL_COMMAND = 'just studio-companion-install'
 
 /** DevicectlList is the `devicectl list devices` JSON shape this module reads. */
 export type DevicectlList = {
@@ -84,9 +90,15 @@ export function iosPhysicalDevicesFromDevicectl(payload: DevicectlList): IosPhys
   })
 }
 
-/** physicalIosUnsupportedMessage explains why the generic iOS target is deliberately unavailable. */
+/**
+ * physicalIosUnsupportedMessage explains why `tao dev` refuses a physical iPhone or iPad and names
+ * the loop that does reach one. Expo Go is not a lane Tao can restore here: since 2026-09-03 its
+ * iPhone build requires an Expo account signed in on the device *and* in the terminal serving the
+ * bundle, and `expo-config.ts` deliberately gives Metro a repository-local Expo home, so a
+ * developer's own `expo login` is invisible to it.
+ */
 export function physicalIosUnsupportedMessage(device: IosPhysicalDevice): string {
-  return `Cannot open this Tao app on ${device.name}: App Store Expo Go does not support Expo SDK ${unsupportedPhysicalIosSdk}. Use Android Expo Go or an iOS Simulator; physical iOS needs a maintained Tao development client.`
+  return `Cannot open this Tao app on ${device.name}: Expo Go on iPhone now requires an Expo account signed in both on the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that sign-in never reaches it. Run this app on ${device.name} through the Tao Companion development build instead: \`${COMPANION_INSTALL_COMMAND} device="${device.name}"\` once from a Tao checkout with Xcode, then open the app from Tao Studio's Device popover.`
 }
 
 /** openPhysicalDevice opens compatible Android phones and truthfully rejects generic physical iOS. */
@@ -102,7 +114,7 @@ export async function openPhysicalDevice(
   if (iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopOutput.logDevLoop(
       'dev',
-      `No connected physical device. Connect Android with compatible Expo Go, or use an iOS Simulator; generic physical iOS is unsupported for Expo SDK ${unsupportedPhysicalIosSdk}.`,
+      `No connected physical device. Connect an Android phone — this loop sideloads the SDK ${taoSdkMajor} Expo Go onto it — or use an iOS Simulator. A physical iPhone or iPad runs a Tao app through the Tao Companion development build (\`${COMPANION_INSTALL_COMMAND}\`), not through Expo Go.`,
       'warn',
     )
     return false

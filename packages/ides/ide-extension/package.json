@@ -2,6 +2,7 @@
   "name": "tao-ide-extension",
   "displayName": "Tao Lang",
   "version": "0.0.1",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "Tao Lang VS Code extension",
   "publisher": "tao",

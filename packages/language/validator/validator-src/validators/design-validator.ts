@@ -10,6 +10,9 @@ const visualHeads = new Set<string>(ASTUtils.design.visualHeads)
 const colorHeads = new Set<string>(ASTUtils.design.colorHeads)
 const builtInHeads = new Set<string>([...ASTUtils.design.visualHeads, ...ASTUtils.design.layoutHeads])
 
+/** legacyVisualSpellings names the decided canonical spelling for each accepted legacy visual head. */
+const legacyVisualSpellings: Readonly<Record<string, string>> = { bg: 'background', fg: 'ink' }
+
 const cssHexColor = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i
 const taoTag = /^#[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -27,6 +30,11 @@ const designValidationMessages = {
     `Design entries '${first}' and '${second}' set the same visual property.`,
   exploration: (entry: string) =>
     `Inline design exploration '${entry}' must be promoted to a token, style bundle, or element default for release.`,
+  flatCatalog: (design: string, count: number) =>
+    `Design '${design}' has ${count} flat ${
+      count === 1 ? 'entry' : 'entries'
+    } outside its typed blocks; move colors into 'colors { }' and bundles into 'styles { }'.`,
+  legacyVisualHead: (legacy: string, canonical: string) => `'${legacy}' is the legacy spelling of '${canonical}'.`,
   malformedColor: (value: string) => `Design color '${value}' must use exactly 3, 4, 6, or 8 hexadecimal digits.`,
   malformedTag: (value: string) =>
     `Tag '${value}' must start with a letter or underscore and contain only letters, digits, or underscores.`,
@@ -68,12 +76,13 @@ export const DesignValidator = {
 
 function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: ValidationContext): void {
   validateUniqueBlocks(design, ctx)
+  validateFlatCatalog(design, ctx)
   const namedMembers = designNamedMembers(design)
   const members = new Map<string, AST.Node>()
   for (const member of namedMembers) {
     if (members.has(member.name)) {
       // The compiled design is one keyed map, so the later member simply replaces the earlier one and
-      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design - WIP.md).
+      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design.md).
       ctx.error(member.node, designValidationMessages.duplicateMember(member.name), {
         code: designValidationCodes.duplicateMember,
       })
@@ -100,7 +109,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   validateScreens(design, ctx)
   // A bundle named after a built-in clause can never be reached: TR-design.ts answers the built-in
   // head before it ever looks a bundle up, and text and style entries compile into the same bundle
-  // map. Static validation owns reserved names (Docs/Spec/Tao Design - WIP.md), so this is an error.
+  // map. Static validation owns reserved names (Docs/Spec/Tao Design.md), so this is an error.
   for (const member of design.block.members) {
     if (AST.isDesignBundle(member) && builtInHeads.has(member.name)) {
       ctx.error(member, designValidationMessages.reservedBundle(member.name), {
@@ -118,6 +127,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   }
   for (const bundle of bundles.values()) {
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
+    warnLegacyVisualHeads(bundle.spec.entries, ctx)
     validateRedundantStyleProperties(bundle.spec, bundles, ctx, design)
   }
   validateBundleCycles(design, bundles, ctx)
@@ -182,6 +192,7 @@ function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: Val
     return
   }
 
+  warnLegacyVisualHeads(designEntries, ctx)
   for (const entry of designEntries.filter(isVisualEntry)) {
     validateVisualEntry(entry, undefined, undefined, ctx)
   }
@@ -451,6 +462,33 @@ function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration
     }
     return [...designs]
   })
+}
+
+/**
+ * validateFlatCatalog warns once per declaration when it has any pre-typed-block member (a
+ * `DesignToken` or `DesignBundle` directly under the design body, outside `colors {}`/`styles {}`).
+ * One warning per declaration, not per entry: WordFlower alone carries roughly a hundred of them.
+ */
+function validateFlatCatalog(design: AST.DesignDeclaration, ctx: ValidationContext): void {
+  const flatMembers = design.block.members.filter(member => AST.isDesignToken(member) || AST.isDesignBundle(member))
+  if (flatMembers.length === 0) {
+    return
+  }
+  ctx.warning(design, designValidationMessages.flatCatalog(design.name, flatMembers.length), {
+    code: designValidationCodes.flatCatalog,
+  })
+}
+
+/** warnLegacyVisualHeads warns, anchored on the head term, for every entry spelled with a legacy visual head. */
+function warnLegacyVisualHeads(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
+  for (const entry of entries.filter(isVisualEntry)) {
+    const canonical = legacyVisualSpellings[entryHead(entry)]
+    if (canonical !== undefined) {
+      ctx.warning(entry.head, designValidationMessages.legacyVisualHead(entryHead(entry), canonical), {
+        code: designValidationCodes.legacyVisualHead,
+      })
+    }
+  }
 }
 
 function validateUniqueBlocks(design: AST.DesignDeclaration, ctx: ValidationContext): void {
