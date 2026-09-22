@@ -1,3 +1,8 @@
+import {
+  type JourneyCheckObservation,
+  JourneyObservations,
+  type JourneyObservationsArtifact as JourneyObservationsArtifactType,
+} from './journey-observations'
 import type { RuntimeApp } from './RuntimeApp'
 import { TestCaseName } from './test-case-name'
 import { TestCompiler as CoreTestCompiler } from './test-compiler/TestCompiler'
@@ -21,7 +26,7 @@ type CompileAppModule = {
 }
 
 type TestRunnerModule = {
-  runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<void>
+  runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<JourneyCheckObservation>
 }
 
 type TaoTestPlanModule = {
@@ -43,6 +48,7 @@ export const RuntimeTesting = {
   TestCaseName,
   TestCompiler: CoreTestCompiler,
   TestHarnessFiles,
+  JourneyObservations,
   TestRunId,
   TestRunRoot,
 }
@@ -53,6 +59,7 @@ export namespace RuntimeTesting {
 
   /** Screen represents a rendered React Native Testing Library app screen. */
   export type Screen = RuntimeApp.Screen
+  export type JourneyObservationsArtifact = JourneyObservationsArtifactType
 
   /** TestHarnessFiles groups the generated Jest entrypoint types under RuntimeTesting. */
   export namespace TestHarnessFiles {
@@ -96,9 +103,9 @@ async function compileAndRenderApp(
   return await module.compileAndRenderApp(appPath, options)
 }
 
-async function runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<void> {
+async function runTestCheck(suiteName: string, check: TestCompilerTypes.Check): Promise<JourneyCheckObservation> {
   const module = testRunnerModule ??= require(TEST_RUNNER_MODULE_PATH) as TestRunnerModule
-  await module.runTestCheck(suiteName, check)
+  return await module.runTestCheck(suiteName, check)
 }
 
 async function runTaoTestPlan(testFilePath: string): Promise<void> {

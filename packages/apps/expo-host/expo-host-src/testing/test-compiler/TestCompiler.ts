@@ -48,6 +48,7 @@ namespace TestCompiler {
   /** CompileAppOptions configures where a generated runtime test app is written. */
   export type CompileAppOptions = {
     appName?: string
+    journeyObservations?: boolean
     runtimePackageRoot: string
   }
 
@@ -186,6 +187,7 @@ export namespace Worker {
 async function compileApp(appPath: string, options: TestCompiler.CompileAppOptions): Promise<string> {
   return (await runtime().generateApp(appPath, {
     appName: options.appName,
+    journeyObservations: options.journeyObservations ?? true,
     runtimePackageRoot: options.runtimePackageRoot,
   })).outputPath
 }

@@ -9,6 +9,7 @@ import type {
   TaoKeyValueStorage,
 } from '../TaoRuntime-src/TR-data'
 import { memoryDataProvider, memoryKeyValueStorage, testDataConnection } from '../TaoRuntime-src/TR-data-provider'
+import type { TaoSyncWriteRecovery } from '../TaoRuntime-src/TR-data-sync'
 import { HostEnvironmentError, UserInputError } from '../TaoRuntime-src/TR-errors'
 
 const noteDefinition: TaoDataSchemaDefinition = {
@@ -27,6 +28,99 @@ const noteDefinition: TaoDataSchemaDefinition = {
 }
 
 Describe('TR.Data provider foundation', () => {
+  Test('submits supplied same-value update fields as transient write intent', async () => {
+    const saves: Array<{ intents: readonly { entity: string; fields: readonly string[]; id: string }[] | undefined }> =
+      []
+    const schema = TR.Data.Schema(noteDefinition, {
+      load: () => undefined,
+      save: (_snapshot, intents) => {
+        saves.push({ intents })
+      },
+    })
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Same') })
+    await TR.Data.Settle(schema)
+    const note = schema.query({ entity: 'Note', filters: [] })[0]!
+    TR.Data.Update(TR.Value(note), { Title: TR.Value('Same') })
+    await TR.Data.Settle(schema)
+
+    Expect(saves.at(-1)?.intents).toEqual([{ entity: 'Note', fields: ['Title'], id: 'Note-1' }])
+  })
+
+  Test('preserves an explicitly submitted same-value action update over a remote snapshot', async () => {
+    const gate = Deferred<void>()
+    let observer: TaoDataConnectionObserver | undefined
+    let saved: string | undefined
+    const schema = TR.Data.Schema(noteDefinition, {
+      load: () => persistedNotes('Mine'),
+      save: snapshot => {
+        saved = snapshot
+      },
+      subscribe: next => {
+        observer = next
+        return () => {}
+      },
+    })
+    await TR.Data.Settle(schema)
+    const note = schema.query({ entity: 'Note', filters: [] })[0]!
+    const action = TR.Action(async () => {
+      TR.Data.Update(TR.Value(note), { Title: TR.Value('Mine') })
+      await gate.promise
+    }, { name: 'KeepSubmittedTitle' })
+
+    const pending = action.jsValue.invoke()
+    observer?.snapshot(persistedNotes('Theirs'))
+    gate.resolve()
+    await pending
+    await TR.Data.Settle(schema)
+
+    Expect(TR.Data.Read(schema.query({ entity: 'Note', filters: [] })[0]!, 'Title')).toBe('Mine')
+    Expect((JSON.parse(saved!) as { rows: { Note: Array<{ Title: string }> } }).rows.Note[0]?.Title).toBe('Mine')
+  })
+
+  Test('reads durable write recovery status and retries only through a supporting provider', async () => {
+    let statusListener: (() => void) | undefined
+    const retries: Array<[string, string]> = []
+    const writes: TaoSyncWriteRecovery = {
+      retry: (entity, id) => retries.push([entity, id]),
+      status: () => ({
+        failed: 1,
+        queued: 2,
+        records: [{ id: 'write-1', message: 'Connection lost.' }, { id: 'write-2' }],
+      }),
+      subscribe: listener => {
+        statusListener = listener
+        return () => {
+          if (statusListener === listener) {
+            statusListener = undefined
+          }
+        }
+      },
+    }
+    const schema = TR.Data.Schema(noteDefinition, { load: () => undefined, save: () => undefined, writes })
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Recoverable') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]!
+
+    Expect(TR.Data.Read(note, 'WritesQueued')).toBe(2)
+    Expect(TR.Data.Read(note, 'WritesFailed')).toBe(1)
+    Expect(TR.Data.Read(note, 'WriteError')).toBe('Connection lost.')
+    Expect(TR.Data.Read(note, 'CanRetryWrites')).toBe(true)
+    TR.Data.Retry(TR.Value(note))
+    Expect(retries).toEqual([['Note', 'Note-1']])
+
+    const before = schema.snapshot()
+    statusListener!()
+    Expect(schema.snapshot()).toBeGreaterThan(before)
+
+    const unsupported = TR.Data.Schema(noteDefinition, { load: () => undefined, save: () => undefined })
+    await TR.Data.Settle(unsupported)
+    TR.Data.Create(unsupported, 'Note', { Title: TR.Value('Snapshot') })
+    const snapshotNote = unsupported.query({ entity: 'Note', filters: [] })[0]!
+    Expect(TR.Data.Read(snapshotNote, 'CanRetryWrites')).toBe(false)
+    Expect(() => TR.Data.Retry(TR.Value(snapshotNote))).toThrow('does not record them')
+  })
+
   Test('configures and patches declaration-owned providers without losing identity', async () => {
     const provider = memoryDataProvider()
     const declaration = TR.Data.Declaration('Memory', provider)
@@ -384,7 +478,7 @@ Describe('TR.Data provider foundation', () => {
     gates[0]!.resolve()
     await flushMicrotasks()
     Expect(saves).toHaveLength(2)
-    gates[1]!.reject(new Error('disk full'))
+    gates[1]!.reject(new HostEnvironmentError('disk full'))
     await TR.Data.Settle(schema)
 
     const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
@@ -613,7 +707,7 @@ Describe('TR.Data provider foundation', () => {
     const schema = TR.Data.Schema(noteDefinition, liveConnection)
     await TR.Data.Settle(schema)
 
-    observer?.error(new Error('offline'))
+    observer?.error(new HostEnvironmentError('offline'))
 
     const unavailable = schema.query({ entity: 'Note', filters: [] }) as Array<Record<string, unknown>> & {
       Error: string
@@ -960,9 +1054,12 @@ Describe('TR.Data save and sync reconciliation', () => {
     const schema = TR.Data.Schema(noteDefinition, connection)
     await TR.Data.Settle(schema)
 
-    observer?.error(new Error('websocket blip'))
+    observer?.error(new HostEnvironmentError('websocket blip'))
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error)
       .toContain('Could not synchronize data')
+    Expect(TR.Data.EntityAvailability(schema.query({ entity: 'Note', filters: [] })[0])).toEqual({
+      status: 'available',
+    })
 
     // A transient sync error must not write-lock the app: the write goes through and its
     // successful save clears the error.
@@ -978,7 +1075,7 @@ Describe('TR.Data save and sync reconciliation', () => {
     Expect(lastSaved).toContain('Written during outage')
 
     // A sync error with no local writes clears when the provider pushes the identical snapshot.
-    observer?.error(new Error('websocket blip'))
+    observer?.error(new HostEnvironmentError('websocket blip'))
     observer?.snapshot(lastSaved)
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error)
       .toBe('')

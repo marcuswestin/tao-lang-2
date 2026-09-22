@@ -7,6 +7,16 @@ root invocation in one serialized transaction.
 An action names nothing a person reads. It is a private procedure, and no surface lists one. The
 discoverable verb is a `command`.
 
+## Reactive inputs
+
+An ordinary action parameter keeps its caller's storage when the action writes it. The compiler
+infers that requirement through action calls, command inputs, and view forwarding. Callers must supply writable
+state or an ordinary item field path. A computed expression cannot satisfy a writable parameter.
+
+`copy Value text` makes an action or command parameter independent for each invocation. Mutating that copy
+does not mutate the caller. Copies recursively detach items and lists while preserving entity handles.
+Native controls receive generated Tao action callbacks for explicitly `mutable` parameters.
+
 ## Commands
 
 A command is a standalone configured value: one action invocation, the words a person reads, and the

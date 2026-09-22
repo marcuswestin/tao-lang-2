@@ -273,6 +273,9 @@ equals MVP.
 - Scope: `R5` defers the authority cluster to the later app expansion. `R6` leaves the three runtime
   contracts experimental at 0.x launch; settle each when a forcing slice reaches it.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
+  snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
+  acceptance. These are not implied by the implemented projected inputs and writable parameters.
 
 ### A14 — Plans already written
 

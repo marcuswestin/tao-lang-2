@@ -5,11 +5,13 @@ import type {
   TaoDataConnectionObserver,
   TaoDataProviderContext,
   TaoDataSchemaDefinition,
+  TaoDataWriteIntent,
   TaoKeyValueStorage,
 } from './TR-data'
 import { emptyData, envelope, parseEnvelope, type StoredData, type StoredRow } from './TR-data-persistence'
 import { memoryKeyValueStorage } from './TR-data-provider'
-import { HostEnvironmentError, UserInputError, warnContainedFailure } from './TR-errors'
+import { statusForSyncEntity, type TaoSyncEntityWriteStatus, type TaoSyncWriteFailure } from './TR-data-write-status'
+import { errorMessage, HostEnvironmentError, UserInputError, warnContainedFailure } from './TR-errors'
 
 /**
  * The granular-write family: typed change-sets in both directions, one authority per store.
@@ -60,6 +62,11 @@ export type TaoChangeSet = Readonly<{
   stamp: TaoSyncStamp
 }>
 
+/** sameRow keeps entity-status projection and retry selection on the wire identity, never display id text. */
+function sameRow(operation: TaoSyncOp, entity: string, row: TaoSyncRowId): boolean {
+  return operation.entity === entity && operation.row.id === row.id && operation.row.origin === row.origin
+}
+
 /** TaoSyncObserver receives the authority's events for one connection. */
 export type TaoSyncObserver = Readonly<{
   /** accepted reports that the authority durably holds this replica's change-set: queued → saved. */
@@ -107,9 +114,16 @@ type SyncCheckpoint = {
   formatVersion: 1
   nextId: number
   origin: string
+  /** failures stays local: it classifies a still-pending change-set without replicating an outcome. */
+  failures?: TaoSyncWriteFailure[]
   pending: TaoChangeSet[]
   rows: Record<string, Record<string, StoredSyncRow>>
 }
+
+type DurableWriteState = Readonly<{
+  failures: readonly TaoSyncWriteFailure[]
+  pending: readonly TaoChangeSet[]
+}>
 
 const checkpointFormatVersion = 1
 const checkpointKeyPrefix = 'tao-sync'
@@ -124,6 +138,13 @@ type SnapshotOverSyncOptions = Readonly<{
   /** scope separates the checkpoints of providers or containers that share a schema and key. */
   scope?: string
   storage: TaoKeyValueStorage
+}>
+
+/** TaoSyncWriteRecovery is the runtime-owned durable write-status surface of one sync connection. */
+export type TaoSyncWriteRecovery = Readonly<{
+  retry(entity: string, id: string): void
+  status(entity: string, id: string): TaoSyncEntityWriteStatus
+  subscribe(listener: () => void): () => void
 }>
 
 /**
@@ -141,7 +162,7 @@ export function snapshotConnectionOverSync(
   provider: TaoSyncProvider,
   context: TaoDataProviderContext,
   options: SnapshotOverSyncOptions,
-): TaoDataConnection {
+): TaoDataConnection & Readonly<{ writes: TaoSyncWriteRecovery }> {
   const state = new SyncState(context.schema, options)
   // The provider scope and configured storage key are the durable identity of one mounted source.
   // The schema name used to include the collection list, so adding a collection silently abandoned
@@ -167,6 +188,14 @@ export function snapshotConnectionOverSync(
   // run on their own chain so a slow transport never holds the fold.
   let work: Promise<void> = Promise.resolve()
   let pushes: Promise<void> = Promise.resolve()
+  const acknowledgements = new Map<string, Promise<void>>()
+  // A transport accepting the handoff is distinct from the authority accepting the mutation. Keep
+  // the record reserved until that second event settles, so an online re-offer and a manual retry
+  // cannot both send it during the acknowledgement gap.
+  const inFlight = new Map<string, number>()
+  let transportEpoch = 0
+  const writeListeners = new Set<() => void>()
+  let durableWrites: DurableWriteState = state.writeState()
 
   const report = (error: unknown): void => {
     if (observer !== undefined) {
@@ -190,6 +219,29 @@ export function snapshotConnectionOverSync(
     await options.storage.setItem(checkpointKey, JSON.stringify(state.checkpoint()))
   }
 
+  const publishDurableWrites = (): void => {
+    durableWrites = state.writeState()
+    for (const listener of writeListeners) {
+      listener()
+    }
+  }
+
+  /** commitWriteState publishes a recovery transition only after its checkpoint is durable. */
+  const commitWriteState = async (change: () => boolean): Promise<boolean> => {
+    const before = JSON.stringify(state.checkpoint())
+    if (!change()) {
+      return false
+    }
+    try {
+      await persist()
+    } catch (error) {
+      state.restore(before)
+      throw error
+    }
+    publishDurableWrites()
+    return true
+  }
+
   const transport = (): TaoSyncConnection => {
     if (connection === undefined) {
       connection = provider.connect({ ...context, origin: state.origin })
@@ -200,16 +252,72 @@ export function snapshotConnectionOverSync(
   // A push the transport rejects is the contract's "not taken": that change-set stays queued. Keep
   // trying the independent later commits, because a transport such as CloudKit can reject one
   // malformed/conflicted record without ever producing a separate online transition.
-  const pushPending = (): void => {
+  const recordTransportFailure = async (changeSet: TaoChangeSet, error: unknown): Promise<void> => {
+    try {
+      await enqueue(async () => {
+        await commitWriteState(() => state.fail(changeSet.id, errorMessage(error)))
+      })
+    } catch (journalError) {
+      report(journalError)
+    }
+  }
+
+  const push = (changeSets: readonly TaoChangeSet[]): void => {
     pushes = pushes.then(async () => {
-      for (const changeSet of [...state.pending()]) {
+      for (const changeSet of changeSets) {
+        if (!state.isPending(changeSet.id) || inFlight.has(changeSet.id)) {
+          continue
+        }
+        const attemptEpoch = transportEpoch
+        inFlight.set(changeSet.id, attemptEpoch)
         try {
           await transport().push(changeSet)
-        } catch {
+          if (inFlight.get(changeSet.id) !== attemptEpoch) {
+            continue
+          }
+          const acknowledgement = acknowledgements.get(changeSet.id)
+          if (acknowledgement !== undefined) {
+            try {
+              await acknowledgement
+            } catch {
+              // The acknowledgement has already reported its failed durable transition. Keeping
+              // the original queue record is safer than reclassifying it as a transport failure.
+            }
+          }
+        } catch (error) {
+          if (inFlight.get(changeSet.id) !== attemptEpoch) {
+            continue
+          }
+          inFlight.delete(changeSet.id)
+          await recordTransportFailure(changeSet, error)
           continue
         }
       }
     })
+  }
+
+  // Automatic connection recovery re-offers every outstanding change-set; explicit retry below
+  // sends only the selected record, so it cannot replay unrelated pending writes.
+  const pushPending = (): void => push([...state.pending()])
+
+  const writes: TaoSyncWriteRecovery = {
+    retry: (entity, id) => {
+      run(async () => {
+        let selected: TaoChangeSet | undefined
+        const committed = await commitWriteState(() => {
+          selected = state.retry(entity, id)
+          return selected !== undefined
+        })
+        if (committed && selected !== undefined) {
+          push([selected])
+        }
+      })
+    },
+    status: (entity, id) => state.status(durableWrites, entity, id),
+    subscribe: listener => {
+      writeListeners.add(listener)
+      return () => writeListeners.delete(listener)
+    },
   }
 
   const publishIfChanged = (): void => {
@@ -250,6 +358,11 @@ export function snapshotConnectionOverSync(
       stopTransport = undefined
       connection?.close?.()
       connection = undefined
+      // An old transport may never settle its push promise after disconnect. A new connection must
+      // deliberately re-offer its durable queue, while late outcomes from the old epoch are ignored.
+      transportEpoch += 1
+      inFlight.clear()
+      pushes = Promise.resolve()
     },
     load: () =>
       enqueue(async () => {
@@ -257,6 +370,7 @@ export function snapshotConnectionOverSync(
         if (stored !== null) {
           state.restore(stored)
         }
+        durableWrites = state.writeState()
         loaded = true
         lastProjected = state.projectedSnapshot()
         storeView = parseEnvelope(lastProjected, context.schema)
@@ -266,14 +380,14 @@ export function snapshotConnectionOverSync(
     // projected `<id>~<origin>` form, both stable for as long as the row exists.
     referenceToken: reference => reference.id,
     resolveReference: reference => reference.token,
-    save: snapshot => {
+    save: (snapshot, intents) => {
       savesInFlight += 1
       return enqueue(async () => {
         try {
           RuntimeAssert(loaded, 'Expected: a sync-backed store loads before it saves')
           const before = JSON.stringify(state.checkpoint())
           const previousView = storeView
-          const changeSet = state.diff(snapshot, storeView)
+          const changeSet = state.diff(snapshot, storeView, intents)
           storeView = parseEnvelope(snapshot, context.schema)
           // What the store just saved is what it holds; only a fold that differs from it is news.
           lastProjected = state.normalized(storeView)
@@ -287,6 +401,7 @@ export function snapshotConnectionOverSync(
             throw error
           }
           if (changeSet !== undefined) {
+            publishDurableWrites()
             pushPending()
           }
           // The fold may hold remote rows the store's snapshot predates; hand them back now.
@@ -300,14 +415,20 @@ export function snapshotConnectionOverSync(
         }
       })
     },
+    writes,
     subscribe: next => {
       observer = next
       stopTransport?.()
       const stop = transport().subscribe({
         accepted: changeSetId => {
-          run(async () => {
-            if (state.accept(changeSetId)) {
-              await persist()
+          const acknowledgement = enqueue(async () => {
+            await commitWriteState(() => state.accept(changeSetId))
+          })
+          acknowledgements.set(changeSetId, acknowledgement)
+          acknowledgement.catch(report).finally(() => {
+            inFlight.delete(changeSetId)
+            if (acknowledgements.get(changeSetId) === acknowledgement) {
+              acknowledgements.delete(changeSetId)
             }
           })
         },
@@ -346,6 +467,7 @@ class SyncState {
   origin: string
   private clock: { counter: number; wall: number } = { counter: 0, wall: 0 }
   private nextId = 1
+  private failures = new Map<string, string>()
   private rows: Record<string, Record<string, StoredSyncRow>>
   private queue: TaoChangeSet[] = []
   private readonly now: () => number
@@ -367,6 +489,9 @@ class SyncState {
       formatVersion: checkpointFormatVersion,
       nextId: this.nextId,
       origin: this.origin,
+      ...(this.failures.size === 0
+        ? {}
+        : { failures: [...this.failures].map(([changeSetId, message]) => ({ changeSetId, message })) }),
       pending: [...this.queue],
       rows: this.rows,
     }
@@ -393,6 +518,15 @@ class SyncState {
     this.clock = { counter: value.clock?.counter ?? 0, wall: value.clock?.wall ?? 0 }
     this.nextId = value.nextId ?? 1
     this.queue = Array.isArray(value.pending) ? value.pending : []
+    this.failures = new Map(
+      (Array.isArray(value.failures) ? value.failures : []).flatMap(failure =>
+        typeof failure === 'object' && failure !== null
+          && typeof (failure as TaoSyncWriteFailure).changeSetId === 'string'
+          && typeof (failure as TaoSyncWriteFailure).message === 'string'
+          ? [[(failure as TaoSyncWriteFailure).changeSetId, (failure as TaoSyncWriteFailure).message]]
+          : []
+      ),
+    )
     this.rows = Object.fromEntries(Object.keys(this.schema.entities).map(entity => [entity, rows[entity] ?? {}]))
   }
 
@@ -400,10 +534,51 @@ class SyncState {
     return this.queue
   }
 
+  isPending(changeSetId: string): boolean {
+    return this.queue.some(changeSet => changeSet.id === changeSetId)
+  }
+
   accept(changeSetId: string): boolean {
     const before = this.queue.length
     this.queue = this.queue.filter(changeSet => changeSet.id !== changeSetId)
+    this.failures.delete(changeSetId)
     return this.queue.length !== before
+  }
+
+  fail(changeSetId: string, message: string): boolean {
+    if (!this.queue.some(changeSet => changeSet.id === changeSetId) || this.failures.get(changeSetId) === message) {
+      return false
+    }
+    this.failures.set(changeSetId, message)
+    return true
+  }
+
+  retry(entity: string, id: string): TaoChangeSet | undefined {
+    const row = rowIdOf(id, this.origin)
+    const selected = this.queue.find(changeSet =>
+      this.failures.has(changeSet.id) && changeSet.ops.some(operation => sameRow(operation, entity, row))
+    )
+    if (selected === undefined) {
+      return undefined
+    }
+    this.failures.delete(selected.id)
+    return selected
+  }
+
+  writeState(): DurableWriteState {
+    return {
+      failures: [...this.failures].map(([changeSetId, message]) => ({ changeSetId, message })),
+      pending: [...this.queue],
+    }
+  }
+
+  status(writes: DurableWriteState, entity: string, id: string): TaoSyncEntityWriteStatus {
+    return statusForSyncEntity(
+      writes.pending,
+      writes.failures,
+      entity,
+      rowIdOf(id, this.origin),
+    )
   }
 
   /**
@@ -411,10 +586,15 @@ class SyncState {
    * held, applied locally with fresh stamps. Rows absent from the snapshot but present in that view
    * are deletes; rows the view never held are creates.
    */
-  diff(snapshot: string, storeView: StoredData | undefined): TaoChangeSet | undefined {
+  diff(
+    snapshot: string,
+    storeView: StoredData | undefined,
+    intents: readonly TaoDataWriteIntent[] = [],
+  ): TaoChangeSet | undefined {
     const data = parseEnvelope(snapshot, this.schema)
     this.nextId = data.nextId
     const stamp = this.tick()
+    const submitted = new Map(intents.map(intent => [intentKey(intent.entity, intent.id), new Set(intent.fields)]))
     const ops: TaoSyncOp[] = []
     for (const [entity, definition] of Object.entries(this.schema.entities)) {
       const held = new Map((storeView?.rows[entity] ?? []).map(row => [wireKeyOf(rowIdOf(row.Id, this.origin)), row]))
@@ -428,7 +608,10 @@ class SyncState {
           const value = field.kind === 'relation'
             ? rowIdOf(row[name] as string, this.origin)
             : row[name] as boolean | null | number | string
-          if (previous === undefined || !Object.is(previous[name], row[name])) {
+          if (
+            previous === undefined || !Object.is(previous[name], row[name])
+            || submitted.get(intentKey(entity, row.Id))?.has(name)
+          ) {
             fields[name] = { stamp, value }
           }
         }
@@ -602,6 +785,11 @@ function randomOrigin(): string {
 
 function wireKeyOf(row: TaoSyncRowId): string {
   return `${row.origin}${remoteIdSeparator}${row.id}`
+}
+
+/** intentKey distinguishes entity rows without depending on runtime handle implementation details. */
+function intentKey(entity: string, id: string): string {
+  return JSON.stringify([entity, id])
 }
 
 function rowIdFromKey(key: string): TaoSyncRowId {

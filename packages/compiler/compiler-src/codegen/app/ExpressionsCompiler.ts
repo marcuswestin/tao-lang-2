@@ -6,6 +6,7 @@ import { Compile } from '../Compile'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
+import { compileReactiveArgument } from './reactive-parameters'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -20,6 +21,7 @@ export const ExpressionsCompiler = {
       PostfixMemberAccess: Compile.PostfixMemberAccess,
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
+      CopyExpression: Compile.CopyExpression,
       ConfigurationConstructor: Compile.ConfiguredValue,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
@@ -36,6 +38,16 @@ export const ExpressionsCompiler = {
       UnaryExpression: Compile.UnaryExpression,
       ValueReference: Compile.ValueReference,
     })
+  },
+
+  CopyExpression(copy: AST.CopyExpression): Compiled {
+    const target = copy.type ? Type.ofReference(copy.type) : undefined
+    const fields = target?.kind === 'item' && target.item?.projectedEntity
+      ? target.item.dataFields?.map(field => field.name) ?? []
+      : undefined
+    return fields
+      ? gen`TR.Copy(${Compile.Expression(copy.value)}, ${gen.jsLiteral(fields)})`
+      : gen`TR.Copy(${Compile.Expression(copy.value)})`
   },
 
   /** ConfiguredValue lowers constructors through their linked Tao declaration identity. */
@@ -215,7 +227,7 @@ export const ExpressionsCompiler = {
         parameters.slice(0, lastProvidedIndex + 1),
         parameter => {
           const argument = argumentsByParameter.get(parameter)
-          return argument ? gen`, ${Compile.Argument(argument)}` : gen`, undefined`
+          return argument ? gen`, ${Compile.Expression(argument.value)}` : gen`, undefined`
         },
         { separator: '' },
       )
@@ -368,18 +380,17 @@ function compileConfiguredItemBlock(
     Assert(block.entries.length === 0, shapelessItemConstructorMessage)
     return gen`TR.Value({})`
   }
-  const remaining = new Set(itemType.properties.filter(property => !Type.propertyIsFilled(property)))
-  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = itemType.properties
-    .filter(Type.propertyIsFilled)
+  const fields = Type.itemFields(itemType)
+  const remaining = new Set<ASTUtils.ItemShapeField>(fields.filter(property => !Type.itemFieldIsFilled(property)))
+  const pairs: Array<{ expected: ASTUtils.ItemShapeField; compiled: Compiled }> = fields
+    .filter(Type.itemFieldIsFilled)
     .map(expected => {
       Assert.defined(expected.value, 'filled item slot has a value')
       return { expected, compiled: Compile.Expression(expected.value) }
     })
   for (const entry of block.entries) {
     if (entry.label && entry.expression) {
-      const expected: AST.TypeProperty | undefined = itemType.properties.find(
-        (property: AST.TypeProperty) => property.name === entry.label,
-      )
+      const expected = fields.find(property => property.name === entry.label)
       Assert.defined(expected, 'validated configured item label resolves one field')
       remaining.delete(expected)
       pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
@@ -392,7 +403,7 @@ function compileConfiguredItemBlock(
     pairs.push({ expected, compiled: candidate.compiled })
   }
   for (const expected of [...remaining]) {
-    if (!Type.propertyHasDefault(expected)) {
+    if (!AST.isTypeProperty(expected) || !Type.propertyHasDefault(expected)) {
       continue
     }
     Assert.defined(expected.value, 'defaulted item slot has a value')
@@ -400,10 +411,10 @@ function compileConfiguredItemBlock(
     remaining.delete(expected)
   }
   Assert(
-    [...remaining].every(property => !Type.propertyRequiresValue(property)),
+    [...remaining].every(property => !Type.itemFieldRequiresValue(property)),
     'validated configured item constructor binds every required field',
   )
-  pairs.sort((left, right) => itemType.properties.indexOf(left.expected) - itemType.properties.indexOf(right.expected))
+  pairs.sort((left, right) => fields.indexOf(left.expected) - fields.indexOf(right.expected))
   return gen`TR.Value({
     ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
   })`
@@ -426,11 +437,11 @@ function compileConfiguredItemEntry(
     }
   }
   if (entry.name && entry.value) {
-    const ownerProperty = itemType.properties.find(property => property.name === entry.name)
+    const ownerProperty = Type.itemFields(itemType).find(property => property.name === entry.name)
     if (ownerProperty) {
       return {
         compiled: Compile.ConfigurationValue(entry.value),
-        type: Type.ofProperty(ownerProperty),
+        type: Type.itemFieldType(ownerProperty),
       }
     }
   }
@@ -469,16 +480,16 @@ function dataConfigureCall(declaration: AST.ConfigurableDeclaration, config: Com
 
 /** bindSingleSlot picks the one unfilled slot an entry binds: an exact identity match wins, else assignability. */
 function bindSingleSlot(
-  remaining: ReadonlySet<AST.TypeProperty>,
+  remaining: ReadonlySet<ASTUtils.ItemShapeField>,
   actual: ASTUtils.TaoType,
   message: string,
-): AST.TypeProperty {
+): ASTUtils.ItemShapeField {
   const exact = [...remaining].filter(property =>
-    Type.identityKey(Type.ofProperty(property)) === Type.identityKey(actual)
+    Type.identityKey(Type.itemFieldType(property)) === Type.identityKey(actual)
   )
   const assignable = exact.length === 1
     ? exact
-    : [...remaining].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
+    : [...remaining].filter(property => Type.isAssignable(actual, Type.itemFieldType(property)))
   Assert(assignable.length === 1, message)
   return assignable[0]!
 }
@@ -585,7 +596,7 @@ function commandBindingExpression(entry: AST.ConfigurationEntry): Compiled | und
     return Compile.ValueDeclarationReference(declaration)
   }
   if (entry.expression) {
-    return Compile.Expression(entry.expression)
+    return compileReactiveArgument(entry.expression)
   }
   return entry.value && !AST.isPropertyConfigurationPatch(entry.value)
     ? Compile.ConfigurationValue(entry.value)
@@ -691,18 +702,19 @@ function compileItemPatch(
   base: AST.AliasDeclaration,
   itemType: ASTUtils.ItemShape,
 ): Compiled {
-  const available = new Set(itemType.properties.filter(property => !Type.propertyIsFilled(property)))
-  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = []
+  const fields = Type.itemFields(itemType)
+  const available = new Set<ASTUtils.ItemShapeField>(fields.filter(property => !Type.itemFieldIsFilled(property)))
+  const pairs: Array<{ expected: ASTUtils.ItemShapeField; compiled: Compiled }> = []
   for (const entry of value.patchBlock.entries) {
     if (entry.label && entry.expression) {
-      const expected = itemType.properties.find(property => property.name === entry.label)
+      const expected = fields.find(property => property.name === entry.label)
       Assert.defined(expected, 'validated item patch label resolves one slot')
       available.delete(expected)
       pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
       continue
     }
     const named = entry.name
-      ? itemType.properties.find(property => property.name === entry.name)
+      ? fields.find(property => property.name === entry.name)
       : undefined
     const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated item patch entry has a value')

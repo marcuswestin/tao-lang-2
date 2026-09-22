@@ -19,6 +19,7 @@ import {
   taoJourneyTargetTimeoutMs,
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
+import { StudioLensHost, type TaoStudioLensRenderSample } from './TR-studio-lens'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
 import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
@@ -160,6 +161,7 @@ export type StudioPreviewHost = {
   }
   window: {
     addEventListener: StudioPreviewWindowListener
+    getComputedStyle?: (element: StudioPreviewElement) => { getPropertyValue(property: string): string }
     removeEventListener: StudioPreviewWindowListener
   }
 }
@@ -350,6 +352,19 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   ].join(':')
   const journeyReplayGate = React.useRef(createTaoJourneyReplayGate())
   const [journeyError, setJourneyError] = React.useState<unknown>()
+  const publishLens = React.useCallback((sample: TaoStudioLensRenderSample) => {
+    const host = browserPreviewHost()
+    const sourceVersion = sourceVersionFor(props.config, sample.identity.sourcePath)
+    if (host !== undefined && sourceVersion !== undefined) {
+      postToStudio(host, props.config, 'preview-lens-render', {
+        sample: {
+          ...sample,
+          resolvedStyle: resolvedStudioStyle(host, sample.identity),
+          sourceVersion,
+        },
+      })
+    }
+  }, [props.config])
   React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, captureFixture), [
     captureFixture,
     props.config,
@@ -388,7 +403,52 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   if (journeyError !== undefined) {
     return createElement(StudioPreviewFailure, { error: journeyError })
   }
-  return createElement(React.Fragment, null, props.children)
+  return createElement(StudioLensHost, { publish: publishLens }, props.children)
+}
+
+/** Reads the browser's final public CSS values after React commits the selected occurrence. */
+export function resolvedStudioStyle(
+  host: StudioPreviewHost,
+  identity: TaoStudioIdentity,
+): Readonly<Record<string, string>> | undefined {
+  if (host.window.getComputedStyle === undefined) {
+    return undefined
+  }
+  const elements = allRenderTargets(host)
+    .filter(target => renderId(target.identity) === renderId(identity))
+    .map(target => target.element)
+  if (elements.length === 0) {
+    return undefined
+  }
+  const properties = [
+    'background-color',
+    'border-radius',
+    'color',
+    'display',
+    'flex-direction',
+    'font-size',
+    'font-weight',
+    'gap',
+    'line-height',
+    'opacity',
+    'padding-bottom',
+    'padding-left',
+    'padding-right',
+    'padding-top',
+  ]
+  const styles = elements.map(element => {
+    const computed = host.window.getComputedStyle!(element)
+    const values = properties.flatMap(property => {
+      const value = computed.getPropertyValue(property).trim()
+      return value.length > 0 && value.length <= 128 ? [[property, value] as const] : []
+    })
+    return Object.fromEntries(values) as Readonly<Record<string, string>>
+  })
+  const first = styles[0]!
+  return Object.keys(first).length > 0
+      && styles.every(style => properties.every(property => style[property] === first[property]))
+    ? first
+    : undefined
 }
 
 /** replayStudioJourney drives a scenario prefix in the live browser preview through DOM events. */

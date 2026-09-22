@@ -93,7 +93,7 @@ function createCommands(): Command {
     .option('--ios', 'Open an iOS simulator after Metro starts.')
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
-    .option('--desktop', 'Open the Tao desktop app after Metro starts (not yet available).')
+    .option('--desktop', 'Open the Tao desktop app after Metro starts.')
     .description('Start Metro for a Tao app without opening a target unless requested.')
     .action(
       async (
@@ -101,12 +101,11 @@ function createCommands(): Command {
         options: { android?: boolean; app?: string; desktop?: boolean; ios?: boolean; web?: boolean },
       ) => {
         try {
-          if (options.desktop === true) {
-            Errors.throwUserInput('The Tao desktop development host is not available yet.')
-          }
           // Command implementations load lazily so completion and help paths stay fast.
           const { runTaoDev } = await import('./dev-command')
-          const startupTargets = (['ios', 'android', 'web'] as const).filter(target => options[target] === true)
+          const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
+            options[target] === true
+          )
           Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app, startupTargets }))
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
@@ -114,6 +113,55 @@ function createCommands(): Command {
         }
       },
     )
+
+  commands
+    .command('build')
+    .argument('[path]', 'Tao project file or directory to build.', '.')
+    .option('--app <name>', 'Select a named app.')
+    .option('--web', 'Export a static web artifact.')
+    .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--ios', 'Show the status of local iOS builds.')
+    .option('--android', 'Show the status of local Android builds.')
+    .option('--compile-only', 'Retain generated source without exporting or packaging.')
+    .description('Build fresh, retained local artifacts for selected targets.')
+    .action(
+      async (
+        path: string,
+        options: {
+          app?: string
+          web?: boolean
+          desktop?: boolean
+          ios?: boolean
+          android?: boolean
+          compileOnly?: boolean
+        },
+      ) => {
+        try {
+          const { runTaoBuild } = await import('./build-command')
+          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          Platform.runtimeProcess.setExitCode(
+            await runTaoBuild(path, { appName: options.app, compileOnly: options.compileOnly, targets }),
+          )
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      },
+    )
+
+  commands
+    .command('clean')
+    .argument('[path]', 'Tao project file or directory whose retained local builds should be listed.', '.')
+    .description('Interactively select retained local builds to remove.')
+    .action(async (path: string) => {
+      try {
+        const { runTaoClean } = await import('./clean-command')
+        await runTaoClean(path)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('review')
@@ -293,6 +341,7 @@ function createCommands(): Command {
       'Report the run as streamed lines or as a quiet summary with a log file (tui streams lines).'
         + ' Defaults to lines in a terminal and quiet otherwise.',
     )
+    .option('--journey-observations <path>', 'Write versioned live render observations for this test run.')
     .option(
       '--pass-with-no-tests',
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
@@ -308,12 +357,19 @@ function createCommands(): Command {
     .action(
       async (
         paths: string[],
-        options: { name?: string; output?: string; passWithNoTests?: boolean; watch?: boolean },
+        options: {
+          journeyObservations?: string
+          name?: string
+          output?: string
+          passWithNoTests?: boolean
+          watch?: boolean
+        },
       ) => {
         try {
           const { TestOutput } = await import('./test-output')
           const testPaths = paths.length > 0 ? paths : ['.']
           const testOptions = {
+            journeyObservationsPath: options.journeyObservations,
             name: options.name,
             output: TestOutput.resolveMode(options.output),
             passWithNoTests: options.passWithNoTests,

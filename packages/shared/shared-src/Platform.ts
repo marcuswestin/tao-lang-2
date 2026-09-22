@@ -47,6 +47,9 @@ export function randomUUID(): string {
   return globalThis.crypto.randomUUID()
 }
 
+/** hostPlatform is the OS on which the CLI process runs. */
+export const hostPlatform = process.platform
+
 /**
  * sha256Hex reduces content to a hexadecimal digest, in one call for a single value or, for content
  * that arrives in pieces, over ordered parts fed to the same digest. It is the digest seam

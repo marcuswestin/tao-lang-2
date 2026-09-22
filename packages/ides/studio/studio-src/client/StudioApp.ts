@@ -124,14 +124,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     configureInteractionMode(view.interactionMode, previews, handshake)
     let deviceLogs: readonly StudioDeviceLog[] = []
+    let deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']> = []
     let clearedDeviceSequence = 0
     const receiveDeviceStatus = (status: StudioDeviceStatus): void => {
       const incoming = (status.logs ?? []).filter(log => log.sequence > clearedDeviceSequence)
       if ((incoming.at(-1)?.sequence ?? 0) >= (deviceLogs.at(-1)?.sequence ?? 0)) {
         deviceLogs = incoming
       }
+      deviceLensSamples = status.lensSamples ?? []
       devicePanel.setStatus(status)
       drawer.renderIfLogs()
+      publish()
     }
     const devicePanel = createStudioDevicePanel({
       api: StudioApiClient,
@@ -160,6 +163,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         canUndo: mutations.canUndo(),
         compile: compileState,
         data: drawer.data(),
+        deviceLensSamples,
         deviceLogs,
         drawerTab: drawer.tab(),
         editor: session.editor(),

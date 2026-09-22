@@ -1,4 +1,5 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
@@ -87,6 +88,7 @@ async function runDevLoopWithActiveReporter(
   const output = DevLoopOutput.start()
   let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined
+  let desktop: ReturnType<typeof DesktopHost.runDev> | undefined
   let finished = false
   let cleanupStarted = false
   let exitLoop!: (outcome: DevLoopOutcome) => void
@@ -118,6 +120,13 @@ async function runDevLoopWithActiveReporter(
   const stopServices = async () => {
     await watcher?.close()
     watcher = undefined
+    const desktopProcess = desktop
+    if (desktopProcess !== undefined) {
+      desktopProcess.kill('SIGTERM')
+      await desktopProcess.waitForClose()
+      await desktopProcess.closeOutput()
+      desktop = undefined
+    }
     await expoServer.stop()
     await devData.stop().catch(error => {
       DevLoopOutput.logDevLoop('data', `Could not stop the dev data server: ${Errors.formatForLog(error)}`, 'warn')
@@ -150,11 +159,44 @@ async function runDevLoopWithActiveReporter(
     // Key input starts before the first compile so q and Ctrl-C work during startup, not only
     // once Metro is ready.
     Commands.printControls()
+    const openDesktop = async (): Promise<boolean> => {
+      if (desktop !== undefined) {
+        DevLoopOutput.logDevLoop('desktop', 'Desktop app is already open.')
+        return true
+      }
+      try {
+        const project = await DesktopHost.prepare({ appName, root: FS.resolvePath('desktop', stateRoot) })
+        if (shouldStop()) {
+          return false
+        }
+        const desktopProcess = DesktopHost.runDev(
+          project,
+          expo.config.EXPO_ORIGIN,
+          DevLoopOutput.devLoopOutputHandler('desktop'),
+        )
+        desktop = desktopProcess
+        desktopProcess.onceClose((exitCode, signal) => {
+          if (!shouldStop() && exitCode !== 0) {
+            DevLoopOutput.recordFailure('desktop', `Desktop host exited (${exitCode ?? signal ?? 'unknown'}).`)
+          }
+          if (desktop === desktopProcess) {
+            desktop = undefined
+          }
+          void desktopProcess.closeOutput()
+        })
+        DevLoopOutput.logDevLoop('desktop', 'Opening Tao desktop app with live Metro updates.')
+        return true
+      } catch (error) {
+        DevLoopOutput.recordFailure('desktop', Errors.formatForUser(error))
+        return false
+      }
+    }
     keyInput = HCI.startRawKeys(key => {
       void handleCommandKey(key, {
         appPath,
         appName,
         expo,
+        openDesktop,
         finish: exitCode => finish({ kind: 'exit', exitCode }),
         repoRoot,
         repositoryControlsAvailable,
@@ -203,7 +245,10 @@ async function runDevLoopWithActiveReporter(
     if (shouldStop()) {
       return await done
     }
-    void expo.openStartupTargets(startupTargets, shouldStop)
+    void expo.openStartupTargets(startupTargets.filter(target => target !== 'desktop'), shouldStop)
+    if (startupTargets.includes('desktop')) {
+      void openDesktop()
+    }
     return await done
   } catch (error) {
     DevLoopOutput.recordFailure('dev', Run.formatFailure(error))
