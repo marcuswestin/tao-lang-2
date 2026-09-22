@@ -176,6 +176,17 @@ Describe('changed suite plan', () => {
     Expect(result.selected.get('tao-apps')).toBe('Apps/Skillet changed, Apps/WordFlower changed')
   })
 
+  Test('a spec-dialect source selects nothing, since Tao discovery never reads it', () => {
+    const result = plan([
+      'Apps/Tao Future/Hearth/Hearth.test.tao-revolution',
+      'Apps/WordFlower/2 - Next/Words.tao-next',
+      'Apps/WordFlower/3 - MVP/Words.tao-mvp',
+    ])
+
+    Expect(result.selected.has('tao-apps')).toBe(false)
+    Expect(result.taoAppPaths).toBeUndefined()
+  })
+
   Test('a Studio app change also selects the studio package suites its behavior proof lives in', () => {
     const result = plan(['Apps/Tao Studio/TaoStudioClient.tao'])
 

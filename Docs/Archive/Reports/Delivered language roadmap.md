@@ -28,7 +28,7 @@ spellings. The live contracts are `Apps/WordFlower/` and `Docs/Spec/`.
 - Cut and implement the dialect-migration tranche (Process step 1). Record: `Docs/Archive/Explorations/Dialect migration tranche/`.
 - Implement the focused writing tranche. Record: `Docs/Archive/Plans/Focused writing tranche/`.
 
-## Delivered from Ro's stack
+## Delivered from the Developer's stack
 
 - Retire the `ui` keyword — the unified-view tranche folded it into `view`. No `scene` construct was introduced, and none is intended; the original "rename UI to Scene" wording described a rename that did not happen.
 - Upgrade all dependencies of e.g. expo/react-native/expo-router/etc.

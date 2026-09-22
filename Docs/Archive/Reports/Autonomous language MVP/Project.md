@@ -76,7 +76,7 @@ The consolidation replaces direct `expo-file-system` use with `@react-native-asy
 
 ## Success checklist
 
-- [x] `feat/autonomous-language-mvp` contains intentional consolidation work only and remains available for Ro's review.
+- [x] `feat/autonomous-language-mvp` contains intentional consolidation work only and remains available for the Developer's review.
 - [x] `Apps/WordFlower/1 - Current/WordFlower.tao` is executable through the normal dev/runtime path after the consolidated syntax/runtime migration.
 - [x] WordFlower persists related data and supports CRUD, completion, forms, filtering/order, reactive updates, and live detail editing without manual ordering state.
 - [x] WordFlower visibly covers loading, empty, validation-error, provider-error, recovery, and populated states.

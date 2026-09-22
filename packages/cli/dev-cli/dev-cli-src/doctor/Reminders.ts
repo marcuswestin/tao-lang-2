@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 
 /**
- * Reminders are the repository's way of telling Ro that a dated thing is due. They exist because
+ * Reminders are the repository's way of telling the Developer that a dated thing is due. They exist because
  * some work can only be judged after time has passed — a measurement worth repeating a week later,
  * a branch to re-check once another lands — and a note written into a plan is read by whoever opens
  * that plan, which is nobody on the day it matters. `board` prints the due ones, so a reminder

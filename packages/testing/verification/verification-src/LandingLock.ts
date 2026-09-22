@@ -460,8 +460,8 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
           `The landing lock has been held by ${describe(holder)} for the whole ${
             describeDuration(waitedMs)
           } this command waited. A dead PID would not mean it was released, and waiting this long is `
-            + "not unusual on its own. Forcing it is Ro's call — bring the output of `./agent board` to "
-            + 'Ro rather than clearing it yourself.',
+            + "not unusual on its own. Forcing it is the Developer's call — bring the output of `./agent board` to "
+            + 'the Developer rather than clearing it yourself.',
           holder,
         )
       }
@@ -560,8 +560,8 @@ async function release(options: ReleaseLandingLockOptions): Promise<ReleaseOutco
     if (existing.holder !== repositoryRoot) {
       Errors.throwUserInput(
         `The landing lock is held by ${describe(existing)}, not by this worktree, so this cannot `
-          + "release it. Release it from that worktree instead; forcing it is Ro's call, so bring the "
-          + 'output of `./agent board` to Ro rather than clearing it yourself.',
+          + "release it. Release it from that worktree instead; forcing it is the Developer's call, so bring the "
+          + 'output of `./agent board` to the Developer rather than clearing it yourself.',
       )
     }
     const remaining: LandingLockRecord = {
@@ -857,8 +857,8 @@ function describeWaiting(record: LandingLockRecord, waitedMs: number): string {
     return `WAIT  Landing lock held by ${describe(record)}. This command will start when the lock is released.`
   }
   return `WARN  Still waiting ${describeDuration(waitedMs)} for the landing lock, held by ${describe(record)}. `
-    + "A dead PID would not mean it was released, and waiting this long is normal. Forcing it is Ro's call — "
-    + 'bring the output of `./agent board` to Ro rather than clearing it yourself.'
+    + "A dead PID would not mean it was released, and waiting this long is normal. Forcing it is the Developer's call — "
+    + 'bring the output of `./agent board` to the Developer rather than clearing it yourself.'
 }
 
 export const LandingLock = {

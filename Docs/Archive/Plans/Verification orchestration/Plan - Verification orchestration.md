@@ -3,7 +3,7 @@
 Audited at commit `34e47c1c` (Fix edge case of stale generated files), 2026-09-01. Every finding
 below was produced read-only and verified against code at that commit — file:line references drift,
 so re-verify each claim against the current tree before acting on it. Findings carry a **Done** /
-**Skipped** / **Blocked on Ro** marker as they land; where re-verification contradicts a finding,
+**Skipped** / **Blocked on the Developer** marker as they land; where re-verification contradicts a finding,
 the tree wins and the finding is corrected in place.
 
 This plan makes every test and verification workflow run through one dependency-aware, prioritized
@@ -57,7 +57,7 @@ costs what `verify` alone used to.
 
 ## Guardrails — verified keep-as-is
 
-1. **`./tao`, `Justfile`, and `./dev` stay distinct** (Ro's ruling, simplification plan Part 4.1).
+1. **`./tao`, `Justfile`, and `./dev` stay distinct** (the Developer's ruling, simplification plan Part 4.1).
    The Justfile remains the human menu discovered via `just --list`; recipes stay composed with
    each part invocable stand-alone. Do not collapse surfaces or delete public recipes for lack of
    callers.
@@ -80,7 +80,7 @@ costs what `verify` alone used to.
    against each other while everything else runs; do not force them fully serial with the browser
    lanes, and do not run them concurrently with each other.
 8. **`just studio-test` stays** even though the TestRunner discovers the same suite — it is a
-   human-facing focused entry point, exactly the composability Ro's Justfile ruling protects.
+   human-facing focused entry point, exactly the composability the Developer's Justfile ruling protects.
 9. **`_parser-gen` stays a prerequisite of every recipe that reads the generated parser**
    (simplification plan 4.2: recipe-dropping was rejected because `_ide-extension-build` is also
    reached standalone). The content stamp makes repeats ~0.01s; the graph may add explicit edges
@@ -161,7 +161,7 @@ Arrived with `c03abaea` (Execute the repository simplification plan) or later, a
 `full-verify` composition, `_full-verify-studio` lanes, `dead-exports`, `doctor` in a lane,
 `studio-canary` (tri-state pass/fail/blocked vocabulary the gate model cannot express),
 `studio-release-check` (`UNVERIFIED` state, release lane), `_runtime-pack-check` (in daily lanes;
-Ro decision pending on demotion), `_bench-check` (duplicates the `performance-checks` suite that
+The Developer decision pending on demotion), `_bench-check` (duplicates the `performance-checks` suite that
 `8a74aacb` moved into the TestRunner). The WordFlower `3 - MVP` / `4 - Revolution` and
 `Apps/Tao Future/*` spec Justfiles name the intended future `tao` surface (`test-ci --output
 json`, `test-watch`, `design check`) — target vocabulary for the seams this plan builds, nothing
@@ -409,11 +409,11 @@ budget, failure path names the log file, full output preserved in it.
 - **Done** (W4). `doctor --json` persisted when run through a lane: `full-verify` runs a private
   `_doctor-json` recipe, so the node's own log at `.artifacts/logs/full-verify/latest/doctor-json.log`
   is the versioned report. Standalone `just doctor` unchanged.
-- **Skipped — needs Ro.** `_runtime-pack-check` demotion to a release lane is already a recorded
-  Ro decision from the simplification plan (Part 7); this plan does not move it, only schedules
+- **Skipped — needs the Developer.** `_runtime-pack-check` demotion to a release lane is already a recorded
+  The Developer decision from the simplification plan (Part 7); this plan does not move it, only schedules
   it like any other gate.
 
-## Part 5 — Assumptions made without Ro (flag if wrong)
+## Part 5 — Assumptions made without the Developer (flag if wrong)
 
 1. Auto-selecting output mode by TTY (with explicit flag/env overrides) is acceptable for every
    lane, including `./agent` passthroughs — no separate agent flag is introduced.

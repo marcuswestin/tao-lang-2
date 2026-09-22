@@ -191,7 +191,7 @@ Describe('Tao formatter injections', () => {
     'normalizes injection argument spacing',
     formats(
       `
-        let UserName = "Ro"
+        let UserName = "the Developer"
         view MainView() {
         render inject Name    UserName,UserName ${tsFence}
         return <RN.Text>{Name}</RN.Text>
@@ -199,7 +199,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        let UserName = "Ro"
+        let UserName = "the Developer"
 
         view MainView() {
            render inject Name UserName, UserName ${tsFence}

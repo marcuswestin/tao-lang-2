@@ -5,10 +5,10 @@ import { createInkDevLoopReporter, devLoopDashboardLayout } from '../cli-src/dev
 
 Describe('Dev-loop TUI dashboard layout', () => {
   Test('wraps long output instead of clipping it', () => {
-    Expect(OutputText.wrapLine('Compiled /Users/ro/code/tao-lang-2/Apps/Books/Books.tao', 20)).toEqual([
-      'Compiled /Users/ro/c',
-      'ode/tao-lang-2/Apps/',
-      'Books/Books.tao',
+    Expect(OutputText.wrapLine('Compiled /Users/dev/code/tao/Apps/Books/Books.tao', 20)).toEqual([
+      'Compiled /Users/dev/',
+      'code/tao/Apps/Books/',
+      'Books.tao',
     ])
   })
 

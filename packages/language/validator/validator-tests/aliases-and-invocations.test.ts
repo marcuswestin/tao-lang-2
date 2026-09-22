@@ -136,7 +136,7 @@ Describe('validator: aliases and invocations', () => {
 
   Test(
     'keeps type and value names in separate namespaces',
-    accepts(app('render Text(Name)', `type Name is text\nlet Name = Name "Ro"\n${textView}`)),
+    accepts(app('render Text(Name)', `type Name is text\nlet Name = Name "the Developer"\n${textView}`)),
   )
 
   Test(

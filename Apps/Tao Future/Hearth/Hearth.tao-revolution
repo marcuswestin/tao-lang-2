@@ -123,7 +123,7 @@ app HearthPreview = Hearth with {
    Name "Hearth Preview"
    Datasource Memory
    Seed PineStreet
-   Accounts simulated (signed in as "Ro")
+   Accounts simulated (signed in as "Mira")
    Notifications simulated
    Places simulated
    Restore fresh

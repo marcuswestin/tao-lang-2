@@ -17,6 +17,7 @@ import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -493,6 +494,20 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('open-pr')
+    .description(
+      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+    )
+    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .action(async (options: { pollIntervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await OpenPrCommand.run({
+          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
     .command('reclaim')
     .description(
       'Classify every worktree as reclaimable, live, or unclassified, with the evidence; removes nothing without --execute.',
@@ -696,6 +711,25 @@ await runWithCommands(commands => {
         }
         const { runStudioCompanionInstall } = await import('@studio-tooling/StudioCompanionDevice')
         Platform.runtimeProcess.exit(await runStudioCompanionInstall({ deviceName: options.device }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('companion-host-build')
+    .description(
+      'Build the Tao Companion as a prebuilt Android host into .artifacts/hosts, which tao dev installs on an emulator in place of Expo Go.',
+    )
+    .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
+    .action(async (options: { abi?: string }) => {
+      try {
+        const { runCompanionHostBuild } = await import('@studio-tooling/CompanionHostBuild')
+        const architectures = options.abi?.split(',').map(abi => abi.trim()).filter(Boolean)
+        Platform.runtimeProcess.exit(
+          await runCompanionHostBuild(architectures === undefined ? {} : { architectures }),
+        )
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

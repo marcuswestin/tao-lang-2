@@ -1,6 +1,6 @@
 # DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Packaging
 - **Impact:** `TaoAppModules.runtimeRoot()` resolves only because `packages/runtime` sits beside
@@ -20,3 +20,8 @@
   carried module and links a created project at it; `cli-tests/app-modules.test.ts` already covers
   both halves of that fallback against a synthetic tree.
 - **Source:** 2026-09-12 review of the `@tao/runtime` CLI module wiring.
+- **Archived:** 2026-09-22, by slice 2 of `Plan - Standalone Tao CLI.md`. The distributable CLI
+  tree is the standalone binary's unpacked resource root rather than the checkout's
+  `packages/cli/tao-cli/modules/@tao/`: `standalone-build.ts` calls `TaoAppModules.packageRuntime`
+  into it as real directories, `CLI_PACKAGE_ROOT` resolves to it in an installed binary, and
+  `just standalone-cli-acceptance` proves a project created outside any checkout links it.

@@ -22,7 +22,7 @@
   the same reasoning corrupts `main` the first time the other agent is mid-landing rather than
   between commands.
 - **Workaround:** Treat a held lock as a live landing and wait; `./agent board` names the holder.
-  Ask Ro before forcing.
+  Ask the Developer before forcing.
 - **Proposed change:** Make the two pieces of guidance say what the code says. In `AGENTS.md`, state
   that a wedged lock is a person's call and that an agent asks rather than forces. In the waiter's
   warning, name `./agent board` and the person, rather than handing out the `--force` command as the

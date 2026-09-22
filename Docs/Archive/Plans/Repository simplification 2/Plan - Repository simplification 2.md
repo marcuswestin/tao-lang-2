@@ -1,7 +1,7 @@
 # Plan - Repository simplification 2
 
 Status: Landed. Waves 0-3 and the package restructure are in on `main`, stepwise rather than in the
-single mechanical commit Wave 3 originally called for. Decisions settled with Ro on 2026-09-19 and
+single mechanical commit Wave 3 originally called for. Decisions settled with the Developer on 2026-09-19 and
 2026-09-21. The `simplify-repo` skill owns the repeatable method; this document owns this run: its
 baseline, fences, waves, and ledger.
 
@@ -55,7 +55,7 @@ and the `repo-lint` convention table. Its Documentation and Command-surface part
    - e. New hooks warn; none block yet.
    - f. Archives are kept and consolidated into one `Docs/Archive/` with a brief README on how to
      add to it. Overlapping live explorations merge into one document per topic, from a merge list
-     Ro signs off first.
+     The Developer signs off first.
 5. Packages: 20 → 13, import aliases renamed to match (`@language/parser`, `@compiler/generation`).
 6. Execution: one branch, exclusive path ownership per agent, `./agent verify` per slice, success
    measured as non-test source lines and instruction lines before and after.
@@ -80,7 +80,7 @@ Shared-edit files (`AGENTS.md`, `Justfile`, `dev.ts`, `agent-dev.ts`, `tsconfig.
    piped exit status (PreToolUse hook).
 2. **Documentation prune.** Build `Docs/Archive/` (`Plans/`, `Explorations/`, `Reports/`, README of
    at most 15 lines). Archive finished roadmaps, starting with `September squash-merge
-   remediation.md`. Produce the live-exploration merge list for Ro, then merge.
+   remediation.md`. Produce the live-exploration merge list for the Developer, then merge.
 3. **Pattern conformance.** Decisions 3.a–3.d everywhere in scope. Executed by every code agent
    inside its own paths, not by a separate agent.
 4. **Studio and runtime structure.** One message-dispatch shape for the 13-, 11-, and 7-branch
@@ -202,7 +202,7 @@ than single-line counts.
 - Hashing, signing, and random ids go through flat `Platform` functions, not a `Platform.Crypto`
   namespace, because `Platform` has no nested namespaces. Ten `node:` allowlist entries retired.
 - Instruction lines rose by 17: the hooks removed about as much prose as the `after-merging-main`
-  reference Ro asked for added. The halving target still needs its own pass.
+  reference the Developer asked for added. The halving target still needs its own pass.
 - Not done: `journalLimit` stays mirrored across the runtime–Studio seam, because the test that pins
   runtime mirrors is fenced.
 
@@ -246,16 +246,16 @@ Five implementers, one file set each, measured on net lines removed rather than 
 
 ### Documentation merges and the second instruction pass
 
-- The six groups of the merge list are merged, with Ro's sign-off: live documents for those groups
+- The six groups of the merge list are merged, with the Developer's sign-off: live documents for those groups
   fell from about 10,500 lines to 8,200, and every absorbed source is kept under `Docs/Archive/`.
   No pair of sources needed an "Unreconciled" heading. Two stale claims in the Tao ship material
   were corrected while merging: Electron to Electrobun, and a slice requirement that has landed.
-- Left live for Ro: `Exploration - Studio server hot reload.md`, which the list counted but never
+- Left live for the Developer: `Exploration - Studio server hot reload.md`, which the list counted but never
   placed; `Roadmap - Studio review and refinement.md`; and `Component kits`.
 - The second instruction pass cut 54 lines and 8.5% of the words, to 1,379 lines against a target
   near 880. It removed ten duplicated or gate-covered rules. What remains is one rule per line, so
   the count falls only when a rule goes, and the rest is not enforced by code and not inferable.
-  Halving would mean cutting rules rather than prose, which is Ro's call rule by rule.
+  Halving would mean cutting rules rather than prose, which is the Developer's call rule by rule.
 - Package consolidation is safe once deprecated duplicates of the old aliases stay in
   `packages/tsconfig.base.json` for one cycle; aliases resolve only through its `paths`. The
   branches it would hurt are `feat/misc-changes` and `feat/multiple-datasources-plan-ab9e5f`, which
@@ -268,7 +268,7 @@ Five implementers, one file set each, measured on net lines removed rather than 
 
 ### One element-creation point and the third instruction trim
 
-- Ro decided against JSX in the hand-written runtime and for one chokepoint instead: `createElement` in
+- The Developer decided against JSX in the hand-written runtime and for one chokepoint instead: `createElement` in
   `TR-create-element.ts`, public as `TR.createElement`. All 266 `React.createElement` sites and the
   `createReactElement` wrapper in `TR-views.tsx` go through it, and `repo-lint` bans
   `React.createElement`, its import and destructured forms, and JSX in runtime source, with no
@@ -288,7 +288,7 @@ Five implementers, one file set each, measured on net lines removed rather than 
 
 ## Package restructure
 
-The consolidation table above is superseded by the decided tree, settled with Ro on 2026-09-21 and
+The consolidation table above is superseded by the decided tree, settled with the Developer on 2026-09-21 and
 recorded in `.artifacts/restructure-map.md` for the move itself.
 
 The language packages (`parser`, `ast-utils`, `validator`, `formatter`, `source-actions`) become a
@@ -341,7 +341,7 @@ Later slices, in order, and where each stands at the close of this run:
 
 1. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
    package next to `core`, with a surface snapshot test and a gate that apps import only the SDK,
-   never runtime internals. Deferred, awaiting Ro's go: the export list depends on what
+   never runtime internals. Deferred, awaiting the Developer's go: the export list depends on what
    `Apps/HNReader` and the stdlib TypeScript implementations actually use, which needs deriving
    before the surface is drawn.
 2. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
@@ -390,7 +390,7 @@ in a real editor; or a real packaged Studio app build (its payload fix has a uni
 
 ## Deferred
 
-- The `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` slice above, awaiting Ro's go.
+- The `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` slice above, awaiting the Developer's go.
 - A vocabulary pass on the word "host", about 2,000 uses across several meanings, deferred to a
   quiet day.
 - Studio as a Tao app, `packages/services/tao-cloud`, and `packages/providers/instantdb`: a separate

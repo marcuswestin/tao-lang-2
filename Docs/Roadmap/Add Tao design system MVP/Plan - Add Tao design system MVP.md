@@ -6,7 +6,7 @@ contextual validation, deterministic clause composition, compiler lowering, and 
 resolution. Steps 1–4 below describe that landed milestone; continue from Step 5 through a later
 WordFlower tranche. Later design surface is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
 
-`Docs/Spec/Tao Design - WIP.md` is authoritative for the implemented first design-language slice.
+`Docs/Spec/Tao Design.md` is authoritative for the implemented first design-language slice.
 This document carries the plan toward the rest of the MVP and, from "Tooling and rollout beyond the
 MVP" onward, the tooling, artifacts, and later-phase direction around it.
 
@@ -168,7 +168,7 @@ The fuller `tao design` command surface, its output shape, and safe-fix examples
 
 Concrete work:
 
-- Update `Docs/Spec/Tao Design - WIP.md`, `Docs/Spec/Tao Layout and UI.md`, and `Docs/Spec/Tao Packages.md` for any syntax or capability names that changed during implementation.
+- Update `Docs/Spec/Tao Design.md`, `Docs/Spec/Tao Layout and UI.md`, and `Docs/Spec/Tao Packages.md` for any syntax or capability names that changed during implementation.
 - Update `Roadmap.md` status and this plan with completion notes.
 - Run a stale-repo check for old design syntax, old theme names, and obsolete plan claims.
 - Prepare the next project plan for lockfile/generation or screenshot-loop work only after the deterministic MVP is accepted.

@@ -26,7 +26,7 @@
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
 - **Proposed change:** Phase 0 of the linked report is done bar its dropped item (a cache for a
-  packaged CLI, which Ro dropped until one exists). What remains here is past Phase 0: validating a
+  packaged CLI, which the Developer dropped until one exists). What remains here is past Phase 0: validating a
   file once per batch rather than once per entry that reaches it.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
   with them.

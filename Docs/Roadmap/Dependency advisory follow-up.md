@@ -9,10 +9,10 @@ records the stale-link reproduction and repair.
 
 ## Open advisory register
 
-| Item                                                                 | Disposition                                                                                                                                   | Owner               | Review by  |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | ---------- |
-| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases.                          | Ro, until delegated | 2026-09-28 |
-| Nixpkgs glibc input                                                  | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices. | Ro, until delegated | 2026-09-28 |
+| Item                                                                 | Disposition                                                                                                                                   | Owner                          | Review by  |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
+| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases.                          | the Developer, until delegated | 2026-09-28 |
+| Nixpkgs glibc input                                                  | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices. | the Developer, until delegated | 2026-09-28 |
 
 At each review, record the new evidence and either close the item or set a new review date and
 owner. A review date schedules reassessment; it does not claim the advisory is fixed.

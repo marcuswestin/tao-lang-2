@@ -45,7 +45,7 @@ const SCRATCH_PREFIXES = ['/tmp', '/private/tmp', '/var/folders', '$TMPDIR', '${
 
 const SED_EDIT_REFUSAL =
   'Edit files with the Edit tool, not `sed -i` (AGENTS.md): an edit inside the worktree runs without '
-  + 'review and arrives in the diff Ro reads.'
+  + 'review and arrives in the diff the Developer reads.'
 
 const RECURSIVE_SEARCH_REFUSAL =
   'This worktree holds about 1,800 tracked files and over 120,000 in total — `node_modules`, the '
@@ -80,10 +80,10 @@ const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts
 
 const BUN_INSTALL_REFUSAL =
   '`bun install` skips repository adapter generation. Run `./agent setup` for routine installs. '
-  + 'Ask Ro before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
+  + 'Ask the Developer before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
 
 const GIT_ADD_WIDE_REFUSAL =
-  'Stage exact reviewed paths — `git add -- <path>…` — never `.`, `-A`, or `-u` (AGENTS.md). Ro and '
+  'Stage exact reviewed paths — `git add -- <path>…` — never `.`, `-A`, or `-u` (AGENTS.md). The Developer and '
   + "this session's own subagents write this worktree while you work, and generators drop untracked "
   + 'files into it, so a wide add sweeps work you did not make into your commit.'
 
@@ -94,7 +94,7 @@ const GIT_STASH_REFUSAL =
 
 const treeWriteRefusal = (target: string): string =>
   `Write \`${target}\` with the Write or Edit tool, not a shell redirect: an edit inside the worktree `
-  + 'runs without review and arrives in the diff Ro reads. A scratch file belongs in `$TMPDIR` or '
+  + 'runs without review and arrives in the diff the Developer reads. A scratch file belongs in `$TMPDIR` or '
   + '`.artifacts/`, where a redirect is fine.'
 
 const gitPatchRefusal = (subcommand: string): string =>
@@ -243,7 +243,7 @@ function isScratchPath(path: string): boolean {
   return SCRATCH_PREFIXES.some(prefix => plain.startsWith(prefix))
 }
 
-/** isReviewedPath reports whether a path names content that belongs in the diff Ro reads. */
+/** isReviewedPath reports whether a path names content that belongs in the diff the Developer reads. */
 function isReviewedPath(path: string): boolean {
   const plain = path.replace(/^["']|["']$/g, '').replace(/^\.\//, '')
   return !isScratchPath(plain) && REVIEWED_TREES.some(tree => plain.startsWith(tree))
@@ -252,7 +252,7 @@ function isReviewedPath(path: string): boolean {
 /**
  * hookOverrideReason returns the justification an agent attached to a command it believes a rule
  * wrongly catches. The marker is deliberately visible in the command rather than hidden in a
- * setting, so the override is in front of Ro in the transcript as well as in the log.
+ * setting, so the override is in front of the Developer in the transcript as well as in the log.
  */
 export function hookOverrideReason(command: string): string | undefined {
   const reason = command.match(/#\s*hook-ok:\s*(\S.*?)\s*$/m)?.[1]
@@ -261,7 +261,7 @@ export function hookOverrideReason(command: string): string | undefined {
 
 /**
  * shellReadDenial catches the shell standing in for a file tool. `sed -i` is included because it is
- * the same substitution in the other direction: an edit the harness cannot show Ro in a diff.
+ * the same substitution in the other direction: an edit the harness cannot show the Developer in a diff.
  */
 function shellReadDenial(stage: Stage): string | undefined {
   const [command, ...rest] = stage.words

@@ -216,7 +216,7 @@ draft groups) → D (Focus tool, red outline) → G (tool strip, lens merge, ins
 tool) → F (dwell-to-enter insertion). About twelve working days in total; A, B, and G can proceed in
 parallel once C has landed.
 
-## Decisions for Ro
+## Decisions for the Developer
 
 1. Frame size as catalog state with an explicit "Save as scenario size", rather than writing the
    scenario's `Size` on every resize.

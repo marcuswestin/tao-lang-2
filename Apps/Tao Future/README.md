@@ -7,7 +7,7 @@ feature in one of these apps forces it.
 
 ## Origin
 
-Four independent designs of post-MVP Tao were produced and compared item by item; Ro resolved every
+Four independent designs of post-MVP Tao were produced and compared item by item; the Developer resolved every
 agreement and disagreement into `Docs/Roadmap/Tao Revolution/Decisions.md`, which is the authoritative
 record of the decided language. These app sources were seeded from design D
 (`tao-revolution-synthesis-da6265`), the design whose dialect the decisions most often selected.
@@ -43,7 +43,7 @@ binding each with a `Reason`, and neither an app language picker nor a provider 
 survives.
 
 **Spellings this pass had to choose without a decision.** Each is recorded as `R14` in
-`Docs/MVP Roadmap/Ro MVP Roadmap.md`: the reorder affordance and drop target as container members
+`Docs/MVP Roadmap/Developer MVP Roadmap.md`: the reorder affordance and drop target as container members
 (`Col(Reorderable: …)`, `Col(Accepts: …)`, `on drop`), `invalidate <Draft> with <Problem>` where §5
 decides a bare `save` populates `Draft.Problems` on its own,
 `where` on a `loop`, `first N of`, composite `unique A, B`,
@@ -102,6 +102,6 @@ sheets read neither `Title` nor `Toolbar`, so their only exit is never placed in
   `Decisions.md`, step 3) or a **decision amendment** (which updates `Decisions.md` in the same
   change, per the process). The apps and the decisions never disagree silently.
 - Product behavior is spec: renaming a feature, tab, or flow here changes what the language must
-  support, and belongs to Ro.
+  support, and belongs to the Developer.
 - Each app folder keeps its own README describing the product; this file owns their shared role in
   the process.

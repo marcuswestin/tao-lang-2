@@ -4,27 +4,30 @@ Status: authoritative for the implemented first design-language slice and intend
 it. Compatible layers beyond that slice remain future work. Tooling, artifacts, and rollout live in
 `Docs/Roadmap/Add Tao design system MVP/Plan - Add Tao design system MVP.md`.
 
-Current implementation status: Tao-authored `design` declarations provide flat hexadecimal color
-tokens and named clause bundles in ordinary source. An app mounts one declaration through `Design`;
-render specs resolve its bundles and merge layout plus the implemented `bg`, `border`, `fg`, `line`,
-`radius`, `size`, and `weight` visual entries into the existing native root. Static validation owns
-duplicates, reserved names, references, cycles, colors, tags, and uniquely resolvable app design
-selection. Semantic tokens, recipes, `tao design` commands, screenshot comparison, design lockfiles,
-and AI-assisted design iteration remain future work.
+Current implementation status: Tao-authored `design` declarations hold typed `colors`, `sizes`,
+`text`, `screens`, and `styles` blocks in ordinary source (`Decisions.md` §13). An app mounts one
+declaration through `Design`; render specs resolve its styles and merge layout plus the implemented
+`background`, `border`, `ink`, `line`, `radius`, `size`, and `weight` visual entries into the
+existing native root. Static validation owns duplicates, reserved names, references, cycles, colors,
+tags, conditions, and uniquely resolvable app design selection. `rules { }`, parameterized entries,
+environment values other than `Scheme`, `tao design` commands, screenshot comparison, design
+lockfiles, and AI-assisted design iteration remain future work.
 
 ## Implemented First Slice
 
-The first slice implements exactly flat tokens and named clause bundles in ordinary `.tao` source. An app
-selects a design through its `Design` property:
+An app selects a design through its `Design` property:
 
 ```tao
 workspace design WordFlowerDesign {
-   paper #f6f7f3
-   ink #121826
-   accent #2f6b4f
-
-   screen [fill, content top stretch, pad 16, bg paper]
-   title [size 28, weight 700, fg ink]
+   colors {
+      paper #f6f7f3
+      ink #121826
+      accent #2f6b4f
+   }
+   styles {
+      screen [fill, content top stretch, pad 16, background paper]
+      title [size 28, weight 700, ink ink]
+   }
 }
 
 app WordFlower {
@@ -38,18 +41,22 @@ A bundle contains the same clauses a render site may write inline. Bundles and d
 one left-to-right list; the last specification of a given clause wins. After replacement, a
 semantically incompatible resolved clause set is invalid regardless of source order.
 
-The implemented visual heads are `bg <token>`, `border <token>`, `fg <token>`, `line <number>`,
-`radius <number>`, `size <number>`, and `weight <number>`. A border token supplies its color and the
-minimal slice supplies width `1`. Bundle expansion preserves source order; later occurrences replace
+The implemented visual heads are `background <token>`, `border <token>`, `ink <token>`,
+`line <number>`, `radius <number>`, `size <number>`, and `weight <number>`. A border token supplies
+its color and the minimal slice supplies width `1`. `bg` and `fg` are accepted legacy spellings of
+`background` and `ink` and draw a warning; one style spelling the same property both ways is an
+error. Colors and bundles written directly in `design { }`, outside the typed blocks, are the
+deprecated flat catalog: still accepted, with one warning per design. Bundle expansion preserves source order; later occurrences replace
 the same semantic clause while unrelated layout and style clauses remain. Resolution uses the
 Design selected by the mounted app occurrence—there is no global design registry—so two mounted
 apps may resolve the same bundle name independently.
 
 The lexer uses one `TagOrHexColor: /#[A-Za-z0-9_]+/` terminal. AST context supplies the meaning: the
 validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*`, while design color values must be CSS
-hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively. Nested token categories,
-semantic tokens, recipes, patterns, rules, and design tooling remain compatible later work; they are
-not implied by this first slice.
+hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively. `rules { }` and design
+tooling remain compatible later work; they are not implied by this slice. The sections below that
+predate `Decisions.md` §13 (semantic tokens, recipes, patterns) are superseded by it where they
+disagree.
 
 At a render site, names that are not built-in layout or visual heads are bundle references. When the
 enclosing source has one statically selected Design, validation resolves those references and their
@@ -127,6 +134,8 @@ the structured forms below remain future work unless a later tranche settles the
 
 ### Raw Tokens
 
+Status: design, not yet implemented.
+
 Raw tokens are primitive values owned by the selected design:
 
 ```tao
@@ -161,6 +170,8 @@ Token categories should start small: color, space, radius, typography, shadow/el
 
 ### Semantic Tokens
 
+Status: design, not yet implemented.
+
 Semantic tokens name intent:
 
 ```tao
@@ -183,6 +194,8 @@ design AppTheme {
 App code should normally use meanings such as `surface`, `muted`, `primary`, and `danger`, not raw colors.
 
 ### Component Recipes
+
+Status: design, not yet implemented.
 
 Recipes define reusable visual treatment for components:
 
@@ -216,6 +229,8 @@ The compiler should treat recipes as structured data, not text snippets. Runtime
 
 ### Pattern Recipes
 
+Status: design, not yet implemented.
+
 Pattern recipes describe larger screen grammar:
 
 ```tao
@@ -235,6 +250,8 @@ Patterns are deferred until component recipes and design application are stable,
 
 ### Design Rules
 
+Status: design, not yet implemented.
+
 Rules are constraints the compiler, validator, runtime, and design tooling can check:
 
 ```tao
@@ -252,6 +269,8 @@ rules {
 Some rules are source-only. Others require rendered context. The first implementation should start with deterministic source-level checks and defer screenshot/browser checks.
 
 ## Applying Design
+
+Status: design, not yet implemented.
 
 Tao needs both low-level and semantic design application:
 
@@ -297,6 +316,8 @@ Col() [gap md] {
 The exact condition syntax is future work. The important direction is that components should adapt to their context, not only to global breakpoints.
 
 ## App Selection And Defaults
+
+Status: design, not yet implemented.
 
 Project creation should give every app a coherent design immediately. A first app should not look like unstyled React Native.
 
@@ -352,6 +373,8 @@ Starter themes can be generated from the same underlying token architecture:
 These are presets over one design model, not separate style engines.
 
 ## Platform Adaptation
+
+Status: design, not yet implemented.
 
 Tao should not force every platform to look identical.
 

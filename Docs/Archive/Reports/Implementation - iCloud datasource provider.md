@@ -78,7 +78,7 @@ Trigger iCloud Sync_ to push changes between simulators.
 
 - Apple platforms only. A mount elsewhere fails loudly with a host-environment error; an app that
   also targets Android or the web binds another datasource in a variant for those targets. Whether
-  the validator should refuse such a target at compile time is a decision for Ro.
+  the validator should refuse such a target at compile time is a decision for the Developer.
 - Single account, many devices. iCloud Drive offers no server-side rule evaluation, no accounts of
   its own, and no sharing of a data-scope document, so the §3 access rules have nowhere to run and
   the household demos are out of scope. Sharing arrives with CloudKit in the granular family.
