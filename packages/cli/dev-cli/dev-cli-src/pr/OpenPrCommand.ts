@@ -240,7 +240,9 @@ function splitMergeMessage(source: string): { body: string; title: string } {
  * Watching straight after the push reported the first real run as over before its workflow had
  * started, so this waits until the pull request's head is the pushed commit and that commit carries
  * at least one check. None appearing within the window is reported as a failure, not a pass: this
- * command exists to observe CI, and a silent pass is how it misled its first user.
+ * command exists to observe CI, and a silent pass is how it misled its first user. The usual cause
+ * is a pull request that conflicts with its base, which GitHub runs no `pull_request` workflow for;
+ * mergeability is only read out at the end because GitHub recomputes it after each push.
  */
 async function awaitChecksOnHead(
   dependencies: OpenPrDependencies,
@@ -252,19 +254,27 @@ async function awaitChecksOnHead(
   const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
   for (let attempt = 1;; attempt += 1) {
     const view = await dependencies.run('gh', {
-      args: ['pr', 'view', String(prNumber), '--json', 'headRefOid,statusCheckRollup'],
+      args: ['pr', 'view', String(prNumber), '--json', 'headRefOid,mergeable,statusCheckRollup'],
       cwd: root,
       stdio: 'pipe',
     })
     assertCommandSucceeded(view)
-    const head = parseJson<{ headRefOid?: string; statusCheckRollup?: unknown[] }>(view.stdout, {})
+    const head = parseJson<{ headRefOid?: string; mergeable?: string; statusCheckRollup?: unknown[] }>(
+      view.stdout,
+      {},
+    )
     if (head.headRefOid === headSha && (head.statusCheckRollup?.length ?? 0) > 0) {
       return true
     }
     if (attempt >= attempts) {
+      const noChecks = `FAIL  No checks appeared on ${headSha.slice(0, 8)} within ${
+        CHECKS_APPEAR_WITHIN_MS / 1000
+      }s of the push`
       report(
-        `FAIL  No checks appeared on ${headSha.slice(0, 8)} within ${CHECKS_APPEAR_WITHIN_MS / 1000}s of the push.`
-          + ' Actions may be disabled for this repository, or no workflow matches this branch.',
+        head.mergeable === 'CONFLICTING'
+          ? `${noChecks}: the pull request conflicts with ${MAIN_BRANCH}, and GitHub runs no pull_request`
+            + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch and run open-pr again.`
+          : `${noChecks}. Actions may be disabled for this repository, or no workflow matches this branch.`,
       )
       return false
     }

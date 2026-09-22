@@ -52,13 +52,13 @@ function cleanFeatureBranchRoutes(): Record<string, RouteResult> {
 }
 
 function headViewKey(prNumber: number): string {
-  return routeKey('gh', ['pr', 'view', String(prNumber), '--json', 'headRefOid,statusCheckRollup'], ROOT)
+  return routeKey('gh', ['pr', 'view', String(prNumber), '--json', 'headRefOid,mergeable,statusCheckRollup'], ROOT)
 }
 
-/** headView is `gh pr view --json headRefOid,statusCheckRollup` answering with `checkCount` checks. */
-function headView(headRefOid: string, checkCount: number): RouteResult {
+/** headView is `gh pr view` answering for the pull request's head with `checkCount` checks on it. */
+function headView(headRefOid: string, checkCount: number, mergeable = 'MERGEABLE'): RouteResult {
   const statusCheckRollup = Array.from({ length: checkCount }, (_, index) => ({ name: `check-${index}` }))
-  return { stdout: JSON.stringify({ headRefOid, statusCheckRollup }) }
+  return { stdout: JSON.stringify({ headRefOid, mergeable, statusCheckRollup }) }
 }
 
 function fakeDependencies(
@@ -134,7 +134,26 @@ Describe('open-pr', () => {
 
     Expect(result.exitCode).toBe(1)
     Expect(result.lines.some(line => line.startsWith('FAIL  No checks appeared on headsha1'))).toBe(true)
+    Expect(result.lines.some(line => line.includes('Actions may be disabled'))).toBe(true)
     Expect(calls.some(call => call.startsWith('gh pr checks'))).toBe(false)
+  })
+
+  Test('names a conflict with main as the reason no checks appeared', async () => {
+    // The second real run: GitHub creates no pull_request workflow run for a pull request that
+    // conflicts with its base, so blaming disabled Actions sent the reader the wrong way.
+    const routes = cleanFeatureBranchRoutes()
+    routes[
+      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
+    ] = {
+      stdout: '[{"number":2,"url":"https://github.com/o/r/pull/2"}]',
+    }
+    routes[headViewKey(2)] = headView(HEAD_SHA, 0, 'CONFLICTING')
+    const { dependencies } = fakeDependencies(routes)
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(result.lines.some(line => line.includes('conflicts with main') && line.includes('Merge main'))).toBe(true)
   })
 
   Test('refuses a detached HEAD', async () => {
