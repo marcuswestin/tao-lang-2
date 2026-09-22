@@ -302,6 +302,13 @@ Product and codebase backlog, unordered.
     an app-local editor package, and new `tao-cloud`/`providers/instantdb` packages. No language or
     product decision is needed; it is a location move. Plan:
     `Docs/Archive/Plans/Tao Studio as a Tao app/Plan - Tao Studio as a Tao app.md`.
+- [ ] Deferred past MVP from the second simplification pass (2026-09-22)
+  - A curated runtime SDK, `@tao/runtime/sdk` for app builders and `@tao/runtime/sdk/providers` for
+    provider authors, with a surface snapshot test and a gate that app TypeScript imports only the
+    SDK; today app code imports `@tao/runtime` directly, which every `TR` member makes public.
+  - A vocabulary pass on the word "host", which names the machine in host lanes and an embedding
+    program in product host and device host; about 2,000 uses.
+  - Recorded with the run in `Docs/Archive/Plans/Repository simplification 2/`.
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
     `Docs/Archive/Plans/Repository simplification/Plan - Repository simplification.md`. Each item
