@@ -1,4 +1,4 @@
-# Ro MVP Roadmap
+# Developer MVP Roadmap
 
 The judgments only Ro can make before Tao goes out to a small number of outside developers. The
 agent-executable half is `Agent MVP Roadmap.md` beside this file, and its entries name the decision
