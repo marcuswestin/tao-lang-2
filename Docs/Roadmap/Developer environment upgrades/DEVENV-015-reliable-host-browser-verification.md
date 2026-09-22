@@ -33,18 +33,73 @@
   coalition 46132. The supported API exposed no CDP port. Rendered frontend content and attachment
   to a live Hermes target remain unverified. This proves an ordinary iTerm2 desktop host, not
   Terminal.app specifically or reliable managed-task startup.
+  On 2026-09-21, a fresh managed checkout at `f8e5d195` recorded its context before either app
+  launch: Python -> codex -> ChatGPT, all in resource coalition 34940 (`com.openai.codex`),
+  `CODEX_SANDBOX=seatbelt`, no `TERM_PROGRAM` or `SSH_TTY`, workspace-write permissions with no
+  approval escalation, and `launchctl managername=Aqua`.
+  The approved `ps` shape was denied; libproc supplied the ancestry, and `launchctl print pid/...`
+  supplied the coalition. A pre-existing Chrome report from 21:25 (PID 97621, parent bun) again
+  shows `SIGABRT` in `_RegisterApplication -> TransformProcessType` in the Codex coalition.
+  This session did not relaunch either app: it had no new hypothesis that would distinguish another
+  managed abort. The same-coalition full-access success and this sandboxed ancestry narrow the
+  likely boundary to the managed launch context, but do not prove the exact macOS denial;
+  `log show` is unavailable in the sandbox.
 - **Workaround:** From an independent desktop terminal, run `./agent parser-gen` if generated
   parser artifacts are missing, then `./agent studio-smoke
   packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts <unique-run-id>`.
-  `StudioCdp.launchChrome` owns a fresh browser profile and closes it. Use the pinned
-  `@react-native/debugger-shell` API with `frontendUrl` and `windowKey` for a bounded DevTools
-  startup proof; do not pass Chrome's CDP flag to that API.
+  Record the terminal's parent chain, selected non-secret environment, permissions, and coalition
+  before launch. `StudioCdp.launchChrome` owns a fresh browser profile and closes it. For a
+  separate bounded DevTools startup proof, use the pinned `@react-native/debugger-shell` 0.86.3
+  API with `frontendUrl` and `windowKey`; the Electron entry point accepts those two arguments,
+  and its Node API accepts `mode: 'syncThenExit'` so an owned launcher can forward termination.
+  Do not pass Chrome's CDP flag to that API. Record the app's parent, coalition, exit, check-in,
+  and crash report when observable. A successful shell check-in proves neither frontend rendering
+  nor attachment to a live Hermes target.
+
+  From that independent terminal, after confirming no other React Native DevTools instance is
+  running, the shell-only invocation below uses the installed package reached through this repo's
+  pinned React Native dependency. It serves `about:blank`, so it deliberately tests registration
+  and window lifetime only. The Python parent owns and bounds the launcher process group; an early
+  exit needs its stderr and crash report, while a 12-second lifetime still needs a LaunchServices
+  check-in before counting as shell startup.
+
+  ```bash
+  python3 - <<'PY'
+  import os, signal, subprocess
+  javascript = r'''
+  const {createRequire} = require('node:module');
+  const reactNative = require.resolve('react-native/package.json', {paths: ['./packages/apps/expo-host']});
+  const {unstable_spawnDebuggerShellWithArgs} = createRequire(reactNative)('@react-native/debugger-shell');
+  unstable_spawnDebuggerShellWithArgs(
+    ['--frontendUrl=about:blank', `--windowKey=devenv015-${process.pid}`],
+    {mode: 'syncThenExit', silent: false},
+  ).catch(error => { console.error(error); process.exitCode = 1; });
+  '''
+  launcher = subprocess.Popen(['node', '-e', javascript], start_new_session=True)
+  print(f'debugger launcher PID {launcher.pid}', flush=True)
+  try:
+      code = launcher.wait(timeout=12)
+      print(f'debugger launcher exited early: {code}')
+  except subprocess.TimeoutExpired:
+      print('debugger launcher remained alive for 12 seconds')
+  finally:
+      if launcher.poll() is None:
+          os.killpg(launcher.pid, signal.SIGTERM)
+          try:
+              launcher.wait(timeout=3)
+          except subprocess.TimeoutExpired:
+              os.killpg(launcher.pid, signal.SIGKILL)
+              launcher.wait()
+  PY
+  ```
 - **Proposed change:** Establish a repeatable host-only lane for the Studio journey and supported
-  React Native DevTools startup. Diagnose the managed session's GUI registration boundary before
-  changing repository sandbox rules. Record the launcher's ancestry, selected non-secret
-  environment, launch method, app parent and coalition when observable, exit status, crash stack,
-  and CDP reachability. Use one bounded launch per app in each new host context. Keep frontend
-  and Hermes attachment claims separate from shell registration.
+  React Native DevTools startup. The existing `./agent studio-smoke` command is the smallest proven
+  Studio lane; there is not yet a first-class `./agent` command for the DevTools shell proof.
+  Keep this as an explicit desktop-terminal operator step until a supported, owned, bounded
+  DevTools command can be added and repeated. Diagnose the managed GUI registration boundary
+  before changing repository sandbox rules. Record ancestry, selected non-secret environment,
+  permissions, coalition, launch method, exit, crash stack, and CDP reachability. Use one bounded
+  launch per app in each new host context.
 - **Candidate mitigations:** A standalone pinned headless shell remains untested and would cover
   Chrome only. LaunchServices handoffs failed in the managed task. `StudioCdp.attach()` selects an
   existing page without creating an isolated browser context or owning the process, so a shared
