@@ -15,6 +15,8 @@ const FEATURE_BRANCH_PREFIX = 'feat/'
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const DEFAULT_POLL_INTERVAL_MS = 15_000
+const CHECKS_APPEAR_POLL_MS = 5_000
+const CHECKS_APPEAR_WITHIN_MS = 90_000
 const GH_AUTH_REMEDY = 'Run `gh auth login`.'
 
 /** OpenPrRunner is the injectable process seam every `git` and `gh` call goes through. */
@@ -47,7 +49,7 @@ export type OpenPrOptions = {
 
 /** OpenPrResult reports what the command printed and how it concluded. */
 export type OpenPrResult = {
-  /** 0 when every check succeeded (or none are configured), 1 when any check failed. */
+  /** 0 when every check on the pushed commit succeeded, 1 when any failed or none appeared. */
   exitCode: number
   lines: string[]
 }
@@ -82,15 +84,12 @@ export const OpenPrCommand = {
     await requireCommitsBeyondMain(dependencies, root)
     await requireGh(dependencies, root)
 
+    const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
     await pushBranch(dependencies, root, branch, report)
     const pr = await ensurePullRequest(dependencies, root, branch, report)
-    const exitCode = await streamChecks(
-      dependencies,
-      root,
-      pr.number,
-      options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
-      report,
-    )
+    const exitCode = await awaitChecksOnHead(dependencies, root, pr.number, headSha, report)
+      ? await streamChecks(dependencies, root, pr.number, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, report)
+      : 1
 
     return { exitCode, lines }
   },
@@ -236,6 +235,47 @@ function splitMergeMessage(source: string): { body: string; title: string } {
 }
 
 /**
+ * GitHub creates a push's check runs some seconds after the push, and until it has, `gh pr checks`
+ * answers for what it last saw: no checks at all, or the previous commit's already-finished ones.
+ * Watching straight after the push reported the first real run as over before its workflow had
+ * started, so this waits until the pull request's head is the pushed commit and that commit carries
+ * at least one check. None appearing within the window is reported as a failure, not a pass: this
+ * command exists to observe CI, and a silent pass is how it misled its first user.
+ */
+async function awaitChecksOnHead(
+  dependencies: OpenPrDependencies,
+  root: string,
+  prNumber: number,
+  headSha: string,
+  report: (line: string) => void,
+): Promise<boolean> {
+  const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
+  for (let attempt = 1;; attempt += 1) {
+    const view = await dependencies.run('gh', {
+      args: ['pr', 'view', String(prNumber), '--json', 'headRefOid,statusCheckRollup'],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    assertCommandSucceeded(view)
+    const head = parseJson<{ headRefOid?: string; statusCheckRollup?: unknown[] }>(view.stdout, {})
+    if (head.headRefOid === headSha && (head.statusCheckRollup?.length ?? 0) > 0) {
+      return true
+    }
+    if (attempt >= attempts) {
+      report(
+        `FAIL  No checks appeared on ${headSha.slice(0, 8)} within ${CHECKS_APPEAR_WITHIN_MS / 1000}s of the push.`
+          + ' Actions may be disabled for this repository, or no workflow matches this branch.',
+      )
+      return false
+    }
+    if (attempt === 1) {
+      report(`PASS  Waiting for GitHub to start checks on ${headSha.slice(0, 8)}.`)
+    }
+    await dependencies.sleep(CHECKS_APPEAR_POLL_MS)
+  }
+}
+
+/**
  * `gh pr checks <number> --watch` is the obvious mechanism, but its availability is checked against
  * the installed gh's own `--help` output rather than assumed: a gh old enough to lack it still gets a
  * working command, through the poll loop below, instead of a flag error.
@@ -302,12 +342,6 @@ async function fetchChecks(dependencies: OpenPrDependencies, root: string, prNum
     cwd: root,
     stdio: 'pipe',
   })
-  // gh exits nonzero when a pull request has no checks at all, saying so on stderr. That is an
-  // ordinary state — Actions may be disabled for the repository, or no workflow may match this
-  // branch — and not a failure to run, so it reads as an empty list rather than an error.
-  if (result.error === undefined && `${result.stdout}${result.stderr}`.includes('no checks reported')) {
-    return []
-  }
   assertCommandSucceeded(result)
   return parseJson<CheckStatus[]>(result.stdout, [])
 }
@@ -328,12 +362,7 @@ function describeProgress(checks: readonly CheckStatus[]): string {
 function reportOutcome(checks: readonly CheckStatus[], report: (line: string) => void): number {
   const failed = checks.filter(isFailedCheck)
   if (failed.length === 0) {
-    report(
-      checks.length === 0
-        ? 'PASS  No checks ran for this pull request. If one was expected, Actions may be disabled'
-          + ' for this repository, or no workflow matches this branch.'
-        : `PASS  All ${checks.length} check(s) succeeded.`,
-    )
+    report(`PASS  All ${checks.length} check(s) succeeded.`)
     return 0
   }
   for (const check of failed) {
