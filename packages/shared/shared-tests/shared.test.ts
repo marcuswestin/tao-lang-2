@@ -1002,6 +1002,47 @@ Describe('Repo', () => {
       await FS.remove(root)
     }
   })
+
+  // A listing answers from one discovery what `filesUnder` and `directoriesUnder` answer from one
+  // discovery each, so every option has to filter to the same set either way.
+  Test('answers every file and directory question from one listing as the per-question calls do', async () => {
+    const root = await untrackedTmpDir()
+    try {
+      await FS.writeText(FS.resolvePath('Project.tao', root), '')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', root), '')
+      await FS.writeText(FS.resolvePath('@data/nested/Notes.ts', root), '')
+      await FS.writeText(FS.resolvePath('@empty/README.md', root), '')
+      await FS.writeText(FS.resolvePath('.hidden/@secret/Hidden.tao', root), '')
+      await FS.writeText(FS.resolvePath('node_modules/@scoped/Dep.tao', root), '')
+      const listing = await Repo.listUnder(root)
+      const questions = [
+        {},
+        { extensions: ['.tao'] },
+        { excludeDirectoryNames: ['node_modules'], extensions: ['.tao'] },
+        { excludeDirectoryNames: ['node_modules', 'nested'] },
+      ] as const
+
+      for (const options of questions) {
+        Expect(listing.files(options)).toEqual(await Repo.filesUnder(root, options))
+      }
+      for (const options of [{}, { namePrefix: '@' }] as const) {
+        Expect(listing.directories(options)).toEqual(await Repo.directoriesUnder(root, options))
+      }
+      Expect(listing.directories({ namePrefix: '@' }).map(path => FS.relativePath(root, path))).toEqual([
+        '@data',
+        '@empty',
+        'node_modules/@scoped',
+      ])
+      Expect(
+        listing.files({ excludeDirectoryNames: ['node_modules'], extensions: ['.tao'] }).map(path =>
+          FS.relativePath(root, path)
+        ),
+      )
+        .toEqual(['@data/Data.tao', 'Project.tao'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })
 
 Describe('Errors, Assert, and Switch', () => {
