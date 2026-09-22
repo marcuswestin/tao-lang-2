@@ -106,7 +106,7 @@ today, or how to start.
 - Done: a visitor who reads only the README knows what Tao is, whether it fits them, and what to run
   first.
 
-### A4 — Retire Expo Go from the phone lane
+### A4 — Retire Expo Go from the phone lane — **done**
 
 Written on the premise that the App Store's Expo Go was stuck on SDK 54 while Tao had moved to SDK
 57. That premise expired: App Store Expo Go 57.0.9 shipped on 2026-09-02, and Expo publishes SDK 57
@@ -130,6 +130,12 @@ statement that "Login is not required for development builds" is the argument fo
 - Done: no surface offers Expo Go where Expo Go cannot work, every message and document gives the
   real reason rather than the SDK gap, and the phone path a newcomer is pointed at is the one Tao
   intends to support.
+- Landed 2026-09-22: a physical iPhone is refused with the account-wall reason and the
+  `studio-companion-install` command; the simulator remedy names the SDK it needs; Android installs
+  a matching Expo Go itself and falls back to a skipped lane with its reason if that fails.
+  `EXPO_SDK_VERSION` in `expo-config.ts` is the one SDK pin the loop measures clients against, and a
+  test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
+  research carry a dated correction of the SDK-54 claim.
 
 ## First-hour quality
 
@@ -231,6 +237,14 @@ from the development loop, which no virtualization approach can do.
   physical-Android Expo Go lanes are removed as this host replaces each one.
 - Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone,
   and no surface offers Expo Go.
+- Landed 2026-09-22: the Companion carries every native module an app host can reach, at the same
+  version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
+  CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
+  the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+- Remaining: the Android side of the Companion shell, the host compatibility check, `tao dev`
+  obtaining and launching a host, building and publishing hosts, and the proofs on each lane. The
+  entitlements need the iCloud container and push enabled on the app id before a device build signs.
 
 ### A10 — Publication hygiene audit
 
