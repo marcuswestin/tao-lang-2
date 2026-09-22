@@ -19,13 +19,13 @@ A file-level fixture declares a reusable identity and data graph:
 
 ```tao
 fixture HNStories {
-   account Ro {
-      Name: "Ro",
-      Email: "ro@example.com"
+   account Mira {
+      Name: "Mira",
+      Email: "mira@example.com"
    }
    LeadStory = create Story {
       Title: "Tao Studio"
-   } for Ro
+   } for Mira
 }
 ```
 

@@ -4,7 +4,7 @@ Research report, 2026-09-21. It answers four questions in order: where verificat
 makes the developer-facing `tao` commands slow, how fast the current stack (TypeScript, Bun, Langium,
 Jest, Expo) can be made, and whether a different stack would raise that ceiling enough to matter.
 The largest single defect it found (5.1) was fixed in the change that landed it; everything else is
-proposed, with section 8 the sequence and section 9 the judgments that are Ro's.
+proposed, with section 8 the sequence and section 9 the judgments that are the Developer's.
 
 The bar is interactive-grade: a warm single-file check or fix under 100ms, a whole-app check under
 1s, one behavior test re-run under 1s, a whole app's tests under 10s, and an edit visible in the
@@ -462,7 +462,7 @@ Phase 0 — remove the defects (days; no design decisions; unblocks every lane i
 4. ~~Keep Jest's configuration and the compiled apps' paths still across compiles (5.5).~~ Done: the
    entrypoint directory beside the run roots, then a content-addressed store for the compiled apps.
    An unchanged run re-transforms nothing; an edit re-transforms the one module tree it changed.
-5. ~~Give a packaged CLI a version-keyed cache in a user cache directory (5.6).~~ Dropped by Ro on
+5. ~~Give a packaged CLI a version-keyed cache in a user cache directory (5.6).~~ Dropped by the Developer on
    2026-09-21: no packaged CLI exists yet, and a published `tao` pays the uncached cost, 1.2s for
    WordFlower, until the standalone CLI plan gives it a home.
 
@@ -489,19 +489,19 @@ it took so it can be rebuilt from the description.
 Phase 3 — evidence-gated, after MVP: the language-owned runtime core (7.3) and a native toolchain
 core (7.2), each opened only by its named trigger.
 
-## 9. Judgments that are Ro's
+## 9. Judgments that are the Developer's
 
 1. **Is a lower-fidelity inner test loop acceptable?** Option C runs journeys against a stub of
-   React Native. Decided by Ro on 2026-09-21: yes. Headless is `tao test`'s default while iterating,
+   React Native. Decided by the Developer on 2026-09-21: yes. Headless is `tao test`'s default while iterating,
    and the Jest run stays the gate in `verify` that proves a journey against real React Native
    JavaScript. Phase 2 opens after Phase 1's first slice.
-2. **May the CLI rely on a resident process?** Decided by Ro on 2026-09-21: yes, it may. Also decided
+2. **May the CLI rely on a resident process?** Decided by the Developer on 2026-09-21: yes, it may. Also decided
    the same day: Phase 1 starts with `tao dev` compiling in-process, before watch modes, because the
    1-2s edit-to-preview bar is the one people feel; a shared background service comes only if cold
    one-shot commands still feel slow after that, because daemons cost lifecycle bugs. That decision
    rested on 5.4's claim that a save spawned a process, which was stale (see 5.4); the in-process
    part already exists, and what a live workspace is worth is about 0.1-0.15s per save. Whether to
-   build it now, measure Metro's side first, or go to Phase 2 first was put back to Ro on 2026-09-22
+   build it now, measure Metro's side first, or go to Phase 2 first was put back to the Developer on 2026-09-22
    and is open.
 3. **Does the runtime stay React-shaped after MVP?** The hybrid core is the only option here that
    improves the loop _and_ opens native renderers. Recommended: decide nothing now; open a

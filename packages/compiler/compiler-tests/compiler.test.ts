@@ -272,7 +272,7 @@ Describe('compiler: language lowering', () => {
       `
         type Person is { Name text, Role text is "member" }
         type Admin is Person with { Role is "admin", Access number is 1 }
-        let Admin = { Name "Ro" }
+        let Admin = { Name "the Developer" }
         let Renamed = Admin with { Name "Grace", Access 2 }
         ${stubView('Text', 'Value text')}
       `,
@@ -947,7 +947,7 @@ Describe('compiler: language lowering', () => {
 
   Test('lowers named and literal injection arguments to typed parameters and compiled values', async () => {
     const compiled = await Compiler.compileCode(`
-      let UserName = "Ro"
+      let UserName = "the Developer"
       app InjectionApp { view Native }
       view Native() {
         render inject Name UserName, Count 3, Greeting "Hello" ${tsFence}

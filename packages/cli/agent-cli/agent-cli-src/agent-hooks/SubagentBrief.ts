@@ -13,7 +13,7 @@ const RULES = [
   "The developer-environment ledger under `Docs/Roadmap/Developer environment upgrades/` and its index are the caller's to edit; findings about the developer environment go back in the report instead.",
   'Work products in this repository — file names, documents, code, comments, branch names, commit messages — name no agent identity, and carry no AI `Co-Authored-By` trailer or generated-with line.',
   'Outside agent configuration (`.rulesync/`, `.claude/`, `.codex/`, `.cursor/`, `agents/subagents/`, `packages/cli/agent-cli/`), text and code say "agent" or "harness" rather than naming a provider, and where behavior genuinely differs by provider they cover every provider in use, today Claude and Codex.',
-  "Messaging another agent or session is Ro's to approve, and nothing here sends one uninvited; work travels back to the caller as a report, and a message worth sending goes into that report as a request.",
+  "Messaging another agent or session is the Developer's to approve, and nothing here sends one uninvited; work travels back to the caller as a report, and a message worth sending goes into that report as a request.",
 ]
 
 /** subagentBrief returns the boilerplate, one sentence per rule. */

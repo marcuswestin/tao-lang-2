@@ -4,15 +4,14 @@ use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // REACTIVE EDITING. Input projections and explicit copies produce ordinary local values.
 // Writable view/action parameters share storage; copy parameters detach explicitly. Native
-// mutable inputs write through generated Tao actions. Document write outcomes retain all
-// pending/failed submissions and retry their recorded payloads across relaunch.
-// The initial implementation supports recovery on granular sync providers. Snapshot-only
-// providers still need a separately decided mutation-acknowledgement protocol migration.
-
+// mutable inputs write through generated Tao actions. On granular sync providers, document write
+// outcomes retain pending and failed submissions and retry their recorded payloads across
+// relaunch. Snapshot-provider recovery and server-enforced validation are deferred to
+// Docs/Roadmap/Reactive editing follow-up.md.
 //
 // FREEHAND UI SKETCHING L1. Scenario entries are journey prefixes: ordered interaction steps follow
 // the effective `run` or `render` subject, replay when the Studio cell mounts, and leave it

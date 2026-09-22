@@ -9,25 +9,8 @@ language target and the program that reaches it — first MVP, then Revolution �
 app feature and Tao test proves each capability).
 
 The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
-agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
-judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
-
-## Ro STACK
-
-- [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
-- [ ] Deep links and navigation persistence
-- [ ] Enable agents (Claude and Codex) to interact with studio on their own for testing and development of it.
-- [ ] Work through the durable developer-environment upgrade ledger.
-  - Agents record and deduplicate material findings as they work; the current backlog, incoming
-    branch fixes, evidence, and acceptance criteria live in
-    `Docs/Roadmap/Developer environment upgrades.md`; addressed entries move to
-    `Docs/Roadmap/Developer environment upgrades archive.md`. The `devenv-upgrades` skill owns how
-    the next set is selected and archived.
-- [ ] Decide how parallel agents share one machine.
-  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
-    wall time and starved suites past their hang guards. What to share, what to serialize, what is
-    duplicated per worktree for no reason, and where a single orchestrator does and does not help
-    live in `Docs/Roadmap/Parallel agents on one machine.md`.
+agents can execute without a new decision, and `Docs/MVP Roadmap/Developer MVP Roadmap.md` for the
+judgments that are the Developer's. Both point back into this file and into `Docs/Roadmap/` for context.
 
 ## Tao tooling performance
 
@@ -48,7 +31,7 @@ Two scoped passes over the repository's own records. Both are bookkeeping, not l
 neither blocks a tranche.
 
 - [ ] Reorganize this roadmap by category and size
-  - `Toward v1` and `Ro's stack` are flat lists that mix multi-week workstreams with one-line
+  - `Toward v1` and `Backlog` are flat lists that mix multi-week workstreams with one-line
     follow-ups, so nothing can be scanned for what to pick up next. Group entries by area and mark
     their rough size, keeping this file the single index of open work.
 - [ ] Rework the rest of the markdown set
@@ -66,7 +49,7 @@ neither blocks a tranche.
 How agents in this repository delegate, and at which model tier. The guidance, the profiles, the
 three harnesses' defaults, and the fan-out and second-opinion procedures have landed;
 `Docs/Roadmap/Subagent delegation/Plan - Subagent delegation.md` owns what is left and the
-calibration period that ends the ask-Ro clause.
+calibration period that ends the "ask the Developer" clause.
 
 - [ ] Decide whether the two fan-outs get saved `Workflow` scripts. The plan states the case against
       shipping them unasked: one harness only, unprovable without a supervised run, and a fan-out at
@@ -74,7 +57,7 @@ calibration period that ends the ask-Ro clause.
 - [ ] Benchmark a few representative tasks with and without delegation, once load-aware admission
       lands and the machine is quiet enough for the measurement to mean anything.
 - [ ] End calibration when the delegation log says the routing table is right, then delete the
-      ask-Ro clause and the three logging hooks.
+      "ask the Developer" clause and the three logging hooks.
 
 ## The Tao Revolution program
 
@@ -93,7 +76,7 @@ tests written in Tao, green in Current, for every construct introduced.
     (§9 says yes, §10's own example and the implementation say no, and `3 - MVP` inherits whichever
     wins), whether the visibility ladder is §1's two words or the implemented five, and whether
     `DynamicSelectionNav` is a decided nav kind. Its Q1, the authority cluster, is `R5` in
-    `Docs/MVP Roadmap/Ro MVP Roadmap.md` rather than a new question. Three internal contradictions in
+    `Docs/MVP Roadmap/Developer MVP Roadmap.md` rather than a new question. Three internal contradictions in
     `Decisions.md` were amended in the same change: `TabNav` → `SelectionNav`, the missing `overlay`
     presentation mode, and two parameter lists still written `Name is Type`.
   - `Coverage.md` rows for the tier remain unwritten; step 3 owns that file.
@@ -111,20 +94,20 @@ tests written in Tao, green in Current, for every construct introduced.
     SplitNav/windows, semantic design recipes, concurrency policy — are now scoped by
     `Coverage.md`'s tier column.
 - [ ] Decide the runtime action-transaction contract
-  - Deferred by Ro on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
+  - Deferred by the Developer on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
     transaction, state/data use private read-your-writes overlays, commits apply deltas to the latest
     snapshot through prepare/publish phases, and publish failures restore already-published resources.
   - Keep external effects explicitly non-rollbackable and do not treat the implemented Studio runtime
     behavior as a settled distributed-atomicity or automatic-retry language contract.
 - [ ] Decide the semantic failure capture and replay contract
-  - Deferred by Ro on 2026-08-31. Settle the versioned artifact and domain-registry contract, domain
+  - Deferred by the Developer on 2026-08-31. Settle the versioned artifact and domain-registry contract, domain
     compatibility and restore timing, credential and opaque-state exclusions, Studio cell-environment
     participation, and validation of loaded or pasted artifacts.
   - Automatic render-failure containment and guarded recovery are adopted independently. Do not treat the
     implemented `action-history`, `data`, `navigation`, `persisted-state`, or Studio replay behavior as an
     adopted language contract until this decision is resumed.
 - [ ] Decide fixture-through-action result and handle semantics
-  - Deferred by Ro on 2026-08-31. Keep `through` setup fail-closed until result multiplicity, fixture-handle
+  - Deferred by the Developer on 2026-08-31. Keep `through` setup fail-closed until result multiplicity, fixture-handle
     identity, transaction and rollback behavior, capture/replay, and test-harness seeding are settled.
   - Successful captured-fixture source writing is not evidence that the current runner can execute that
     setup path; do not infer the language contract from Studio's transient capture workflow.
@@ -229,7 +212,7 @@ tests written in Tao, green in Current, for every construct introduced.
     a device loads the scenario rather than the canvas frame. Its acceptance is not complete — running
     one journey on the device is a fork rather than a task, and capture/restore has no UI on any
     surface. Status, what was proven live, and the open decisions are in
-    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`. Ro deferred
+    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`. The Developer deferred
     the entire record-and-replay Slice 4 until after the public MVP on 2026-09-22; its design
     details remain open and its acceptance is not an MVP release gate.
 - [x] Add `tao create` project scaffold
@@ -249,7 +232,7 @@ tests written in Tao, green in Current, for every construct introduced.
   - The family's runtime machinery (change-sets, fold, bridge, conformance suite) and a `CloudKit`
     provider over `CKSyncEngine` landed as a stab under three stated assumptions; see the
     "CloudKit" section of `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`. Open
-    questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md` need Ro's answers before the fold
+    questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md` need the Developer's answers before the fold
     is more than a working assumption.
 - [ ] Finish the multiple-datasources follow-ups
   - Binding several datasources to one app landed: a datasource names the collections it stores, an
@@ -295,7 +278,7 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
 
-## Ro's stack
+## Backlog
 
 Product and codebase backlog, unordered.
 
@@ -309,7 +292,7 @@ Product and codebase backlog, unordered.
     provider authors, with a surface snapshot test and a gate that app TypeScript imports only the
     SDK; today app code imports `@tao/runtime` directly, which every `TR` member makes public.
   - A vocabulary pass on the word "host", which names the machine in host lanes and an embedding
-    program in product host and device host; about 2,000 uses.
+    program in product host and device host, across the repository.
   - Recorded with the run in `Docs/Archive/Plans/Repository simplification 2/`.
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
@@ -321,13 +304,12 @@ Product and codebase backlog, unordered.
       `packages/studio/studio-src/session/StudioFileOperations.ts`, which reject renaming or deleting
       the active app entry file on the only path a client can reach. What is missing is the affordance: the tree offers the
       action and the server refuses it, instead of not offering it.
-    - **Roughly two dozen raw `Error`s handed to a promise rejection.** `repo-lint` now ratchets them
-      through `CONVENTION_RULES.rejectedRawError` per file rather than per count, so a new rejection inside an
-      already-listed file still passes; the ratchet stops the set of files growing, not the number of
-      sites. Most reach a Tao author exactly as a throw would, though three of the twelve are test
-      fixtures and do not. Heaviest in
+    - **Raw `Error`s handed to a promise rejection.** `repo-lint` ratchets them through
+      `CONVENTION_RULES.rawError` per allowlisted site rather than per count, so the set of files
+      cannot grow while the sites inside a listed file remain. Most reach a Tao author exactly as a
+      throw would; the test fixtures among them do not. Heaviest in
       `studio-src/client/StudioMatrixView.ts`.
-    - **66 already-typed `throw new Errors.*` guards across ten studio files** that would collapse to a
+    - **Already-typed `throw new Errors.*` guards in the studio files** that would collapse to a
       one-line `Assert.input` now that `Assert` narrows the expression it is given. Invisible to
       repo-lint because they are already typed; purely a readability win.
 - [ ] Finish simulation mode in Tao Studio
@@ -337,9 +319,8 @@ Product and codebase backlog, unordered.
     shows it before applying, and cancel or a failed proposal applies nothing.
   - The browser proof of observable delay, offline, declared failure, and cross-cell isolation exists
     as `packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts`, driven through
-    the Environment and scenario panel. It found and now guards a defect: a runtime update repeating
-    the applied revisions rebuilt a cell's provider overlay without a remount, so one run in five
-    mounted a cell with its heading and nothing else. With that fixed it passed twenty runs in twenty.
+    the Environment and scenario panel. It found and now guards a defect where a runtime update
+    repeating the applied revisions rebuilt a cell's provider overlay without a remount.
   - That journey is the `studio-network-simulation` gate in `verify-full`.
   - Two leads the diagnosis left open: `setMatrixManifest` emits `preview-manifest-changed` without
     checking the revision moved, which is the likely producer of the repeated update; and
@@ -384,8 +365,8 @@ Product and codebase backlog, unordered.
   - Keep this separate from the AI-in-apps work, which consumes concurrency policy but does not decide it.
     Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
-  - Part 5.2 of the simplification plan: 462 call sites today, five of which are inline template
-    literals rather than factory-produced messages and need converting first.
+  - Part 5.2 of the simplification plan: the few call sites that pass inline template literals
+    rather than factory-produced messages need converting first.
     Land it before or with that plan's validator rename slice.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
   - The dead-surface pass has landed (Part 1 of the simplification plan): the web-history module,
@@ -394,7 +375,7 @@ Product and codebase backlog, unordered.
     consolidated runtime error surface.
 - [ ] Remove magical strings.
   - Part 3.1 of the simplification plan owns the cluster with real breakage potential: Studio's
-    route table, session-protocol DTOs, and guards. Not started.
+    route table, session-protocol DTOs, and guards.
 - [ ] Improve utility function usage, preferring grouped helpers over many free imports.
   - Partly done through the simplification plan: `@shared/test` gained the deferred, waiter,
     terminal, module-mock, and clock helpers, and the runtime gained memory data helpers. The
@@ -402,13 +383,26 @@ Product and codebase backlog, unordered.
 - [ ] Apply the named-const export pattern across the repo, then rename modules to match their main export in one coordinated sweep.
   - Part 5.1 of the simplification plan, one commit per package, Note repo-lint's convention checks do **not**
     cover export naming or the module-basename-to-export correspondence, so this sweep needs its own
-    check if it is to stay swept. Not started.
+    check if it is to stay swept.
 - [ ] Rename `gen` helper properties to capitalized names, and stop `fmt` from breaking `gen\`…\`` onto the next line.
 - [ ] Add generic compiled test declarations.
 - [ ] Enable over-the-network dev app running for iOS devices
   - Start with the authenticated Expo-development-build Studio renderer described in the native-device
     exploration; require foreground pairing, local-network permission, revision recovery, revocation,
     and a real-iPhone validation pass. Do not add an unrestricted production remote-code path.
+- [ ] Deep links and navigation persistence.
+- [ ] Work through the developer-environment upgrade ledger.
+  - Agents record and deduplicate material findings as they work; the current backlog, incoming
+    branch fixes, evidence, and acceptance criteria live in
+    `Docs/Roadmap/Developer environment upgrades.md`; addressed entries move to
+    `Docs/Roadmap/Developer environment upgrades archive.md`. The `devenv-upgrades` skill owns how
+    the next set is selected and archived.
+- [ ] Decide how parallel agents share one machine.
+  - What to share, what to serialize, what is duplicated per worktree for no reason, and where a
+    single orchestrator does and does not help live in
+    `Docs/Roadmap/Parallel agents on one machine.md`.
+- [ ] Let Codex drive Tao Studio on its own, for testing and for developing Studio itself.
+- [ ] Shorten the TUI tests' main timer from 0.5 s to 0.1 s.
 
 ### Smaller follow-ups
 

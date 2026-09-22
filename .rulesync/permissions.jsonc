@@ -81,7 +81,7 @@
       "adb get-state *": "allow",
       "emulator -list-avds": "allow",
       "xcrun simctl list *": "allow",
-      // Fetch writes Git objects but remains sandboxed; if it needs host access, the agent asks Ro.
+      // Fetch writes Git objects but remains sandboxed; if it needs host access, the agent asks the Developer.
       "git fetch origin *": "allow",
       // Both orders, because git accepts the flag on either side of the remote and a pattern that
       // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
@@ -117,7 +117,7 @@
     },
     // Messaging a subagent you spawned is always allowed. `SendMessage` cannot tell a subagent from
     // another session by its arguments, so the rule that a message to any other agent or session
-    // is Ro's to approve lives in AGENTS.md and the `delegation` skill; the session-management
+    // is the Developer's to approve lives in AGENTS.md and the `delegation` skill; the session-management
     // tool below only ever reaches another session, so it keeps its gate. As with the force-unlock
     // rules above, Codex gets no equivalent gate, because `CodexConfigGenerator.renderCodexRules`
     // emits only `allow` entries.
@@ -131,7 +131,7 @@
   // Explicit host-access exceptions for Codex. Unlike Claude's sandbox exclusions, Codex needs
   // prefix rules to make these commands both unsandboxed and non-interactive. Each must also be
   // covered by a Bash allow rule and a Claude exclusion; the generator checks both. This grants
-  // the landing command and all repository code it invokes host access, which Ro explicitly chose.
+  // the landing command and all repository code it invokes host access, which the Developer explicitly chose.
   "codex": {
     "outsideSandboxCommands": [
       "./agent land",
@@ -151,11 +151,11 @@
         "emulator -list-avds",
         "xcrun simctl list *",
         // Read-only remote inspection may run on the host. Mutating Git operations are not
-        // exceptions: if the sandbox denies one, diagnose it and ask Ro before retrying.
+        // exceptions: if the sandbox denies one, diagnose it and ask the Developer before retrying.
         "git ls-remote origin *",
         "git ls-remote --heads origin *",
         // The single unsandboxed write entry point. It owns integration through push under one
-        // lock; it is usable only after Ro has authorized landing this named slice in the thread.
+        // lock; it is usable only after the Developer has authorized landing this named slice in the thread.
         "./agent land",
         "./agent land *",
       ],

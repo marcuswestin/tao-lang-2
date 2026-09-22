@@ -1,5 +1,6 @@
 {
   "name": "tao-cli",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "cli-src/tao-cli.ts",

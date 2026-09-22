@@ -80,14 +80,15 @@ on a number that has aged.
   the project. Free-plan organizations allow unlimited members; the Viewer role "can only view
   your projects through Expo Go". https://expo.dev/changelog/expo-go-loading-changes-may-2026 ;
   https://docs.expo.dev/accounts/account-types/ ; https://expo.dev/pricing
-- Expo's own words on the App Store version (2026-05-04): "a version of Expo Go for SDK 55 is
-  still waiting for approval on the Apple App Store … we cannot provide a timeline", and "Expo
-  Go for SDK 54 will continue to be available on both the App Store and Play Store". The SDK 56
-  and SDK 57 changelogs repeat that no timeline exists. Expo gives no cause; no page cites Apple
-  review or a guideline. https://expo.dev/changelog/expo-go-and-app-store-may-2026 ;
-  https://expo.dev/changelog/sdk-56 ; https://expo.dev/changelog/sdk-57 ;
-  https://github.com/expo/expo/discussions/44036
-- Store listings on 2026-09-01: App Store Expo Go 54.0.2 (2025-09-23); Google Play 54.0.8.
+- **Superseded 2026-09-22 — see _Correction, 2026-09-22_ below.** Expo's own words on the App
+  Store version (2026-05-04): "a version of Expo Go for SDK 55 is still waiting for approval on
+  the Apple App Store … we cannot provide a timeline", and "Expo Go for SDK 54 will continue to
+  be available on both the App Store and Play Store". The SDK 56 and SDK 57 changelogs repeat
+  that no timeline exists. Expo gives no cause; no page cites Apple review or a guideline.
+  https://expo.dev/changelog/expo-go-and-app-store-may-2026 ; https://expo.dev/changelog/sdk-56 ;
+  https://expo.dev/changelog/sdk-57 ; https://github.com/expo/expo/discussions/44036
+- **Superseded 2026-09-22 — see _Correction, 2026-09-22_ below.** Store listings on 2026-09-01:
+  App Store Expo Go 54.0.2 (2025-09-23); Google Play 54.0.8.
   https://apps.apple.com/us/app/expo-go/id982107779
 
 ## Expo Go: Expo's stated alternatives
@@ -95,11 +96,39 @@ on a number that has aged.
 - Expo's own recommendations for review and testing are store testing tracks, internal
   distribution, or development builds with EAS Update.
   https://expo.dev/changelog/expo-go-loading-changes-may-2026
-- The App Store Expo Go is SDK 54; SDK 55 and later are not on the App Store and reach a physical
-  iPhone only through `eas go`, which builds a private Expo Go to the developer's TestFlight team.
+- **Superseded 2026-09-22 — see _Correction, 2026-09-22_ below.** The App Store Expo Go is SDK 54;
+  SDK 55 and later are not on the App Store and reach a physical iPhone only through `eas go`,
+  which builds a private Expo Go to the developer's TestFlight team.
   https://expo.dev/changelog/expo-go-and-app-store-may-2026 ; https://expo.dev/changelog/sdk-57
 - Expo positions Expo Go as an educational tool and development builds as the default for real
   apps. https://expo.dev/blog/expo-go-vs-development-builds
+
+## Correction, 2026-09-22
+
+The bullets above marked "Superseded" no longer hold; this section carries what replaces them.
+Re-verified against the open web this date.
+
+- The App Store's Expo Go is version 57.0.9, released 2026-09-02 (Apple iTunes lookup API for
+  id982107779, fetched 2026-09-22). It is not stuck on SDK 54, and the "no timeline" language
+  above no longer describes the App Store build.
+- Expo's changelog "Login now required for running projects in Expo Go" (2026-09-03) says: "Expo
+  Go users are now required to be logged in to both the Expo CLI running in your terminal and the
+  Expo Go app in order to run your app in development mode." It adds that the requirement
+  "currently only applies to the latest version of Expo Go for iOS, and will be extended to the
+  Android version in the future. It does not apply to simulator versions," and that "Login is not
+  required for development builds." https://expo.dev/changelog/expo-go-57-login
+- This login requirement, not the SDK, is what closes the physical-iPhone Expo Go lane for Tao:
+  `tao dev`'s Metro server sets `__UNSAFE_EXPO_HOME_DIRECTORY` to a repository-local
+  `.artifacts/cache/expo`
+  (`packages/apps/expo-host/expo-host-src/dev-loop/expo-runner/expo-config.ts:48-50`), so a
+  developer's own `expo login` session in `~/.expo` never reaches the Metro server Expo Go on an
+  iPhone would need to see it from.
+- The 2026-05-12 ownership rule two sections above remains scoped to "updates published to EAS
+  Update"; it does not govern local Metro dev servers, and this correction does not extend it to
+  `tao dev`'s LAN lane. https://expo.dev/changelog/expo-go-loading-changes-may-2026
+- Android device/emulator and the iOS Simulator still get SDK 57 Expo Go clients with no account
+  requirement (`api.expo.dev/v2/versions/latest`, `androidClientUrl`/`iosClientUrl` at 57.0.9;
+  SDK 58 also exists), so those lanes are unaffected by either correction above.
 
 ## Development builds and EAS Update
 
@@ -252,7 +281,9 @@ Researched 2026-09-02 for the local build lane.
 - Whether Apple documents `seedId` as the Team ID anywhere in the API reference itself.
 - The exact API error for a lapsed membership, as opposed to a lapsed agreement.
 
-- Why Expo Go's SDK 55 and later builds are waiting on Apple: no statement from either company.
+- **Superseded 2026-09-22:** why Expo Go's SDK 55 and later builds were waiting on Apple — no
+  statement from either company, and now moot: SDK 57 (57.0.9) reached the App Store on
+  2026-09-02. See _Correction, 2026-09-22_ above.
 - Whether Expo Go's ownership check also gates a tunnelled development server; the changelog
   scopes it to EAS Update.
 - Whether direct APK installs in Google's four pilot countries stop on 2026-09-30.

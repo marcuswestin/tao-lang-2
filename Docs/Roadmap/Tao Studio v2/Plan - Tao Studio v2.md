@@ -28,7 +28,7 @@ Grouped scenarios, typed foreign views, action failures, automatic containment, 
 are now adopted in `Docs/Roadmap/Tao Revolution/Decisions.md`. The implemented transaction and semantic
 capture/replay details remain recorded as proposals only and are explicitly deferred in `Roadmap.md`.
 
-`Decision memo - Tao Studio v2.md` records Ro's later rulings and explicit deferrals. No undecided item
+`Decision memo - Tao Studio v2.md` records the Developer's later rulings and explicit deferrals. No undecided item
 remains on the implementation-ready Studio path.
 
 ## Completion resolution
@@ -94,7 +94,7 @@ validity as unverified when Apple's tools are absent rather than as passed.
 2. Preserve the current strangler boundary while completing the external browser and native interaction
    passes: Tao owns Studio structure and ordinary controls, while TypeScript owns the trusted controller,
    preview lifecycle, serialization boundary, and primitive leaves Tao cannot yet express.
-3. When Ro resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
+3. When the Developer resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
    semantic capture/replay contract before finishing authored failure-capture promotion. Do not infer these
    contracts from the current runtime implementation.
 4. Replace `StudioCommandPalette.filter`'s unordered substring matching with the interaction

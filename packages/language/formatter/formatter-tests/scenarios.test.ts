@@ -6,24 +6,24 @@ Describe('Tao formatter fixtures and scenarios', () => {
     'formats grouped app-running and focused-view scenarios',
     formats(
       `
-        fixture HomeKitchen{account Ro{Name:"Ro",Email:"ro@example.com"}Home=create Household{Name:"Garden Kitchen"}through StartKitchen(Ro)Shakshuka=create Recipe{Household:Home,Title:"Shakshuka",Servings:4}for Ro}
+        fixture HomeKitchen{account Sam{Name:"Sam",Email:"sam@example.com"}Home=create Household{Name:"Garden Kitchen"}through StartKitchen(Sam)Shakshuka=create Recipe{Household:Home,Title:"Shakshuka",Servings:4}for Sam}
         scenarios Skillet "devices"{fixture HomeKitchen device phone locale "es" network offline scenario "tablet"{prepare{update Shakshuka{Servings:6}}run at RecipeLink(Shakshuka)device laptop 1440 x 900 appearance dark}}
         scenarios StoryRow "states"{fixture HNStories device phone scenario "leading"{render (Story:LeadStory)}}
       `,
       `
         fixture HomeKitchen {
-           account Ro {
-              Name: "Ro",
-              Email: "ro@example.com"
+           account Sam {
+              Name: "Sam",
+              Email: "sam@example.com"
            }
            Home = create Household {
               Name: "Garden Kitchen"
-           } through StartKitchen(Ro)
+           } through StartKitchen(Sam)
            Shakshuka = create Recipe {
               Household: Home,
               Title: "Shakshuka",
               Servings: 4
-           } for Ro
+           } for Sam
         }
 
         scenarios Skillet "devices" {

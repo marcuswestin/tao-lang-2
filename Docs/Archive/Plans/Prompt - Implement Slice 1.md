@@ -51,7 +51,7 @@ Read the applicable repository skills before crossing their boundaries:
 - `git-workflow` before any authorized commit or branch operation.
 
 Live repository evidence wins over this prompt. If it contradicts the plan materially, stop at the
-integration barrier, show the evidence, and ask Ro to decide rather than silently changing the product
+integration barrier, show the evidence, and ask the Developer to decide rather than silently changing the product
 contract. Routine implementation details should be resolved from the code.
 
 ## Non-negotiable architecture
@@ -78,7 +78,7 @@ contract. Routine implementation details should be resolved from the code.
   DeviceDiscoveryUI, a Tao internet relay, TestFlight, accounts, beta updates, and App Store review are not
   dependencies for this slice.
 - Do not depend on `iproxy`, `usbmuxd`, private USB forwarding, or a custom `expo-dev-launcher` patch unless
-  a documented physical-device failure proves it necessary and Ro approves the scope expansion.
+  a documented physical-device failure proves it necessary and the Developer approves the scope expansion.
 - Never send `localhost` to a physical device. Treat `169.254.*` as a candidate that must succeed from the
   phone, not as proof of a tunnel.
 - Add the development local-network privacy and ATS declarations. Add Bonjour service declarations only

@@ -96,7 +96,7 @@ async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise
         throw error
       }
       const message = `Codex permissions are stale but ${output.path} is not writable. `
-        + 'Pause and ask Ro to approve an unsandboxed `./agent setup`; do not commit stale generated rules.'
+        + 'Pause and ask the Developer to approve an unsandboxed `./agent setup`; do not commit stale generated rules.'
       options.onSkip?.(message)
       Errors.throwHostEnvironment(message)
     }
@@ -377,7 +377,13 @@ function unixSocketSection(profile: string, sockets: readonly string[], comments
   ]
 }
 
-/** Codex requires Unix sockets to be absolute even though filesystem rules accept `~`. */
+/**
+ * Codex requires Unix sockets to be absolute even though filesystem rules accept `~`: its own
+ * config reference documents `permissions.<name>.network.unix_sockets.<path>` as taking "an
+ * absolute Unix socket path", and `codex sandbox` refuses to start ("invalid
+ * network.allow_unix_sockets") given a literal `~/...` entry there (verified 2026-09-22). Keep
+ * this expansion; do not switch it to emit the source's `~`-relative form.
+ */
 function codexSocketPath(path: string): string {
   return path === '~' ? FS.homeDir() : path.startsWith('~/') ? FS.resolvePath(path.slice(2), FS.homeDir()) : path
 }

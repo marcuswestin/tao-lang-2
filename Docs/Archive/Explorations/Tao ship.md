@@ -19,7 +19,7 @@ with the substrate facts it rests on in `Tao ship/Research - Beta distribution l
 
 ## Direction settled — 2026-09-02
 
-Ro decided to create a **Tao Studio companion app**: a Tao-published phone app for an improved
+The Developer decided to create a **Tao Studio companion app**: a Tao-published phone app for an improved
 development experience, paired with Tao Studio, and for pre-release testing and feedback by
 members a developer invites to their project on the Tao Lang servers, each with an account
 there. It is the Expo Go model under Tao's control and the native-device Studio canvas in one
@@ -280,7 +280,7 @@ decided as "(none of it is server code)" — lowered to provider-native rules. S
 runtime's job is narrow and derivable: hold the store, enforce the derived rules, evaluate
 automation schedules, deliver push, answer auth — and _not_ run app code. An automation cannot
 write (§12); it `do`es a transaction, whose authority question (§12 gap: what identity does a
-server-side scheduled `do` carry?) is a real language decision this program must put to Ro.
+server-side scheduled `do` carry?) is a real language decision this program must put to the Developer.
 
 Provisioning is a ship-time act: `tao ship` diffs the derived backend (schema, rules, indices,
 automation schedules, push config) against what the service currently runs for that variant,
@@ -520,7 +520,7 @@ forces it — WordFlower's `2 - Next` tier grows the ship-forcing features as sl
   slice requirement.
 - **Authority & multiplayer**: the `secret` value type vs deploy-config wording; the InstantDB
   provider's config/auth surface; per-app account semantics. Shared dependencies — collisions
-  get surfaced to Ro, not designed past.
+  get surfaced to the Developer, not designed past.
 - **AI in Tao apps**: hosted agent execution, agent access to production data, on-device model
   entitlements in store builds, and eval runs against shipped model versions are intersections;
   noted here, owned there.

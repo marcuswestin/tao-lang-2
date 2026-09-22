@@ -19,9 +19,8 @@ status. The implementation can ship independently of the deferred work below.
    granular recovery against live CloudKit, including failure, relaunch, retry, and concurrent edits.
    Runtime regressions and Tao journeys cover the local contract, not those external services.
 
-WordFlower Next remains open while its header describes the wider recovery target. When reopening
-the work, compare its complete mapped directory with Current and reconcile the tranche boundary;
-do not treat the open marker as a missing implementation of the editing primitives already in Current.
+WordFlower absorbed the reactive-editing tranche at the implemented boundary above; its header names
+these deferrals. Resume any of them as a new tranche opened in WordFlower Next.
 
 These items can be resumed from this document without the original design conversation. None implies
 that provider parity or server validation has been completed.

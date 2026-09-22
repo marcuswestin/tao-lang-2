@@ -102,7 +102,7 @@
       "allowLocalBinding": true,
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
-        "~/.local/state/watchman/ro-state/sock"
+        "~/.local/state/watchman"
       ],
       "allowedDomains": [
         "registry.npmjs.org",

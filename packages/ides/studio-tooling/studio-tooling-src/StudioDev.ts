@@ -4,6 +4,7 @@ import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataManifest } from '@expo-host/d
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
+import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
 import { CLI, Errors, FS, HCI, Json, Platform, ProjectDevSession, Repo, SecretsFile, Time } from '@shared'
 import {
@@ -25,7 +26,6 @@ import {
 import { enclosingWatchRoot } from '@verification/WatchmanHealth'
 import betterOpen from 'better-opn'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
-import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
@@ -495,7 +495,7 @@ export async function openStudioProjectResource(
   const project = await resolveStudioProjectRoot(request.projectPath)
   const ownership = await ProjectDevSession.acquire(project.projectRoot, 'studio')
   const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort, {
-    scheme: StudioCompanionIdentity.scheme,
+    scheme: CompanionIdentity.scheme,
   }).catch(async error => {
     await ownership.release()
     throw error

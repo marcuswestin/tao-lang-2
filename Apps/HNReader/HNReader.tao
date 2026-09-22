@@ -122,22 +122,24 @@ design HNDesign {
    sizes {
       sm 4.px
    }
-   screen [fill, content top stretch, bg paper]
-   feed [fill, content top stretch, pad 10, gap 8]
-   threadWrap [fill, content center top]
-   thread [claim 1, compress, width max 680, content top stretch, pad 10, gap 8]
-   rail [width sm, radius 2, bg railInk]
-   storyCard [pad 12, radius 10, bg card, border line]
-   rank [rigid, size 15, weight 700, fg accent]
-   storyTitle [size 16, weight 600, line 22, fg ink]
-   meta [size 13, line 18, fg inkMuted]
-   pageTitle [size 21, weight 700, line 27, fg ink]
-   commentCard [pad 12, radius 10, bg card, border line, gap sm]
-   author [size 13, weight 700, fg accentDeep]
-   commentText [size 15, line 21, fg ink]
-   notice [size 13, fg inkMuted]
-   problemTitle [size 16, weight 700, fg ink]
-   stateBox [content center, pad 24]
+   styles {
+      screen [fill, content top stretch, background paper]
+      feed [fill, content top stretch, pad 10, gap 8]
+      threadWrap [fill, content center top]
+      thread [claim 1, compress, width max 680, content top stretch, pad 10, gap 8]
+      rail [width sm, radius 2, background railInk]
+      storyCard [pad 12, radius 10, background card, border line]
+      rank [rigid, size 15, weight 700, ink accent]
+      storyTitle [size 16, weight 600, line 22, ink ink]
+      meta [size 13, line 18, ink inkMuted]
+      pageTitle [size 21, weight 700, line 27, ink ink]
+      commentCard [pad 12, radius 10, background card, border line, gap sm]
+      author [size 13, weight 700, ink accentDeep]
+      commentText [size 15, line 21, ink ink]
+      notice [size 13, ink inkMuted]
+      problemTitle [size 16, weight 700, ink ink]
+      stateBox [content center, pad 24]
+   }
 }
 
 folder

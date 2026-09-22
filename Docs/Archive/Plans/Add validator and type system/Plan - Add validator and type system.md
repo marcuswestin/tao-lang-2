@@ -22,7 +22,7 @@ The implementation should support the current executable Kitchen Sink plus the t
 - Typir is the type-checking engine for this slice, but the public Tao model still starts with only `text` and `number`.
 - Do not add an `unknown` Tao type, Typir primitive, or Typir sentinel. The previous repo did not need one; Typir inference misses used `undefined` / `InferenceRuleNotApplicable`.
 - The first invocation checker can bind render arguments positionally because current syntax is positional. Adopt the old repo's single shared argument-checking concept, but do not adopt its greedy by-type binding algorithm until Tao syntax needs it.
-- A local alias or parameter should not silently hide another visible value in the first slice. If implementation shows that Tao should allow shadowing, stop and ask Ro before changing this policy.
+- A local alias or parameter should not silently hide another visible value in the first slice. If implementation shows that Tao should allow shadowing, stop and ask the Developer before changing this policy.
 - File-level aliases are visible throughout the file. View parameters and aliases inside a `ui` are visible inside that view body.
 
 ## Previous repo reference
@@ -47,7 +47,7 @@ Simplify or reject these parts:
 
 The old repo's Typir implementation was reviewed before writing this plan. Use these mechanics, scaled down to the current grammar:
 
-- Before adding dependencies, verify a `typir` / `typir-langium` version pair that supports the repo's current `langium ~4.2.2`. Start from the old repo's `~0.3.3` pair only as a reference. If no compatible pair exists, stop and ask Ro; downgrading Langium is out of scope for this project.
+- Before adding dependencies, verify a `typir` / `typir-langium` version pair that supports the repo's current `langium ~4.2.2`. Start from the old repo's `~0.3.3` pair only as a reference. If no compatible pair exists, stop and ask the Developer; downgrading Langium is out of scope for this project.
 - Add the compatible `typir` and `typir-langium` dependencies to `packages/validator`.
 - Define Tao-specific Typir service types in `validator-src/type-system.ts`, equivalent in shape to the old `TaoSpecifics extends TypirLangiumSpecifics` and `TaoTypirServices = TypirLangiumServices<TaoSpecifics>`.
 - Create Typir services with `createTypirLangiumServices(shared, AST.reflection, new TaoTypeSystem(), {})` in the Langium service factory used by validator and IDE diagnostics.
@@ -204,7 +204,7 @@ Concrete work:
 - Compile view-local aliases as local bindings before the view return expression.
 - Compile render props from validated positional arguments.
 - Update compiler tests so validation failures are asserted through compiler diagnostics/errors instead of generated TypeScript structure.
-- Keep the compiler source API throw-on-error for this slice: `compileCode` / `compileFile` still return `{ code }` on success and throw the existing structured failure with `details.errors` on parser or validator errors. Do not add diagnostics to `CompileResult` unless Ro changes the API.
+- Keep the compiler source API throw-on-error for this slice: `compileCode` / `compileFile` still return `{ code }` on success and throw the existing structured failure with `details.errors` on parser or validator errors. Do not add diagnostics to `CompileResult` unless the Developer changes the API.
 - Copy the implemented alias/number slice from `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` into `Apps/Kitchen Sink/Kitchen Sink.tao` only after the compiler can compile it.
 - Compile `Apps/Test Apps/Type System Tests/Type System Tests.tao` as a focused app validation path.
 
@@ -258,7 +258,7 @@ Exit criteria:
 
 Concrete work:
 
-- Update `Docs/Roadmap/Add validator and type system/Research - Add validator and type system.md` only if implementation disproves a research decision or records a Ro decision.
+- Update `Docs/Roadmap/Add validator and type system/Research - Add validator and type system.md` only if implementation disproves a research decision or records a decision by the Developer.
 - Keep `Docs/Roadmap/Add validator and type system/Plan - Add validator and type system.md` current if implementation slices shift.
 - Update `Apps/Test Apps/Type System Tests/Purpose.md` if implemented behavior or future behavior-test metadata differs from the current notes.
 - Remove stale compiler comments/tests that still describe semantic checks as compiler-owned.

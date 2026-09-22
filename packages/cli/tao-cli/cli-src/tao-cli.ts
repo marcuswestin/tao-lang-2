@@ -17,17 +17,12 @@ type InPlaceLabels = {
   failOnChanged?: boolean
 }
 
-await runTaoCliWhenExecutedDirectly(import.meta)
-
-type ExecutableImportMeta = ImportMeta & {
-  main?: boolean
-}
-
-async function runTaoCliWhenExecutedDirectly(meta: ExecutableImportMeta): Promise<void> {
-  // Bun sets import.meta.main only for directly executed modules; tests import this file without running the CLI.
-  if (meta.main === true) {
-    await runTaoCli()
-  }
+// Bun sets import.meta.main only for directly executed modules; tests import this file without
+// running the CLI. It must be read here, not passed along as `import.meta`: a compiled binary shares
+// one runtime `import.meta` among every module in its bundle, so only a direct read is rewritten to
+// this module's own answer, and the standalone entry that imports this file would run it twice.
+if (import.meta.main) {
+  await runTaoCli()
 }
 
 /** runTaoCli runs the Tao CLI for the provided argv. */

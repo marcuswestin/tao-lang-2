@@ -28,7 +28,7 @@ historical ledger and should not be read as the current implementation target.
   controls, Stack wrapping, preview-originated semantic drag/reorder, edge and cross-container source
   transforms, one-gesture checkpoint/undo, the sandboxed local Electron wrapper and packaging recipe,
   isolated slow-suite resources, and an explicit CDP simulated-user smoke.
-- Product gate: closed by Ro on 2026-08-30. Examples and named state use the decided fixture/scenario
+- Product gate: closed by the Developer on 2026-08-30. Examples and named state use the decided fixture/scenario
   direction, with no `example` declaration or Studio-only authority. Scheme is a versioned, visibly
   inert Studio seam until reactive `Scheme`/appearance resolution exists.
 - Scenario-language checkpoint: implemented file-level `fixture` and `scenario`, typed fixture handles,
@@ -116,7 +116,7 @@ runtime-only design state.
 | Absolute path plus offsets as node ID | Replace                      | Treat the range as a version-bound locator, not durable identity. Protocol identity also carries declaration owner, node kind, source version, preview instance, and later example ID.                              |
 | Direct DOM drag implementation        | Adopt only as a chassis      | Stabilize semantic drag tests before evaluating `@dnd-kit/dom`; the product model is typed Tao operations, not browser drag events.                                                                                 |
 | Electron native wrapper               | Adopt                        | Keep the preview iframe inside the Tao Studio shell. The wrapper owns local process lifecycle; signed/distributable packaging is beyond v1.                                                                         |
-| Cases JSON sidecar                    | Defer as authority           | Reuse viewport-frame mechanics only. Saved example/state authority follows Ro's decision below.                                                                                                                     |
+| Cases JSON sidecar                    | Defer as authority           | Reuse viewport-frame mechanics only. Saved example/state authority follows the Developer's decision below.                                                                                                                     |
 | Debugger manifest/source maps         | Preserve seam, defer feature | Keep protocol capabilities optional and avoid blocking future source maps; omit debugger UI, DAP/CDP bindings, breakpoint hooks, and debugger E2E from v1.                                                          |
 | VS Code Studio UX                     | Defer                        | The shared LSP remains reusable, but v1 ships native/web Studio rather than a second Studio client.                                                                                                                 |
 | Shared in-memory document model       | Defer conditionally          | Disk-synced parsable drafts may ship if revision checks and compile coordination prove reliable.                                                                                                                    |
@@ -380,13 +380,13 @@ Required proof and output:
   compile coordinator before watch/editor integration; Decision 1 before example/state persistence;
   Decision 2 before scheme behavior; focused green gates before dependency slices and commits.
 
-## Decisions for Ro
+## Decisions for the Developer
 
 ### 1. Saved examples and named state
 
 **Closed 2026-08-30: scenario-first.** Use the already-decided `fixture` plus `scenario` mechanism as
 the common durable basis for tests, Studio states, and the examples grid; do not add an `example`
-keyword or a temporary sidecar authority. Ro approved the focused subject
+keyword or a temporary sidecar authority. The Developer approved the focused subject
 `render ViewName(Parameter: FixtureHandle)`: named arguments bind the view's parameters, and `run`
 and `render` are mutually exclusive scenario subjects. V1 capture covers provider data and identity
 only; it does not claim arbitrary React hook or navigation-stack state.
@@ -414,7 +414,7 @@ Alternative: make the design-system MVP a prerequisite and ship the toggle live.
 
 No amendment is recommended. Retain Electron, CodeMirror 6, shared Langium LSP, separate Studio
 protocol, Expo web/Fast Refresh, iframe preview, and the versioned source-action patch bus. Any
-replacement requires evidence and Ro's approval before implementation.
+replacement requires evidence and the Developer's approval before implementation.
 
 ## Done when
 
