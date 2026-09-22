@@ -16,7 +16,8 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 
 ## Sequence
 
-1. Read the previous runs' plans and `git log -i --grep=simplif` so the pass builds on them.
+1. Read the previous runs' plans, archived under `Docs/Archive/Plans/Repository simplification*/`
+   once each lands, and `git log -i --grep=simplif` so the pass builds on them.
 2. Run `./agent simplify-audit` for the baseline; `--json` lists every row. `references/audit.md`
    says what it measures and what it cannot.
 3. Find concurrent work with `./agent board`, read each branch's touched paths, and write them into
@@ -26,9 +27,16 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 5. Write the plan: decisions, fences, projects, waves with exclusive path ownership and a model
    tier per agent, and a ledger. `delegation`'s `references/parallel-implementation.md` owns the
    fan-out mechanics.
-6. Execute on one branch. `./agent verify` gates each slice; a deep-tier `reviewer` reads each
-   wave's seams. Package moves and alias renames go last, after merging `main`, in one mechanical
-   commit.
+6. Execute on one branch through `./agent`'s own commands (`verify`, `typecheck`, `dead-exports`,
+   `parser-gen`, `ledger-index`, …), not a direct `just` recipe it already exposes. Run narrow checks
+   while iterating and one wide `./agent verify` when a slice looks done; only `finalize` before
+   landing is merge evidence. After moving or renaming a package, `./agent setup --refresh-lockfile`
+   is the one install that rewrites `bun.lock`. A deep-tier `reviewer`, read-only, reads every wave's
+   seams before it starts and the whole diff again before every landing, briefed to hunt what
+   `./agent typecheck` cannot see — a moved literal that still resolves, just not to what it used to.
+   Package moves and alias renames go last, after merging `main`, in one mechanical commit; if a move
+   touched a Git hook script, `./agent doctor` after landing checks the shared `.git/hooks` picked it
+   up rather than a stale script silently exiting 0.
 7. Record before and after in the plan's ledger: non-test source lines, instruction lines,
    allowlist entries, defects fixed. Archive the plan when the run lands.
 
@@ -45,7 +53,7 @@ run shares. Standing decisions below are Ro's and are not reopened; anything new
 - Code: `references/code.md` — shared functions, house patterns, structural splits, allowlists.
 - Instructions and documentation: `references/instructions-and-docs.md` — budgets, placement, rules
   into code, the archive.
-- Packages: `references/packages.md` — when packages merge and how aliases follow.
+- Packages: `references/packages.md` — when packages group, when they merge, and how aliases follow.
 
 ## Prefer a gate to a sentence
 
