@@ -1,7 +1,7 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
 import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { startStudioClientDevReload, StudioClientDevReload } from '../studio-tooling-src/StudioClientDevReload'
 import {
@@ -690,6 +690,8 @@ Describe('Studio smoke resource isolation', () => {
 
     Expect(isStudioServerSource('packages/ides/studio/studio-src/StudioServer.ts')).toBe(true)
     Expect(isStudioServerSource('packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts')).toBe(true)
+    Expect(isStudioServerSource('packages/ides/studio-tooling/studio-tooling-src/StudioDev.ts')).toBe(true)
+    Expect(isStudioServerSource('Apps/Tao Studio/TaoStudioClient.tao')).toBe(false)
     // The panel and everything under client/ are bundled into the page, so a rebuild is enough for them.
     Expect(isStudioServerSource('packages/ides/studio/studio-src/client/StudioApiClient.ts')).toBe(false)
     Expect(isStudioServerSource('packages/ides/studio/studio-src/agent-chat/StudioAgentChatPanel.ts')).toBe(false)
@@ -742,6 +744,79 @@ Describe('Studio smoke resource isolation', () => {
     Expect(await reload.clientAssets.bundle()).toBe('bundle-3')
     await reload.close()
     Expect(closed).toBe(1)
+  })
+
+  Test('holds the old client after server sources change until Studio restarts', async () => {
+    let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
+    const attempts: number[] = []
+    const reload = await startStudioClientDevReload({
+      async loadAssets(attempt) {
+        attempts.push(attempt)
+        return {
+          async bundle() {
+            return `bundle-${attempt}`
+          },
+          html() {
+            return `html-${attempt}`
+          },
+        }
+      },
+      async subscribe(listener) {
+        changed = listener
+        return async () => {}
+      },
+    })
+
+    try {
+      await changed!({ serverSourcesChanged: false })
+      Expect(reload.revision()).toBe(1)
+      await changed!({ serverSourcesChanged: true })
+      await changed!({ serverSourcesChanged: false })
+      Expect(reload.revision()).toBe(1)
+      Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
+      Expect(attempts).toEqual([1])
+    } finally {
+      await reload.close()
+    }
+  })
+
+  Test('does not publish an in-flight client build after a server source changes', async () => {
+    let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
+    const started = Deferred<void>()
+    const finishBundle = Deferred<void>()
+    const reload = await startStudioClientDevReload({
+      async loadAssets(attempt) {
+        return {
+          async bundle() {
+            if (attempt === 1) {
+              started.resolve()
+              await finishBundle.promise
+            }
+            return `bundle-${attempt}`
+          },
+          html() {
+            return `html-${attempt}`
+          },
+        }
+      },
+      async subscribe(listener) {
+        changed = listener
+        return async () => {}
+      },
+    })
+
+    try {
+      const clientBuild = changed!({ serverSourcesChanged: false })
+      await started.promise
+      const serverEdit = changed!({ serverSourcesChanged: true })
+      finishBundle.resolve()
+      await Promise.all([clientBuild, serverEdit])
+      Expect(reload.revision()).toBe(0)
+      Expect(reload.clientAssets.html({ previewUrl: 'preview' })).not.toBe('html-1')
+    } finally {
+      finishBundle.resolve()
+      await reload.close()
+    }
   })
 
   Test('allocates every Studio preview server from an ephemeral port', () => {

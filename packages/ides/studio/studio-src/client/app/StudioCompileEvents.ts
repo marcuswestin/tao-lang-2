@@ -55,7 +55,17 @@ export function connectStudioEvents(
         reconnectTimer = setTimeout(connect, reconnectDelayMs)
         reconnectDelayMs = Math.min(maximumReconnectDelayMs, reconnectDelayMs * 2)
       },
-      onDeviceState: handlers.onDeviceState,
+      onDeviceState(device) {
+        const unsyncedRevision = Number(status.dataset['phoneUnsyncedRevision'])
+        if (unsyncedRevision > 0 && (device.connection?.appliedRevision ?? 0) >= unsyncedRevision) {
+          delete status.dataset['phoneUnsyncedRevision']
+          status.removeAttribute('title')
+          if (status.textContent?.startsWith(`Phone did not apply revision ${unsyncedRevision};`)) {
+            status.textContent = `Phone caught up to revision ${unsyncedRevision}.`
+          }
+        }
+        handlers.onDeviceState(device)
+      },
       onFile: handlers.onFile,
       onFiles: handlers.onFiles,
       onHandshake(handshake) {

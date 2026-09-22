@@ -1,19 +1,20 @@
 # Exploration - Studio server hot reload
 
-Status: **problem statement and options, not a decision**. Nothing here is implemented. It records why a
-`./dev studio` session only half-reloads today, what the cheap fix would cost, and what a real one would have
-to preserve.
+Status: **decision for the current development loop**. Studio server and native-host edits require a
+deliberate `./dev studio` restart. Browser-client-only edits still reload the browser. Do not build a
+coordinated server/native hot-swap or an automatic whole-process restart yet. This decision is separate
+from Tao project edits, whose preview loop retains compatible interaction state.
 
 ## What reloads today, and what does not
 
-`startStudioClientDevReload` watches `packages/ides/studio/studio-src` (which now holds the code editor too)
-for `.tao`, `.ts` and `.tsx` changes, rebuilds the browser bundle in a subprocess, and publishes it only when
-the build completes. The page polls `/studio-dev/revision` and reloads itself. That covers everything bundled
-into the client: the editor, the matrix view, the agent panel.
+`startStudioClientDevReload` watches the Studio package, Studio-tooling, and `Apps/Tao Studio` for `.tao`, `.ts` and `.tsx` changes.
+For a browser-client-only edit it rebuilds the bundle in a subprocess, publishes it after the build, and
+the page polls `/studio-dev/revision` to reload itself. This covers the editor, matrix view, and client
+agent panel.
 
 The Studio **server** does not reload. Its modules are loaded once when the process starts, so a change to
 `StudioServer.ts`, a session, a source action, or anything under `agent-chat/` that runs server-side takes
-effect only on restart. `--native` disables client reload entirely, so a native session reloads nothing.
+effect only on restart. `--native` disables client reload, so a native-host edit also needs restart.
 
 ## Why the half state is worse than no reload
 
@@ -25,13 +26,14 @@ for a not-yet-existing `stream/send` sub-path as a _command name_ and answered `
 
 That cost real time during the agent-chat work: a live check appeared to prove a new route existed when it did
 not, and only a deliberate control probe — asking for a command that could never exist — showed the route was
-being swallowed by the old handler. The rebuild now logs `Studio server sources changed; restart ./dev studio`
-when a changed file is one the server loads, which makes the state visible but does not remove it.
+being swallowed by the old handler. The watcher now latches on a server-side edit, keeps the last coherent
+client bundle instead of publishing newer assets against the old server, and logs that Studio needs restart.
+An in-flight client build cannot publish once that latch is set. Restart clears it.
 
 ## Why the cheap version is not obviously worth it
 
-Restarting the process on every server-side save is a few lines. It is also probably worse than restarting by
-hand, because `./dev studio` owns more than an HTTP server:
+Restarting the process on every server-side save is simple but could be expensive because `./dev studio`
+owns more than an HTTP server:
 
 - the disposable Expo/Metro preview runtime, which takes seconds to boot and whose file-map crawl is the
   subject of its own fix (`Publish the preview app before the bundler crawls for it`);
@@ -39,11 +41,13 @@ hand, because `./dev studio` owns more than an HTTP server:
 - the Apple Foundation Models helper subprocess;
 - the native shell, when one is attached.
 
-Tearing all of that down on each save turns a two-second edit into a ten-second one and re-runs the preview
-boot that a session only just got right. A person who wants that today can already have it, deliberately, in
-two keystrokes.
+The full restart cost has not been measured on a usable host, so no latency claim is settled here. For now,
+the developer chooses when to pay it. If real work shows restarts dominate the loop, measure the components
+and consider keeping Metro as a separate preview worker while restarting the Studio shell. The shell would
+then reconnect to known preview URLs; that is an optimization to prove, not a dependency of the Tao preview
+edit loop.
 
-## What a real one has to preserve
+## If a coordinated reload becomes worth doing
 
 The valuable version keeps the expensive things alive and reloads only what changed. Sketch, not a plan:
 
@@ -62,6 +66,6 @@ The valuable version keeps the expensive things alive and reloads only what chan
 
 ## What would make it worth doing
 
-This is worth building when Studio server code is edited often enough that manual restarts dominate the loop —
-which the agent work has started to do, since a change to a tool or a route is a server change. Until then the
-honest position is: the client reloads, the server does not, and the rebuild says so out loud.
+Revisit only if measured restart frequency and latency justify it. Until then the honest position is:
+client-only browser changes reload, server/native changes wait for restart, and the running client and
+server never intentionally advance to different source revisions.
