@@ -722,6 +722,25 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('companion-host-build')
+    .description(
+      'Build the Tao Companion as a prebuilt Android host into .artifacts/hosts, which tao dev installs on an emulator in place of Expo Go.',
+    )
+    .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
+    .action(async (options: { abi?: string }) => {
+      try {
+        const { runCompanionHostBuild } = await import('@studio-tooling/CompanionHostBuild')
+        const architectures = options.abi?.split(',').map(abi => abi.trim()).filter(Boolean)
+        Platform.runtimeProcess.exit(
+          await runCompanionHostBuild(architectures === undefined ? {} : { architectures }),
+        )
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('studio-native')
     .description(
       'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',

@@ -1,4 +1,5 @@
 import type { ExpoFetch } from '@expo-host/dev-loop/expo-runner/metro'
+import { companionDevClientUrl, CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, FS, type Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import type { StudioDeviceLaunchDiagnostic } from '@studio'
@@ -18,7 +19,6 @@ import {
   studioDeviceFailureLayer,
   throwStudioDeviceFailure,
 } from '@studio-tooling/StudioCompanionDevice'
-import { StudioCompanionIdentity } from '@studio-tooling/StudioCompanionIdentity'
 import {
   companionSimulatorInstallCommand,
   companionSimulatorNameFromArgument,
@@ -30,7 +30,6 @@ import {
   type StudioCompanionSimulator,
 } from '@studio-tooling/StudioCompanionSimulator'
 import {
-  companionDevClientUrl,
   createStudioDeviceLauncher,
   isLoopbackHost,
   launchDiagnosticFromError,
@@ -160,7 +159,7 @@ async function withDeviceRoots<T>(
   const root = await mkTestDir('tao-companion-device-')
   try {
     const repoRoot = FS.resolvePath('repo', root)
-    const packageRoot = FS.resolvePath(StudioCompanionIdentity.packagePath, repoRoot)
+    const packageRoot = FS.resolvePath(CompanionIdentity.packagePath, repoRoot)
     await FS.mkdir(FS.resolvePath('node_modules/expo', packageRoot))
     const tmpRoot = FS.resolvePath('tmp', root)
     await FS.mkdir(tmpRoot)
@@ -224,7 +223,7 @@ Describe('Studio companion device tooling', () => {
   Test('reports the companion as installed only when devicectl lists its bundle id', async () => {
     await withDeviceRoots(async roots => {
       const installedOn = new Map<string, readonly string[]>([
-        ['with-app', [StudioCompanionIdentity.bundleIdentifier]],
+        ['with-app', [CompanionIdentity.bundleIdentifier]],
         ['without-app', []],
       ])
       const runner = scriptedRunner(call => ({ json: appsFixture(installedOn.get(call.args[5] ?? '') ?? []) }))
@@ -235,7 +234,7 @@ Describe('Studio companion device tooling', () => {
       const call = runner.calls[0]
       Expect(call === undefined ? [] : devicectlSubcommand(call).split(' ')).toEqual(['device', 'info', 'apps'])
       Expect(call?.args).toContain('--bundle-id')
-      Expect(call?.args).toContain(StudioCompanionIdentity.bundleIdentifier)
+      Expect(call?.args).toContain(CompanionIdentity.bundleIdentifier)
     })
   })
 
@@ -281,7 +280,7 @@ Describe('Studio companion device tooling', () => {
       Expect(args.slice(args.indexOf('--payload-url'), args.indexOf('--payload-url') + 3)).toEqual([
         '--payload-url',
         url,
-        StudioCompanionIdentity.bundleIdentifier,
+        CompanionIdentity.bundleIdentifier,
       ])
     })
   })
@@ -418,7 +417,7 @@ function fakeSimulator(options: {
   const opened: { id: string; url: string }[] = []
   return {
     boot: async () => {},
-    bundleIdentifier: StudioCompanionIdentity.bundleIdentifier,
+    bundleIdentifier: CompanionIdentity.bundleIdentifier,
     install: async () => {},
     installedOn: async id => options.installed?.[id],
     listSimulators: async () => {
@@ -450,7 +449,7 @@ function fakeDevice(options: {
       : { installed }
   }
   return {
-    bundleIdentifier: StudioCompanionIdentity.bundleIdentifier,
+    bundleIdentifier: CompanionIdentity.bundleIdentifier,
     install: async () => {},
     installedAppProbe: async hostId => probe(hostId),
     installedOn: async hostId => probe(hostId).installed,
@@ -915,10 +914,11 @@ Describe('Studio companion install command', () => {
 })
 
 Describe('Tao Companion shell configuration', () => {
-  Test('app.json agrees with StudioCompanionIdentity and declares the local-network facts', async () => {
-    const packageRoot = Repo.resolvePath(StudioCompanionIdentity.packagePath)
+  Test('app.json agrees with CompanionIdentity and declares the local-network facts', async () => {
+    const packageRoot = Repo.resolvePath(CompanionIdentity.packagePath)
     const config = await FS.readJson<{
       expo: {
+        android?: { package?: string }
         ios?: { bundleIdentifier?: string; infoPlist?: Record<string, unknown>; supportsTablet?: boolean }
         name?: string
         plugins?: readonly unknown[]
@@ -927,10 +927,11 @@ Describe('Tao Companion shell configuration', () => {
       }
     }>(FS.resolvePath('app.json', packageRoot))
 
-    Expect(config.expo.name).toBe(StudioCompanionIdentity.name)
-    Expect(config.expo.slug).toBe(StudioCompanionIdentity.slug)
-    Expect(config.expo.scheme).toBe(StudioCompanionIdentity.scheme)
-    Expect(config.expo.ios?.bundleIdentifier).toBe(StudioCompanionIdentity.bundleIdentifier)
+    Expect(config.expo.name).toBe(CompanionIdentity.name)
+    Expect(config.expo.slug).toBe(CompanionIdentity.slug)
+    Expect(config.expo.scheme).toBe(CompanionIdentity.scheme)
+    Expect(config.expo.ios?.bundleIdentifier).toBe(CompanionIdentity.bundleIdentifier)
+    Expect(config.expo.android?.package).toBe(CompanionIdentity.androidPackage)
     Expect(config.expo.ios?.supportsTablet).toBe(true)
     Expect(typeof config.expo.ios?.infoPlist?.['NSLocalNetworkUsageDescription']).toBe('string')
     Expect(config.expo.ios?.infoPlist?.['NSAppTransportSecurity']).toEqual({ NSAllowsLocalNetworking: true })
@@ -968,7 +969,7 @@ Describe('Tao Companion shell configuration', () => {
   })
 
   Test('the shell entry registers a root component and carries no Studio logic', async () => {
-    const packageRoot = Repo.resolvePath(StudioCompanionIdentity.packagePath)
+    const packageRoot = Repo.resolvePath(CompanionIdentity.packagePath)
     const entry = await FS.readText(FS.resolvePath('index.ts', packageRoot))
     Expect(entry).toContain('registerRootComponent(CompanionPlaceholder)')
     Expect(entry).not.toContain('@studio')
@@ -1136,7 +1137,7 @@ Describe('Tao Companion simulator install outcome', () => {
     const commands: string[][] = []
     const simulator = (installedAfterwards: boolean) =>
       createStudioCompanionSimulator({
-        packageRoot: Repo.resolvePath(StudioCompanionIdentity.packagePath),
+        packageRoot: Repo.resolvePath(CompanionIdentity.packagePath),
         run: (async (command: string, spec: CLI.CommandSpec) => {
           commands.push([command, ...(spec.args ?? [])])
           if (command === 'bunx') {

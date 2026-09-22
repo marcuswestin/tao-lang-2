@@ -643,6 +643,7 @@ en7: flags=8863
     const installs: string[] = []
     const reversed: string[] = []
     const android = createAndroid(config, {} as ExpoMetroSession, {
+      findPrebuiltHost: async () => ({ refused: [] }),
       findRunningEmulator: async () => 'emulator-5554',
       installExpoGo: async serial => {
         installs.push(serial)
@@ -659,7 +660,7 @@ en7: flags=8863
     await withCapturedOutput(() => android.ensureExpoGoOnSerial('phone-1'))
     Expect(installs).toEqual(['phone-1'])
 
-    const stalePrepared = await withCapturedOutput(() => android.prepareAvailableExpoGo())
+    const stalePrepared = await withCapturedOutput(() => android.prepareAvailableRuntime())
     Expect(stalePrepared.result).toBe(true)
     Expect(stalePrepared.stdout).toContain('Replacing incompatible Expo Go 56.0.8 on emulator-5554')
     Expect(installs).toEqual(['phone-1', 'emulator-5554'])
@@ -668,7 +669,7 @@ en7: flags=8863
     installedVersion = '57.0.9'
     await withCapturedOutput(() => android.ensureExpoGoOnSerial('phone-2'))
     Expect(installs).toEqual(['phone-1', 'emulator-5554'])
-    Expect((await withCapturedOutput(() => android.prepareAvailableExpoGo())).result).toBe(true)
+    Expect((await withCapturedOutput(() => android.prepareAvailableRuntime())).result).toBe(true)
     Expect(reversed).toEqual(['emulator-5554', 'emulator-5554'])
   })
 
@@ -676,6 +677,7 @@ en7: flags=8863
     const config = createExpoConfig(8_099)
     const reversed: string[] = []
     const android = createAndroid(config, {} as ExpoMetroSession, {
+      findPrebuiltHost: async () => ({ refused: [] }),
       findRunningEmulator: async () => 'emulator-5554',
       // The real failure this path meets is the APK download refusing, which `android.ts` reports
       // as user input so the reason survives `formatForUser`.
@@ -691,7 +693,7 @@ en7: flags=8863
       },
     })
 
-    const captured = await withCapturedOutput(() => android.prepareAvailableExpoGo())
+    const captured = await withCapturedOutput(() => android.prepareAvailableRuntime())
 
     Expect(captured.result).toBe(false)
     Expect(`${captured.stdout}${captured.stderr}`).toContain(
@@ -699,6 +701,66 @@ en7: flags=8863
         + ' Failed to download Expo Go APK: 503 Service Unavailable',
     )
     Expect(reversed).toEqual([])
+  })
+
+  Test('prepares a compatible prebuilt Companion instead of Expo Go, installing it only when it differs', async () => {
+    const config = createExpoConfig(8_099)
+    const host = {
+      binaryPath: '/hosts/1.0.0/android/tao-companion.apk',
+      directory: '/hosts/1.0.0/android',
+      manifest: { format: 1 as const, hostVersion: '1.0.0', nativeKit: {}, platform: 'android' as const },
+    }
+    let installedMatches = false
+    const companionInstalls: string[] = []
+    const expoGoInstalls: string[] = []
+    const android = createAndroid(config, {} as ExpoMetroSession, {
+      findPrebuiltHost: async () => ({ host, refused: [] }),
+      findRunningEmulator: async () => 'emulator-5554',
+      installCompanion: async serial => {
+        companionInstalls.push(serial)
+      },
+      installExpoGo: async serial => {
+        expoGoInstalls.push(serial)
+      },
+      installedCompanionMatches: async () => installedMatches,
+      isEmulatorBooted: async () => true,
+      requireAdb: async () => {},
+      reverseMetroPort: async () => true,
+    })
+
+    const first = await withCapturedOutput(() => android.prepareAvailableRuntime())
+    installedMatches = true
+    const second = await withCapturedOutput(() => android.prepareAvailableRuntime())
+
+    Expect(first.result).toBe(true)
+    Expect(first.stdout).toContain('Installing Tao Companion 1.0.0 on emulator-5554')
+    Expect(second.stdout).toContain('Tao Companion 1.0.0 is already installed on emulator-5554')
+    Expect(companionInstalls).toEqual(['emulator-5554'])
+    Expect(expoGoInstalls).toEqual([])
+  })
+
+  Test('names each prebuilt host it passed over before falling back to Expo Go', async () => {
+    const config = createExpoConfig(8_099)
+    const expoGoInstalls: string[] = []
+    const android = createAndroid(config, {} as ExpoMetroSession, {
+      findPrebuiltHost: async () => ({ refused: ['/hosts/0.9.0/android: it lacks expo-haptics 57.0.3'] }),
+      findRunningEmulator: async () => 'emulator-5554',
+      installExpoGo: async serial => {
+        expoGoInstalls.push(serial)
+      },
+      installedExpoGoVersion: async () => undefined,
+      isEmulatorBooted: async () => true,
+      requireAdb: async () => {},
+      reverseMetroPort: async () => true,
+    })
+
+    const captured = await withCapturedOutput(() => android.prepareAvailableRuntime())
+
+    Expect(captured.result).toBe(true)
+    Expect(`${captured.stdout}${captured.stderr}`).toContain(
+      'Passed over the prebuilt host at /hosts/0.9.0/android: it lacks expo-haptics 57.0.3.',
+    )
+    Expect(expoGoInstalls).toEqual(['emulator-5554'])
   })
 
   Test('reads a devicectl JSON report through a temporary file and removes the file afterwards', async () => {

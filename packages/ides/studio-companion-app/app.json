@@ -19,6 +19,9 @@
         }
       }
     },
+    "android": {
+      "package": "dev.tao_lang.studio.companion"
+    },
     "updates": {
       "enabled": false
     },

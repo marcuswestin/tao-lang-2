@@ -1,5 +1,6 @@
 import { detectLanIPv4, type InterfaceAddress, parseIfconfigIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { type ExpoFetch, expoRuntimeLink, fetchExpoOpenEndpoint } from '@expo-host/dev-loop/expo-runner/metro'
+import { companionDevClientUrl, CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, Json } from '@shared'
 import type {
   StudioDeviceLaunchDiagnostic,
@@ -15,7 +16,6 @@ import {
   studioDeviceFailureLayer,
   throwStudioDeviceFailure,
 } from './StudioCompanionDevice'
-import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 import {
   companionSimulatorInstallCommand,
   createStudioCompanionSimulator,
@@ -103,7 +103,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
       diagnostics.push({
         layer: 'expo',
         message:
-          `Expo at ${metroOrigin} offered no development-client link from /_expo/link (the preview project may not declare the ${StudioCompanionIdentity.scheme} scheme); using a constructed link instead.`,
+          `Expo at ${metroOrigin} offered no development-client link from /_expo/link (the preview project may not declare the ${CompanionIdentity.scheme} scheme); using a constructed link instead.`,
       })
       return undefined
     } catch (error) {
@@ -163,14 +163,14 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     }
     const firstCandidate = candidates[0]
     const url = cableHost !== undefined
-      ? companionDevClientUrl({ host: cableHost, port: metroPort, scheme: StudioCompanionIdentity.scheme })
+      ? companionDevClientUrl({ host: cableHost, port: metroPort, scheme: CompanionIdentity.scheme })
       : route === 'cable'
       ? undefined
       : expoUrl !== undefined && expoHostUsable
       ? expoUrl
       : firstCandidate === undefined
       ? undefined
-      : companionDevClientUrl({ host: firstCandidate, port: metroPort, scheme: StudioCompanionIdentity.scheme })
+      : companionDevClientUrl({ host: firstCandidate, port: metroPort, scheme: CompanionIdentity.scheme })
     return { candidates, diagnostics, metroPort, url }
   }
 
@@ -198,8 +198,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
       if (probe.problem !== undefined) {
         diagnostics.push({
           layer: probe.layer ?? 'devicectl',
-          message:
-            `Could not tell whether ${StudioCompanionIdentity.name} is installed on ${entry.name}: ${probe.problem}`,
+          message: `Could not tell whether ${CompanionIdentity.name} is installed on ${entry.name}: ${probe.problem}`,
         })
       }
       hosts.push(
@@ -265,7 +264,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     if (await simulator.installedOn(target.id) === false) {
       throwStudioDeviceFailure(
         'simulator',
-        `${StudioCompanionIdentity.name} is not installed on ${name}. Install it once with: ${
+        `${CompanionIdentity.name} is not installed on ${name}. Install it once with: ${
           companionSimulatorInstallCommand(target.name)
         }`,
       )
@@ -273,7 +272,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     const url = companionDevClientUrl({
       host: loopbackHost,
       port: metroPortOf(input.metroOrigin),
-      scheme: StudioCompanionIdentity.scheme,
+      scheme: CompanionIdentity.scheme,
     })
     await simulator.open({ id: target.id, url })
     return { hostName: name, launched: true, url }
@@ -295,7 +294,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
           ? companionSimulatorInstallCommand(simulators.installName)
           : companionInstallCommand(firstDevice?.name),
         metroPort: resolved.metroPort,
-        scheme: StudioCompanionIdentity.scheme,
+        scheme: CompanionIdentity.scheme,
         ...(resolved.url === undefined ? {} : { url: resolved.url }),
       }
     },
@@ -323,7 +322,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
       if (probe.installed === false) {
         throwStudioDeviceFailure(
           'devicectl',
-          `${StudioCompanionIdentity.name} is not installed on ${host.name}. Install it once with: ${
+          `${CompanionIdentity.name} is not installed on ${host.name}. Install it once with: ${
             companionInstallCommand(host.name)
           }`,
         )
@@ -342,7 +341,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
         if (error instanceof Errors.HostEnvironmentError && probe.installed === undefined) {
           throwStudioDeviceFailure(
             studioDeviceFailureLayer(error) ?? 'devicectl',
-            `${error.messageForUser} If ${StudioCompanionIdentity.name} is not installed yet, run: ${
+            `${error.messageForUser} If ${CompanionIdentity.name} is not installed yet, run: ${
               companionInstallCommand(host.name)
             }`,
             { cause: error },
@@ -371,11 +370,6 @@ type StudioDeviceLaunchRoute = 'auto' | 'cable'
 /** The cable address among the launch candidates: macOS assigns one only while a device is attached. */
 export function linkLocalCandidate(candidates: readonly string[]): string | undefined {
   return candidates.find(candidate => candidate.startsWith('169.254.'))
-}
-
-/** companionDevClientUrl is the development-client deep link the shell opens Metro from. */
-export function companionDevClientUrl(input: { host: string; port: number; scheme: string }): string {
-  return `${input.scheme}://expo-development-client/?url=${encodeURIComponent(`http://${input.host}:${input.port}`)}`
 }
 
 /** metroHostFromDevClientUrl reads the Metro host out of a development-client deep link, if it carries one. */

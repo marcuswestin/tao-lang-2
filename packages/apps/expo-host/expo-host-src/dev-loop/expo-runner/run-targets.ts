@@ -4,6 +4,7 @@ import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
+import { CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import type { AndroidSession } from './android'
 import { expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import type { ExpoMetroSession } from './metro'
@@ -45,14 +46,12 @@ export function createExpoTargets(
   }
 }
 
-/** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */
+/** openAndroid opens the current app on Android, launching an emulator and installing its runtime. */
 async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
   try {
     await context.android.ensureEmulator()
-    await context.android.ensureExpoGo()
-    const endpoint = await context.metro.expoOpenEndpoint('android')
-    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+    await context.android.ensureRuntime()
+    await openPreparedAndroidAndSay(context)
     return true
   } catch (error) {
     DevLoopOutput.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
@@ -141,19 +140,28 @@ async function openStartupTargets(
   }))
 }
 
-/** openPreparedAndroid opens the current Expo app on a prepared Android emulator. */
+/** openPreparedAndroid opens the current app in the runtime prepared on the Android emulator. */
 async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Promise<void> {
-  await context.android.openExpoGo(url)
+  await context.android.openRuntime(url)
 }
 
 async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean> {
-  if (await context.android.prepareAvailableExpoGo()) {
-    const endpoint = await context.metro.expoOpenEndpoint('android')
-    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+  if (await context.android.prepareAvailableRuntime()) {
+    await openPreparedAndroidAndSay(context)
     return true
   }
   return false
+}
+
+async function openPreparedAndroidAndSay(context: ExpoTargetContext): Promise<void> {
+  const endpoint = await context.metro.expoOpenEndpoint('android')
+  const runtime = await context.android.openRuntime(context.metro.endpointUrl(endpoint))
+  DevLoopOutput.logDevLoop(
+    'dev',
+    `opened Android${
+      runtime === 'companion' ? ` (${CompanionIdentity.name})` : context.metro.formatOpenedRuntime(endpoint)
+    }`,
+  )
 }
 
 async function ensureIosSimulator(
