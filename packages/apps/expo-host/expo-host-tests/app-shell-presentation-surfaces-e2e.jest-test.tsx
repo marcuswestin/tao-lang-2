@@ -1,9 +1,13 @@
 import { jest } from '@jest/globals'
+import TR from '@runtime/TR'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { Describe, Expect, Test } from '@shared/test'
-import { act, fireEvent } from '@testing-library/react-native'
+import { act, fireEvent, render, type screen as Screen } from '@testing-library/react-native'
+import React from 'react'
 import * as RN from 'react-native'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
+
+type TestInstance = ReturnType<typeof Screen.UNSAFE_getAllByType>[number]
 
 const askConfirmView = `
   type ConfirmResult is one of Confirmed
@@ -121,6 +125,24 @@ function resetInsets(): void {
   safeAreaMock().setSafeAreaInsetsForTests(zeroInsets)
 }
 
+function askScrim(screen: { UNSAFE_getAllByType(type: typeof RN.View): TestInstance[] }): TestInstance {
+  const scrim = screen.UNSAFE_getAllByType(RN.View).find(view => {
+    const style = RN.StyleSheet.flatten(view.props.style) ?? {}
+    return style.backgroundColor === 'rgba(0, 0, 0, 0.45)'
+  })
+  Expect(scrim).toBeDefined()
+  return scrim!
+}
+
+function hasAncestorOfType(instance: TestInstance, type: unknown): boolean {
+  for (let current = instance.parent; current; current = current.parent) {
+    if (current.type === type) {
+      return true
+    }
+  }
+  return false
+}
+
 function noModalRuntimeOverride(): ReturnType<typeof TaoReactNative.requireReactNativeRuntime> {
   return {
     ActivityIndicator: RN.ActivityIndicator,
@@ -137,58 +159,134 @@ function noModalRuntimeOverride(): ReturnType<typeof TaoReactNative.requireReact
 }
 
 Describe('Expo runtime: presentation surfaces', () => {
-  Test('insets an asked dialog with base padding only inside an already-inset frame', async () => {
-    setInsets()
-    try {
-      await testCompileApp(askSlotSource, async screen => {
-        await act(async () => {
-          fireEvent.press(screen.getByText('Open ask'))
-        })
-        ExpectScreen(screen).toHaveText('Yes')
+  Test(
+    "draws an asked dialog in the app host's window layer, outside the padded frame, when its navigator does not own the window",
+    async () => {
+      setInsets()
+      try {
+        await testCompileApp(askSlotSource, async screen => {
+          await act(async () => {
+            fireEvent.press(screen.getByText('Open ask'))
+          })
+          ExpectScreen(screen).toHaveText('Yes')
 
-        const scrim = screen.UNSAFE_getAllByType(RN.View).find(view => {
-          const style = RN.StyleSheet.flatten(view.props.style) ?? {}
-          return style.backgroundColor === 'rgba(0, 0, 0, 0.45)'
+          const scrim = askScrim(screen)
+          // The synthesized SlotNav renders inside the app host's AppSurfaceFrame, whose scroll content
+          // is padded away from the window edges. Drawn there, the scrim would dim the padded content
+          // box only; drawn in the window layer beside that frame it covers the window, and so adds
+          // the live insets itself to keep the card off the notch and the home indicator.
+          Expect(hasAncestorOfType(scrim, RN.ScrollView)).toBe(false)
+          Expect(RN.StyleSheet.flatten(scrim.props.style)).toMatchObject({
+            paddingBottom: 24 + insets.bottom,
+            paddingLeft: 24 + insets.left,
+            paddingRight: 24 + insets.right,
+            paddingTop: 24 + insets.top,
+          })
         })
-        Expect(scrim).toBeDefined()
-        // The synthesized SlotNav does not own its window, so AppSurfaceFrame already padded this
-        // scrim's ancestor content by the live insets; adding them again here would double-pad.
-        Expect(RN.StyleSheet.flatten(scrim!.props.style)).toMatchObject({
-          paddingBottom: 24,
-          paddingLeft: 24,
-          paddingRight: 24,
-          paddingTop: 24,
+      } finally {
+        resetInsets()
+      }
+    },
+  )
+
+  Test(
+    'draws an asked dialog in the window layer with the same insets when its navigator owns the window',
+    async () => {
+      setInsets()
+      try {
+        await testCompileApp(askStackSource, async screen => {
+          await act(async () => {
+            fireEvent.press(screen.getByText('Open ask'))
+          })
+          ExpectScreen(screen).toHaveText('Yes')
+
+          const scrim = askScrim(screen)
+          Expect(hasAncestorOfType(scrim, RN.ScrollView)).toBe(false)
+          Expect(RN.StyleSheet.flatten(scrim.props.style)).toMatchObject({
+            paddingBottom: 24 + insets.bottom,
+            paddingLeft: 24 + insets.left,
+            paddingRight: 24 + insets.right,
+            paddingTop: 24 + insets.top,
+          })
         })
-      })
-    } finally {
-      resetInsets()
-    }
+      } finally {
+        resetInsets()
+      }
+    },
+  )
+
+  Test('hides an asked dialog while an enclosing level covers its presenter, and shows it again after', async () => {
+    const innerHome = TR.Navigation.View({
+      name: 'InnerHome',
+      render: () => React.createElement(RN.Text, null, 'Inner home'),
+    })
+    const innerSlot = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('InnerSlot', TR.NavKind.Slot()),
+      { Initial: innerHome },
+    ))
+    // Home renders InnerSlot inline, the way a scene renders a `nav` it names, so InnerSlot's whole
+    // surface lives inside Home's stack level.
+    const home = TR.Navigation.View({
+      name: 'Home',
+      render: (_arguments, taoProps) =>
+        React.createElement(TR.Navigation.Occurrence, { __tao: taoProps, name: 'InnerSlot', value: innerSlot }),
+    })
+    const detail = TR.Navigation.View({
+      name: 'Detail',
+      render: () => React.createElement(RN.Text, null, 'Detail body'),
+    })
+    const confirm = TR.Navigation.View({
+      name: 'Confirm',
+      render: () => React.createElement(RN.Text, null, 'Question'),
+    })
+    const stack = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('Covered ask stack', TR.NavKind.Stack()),
+      { Initial: home },
+    ))
+    const app = TR.Navigation.App({ name: 'Covered ask app', navigator: () => stack, auxiliaries: () => ({}) })
+    const screen = render(React.createElement(TR.Navigation.AppHost, { app }))
+    ExpectScreen(screen).toHaveText('Inner home')
+
+    await act(async () => {
+      void innerSlot.ask(confirm, {})
+    })
+    ExpectScreen(screen).toHaveText('Question')
+
+    // A person cannot reach past a modal ask, but an action already running can still present over
+    // its presenter. The dialog draws in the window layer, outside Home's subtree — so what hides
+    // Home when Detail covers it must hide the dialog too, or the window dims behind a screen that
+    // is not showing.
+    await act(async () => {
+      stack.present(detail, {})
+    })
+    ExpectScreen(screen).toHaveText('Detail body')
+    Expect(screen.queryByText('Question')).toBeNull()
+
+    await act(async () => {
+      app.back()
+    })
+    ExpectScreen(screen).toHaveText('Question')
   })
 
-  Test('insets an asked dialog with base padding plus live insets when its navigator owns the window', async () => {
-    setInsets()
-    try {
-      await testCompileApp(askStackSource, async screen => {
-        await act(async () => {
-          fireEvent.press(screen.getByText('Open ask'))
-        })
-        ExpectScreen(screen).toHaveText('Yes')
-
-        const scrim = screen.UNSAFE_getAllByType(RN.View).find(view => {
-          const style = RN.StyleSheet.flatten(view.props.style) ?? {}
-          return style.backgroundColor === 'rgba(0, 0, 0, 0.45)'
-        })
-        Expect(scrim).toBeDefined()
-        Expect(RN.StyleSheet.flatten(scrim!.props.style)).toMatchObject({
-          paddingBottom: 24 + insets.bottom,
-          paddingLeft: 24 + insets.left,
-          paddingRight: 24 + insets.right,
-          paddingTop: 24 + insets.top,
-        })
-      })
-    } finally {
-      resetInsets()
-    }
+  Test('draws an asked dialog in place when no window layer encloses its navigator', async () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => React.createElement(RN.Text, null, 'Home') })
+    const confirm = TR.Navigation.View({
+      name: 'Confirm',
+      render: () => React.createElement(RN.Text, null, 'Question'),
+    })
+    const stack = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('Bare stack', TR.NavKind.Stack()),
+      { Initial: home },
+    ))
+    // A navigator rendered on its own, with no app host and so no window layer, keeps its ask in
+    // its own overlay lane rather than dropping it.
+    const screen = render(stack.render() as React.ReactElement)
+    await act(async () => {
+      void TR.Navigation.Ask({ navigation: stack }, confirm, {})
+    })
+    screen.rerender(stack.render() as React.ReactElement)
+    ExpectScreen(screen).toHaveText('Question')
+    askScrim(screen)
   })
 
   Test(
@@ -305,9 +403,12 @@ Describe('Expo runtime: presentation surfaces', () => {
   )
 
   Test(
-    'does not leak the already-inset context through a native Modal: an ask nested inside a sheet still insets',
+    "draws an ask asked from inside a native sheet in the sheet's own window layer, with the sheet window's insets",
     async () => {
       setInsets()
+      // The page sheet's own native window (see the sheet test above): its insets differ from the
+      // root window's on every edge but `left` and `right`.
+      const modalInsets = { bottom: 21, left: 0, right: 0, top: 0 }
       try {
         await testCompileApp(
           `
@@ -341,11 +442,12 @@ Describe('Expo runtime: presentation surfaces', () => {
             }
           `,
           async screen => {
-            // The presenter (Editor) sits inside the app host's own AppSurfaceFrame, since its
-            // synthesized SlotNav does not own its window — but the ask below is asked from inside
-            // the sheet's own nested SlotNav (InnerSlot), a descendant of the native Modal that frame
-            // never padded. React context still crosses the Modal portal, so without resetting it,
-            // this ask would wrongly read "already inset" from the presenter's ancestor frame.
+            // The ask below is asked from inside the sheet's own nested SlotNav (InnerSlot), a
+            // descendant of the native Modal. A native Modal lies above the root window's layer, so
+            // an ask drawn there would be hidden behind the sheet; the sheet keeps a window layer of
+            // its own, and the ask must draw in that one — which the sheet window's own insets, read
+            // from the sheet's nested SafeAreaProvider rather than the root's, prove.
+            safeAreaMock().setNestedSafeAreaInsetsForTests(modalInsets)
             await act(async () => {
               fireEvent.press(screen.getByText('Open sheet'))
             })
@@ -354,16 +456,16 @@ Describe('Expo runtime: presentation surfaces', () => {
             })
             ExpectScreen(screen).toHaveText('Yes')
 
-            const scrim = screen.UNSAFE_getAllByType(RN.View).find(view => {
-              const style = RN.StyleSheet.flatten(view.props.style) ?? {}
-              return style.backgroundColor === 'rgba(0, 0, 0, 0.45)'
-            })
-            Expect(scrim).toBeDefined()
-            Expect(RN.StyleSheet.flatten(scrim!.props.style)).toMatchObject({
-              paddingBottom: 24 + insets.bottom,
-              paddingLeft: 24 + insets.left,
-              paddingRight: 24 + insets.right,
-              paddingTop: 24 + insets.top,
+            const scrim = askScrim(screen)
+            Expect(hasAncestorOfType(scrim, RN.Modal)).toBe(true)
+            // Inside the sheet's own keyboard avoidance too, so an input in the asked view clears
+            // the keyboard the way the sheet's content does.
+            Expect(hasAncestorOfType(scrim, RN.KeyboardAvoidingView)).toBe(true)
+            Expect(RN.StyleSheet.flatten(scrim.props.style)).toMatchObject({
+              paddingBottom: 24 + modalInsets.bottom,
+              paddingLeft: 24 + modalInsets.left,
+              paddingRight: 24 + modalInsets.right,
+              paddingTop: 24 + modalInsets.top,
             })
           },
         )
