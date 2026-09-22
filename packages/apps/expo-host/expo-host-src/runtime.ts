@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert, FS } from '@shared'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
+export { DesktopHost } from './desktop-host'
 
 export {
   type ExpoUpdateArtifact,
