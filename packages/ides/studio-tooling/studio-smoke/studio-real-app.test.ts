@@ -215,8 +215,8 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // Adding a scenario changes the cell contract. Unlike a compatible render edit above, it
     // deliberately resets every retained preview so old interaction state cannot cross it.
     const expandedSource = movedSource.replace(
-      'scenario "default" { render MainView() }',
-      'scenario "default" { render MainView() }\n   scenario "second" { render MainView() }',
+      /scenario "default" \{\s*render MainView\(\)\s*\}/,
+      '$&\n   scenario "second" { render MainView() }',
     )
     Expect(expandedSource).not.toBe(movedSource)
     await replaceEditorSource(
