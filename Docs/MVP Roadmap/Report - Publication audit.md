@@ -373,8 +373,9 @@ Three test files also embed absolute paths, but only one is personal:
   source already does, and change that one test fixture to `/Users/dev/...` to match its neighbours.
   Same commit as `P17`.
 - **Disposition (2026-09-22):** Fixed by no longer tracking `.codex/config.toml`, since the
-  recommendation cannot work: Codex parses a `~` socket entry but never expands it, so the rule
-  would match nothing. `./agent setup` renders the file per machine with absolute paths, and with
+  recommendation cannot work: Codex 0.155.1 refuses to start its network proxy on a `~`, `$HOME`,
+  or relative socket entry (`invalid network.allow_unix_sockets[0]`, measured), and accepts only an
+  absolute path, which names a login. `./agent setup` renders the file per machine with absolute paths, and with
   the clone's own Git directory in place of a hardcoded `~/code/tao-lang-2/.git`. `.codex/hooks.json`
   and `.codex/rules/tao.rules` stay tracked. The cost is that Codex's first session in a fresh
   clone runs on its default permissions until that session's start hook has run setup. The personal

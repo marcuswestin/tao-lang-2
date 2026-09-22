@@ -37,7 +37,7 @@ const PROVIDER_NAMES = Object.keys(PROVIDERS) as AgentChatProviderName[]
 const PROVIDER_VARIABLE = 'TAO_STUDIO_AGENT_PROVIDER'
 
 /** One provider the person can choose, as the panel lists it. */
-export type AgentChatProviderOption = {
+type AgentChatProviderOption = {
   /** True when its key is available. */
   configured: boolean
   label: string

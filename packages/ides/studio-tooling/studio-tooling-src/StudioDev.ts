@@ -639,7 +639,8 @@ async function studioWatchmanEnvironment(
     )
   }
   const watchRoot = options.watchRoot ?? repositoryRoot
-  const result = await (options.run ?? CLI.run)(executable, {
+  const run = options.run ?? CLI.run
+  const result = await run(executable, {
     args: ['watch-project', watchRoot],
     stdio: 'pipe',
   })
@@ -657,14 +658,23 @@ async function studioWatchmanEnvironment(
     )
   }
   // Watchman answers with an existing watch that encloses the checkout before it honors the
-  // checkout's own root marker, so a watched primary checkout folds every worktree into one watch.
-  const watched = watchmanWatchRoot(result.stdout)
-  const enclosing = watched === undefined
-    ? undefined
-    : enclosingWatchRoot([watched], await FS.realPath(repositoryRoot).catch(() => repositoryRoot))
+  // checkout's own root marker, so a watched primary checkout folds every worktree nested in it into
+  // one watch. One that no dev server subscribes to is released and the watch asked for again; one
+  // still in use is left alone, and Studio refuses rather than have Metro crawl every worktree.
+  const checkout = await FS.realPath(repositoryRoot).catch(() => repositoryRoot)
+  const enclosingIn = (output: string) => {
+    const watched = watchmanWatchRoot(output)
+    return watched === undefined ? undefined : enclosingWatchRoot([watched], checkout)
+  }
+  let enclosing = enclosingIn(result.stdout)
+  if (enclosing !== undefined && await watchIsIdle(run, executable, enclosing)) {
+    await run(executable, { args: ['watch-del', enclosing], stdio: 'pipe' })
+    const again = await run(executable, { args: ['watch-project', watchRoot], stdio: 'pipe' })
+    enclosing = again.error === undefined && again.exitCode === 0 ? enclosingIn(again.stdout) : enclosing
+  }
   if (enclosing !== undefined) {
     Errors.throwHostEnvironment(
-      `Tao Studio cannot start Metro on its own watch: Watchman is watching ${enclosing}, which encloses this checkout, so Metro would crawl every worktree beneath it. Once no dev server uses it (\`${executable} debug-get-subscriptions ${enclosing}\` lists none), run \`${executable} watch-del ${enclosing}\`, then retry Studio.`,
+      `Tao Studio cannot start Metro on its own watch: Watchman is watching ${enclosing}, which encloses this checkout, and a dev server is still subscribed to it, so Metro would crawl every worktree beneath it. Once that server stops, retry Studio: it releases an enclosing watch nothing uses.`,
     )
   }
   const environment = options.environment ?? Platform.runtimeProcess.env
@@ -693,6 +703,23 @@ function watchmanCapabilityNames(output: string): ReadonlySet<string> {
     return new Set(parsed['capabilities'].filter((capability): capability is string => typeof capability === 'string'))
   } catch {
     return new Set()
+  }
+}
+
+/** watchIsIdle is true only when Watchman positively reports no subscription on `root`. */
+async function watchIsIdle(
+  run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>,
+  executable: string,
+  root: string,
+): Promise<boolean> {
+  const listed = await run(executable, { args: ['--no-pretty', 'debug-get-subscriptions', root], stdio: 'pipe' })
+  try {
+    const parsed: unknown = JSON.parse(listed.stdout)
+    return listed.exitCode === 0 && Json.isRecord(parsed)
+      && Array.isArray(parsed['subscribers']) && parsed['subscribers'].length === 0
+      && Array.isArray(parsed['subscriptions']) && parsed['subscriptions'].length === 0
+  } catch {
+    return false
   }
 }
 

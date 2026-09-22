@@ -41,19 +41,28 @@
     108,661 files, 18,722 directories, 5,118 symlinks here), and Metro needs it visible through
     Watchman to hash what it resolves. So `.watchmanconfig` must never ignore a Metro watch folder:
     a watch folder inside an ignored directory gets an empty file list. A test holds that.
+  - An explicit watch of the nested checkout does not protect it either: with one in place,
+    `watch-project` on a folder inside it still resolved to the outer watch (measured on a
+    throwaway tree). Watchman consolidates onto an enclosing watch by design, so the one structural
+    fix is not to nest checkouts inside a watched one.
 - **Workaround:** Run `./agent doctor`. It names a denied socket (fix the sandbox rule, then
   restart the session), a stopped server (the exact start command, using the primary checkout's
   client so the LaunchAgent survives worktree cleanup), and an enclosing watch root (the
-  `watch-del` to run once `debug-get-subscriptions` shows no dev server on it).
-- **Proposed change:** Prevent the enclosing watch instead of only detecting it, so the primary
-  checkout's own dev loop cannot capture every worktree. Candidates are Studio watching a narrower
-  root in the primary checkout, or `./agent setup` removing an idle enclosing watch. Separately,
-  measure the no-Watchman fallback on the current Metro before relying on the EMFILE claim.
+  `watch-del` to run once `debug-get-subscriptions` shows no dev server on it). Studio's launch
+  check now releases an enclosing watch nothing subscribes to by itself.
+- **Proposed change:** Done in part. `WorktreeCreate`/`WorktreeRemove` hooks
+  (`WorktreePlacement.ts`) now place Claude Code's worktrees beside the primary checkout, in
+  `<checkout>.worktrees/`, falling back to `.claude/worktrees/` when that fails. Codex already keeps
+  its own outside. Still open: the harness documents the hooks for `claude --worktree`, subagent
+  worktrees, and background sessions, not for the desktop app's worktree sessions, which made most
+  of the 19 nested worktrees measured here; an open harness issue (anthropics/claude-code#36205)
+  reports subagent worktrees ignoring the hooks; and worktrees already nested stay where they are
+  until they are removed. Confirm the desktop case on one new session once this lands.
 - **Dependencies:** None.
 - **Acceptance:** A fresh worktree under a watched primary checkout gets its own watch without a
   person's intervention, and a stopped server is either restarted without a person or reported by
   every command that needs it.
 - **Source:** 2026-09-22 agent file-watching project; decisions A1, B1, C1 and D1 of its decision
   round (Codex config untracked and machine-local; doctor fails when Watchman is unusable; doctor
-  prints the start command rather than writing to the host; enclosing roots detected, not yet
-  prevented).
+  prints the start command rather than writing to the host; enclosing roots detected), then
+  worktrees placed beside the checkout and idle enclosing watches released.
