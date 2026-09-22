@@ -187,7 +187,7 @@
         // `land` wraps the lock, the barrier, and then `merge-with-main`, which is also reachable on
         // its own and is the spelling AGENTS.md uses. Naming only `land` would leave the documented
         // entry point sandboxed and failing exactly as before. `./agent` has no landing command at
-        // all — `JUST_COMMANDS` in `agent-dev.ts` stops at `land-lock`, `land-unlock` and `landed`,
+        // all — `JUST_COMMANDS` in `AgentCommands.ts` stops at `land-lock`, `land-unlock` and `landed`,
         // because an agent proposes a landing rather than making one — so an `./agent land` entry
         // here would be a rule that looks like coverage and matches nothing.
         // Formatting and regenerating the agent configuration each harness write-protects against
