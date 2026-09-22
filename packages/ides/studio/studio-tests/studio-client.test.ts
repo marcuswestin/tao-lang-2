@@ -3745,6 +3745,48 @@ function stubStudioSessionWindow(pathname: string): () => void {
   }
 }
 
+Test('Lens transport retains only samples from the exact preview cell and coalesces refresh', async () => {
+  const previewWindow = {}
+  const preview = previewConnection('preview-lens', 'default', previewWindow)
+  let changed = 0
+  const message = (cellRevision: number): MessageEvent =>
+    ({
+      data: {
+        channel: studioProtocolChannel,
+        identity: { ...preview.cellIdentity, cellRevision, previewInstanceId: preview.previewInstanceId },
+        protocolVersion: studioProtocolVersion,
+        sample: {
+          actualDurationMs: 22,
+          causes: [{ kind: 'state' }],
+          identity: { end: 30, kind: 'render', sourcePath: '/workspace/Garden.tao', start: 10 },
+          instanceId: 'row-1',
+          phase: 'update',
+          sourceVersion: 'source-1',
+          timestamp: 1_788_100_000_000,
+        },
+        type: 'preview-lens-render',
+      },
+      origin: preview.origin,
+      source: previewWindow,
+    }) as MessageEvent
+  const actions = {
+    async applySourceAction() {},
+    changed: () => {
+      changed += 1
+    },
+    inspect() {},
+  }
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  await Promise.all([
+    handlePreviewMessage(message(0), preview, handshake, async () => undefined, actions),
+    handlePreviewMessage(message(0), preview, handshake, async () => undefined, actions),
+  ])
+  await handlePreviewMessage(message(1), preview, handshake, async () => undefined, actions)
+  await Promise.resolve()
+  Expect(preview.lensSamples).toHaveLength(2)
+  Expect(changed).toBe(1)
+})
+
 function previewConnection(
   previewInstanceId: string,
   cellId: string,

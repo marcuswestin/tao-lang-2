@@ -59,6 +59,36 @@ Describe('Studio test process output', () => {
     Expect(result.status).toBe('cancelled')
     Expect(runner.status().running).toBe(false)
   })
+
+  Test('requests and retains the versioned live-render artifact from tao test', async () => {
+    const artifact = {
+      checks: [{
+        appSourcePath: '/project/App.tao',
+        checkName: 'mounts app',
+        checkSource: { filePath: '/project/App.test.tao' },
+        renders: [{
+          end: 42,
+          renderId: '/project/App.tao:10:42',
+          sourcePath: '/project/App.tao',
+          sourceVersion: 'text-v1:12:abcdefgabcdefg',
+          start: 10,
+        }],
+        status: 'passed',
+        suiteName: 'App',
+      }],
+      format: 'tao-journey-observations',
+      version: 1,
+    }
+    const runner = new StudioTestProcessRunner({
+      args: ['-c', `printf '%s' '${JSON.stringify(artifact)}' > "$2"`, 'journey-artifact'],
+      command: '/bin/sh',
+      cwd: FS.tmpdir(),
+    })
+
+    await runner.run()
+
+    Expect(runner.journeyObservations()).toEqual(artifact)
+  })
 })
 
 Describe('Studio native wrapper foundation', () => {

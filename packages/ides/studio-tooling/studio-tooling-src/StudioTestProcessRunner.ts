@@ -5,7 +5,8 @@ import {
   type StudioProcessTree,
   type WaitForStudioProcessTreeClose,
 } from '@expo-host/dev-loop/StudioProcessTree'
-import { Errors, Text } from '@shared'
+import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
+import { Errors, FS, Text } from '@shared'
 import { StudioTestOutput, type StudioTestRun, type StudioTestRunner, type StudioTestStatus } from '@studio'
 
 type StudioTestProcessRunnerOptions = {
@@ -25,6 +26,7 @@ export class StudioTestProcessRunner implements StudioTestRunner {
   #activeClose: WaitForStudioProcessTreeClose | undefined
   #closed = false
   #lastRun: StudioTestRun | undefined
+  #lastJourneyObservations: RuntimeTesting.JourneyObservationsArtifact | undefined
   #running: Promise<StudioTestRun> | undefined
 
   constructor(options: StudioTestProcessRunnerOptions) {
@@ -33,6 +35,11 @@ export class StudioTestProcessRunner implements StudioTestRunner {
 
   status(): StudioTestStatus {
     return { available: true, lastRun: this.#lastRun, running: this.#running !== undefined }
+  }
+
+  /** journeyObservations returns the last run's live renderer observations when its command supplied the artifact. */
+  journeyObservations(): RuntimeTesting.JourneyObservationsArtifact | undefined {
+    return this.#lastJourneyObservations
   }
 
   run(): Promise<StudioTestRun> {
@@ -59,10 +66,12 @@ export class StudioTestProcessRunner implements StudioTestRunner {
 
   async #run(): Promise<StudioTestRun> {
     const id = crypto.randomUUID()
+    const journeyObservationsPath = FS.resolvePath(`tao-studio-journey-observations-${id}.json`, FS.tmpdir())
+    this.#lastJourneyObservations = undefined
     const startedAt = Date.now()
     const output = new StudioTestProcessOutput(retainedOutputBytes)
     const command = startStudioProcessTree(this.#options.command, {
-      args: this.#options.args,
+      args: [...this.#options.args, '--journey-observations', journeyObservationsPath],
       cwd: this.#options.cwd,
       env: this.#options.env,
       onOutput(_stream, chunk) {
@@ -77,6 +86,8 @@ export class StudioTestProcessRunner implements StudioTestRunner {
       this.#active = undefined
       this.#activeClose = undefined
     }
+    this.#lastJourneyObservations = await readJourneyObservations(journeyObservationsPath)
+    await FS.remove(journeyObservationsPath)
     const run = StudioTestOutput.parse({
       durationMs: Date.now() - startedAt,
       exitCode: completion.exitCode,
@@ -86,9 +97,17 @@ export class StudioTestProcessRunner implements StudioTestRunner {
       parseOutput: output.parseText(),
       signal: completion.signal,
     })
+    run.journeyObservations = this.#lastJourneyObservations
     this.#lastRun = run
     return run
   }
+}
+
+async function readJourneyObservations(path: string): Promise<RuntimeTesting.JourneyObservationsArtifact | undefined> {
+  if (!await FS.isFile(path)) {
+    return undefined
+  }
+  return RuntimeTesting.JourneyObservations.parseArtifact(await FS.readJson<unknown>(path))
 }
 
 export class StudioTestProcessOutput {

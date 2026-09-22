@@ -12,6 +12,52 @@ import {
 } from '../studio-src/StudioProtocol'
 
 Describe('Studio session paths and routes', () => {
+  Test('accepts bounded Lens timing without exposing values or trusting malformed causes', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      sample: {
+        actualDurationMs: 18.5,
+        causes: [{ entity: 'Note', kind: 'data', providerWaitMs: 12.25, schema: 'Journal' }, { kind: 'state' }],
+        identity: { end: 42, kind: 'render', ownerName: 'Root', sourcePath: '/project/Main.tao', start: 21 },
+        instanceId: 'render-instance-1',
+        phase: 'update',
+        resolvedStyle: { color: 'rgb(3, 4, 5)', 'font-size': '18px' },
+        sourceVersion: 'sha-1',
+        timestamp: 1_788_100_000_000,
+      },
+      type: 'preview-lens-render',
+    }
+    Expect(StudioProtocol.parseMessage(message)).toMatchObject({ sample: message.sample, type: message.type })
+    Expect(StudioProtocol.parseMessage({ ...message, sample: { ...message.sample, actualDurationMs: Number.NaN } }))
+      .toBeUndefined()
+    Expect(
+      StudioProtocol.parseMessage({
+        ...message,
+        sample: {
+          ...message.sample,
+          causes: [{ kind: 'data', schema: 'Journal', entity: 'Note', value: 'private row' }],
+        },
+      }),
+    )
+      .toMatchObject({ sample: { causes: [{ entity: 'Note', kind: 'data', schema: 'Journal' }] } })
+    Expect(
+      StudioProtocol.parseMessage({
+        ...message,
+        sample: { ...message.sample, causes: [{ kind: 'data', schema: '', entity: 'Note' }] },
+      }),
+    )
+      .toBeUndefined()
+    Expect(
+      StudioProtocol.parseMessage({
+        ...message,
+        sample: { ...message.sample, resolvedStyle: { content: 'private row' } },
+      }),
+    )
+      .toBeUndefined()
+  })
+
   Test('parses finite preview canvas gestures and rejects malformed geometry', () => {
     const gesture = {
       channel: studioProtocolChannel,

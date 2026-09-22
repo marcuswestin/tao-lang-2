@@ -188,6 +188,29 @@ async function listCachedFingerprints(runtimeRoot: string): Promise<string[]> {
 }
 
 Describe('tao test CLI', () => {
+  Test('writes a versioned live-render artifact when Studio requests journey observations', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const artifactPath = FS.resolvePath('journey-observations.json', rootDir)
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest([
+            'test',
+            rootDir,
+            '--journey-observations',
+            artifactPath,
+          ])
+
+          Expect(result.exitCode).toBe(0)
+          Expect(await FS.readJson<RuntimeTesting.JourneyObservationsArtifact>(artifactPath)).toEqual({
+            checks: [],
+            format: 'tao-journey-observations',
+            version: 1,
+          })
+        })
+      })
+    })
+  })
+
   Test('reports no discovered tests without failing', async () => {
     await withTaoFixture({ 'Main.tao': '' }, async (rootDir) => {
       const result = await runTaoCliForTest(['test', rootDir])
