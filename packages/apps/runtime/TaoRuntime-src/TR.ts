@@ -669,6 +669,15 @@ class TR {
     return inheritCallerProps ? TR.TaoProps(props, callerProps) : props
   }
 
+  /**
+   * DeclarationTaoProps carries a view or scene declaration's header style defaults to the
+   * occurrence root of each of its render branches. The header sits at the caller's own link, so it
+   * applies above the element default and below the clauses the caller wrote at the render site.
+   */
+  static DeclarationTaoProps(callerProps: TR.TaoProps | undefined, spec: TR.DesignSpec): TR.TaoProps {
+    return callerProps === undefined ? { declarationSpec: spec } : { ...callerProps, declarationSpec: spec }
+  }
+
   /** AssertViewDepth fails the first generated view frame beyond the exact 256-frame cap. */
   static AssertViewDepth(props: TR.TaoProps | undefined, view: string): void {
     const depth = props?.viewDepth ?? 1

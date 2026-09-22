@@ -228,6 +228,160 @@ Describe('TR design runtime', () => {
     })
   })
 
+  Test('clears a slot with `none` on every clause head, leaving the element unstyled', () => {
+    const resolved = DesignControls.resolve(
+      clearingDesign(),
+      DesignControls.Spec([
+        ['card'],
+        ['bg', 'none'],
+        ['border', 'none'],
+        ['radius', 'none'],
+        ['fg', 'none'],
+        ['size', 'none'],
+        ['weight', 'none'],
+        ['line', 'none'],
+        ['pad', 'none'],
+        ['margin', 'none'],
+        ['gap', 'none'],
+        ['width', 'none'],
+        ['height', 'none'],
+      ]),
+    )
+
+    // Nothing lays out and nothing is painted, but each cleared visual slot is carried as an
+    // explicit unset: the layer that set it may be another link's, merged in later.
+    Expect(LayoutControls.resolve({ entries: resolved.layout?.entries ?? [] })).toEqual({})
+    Expect(styleEntries(resolved.style)).toEqual([
+      ['backgroundColor', undefined],
+      ['borderColor', undefined],
+      ['borderRadius', undefined],
+      ['borderWidth', undefined],
+      ['color', undefined],
+      ['fontSize', undefined],
+      ['fontWeight', undefined],
+      ['lineHeight', undefined],
+    ])
+  })
+
+  Test('clears one spacing side with `none` and keeps the sides the clause left alone', () => {
+    const resolved = DesignControls.resolve(
+      clearingDesign(),
+      DesignControls.Spec([
+        ['card'],
+        ['pad', 'left', 'none'],
+        ['margin', 'horizontal', 6],
+        ['margin', 'horizontal', 'none'],
+      ]),
+    )
+
+    Expect(LayoutControls.resolve({ entries: resolved.layout?.entries ?? [] })).toEqual({
+      gap: 6,
+      height: 40,
+      marginBottom: 10,
+      marginTop: 10,
+      paddingBottom: 12,
+      paddingRight: 12,
+      paddingTop: 12,
+      width: 320,
+    })
+  })
+
+  Test('sets a slot again after `none` cleared it, and keeps `pad 0` as zero', () => {
+    const resolved = DesignControls.resolve(
+      clearingDesign(),
+      DesignControls.Spec([
+        ['card'],
+        ['pad', 'none'],
+        ['pad', 8],
+        ['gap', 'none'],
+        ['gap', 0],
+        ['bg', 'none'],
+        ['bg', 'ink'],
+      ]),
+    )
+
+    Expect(resolved.style).toEqual({
+      backgroundColor: '#121826',
+      borderColor: '#121826',
+      borderRadius: 8,
+      color: '#121826',
+      fontSize: 14,
+      fontWeight: '700',
+      lineHeight: 20,
+      borderWidth: 1,
+    })
+    Expect(LayoutControls.resolve({ entries: resolved.layout?.entries ?? [] })).toEqual({
+      gap: 0,
+      height: 40,
+      margin: 10,
+      // `pad 8` reopened each side the clear had closed, which is the side-by-side form.
+      paddingBottom: 8,
+      paddingLeft: 8,
+      paddingRight: 8,
+      paddingTop: 8,
+      width: 320,
+    })
+  })
+
+  Test('refuses `none` after a clause head that names no slot to clear', () => {
+    Expect(() => DesignControls.resolve(clearingDesign(), DesignControls.Spec([['fill', 'none']]))).toThrow(
+      "Layout clause 'fill none' cannot clear a slot with 'none'.",
+    )
+    Expect(() => DesignControls.resolve(clearingDesign(), DesignControls.Spec([['content', 'none']]))).toThrow(
+      "Layout clause 'content none' cannot clear a slot with 'none'.",
+    )
+  })
+
+  Test('resolves a declaration header above the element default and below the caller clauses', () => {
+    const design = DesignControls.Declaration({
+      name: 'Header',
+      tokens: { ink: '#121826', paper: '#f6f7f3' },
+      bundles: { Card: DesignControls.Spec([['pad', 4], ['radius', 2], ['bg', 'ink']]) },
+    })
+    const occurrence = { end: 40, kind: 'inline' as const, path: '/Main.tao', start: 30 }
+
+    const resolved = DesignControls.resolve(
+      design,
+      DesignControls.Source(DesignControls.Spec([['pad', 0]]), occurrence),
+      'Card',
+      'light',
+      undefined,
+      DesignControls.Spec([['pad', 12], ['bg', 'paper']]),
+    )
+
+    Expect(resolved.style).toEqual({ backgroundColor: '#f6f7f3', borderRadius: 2 })
+    // Merging one `pad` over another keeps the sides it settles, so the caller's zero lands on all four.
+    Expect(LayoutControls.resolve({ entries: resolved.layout?.entries ?? [] })).toEqual({
+      paddingBottom: 0,
+      paddingLeft: 0,
+      paddingRight: 0,
+      paddingTop: 0,
+    })
+    Expect(resolved.provenance).toEqual([
+      { chain: [{ kind: 'element-default', member: 'Card' }], entry: ['pad', 4], property: 'pad' },
+      { chain: [{ kind: 'element-default', member: 'Card' }], entry: ['radius', 2], property: 'radius' },
+      { chain: [{ kind: 'element-default', member: 'Card' }], entry: ['bg', 'ink'], property: 'background' },
+      { chain: [{ kind: 'declaration' }], entry: ['pad', 12], property: 'pad' },
+      { chain: [{ kind: 'declaration' }], entry: ['bg', 'paper'], property: 'background' },
+      { chain: [occurrence], entry: ['pad', 0], property: 'pad' },
+    ])
+  })
+
+  Test('keeps the source a compiled declaration header carries instead of stamping its own', () => {
+    const authored = { end: 22, kind: 'declaration' as const, member: 'Card', path: '/Card.tao', start: 10 }
+    const resolved = DesignControls.resolve(
+      DesignControls.Declaration({ name: 'Header', tokens: { paper: '#f6f7f3' }, bundles: {} }),
+      undefined,
+      undefined,
+      'light',
+      undefined,
+      DesignControls.Spec([['bg', 'paper']], authored),
+    )
+
+    Expect(resolved.style).toEqual({ backgroundColor: '#f6f7f3' })
+    Expect(resolved.provenance).toEqual([{ chain: [authored], entry: ['bg', 'paper'], property: 'background' }])
+  })
+
   Test('checks effective incompatibilities against the actual mounted design occurrence', () => {
     const weighted = DesignControls.Spec([['weighted'], ['rigid']])
     const light = DesignControls.Declaration({
@@ -296,3 +450,32 @@ Describe('TR design runtime', () => {
     )
   })
 })
+
+/** Style pairs in a stable order, keeping the explicitly cleared keys a plain toEqual would hide. */
+function styleEntries(style: Record<string, unknown> | undefined): (readonly [string, unknown])[] {
+  return Object.entries(style ?? {}).sort(([left], [right]) => left.localeCompare(right))
+}
+
+/** One bundle setting every clearable slot, so a `none` test states only what it clears. */
+function clearingDesign(): ReturnType<typeof DesignControls.Declaration> {
+  return DesignControls.Declaration({
+    name: 'Clearing',
+    tokens: { ink: '#121826', paper: '#f6f7f3' },
+    bundles: {
+      card: DesignControls.Spec([
+        ['bg', 'paper'],
+        ['border', 'ink'],
+        ['fg', 'ink'],
+        ['line', 20],
+        ['radius', 8],
+        ['size', 14],
+        ['weight', 700],
+        ['gap', 6],
+        ['height', 40],
+        ['margin', 10],
+        ['pad', 12],
+        ['width', 320],
+      ]),
+    },
+  })
+}

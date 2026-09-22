@@ -31,9 +31,12 @@ ViewCommandExclusion:
 // composed. That is why it is a keyword here rather than a separate rule — a scene IS a view, as
 // the Prelude's `scene is view` says, so everything that accepts a view accepts a scene and only
 // the render site turns one away.
+// The header clause is the declaration's public style surface: its defaults, which a caller's
+// clause overrides, applied to the occurrence root of every render branch. What a render inside
+// the body sets stays private.
 ViewDeclaration:
     visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
-    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])?
+    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? layoutClause=LayoutClause?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
 

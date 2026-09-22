@@ -4,12 +4,13 @@ import type {
   TaoLayoutContentTerm,
   TaoLayoutDirection,
   TaoLayoutPhysicalSpacingSide,
+  TaoLayoutSpacingAmount,
   TaoLayoutSpacingEntry,
   TaoLayoutSpacingSide,
 } from './LayoutTypes'
 
 type TaoLayoutContentDirectionalTerm = Exclude<TaoLayoutContentTerm, 'center'>
-type TaoLayoutSpacingPair = readonly [TaoLayoutSpacingSide, number]
+type TaoLayoutSpacingPair = readonly [TaoLayoutSpacingSide, TaoLayoutSpacingAmount]
 
 /** LayoutTerms resolves compact parsed layout terms into runtime semantic slots and style values. */
 export const LayoutTerms = {
@@ -84,14 +85,13 @@ function physicalSpacingSides(side: TaoLayoutSpacingSide): readonly TaoLayoutPhy
 }
 
 function spacingPairs(entry: TaoLayoutSpacingEntry): readonly TaoLayoutSpacingPair[] {
-  const firstTerm = entry[1]
-  if (typeof firstTerm === 'number') {
+  if (entry.length === 2) {
     return []
   }
 
   const pairs: TaoLayoutSpacingPair[] = []
   for (let index = 1; index < entry.length; index += 2) {
-    pairs.push([entry[index] as TaoLayoutSpacingSide, entry[index + 1] as number])
+    pairs.push([entry[index] as TaoLayoutSpacingSide, entry[index + 1] as TaoLayoutSpacingAmount])
   }
   return pairs
 }

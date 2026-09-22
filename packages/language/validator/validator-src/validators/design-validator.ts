@@ -36,6 +36,7 @@ const designValidationMessages = {
     `Design screen '${name}' must use an increasing px threshold; only the last may omit it.`,
   invalidSize: (name: string) => `Design size '${name}' must resolve from px/rem values in the same unit family.`,
   missingMountedDesign: (entry: string) => `Design entry '${entry}' requires an app Design selection.`,
+  noneWithTrailingTerms: (entry: string) => `'none' must be the last term in design entry '${entry}'.`,
   placeholderShipping: 'Placeholder ships as an empty box in release.',
   precedingStyleProperty: (property: string, entry: string) =>
     `Style property '${property}' was already declared by '${entry}'.`,
@@ -60,6 +61,7 @@ export const DesignValidator = {
     [AST.TagPressStep.$type]: validateTaggedTestStep,
     [AST.TagStatement.$type]: validateTag,
     [AST.TagSubmitStep.$type]: validateTaggedTestStep,
+    [AST.ViewDeclaration.$type]: validateViewDeclarationDesign,
   } satisfies NodeValidationChecks,
   messages: designValidationMessages,
 }
@@ -151,10 +153,23 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (!clause) {
     return
   }
+  validateDesignClause(clause, render, ctx)
+}
+
+/** validateViewDeclarationDesign runs the same design checks a render site's clause gets over a declaration's public header clause. */
+function validateViewDeclarationDesign(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  const clause = view.layoutClause
+  if (!clause) {
+    return
+  }
+  validateDesignClause(clause, view, ctx)
+}
+
+function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: ValidationContext): void {
   // Snap writes measured `width` and `height` into Studio-owned generated views by design (FS-D11);
   // those inferred sizes are not explorations a person forgot to promote. A shipping Placeholder in
   // that same tree is exactly what FS-D2 warns about, so that warning is never suppressed there.
-  if (!isStudioGeneratedSource(render, ctx)) {
+  if (!isStudioGeneratedSource(node, ctx)) {
     for (const entry of clause.entries.filter(isInlineDesignExploration)) {
       ctx.warning(entry, designValidationMessages.exploration(entryText(entry)), {
         code: designValidationCodes.exploration,
@@ -211,9 +226,9 @@ function isTestSource(render: AST.Render): boolean {
   return Packages.isTestSourcePath(AST.getDocument(render).uri.path)
 }
 
-function isStudioGeneratedSource(render: AST.Render, ctx: ValidationContext): boolean {
+function isStudioGeneratedSource(node: AST.Node, ctx: ValidationContext): boolean {
   const studioGeneratedRoot = FS.resolvePath('@/studio', ctx.packagesContext.index.projectRoot)
-  return FS.pathIsWithin(AST.getDocument(render).uri.path, studioGeneratedRoot)
+  return FS.pathIsWithin(AST.getDocument(node).uri.path, studioGeneratedRoot)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
@@ -283,6 +298,14 @@ function validateVisualEntry(
   }
   const [head, ...terms] = conditioned
   const name = String(head)
+  // `none` clears the visual head's slot outright (Decisions §R9); it needs no token, size, or
+  // design lookup, and nothing may follow it.
+  if (terms[0] === 'none') {
+    if (terms.length > 1) {
+      ctx.error(entry, designValidationMessages.noneWithTrailingTerms(entryText(entry)))
+    }
+    return
+  }
   if (colorHeads.has(name)) {
     const token = terms.length === 1 && typeof terms[0] === 'string' ? terms[0] : undefined
     if (!token) {
@@ -624,7 +647,10 @@ function layoutSizeReferences(entry: AST.LayoutEntry): string[] {
     : head === 'width' || head === 'height'
     ? (terms[0] === 'max' ? terms.slice(1, 2) : terms.slice(0, 1))
     : []
-  return candidates.filter((value): value is string => typeof value === 'string' && value !== 'fill')
+  // `none` clears the slot outright and never names a design size, however it lands positionally.
+  return candidates.filter((value): value is string =>
+    typeof value === 'string' && value !== 'fill' && value !== 'none'
+  )
 }
 
 function designValuePath(path: AST.DesignValuePath): string {
@@ -651,6 +677,7 @@ function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
     const head = String(values[0])
     return values.length === 2
       && typeof values[1] === 'string'
+      && values[1] !== 'none'
       && !values[1].startsWith('#')
       && !(head === 'weight' && ['bold', 'medium', 'regular', 'semibold'].includes(values[1]))
   }

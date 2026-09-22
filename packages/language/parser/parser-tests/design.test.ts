@@ -85,6 +85,28 @@ Describe('parser: minimal design declarations', () => {
     Expect(entries).toContainEqual(['bg', '#fff'])
   })
 
+  Test('parses a declaration header clause and `none` as a clearing term', async () => {
+    const parsed = await testParseCode(`
+      design Theme { paper #fff }
+      type Answer is one of Yes
+      view Card() [pad 12, bg paper] { render Surface() [bg none, pad left none] }
+      scene Page() responds Answer [gap 8] { render Surface() }
+      view Surface() { }
+    `)
+
+    const views = [...AST.streamAllContents(parsed.entry.ast).filter(AST.isViewDeclaration)]
+    const clauses = views.map(view => [view.name, view.layoutClause?.entries.map(ASTUtils.layoutEntryValues)])
+    Expect(clauses).toEqual([
+      ['Card', [['pad', 12], ['bg', 'paper']]],
+      ['Page', [['gap', 8]]],
+      ['Surface', undefined],
+    ])
+    const entries = [...AST.streamAllContents(parsed.entry.ast).filter(AST.isLayoutEntry)]
+      .map(ASTUtils.layoutEntryValues)
+    Expect(entries).toContainEqual(['bg', 'none'])
+    Expect(entries).toContainEqual(['pad', 'left', 'none'])
+  })
+
   Test('preserves representable decided visual and spacing terms as typed layout AST values', async () => {
     const parsed = await testParseCode(`
       design Theme {
