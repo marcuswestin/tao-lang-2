@@ -13,10 +13,11 @@
   runs of WordFlower. Each run that compiled a new run root added exactly 2,135 files, the whole
   module graph the run loads, because the run root's path was part of Jest's configuration and Jest
   hashes its configuration into every cache key. The change that added this entry moved the
-  entrypoints out of the run root, which cut the growth to 650 files per compile; those are the
-  compiled apps, whose paths still change with every compile, so the growth is slower and still
-  unbounded. Entries written under a configuration or path that no longer exists can never be hit
-  again.
+  entrypoints out of the run root, which cut the growth to 650 files per compile, and the change
+  after it stored the compiled apps by their contents, which cut it to 116 after an edit and none
+  without one. The growth is now proportional to distinct compiled output rather than to runs, and
+  still unbounded: entries written under a configuration or path that no longer exists can never be
+  hit again.
 - **Workaround:** Delete the directory by hand; the next run of each suite re-transforms everything
   once.
 - **Proposed change:** Name a `cacheDirectory` in `packages/apps/expo-host/jest.shared.config.cjs`
