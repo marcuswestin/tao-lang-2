@@ -173,6 +173,12 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
+# Build a standalone Tao binary for this host after generating its parser
+[group('Ship')]
+standalone-cli-build: _parser-gen
+    mkdir -p .artifacts/build
+    bun build --compile --outfile .artifacts/build/tao packages/cli/tao-cli/cli-src/tao-cli.ts
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
 [positional-arguments]

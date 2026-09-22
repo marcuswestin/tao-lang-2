@@ -1,2 +1,6 @@
 nixpkgs:
   allowUnfree: true
+
+inputs:
+  bun-nixpkgs:
+    url: github:NixOS/nixpkgs/35e212742ceab4ae1dcfbfd9039a39215c816e8e

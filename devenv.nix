@@ -1,8 +1,11 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 let
   # Keep one Node pin for both devenv's JavaScript support and Expo's direct `node` usage.
   nodePkg = pkgs.nodejs_24;
+  # Bun 1.4.2 fixes the compiled-binary signature failure on macOS 27. Keep the
+  # rest of the toolchain on its existing nixpkgs pin.
+  bunPkg = (import inputs.bun-nixpkgs { system = pkgs.stdenv.system; }).bun;
 in
 {
   name = "tao-lang";
@@ -24,6 +27,7 @@ in
     enable = true;
     package = nodePkg;
     bun.enable = true;
+    bun.package = bunPkg;
   };
 
   android = {
