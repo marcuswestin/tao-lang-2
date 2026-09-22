@@ -17,7 +17,7 @@ five-target engineering survey below is broader than the decided first release: 
 an install script only**. Later targets and channels remain possible, not committed release scope.
 
 Everything under **Findings** was verified on this machine on 2026-09-17 — macOS 27.0 (26A428),
-arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun is 1.3.13; F3
+arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun was 1.3.13; F3
 explains why every other measurement was taken with an official Bun 1.4.2 instead. Commands and
 numbers are reproduced verbatim so a later reader can tell measurement from opinion.
 
@@ -119,9 +119,8 @@ Across versions, same `hello.ts`, same host:
 | 1.4.0           | invalid       | killed (137)                                                                     |
 | **1.4.2**       | **valid**     | **runs**                                                                         |
 
-Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 is a
-precondition for slice 1**, and it is a repository-wide change that has to be verified against the
-existing suites, not a local choice for this work.
+Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 was a
+precondition for slice 1**, and the changed profile must be verified against the existing suites.
 
 Re-signing a 1.4.2 binary for notarization works:
 
@@ -129,6 +128,12 @@ Re-signing a 1.4.2 binary for notarization works:
 $ codesign --force --sign - --options runtime tao-bin      # hardened runtime
 $ tao-bin check .                                          # still runs, exit 0
 ```
+
+The 2026-09-22 upgrade also exposed a macOS 27 watcher regression: with the same CLI watch tests,
+Bun 1.3.13 delivered native file-edit events and 1.4.2 did not, including with host access.
+Chokidar polling delivered the edits. Tao's shared debounced watcher therefore uses polling on
+macOS with Bun 1.4.2, preserving `tao test --watch` and the development loop without changing
+the backend for other runtime versions.
 
 ### F4 — What the CLI reads at runtime, and whether it can be embedded
 
@@ -491,21 +496,20 @@ that.
 
 Each slice ends somewhere honest — a thing that works, not a refactor that compiles.
 
-**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 — a `devenv.lock` nixpkgs
-update or an explicit `bun.package` override, since nothing pins a version string — and verify the
-existing suites against it (F3 — this is the precondition, it is repository-wide, and it moves every
-worktree on the machine at once). Add a build entry point that runs `_parser-gen` and then
-`bun build --compile` for the host platform. Done when `tao --help`,
-`tao fmt`, `tao check`, and `tao create --ai none --yes --skip-tests` run from the binary outside any
-checkout — which F1 shows is almost true already.
+**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 with a dedicated
+`bun.package` pin so the other toolchain packages stay fixed, and verify the existing suites
+against it (F3). Add a build entry point that runs `_parser-gen` and then `bun build --compile`
+for the host platform. Done when `tao --help`, `tao fmt`, and `tao check` run from the binary
+outside any checkout on a self-contained Tao project. A project created by `tao create` needs the
+runtime module installed on disk, so its acceptance belongs to slice 2.
 
 **2. One resource root.** The `TaoResources` seam, the three anchors plus the grammar path, the
 embedded resource payload, and the unpack-with-verification. Fills
 `packages/cli/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
 `DEVENV-058` — and it must copy rather than link, because `DEVENV-057` records that a directory
 symlink at exactly that path makes `GreenTree.hashTree` exit 128 before any gate runs. Done when
-`tao create` completes and `tao compile` produces a generated app from the binary, outside a
-checkout.
+`tao create --ai none --yes --skip-tests` completes and `tao compile` produces a generated app
+from the binary, outside a checkout.
 
 **3. A Tao home and a versioned host.** The `~/.tao` layout, the embedded host lockfile,
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
@@ -594,9 +598,9 @@ this list makes their effect on the implementation sequence explicit.
 - A fresh worktree has no `packages/language/parser/parser-src/_gen_tao-parser`, and every Tao command fails
   with a bare `Something went wrong.` until `just _parser-gen` runs. The build entry point in slice 1
   must generate before it compiles, and the diagnostic is worth fixing under `A1`.
-- Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets
-  `languages.javascript.bun.enable = true` and the version comes from `devenv.lock`'s nixpkgs input.
-  Slice 1's bump is therefore a nixpkgs update or an explicit `bun.package` override, and it moves
-  every worktree on the machine at once. The signing failure it fixes is `DEVENV-096`.
+- Slice 1 pins Bun 1.4.2 through a dedicated `bun-nixpkgs` input and
+  `languages.javascript.bun.package`, leaving the other nixpkgs packages on their existing pin.
+  A worktree sees the new Bun when its devenv profile is refreshed. The signing failure it fixes is
+  `DEVENV-096`.
 - The prototypes behind every measurement here were run in `.artifacts/tmp/standalone-proto/` and
   the session scratchpad, and were removed afterwards.

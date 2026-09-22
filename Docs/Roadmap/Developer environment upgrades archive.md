@@ -61,6 +61,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-092 — A landing staged its squash in a shared checkout, where another agent committed it](<Developer environment upgrades/Archive/DEVENV-092-a-landing-staged-its-squash-in-a-shared-checkout.md>) — Resolved
 - [DEVENV-093 — Ready branches convoy behind each other, each re-verifying the whole tree](<Developer environment upgrades/Archive/DEVENV-093-landing-branches-convoy-behind-each-other.md>) — Closed
 - [DEVENV-095 — Merge finalization is a prose protocol with no command behind it](<Developer environment upgrades/Archive/DEVENV-095-merge-finalization-had-no-command-behind-it.md>) — Resolved
+- [DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27](<Developer environment upgrades/Archive/DEVENV-096-the-devenv-bun-cannot-produce-a-runnable-compiled-binary.md>) — Resolved
 - [DEVENV-099 — No command reclaims dead worktrees and merged branches](<Developer environment upgrades/Archive/DEVENV-099-no-command-reclaims-dead-worktrees-and-merged-branches.md>) — Resolved
 - [DEVENV-100 — Finalize never accepts a `verify-full` green record](<Developer environment upgrades/Archive/DEVENV-100-finalize-never-accepts-a-verify-full-green-record.md>) — Resolved
 - [DEVENV-104 — `./dev` restores dependencies without satisfying `./agent`'s install stamp](<Developer environment upgrades/Archive/DEVENV-104-dev-restores-dependencies-without-satisfying-agent-s-install-stamp.md>) — Resolved
