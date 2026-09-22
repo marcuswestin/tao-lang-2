@@ -200,6 +200,8 @@ kbd {
 .studio-status[data-state="compiling"]::before { background: var(--studio-info); }
 .studio-status[data-state="error"] { border-color: rgba(255, 92, 92, .35); color: var(--studio-error); }
 .studio-status[data-state="error"]::before { background: var(--studio-error); box-shadow: 0 0 0 3px rgba(255, 92, 92, .18); }
+.studio-status[data-phone-unsynced-revision] { border-color: var(--studio-warning); }
+.studio-status[data-phone-unsynced-revision]::after { color: var(--studio-warning); content: "Phone unsynced"; flex: none; }
 .studio-status-diagnostic {
   background: transparent; border: 0; color: inherit; cursor: pointer; max-width: 100%; overflow: hidden; padding: 0;
   text-align: left; text-overflow: ellipsis; white-space: nowrap;

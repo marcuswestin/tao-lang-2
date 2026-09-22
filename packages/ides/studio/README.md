@@ -71,9 +71,15 @@ separate device gateway.
    two minutes. Confirm in Studio only when the codes match. The device key then lives in the
    phone's Keychain and the trusted record under the device-trust artifact root, so later launches
    reconnect without a code. **Revoke** removes that trust; a revoked phone must pair again.
-5. **Iterate.** Tao edits compile as usual; Metro Fast Refresh updates the phone and the browser
-   canvas from the same file graph, and the popover shows the compile revision beside the revision the
-   phone acknowledged. The floating **Tao** badge on the phone switches scenarios and reconnects.
+5. **Iterate.** Typing in Studio's editor stays local until **Save**; saved Tao edits compile and
+   publish to the shared Metro graph. Compatible edits retain the browser preview frames; a change
+   to the compiler-authored scenario contract reloads every retained browser frame. A later editor
+   Save waits while the connected phone has not acknowledged the previous compiled revision. If it
+   disconnects, Studio releases that wait after five seconds and marks the phone unsynced. The
+   popover shows the compile revision beside the phone's acknowledgment, and the floating **Tao**
+   badge on the phone switches scenarios and reconnects. Phone-wide scenario reset and compatible
+   phone state retention remain an integration boundary: the current device host keys its cell by
+   compile revision and remounts it on reassignment.
 
 Networking: the phone must reach the Mac's LAN address that Expo advertises (the popover names it);
 an active `169.254.*` cable interface is offered as another candidate but must succeed from the
