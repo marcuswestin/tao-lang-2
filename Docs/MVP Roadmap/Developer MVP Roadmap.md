@@ -74,6 +74,12 @@ committed `secrets/secrets.jsonc`.
   prerequisites under every option and they are now the only blocking work.
 - Apply the audit's `P1`, `P2`, and `P7`–`P10` findings through that public-audience edit. The
   mandatory `P15`–`P18` and `P24` fixes above remain separate prerequisites.
+- [ ] **Before the first public push, invalidate what history still exposes.** Untracking the
+      WordFlower ship lock (`P15`, 2026-09-22) removed it from the tree, not from history. Revoke the App
+      Store Connect API key its `keyId` names and issue a replacement for `tao ship`; the issuer ID, app
+      ID, and TestFlight group IDs are identifiers, not credentials, and cannot be rotated. Then re-run
+      the audit's full-history credential scan (`P22`, clean as of 2026-09-20) over the history being
+      pushed, and revoke anything it finds.
 
 ### R3 — Launch timing, positioning, and the stability promise
 
