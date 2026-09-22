@@ -12,23 +12,6 @@ The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadma
 agents can execute without a new decision, and `Docs/MVP Roadmap/Ro MVP Roadmap.md` for the
 judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/` for context.
 
-## Ro STACK
-
-- [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
-- [ ] Deep links and navigation persistence
-- [ ] Enable Codex to interact with studio on its own for testing and development of it.
-- [ ] Work through the durable developer-environment upgrade ledger.
-  - Agents record and deduplicate material findings as they work; the current backlog, incoming
-    branch fixes, evidence, and acceptance criteria live in
-    `Docs/Roadmap/Developer environment upgrades.md`; addressed entries move to
-    `Docs/Roadmap/Developer environment upgrades archive.md`. The `devenv-upgrades` skill owns how
-    the next set is selected and archived.
-- [ ] Decide how parallel agents share one machine.
-  - Twelve verification lanes ran at once on eighteen CPUs on 2026-09-17, which tripled every lane's
-    wall time and starved suites past their hang guards. What to share, what to serialize, what is
-    duplicated per worktree for no reason, and where a single orchestrator does and does not help
-    live in `Docs/Roadmap/Parallel agents on one machine.md`.
-
 ## Tao tooling performance
 
 - [ ] Make the `tao` commands interactive-grade.
@@ -295,7 +278,7 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
 
-## Ro's stack
+## Backlog
 
 Product and codebase backlog, unordered.
 
@@ -309,7 +292,7 @@ Product and codebase backlog, unordered.
     provider authors, with a surface snapshot test and a gate that app TypeScript imports only the
     SDK; today app code imports `@tao/runtime` directly, which every `TR` member makes public.
   - A vocabulary pass on the word "host", which names the machine in host lanes and an embedding
-    program in product host and device host; about 2,000 uses.
+    program in product host and device host, across the repository.
   - Recorded with the run in `Docs/Archive/Plans/Repository simplification 2/`.
 - [ ] Finish the cleanups the simplification plan deliberately deferred
   - The program itself is complete and recorded in
@@ -321,13 +304,11 @@ Product and codebase backlog, unordered.
       `packages/studio/studio-src/session/StudioFileOperations.ts`, which reject renaming or deleting
       the active app entry file on the only path a client can reach. What is missing is the affordance: the tree offers the
       action and the server refuses it, instead of not offering it.
-    - **Roughly two dozen raw `Error`s handed to a promise rejection.** `repo-lint` now ratchets them
-      through `CONVENTION_RULES.rejectedRawError` per file rather than per count, so a new rejection inside an
-      already-listed file still passes; the ratchet stops the set of files growing, not the number of
-      sites. Most reach a Tao author exactly as a throw would, though three of the twelve are test
-      fixtures and do not. Heaviest in
-      `studio-src/client/StudioMatrixView.ts`.
-    - **66 already-typed `throw new Errors.*` guards across ten studio files** that would collapse to a
+    - **Raw `Error`s handed to a promise rejection.** `repo-lint` ratchets them through
+      `CONVENTION_RULES.rejectedRawError` per file rather than per count, so the set of files cannot
+      grow while the sites inside a listed file remain. Each reaches a Tao author exactly as a throw
+      would. Heaviest in `studio-src/client/StudioMatrixView.ts`.
+    - **Already-typed `throw new Errors.*` guards in the studio files** that would collapse to a
       one-line `Assert.input` now that `Assert` narrows the expression it is given. Invisible to
       repo-lint because they are already typed; purely a readability win.
 - [ ] Finish simulation mode in Tao Studio
@@ -337,9 +318,8 @@ Product and codebase backlog, unordered.
     shows it before applying, and cancel or a failed proposal applies nothing.
   - The browser proof of observable delay, offline, declared failure, and cross-cell isolation exists
     as `packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts`, driven through
-    the Environment and scenario panel. It found and now guards a defect: a runtime update repeating
-    the applied revisions rebuilt a cell's provider overlay without a remount, so one run in five
-    mounted a cell with its heading and nothing else. With that fixed it passed twenty runs in twenty.
+    the Environment and scenario panel. It found and now guards a defect where a runtime update
+    repeating the applied revisions rebuilt a cell's provider overlay without a remount.
   - That journey is the `studio-network-simulation` gate in `verify-full`.
   - Two leads the diagnosis left open: `setMatrixManifest` emits `preview-manifest-changed` without
     checking the revision moved, which is the likely producer of the repeated update; and
@@ -384,8 +364,8 @@ Product and codebase backlog, unordered.
   - Keep this separate from the AI-in-apps work, which consumes concurrency policy but does not decide it.
     Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
-  - Part 5.2 of the simplification plan: 462 call sites today, five of which are inline template
-    literals rather than factory-produced messages and need converting first.
+  - Part 5.2 of the simplification plan: the few call sites that pass inline template literals
+    rather than factory-produced messages need converting first.
     Land it before or with that plan's validator rename slice.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
   - The dead-surface pass has landed (Part 1 of the simplification plan): the web-history module,
@@ -394,7 +374,7 @@ Product and codebase backlog, unordered.
     consolidated runtime error surface.
 - [ ] Remove magical strings.
   - Part 3.1 of the simplification plan owns the cluster with real breakage potential: Studio's
-    route table, session-protocol DTOs, and guards. Not started.
+    route table, session-protocol DTOs, and guards.
 - [ ] Improve utility function usage, preferring grouped helpers over many free imports.
   - Partly done through the simplification plan: `@shared/test` gained the deferred, waiter,
     terminal, module-mock, and clock helpers, and the runtime gained memory data helpers. The
@@ -402,13 +382,24 @@ Product and codebase backlog, unordered.
 - [ ] Apply the named-const export pattern across the repo, then rename modules to match their main export in one coordinated sweep.
   - Part 5.1 of the simplification plan, one commit per package, Note repo-lint's convention checks do **not**
     cover export naming or the module-basename-to-export correspondence, so this sweep needs its own
-    check if it is to stay swept. Not started.
+    check if it is to stay swept.
 - [ ] Rename `gen` helper properties to capitalized names, and stop `fmt` from breaking `gen\`…\`` onto the next line.
 - [ ] Add generic compiled test declarations.
 - [ ] Enable over-the-network dev app running for iOS devices
   - Start with the authenticated Expo-development-build Studio renderer described in the native-device
     exploration; require foreground pairing, local-network permission, revision recovery, revocation,
     and a real-iPhone validation pass. Do not add an unrestricted production remote-code path.
+- [ ] Deep links and navigation persistence.
+- [ ] Work through the developer-environment upgrade ledger.
+  - Agents record and deduplicate material findings as they work; the current backlog, incoming
+    branch fixes, evidence, and acceptance criteria live in
+    `Docs/Roadmap/Developer environment upgrades.md`; addressed entries move to
+    `Docs/Roadmap/Developer environment upgrades archive.md`. The `devenv-upgrades` skill owns how
+    the next set is selected and archived.
+- [ ] Decide how parallel agents share one machine.
+  - What to share, what to serialize, what is duplicated per worktree for no reason, and where a
+    single orchestrator does and does not help live in
+    `Docs/Roadmap/Parallel agents on one machine.md`.
 
 ### Smaller follow-ups
 
