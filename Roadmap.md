@@ -229,7 +229,9 @@ tests written in Tao, green in Current, for every construct introduced.
     a device loads the scenario rather than the canvas frame. Its acceptance is not complete — running
     one journey on the device is a fork rather than a task, and capture/restore has no UI on any
     surface. Status, what was proven live, and the open decisions are in
-    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`.
+    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`. Ro deferred
+    the entire record-and-replay Slice 4 until after the public MVP on 2026-09-22; its design
+    details remain open and its acceptance is not an MVP release gate.
 - [x] Add `tao create` project scaffold
   - Shipped 2026-09-04: `tao create "<description>"` writes the canonical project layout, id, and
     starters. Contract: `Docs/Spec/Tao Packages.md`. Direction and open follow-ups:

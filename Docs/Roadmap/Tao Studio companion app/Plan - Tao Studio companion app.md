@@ -1,9 +1,10 @@
 # Plan - Tao Studio companion app
 
 Status: product direction settled; the development foundation, Slices 1 and 2, and the packet-23 trust and
-rediscovery hardening are implemented in software. Slice 3's Tao Lens is implemented in this branch;
+rediscovery hardening are implemented in software. Slice 3's Tao Lens has landed;
 its selected-render browser and physical-device acceptance runs remain to be proved. Physical cable/LAN
-evidence remains separate and unverified here; later product slices remain planned. This plans a
+evidence remains separate and unverified here. Slice 4 is deferred until after the public MVP;
+later product slices remain planned. This plans a
 Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
@@ -439,7 +440,11 @@ and report whether compatible state survived refresh. A device journey is part o
 Acceptance: select one slow render and reach its source, invalidating state/data, resolved style, provider
 wait, and covering journey without manual correlation.
 
-### 4. Record and replay a semantic journey
+### 4. Record and replay a semantic journey (after public MVP)
+
+Ro deferred this entire slice on 2026-09-22. The saved source shape, expectation authoring,
+unresolved native or foreign step behavior, and draft editing scope remain open decisions for when
+the slice resumes. Its acceptance below is not a public-MVP release gate.
 
 - Live semantic script, editing, expectations, replay, and reviewed test/journey proposal.
 - Preserve unresolved foreign/native steps honestly.
