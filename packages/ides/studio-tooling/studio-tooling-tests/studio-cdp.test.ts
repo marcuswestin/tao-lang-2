@@ -388,13 +388,15 @@ Describe('Studio browser CDP harness', () => {
     )
     const browser = StudioCdp.testing.create(transient)
 
+    // budget-ok: `transient` is a fake CDP transport, so this budget is never actually waited out.
     await browser.waitFor('window.ready === true', { timeoutMs: 1_000 })
     Expect(transient.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(2)
 
     const productFailure = new FakeCdpTransport()
     productFailure.evaluateResults.push(new Errors.HostEnvironmentError('Preview handler failed after dispatch.'))
+    // `productFailure` is a fake CDP transport, so this budget is never actually waited out.
     await Expect(
-      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }),
+      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }), // budget-ok: fake transport.
     ).rejects.toThrow('Preview handler failed after dispatch.')
     Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })

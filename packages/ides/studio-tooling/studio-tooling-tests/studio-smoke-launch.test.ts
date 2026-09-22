@@ -136,6 +136,8 @@ Describe('Studio smoke launch', () => {
       const command = fakeCommand()
       let thrown: unknown
       try {
+        // `start` is a fake that returns synchronously, so this budget is never actually waited out —
+        // it exists to prove the readiness-timeout path fires.
         await startStudioSmokeLaunch({
           projectRoot: '/w/Apps/HNReader',
           repositoryRoot: root,
@@ -143,7 +145,7 @@ Describe('Studio smoke launch', () => {
             onOutput(Buffer.from('[studio]: Expo exited with code=1\n'))
             return command
           },
-          timeoutMs: 1,
+          timeoutMs: 1, // budget-ok: fake start, never actually waited out.
         })
       } catch (error) {
         thrown = error

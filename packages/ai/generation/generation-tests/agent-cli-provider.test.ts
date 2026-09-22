@@ -122,7 +122,9 @@ Describe('agent CLI generation provider', () => {
     })
     Expect(run).toEqual({ exitCode: 0, stderr: '', stdout: 'unset unset\n', timedOut: false })
 
-    const slow = await sharedAgentCliRunner('sh', { args: ['-c', 'sleep 30'], env, timeoutMs: 300 })
+    // This is the timeoutMs under test — the child sleeps 30s and the test proves the runner's own
+    // timeout fires, not that the run is fast.
+    const slow = await sharedAgentCliRunner('sh', { args: ['-c', 'sleep 30'], env, timeoutMs: 300 }) // budget-ok: timeout value under test.
     Expect(slow.timedOut).toBe(true)
     Expect(slow.exitCode).toBeNull()
   })

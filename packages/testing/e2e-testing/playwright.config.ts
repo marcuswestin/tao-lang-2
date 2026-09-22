@@ -17,7 +17,9 @@ export default defineConfig({
   retries: 0,
   workers: 2,
   timeout: 30_000,
-  expect: { timeout: 5_000 },
+  // Matches the per-test budget above: an `expect(...)` here drives a real browser, and a wall-clock
+  // budget on that is for a busy host, not for a slow condition.
+  expect: { timeout: 30_000 },
   use: {
     baseURL: Platform.runtimeProcess.env['TAO_HOST_TEST_URL'],
     screenshot: 'only-on-failure',

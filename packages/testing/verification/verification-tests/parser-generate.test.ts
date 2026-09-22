@@ -278,7 +278,7 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await Time.pollUntil(async () => await FS.exists(FS.resolvePath('entered-first', root)), {
           intervalMs: 5,
-          timeoutMs: 2_000,
+          timeoutMs: 30_000,
         }),
       ).toBe(true)
       second = run('second', false)

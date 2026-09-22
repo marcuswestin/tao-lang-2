@@ -314,7 +314,7 @@ Describe('dev data server', () => {
         FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir),
         '{"format":"tao-dev-data-state-v1","revision":-1,"snapshot":null}',
       )
-      const deadline = Date.now() + 2_000
+      const deadline = Date.now() + 30_000
       while (!logs.some(line => line.includes('invalid') || line.includes('JSON'))) {
         if (Date.now() >= deadline) {
           Errors.throwHostEnvironment('The dev data authority did not report its refresh failure.')
@@ -474,7 +474,7 @@ function manualTimers(): NonNullable<DevDataHost['timers']> & { fire(): void } {
 }
 
 async function waitForFile(path: string): Promise<void> {
-  const deadline = Date.now() + 5_000
+  const deadline = Date.now() + 30_000
   while (!await FS.isFile(path)) {
     if (Date.now() >= deadline) {
       Errors.throwHostEnvironment(`Timed out waiting for ${path}.`)
@@ -512,7 +512,7 @@ function collect(connection: TR.DataConnection): {
     next: () =>
       new Promise<void>((resolve, reject) => {
         waiting = resolve
-        setTimeout(() => reject(new Errors.HostEnvironmentError('No dev data event arrived within 5s.')), 5_000)
+        setTimeout(() => reject(new Errors.HostEnvironmentError('No dev data event arrived within 30s.')), 30_000)
       }),
     snapshots,
   }

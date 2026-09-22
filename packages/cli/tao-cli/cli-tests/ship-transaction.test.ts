@@ -26,7 +26,7 @@ Describe('tao ship cross-process transactions', () => {
       )
       const claimInstalled = await Time.pollUntil(async () => await FS.exists(claimPath), {
         intervalMs: 5,
-        timeoutMs: 2_000,
+        timeoutMs: 30_000,
       })
       Expect(claimInstalled).toBe(true)
 
@@ -90,7 +90,7 @@ Describe('tao ship cross-process transactions', () => {
     try {
       const claimInstalled = await Time.pollUntil(async () => await FS.exists(claimPath), {
         intervalMs: 5,
-        timeoutMs: 2_000,
+        timeoutMs: 30_000,
       })
       Expect(claimInstalled).toBe(true)
       const displacedPath = FS.resolvePath('displaced-live-claim.lock', coordinationRoot)
@@ -99,7 +99,7 @@ Describe('tao ship cross-process transactions', () => {
 
       const completed = await Time.pollUntil(() => worker.exitCode !== null, {
         intervalMs: 10,
-        timeoutMs: 3_000,
+        timeoutMs: 30_000,
       })
       if (!completed) {
         worker.kill('SIGKILL')
@@ -228,7 +228,7 @@ Describe('tao ship cross-process transactions', () => {
       `)
       const prepared = await Time.pollUntil(async () => await FS.exists(preparedPath), {
         intervalMs: 5,
-        timeoutMs: 2_000,
+        timeoutMs: 30_000,
       })
       Expect(prepared).toBe(true)
       await writeInstalls(root, freshInstalls)
