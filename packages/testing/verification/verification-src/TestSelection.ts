@@ -53,6 +53,13 @@ const ALL_APPS = 'Apps'
  * journeys, which is why this is the *iteration* gate's selection and `verify` still runs them all.
  */
 const LANGUAGE_SAMPLE_APPS = 'Apps/Test Apps'
+/**
+ * Studio's own Tao client is an ordinary `Apps/` entry, but its package suites (`ides/studio`,
+ * `ides/studio-tooling` through the package graph) are its actual behavior proof; `Apps/Tao Studio`
+ * alone only selects the Tao behavior tests, not those suites.
+ */
+const STUDIO_APP_ROOT = 'Apps/Tao Studio'
+const STUDIO_APP_PACKAGE = 'ides/studio'
 
 /** Packages whose language-service performance the `performance-checks` suite measures. */
 const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
@@ -267,6 +274,9 @@ function planChangedSuites(
       const root = segments.length >= 3 ? `Apps/${segments[1]}` : ALL_APPS
       appPaths.set(root, `${root} changed`)
       appSourcesChanged = true
+      if (root === STUDIO_APP_ROOT) {
+        changedPackages.set(STUDIO_APP_PACKAGE, path)
+      }
       continue
     }
     if (path.endsWith('.tao')) {

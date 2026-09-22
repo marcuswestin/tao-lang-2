@@ -588,7 +588,7 @@ relocated Node plus native-library closure rather than relying on the developer 
 
 ## Executable Tao client strangler
 
-`packages/ides/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
+`Apps/Tao Studio/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
 named ProductHost slots render the real StudioServer file hierarchy through recursive Tao `FileTree` and
 Studio-local `Disclosure` views, mount the stdlib Components and manifest-derived project View/Screen
 inventories, expose parser-owned DesignTokens, mount the code editor foreign view, and compose the

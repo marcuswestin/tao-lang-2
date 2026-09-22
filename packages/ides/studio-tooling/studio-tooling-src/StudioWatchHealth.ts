@@ -19,6 +19,7 @@ export const WATCHED_SOURCE_ROOTS = [
   'packages/shared/shared-src/core',
   'packages/apps/stdlib',
   'packages/ides/studio/studio-src',
+  'Apps/Tao Studio',
 ] as const
 
 /** WatchFacts is what the checks read about the machine and Metro's configuration. */

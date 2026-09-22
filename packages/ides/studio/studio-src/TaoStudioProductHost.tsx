@@ -35,12 +35,6 @@ export {
   StudioSegmented,
 } from './product-host/StudioControlViews'
 export {
-  createStudioSourceAnalyzer,
-  isStudioLensCycleShortcut,
-  StudioEditorSurface,
-  StudioLensBar,
-} from './product-host/StudioEditorSurface'
-export {
   StudioEnvironmentValid,
   StudioNetworkShowsError,
   StudioViewportPresetHeight,
