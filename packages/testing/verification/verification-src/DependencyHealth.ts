@@ -1,4 +1,5 @@
 import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { installedLockfileError } from './InstalledLockfile'
 
 /*
  * Detects an installed tree whose package directories are all present but whose contents are not.
@@ -6,10 +7,11 @@ import { CLI, FS, HCI, Platform, Repo } from '@shared'
  * --frozen-lockfile` reported "no changes" for a tree whose `ink` was missing half its build
  * output, so nothing repaired it and the failure surfaced later as an unrelated-looking crash.
  *
- * This is a detector, not an integrity check. It samples the third-party modules the repository's
- * own entry commands load at startup, because a module that only resolves is not evidence: `ink`
- * resolved to a build entry that then failed to load its own siblings. Loading is the cheapest
- * check that sees that, so each probe imports rather than resolves.
+ * This is a detector, not a package-content integrity check. It samples the third-party modules
+ * the repository's entry commands load at startup, because a module that only resolves is not
+ * evidence: `ink` resolved to a build entry that then failed to load its own siblings. Loading
+ * sees that, so each probe imports rather than resolves. It also checks installed nested links
+ * against the locked name and version after Bun has changed a transitive resolution.
  *
  * Every probe names its own directory. Bun links workspace dependencies per package, so `ink` is
  * unresolvable from the repository root even in a perfectly healthy checkout, and the Expo probe
@@ -64,7 +66,7 @@ export async function dependencyHealthError(
       return failure
     }
   }
-  return undefined
+  return installedLockfileError(repositoryRoot)
 }
 
 async function probeFailure(
