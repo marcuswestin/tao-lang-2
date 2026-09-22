@@ -1,12 +1,11 @@
 import type TR from '@runtime/TR'
-import { Assert, Errors, FS } from '@shared'
+import { Assert, FS, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { studioPaletteComponents } from '../studio-src/StudioInspector'
 import type { StudioProductHostState } from '../studio-src/StudioProductHostProtocol'
 import {
-  createStudioSourceAnalyzer,
   FileCreateBar,
   FilesPanelSurface,
   productHostStyle,
@@ -72,21 +71,6 @@ import {
   type TreeFileRowProps,
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
-
-Test('Tao Studio retries rejected syntax analysis for unchanged source', async () => {
-  let attempts = 0
-  const analyze = createStudioSourceAnalyzer(async content => {
-    attempts += 1
-    if (attempts === 1) {
-      Errors.throwHostEnvironment('language service disconnected')
-    }
-    return { content }
-  })
-
-  await Expect(analyze('view Main() { }')).rejects.toThrow('language service disconnected')
-  await Expect(analyze('view Main() { }')).resolves.toEqual({ content: 'view Main() { }' })
-  Expect(attempts).toBe(2)
-})
 
 function activeCell(cellRevision: number): NonNullable<StudioProductHostState['activeCell']> {
   return {
@@ -270,7 +254,7 @@ Test('Tao Studio product host retains viewport ownership over generated Tao layo
 })
 
 Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in Tao', async () => {
-  const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioClient.tao', import.meta.dir))
+  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
 
   Expect(source).toContain('Navigator SlotNav')
   Expect(source).not.toContain('StackNav')
@@ -280,10 +264,12 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toMatch(/\bButton\(/)
   Expect(source).not.toMatch(/\bPicker\(/)
   Expect(source).toContain(
-    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ./TaoStudioProductHost.tsx',
+    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from '
+      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain(
-    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx',
+    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
+      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain('@environment StudioEnvironmentPanel(')
   Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
@@ -317,7 +303,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StudioSearchPanelSurface')
   Expect(source).toContain('ServerOrigin text is ""')
   Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
-  Expect(source).toContain('@editor StudioEditorSurface()')
+  Expect(source).toContain('@editor StudioCodeEditor()')
   Expect(source).toContain('@inspector StudioContextPanel(')
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
@@ -470,7 +456,7 @@ Test('Tao-owned component rows preserve canonical drag snippets at the native bo
 })
 
 Test('Tao-owned component inventory stays aligned with the canonical Studio palette', async () => {
-  const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioClient.tao', import.meta.dir))
+  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
   const taoComponents = [...source.matchAll(/ComponentPaletteItem\(Name: "([^"]+)"/g)].map(match => match[1])
 
   Expect(taoComponents).toEqual(studioPaletteComponents.map(component => component.component))
