@@ -101,6 +101,12 @@ today, or how to start.
 - Context: `Docs/README.md`, `Docs/Tutorials/`, `Docs/Spec/`, `Docs/Roadmap/Tao Revolution/`.
 - Uses the decided 0.x positioning (`R3`) and whole-repository publication with public-audience
   edits (`R2`).
+- Landed 2026-09-22: the root `README.md` — the Developer's pitch, a first app from the tutorial,
+  the CLI's commands, install (the standalone binary marked as on its way, the checkout path until
+  then), the 0.x promise, a plain statement that Tao is built by its author with coding agents, and
+  the licence. `Docs/Spec/Tao Design.md` lost its WIP suffix, with each unimplemented section marked.
+  The Developer deferred the honest "works today" page and the language tour. Remaining: the one-line
+  install once `A2` ships.
 - Done: a visitor who reads only the README knows what Tao is, whether it fits them, and what to run
   first.
 
@@ -217,10 +223,21 @@ from the development loop, which no virtualization approach can do.
   implementation and release proofs.
 - Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone.
 
-### A10 — Publication hygiene audit
+### A10 — Publication hygiene audit — **done**
 
 Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
 and a committed `secrets/secrets.jsonc`.
+
+- Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
+  mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect
+  key it named is the Developer's manual step), `roPhone` and the personal absolute paths gone from
+  docs, comments, and fixtures (`P16`, `P18`), the full AGPL-3.0 text with a copyright holder and
+  `AGPL-3.0-only` declared in every `package.json` (`P24`; SPDX headers wait for `R1`'s split) — and
+  the public-audience edits: the instruction set, the skills, and every document say "the Developer"
+  rather than a name (`P1`), `Roadmap.md`'s personal sections are reworded (`P7`, `P8`), and the
+  README states plainly how Tao is built (`P2`). `P17` — the login name Watchman's socket path puts
+  in the generated harness config — is its own project, since neither harness accepts a
+  user-agnostic socket rule.
 
 - Shape: inventory what would become public and what it reveals; confirm the committed secrets file
   is encrypted and that history holds nothing else; list machine-specific files (`local.properties`,
