@@ -19,6 +19,7 @@ const STUDIO_BROWSER_SMOKES = [
   'keyboard-navigation-smoke',
   'studio-dialog-browser',
   'studio-agent-browser',
+  'studio-network-simulation',
 ]
 /** Every Studio smoke gate: the pool members the graph numbers. */
 const STUDIO_SMOKES = [...STUDIO_BROWSER_SMOKES, 'studio-smoke-native']
@@ -418,6 +419,7 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
     Expect(nodeOf('studio-dialog-browser').resources).toBeUndefined()
     Expect(nodeOf('studio-agent-browser').resources).toBeUndefined()
+    Expect(nodeOf('studio-network-simulation').resources).toBeUndefined()
   })
 
   Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {

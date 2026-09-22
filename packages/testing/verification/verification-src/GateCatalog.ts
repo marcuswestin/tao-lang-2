@@ -419,6 +419,13 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       'studio-agent-browser',
       studioSmoke('studio-agent-browser', 'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts'),
     ],
+    [
+      'studio-network-simulation',
+      studioSmoke(
+        'studio-network-simulation',
+        'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
+      ),
+    ],
     // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
     // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
     // also the resource name `GateRunner` takes a machine-wide lease under for as long as either is

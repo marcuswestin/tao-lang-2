@@ -580,6 +580,10 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
   context still crosses this window boundary (a `Modal` is a portal, not a separate React tree) even
   though the modal's window itself was never padded by whatever frame encloses the presenter.
 
+A plain `present … as overlay` (no `ask`, no `as sheet`, no `as toast`) is full-bleed by decision:
+it is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach the window
+edges, so the runtime adds no inset and its content is the author's to inset (`Decisions.md` §10).
+
 Known, pre-existing limitation, not addressed here: an ask's dimming scrim sits inside the same
 scrollable content an enclosing `AppSurfaceFrame` already padded, when its navigator does not own its
 window. Absolute positioning there is relative to the content container, which sizes to content and
@@ -589,9 +593,6 @@ way, but does not necessarily cover them exactly.
 
 Not yet covered, and not decided by what exists today:
 
-- A plain `present … as overlay` (no `ask`, no `as sheet`) renders unpadded, on purpose for now:
-  whether it should default to inset content (a banner) or stay full-bleed (a dimming spinner layer)
-  is undecided, and the two look identical at this presentation mode.
 - A `SplitNav` pane whose `Content` is itself a window-owning navigator is not yet guarded against a
   double inset the way a `StackNav` or `SlotNav` entry is; `SplitNav` renders every pane's content
   through one shared frame regardless of what is nested inside a pane.
@@ -710,8 +711,7 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - `nudge`: small post-layout movement that does not affect siblings
 - `overlay`: a possible in-layout positioning term, distinct from implemented presentation
   `as overlay`
-- whether a plain `as overlay` presentation should default to inset or full-bleed content, and
-  `SplitNav` pane insets when a pane holds a nested window-owning navigator — see "Safe Area And
+- `SplitNav` pane insets when a pane holds a nested window-owning navigator — see "Safe Area And
   Keyboard Insets" above for what safe-area and keyboard avoidance is already implemented and proven
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
