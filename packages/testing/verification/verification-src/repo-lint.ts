@@ -763,8 +763,8 @@ export function conventionRuleIssues(
 
 /**
  * KIND_CHAIN_ALLOWLIST names the files that still dispatch through an `if`/`else if` chain over one
- * `.kind`, `.type`, or `.$type`. It only shrinks: `Docs/Roadmap/Repository simplification 2` converts
- * each to a `Switch` helper, and an entry goes stale when its file no longer holds a chain.
+ * `.kind`, `.type`, or `.$type`. It only shrinks: a simplification pass converts each to a `Switch`
+ * helper, and an entry goes stale when its file no longer holds a chain.
  */
 const KIND_CHAIN_ALLOWLIST = [
   'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
