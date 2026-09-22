@@ -23,8 +23,9 @@ Root `AGENTS.md` owns the boundary between Ro's decisions and routine implementa
 
 1. Present three to five per round, upstream decisions first so later rounds shrink or disappear.
 2. Give each decision its realistic options, one line each, and mark the recommended one.
-3. Ro may answer "your recommendations" or "defaults for the rest"; take them and continue. An item Ro skips takes its recommendation, and the next message says so in one line so Ro can veto it.
-4. Continue until the list is settled, then plan and implement. A decision discovered during implementation joins the next round; it is not decided silently.
+3. Print the round as text in the reply, in the shape below. Never put it through a harness question prompt such as `AskUserQuestion`: a prompt hides the round from the transcript, caps what an answer can say, and forces every item through its own box. Ro answers in the conversation — by letter and number, in prose, or with an option the round did not offer.
+4. Ro may answer "your recommendations" or "defaults for the rest"; take them and continue. An item Ro skips takes its recommendation, and the next message says so in one line so Ro can veto it.
+5. Continue until the list is settled, then plan and implement. A decision discovered during implementation joins the next round; it is not decided silently.
 
 ## Record what was settled
 
