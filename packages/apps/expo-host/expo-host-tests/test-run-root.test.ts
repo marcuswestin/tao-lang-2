@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
 import { TestRunRoot } from '../expo-host-src/testing/test-run-root'
 
@@ -126,6 +127,21 @@ async function listGenerated(runtimePackageRoot: string, relativePath = ''): Pro
 }
 
 Describe('generated test run roots', () => {
+  Test('the default runtime stores compiled apps outside the checkout', async () => {
+    const runRoot = await TestRunRoot.create('tao-test-command')
+    const appPath = await compiledApp(runRoot, {
+      app: 'export default function App() { return null }\n',
+      files: { 'modules/probe.ts': 'export const probe = true\n' },
+    })
+
+    Expect(FS.pathIsWithin(runRoot, FS.tmpdir())).toBe(true)
+    Expect(TestRunRoot.generatedRoot()).toBe(TestRunRoot.hostGeneratedRoot(RuntimeToolchainPaths.packageRoot))
+    Expect(await FS.isFile(appPath)).toBe(true)
+    Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
+    await TestRunRoot.discard(runRoot)
+    Expect(await FS.exists(runRoot)).toBe(false)
+  })
+
   Test('keeps the default generated store outside a managed worktree', async () => {
     const runRoot = await TestRunRoot.create('tao-test-default-root')
     try {

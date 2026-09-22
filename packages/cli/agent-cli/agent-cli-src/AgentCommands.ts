@@ -21,6 +21,7 @@ export const JUST_COMMANDS = [
   'fix-agent-config',
   'fmt',
   'ide-extension-package',
+  'land',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
   // AGENTS.md rather than dropping to `just`.
@@ -75,10 +76,10 @@ export function recipeFor(command: AgentCommand): string {
 
 /**
  * EXPOSED_RECIPES maps a Just recipe name to the `./agent` command that already wraps it, for
- * `OutputDiscipline` to redirect a raw `just <recipe>` call to. `land-unlock` is left out: it keeps
- * its own `ask` permission rule for `--force`, and this refusal would sit in front of that rather
- * than beside it.
+ * `OutputDiscipline` to redirect a raw `just <recipe>` call to. `land-unlock` keeps its own `ask`
+ * permission rule for `--force`.
  */
 export const EXPOSED_RECIPES: ReadonlyMap<string, AgentCommand> = new Map(
-  JUST_COMMANDS.filter(command => command !== 'land-unlock').map(command => [recipeFor(command), command]),
+  JUST_COMMANDS.filter(command => command !== 'land-unlock')
+    .map(command => [recipeFor(command), command]),
 )

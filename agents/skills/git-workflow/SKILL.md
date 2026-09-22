@@ -18,13 +18,11 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 - In a linked worktree, `./agent` reuses the primary checkout's pinned devenv profile (run
   `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
-- `git merge` and the squash-aborting resets (`git reset --merge`, `git reset --hard HEAD`) run
-  outside the sandbox by policy and may replace a sandbox-protected file such as `agents/skills/*`.
-  Every other ref-moving command (`git checkout <ref>`, `git checkout <ref> -- <path>`, any other
-  `git reset`) needs an unsandboxed shell too: sandboxed, it half-succeeds — HEAD and most of the
-  tree move, but protected paths keep their old content and read as dirty rather than failed, and the
-  other branch's new files are left as untracked strays. Recover with `git checkout -f <branch>`
-  unsandboxed.
+- Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
+  files move, but protected paths stay dirty. Do not try alternate commands or switch to an
+  unsandboxed shell to finish one. Diagnose the exact state read-only, report the write needed, and
+  pause for Ro's explicit approval. An authorized `./agent land` is the exception and performs its
+  own integration under the landing lock.
 
 ## Moving a branch ref
 
@@ -49,13 +47,12 @@ the SHA. It preserves Git's squash appendix on `main` — summary, bullets, a bl
 
 ## Merging a feature branch into `main`
 
-Require a clean, validated feature branch with `.artifacts/merge/<branch>.msg` written or refreshed;
-`verification-lanes` owns the landing command's mechanics, evidence, and message format. Sync `main`
-deliberately: `git fetch origin main` immediately before landing, since another branch can land
-between the verification run and the merge command; fast-forward a behind local `main` only where it
-is checked out, never in a borrowed worktree; an ahead local `main` pushes forward alongside yours,
-which is correct; if both moved, merge refreshed `main` into the feature branch and re-verify.
-After any merge of `main` into a branch, skim what arrived: `references/after-merging-main.md`.
+Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
+landing command's mechanics, evidence, and message format. After Ro authorizes landing this slice,
+run `./agent land`: it fetches and integrates current `main`, verifies, and pushes while holding
+one lock. Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
+landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
+skim what arrived: `references/after-merging-main.md`.
 
 A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does, through the `Mine`
 `Justfile` recipes. Pushing is irreversible: confirm with Ro before pushing anything Ro did not ask

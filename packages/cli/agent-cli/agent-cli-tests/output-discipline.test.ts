@@ -185,11 +185,13 @@ Describe('output discipline', () => {
     Expect(isAllowed('just -f Justfile --list')).toEqual(true)
   })
 
-  Test('leaves landing on its own spellings: an agent proposes a landing rather than making one', () => {
-    Expect(isAllowed('just land')).toEqual(true)
-    Expect(isAllowed('just merge-with-main')).toEqual(true)
-    Expect(isAllowed('./dev land')).toEqual(true)
-    Expect(isAllowed('./dev merge-with-main')).toEqual(true)
+  Test('routes agent landing through its single approved entry point', () => {
+    Expect(refusalFor('just land')).toContain('./agent land')
+    Expect(isAllowed('./agent land')).toEqual(true)
+    Expect(refusalFor('just merge-with-main')).toContain('./agent land')
+    Expect(refusalFor('just my-land')).toContain('./agent land')
+    Expect(refusalFor('./dev land')).toContain('./agent land')
+    Expect(refusalFor('./dev merge-with-main')).toContain('./agent land')
     Expect(isAllowed('just land-barrier')).toEqual(true)
     Expect(isAllowed('just landing-setup')).toEqual(true)
   })

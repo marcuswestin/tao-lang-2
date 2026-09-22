@@ -1,5 +1,5 @@
 import { OutputText } from '@cli-kit'
-import { CLI, HCI, Repo } from '@shared'
+import { CLI, FS, HCI, Repo } from '@shared'
 
 /**
  * `just clean` and `just clean-all`, as steps a reader can watch rather than one silent block.
@@ -8,9 +8,9 @@ import { CLI, HCI, Repo } from '@shared'
  * nothing while it happened: a stalled `find` over `node_modules` and a finished clean looked
  * identical. Each step therefore names itself as it starts and states what it cost when it ends.
  *
- * The removals themselves are the recipes' own commands, unchanged and in the same order. This
- * lives in TypeScript rather than the Justfile because timing and reporting each step is more
- * shell than a recipe should carry, not because the cleaning changed.
+ * The removals follow the recipes' order and include the checkout-keyed test cache in host temp.
+ * This lives in TypeScript rather than the Justfile because timing and reporting each step is more
+ * shell than a recipe should carry.
  *
  * Bootstrap scratch is not here. `just clean-scratch` stays its own recipe and already reports
  * what it freed, and both cleaning recipes still run it first as a Just dependency.
@@ -36,9 +36,9 @@ type RunCleanOptions = {
 }
 
 /**
- * What `clean` removes: the build and dev artifact roots, the runtime toolchain's Expo and
- * generated app trees, and every installed `node_modules`. Left exactly as the recipe ran them,
- * including the `find` that prunes rather than descending into what it is about to delete.
+ * What `clean` removes: build and dev artifacts, the runtime toolchain's Expo and generated app
+ * trees, the checkout-keyed temp test cache, and every installed `node_modules`. Keep `find`
+ * pruning rather than descending into what it is about to delete.
  */
 const CHECKOUT_STEPS: readonly CleanStep[] = [
   {
@@ -70,8 +70,15 @@ const ALL_STEPS: readonly CleanStep[] = [
 ]
 
 /** stepsFor names the removals one scope performs, in the order the recipes performed them. */
-function stepsFor(scope: CleanScope): readonly CleanStep[] {
-  return scope === 'all' ? [...CHECKOUT_STEPS, ...ALL_STEPS] : CHECKOUT_STEPS
+async function stepsFor(scope: CleanScope): Promise<readonly CleanStep[]> {
+  // The runtime testing entrypoint loads compiler code; keep it out of unrelated `./dev` commands.
+  const { RuntimeTesting } = await import('@expo-host/testing/runtime-testing')
+  const [generated, ...rest] = CHECKOUT_STEPS
+  const checkout = [
+    { ...generated!, args: [...generated!.args, FS.dirname(RuntimeTesting.TestRunRoot.generatedRoot())] },
+    ...rest,
+  ]
+  return scope === 'all' ? [...checkout, ...ALL_STEPS] : checkout
 }
 
 /**
@@ -84,7 +91,7 @@ async function run(options: RunCleanOptions = {}): Promise<number> {
   const now = options.now ?? Date.now
   const runStep = options.runStep ?? defaultRunStep
 
-  for (const step of stepsFor(options.scope ?? 'checkout')) {
+  for (const step of await stepsFor(options.scope ?? 'checkout')) {
     // Written without a newline, so the finished line reads `<step> ... Done (3.2s)` whether a
     // person watches it complete or reads it afterwards in a log.
     HCI.write(`${step.name} ...`)

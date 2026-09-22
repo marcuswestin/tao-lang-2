@@ -984,7 +984,7 @@ async function integrateMain(
         + 'landing released the landing lock and stopped. Nothing was pushed and main was not moved.\n'
         + `Conflicting paths:\n${unmerged.map(path => `- ${path}`).join('\n')}\n`
         + 'Resolve them here, unlocked — the machine is free for everyone else while you do — commit the '
-        + 'merge with `git commit --no-edit`, and run `./dev land` again. The landing re-integrates '
+        + 'merge with `git commit --no-edit`, and run `./agent land` again. The landing re-integrates '
         + 'whatever main has become by then, so nothing you do now has to anticipate it.',
     )
   }

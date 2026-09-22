@@ -81,13 +81,7 @@
       "adb get-state *": "allow",
       "emulator -list-avds": "allow",
       "xcrun simctl list *": "allow",
-      // Merging runs without a prompt. An agent decides which branch lands on main, and when, on
-      // its own judgment; `verification-lanes` owns where that judgment stops and hands the
-      // landing to Ro. A bare `git push` is the outward-facing step and is deliberately absent
-      // from this list — the landing command does its own pushing, under that same judgment.
-      "git merge *": "allow",
-      // Read-only remote queries, so agents can inspect origin. Pushing stays absent
-      // above by design; the sandbox exclusion below is what lets its prompt succeed.
+      // Fetch writes Git objects but remains sandboxed; if it needs host access, the agent asks Ro.
       "git fetch origin *": "allow",
       // Both orders, because git accepts the flag on either side of the remote and a pattern that
       // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
@@ -140,11 +134,7 @@
   // the landing command and all repository code it invokes host access, which Ro explicitly chose.
   "codex": {
     "outsideSandboxCommands": [
-      "./dev land",
-      "./dev merge-with-main",
-      "just land",
-      "just merge-with-main",
-      "just my-land",
+      "./agent land",
     ],
   },
   "claudecode": {
@@ -160,69 +150,14 @@
         "adb get-state *",
         "emulator -list-avds",
         "xcrun simctl list *",
-        "gh *",
-        // Git's github.com credential helper is `gh auth git-credential`, which reads
-        // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
-        // inherits git's sandbox, so networked git fails with a misleading
-        // "could not read Username for 'https://github.com'". These exclusions make direct
-        // top-level Git commands eligible for host review; they cannot lift a nested Git command
-        // such as merge-with-main's own preflight out of the sandbox.
-        "git fetch origin *",
+        // Read-only remote inspection may run on the host. Mutating Git operations are not
+        // exceptions: if the sandbox denies one, diagnose it and ask Ro before retrying.
         "git ls-remote origin *",
         "git ls-remote --heads origin *",
-        "git push *",
-        // Removing a worktree writes outside this checkout. It still prompts, which is
-        // correct for a command that deletes directories.
-        "git worktree *",
-        // A squash merge, and the reset that aborts one, write the primary checkout's working
-        // tree, which the sandbox denies from a linked worktree. `git merge *` is already allowed
-        // above without a prompt; excluding it is what lets that permission succeed instead of
-        // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
-        // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
-        // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
-        // main, and when, is the agent's own judgment; `verification-lanes` owns where that
-        // judgment stops.
-        "git merge *",
-        "git reset --merge",
-        "git reset --hard HEAD",
-        // The landing itself, because none of the entries above can reach inside it. The sandbox
-        // matches the top-level command string, so a landing spawns its Git, its gates, and its
-        // gates' children all sandboxed however many Git exclusions are listed here. What that
-        // costs is not subtle: measured 2026-09-21, `./dev land` sandboxed failed every Studio and
-        // browser gate in 1.5-9.9s — Studio exits before reporting readiness — and the same gates
-        // passed in the same tree moments later unsandboxed. The landing is already an approval
-        // boundary that `verification-lanes` owns and `./dev *` already allows, so naming it here
-        // makes it one reviewed unit rather than a command that half-runs and blames the branch.
-        // `land-unlock --force` keeps its own `ask` rule above; excluding a command from the
-        // sandbox never grants it permission.
-        //
-        // Both spellings of the landing are named, because they are two CLI verbs rather than one:
-        // `land` wraps the lock, the barrier, and then `merge-with-main`, which is also reachable on
-        // its own and is the spelling AGENTS.md uses. Naming only `land` would leave the documented
-        // entry point sandboxed and failing exactly as before. `./agent` has no landing command at
-        // all — `JUST_COMMANDS` in `AgentCommands.ts` stops at `land-lock`, `land-unlock` and `landed`,
-        // because an agent proposes a landing rather than making one — so an `./agent land` entry
-        // here would be a rule that looks like coverage and matches nothing.
-        // Formatting and regenerating the agent configuration each harness write-protects against
-        // shell commands. Without this, an unformatted skill file fails `_fix-dprint` outright
-        // (DEVENV-101) and `_agent-config` leaves generated settings stale (DEVENV-062), with no
-        // recovery a Codex agent can reach — `dangerouslyDisableSandbox` is Claude Code's alone.
-        // The recipe takes no paths and writes no content of its own: it formats files already in
-        // the tree and regenerates from `.rulesync`, which is reviewed, so excluding it does not
-        // widen what an agent can put into its own instructions. Keep the recipe that narrow.
-        "./agent fix-agent-config",
-        "./dev agent-config",
-        "just fix-agent-config",
-        "./dev land",
-        "./dev land *",
-        "./dev merge-with-main",
-        "./dev merge-with-main *",
-        "just land",
-        "just land *",
-        "just merge-with-main",
-        "just merge-with-main *",
-        "just my-land",
-        "just my-land *",
+        // The single unsandboxed write entry point. It owns integration through push under one
+        // lock; it is usable only after Ro has authorized landing this named slice in the thread.
+        "./agent land",
+        "./agent land *",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.

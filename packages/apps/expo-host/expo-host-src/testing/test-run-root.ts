@@ -122,6 +122,7 @@ export const TestRunRoot = {
   create,
   DIRECTORY_NAME,
   discard,
+  generatedRoot: resolveGeneratedRoot,
   intern,
   hostGeneratedRoot,
   lookup,
@@ -743,7 +744,7 @@ function isRunRoot(path: string, generatedRoot: string): boolean {
     || (FS.dirname(parent) === generatedRoot && CATEGORY_NAME.test(FS.basename(parent)))
 }
 
-function resolveGeneratedRoot(options: TestRunRootOptions): string {
+function resolveGeneratedRoot(options: TestRunRootOptions = {}): string {
   return options.generatedRoot
     ?? (options.runtimePackageRoot === undefined
       ? hostGeneratedRoot(RuntimeToolchainPaths.packageRoot)

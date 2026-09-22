@@ -14,6 +14,7 @@ const canonicalRules = `{
       "git merge *": "allow",
       "just studio-smoke *": "allow",
       "git status *": "allow",
+      "./agent *": "allow",
       "just *": "allow",
       "bun install *": "deny",
     },
@@ -25,7 +26,7 @@ const canonicalRules = `{
     },
   },
   "codex": {
-    "outsideSandboxCommands": ["just land"],
+    "outsideSandboxCommands": ["./agent land"],
   },
   "claudecode": {
     "sandbox": {
@@ -38,12 +39,13 @@ const canonicalRules = `{
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
       "excludedCommands": [
+        "./agent land",
+        "./agent land *",
         "ps -o pid=,command= -p *",
         "ps -axo pid=,ppid=,lstart=,command=",
         "kill -TERM *",
         "git merge *",
         "just studio-smoke *",
-        "just land",
       ],
     },
   },
@@ -166,7 +168,8 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
     Expect(rendered).not.toContain('pattern=["git","merge"]')
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
-    Expect(rendered).toContain('pattern=["just","land"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
     Expect(rendered).not.toContain('pattern=["just"]')
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
@@ -176,7 +179,7 @@ Describe('Codex config generation', () => {
   Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {
     const permissions = CodexConfigGenerator.parsePermissions(
       canonicalRules.replace(
-        '"outsideSandboxCommands": ["just land"]',
+        '"outsideSandboxCommands": ["./agent land"]',
         '"outsideSandboxCommands": ["just unreviewed"]',
       ),
     )
@@ -211,7 +214,7 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('**/.env*"')
   })
 
-  Test('writes the profile and continues when a sandbox denies the output', async () => {
+  Test('skips unchanged outputs but reports a stale protected output as a blocking host write', async () => {
     const root = await mkTestDir('tao-codex-config-')
     try {
       await FS.writeText(FS.resolvePath('.rulesync/permissions.jsonc', root), canonicalRules)
@@ -231,11 +234,24 @@ Describe('Codex config generation', () => {
           throw Object.assign(new Errors.HostEnvironmentError('blocked'), { code: 'EPERM', path })
         },
       })
+      Expect(skipped).toEqual([])
 
-      Expect(skipped).toEqual([
-        `Skipped codexcli permissions: ${FS.resolvePath('.codex/config.toml', root)} is not writable.`,
-        `Skipped codexcli permissions: ${FS.resolvePath('.codex/rules/tao.rules', root)} is not writable.`,
-      ])
+      await FS.writeText(
+        FS.resolvePath('.rulesync/permissions.jsonc', root),
+        canonicalRules.replace(
+          '"ps -axo pid=,ppid=,lstart=,command=": "allow"',
+          '"ps -axo pid=,ppid=,lstart=,command=": "ask"',
+        ),
+      )
+      await Expect(CodexConfigGenerator.generate({
+        onSkip: message => skipped.push(message),
+        root,
+        writeText: async path => {
+          throw Object.assign(new Errors.HostEnvironmentError('blocked'), { code: 'EPERM', path })
+        },
+      })).rejects.toThrow('Codex permissions are stale')
+
+      Expect(skipped).toHaveLength(1)
     } finally {
       await FS.remove(root)
     }
@@ -314,11 +330,11 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
     Expect(rules).not.toContain('studio-smoke')
-    Expect(rules).toContain('pattern=["just","land"], decision="allow"')
-    Expect(rules).toContain('pattern=["./dev","land"], decision="allow"')
-    Expect(rules).toContain('pattern=["just","merge-with-main"], decision="allow"')
-    Expect(rules).toContain('pattern=["./dev","merge-with-main"], decision="allow"')
-    Expect(rules).toContain('pattern=["just","my-land"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["just","land"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["./dev","land"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["just","merge-with-main"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["./dev","merge-with-main"], decision="allow"')
+    Expect(rules).not.toContain('pattern=["just","my-land"], decision="allow"')
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
   })
 })
