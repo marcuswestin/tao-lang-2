@@ -21,6 +21,9 @@ export function layoutEntryValues(entry: AST.LayoutEntry): TaoLayoutTermValue[] 
 export function layoutTermValue(term: AST.LayoutTerm): TaoLayoutTermValue {
   return Switch.type(term, {
     LayoutColorLiteral: color => color.value,
+    // `none` cannot be an ID (it is the language's absence keyword), so the string never collides
+    // with a design token or bundle name.
+    LayoutNoneLiteral: () => 'none',
     LayoutNumberLiteral: numberLiteral => numberLiteral.value,
     LayoutWord: word =>
       `${[word.value, ...word.suffixes].join('-')}${

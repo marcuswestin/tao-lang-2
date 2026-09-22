@@ -19,7 +19,13 @@ LayoutCondition:
     'when' subject=LayoutWord ('is' value=LayoutWord)?;
 
 LayoutTerm:
-    LayoutWord | LayoutNumberLiteral | LayoutColorLiteral;
+    LayoutWord | LayoutNumberLiteral | LayoutColorLiteral | LayoutNoneLiteral;
+
+// `none` after a head clears that clause rather than setting it (`bg none`, `pad left none`): the
+// merged list ends without the slot. The word is already the language's keyword for absence, so it
+// cannot be an ID here.
+LayoutNoneLiteral:
+    value='none';
 
 LayoutWord:
     value=ID ('-' suffixes+=ID)* ('.' pathSegments+=LayoutPathSegment)*;

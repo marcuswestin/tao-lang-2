@@ -18,4 +18,35 @@ Describe('formatter: minimal design', () => {
       `,
     ),
   )
+
+  Test(
+    'formats a declaration header clause and a clearing term like a render clause',
+    formats(
+      `workspace
+design Theme{paper #fff}
+view   Card()[pad 12,bg paper]{
+render Surface()[bg none,pad left none]
+}
+scene Page()   responds Answer[gap 8]{
+render Surface()
+}
+view Surface(){}`,
+      `
+        workspace
+        design Theme {
+           paper #fff
+        }
+
+        view Card() [pad 12, bg paper] {
+           render Surface() [bg none, pad left none]
+        }
+
+        scene Page() responds Answer [gap 8] {
+           render Surface()
+        }
+
+        view Surface() { }
+      `,
+    ),
+  )
 })

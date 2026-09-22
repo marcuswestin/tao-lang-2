@@ -3,9 +3,11 @@ import { Describe, Expect, Test } from '@shared/test'
 import { designValidationCodes } from '../validator-src/diagnostic-codes'
 import Validator from '../validator-src/validator'
 import { DesignValidator } from '../validator-src/validators/design-validator'
+import { LayoutValidator } from '../validator-src/validators/layout-validator'
 import { accepts, app, checksFiles, fence, rejects, tsFence, visibleView } from './test-validate'
 
 const messages = DesignValidator.messages
+const layoutMessages = LayoutValidator.messages
 
 Describe('validator: minimal design', () => {
   Test('reports raw unnamed style values as stable warnings during ordinary validation', async () => {
@@ -33,6 +35,86 @@ Describe('validator: minimal design', () => {
     Expect(result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.exploration))
       .toEqual([])
   })
+
+  Test(
+    // Card's body is view-rooted (`render Surface()`), not inject-rooted: the header must validate
+    // the same way whichever kind of occurrence root the declaration ends up compiling.
+    'validates a declaration header clause with the same design rules as a render-site clause',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        workspace design Theme { paper #fff }
+        app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+        scene Main() { Title "Main" render Card() }
+        view Card() [bg missingToken] {
+          render Surface()
+        }
+        ${surfaceView}
+      `,
+      messages.unknownToken('Theme', 'missingToken'),
+    ),
+  )
+
+  Test(
+    'accepts `none` as a clearing term on visual and layout value heads in a header clause',
+    accepts(`
+      app Demo { view Card }
+      view Card() [bg none, border none, pad none, margin horizontal none, gap none, width none, height none, size none] {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `),
+  )
+
+  Test(
+    'rejects `none` after a keyword head in a header clause',
+    rejects(
+      `
+        app Demo { view Card }
+        view Card() [fill none] {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      layoutMessages.clearsNoValue('fill none'),
+    ),
+  )
+
+  Test(
+    'rejects `none` followed by more terms in a header clause',
+    rejects(
+      `
+        app Demo { view Card }
+        view Card() [bg none paper] {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      messages.noneWithTrailingTerms('bg none paper'),
+    ),
+  )
+
+  Test(
+    'does not lint a raw zero or `none` as inline design exploration, but still lints a raw header hex',
+    async () => {
+      const result = await Validator.validateCode(`
+      app Demo { view Card }
+      view Card() [pad 0, bg none, bg #fff] {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+      const explorationMessages = result.diagnostics
+        .filter(diagnostic => diagnostic.code === designValidationCodes.exploration)
+        .map(diagnostic => diagnostic.message)
+      Expect(explorationMessages).toEqual([messages.exploration('bg #fff')])
+    },
+  )
 
   Test('warns when the stdlib Placeholder ships while accepting Placeholder and Spacer', async () => {
     const result = await Validator.validateCode(`

@@ -46,6 +46,19 @@ scene MainView() {
          Text("Cross-platform")
       }
 
+      // A declaration's header clause is its public default: the first frame keeps it, the second
+      // replaces the padding with zero, the third clears it with `none`. The frame's own `gap` is
+      // private to its root and stays whatever a caller says.
+      Frame("Default frame") {
+         Text("Padded by the header")
+      }
+      Frame("Zero frame") [pad 0] {
+         Text("Padding set to zero by the caller")
+      }
+      Frame("Flush frame") [pad none, gap 0] {
+         Text("Padding cleared by the caller; the gap is the frame's own")
+      }
+
       #layoutPanes
       Panes() [gap 16, width fill] {
          #layoutScroll
@@ -59,3 +72,10 @@ scene MainView() {
          Col() [claim 1] {
             Text("Adaptive secondary pane")
 }  }  }  }
+
+// A labelled frame whose padding is public (the header) and whose gap is private (the root).
+view Frame(Label text) [pad 12] {
+   render Col() [gap 6, width fill] {
+      Text(Label)
+      @@content
+}  }

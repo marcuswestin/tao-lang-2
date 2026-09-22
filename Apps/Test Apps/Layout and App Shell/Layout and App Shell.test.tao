@@ -10,6 +10,9 @@ test "Layout and App Shell" {
       expect text "Primary action"
       press "Primary action"
       expect text "Deterministic"
+      expect text "Default frame"
+      expect text "Padding set to zero by the caller"
+      expect text "Padding cleared by the caller; the gap is the frame's own"
       expect text "Adaptive primary pane"
       expect text "Adaptive secondary pane"
    }

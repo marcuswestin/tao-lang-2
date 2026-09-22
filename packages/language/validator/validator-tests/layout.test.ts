@@ -52,9 +52,6 @@ Describe('validator: layout clauses', () => {
     ['width shrink', messages.unsupportedTerm('width shrink', 'shrink')],
     ['expand', messages.unsupportedEntry('expand')],
     ['stretch', messages.unsupportedEntry('stretch')],
-    ['gap 0', messages.positiveNumber('gap 0')],
-    ['pad 0', messages.positiveNumber('pad 0')],
-    ['margin left 0', messages.positiveNumber('margin left 0')],
     ['width 0', messages.positiveNumber('width 0')],
     ['height 0', messages.positiveNumber('height 0')],
     ['claim 0', messages.positiveNumber('claim 0')],
@@ -62,6 +59,12 @@ Describe('validator: layout clauses', () => {
 
   for (const [clause, message] of malformedCases) {
     Test(`rejects malformed or unsupported [${clause}]`, rejects(layoutApp(clause), message))
+  }
+
+  // `pad 0` sets zero, a value like any other (Decisions §R9): spacing and gap accept it, while a
+  // weight or a dimension must stay positive (above).
+  for (const clause of ['gap 0', 'pad 0', 'margin left 0', 'pad horizontal 0 vertical 8']) {
+    Test(`accepts a zero spacing value in [${clause}]`, accepts(layoutApp(clause)))
   }
 
   const withinEntryConflictCases: ReadonlyArray<readonly [clause: string, message: string]> = [
