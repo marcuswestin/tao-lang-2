@@ -901,6 +901,25 @@ Describe('Studio smoke resource isolation', () => {
     })).rejects.toThrow('missing Metro capability')
   })
 
+  Test('stops before Metro when Watchman folds this checkout into a watch that encloses it', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/clone/worktrees/task',
+      run: async (command, spec) => ({
+        args: [...(spec.args ?? [])],
+        command,
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: spec.args?.[0] === 'watch-project'
+          ? '{"watch":"/clone","relative_path":"worktrees/task"}'
+          : spec.args?.includes('get-sockname')
+          ? '{"sockname":"/clone/.watchman.sock"}'
+          : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
+      }),
+    })).rejects.toThrow('watch-del /clone')
+  })
+
   Test("stops before Metro when Watchman omits Metro's required version field", async () => {
     await Expect(StudioDev.testing.studioWatchmanEnvironment({
       isFile: async () => true,
@@ -1340,8 +1359,8 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('gives each worktree its own port block, so two checkouts never claim one port', () => {
     const here = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')
-    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-a')
-    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-b')
+    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/worktrees/feature-a')
+    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/worktrees/feature-b')
 
     // Every lane bound 42000 upward from shard 0, so the second worktree to start a Studio lane
     // died on a port the first one was serving.

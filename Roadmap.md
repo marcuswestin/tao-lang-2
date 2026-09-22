@@ -16,7 +16,7 @@ judgments that are Ro's. Both point back into this file and into `Docs/Roadmap/`
 
 - [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
 - [ ] Deep links and navigation persistence
-- [ ] Enable Codex to interact with studio on its own for testing and development of it.
+- [ ] Enable agents (Claude and Codex) to interact with studio on their own for testing and development of it.
 - [ ] Work through the durable developer-environment upgrade ledger.
   - Agents record and deduplicate material findings as they work; the current backlog, incoming
     branch fixes, evidence, and acceptance criteria live in

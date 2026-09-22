@@ -43,7 +43,8 @@ const FAILED_CORE_SIMULATOR_SERVICE =
   /CoreSimulatorService connection became invalid|simdiskimaged (?:crashed|is not responding)|failed to initialize simulator runtime/i
 
 /**
- * Only a variable a harness sets *because* the command is sandboxed belongs here. Claude Code sets
+ * Only a variable a harness sets *because* the command is sandboxed belongs here: Claude Code's
+ * sandboxed shell sets `SANDBOX_RUNTIME` and Codex's sets `CODEX_SANDBOX`. Claude Code also sets
  * `CLAUDE_CODE_TMPDIR` in every session, sandboxed or not, so keying on it reported every agent as
  * sandboxed and made the report's one host-policy signal say nothing.
  */
@@ -72,11 +73,12 @@ const PROBES: readonly CapabilityProbe[] = [
     successfulExitCodes: [0, 1],
   },
   {
-    args: ['version'],
+    // Never spawns a server, and never lets the client answer for one that is absent or denied.
+    args: ['--no-spawn', '--no-local', 'watch-list'],
     command: 'watchman',
-    display: 'watchman version',
+    display: 'watchman --no-spawn --no-local watch-list',
     name: 'Watchman socket',
-    remediation: 'Use tao-workspace or another Tao profile carrying the canonical Watchman socket.',
+    remediation: 'Run ./agent doctor: it tells a denied socket from a stopped server and names the fix for each.',
   },
   {
     args: ['store', 'info', '--store', 'daemon'],

@@ -350,6 +350,13 @@ about.
   wildcard segment, or have `./agent setup` render `$USER` into the generated policy. Then
   regenerate with `just _agent-config`. This one is worth fixing whether or not the repository ever
   publishes, because it breaks the second developer.
+- **Disposition (2026-09-22):** Fixed, without a wildcard or a rendered login. Both harnesses turn
+  a socket entry into a Seatbelt `subpath` rule that matches the resolved path, so the source now
+  allows the directory `~/.local/state/watchman`, which covers `<login>-state/sock` for any login
+  and nothing a link planted there points at. A denied or stopped Watchman now fails `./agent doctor`
+  by name, from `packages/testing/verification/verification-src/WatchmanHealth.ts` (the doctor path
+  cited above has moved). What remains is recorded in
+  [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START](<../Roadmap/Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>).
 
 ### P18 — Absolute `/Users/ro/…` paths in a generated harness config — Medium
 
@@ -365,6 +372,14 @@ Three test files also embed absolute paths, but only one is personal:
 - **Recommendation:** have the generator emit `~`-relative paths into `.codex/config.toml` as the
   source already does, and change that one test fixture to `/Users/dev/...` to match its neighbours.
   Same commit as `P17`.
+- **Disposition (2026-09-22):** Fixed by no longer tracking `.codex/config.toml`, since the
+  recommendation cannot work: Codex parses a `~` socket entry but never expands it, so the rule
+  would match nothing. `./agent setup` renders the file per machine with absolute paths, and with
+  the clone's own Git directory in place of a hardcoded `~/code/tao-lang-2/.git`. `.codex/hooks.json`
+  and `.codex/rules/tao.rules` stay tracked. The cost is that Codex's first session in a fresh
+  clone runs on its default permissions until that session's start hook has run setup. The personal
+  fixture now uses a neutral path, and a test fails if any tracked harness file names a home
+  directory or a `<login>-state` segment.
 
 ### P19 — `local.properties` — Low, already handled
 
@@ -521,6 +536,7 @@ Both refreshes re-checked the substantive findings rather than only the numbers.
 Connect identifiers in a tracked lock file), `P16` (`roPhone` on 76 lines across 12 files), `P17`
 (the `ro-state` socket, now at `.rulesync/permissions.jsonc:184`), and `P24` (the truncated,
 unattributed, undeclared license) all still hold exactly as written. Nothing `main` landed has fixed
-any of them, and no new credential material entered the tree.
+any of them, and no new credential material entered the tree. `P17` and `P18` were fixed on
+2026-09-22; see their dispositions.
 
 Repository state: `feat/publication-audit-report-d93f40`.

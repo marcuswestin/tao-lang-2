@@ -1,4 +1,5 @@
 import { Assert, Errors, FS, Text } from '@shared'
+import * as CLI from '@shared/CLI'
 import { DELEGATION_SKILL_PATH, tierModels } from '../delegation/DelegationProfiles'
 import { type AgentProfiles, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
 
@@ -19,11 +20,15 @@ const REVIEW_PROFILE = 'tao-review'
 const UNRESTRICTED_PROFILE_BASE = ':danger-full-access'
 
 /**
- * Paths and settings Codex needs that the canonical rules do not describe, because they are
- * Codex-shaped rather than policy-shaped. The Git directory is spelled for the primary checkout
- * on purpose: the generated file is committed, so it cannot carry a linked worktree's path.
+ * gitDirectory is the Git directory every worktree of the checkout at `root` shares, which Codex
+ * needs as a write rule the canonical rules do not describe. It is read from the checkout rather
+ * than spelled here because the generated file is machine-local (see `header`), so it can name
+ * wherever this clone lives; a root that is not a checkout gets its own `.git`.
  */
-const PRIMARY_GIT_DIRECTORY = '~/code/tao-lang-2/.git'
+async function gitDirectory(root: string): Promise<string> {
+  const common = await CLI.run('git', { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root })
+  return common.exitCode === 0 ? common.stdout.trim() : FS.resolvePath('.git', root)
+}
 
 /**
  * What a Codex subagent gets when its caller names nothing. The model is read from the tier table in
@@ -74,7 +79,7 @@ async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise
   const delegationSkill = await FS.isFile(skillPath) ? await FS.readText(skillPath) : ''
   const outputs = [
     {
-      content: renderCodexConfig(permissions, profiles, delegationSkill),
+      content: renderCodexConfig(permissions, profiles, delegationSkill, await gitDirectory(options.root)),
       path: FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root),
     },
     { content: renderCodexRules(permissions), path: FS.resolvePath(CODEX_RULES_OUTPUT, options.root) },
@@ -109,6 +114,8 @@ function renderCodexConfig(
   profiles: AgentProfiles,
   /** Empty when the skill is unreadable, which drops the delegation defaults rather than guessing. */
   delegationSkill = '',
+  /** The checkout's shared Git directory, from `gitDirectory`. */
+  sharedGitDirectory = '.git',
 ): string {
   const read = permissions.permission?.read ?? {}
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
@@ -133,7 +140,7 @@ function renderCodexConfig(
     'extends = ":read-only"',
     'description = "Tao review: inspect the worktree and reference repository without editing them."',
     '',
-    ...filesystemSection(REVIEW_PROFILE, read, []),
+    ...filesystemSection(REVIEW_PROFILE, read, [], sharedGitDirectory),
     '',
     ...workspaceRootsSection(REVIEW_PROFILE, read),
     '',
@@ -143,7 +150,7 @@ function renderCodexConfig(
     `extends = ${quote(PROFILE_BASE)}`,
     'description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."',
     '',
-    ...filesystemSection(PROFILE, read, allowWrite),
+    ...filesystemSection(PROFILE, read, allowWrite, sharedGitDirectory),
     '',
     ...workspaceRootsSection(PROFILE, read),
     '',
@@ -281,6 +288,10 @@ function header(): string[] {
     '# Repo-local filesystem, network, and approval settings for Tao development.',
     '# Git metadata writes outside the worktree are routed through Auto-review.',
     '#',
+    '# Machine-local and untracked: Codex needs Unix sockets as absolute paths and does not expand',
+    "# `~` in them, and this checkout's Git directory lives wherever it was cloned, so a committed",
+    "# copy would carry one person's home directory. `./agent setup` renders it for this machine.",
+    '#',
     `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}`,
     `# and ${PROFILES_SOURCE}. Edit those canonical files, not either generated Codex output:`,
     "# rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a",
@@ -294,10 +305,15 @@ function header(): string[] {
   ]
 }
 
-function filesystemSection(profile: string, read: Record<string, string>, allowWrite: readonly string[]): string[] {
+function filesystemSection(
+  profile: string,
+  read: Record<string, string>,
+  allowWrite: readonly string[],
+  sharedGitDirectory: string,
+): string[] {
   return [
     `[permissions.${profile}.filesystem]`,
-    ...(profile === PROFILE ? [`${quote(PRIMARY_GIT_DIRECTORY)} = "write"`] : []),
+    ...(profile === PROFILE ? [`${quote(sharedGitDirectory)} = "write"`] : []),
     ...(allowWrite.length === 0
       ? []
       : [
@@ -421,6 +437,7 @@ function quote(value: string): string {
 export const CodexConfigGenerator = {
   codexDomains,
   generate: generateCodexConfig,
+  gitDirectory,
   parsePermissions,
   render: renderCodexConfig,
   renderRules: renderCodexRules,

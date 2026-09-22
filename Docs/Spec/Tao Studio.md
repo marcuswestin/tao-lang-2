@@ -678,7 +678,7 @@ is an explicit upgrade operation and is not part of ordinary launch or release b
 Hutch is installed at its installer-owned user path, and native startup resolves either `PATH` or that
 location before creating artifacts. The real command projects and builds the generated Electrobun app, uses
 an ephemeral Metro port, and tears down Studio and Metro when the native child exits. AppKit application
-registration aborts when launched under the Codex host coalition, so visible windows, menus, the real
+registration aborts when launched inside an agent harness's process coalition, so visible windows, menus, the real
 directory picker, WebSocket/iframe bridge, shortcut, signed/notarized `.app`, DMG, differential update, and
 HTTPS release-host round trip still require an ordinary Terminal and release credentials.
 

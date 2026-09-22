@@ -22,6 +22,7 @@ import {
   StudioSessionPath,
   type StudioSessionResource,
 } from '@studio'
+import { enclosingWatchRoot } from '@verification/WatchmanHealth'
 import betterOpen from 'better-opn'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { StudioCompanionIdentity } from './StudioCompanionIdentity'
@@ -651,6 +652,17 @@ async function studioWatchmanEnvironment(
       `Run \`${executable} version\` to diagnose Watchman, then retry Studio.`,
     )
   }
+  // Watchman answers with an existing watch that encloses the checkout before it honors the
+  // checkout's own root marker, so a watched primary checkout folds every worktree into one watch.
+  const watched = watchmanWatchRoot(result.stdout)
+  const enclosing = watched === undefined
+    ? undefined
+    : enclosingWatchRoot([watched], await FS.realPath(repositoryRoot).catch(() => repositoryRoot))
+  if (enclosing !== undefined) {
+    Errors.throwHostEnvironment(
+      `Tao Studio cannot start Metro on its own watch: Watchman is watching ${enclosing}, which encloses this checkout, so Metro would crawl every worktree beneath it. Once no dev server uses it (\`${executable} debug-get-subscriptions ${enclosing}\` lists none), run \`${executable} watch-del ${enclosing}\`, then retry Studio.`,
+    )
+  }
   const environment = options.environment ?? Platform.runtimeProcess.env
   const inheritedPath = (environment['PATH'] ?? '')
     .split(':')
@@ -677,6 +689,15 @@ function watchmanCapabilityNames(output: string): ReadonlySet<string> {
     return new Set(parsed['capabilities'].filter((capability): capability is string => typeof capability === 'string'))
   } catch {
     return new Set()
+  }
+}
+
+function watchmanWatchRoot(output: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(output)
+    return Json.isRecord(parsed) && typeof parsed['watch'] === 'string' ? parsed['watch'] : undefined
+  } catch {
+    return undefined
   }
 }
 

@@ -1,4 +1,4 @@
-# DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox
+# DEVENV-051 — `sips` exits 13 inside a sandboxed agent shell
 
 - **Status:** Candidate
 - **Section:** External
