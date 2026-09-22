@@ -56,7 +56,6 @@ type SplitWidthBinding = TaoSplitNavConfiguration['items'][string]['width']
 export class RuntimeSplitNav extends RuntimeNavigationValue {
   readonly kind = 'split'
   readonly name: string
-  private readonly ownsWindow: boolean
 
   constructor(readonly descriptor: TaoNavDescriptor<'split', TaoSplitNavConfiguration>) {
     super()
@@ -66,7 +65,6 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
         item.content.subscribe(() => this.emit())
       }
     }
-    this.ownsWindow = Object.values(descriptor.config.items).some(item => paneOwnsWindow(item.content))
   }
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
@@ -109,16 +107,13 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
   }
 
   /**
-   * ownsWindowSurface delegates to the panes: a pane whose content is a window-owning navigator
-   * already frames its own screens, and a scroll frame around the whole split would inset that pane
-   * twice and leave its screens with no definite height. When any pane owns its window the split
-   * takes true window bounds and frames each of its other panes itself (see SplitNavSurface). The
-   * verdict is read once, at mount, from the panes' declared content: a pane's `SlotNav` stops
-   * owning its window while it presents a plain view, and a verdict that followed it would swap the
-   * app host's frame around the whole split — remounting every pane — on each present and dismiss.
+   * ownsWindowSurface: a split always takes true window bounds and frames each pane itself (see
+   * SplitNavSurface), so a sidebar and its detail scroll independently and a pane whose navigator
+   * frames its own screens is never framed twice (decided 2026-09-22). One frame around the whole
+   * split would scroll the panes as one and leave a stack pane's screens with no definite height.
    */
   override ownsWindowSurface(): boolean {
-    return this.ownsWindow
+    return true
   }
 
   protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
@@ -160,21 +155,20 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const widths = items.map(([key, item]) => localWidths[key] ?? numericWidth(item.width))
   const drag = React.useRef<{ index: number; moved: boolean; start: number; width: number } | undefined>(undefined)
   const lastTap = React.useRef<Record<string, number>>({})
-  const framesPanes = props.navigation.ownsWindowSurface()
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
     const region = splitPaneRegion(props.navigation.name, key, () => (widths[index] ?? 0) > 0)
     const content = renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation))
-    // A split that owns its window frames each pane that does not own its own — read live, so a
-    // pane's `SlotNav` that presents a plain view is framed while it shows it. A pane that owns its
-    // window frames its own screens. Either way a pane meets the window on its outer side alone:
-    // the top and bottom edges always, the left edge in the first pane, the right edge in the last.
+    // Every pane is framed here unless its content frames its own screens — read live, so a pane's
+    // `SlotNav` that presents a plain view is framed while it shows it. Either way a pane meets the
+    // window on its outer side alone: the top and bottom edges always, the left edge in the first
+    // pane, the right edge in the last.
     const paneContent = createElement(
       AppSurfaceFrameDefaults.Provider,
       { edges: splitPaneEdges(index, items.length) },
-      framesPanes && !paneOwnsWindow(item.content)
-        ? createElement(AppSurfaceFrame, { children: content, taoProps: props.taoProps })
-        : content,
+      paneOwnsWindow(item.content)
+        ? content
+        : createElement(AppSurfaceFrame, { children: content, taoProps: props.taoProps }),
     )
     children.push(createElement(runtime.View, {
       ...regionNativeProps(region),

@@ -415,7 +415,11 @@ present DocumentInfo(Document) as overlay in WorkspaceNav
 The runtime gives each nav a relative host and an absolute-fill overlay layer above its content.
 Overlays stack. Covered overlay entries remain mounted but are hidden visually and from
 accessibility; revealing them restores their state. `dismiss` or Back consumes the top overlay before
-the nav's ordinary content history.
+the nav's ordinary content history. An overlay covers the nav that presented it, not the window;
+`ask` alone draws at the window level. An entry presented while a native sheet is showing is hosted
+by that sheet — it draws inside the sheet's window and the sheet stays showing beneath it — while
+Back and `dismiss` still take the top entry first (`Tao Layout and UI.md` § _Safe Area And Keyboard
+Insets_ owns the lanes and windows).
 
 A toast is app-level, transient, and never accepts `in`:
 

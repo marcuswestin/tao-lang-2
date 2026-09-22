@@ -130,12 +130,23 @@ export const AppSurfaceFrameDefaults = {
   use: (): AppSurfaceFrameDefaultValues => React.useContext(ReactAppSurfaceFrameDefaults),
 } as const
 
+/**
+ * A provider composes with the one enclosing it rather than replacing it: a split inside a native
+ * tab keeps the tab's platform insets, and a split inside another split's pane meets only the edges
+ * both say it meets.
+ */
 function AppSurfaceFrameDefaultsProvider(
   props: AppSurfaceFrameDefaultValues & { children?: React.ReactNode },
 ): React.ReactElement {
+  const enclosing = AppSurfaceFrameDefaults.use()
+  const edges = props.edges === undefined
+    ? enclosing.edges
+    : enclosing.edges === undefined
+    ? props.edges
+    : props.edges.filter(edge => enclosing.edges!.includes(edge))
   return createElement(
     ReactAppSurfaceFrameDefaults.Provider,
-    { value: { edges: props.edges, nativeInsets: props.nativeInsets } },
+    { value: { edges, nativeInsets: props.nativeInsets ?? enclosing.nativeInsets } },
     props.children,
   )
 }

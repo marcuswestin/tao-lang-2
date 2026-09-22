@@ -611,14 +611,13 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
   per-entry frames and fills the true window directly. A toast is always the second case: it renders
   as a sibling of the app host's own frame regardless of what the main navigator does, so it always
   adds the live inset.
-- A `SplitNav` one of whose panes holds a window-owning navigator takes true window bounds itself,
-  a verdict read once at mount from the panes' declared content: that pane's navigator frames its
-  own screens, and the split frames each other pane — including a pane whose `SlotNav` is showing a
-  plain view — itself. Every frame inside a pane, the split's own or a nested navigator's, insets
-  only the window edges the pane meets: top and bottom always, left in the first pane, right in the
-  last. A split whose panes are all plain content stays inside the app host's one frame, scrolling
-  as one. Inside a native tab's screen, the frames a window-owning entry draws take the platform's
-  insets, as the frame the tab would otherwise draw around it does.
+- A `SplitNav` always takes true window bounds and frames each pane itself, so a sidebar and its
+  detail scroll independently: a pane whose navigator frames its own screens is left to it, and
+  every other pane — including one whose `SlotNav` is showing a plain view, read live — gets the
+  split's frame. Every frame inside a pane, the split's own or a nested navigator's, insets only the
+  window edges the pane meets: top and bottom always, left in the first pane, right in the last
+  (decided by Ro, 2026-09-22). Inside a native tab's screen, the frames a window-owning entry draws
+  take the platform's insets, as the frame the tab would otherwise draw around it does.
 - A frame inside a frame adds no live inset: a window-owning navigator a scene renders inline keeps
   the fixed 12-pixel gutter around each of its screens, and the safe-area inset comes from the
   scene's own frame, once.
@@ -638,22 +637,23 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
 A plain `present … as overlay` (no `ask`, no `as sheet`, no `as toast`) is full-bleed by decision:
 it is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach the window
 edges, so the runtime adds no inset and its content is the author's to inset (`Decisions.md` §10).
-It draws in its navigator's overlay lane, which fills that navigator's own surface: the true window
+It draws in its navigator's overlay lane, which fills that navigator's own surface — the true window
 under a navigator that owns its window, and the padded content box under one that does not, where
 the lane sits inside the enclosing `AppSurfaceFrame` and so stops short of the window edges by at
-least the frame's own padding.
+least the frame's own padding. That is the decided behavior, not a gap: an overlay covers the
+navigator that presented it, and only `ask` goes to the window (decided by Ro, 2026-09-22).
 
-Seen on an iPhone 17 simulator on 2026-09-21: a plain `as overlay` presented from inside a native
-sheet. The sheet hides while a later entry tops the overlay stack, so the overlay's content renders
-full-bleed over the root screen, under the status bar — the decided full-bleed behavior applied
-literally, with the sheet's own content gone. Whether an overlay presented from a sheet should stay
-inside the sheet's window is an open presentation question, not an inset one.
+An entry presented while a native sheet is showing — an overlay or an ask from the sheet's own
+content or from a navigator inside it — is hosted by that sheet: it draws in the sheet's window,
+inside the sheet's own overlay lane or window layer, and the sheet stays showing beneath it rather
+than hiding while a later entry tops the presenter's stack (decided by Ro, 2026-09-22). Back and
+`dismiss` still take the top entry first, and a native dismissal of the sheet itself — swiped down —
+takes the sheet with everything it hosts. A second sheet is never hosted: presented from a sheet it
+replaces that sheet on screen, as before. Without a native modal host the sheet is inline in the
+lane, and a later entry covers it as any overlay covers the one before.
 
 Not yet covered, and not decided by what exists today:
 
-- Whether a plain `as overlay` under a navigator that does not own its window should reach the
-  window edges through the window layer the way `ask` does, or keep covering only the navigator
-  that presented it.
 - Android's keyboard resize behavior (`softwareKeyboardLayoutMode` and equivalents) is unset; only
   the iOS `KeyboardAvoidingView` `behavior` is chosen explicitly.
 
@@ -771,8 +771,6 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - `nudge`: small post-layout movement that does not affect siblings
 - `overlay`: a possible in-layout positioning term, distinct from implemented presentation
   `as overlay`
-- `SplitNav` pane insets when a pane holds a nested window-owning navigator — see "Safe Area And
-  Keyboard Insets" above for what safe-area and keyboard avoidance is already implemented and proven
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
 - aspect ratio

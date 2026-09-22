@@ -475,6 +475,101 @@ Describe('Expo runtime: presentation surfaces', () => {
     },
   )
 
+  Test("keeps a sheet showing while an overlay presented from inside it draws in the sheet's window", async () => {
+    await testCompileApp(
+      `
+        use Button from @tao/ui/basic
+        use Text from @tao/ui
+
+        app SheetOverlayApp {
+          view Editor
+        }
+
+        view Editor() {
+          action OpenSheet() { present SheetContent() as sheet }
+          render Button("Open sheet") [] { on press OpenSheet }
+        }
+
+        view SheetContent() {
+          action OpenCover() { present Cover() as overlay }
+          render Button("Open cover") [] { on press OpenCover }
+        }
+
+        view Cover() {
+          render Text("Cover body")
+        }
+      `,
+      async screen => {
+        await act(async () => {
+          fireEvent.press(screen.getByText('Open sheet'))
+        })
+        await act(async () => {
+          fireEvent.press(screen.getByText('Open cover'))
+        })
+        // The overlay tops the presenter's stack, but it was presented while the sheet showed, so
+        // the sheet hosts it: the Modal stays visible and the overlay draws inside its window.
+        ExpectScreen(screen).toHaveText('Cover body')
+        Expect(screen.UNSAFE_getByType(RN.Modal).props.visible).toBe(true)
+        Expect(hasAncestorOfType(screen.getByText('Cover body'), RN.Modal)).toBe(true)
+        ExpectScreen(screen).toHaveText('Open cover')
+
+        // The platform dismissing the sheet itself (swiped down) takes the sheet and what it hosts:
+        // the stack cannot keep a sheet the platform no longer shows.
+        await act(async () => {
+          screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
+        })
+        Expect(screen.queryByText('Cover body')).toBeNull()
+        Expect(screen.queryByText('Open cover')).toBeNull()
+        ExpectScreen(screen).toHaveText('Open sheet')
+      },
+    )
+  })
+
+  Test(
+    "draws an ask asked from a sheet's own content in the sheet's window, with the sheet still showing",
+    async () => {
+      await testCompileApp(
+        `
+        use Button from @tao/ui/basic
+
+        ${askConfirmView}
+
+        app SheetAskOwnApp {
+          view Editor
+        }
+
+        view Editor() {
+          action OpenSheet() { present SheetContent() as sheet }
+          render Button("Open sheet") [] { on press OpenSheet }
+        }
+
+        view SheetContent() {
+          action OpenAsk() {
+            let Result = ask Confirm()
+            if Result is Confirmed { dismiss }
+          }
+          render Button("Open ask") [] { on press OpenAsk }
+        }
+      `,
+        async screen => {
+          await act(async () => {
+            fireEvent.press(screen.getByText('Open sheet'))
+          })
+          await act(async () => {
+            fireEvent.press(screen.getByText('Open ask'))
+          })
+          ExpectScreen(screen).toHaveText('Yes')
+          Expect(screen.UNSAFE_getByType(RN.Modal).props.visible).toBe(true)
+          const scrim = askScrim(screen)
+          Expect(hasAncestorOfType(scrim, RN.Modal)).toBe(true)
+          // A modal entry hosted by the sheet hides the sheet's own content from accessibility, as a
+          // navigator's content hides beneath its own ask.
+          Expect(screen.queryByText('Open ask')).toBeNull()
+        },
+      )
+    },
+  )
+
   Test('insets a toast off the home indicator and any side notch', async () => {
     setInsets()
     try {
