@@ -12,14 +12,14 @@ Apps/Tao Studio/
   StudioServerDataProvider.ts  sibling stub the StudioServer datasource requires; re-exports the
                                 implementation from packages/ides/studio, which stays there
   @code-editor/                the code editor as an app-local package
-    CodeEditor.tao             the foreign view declaration
-    CodeEditor.tsx             sibling stub; re-exports the state-wired surface from
-                                packages/ides/studio/studio-src/product-host, which stays there
+    CodeEditor.tao             the foreign view declaration, naming TaoStudioProductHost.tsx
 ```
 
-Every foreign view `TaoStudioClient.tao` declares outside `@code-editor` resolves by relative hop
-into `packages/ides/studio/studio-src/`, where the TypeScript implementations live and where their
-own `react`, `@shared`, and `@runtime` imports resolve through that package's `node_modules` —
-`Apps/` has none of its own. The two files above are sibling stubs for the same reason: a
-`provider … from ./X.ts` sidecar and a foreign view's own binding file must exist at the declared
-path, so each is a thin re-export rather than a copy of the implementation.
+Every foreign view this app declares, `@code-editor`'s included, resolves by relative hop into
+`packages/ides/studio/studio-src/`, where the TypeScript implementations live and where their own
+`react`, `@shared`, and `@runtime` imports resolve through that package's `node_modules` — `Apps/`
+has none of its own. `StudioServerDataProvider.ts` is a sibling stub because a
+`provider … from ./X.ts` sidecar must exist at the declared path; the editor needs no such stub,
+and must not have one: naming `TaoStudioProductHost.tsx` directly, as the client's other views do,
+is what keeps the editor and the host on one copy of the product-host module graph, and so on one
+instance of the revisioned host state they share.

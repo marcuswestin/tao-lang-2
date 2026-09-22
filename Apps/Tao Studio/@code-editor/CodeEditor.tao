@@ -1,6 +1,6 @@
 // CodeEditor is Tao Studio's own CodeMirror boundary: a foreign view over the active file's
-// revisioned host state. The CodeMirror component itself stays in `packages/ides/studio`, the
-// package the client's other views reach the same way; this app-local package is the thin state
-// binding between Studio's Tao-owned workbench and that component.
+// revisioned host state. The implementation stays in `packages/ides/studio`, named through the same
+// product-host module the client's other views reach, so the editor and the host share one instance
+// of that module's state; this app-local package is the workbench's name for it.
 workspace
-view CodeEditor() from ./CodeEditor.tsx
+view CodeEditor() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
