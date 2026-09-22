@@ -1,12 +1,18 @@
 import type { StudioRenderInspection } from '@source-actions'
 import type { EditorView } from 'codemirror'
+import type { StudioDeviceLog } from '../../device/StudioDeviceStatus'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import type { StudioInspectorSelection } from '../../StudioInspector'
 import { publishStudioProductHostState } from '../../StudioProductHostProtocol'
 import type { StudioTestStatus } from '../../StudioTestRunner'
 import type { StudioCompileState, StudioFile } from '../StudioApiClient'
 import { absoluteSourcePath } from '../StudioEditor'
-import { StudioJourneyRecorder, type StudioPreviewConnection, type StudioRuntimeDataTable } from '../StudioMatrixView'
+import {
+  StudioJourneyRecorder,
+  type StudioPreviewConnection,
+  type StudioRuntimeDataTable,
+  type StudioRuntimeLog,
+} from '../StudioMatrixView'
 import { StudioPanelProjection } from '../StudioPanelProjection'
 import type { StudioDrawerTab } from '../StudioProductPanels'
 import type { StudioSearchResult } from '../StudioRailPanels'
@@ -30,6 +36,7 @@ export type StudioHostSnapshot = Readonly<{
   canUndo: boolean
   compile: StudioCompileState
   data: StudioDataPanelSnapshot
+  deviceLogs: readonly StudioDeviceLog[]
   drawerTab: StudioDrawerTab
   editor: EditorView | undefined
   inspected: StudioInspectorSelection | undefined
@@ -50,6 +57,20 @@ export function studioSourceVersions(project: string, files: readonly StudioFile
     [file.path, file.sourceVersion],
     [absoluteSourcePath(project, file.path), file.sourceVersion],
   ]))
+}
+
+export function studioPanelLogs(
+  previewLogs: readonly StudioRuntimeLog[],
+  deviceLogs: readonly StudioDeviceLog[],
+): readonly StudioRuntimeLog[] {
+  return [
+    ...previewLogs,
+    ...deviceLogs.map(log => ({
+      arguments: [`Device ${log.deviceName}: ${log.message}`],
+      level: log.level,
+      timestamp: log.timestamp,
+    })),
+  ].sort((left, right) => left.timestamp - right.timestamp)
 }
 
 export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
@@ -110,7 +131,7 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
       dataLoading: snapshot.data.loading,
       dataSource: cellSource,
       debug: preview?.debug,
-      logs: preview?.runtimeLogs ?? [],
+      logs: studioPanelLogs(preview?.runtimeLogs ?? [], snapshot.deviceLogs),
       logSource: cellSource,
       search: snapshot.searchResults,
       sourceVersions: studioSourceVersions(snapshot.project, snapshot.projectFiles),
