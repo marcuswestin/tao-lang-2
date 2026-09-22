@@ -930,8 +930,8 @@ function deadlineFor(tuningArgs: readonly string[]): number {
  * waiting for the rest of the machine. Holding it fixed therefore makes the pass/fail judgment a
  * function of how busy the machine is, which is not a property of the test: the Studio client bundle
  * measures 1.4s in isolation and was killed at Bun's five seconds with four lanes in flight. Raising
- * the bound to a flat sixty seconds, as the suites below do, buys that tolerance by giving up the
- * budget entirely — a test that genuinely regressed to forty seconds would pass in silence.
+ * the bound to a flat two minutes, as the suites below do, buys that tolerance by giving up the
+ * budget entirely — a test that genuinely regressed to eighty seconds would pass in silence.
  *
  * So the budget stays fixed and only the deadline stretches, by the run-queue depth this machine is
  * actually carrying. On a machine this run has to itself the result is the budget itself and nothing
@@ -956,20 +956,25 @@ function starvationAdjustedTimeoutMs(loadAverage: number, cpuCount: number): num
 }
 
 /**
- * The per-test budget an uncontended machine keeps. Above Bun's own 5s default: the extra margin
- * costs nothing on a test that passes and buys headroom on the genuinely slow ones, while the
+ * The per-test budget an uncontended machine keeps, set to clear `TestAsync.until`'s own 30s default
+ * with margin. Below that floor a `until` wait that genuinely times out is killed by Bun's own
+ * anonymous per-test timeout first, so the caller's description in `until`'s error — the property
+ * `TestAsync.ts` documents — never reaches the report. The extra margin above Bun's 5s default costs
+ * nothing on a test that passes and buys headroom on the genuinely slow ones, while the
  * regression-catching property survives because the budget is still fixed rather than waived.
  */
-const TEST_BUDGET_MS = 7_500
+const TEST_BUDGET_MS = 45_000
 /** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
 const LOAD_AVERAGE_LAG_ALLOWANCE = 2
 /**
  * The ceiling, in milliseconds rather than in budgets: past this a deadline is no longer telling a
- * starved test apart from a hung one, and sixty seconds is the bound this repository already accepts
- * as "only a hang trips it". Absolute, so that raising the budget lengthens the deadline a loaded
- * machine gets without also moving the hang guard, which answers a different question.
+ * starved test apart from a hung one. Raised alongside the budget above, so that clearing `until`'s
+ * default with a larger floor does not also shrink the room a starved suite gets before this stops
+ * trusting the load reading — a hang still trips it at two minutes, same as it tripped at one before.
+ * Absolute, so that raising the budget lengthens the deadline a loaded machine gets without also moving
+ * the hang guard, which answers a different question.
  */
-const MAX_TEST_DEADLINE_MS = 60_000
+const MAX_TEST_DEADLINE_MS = 120_000
 
 /**
  * A pattern matching no Tao journey is a user error to someone typing `tao test --name`, and the

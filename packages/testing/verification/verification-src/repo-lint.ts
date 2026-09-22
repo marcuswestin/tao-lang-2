@@ -5,6 +5,7 @@ import { runtimeElementConventionIssues } from './RuntimeElementConventions'
 import { isAuditedSource } from './simplify-audit/AuditedSource'
 import { instructionBudget, instructionCharacterCount } from './simplify-audit/InstructionBudgets'
 import { kindChainsIn } from './simplify-audit/KindChains'
+import { testBudgetConventionIssues } from './TestBudgetConventions'
 
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 
@@ -580,6 +581,7 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/ides/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
   'packages/apps/expo-host/app-config.cjs:1',
+  'packages/apps/expo-host/jest.shared.config.cjs:1',
   'packages/apps/expo-host/app-config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:3',
@@ -1114,6 +1116,7 @@ export async function repoLintIssues(
   issues.push(...devLazyStudioImportIssues(packageFiles))
   issues.push(...runtimeArrayConventionIssues(packageFiles))
   issues.push(...runtimeElementConventionIssues(packageFiles))
+  issues.push(...testBudgetConventionIssues(packageFiles))
   return issues
 }
 

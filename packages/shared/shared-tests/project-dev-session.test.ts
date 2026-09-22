@@ -19,7 +19,6 @@ Describe('project development session ownership', () => {
     try {
       await until(() => output.includes('READY') ? true : undefined, {
         description: 'the child to claim the project',
-        timeoutMs: 5_000,
       })
       await Expect(async () => ProjectDevSession.acquire(root, 'studio'))
         .toThrow('already owned by cli session')

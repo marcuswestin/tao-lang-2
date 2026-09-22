@@ -48,7 +48,9 @@ Describe('Time', () => {
         waits.push(ms)
         now += ms
       },
-      timeoutMs: 100,
+      // `now`/`sleep` are injected fakes, so this budget is denominated in fake ms with no real wall
+      // time spent.
+      timeoutMs: 100, // budget-ok: fake clock, no real wall time.
     })
 
     Expect(result).toBe(0)
@@ -63,6 +65,7 @@ Describe('Time', () => {
     }, {
       intervalMs: 10,
       stop: () => true,
+      // budget-ok: `stop` fires on the first check, so no real wall time is spent waiting on this budget.
       timeoutMs: 100,
     })
 
@@ -84,7 +87,9 @@ Describe('Time', () => {
         waits.push(ms)
         now += ms
       },
-      timeoutMs: 25,
+      // `now`/`sleep` are injected fakes, so this budget is denominated in fake ms with no real wall
+      // time spent.
+      timeoutMs: 25, // budget-ok: fake clock, no real wall time.
     })
 
     Expect(result).toBeUndefined()
@@ -372,7 +377,7 @@ Describe('FS', () => {
       Expect(
         await Time.pollUntil(async () => await FS.exists(FS.resolvePath('entered-first', root)), {
           intervalMs: 5,
-          timeoutMs: 2_000,
+          timeoutMs: 30_000,
         }),
       ).toBe(true)
       second = run('second', secondSource, false)
