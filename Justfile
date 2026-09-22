@@ -175,8 +175,28 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 [group('Ship')]
-studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
-    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native" version="0.0.1":
+    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}" --version "{{ version }}"
+
+# Build signed Studio artifacts and check the app, DMG, update metadata, and isolated payload before upload
+[group('Ship')]
+studio-release-prepare repo version="0.0.1":
+    ./dev release-studio-prepare --repo "{{ repo }}" --version "{{ version }}"
+
+# Upload the prepared Studio artifacts to a public GitHub Release and verify public download bytes
+[group('Ship')]
+studio-release-publish repo:
+    ./dev release-studio-publish --repo "{{ repo }}"
+
+# Package the IDE extension and prove the VSIX installs in a clean VS Code profile
+[group('Ship')]
+ide-extension-release-prepare:
+    ./dev release-ide-prepare
+
+# Publish the prepared VSIX to both registries; pass open-vsx or marketplace to retry one after a partial failure
+[group('Ship')]
+ide-extension-release-publish target="all":
+    ./dev release-ide-publish --target "{{ target }}"
 
 # Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
 [group('Ship')]

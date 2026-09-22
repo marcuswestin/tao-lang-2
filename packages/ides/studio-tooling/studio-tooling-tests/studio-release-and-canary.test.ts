@@ -150,14 +150,21 @@ Describe('Studio release validation', () => {
   })
 
   Test('treats a missing differential patch as unverified, not a failure', () => {
-    const firstRelease = releaseValidation(payload, {
+    const missingPatch = releaseValidation(payload, {
       ...artifacts,
       names: artifacts.names.filter(name => !name.endsWith('.patch')),
     }, gates)
 
-    Expect(check(firstRelease, 'differential update')?.status).toBe('unverified')
-    Expect(check(firstRelease, 'differential update')?.remediation).toContain('first release')
-    Expect(releaseExitCode(firstRelease, { allowUnverified: true })).toBe(0)
+    Expect(check(missingPatch, 'differential update')?.status).toBe('unverified')
+    Expect(releaseExitCode(missingPatch)).toBe(1)
+
+    const confirmedFirstRelease = releaseValidation(payload, {
+      ...artifacts,
+      firstRelease: true,
+      names: artifacts.names.filter(name => !name.endsWith('.patch')),
+    }, gates)
+    Expect(check(confirmedFirstRelease, 'differential update')?.status).toBe('passed')
+    Expect(releaseExitCode(confirmedFirstRelease)).toBe(0)
   })
 
   Test('reads a staged payload and reports what it references', async () => {

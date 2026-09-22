@@ -48,6 +48,8 @@ export type PayloadInventory = {
  * it was handed proves only that the caller can type.
  */
 export type ArtifactInventory = {
+  /** Confirmed absence of an earlier published release in this channel. */
+  firstRelease?: boolean
   names: readonly string[]
   releaseBaseUrl?: string
   /** The directory the names were read from, for the report. */
@@ -232,6 +234,13 @@ function differentialUpdateCheck(artifacts: ArtifactInventory): ReleaseCheck {
       status: 'failed',
     }
   }
+  if (artifacts.firstRelease === true) {
+    return {
+      detail: 'a full update archive is present; this channel has no earlier release to diff against',
+      name: 'differential update',
+      status: 'passed',
+    }
+  }
   return {
     // The first release of a channel has nothing to diff against, so this is not a failure.
     detail: 'a full update archive is present; no differential patch was produced',
@@ -291,6 +300,7 @@ export async function readPayloadInventory(payloadRoot: string): Promise<Payload
 export async function readArtifactInventory(
   artifactsRoot: string,
   releaseBaseUrl?: string,
+  firstRelease = false,
 ): Promise<ArtifactInventory> {
   const names: string[] = []
   for await (const path of FS.walk(artifactsRoot)) {
@@ -298,13 +308,14 @@ export async function readArtifactInventory(
   }
   const manifestName = names.find(name => name.endsWith('-update.json'))
   if (manifestName === undefined) {
-    return { names: names.sort(), releaseBaseUrl, root: artifactsRoot }
+    return { firstRelease, names: names.sort(), releaseBaseUrl, root: artifactsRoot }
   }
   try {
     const updateManifest: unknown = JSON.parse(await FS.readText(FS.resolvePath(manifestName, artifactsRoot)))
-    return { names: names.sort(), releaseBaseUrl, root: artifactsRoot, updateManifest }
+    return { firstRelease, names: names.sort(), releaseBaseUrl, root: artifactsRoot, updateManifest }
   } catch {
     return {
+      firstRelease,
       names: names.sort(),
       releaseBaseUrl,
       root: artifactsRoot,
