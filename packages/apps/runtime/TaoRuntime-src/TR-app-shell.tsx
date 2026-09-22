@@ -20,6 +20,9 @@ export type SafeAreaInsets = {
   readonly top: number
 }
 
+/** One window edge a surface may meet. */
+export type SafeAreaEdge = keyof SafeAreaInsets
+
 export type SafeAreaContextModule = {
   /**
    * `SafeAreaProvider` renders nothing until it has insets, so a provider with no parent and no
@@ -110,24 +113,64 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
 }
 
 /**
+ * AppSurfaceFrameDefaults are what an enclosing surface tells the frames rendered inside it: which
+ * window edges they meet — a split pane meets the window on its outer side alone — and whether the
+ * platform supplies the insets, inside a native tab's screen. A frame reads the nearest one, so a
+ * navigator that frames its own screens inside such a surface inherits it without any plumbing.
+ */
+export type AppSurfaceFrameDefaultValues = {
+  readonly edges?: readonly SafeAreaEdge[]
+  readonly nativeInsets?: boolean
+}
+
+const ReactAppSurfaceFrameDefaults = React.createContext<AppSurfaceFrameDefaultValues>({})
+
+export const AppSurfaceFrameDefaults = {
+  Provider: AppSurfaceFrameDefaultsProvider,
+  use: (): AppSurfaceFrameDefaultValues => React.useContext(ReactAppSurfaceFrameDefaults),
+} as const
+
+function AppSurfaceFrameDefaultsProvider(
+  props: AppSurfaceFrameDefaultValues & { children?: React.ReactNode },
+): React.ReactElement {
+  return createElement(
+    ReactAppSurfaceFrameDefaults.Provider,
+    { value: { edges: props.edges, nativeInsets: props.nativeInsets } },
+    props.children,
+  )
+}
+
+/**
  * AppSurfaceFrame is the safe-area-padded scrollable frame around one full-screen content surface.
  * The app host applies it around its navigator, and a navigator that hands the window to a native
  * surface (the platform tab bar) applies it inside each of its screens instead — a native surface
  * must own true window bounds, and an enclosing scroll frame would push its bar offscreen.
+ *
+ * A frame that finds itself inside another frame — a window-owning navigator a scene renders inline,
+ * whose per-screen frames sit inside the scene's own — keeps its fixed gutter and adds no live
+ * inset, since the enclosing frame already stands between it and the window.
  */
 export function AppSurfaceFrame(props: {
   /** Chrome floating over the bottom edge; the content scrolls beneath it and clears it at the end. */
   bottomInset?: number
   children?: React.ReactNode
-  /** Inside a native screen the platform supplies the safe-area and bar insets itself. */
+  /**
+   * Inside a native screen the platform supplies the safe-area and bar insets itself; unset, the
+   * enclosing surface's defaults decide.
+   */
   nativeInsets?: boolean
   taoProps?: TaoProps
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const platformOS = RN.Platform?.OS ?? 'web'
   const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const alreadyInset = AppSurfaceInsetContext.use()
+  const defaults = AppSurfaceFrameDefaults.use()
+  const nativeInsets = props.nativeInsets ?? defaults.nativeInsets ?? false
+  const edges = defaults.edges ?? allEdges
+  const liveInset = (edge: SafeAreaEdge): number => alreadyInset || !edges.includes(edge) ? 0 : insets[edge]
   const bottomInset = props.bottomInset ?? 0
-  const contentPadding = props.nativeInsets
+  const contentPadding = nativeInsets
     ? {
       paddingBottom: appFramePadding + bottomInset,
       paddingLeft: appFramePadding,
@@ -135,15 +178,15 @@ export function AppSurfaceFrame(props: {
       paddingTop: appFramePadding,
     }
     : {
-      paddingBottom: appFramePadding + insets.bottom + bottomInset,
-      paddingLeft: appFramePadding + insets.left,
-      paddingRight: appFramePadding + insets.right,
-      paddingTop: appFramePadding + insets.top,
+      paddingBottom: appFramePadding + liveInset('bottom') + bottomInset,
+      paddingLeft: appFramePadding + liveInset('left'),
+      paddingRight: appFramePadding + liveInset('right'),
+      paddingTop: appFramePadding + liveInset('top'),
     }
   return createElement(
     RN.ScrollView,
     {
-      ...(props.nativeInsets ? { contentInsetAdjustmentBehavior: 'automatic' } : {}),
+      ...(nativeInsets ? { contentInsetAdjustmentBehavior: 'automatic' } : {}),
       contentContainerStyle: [contentStyle, contentPadding],
       keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
@@ -160,6 +203,8 @@ export function AppSurfaceFrame(props: {
     ),
   )
 }
+
+const allEdges: readonly SafeAreaEdge[] = ['bottom', 'left', 'right', 'top']
 
 // The generated app root reaches AppShell as a stable `children` element, so React skips
 // re-rendering that subtree when only the frame re-renders. Cloning the root hands React fresh

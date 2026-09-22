@@ -1,0 +1,42 @@
+import { Errors, FS } from '@shared'
+import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
+
+const runtimeFiles = [
+  'index.ts',
+  'app.json',
+  'app.config.js',
+  'app-config.cjs',
+  'metro.config.cjs',
+  'package.json',
+] as const
+
+/** DevRuntime creates the project's own generated Expo host from the installed Tao toolchain. */
+export const DevRuntime = { prepare }
+
+async function prepare(projectRoot: string): Promise<{ root: string; sourceRoot: string }> {
+  const sourceRoot = RuntimeToolchainPaths.packageRoot
+  const root = FS.resolvePath('.tao/dev/runtime', projectRoot)
+  const ignorePath = FS.resolvePath('.tao/.gitignore', projectRoot)
+  if (!await FS.exists(ignorePath)) {
+    await FS.writeText(ignorePath, 'dev/\n')
+  }
+  for (const file of runtimeFiles) {
+    const source = FS.resolvePath(file, sourceRoot)
+    if (!await FS.isFile(source)) {
+      Errors.throwHostEnvironment(`Tao's development runtime is missing ${source}.`)
+    }
+    await FS.copyFile(source, FS.resolvePath(file, root))
+  }
+  const modules = FS.resolvePath('node_modules', sourceRoot)
+  if (!await FS.isDirectory(modules)) {
+    Errors.throwHostEnvironment(`Tao's development runtime has no installed modules at ${modules}.`)
+  }
+  await FS.replaceSymlink(modules, FS.resolvePath('node_modules', root))
+  // Expo resolves TypeScript and other tooling from parent node_modules, while the host package's
+  // own node_modules contains only its declared runtime dependencies.
+  const toolchainModules = FS.resolvePath('../../../node_modules', sourceRoot)
+  if (await FS.isDirectory(toolchainModules)) {
+    await FS.replaceSymlink(toolchainModules, FS.resolvePath('node_modules', FS.dirname(root)))
+  }
+  return { root, sourceRoot }
+}

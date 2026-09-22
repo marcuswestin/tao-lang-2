@@ -282,6 +282,8 @@ const GUI_PRIORITY = 6
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
+/** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
+const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -389,10 +391,15 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // The browser smokes are parallel-safe on the worker indices the pool hands them; the native
-    // shell and the canary contend on the window server, which is what `gui` names. Each smoke
-    // gate is named for the public recipe that runs the same file by hand.
-    ['studio-smoke', studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts')],
+    // Browser smokes have separate ports and artifacts, but the launch smoke and canary both open
+    // HNReader and must share its project resource. The native shell and canary also contend on
+    // the window server, which is what `gui` names. Each smoke gate is named for its public recipe.
+    [
+      'studio-smoke',
+      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts', {
+        resources: [HNREADER_PROJECT_RESOURCE],
+      }),
+    ],
     [
       'studio-proof-real-app',
       studioSmoke('studio-proof-real-app', 'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts'),
@@ -450,7 +457,11 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.
     [
       'studio-canary',
-      { ...studioLane([GUI_RESOURCE]), priority: GUI_PRIORITY, timeoutMs: STUDIO_CANARY_TIMEOUT_MS },
+      {
+        ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        priority: GUI_PRIORITY,
+        timeoutMs: STUDIO_CANARY_TIMEOUT_MS,
+      },
     ],
   ])
 }

@@ -9,6 +9,10 @@ developer tooling first, then an invited-project beta, feedback, and collaborati
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.
 
+The initial local development host uses the exact Tao version that serves its Metro bundle. A store
+Companion for invited beta builds remains a tentative path; its update mechanism, native compatibility,
+and App Store acceptance require separate proof.
+
 Implementation handoff (archived, Slice 1 landed): `Docs/Archive/Plans/Prompt - Implement Slice 1.md`.
 
 Existing boundaries remain authoritative:
@@ -420,12 +424,12 @@ connected and Wi-Fi off — verify before treating this acceptance line as fully
 ### 2. Everyday development canvas
 
 - Project/app/variant/scenario/persona/revision switching.
-- Fast Refresh, remount, relaunch, checkpoint restore, and capture.
+- Fast Refresh, remount, relaunch, runtime capture, and restore controlled from Studio.
 - Bidirectional selection and one device-originated layout action.
-- Logs, compile/apply state, provider/network controls, and test commands.
+- Logs, compile/apply state, and provider/network controls.
 
-Acceptance: edit Mac to native frame, select both ways, capture/restore WordFlower state, run one journey,
-and report whether compatible state survived refresh.
+Acceptance: edit Mac to native frame, select both ways, capture/restore WordFlower state through Studio,
+and report whether compatible state survived refresh. A device journey is part of Slice 4.
 
 ### 3. Tao Lens and diagnostics
 
@@ -439,6 +443,7 @@ wait, and covering journey without manual correlation.
 
 - Live semantic script, editing, expectations, replay, and reviewed test/journey proposal.
 - Preserve unresolved foreign/native steps honestly.
+- Run a journey on the live device renderer with visible step results.
 
 Acceptance: record a five-step WordFlower story on iPhone, remove an incidental step, replay it, and save a
 passing Tao test proposal.

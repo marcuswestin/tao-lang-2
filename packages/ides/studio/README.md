@@ -368,10 +368,14 @@ drop, retained-position Unsnap, overlap Cancel/Apply, and source/catalog Undo.
 
 The smoke lane is deliberately outside ordinary test discovery: it is slow and it binds real ports.
 
-Lanes that drive Chrome (`studio-simulated-user.test.ts`, and anything else using `StudioCdp`) need
-an **unsandboxed** shell. Under the agent sandbox Chrome cannot create its socket directory or write
-`Crashpad/settings.dat`, and it exits before exposing DevTools. The failure names Chrome rather than
-the sandbox, so it reads as a browser problem:
+Run the documented host lane for Chrome (`studio-simulated-user.test.ts`, and anything else using
+`StudioCdp`) from an independent desktop terminal. In a managed sandbox, Chrome can fail before
+DevTools exists:
+it has exited with code 21 when its socket directory or `Crashpad/settings.dat` was denied, and it
+has also aborted during macOS `_RegisterApplication` before CDP became available. `Aqua` from
+`launchctl managername` does not distinguish the failing managed context. See
+[DEVENV-015](<../../../Docs/Roadmap/Developer environment upgrades/DEVENV-015-reliable-host-browser-verification.md>)
+for the host evidence and operator action. The earlier socket failure looks like this:
 
 ```
 Chrome exited before exposing DevTools (exit 21, signal none)

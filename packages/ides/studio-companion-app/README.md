@@ -22,10 +22,19 @@ project needs a development team selected once.
 
 ## Daily loop
 
-Run Studio as usual (`just studio <project>` or `just studio-native <project>`) and press **Open on
-device**, or scan the QR code Studio shows. Studio launches the installed shell on this project's
-Metro, the shell pairs with Studio, and Tao edits reach the device through Fast Refresh. Nothing in
-this package is touched.
+Run Studio as usual (`just studio <project>` or `just studio-native <project>`) and press **Open this
+app on device** in Studio's Device panel, or scan the QR code Studio shows. Use that action again
+after changing projects; selecting another Studio project does not switch the phone automatically.
+Studio launches the installed shell on this project's Metro, the shell pairs with Studio, and Tao
+edits reach the device through Fast Refresh. Nothing in
+this package is touched. This local development path loads Studio's bundle from the same Tao checkout,
+so the JavaScript host and Tao runtime use the exact same version. A separately distributed Companion
+and its update compatibility are still release questions.
+
+The Device panel can download a full runtime capture and restore the current capture or a saved JSON
+file into the same app and scenario. Named fixture captures in the scenario canvas save provider data
+into Tao source; they are separate from the device's complete runtime state. Trusted device console
+lines appear with device labels in Studio's Logs drawer.
 
 ## Rebuild only when native code changes
 

@@ -42,7 +42,7 @@ const PINNED_NATIVE_VERSIONS = {
 
 /** Artifacts Studio itself needs beyond the ones every Tao command needs. */
 const STUDIO_SOURCES = [
-  'packages/ides/studio/studio-src/TaoStudioClient.tao',
+  'Apps/Tao Studio/TaoStudioClient.tao',
   'packages/ides/studio/studio-src/TaoStudioBrowser.tsx',
 ]
 

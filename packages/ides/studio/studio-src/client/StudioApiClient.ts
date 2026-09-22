@@ -22,6 +22,7 @@ import {
   type StudioRenameFileResult,
   type StudioRoute,
   StudioRoutes,
+  type StudioRuntimeCaptureArtifact,
   type StudioSessionHandshake,
   StudioSessionPath,
   type StudioSessionSocketEvent,
@@ -244,6 +245,8 @@ export const StudioApiClient = {
     await request(routes.devicePairingConfirm, { devicePublicKey }),
   deviceDeclinePairing: async (devicePublicKey: string): Promise<{ declined: boolean }> =>
     await request(routes.devicePairingDecline, { devicePublicKey }),
+  deviceCapture: async (): Promise<{ capture?: StudioRuntimeCaptureArtifact; error?: string }> =>
+    await request(routes.deviceCapture, {}),
   deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get(routes.deviceLaunch),
   deviceLaunchOpen: async (hostId: string, route: 'auto' | 'cable' = 'auto'): Promise<StudioDeviceLaunchOpenResult> =>
     await request(routes.deviceLaunchOpen, { hostId, route }),
@@ -270,6 +273,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath(routes.languageLsp.path)), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request(routes.previewApplied, body),
+  previewCell: async (cellId: string): Promise<StudioCellRuntimeResponse> =>
+    await get(`${routes.previewCell.path}?cellId=${encodeURIComponent(cellId)}`),
   previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>
     await request(routes.previewLayoutMeasurements, body),
   previewDiagnosis: async (signal?: AbortSignal): Promise<{ message?: string; status: string }> =>

@@ -1,8 +1,13 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StudioLens, type StudioLensStorage } from '../studio-src/client/StudioLens'
-import { isStudioLensCycleShortcut, StudioLensBar } from '../studio-src/TaoStudioProductHost'
+import {
+  createStudioSourceAnalyzer,
+  isStudioLensCycleShortcut,
+  StudioLensBar,
+} from '../studio-src/product-host/StudioEditorSurface'
 
 function fakeStorage(initial: Record<string, string> = {}): StudioLensStorage & { items: Map<string, string> } {
   const items = new Map(Object.entries(initial))
@@ -81,5 +86,20 @@ Describe('Studio lens vocabulary', () => {
     Expect(html).toContain('aria-pressed="true" class="studio-lens-facet" data-testid="studio-lens-facet-layout"')
     Expect(html).toContain('aria-pressed="false" class="studio-lens-facet" data-testid="studio-lens-facet-behavior"')
     Expect(html).toContain('data-testid="studio-lens-refold"')
+  })
+
+  Test('retries rejected syntax analysis for unchanged source', async () => {
+    let attempts = 0
+    const analyze = createStudioSourceAnalyzer(async content => {
+      attempts += 1
+      if (attempts === 1) {
+        Errors.throwHostEnvironment('language service disconnected')
+      }
+      return { content }
+    })
+
+    await Expect(analyze('view Main() { }')).rejects.toThrow('language service disconnected')
+    await Expect(analyze('view Main() { }')).resolves.toEqual({ content: 'view Main() { }' })
+    Expect(attempts).toBe(2)
   })
 })

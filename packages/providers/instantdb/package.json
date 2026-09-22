@@ -1,0 +1,14 @@
+{
+  "name": "tao-instantdb",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "module": "instantdb-src/InstantDB.ts",
+  "exports": {
+    ".": "./instantdb-src/InstantDB.ts"
+  },
+  "dependencies": {
+    "@instantdb/react-native": "1.0.22",
+    "tao-shared": "workspace:*"
+  }
+}

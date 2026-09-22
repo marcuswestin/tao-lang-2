@@ -1,5 +1,12 @@
 # Plan - Standalone Tao CLI
 
+Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
+selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
+shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+The findings below are the historical pre-implementation baseline; packaging and publishing a
+relocatable CLI remain in this standalone program. The decided command behavior is in
+[`../Roadmap/Tao CLI workflows/Decisions - Development build ship and clean.md`](../Roadmap/Tao%20CLI%20workflows/Decisions%20-%20Development%20build%20ship%20and%20clean.md).
+
 The plan for `A2 — A standalone cross-platform tao executable` in `Agent MVP Roadmap.md`. It writes
 no code; it records what the toolchain actually reads at runtime, what was measured rather than
 assumed, the recommended shape, what is still uncertain, the slice sequence, and the questions that

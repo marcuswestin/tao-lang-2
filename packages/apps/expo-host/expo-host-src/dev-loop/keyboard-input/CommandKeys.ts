@@ -14,6 +14,8 @@ type CommandKeyContext = {
   expo: ExpoRunnerSession
   finish: (exitCode: number) => Promise<void>
   repoRoot: string
+  repositoryControlsAvailable?: boolean
+  runtimeRoot?: string
   restart: () => Promise<void>
   selectApp: () => Promise<void>
   stopServices: () => Promise<void>
@@ -30,6 +32,11 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
     return
   }
 
+  if (context.repositoryControlsAvailable === false && REPOSITORY_COMMAND_KEYS.includes(key)) {
+    DevLoopOutput.logDevLoop('dev', `Key ${key} requires a Tao source checkout.`, 'warn')
+    return
+  }
+
   if (CommandRunner.isCommandRunning()) {
     DevLoopOutput.logDevLoop('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
     return
@@ -40,13 +47,10 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
 
 const COMMAND_HANDLERS = {
   q: context => context.finish(0),
-  r: context =>
-    CommandRunner.runNonInteractiveCommand(
-      'recompile and reload Expo app',
-      () => Run.recompileAndReload(context.repoRoot, context.appPath, context.expo, context.appName),
-    ),
-  d: context => CommandRunner.runNonInteractiveCommand('open Expo device', context.expo.openPhysicalDevice),
-  p: context => context.restart(),
+  r: context => CommandRunner.runNonInteractiveCommand('reload app', context.expo.reloadExpoApps),
+  d: () => DevLoopOutput.logDevLoop('dev', 'The Tao desktop development host is not available yet.', 'warn'),
+  p: context => CommandRunner.runNonInteractiveCommand('open physical device', context.expo.openPhysicalDevice),
+  x: context => context.restart(),
   w: context => CommandRunner.runNonInteractiveCommand('open Expo web', context.expo.openWeb),
   i: context => CommandRunner.runNonInteractiveCommand('open Expo iOS', context.expo.openIosSimulator),
   c: context =>
@@ -69,6 +73,8 @@ const COMMAND_HANDLERS = {
   a: context => CommandRunner.runNonInteractiveCommand('open Expo Android', context.expo.openAndroid),
   s: context => context.selectApp(),
 } satisfies Record<ActionCommandKey, CommandHandler>
+
+const REPOSITORY_COMMAND_KEYS: readonly string[] = ['c', 'f', 't', 'v', 'e']
 
 async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<boolean | void> {
   await context.stopServices()

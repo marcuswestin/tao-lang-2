@@ -24,6 +24,7 @@ import {
   runDevicectlJson,
 } from '@expo-host/dev-loop/expo-runner/physical-device'
 import { simulatorOpenFailure } from '@expo-host/dev-loop/expo-runner/run-targets'
+import { createExpoTargets } from '@expo-host/dev-loop/expo-runner/run-targets'
 import { presentIosSimulator } from '@expo-host/dev-loop/IosSimulatorPresentation'
 import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys'
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
@@ -139,7 +140,16 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
     Expect(Commands.isCommandKey('d')).toBe(true)
     Expect(Commands.isCommandKey('p')).toBe(true)
-    Expect(Commands.isCommandKey('x')).toBe(false)
+    Expect(Commands.isCommandKey('x')).toBe(true)
+  })
+
+  Test('bare startup does not open any target', async () => {
+    const targets = createExpoTargets(
+      createExpoConfig(49_152),
+      {} as ExpoMetroSession,
+      {} as ReturnType<typeof createAndroid>,
+    )
+    await targets.openStartupTargets()
   })
 
   Test('quits on q and opens app selection only on s', async () => {
@@ -196,13 +206,54 @@ Describe('Expo dev-loop command helpers', () => {
     }
 
     await withCapturedOutput(async () => {
-      await handleCommandKey('d', context)
+      await handleCommandKey('p', context)
       await handleCommandKey('w', context)
       await handleCommandKey('i', context)
       await handleCommandKey('a', context)
     })
 
     Expect(actions).toEqual(['device', 'web', 'ios', 'android'])
+  })
+
+  Test('uses r to reload and x to restart the dev process', async () => {
+    const actions: string[] = []
+    const context = {
+      appPath: '/repo/App.tao',
+      expo: {
+        ...ExpoRunner.createSession(49_152),
+        reloadExpoApps: async () => {
+          actions.push('reload')
+        },
+      },
+      finish: async () => {},
+      repoRoot: '/repo',
+      restart: async () => {
+        actions.push('restart')
+      },
+      selectApp: async () => {},
+      stopServices: async () => {},
+    }
+    await handleCommandKey('r', context)
+    await handleCommandKey('x', context)
+    Expect(actions).toEqual(['reload', 'restart'])
+  })
+
+  Test('does not run source-checkout maintenance from an outside project', async () => {
+    const captured = await withCapturedOutput(() =>
+      handleCommandKey('c', {
+        appPath: '/outside/App.tao',
+        expo: ExpoRunner.createSession(49_152),
+        finish: async () => {},
+        repoRoot: '/outside',
+        repositoryControlsAvailable: false,
+        restart: async () => {},
+        selectApp: async () => {},
+        stopServices: async () => {
+          Errors.throwUnexpected('Must not stop the external dev session.')
+        },
+      })
+    )
+    Expect(`${captured.stdout}${captured.stderr}`).toContain('requires a Tao source checkout')
   })
 
   Test('keeps child-process output as the useful dev-loop failure', () => {
@@ -340,7 +391,7 @@ Describe('Expo dev-loop port helpers', () => {
   })
 
   Test('explains environments that prohibit local TCP listeners', () => {
-    const error = Object.assign(new Error('listen blocked'), { code: 'EPERM' })
+    const error = Object.assign(new Errors.HostEnvironmentError('listen blocked'), { code: 'EPERM' })
     const normalized = ExpoRunner.portDiagnostics.normalizeReservationError(error)
 
     Expect(Errors.formatForUser(normalized)).toBe(
@@ -519,6 +570,33 @@ en7: flags=8863
     const output = `${captured.stdout}${captured.stderr}`
     Expect(output).toContain('App Store Expo Go does not support Expo SDK 57')
     Expect(output).not.toContain('opened Expo Go')
+  })
+
+  Test('opens only the selected connected Android device when several are available', async () => {
+    const config = createExpoConfig(8_099)
+    const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+    const opened: string[] = []
+    android.listPhysicalDevices = async () => ['ANDROID-A', 'ANDROID-B']
+    android.ensureExpoGoOnSerial = async () => {}
+    android.reverseMetroPort = async () => true
+    android.openExpoGoOnSerial = async serial => {
+      opened.push(serial)
+    }
+    const result = await openPhysicalDevice(
+      config,
+      { waitForMetro: async () => {} } as unknown as ExpoMetroSession,
+      android,
+      {
+        detectLanHost: async () => '192.168.1.20',
+        listIosDevices: async () => [],
+        selectDevice: async choices => {
+          Expect(choices.map(choice => choice.value)).toEqual(['android:ANDROID-A', 'android:ANDROID-B'])
+          return 'android:ANDROID-B'
+        },
+      },
+    )
+    Expect(result).toBe(true)
+    Expect(opened).toEqual(['ANDROID-B'])
   })
 
   Test('accepts only Android Expo Go clients from the configured SDK generation', () => {

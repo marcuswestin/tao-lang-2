@@ -1,15 +1,20 @@
 # Decisions — Tao development, build, ship, and clean
 
-Status: **decided future product behavior; not implemented**. These decisions were made in the
+Status: **decided product behavior; bare `tao dev` session implemented**. These decisions were made in the
 September 2026 CLI workflow dialogue. They supersede conflicting _forward-looking_ command designs
 in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
-`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; they do not describe the current
-CLI. The implementation must update those documents and the command help when behavior changes.
+`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; much of the remaining contract
+does not describe the current CLI. Implementation updates those documents and command help as behavior changes.
 
 This is the durable record of the choices, not an implementation. The planned CLI restructure has
 landed on `main`; implementation should start from that post-restructure state, not from the
 unrelated `feat/real-host-acceptance` history. The design discussion changed the personal dialogue
 skill separately; no skill change is part of this CLI work.
+
+The first implementation slice starts bare `tao dev` without opening a target, places its generated
+Expo host under the project, records session history at `.tao/sessions/`, and shares exclusive
+project ownership with Studio. The build, ship, invite, clean, desktop-host, and installer behavior
+below remains a target for later slices; the command help describes what is implemented now.
 
 ## Product boundary and architecture
 
@@ -173,6 +178,28 @@ that the current CLI accepts them.
 The remaining product-level CLI questions recorded in the prior version of this document are now
 settled: default iOS builds include a simulator artifact and an available device artifact; local
 native builds default to Release; and existing-beta invitations use `tao invite EMAIL`.
+
+## Implementation sequence
+
+These are implementation priorities, not claims that a command already works. Start slice 2 only
+after slice 1 lands, and deliver all of slice 2 on one branch and in one landing. The later bullets
+give priority order, not a rule against all parallel preparation.
+
+1. Standalone `tao dev`: a live Metro session that opens no target by default, with project-local
+   session ownership shared with Studio and the standalone runtime resources it needs.
+2. Local web and desktop builds plus `tao clean`: deliver the static web folder, runnable macOS
+   `.app`, retained artifact records, and selective cleanup together in one landing.
+3. Local iOS build artifacts, including the simulator and an available physical-device build.
+4. New iOS TestFlight beta shipping and `tao invite` for an existing beta.
+5. iOS production shipping.
+6. Local Android APK builds.
+7. Beta-only OTA shipping and rollback.
+
+For slice 2, Ro may approve landing on green automated checks before a live smoke of the served web
+artifact and opened desktop `.app`. Perform that smoke after landing and track any failure as
+follow-up work; the landing report must say plainly that visible runtime behavior was not yet
+proved. Do not infer from this exception that mocked Apple responses prove TestFlight, signing, or
+App Store acceptance.
 
 ## Implementation and acceptance boundary
 

@@ -534,6 +534,32 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('delivers trusted device console lines in the session status with a stable sequence', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      const statuses: StudioDeviceStatus[] = []
+      const unsubscribe = env.gateway.subscribe(env.sessionId, status => statuses.push(status))
+      device.sendSealed({
+        entries: [
+          { level: 'info', message: 'ready', timestamp: 100 },
+          { level: 'warn', message: 'slow request', timestamp: 101 },
+        ],
+        type: 'device.log',
+      })
+      const logs = await until(() =>
+        env.gateway.status(env.sessionId).logs?.length === 2
+          ? env.gateway.status(env.sessionId).logs
+          : undefined
+      )
+      Expect(logs).toMatchObject([
+        { deviceName: device.description.name, level: 'info', message: 'ready', sequence: 1, timestamp: 100 },
+        { deviceName: device.description.name, level: 'warn', message: 'slow request', sequence: 2, timestamp: 101 },
+      ])
+      Expect(statuses.at(-1)?.logs).toEqual(logs)
+      unsubscribe()
+    })
+  })
+
   Test('detaches a closed project session, its preview instance, and pending capture', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
