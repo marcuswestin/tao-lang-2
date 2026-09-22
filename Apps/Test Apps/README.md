@@ -82,9 +82,10 @@ the folder, one or more per source file, and each check picks its app with `run`
   item while each stack keeps its position; a plain-view item titled by its `Label`; the test
   `relaunch` step restoring both.
 - _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
-  presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;
-  dismissing with Back; a covered sheet hiding and restoring when its cover dismisses — a sheet
-  behaving as an overlay does for every navigation operation.
+  presentation; `present X as overlay` from inside one, drawing inside the sheet's window while the
+  sheet stays showing beneath it; dismissing from inside with `dismiss`; dismissing with Back; the
+  cover dismissing back to the sheet — a sheet behaving as an overlay does for every navigation
+  operation except that what it presents lives in its window.
 - _Split_ (`Resizable Split.tao`): `SplitNav` with keyed `Content`, numeric `Width`, and
   `Resizable`; an app-level `state Name is number = default (persist)` read by a pane and
   changed by an app-level action — the journey observes the value, not the resulting geometry; simultaneous pane rendering; the test `relaunch` step,
