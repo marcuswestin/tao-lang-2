@@ -134,13 +134,26 @@
       "*": "ask",
     },
   },
+  // Explicit host-access exceptions for Codex. Unlike Claude's sandbox exclusions, Codex needs
+  // prefix rules to make these commands both unsandboxed and non-interactive. Each must also be
+  // covered by a Bash allow rule and a Claude exclusion; the generator checks both. This grants
+  // the landing command and all repository code it invokes host access, which Ro explicitly chose.
+  "codex": {
+    "outsideSandboxCommands": [
+      "./dev land",
+      "./dev merge-with-main",
+      "just land",
+      "just merge-with-main",
+      "just my-land",
+    ],
+  },
   "claudecode": {
     "sandbox": {
       "enabled": true,
       "excludedCommands": [
         // These commands need host process or native-service access the sandbox cannot express.
-        // Every entry also has a matching allow rule above; the Codex generator derives the
-        // project-local outside-sandbox rules from that intersection.
+        // Codex derives only fixed, read-only command shapes from this intersection by default.
+        // Its mutable landing exceptions are explicit in `codex.outsideSandboxCommands` above.
         "ps -axo pid=,ppid=,lstart=,command=",
         "ps -o lstart= -p *",
         "adb devices *",
