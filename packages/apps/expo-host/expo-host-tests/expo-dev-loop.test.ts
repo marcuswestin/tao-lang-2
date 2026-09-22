@@ -198,6 +198,10 @@ Describe('Expo dev-loop command helpers', () => {
     const context = {
       appPath: '/repo/App.tao',
       expo,
+      openDesktop: async () => {
+        actions.push('desktop')
+        return true
+      },
       finish: async () => {},
       repoRoot: '/repo',
       restart: async () => {},
@@ -206,13 +210,14 @@ Describe('Expo dev-loop command helpers', () => {
     }
 
     await withCapturedOutput(async () => {
+      await handleCommandKey('d', context)
       await handleCommandKey('p', context)
       await handleCommandKey('w', context)
       await handleCommandKey('i', context)
       await handleCommandKey('a', context)
     })
 
-    Expect(actions).toEqual(['device', 'web', 'ios', 'android'])
+    Expect(actions).toEqual(['desktop', 'device', 'web', 'ios', 'android'])
   })
 
   Test('uses r to reload and x to restart the dev process', async () => {

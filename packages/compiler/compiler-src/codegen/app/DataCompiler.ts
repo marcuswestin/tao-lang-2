@@ -23,6 +23,9 @@ const localDatasourceIdentity = [
 
 /** DataCompiler lowers Tao schemas, reactive queries, and strict row writes to TR.Data. */
 export const DataCompiler = {
+  RetryStatement(statement: AST.RetryStatement): Compiled {
+    return gen`TR.Data.Retry(${Compile.Expression(statement.target)})`
+  },
   /**
    * DataCatalog compiles all top-level Plural / Singular declarations into provider-neutral
    * schemas, one per store. A project whose datasources declare no membership emits the single
@@ -175,6 +178,10 @@ export const DataCompiler = {
     if (targetType.kind !== 'entity') {
       return Assert.never(targetType as never, 'validated update targets an entity row')
     }
+    if (update.source) {
+      return gen`TR.Data.UpdateWith(${Compile.Expression(update.target)}, ${Compile.Expression(update.source)})`
+    }
+    Assert.defined(update.block, 'validated update has a write block or input source')
     const bindings = ASTUtils.resolveDataWriteBindings(targetType.entity, update.block.fields, false)
     Assert(bindings.diagnostics.length === 0, 'validated update has no field-binding diagnostics')
     return gen`TR.Data.Update(

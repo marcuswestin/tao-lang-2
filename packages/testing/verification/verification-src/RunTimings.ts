@@ -66,6 +66,8 @@ export type NodeSample = {
 
 /** RecordRunOptions describes one finished run's measurements. */
 export type RecordRunOptions = RunTimingsOptions & {
+  /** Under machine contention, keep only CPU samples that pass the plausibility check. */
+  cpuOnly?: boolean
   /** What each node that actually ran measured, by node name. */
   durations: ReadonlyMap<string, NodeSample>
   lane: string
@@ -150,14 +152,17 @@ function expectedMs(store: TimingsStore, name: string): number | undefined {
  *   being measured stops being re-sharded.
  */
 async function record(options: RecordRunOptions): Promise<void> {
-  if (options.durations.size === 0) {
+  const durations = options.cpuOnly === true
+    ? new Map([...options.durations].filter(([, sample]) => chosenMs(sample).source === 'cpu'))
+    : options.durations
+  if (durations.size === 0) {
     return
   }
   const lease = await acquireLease(options)
   try {
     const store = await load(options)
     const lastRunAt = new Date().toISOString()
-    for (const [name, sample] of options.durations) {
+    for (const [name, sample] of durations) {
       const previous = store.nodes[name]
       const chosen = chosenMs(sample)
       const weight = chosen.source === 'cpu' ? EMA_WEIGHT_CPU : EMA_WEIGHT_WALL
@@ -175,7 +180,7 @@ async function record(options: RecordRunOptions): Promise<void> {
       }
     }
     await writeStore(store, options)
-    await appendHistory(options)
+    await appendHistory({ ...options, durations })
   } finally {
     await lease?.release()
   }
