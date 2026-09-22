@@ -1,20 +1,21 @@
 # Decisions — Tao development, build, ship, and clean
 
-Status: **decided product behavior; bare `tao dev` session implemented**. These decisions were made in the
+Status: **decided product behavior; bare `tao dev` implemented; web/desktop build and clean implemented on `feat/tao-cli-builds-and-clean`, pending integration**. These decisions were made in the
 September 2026 CLI workflow dialogue. They supersede conflicting _forward-looking_ command designs
 in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
 `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; much of the remaining contract
 does not describe the current CLI. Implementation updates those documents and command help as behavior changes.
 
-This is the durable record of the choices, not an implementation. The planned CLI restructure has
+This is the durable record of the choices and implementation status. The planned CLI restructure has
 landed on `main`; implementation should start from that post-restructure state, not from the
 unrelated `feat/real-host-acceptance` history. The design discussion changed the personal dialogue
 skill separately; no skill change is part of this CLI work.
 
 The first implementation slice starts bare `tao dev` without opening a target, places its generated
 Expo host under the project, records session history at `.tao/sessions/`, and shares exclusive
-project ownership with Studio. The build, ship, invite, clean, desktop-host, and installer behavior
-below remains a target for later slices; the command help describes what is implemented now.
+project ownership with Studio. Slice two adds local web and desktop builds, live desktop opening,
+and build cleanup. Ship, invite, native packaging, and installer behavior remain later slices;
+command help describes what is implemented now.
 
 ## Product boundary and architecture
 
@@ -54,7 +55,8 @@ below remains a target for later slices; the command help describes what is impl
 - Desktop is a first-class Tao target through Electrobun, not another name for a browser tab or for
   Tao Studio. The browser and desktop display the same Tao app; their bundles need not be byte-for-
   byte identical. Desktop-native capabilities are available only in the Electrobun host, and their
-  absence in a browser must be handled explicitly.
+  absence in a browser must be handled explicitly. `tao dev --desktop` and `d` use the live Metro
+  session and Fast Refresh; they do not run a saved static build.
 
 ## `tao build`
 
@@ -63,15 +65,23 @@ below remains a target for later slices; the command help describes what is impl
   Multi-target work runs with a TUI showing the separate processes. Successful artifacts survive
   another target's failure; the final view gives detailed errors for every failed target and the
   command exits unsuccessfully if any failed.
+- Every invocation creates a fresh build record and artifacts. It does not silently reuse a prior
+  local build. A build may run alongside `tao dev`: all selected targets compile the same copied
+  source snapshot made before target work starts, and later source edits cannot change that build.
+  Keep the human-facing progress view; machine-readable `--json` output is not in this slice.
 - A build is local and produces an inspectable artifact; it does not ship or upload. `--compile-only`
   stops after generated source has been retained, before expensive packaging/native steps. There
   is no separate public bundle-only mode. The old `compile` surface retires after migration.
 - Web build: use Expo's web path to export a static, self-contained site folder rather than a live
   Metro preview. Include a minimal script in the artifact that serves those files locally. The
-  folder is what a developer could later upload to a static web host. It has no real-time updates.
+  `site/` folder itself is what a developer could later upload to a static web host, with files at
+  the site root; the adjacent `run` and `serve.ts` need Bun but not a Tao installation. It has no
+  real-time updates.
 - Desktop build: produce a runnable local macOS `.app` with Electrobun, rather than merely a web
-  bundle. It runs the same Tao app with desktop-only capabilities where available. Building without
-  the `.app` was considered and rejected as the public desktop artifact.
+  bundle. The `.app` contains its static site and runtime; it needs no adjacent support folder or
+  Apple signing credentials for local use. It runs the same Tao app with desktop-only capabilities
+  where available. Building without the `.app` was considered and rejected as the public desktop
+  artifact.
 - iOS build: produce a locally runnable `.app`, not an App Store distribution archive. A normal
   `tao build --ios` always builds for the simulator. When a compatible physical device is connected
   and the machine has the prerequisites to build for it, also build the device artifact; do not
@@ -146,12 +156,13 @@ below remains a target for later slices; the command help describes what is impl
   delete shipping history, `.tao-project/lock.jsonc`, source, credentials, deployed records, or
   session records. Current source can usually be built again, but historical or dirty-source
   artifacts may not be byte-for-byte reproducible; the choice to show no special warning was
-  deliberate.
+  deliberate. `tao clean` is interactive-only in this slice; it does not accept a noninteractive
+  bulk-delete option.
 
 ## Use cases and intended CLI shape
 
-These examples are the compact regression checklist for the command design. They are not a claim
-that the current CLI accepts them.
+These examples are the compact regression checklist for the command design. Only the dev,
+web/desktop build, compile-only, and clean examples are implemented so far.
 
 | Use case                                            | Invocation or operation                             |
 | --------------------------------------------------- | --------------------------------------------------- |
@@ -181,8 +192,8 @@ native builds default to Release; and existing-beta invitations use `tao invite 
 
 ## Implementation sequence
 
-These are implementation priorities, not claims that a command already works. Start slice 2 only
-after slice 1 lands, and deliver all of slice 2 on one branch and in one landing. The later bullets
+These are implementation priorities, not claims that every command already works. Slice 2 follows
+the landed slice 1 and delivers all of web/desktop/clean on one branch. The later bullets
 give priority order, not a rule against all parallel preparation.
 
 1. Standalone `tao dev`: a live Metro session that opens no target by default, with project-local
@@ -200,6 +211,14 @@ artifact and opened desktop `.app`. Perform that smoke after landing and track a
 follow-up work; the landing report must say plainly that visible runtime behavior was not yet
 proved. Do not infer from this exception that mocked Apple responses prove TestFlight, signing, or
 App Store acceptance.
+
+Slice 2 verification on this branch: a real Clockwork Expo web export served HTTP 200 through its
+artifact launcher; a real Electrobun command produced a `.app` containing the site and Bun runtime;
+the combined web/desktop invocation retained both results; and selective `tao clean` was exercised
+with both No and default Yes. A visible `.app` window and Metro-backed desktop Fast Refresh remain
+unproved in this managed shell: LaunchServices returned `kLSNoExecutableErr` even for Calculator,
+and Metro could not
+start because Watchman could not write its LaunchAgent and Node watching reached `EMFILE`.
 
 ## Implementation and acceptance boundary
 

@@ -12,6 +12,7 @@ type CommandKeyContext = {
   appName?: string
   appPath: string
   expo: ExpoRunnerSession
+  openDesktop?: () => Promise<boolean>
   finish: (exitCode: number) => Promise<void>
   repoRoot: string
   repositoryControlsAvailable?: boolean
@@ -48,7 +49,7 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
 const COMMAND_HANDLERS = {
   q: context => context.finish(0),
   r: context => CommandRunner.runNonInteractiveCommand('reload app', context.expo.reloadExpoApps),
-  d: () => DevLoopOutput.logDevLoop('dev', 'The Tao desktop development host is not available yet.', 'warn'),
+  d: context => CommandRunner.runNonInteractiveCommand('open Tao desktop', context.openDesktop ?? (async () => false)),
   p: context => CommandRunner.runNonInteractiveCommand('open physical device', context.expo.openPhysicalDevice),
   x: context => context.restart(),
   w: context => CommandRunner.runNonInteractiveCommand('open Expo web', context.expo.openWeb),
