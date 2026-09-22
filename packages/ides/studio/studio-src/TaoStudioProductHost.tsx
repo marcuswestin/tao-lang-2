@@ -37,7 +37,7 @@ export {
 // The editor boundary is exported from here, beside every other product-host view, so the Tao
 // client reaches one module: the host publishes its revisioned state into the same
 // StudioProductHostProtocol instance the editor subscribes to.
-export { StudioEditorSurface as CodeEditor } from './product-host/StudioEditorSurface'
+export { StudioCodeEditor } from './product-host/StudioEditorSurface'
 export {
   StudioEnvironmentValid,
   StudioNetworkShowsError,

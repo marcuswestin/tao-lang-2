@@ -1,7 +1,7 @@
 // Tao Studio client strangler contract. Its mounted slice is a native Tao recursive Files panel over
 // the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
 // the host publishes versioned browser-local selection state into the external editor boundary.
-use CodeEditor from @code-editor
+use StudioCodeEditor from @code-editor
 use SlotNav from @tao/nav
 use Checkbox, Col, Text, TextInput from @tao/ui
 
@@ -1532,7 +1532,7 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
       @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
-      @editor CodeEditor()
+      @editor StudioCodeEditor()
       @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
 }  }
 
