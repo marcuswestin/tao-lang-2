@@ -347,6 +347,9 @@ function createCommands(): Command {
       'Exit with code 0 when --name selects no journey, instead of reporting it as a mistake in the'
         + ' pattern. For a scheduler running one pattern across many suites.',
     )
+    .option('--shared-prepare <handoff-path>', 'Internal: validate and compile a shared Tao test run into a handoff.')
+    .option('--shared-run <handoff-path>', 'Internal: run one shard from a prepared Tao test handoff.')
+    .option('--shared-finalize <handoff-path>', 'Internal: settle a shared Tao test handoff after every shard passed.')
     .option(
       '--watch',
       'Run the selected tests, then rerun them on any change under the selected paths or the project'
@@ -362,17 +365,55 @@ function createCommands(): Command {
           name?: string
           output?: string
           passWithNoTests?: boolean
+          sharedFinalize?: string
+          sharedPrepare?: string
+          sharedRun?: string
           watch?: boolean
         },
       ) => {
         try {
-          const { TestOutput } = await import('./test-output')
+          const sharedModes = [options.sharedPrepare, options.sharedRun, options.sharedFinalize]
+            .filter(path => path !== undefined)
+          if (sharedModes.length > 1) {
+            Errors.throwUserInput('Pass only one shared Tao test phase at a time.')
+          }
+          if (options.watch && sharedModes.length > 0) {
+            Errors.throwUserInput('--watch cannot run a shared Tao test phase.')
+          }
           const testPaths = paths.length > 0 ? paths : ['.']
+          if (options.sharedPrepare !== undefined) {
+            const { prepareSharedTaoTestRun } = await import('./test-command')
+            const outcome = await prepareSharedTaoTestRun(testPaths, options.sharedPrepare)
+            if (outcome.failed) {
+              Platform.runtimeProcess.exit(1)
+            }
+            return
+          }
+          if (options.sharedFinalize !== undefined) {
+            if (paths.length > 0) {
+              Errors.throwUserInput('--shared-finalize takes no Tao test paths.')
+            }
+            const { finalizeSharedTaoTestRun } = await import('./test-command')
+            await finalizeSharedTaoTestRun(options.sharedFinalize)
+            return
+          }
+          const { TestOutput } = await import('./test-output')
           const testOptions = {
             journeyObservationsPath: options.journeyObservations,
             name: options.name,
             output: TestOutput.resolveMode(options.output),
             passWithNoTests: options.passWithNoTests,
+          }
+          if (options.sharedRun !== undefined) {
+            if (paths.length === 0) {
+              Errors.throwUserInput('--shared-run requires one or more shard roots.')
+            }
+            const { runSharedTaoTestRun } = await import('./test-command')
+            const outcome = await runSharedTaoTestRun(options.sharedRun, testPaths, testOptions)
+            if (outcome.failed) {
+              Platform.runtimeProcess.exit(1)
+            }
+            return
           }
           if (options.watch) {
             const { runTestWatchCommand } = await import('./test-watch')

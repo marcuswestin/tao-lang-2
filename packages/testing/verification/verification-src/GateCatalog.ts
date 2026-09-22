@@ -120,6 +120,8 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 export type SuiteTuning = {
   /** Extra runner arguments: Bun's `--concurrent`, a longer per-test timeout. */
   args?: readonly string[]
+  /** First-run split for a suite whose measured whole-process cost makes a cold serial run expensive. */
+  coldShardCount?: number
   /** Env keys a runner that would otherwise size itself to the machine reads its width from. */
   budgetEnvKeys?: readonly string[]
   /** Width one unsharded process of this suite reserves. */
@@ -154,9 +156,9 @@ const BUN_SUITE_FIXED_MS = 600
 const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
 
 /**
- * SUITE_TUNING is the suite half of this table. Shard counts are not here: they are derived per
- * checkout from the recorded per-file costs in the test ledger and the recorded suite duration in
- * the timings store, because a hand-written count goes stale the first time a suite grows.
+ * SUITE_TUNING is the suite half of this table. Measured shard counts are derived per checkout from
+ * recorded duration and per-file costs. Only the two expensive suites with verified cold-start
+ * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
   ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
@@ -190,7 +192,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // work for longer than that and be killed for it. That is starvation, not a hang, so it is the
   // computed deadline's question to answer rather than a fixed number chosen once and left behind as
   // the floor beneath it rose.
-  ['cli/tao-cli', {}],
+  // A quiet complete run of the pre-rename suite used 13 shards and finished with a 32s longest
+  // shard. An unmeasured new worktree otherwise runs all 47 files in one 100s+ process, and busy
+  // runs cannot teach wall-time history. Start below that measured width until this tree learns.
+  ['cli/tao-cli', { coldShardCount: 8 }],
   ['language/validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
@@ -201,24 +206,26 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     'runtime-jest',
     { cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
   ],
-  // The Tao behavior tests are a `./tao test` process that loads the language services, validates
-  // and compiles the apps it was given across its own compiler worker pool, and runs one Jest pass.
+  // The Tao behavior tests validate and compile once per lane, then each `./tao test` shard runs
+  // Jest against its own app roots in the shared compiled run.
   // Unlike Jest's, that pool parallelizes the compile and not the run, so the suite does shard, and
   // roots are what `./tao test` takes. Measured: the whole corpus in one process is 49.7s, and the
   // same corpus as two concurrent halves is 27.8s — 44% less wall for 13% more CPU, which is the
-  // trade this scheduling exists to make. `fixedMs` is the measured language-service load
-  // (`./tao test Apps/HNReader`, one journey, is 6.0s) and it is what caps the count; shrinking it
-  // is what the workspace daemon would change, and it would raise the cap as well.
+  // trade this scheduling exists to make. The compile is now one prepare node, so shard startup
+  // is the warm CLI overhead: a 3.58s WordFlower run spent 2.76s in Jest, leaving about 0.8s.
   [
     'tao-apps',
     {
       budgetEnvKeys: [BUDGET_KEY_TAO_TEST],
+      // Two app-root shards cut a measured 49.7s whole run to 27.8s with modest extra CPU. A new
+      // worktree uses that conservative split before it has trustworthy local timing history.
+      coldShardCount: 2,
       cost: 8,
-      fixedMs: 6_000,
+      fixedMs: 800,
       priority: 5,
       reads: ['gen-parser', 'tao', 'ts'],
       serial: false,
-      // One shard still spawns a compiler worker beside its own Jest pass.
+      // One shard runs its own Jest pass against the lane's compiled corpus.
       shardCost: 2,
     },
   ],

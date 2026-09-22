@@ -81,6 +81,22 @@ Describe('run artifacts timings', () => {
     })
   })
 
+  Test('a contended lane forwards only credible CPU samples to the timing store', async () => {
+    await withRepository(async root => {
+      const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root, stamp: 'busy' })
+      const cpu = finishedState('cpu', { elapsedMs: 10_000, startedAt: 0 })
+      const waiting = finishedState('waiting', { elapsedMs: 10_000, startedAt: 0 })
+      cpu.cpuMs = 7_000
+      waiting.cpuMs = 100
+
+      await RunArtifacts.finishRun({ cpuOnly: true, location, states: [cpu, waiting], summary: { ok: true } })
+
+      const store = await RunTimings.load({ repositoryRoot: root })
+      Expect(store.nodes['cpu']?.emaMs).toBe(7_000)
+      Expect(store.nodes['waiting']).toBeUndefined()
+    })
+  })
+
   Test('learns only from successful work, so a failed or interrupted node teaches the store nothing', async () => {
     await withRepository(async root => {
       const location = RunArtifacts.locate({

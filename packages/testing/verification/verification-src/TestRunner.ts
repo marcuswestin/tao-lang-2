@@ -7,6 +7,7 @@ import { PackageGraph } from './PackageGraph'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, formatVerdict, gateExitCode, toleranceWarnings } from './RunSummary'
 import { RunTimings, type TimingsStore } from './RunTimings'
+import { TaoAppSharedRun } from './TaoAppSharedRun'
 import { TestAdvisory } from './TestAdvisory'
 import { type TestFile, TestLedger, type TestLedgerStore, type TestObservation } from './TestLedger'
 import { type SelectedSuite, TestNodes, type TestNodeState, type TestProcess } from './TestNodes'
@@ -398,13 +399,14 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   }
 
   const mode = options.mode ?? WorkReporter.resolveMode()
-  await RunArtifacts.assignLogPaths(states, location)
+  const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
+  await RunArtifacts.assignLogPaths(graphStates, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = WorkReporter.create({ lane: LANE, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
 
-  const result = await WorkGraph.run(states, {
+  const result = await WorkGraph.run(graphStates, {
     expectedMs,
     jobs: machineLane.ceiling,
     onEvent: event => liveArtifacts.handle(event),
@@ -417,7 +419,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
       contention: machineLane.report(),
       location,
       machineLane,
-      states,
+      states: graphStates,
     })
   }
 
@@ -470,15 +472,16 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     lane: LANE,
     logRoot: location.logRoot,
     schedule: WorkSchedule.report(result),
-    states,
+    states: graphStates,
     suiteOf: name => states.find(state => state.name === name)?.suite,
     toleratedFlakes,
   })
   const summaryPath = await RunArtifacts.finishRun({
+    cpuOnly: contention.contended,
     location,
     extraDurations: TestNodes.suiteDurations(states),
-    recordTimings: completeRun(prepared) && !contention.contended,
-    states,
+    recordTimings: completeRun(prepared),
+    states: graphStates,
     summary,
   })
   TestResultSummary.printResultSummary(states, elapsedMs, {

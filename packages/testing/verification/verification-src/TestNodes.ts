@@ -130,6 +130,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
       : new Map<string, number>()
     const plan = TestShards.planShards({
+      coldShardCount: tuning.coldShardCount,
       // A suite's own units win when the ledger cannot speak about them at all.
       fileCostMs: suite.shardUnits === undefined || suite.unitCostMs === undefined
         ? ledgerCosts

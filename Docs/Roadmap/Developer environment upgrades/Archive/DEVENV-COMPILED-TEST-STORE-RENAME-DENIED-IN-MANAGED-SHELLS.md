@@ -1,6 +1,6 @@
 # DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Tao test compiler, generated artifacts, verification
 - **Impact:** A full verification can fail most Tao runtime and CLI test cases before execution,
@@ -12,13 +12,13 @@
   `packages/apps/expo-host/_gen_tao-app-test/tao-test-plan/run-*/app-*/_gen_tao-app` directory
   into sibling `tao-test-plan/.compiled/<content-hash>`. The same focused command through a reviewed
   host invocation still failed. The temporary diagnostics were reverted and the worktree was clean.
-- **Workaround:** Run verification from an independent ordinary host terminal if it permits the
-  rename; that path has not yet been proved for this branch.
-- **Proposed change:** Keep content-addressed compiled apps, but place or move their generated
-  directories through a path the managed verification shell can write, without weakening the
-  repository's permissions. Report the original filesystem error instead of reducing it to
-  `Something went wrong while compiling Tao tests` when this operation fails.
+- **Workaround:** No longer needed for Tao test run roots.
+- **Proposed change:** Done: the default Tao test run root is a stable host-temporary directory
+  keyed by runtime package, while explicit fixture roots retain their isolated output path. Jest
+  resolves workspace packages from the runtime package's installed links.
 - **Dependencies:** The content-addressed store introduced by `a7a0fc0d`.
-- **Acceptance:** `./agent verify` completes in a managed shell with the compiled test store
-  active, and a Tao test compilation failure names the filesystem operation and path involved.
+- **Acceptance:** `./agent verify` completed in the managed shell on 2026-09-22 with the
+  compiled test store active and both Tao app shards passing. The CLI also exercised the
+  HNReader, WordFlower, and Native Components journeys directly after moving the store.
 - **Source:** Companion Slice 3 integration verification on 2026-09-22.
+- **Archived:** 2026-09-22
