@@ -303,7 +303,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StudioSearchPanelSurface')
   Expect(source).toContain('ServerOrigin text is ""')
   Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
-  Expect(source).toContain('@editor CodeEditor()')
+  Expect(source).toContain('@editor StudioCodeEditor()')
   Expect(source).toContain('@inspector StudioContextPanel(')
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
