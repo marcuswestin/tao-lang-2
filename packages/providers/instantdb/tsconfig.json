@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "instantdb-src/**/*",
+    "instantdb-tests/**/*"
+  ],
+  "compilerOptions": {
+    "types": [
+      "node",
+      "bun"
+    ],
+    "composite": false,
+    "jsx": "react-jsx",
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}

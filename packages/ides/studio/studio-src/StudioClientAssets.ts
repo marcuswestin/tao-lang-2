@@ -1,7 +1,10 @@
 import Runtime from '@expo-host'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import { existsSync } from 'node:fs'
 import { studioClientStylesheet } from './StudioClientStylesheet'
+
+/** studioAppRoot is where Studio's own Tao client lives, an ordinary `Apps/` entry rather than a package. */
+const studioAppRoot = Repo.resolvePath('Apps/Tao Studio')
 
 export type StudioClientConfig = {
   previewUrl?: string
@@ -105,7 +108,7 @@ async function buildClientBundle(validationMode: StudioClientBundleMode): Promis
   const generatedRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-', FS.tmpdir()))
   let generated: Awaited<ReturnType<typeof Runtime.generateApp>>
   try {
-    generated = await Runtime.generateApp(FS.resolvePath('TaoStudioClient.tao', import.meta.dir), {
+    generated = await Runtime.generateApp(FS.resolvePath('TaoStudioClient.tao', studioAppRoot), {
       appName: 'TaoStudioFiles',
       runtimePackageRoot: generatedRoot,
       validationMode,

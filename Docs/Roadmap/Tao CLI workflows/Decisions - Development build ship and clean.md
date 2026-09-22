@@ -174,6 +174,28 @@ The remaining product-level CLI questions recorded in the prior version of this 
 settled: default iOS builds include a simulator artifact and an available device artifact; local
 native builds default to Release; and existing-beta invitations use `tao invite EMAIL`.
 
+## Implementation sequence
+
+These are implementation priorities, not claims that a command already works. Start slice 2 only
+after slice 1 lands, and deliver all of slice 2 on one branch and in one landing. The later bullets
+give priority order, not a rule against all parallel preparation.
+
+1. Standalone `tao dev`: a live Metro session that opens no target by default, with project-local
+   session ownership shared with Studio and the standalone runtime resources it needs.
+2. Local web and desktop builds plus `tao clean`: deliver the static web folder, runnable macOS
+   `.app`, retained artifact records, and selective cleanup together in one landing.
+3. Local iOS build artifacts, including the simulator and an available physical-device build.
+4. New iOS TestFlight beta shipping and `tao invite` for an existing beta.
+5. iOS production shipping.
+6. Local Android APK builds.
+7. Beta-only OTA shipping and rollback.
+
+For slice 2, Ro may approve landing on green automated checks before a live smoke of the served web
+artifact and opened desktop `.app`. Perform that smoke after landing and track any failure as
+follow-up work; the landing report must say plainly that visible runtime behavior was not yet
+proved. Do not infer from this exception that mocked Apple responses prove TestFlight, signing, or
+App Store acceptance.
+
 ## Implementation and acceptance boundary
 
 - The CLI restructure has landed on `main`: the Expo loop is in `packages/apps/expo-host`,
