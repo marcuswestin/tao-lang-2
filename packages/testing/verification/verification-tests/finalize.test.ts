@@ -1056,6 +1056,20 @@ Describe('landing preparation', () => {
     Expect(changedHead.ok).toBe(false)
   })
 
+  Test('accepts an updated kept message without an out-of-lock finalize', async () => {
+    const fake = fakeDependencies()
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+    const first = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(first.ok).toBe(false)
+    fake.files.set(path, 'Land the example workflow\n\n- Add and validate the example workflow.\n')
+
+    const second = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(second.ok).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
   Test('is ready once the message on disk is recorded against this HEAD', async () => {
     const fake = fakeDependencies()
     fake.files.set('/repo/.artifacts/merge/feat/example.msg', 'Land it\n\n- Do the thing.\n')

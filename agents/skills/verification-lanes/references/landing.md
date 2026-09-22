@@ -28,7 +28,8 @@ compute. One process closes the gap without making any step faster.
 `.artifacts/merge/<branch>.msg` exists and validates. On the first call it drafts a missing message
 and refuses, having taken no lock; read and edit the draft, then rerun `./agent land`. A small
 review record ties that edit to this HEAD. A new commit makes the record stale and requires review
-again. Do not run `finalize` merely to prepare this authorized landing: it could integrate and
+again; an already-written message for an older HEAD is handled the same way. Do not run `finalize`
+merely to prepare this authorized landing: it could integrate and
 verify outside the lock, then lose that proof to another landing.
 
 **Inside the lock**, in one `try`/`finally`, it then fetches `origin/main`, merges it into the

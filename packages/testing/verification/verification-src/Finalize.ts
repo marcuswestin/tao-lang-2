@@ -393,7 +393,13 @@ export async function prepareForLanding(
     options.redraft === true,
     lines,
   )
-  if (message.decision !== 'kept') {
+  // A kept message for an older HEAD needs a fresh author edit too. Record its current bytes as
+  // the baseline, so that edit can be confirmed on the next land attempt without `finalize`.
+  if (
+    message.decision !== 'kept'
+    || (message.unconfirmedReason !== '' && draftReview?.headSha !== headSha)
+    || (message.malformed !== '' && draftReview?.headSha !== headSha)
+  ) {
     await dependencies.writeJson(
       reviewPath,
       {
@@ -473,7 +479,7 @@ function messageRemaining(message: MessageOutcome, messageFile: string): string[
     ? []
     : [
       `Confirm the kept merge message still describes this branch (${message.unconfirmedReason}), `
-      + `by reading it and re-running finalize: ${path}`,
+      + `by reading and updating it before retrying: ${path}`,
     ]
 }
 
