@@ -3,6 +3,9 @@
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
 shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
+opening, retained `.tao/builds/` records, and interactive build cleanup; it does not yet package
+or publish the standalone CLI, or implement native builds and shipping.
 The findings below are the historical pre-implementation baseline; packaging and publishing a
 relocatable CLI remain in this standalone program. The decided command behavior is in
 [`../Roadmap/Tao CLI workflows/Decisions - Development build ship and clean.md`](../Roadmap/Tao%20CLI%20workflows/Decisions%20-%20Development%20build%20ship%20and%20clean.md).
