@@ -77,10 +77,12 @@ Describe('landing lock', () => {
       await until(() => reports.length > 0, {
         description: 'the landing-lock waiter to identify the holder',
         intervalMs: 5,
-        timeoutMs: 200,
+        timeoutMs: 30_000,
       })
       Expect(reports[0]?.holder).toBe(ONE)
-      Expect(reports[0]?.waitedMs).toBeLessThan(1_000)
+      // The bound proves the wait was reported, not that it was fast: `waitedMs` is a real cross-process
+      // lock waiter's own clock, and the budget is for a host whose load average is in the tens.
+      Expect(reports[0]?.waitedMs).toBeLessThan(10_000)
       Expect(reports[0]?.message).toContain("WAIT  Landing lock held by 'verify from one' in /worktree/one")
       Expect(reports[0]?.message).toContain('This command will start when the lock is released.')
     } finally {

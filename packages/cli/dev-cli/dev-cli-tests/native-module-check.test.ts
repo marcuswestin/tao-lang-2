@@ -175,13 +175,15 @@ Describe('native module compiler check', () => {
   })
 
   Test('bounds a real child command without leaving its timeout timer active', async () => {
+    // This is the timeoutMs under test — the child sleeps 1s and the test proves the real-command
+    // timeout path fires, not that the run is fast.
     const result = await NativeModuleCheck.testing.runCommand({
       args: ['-c', 'exec sleep 1'],
       command: 'zsh',
       cwd: '/',
       phase: 'test timeout',
       quiet: true,
-      timeoutMs: 10,
+      timeoutMs: 10, // budget-ok: the timeout value under test.
     })
 
     Expect(result.timedOut).toBe(true)

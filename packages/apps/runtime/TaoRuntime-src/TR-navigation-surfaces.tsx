@@ -1,6 +1,7 @@
 import React from 'react'
 import { AppSurfaceInsetContext, requireSafeAreaContext, type SafeAreaInsets } from './TR-app-shell'
 import { createElement } from './TR-create-element'
+import { OutlineScope, useOutlineParentIdentity } from './TR-interaction-outline'
 import {
   occurrenceRegion,
   OutlineRegionScope,
@@ -14,6 +15,7 @@ import type { OverlayEntry, PresentableEntry, ResponseOccurrenceState } from './
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
+import { WindowLayer, WindowLayerPortal, WindowLayerProvider, WindowLayerRegistry } from './TR-window-layer'
 
 /**
  * NavigationLevel hides covered stack entries without unmounting their local React state. A level
@@ -27,20 +29,55 @@ export function NavigationLevel(props: {
   region?: TaoOutlineRegion
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const covered = LevelHiddenContext.use()
   const region = props.region === undefined
     ? undefined
     : { ...props.region, active: () => !props.hidden, primary: !props.hidden }
   return createElement(
     OutlineRegionScope,
     { region },
-    createElement(runtime.View, {
-      ...regionNativeProps(region),
-      accessibilityElementsHidden: props.hidden,
-      children: props.children,
-      importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
-      style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
-    }),
+    createElement(
+      LevelHiddenContext.Provider,
+      { hidden: covered || props.hidden },
+      createElement(runtime.View, {
+        ...regionNativeProps(region),
+        accessibilityElementsHidden: props.hidden,
+        children: props.children,
+        importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
+        style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
+      }),
+    ),
   ) as React.JSX.Element
+}
+
+const ReactLevelHiddenContext = React.createContext(false)
+
+/**
+ * LevelHiddenContext says whether an enclosing level hides everything rendered inside it — a
+ * covered stack entry, an inactive selection item. A surface that leaves its presenter's subtree for
+ * a window layer reads it at the presenter's position, so whatever hides the presenter hides it.
+ */
+export const LevelHiddenContext = {
+  Provider: LevelHiddenProvider,
+  use: (): boolean => React.useContext(ReactLevelHiddenContext),
+} as const
+
+function LevelHiddenProvider(props: { children?: React.ReactNode; hidden: boolean }): React.ReactElement {
+  return createElement(ReactLevelHiddenContext.Provider, { value: props.hidden }, props.children)
+}
+
+/**
+ * WindowAsk places one ask's level in the nearest window layer, carrying over what the presenter's
+ * place in the tree gave it: the outline region it hangs under, so attention treats the ask as the
+ * presenter's, and whether an enclosing level hides the presenter, so a covered presenter's ask is
+ * covered too rather than dimming the window from behind a screen that is not showing.
+ */
+function WindowAsk(props: { hidden: boolean; level: (hidden: boolean) => React.ReactNode }): React.ReactNode {
+  const parent = useOutlineParentIdentity()
+  const covered = LevelHiddenContext.use()
+  return createElement(WindowLayerPortal, {
+    children: createElement(OutlineScope, { identity: parent }, props.level(props.hidden || covered)),
+  })
 }
 
 /** presentedOccurrenceRegion names one presented entry by its live title, else by what was presented. */
@@ -242,7 +279,9 @@ function modalSheet(
  *
  * React context still crosses this `Modal` boundary — it is a portal, not a separate React tree —
  * so this also resets `AppSurfaceInsetContext` to false: the modal is a window no enclosing
- * `AppSurfaceFrame` ever padded, regardless of what encloses the presenter that opened it.
+ * `AppSurfaceFrame` ever padded, regardless of what encloses the presenter that opened it. For the
+ * same reason it keeps a window layer of its own: an ask asked from inside the sheet must dim the
+ * sheet's window, and the root window's layer lies beneath a native Modal.
  */
 function ModalSheetSurface(props: {
   accessibilityProps: Record<string, unknown>
@@ -250,10 +289,19 @@ function ModalSheetSurface(props: {
   taoProps: TaoProps | undefined
 }): React.ReactNode {
   const SafeAreaContext = requireSafeAreaContext()
+  const [windowLayer] = React.useState(() => new WindowLayerRegistry())
   return createElement(
     AppSurfaceInsetContext.Provider,
     { value: false },
-    createElement(SafeAreaContext.SafeAreaProvider, null, createElement(ModalSheetContent, props)),
+    createElement(
+      WindowLayerProvider,
+      { registry: windowLayer },
+      createElement(
+        SafeAreaContext.SafeAreaProvider,
+        null,
+        createElement(ModalSheetContent, { ...props, windowLayer }),
+      ),
+    ),
   )
 }
 
@@ -261,26 +309,35 @@ function ModalSheetContent(props: {
   accessibilityProps: Record<string, unknown>
   children: React.ReactNode
   taoProps: TaoProps | undefined
+  windowLayer: WindowLayerRegistry
 }): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const platformOS = runtime.Platform?.OS ?? 'web'
   // Reads the provider this component is itself nested in (see ModalSheetSurface above), which
   // measures the modal's own window rather than the app's.
   const insets = requireSafeAreaContext().useSafeAreaInsets()
+  // The window layer sits inside the keyboard avoidance, so an ask asked from the sheet clears the
+  // keyboard the way the sheet's own content does — and inside the view that carries the modal
+  // accessibility props, since a screen reader ignores the siblings of a modal view, and the ask
+  // must not be one of them.
   return createElement(
     runtime.KeyboardAvoidingView,
     { behavior: platformOS === 'ios' ? 'padding' : undefined, style: sheetModalKeyboardStyle },
     createElement(
       runtime.View,
-      {
-        ...props.accessibilityProps,
-        style: [
-          sheetModalSurfaceBaseStyle,
-          sheetModalSurfaceInsetStyle(insets),
-          mountedDesignStyle(props.taoProps, 'ModalSurface'),
-        ],
-      },
-      props.children,
+      { ...props.accessibilityProps, style: sheetModalKeyboardStyle },
+      createElement(
+        runtime.View,
+        {
+          style: [
+            sheetModalSurfaceBaseStyle,
+            sheetModalSurfaceInsetStyle(insets),
+            mountedDesignStyle(props.taoProps, 'ModalSurface'),
+          ],
+        },
+        props.children,
+      ),
+      createElement(WindowLayer, { registry: props.windowLayer }),
     ),
   )
 }
@@ -288,12 +345,15 @@ function ModalSheetContent(props: {
 const sheetModalKeyboardStyle = { flex: 1 } as const
 
 /**
- * OverlayInsets hands an ask scrim or an inline sheet the live insets it must add. A navigator that
- * does not own its window renders inside an AppSurfaceFrame, whose content is already padded by the
- * live insets — its overlay lane sits inside that same padded content, so those surfaces must not add
- * the insets again. A window-owning navigator's overlay lane is a sibling of its per-entry frames and
- * fills the true window, so there they must. It is a component so the reads stay out of
- * NavigationSurface, which a plain overlay never needs them for.
+ * OverlayInsets hands an ask scrim or an inline sheet the live insets it must add. An inline sheet
+ * draws in its navigator's overlay lane: a navigator that does not own its window renders inside an
+ * AppSurfaceFrame, whose content is already padded by the live insets and whose lane sits inside
+ * that same padded content, so there the sheet must not add them again, while a window-owning
+ * navigator's lane is a sibling of its per-entry frames and fills the true window, so there it must.
+ * An ask draws in the nearest window layer, which no frame encloses, so it always adds them — except
+ * for a navigator rendered without any window layer, whose ask draws in the lane like the sheet. It
+ * is a component so the reads stay out of NavigationSurface, which a plain overlay never needs them
+ * for.
  */
 function OverlayInsets(props: { children: (insets: SafeAreaInsets) => React.ReactNode }): React.ReactNode {
   const insets = requireSafeAreaContext().useSafeAreaInsets()
@@ -319,25 +379,34 @@ export function NavigationSurface(props: {
             ? askProps(props.taoProps, props.navigation, entry.response)
             : navigationProps(props.taoProps, props.navigation),
         )
-        return createElement(NavigationLevel, {
-          children: entry.response
-            ? createElement(OverlayInsets, {
-              children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
-            })
-            : entry.sheet
-            ? createElement(OverlayInsets, {
-              children: insets => modalSheet(content, props.navigation, props.taoProps, visible, insets),
-            })
-            : content,
-          fill: true,
-          hidden: !visible,
-          key: entry.instanceId,
-          region: presentedOccurrenceRegion(
-            props.navigation,
-            entry,
-            entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
-          ),
-        })
+        const region = presentedOccurrenceRegion(
+          props.navigation,
+          entry,
+          entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
+        )
+        const level = (hidden: boolean) =>
+          createElement(NavigationLevel, {
+            children: entry.response
+              ? createElement(OverlayInsets, {
+                children: insets => modalAsk(content, props.navigation, props.taoProps, visible, insets),
+              })
+              : entry.sheet
+              ? createElement(OverlayInsets, {
+                children: insets => modalSheet(content, props.navigation, props.taoProps, visible, insets),
+              })
+              : content,
+            fill: true,
+            hidden,
+            key: entry.instanceId,
+            region,
+          })
+        // An ask dims the whole window it is shown in, not the padded content box its navigator may
+        // be drawing inside, so it goes through the nearest window layer. A sheet is a window of its
+        // own, and a plain overlay stays where its navigator draws it, full-bleed within that lane
+        // (Decisions §10).
+        return entry.response
+          ? createElement(WindowAsk, { hidden: !visible, key: entry.instanceId, level })
+          : level(!visible)
       }),
       style: overlayLayerStyle,
     })

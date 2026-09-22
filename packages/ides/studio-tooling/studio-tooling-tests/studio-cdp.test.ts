@@ -388,13 +388,15 @@ Describe('Studio browser CDP harness', () => {
     )
     const browser = StudioCdp.testing.create(transient)
 
+    // budget-ok: exercises the retry, not the timeout path — one real 100ms poll interval fits well inside the 1s bound.
     await browser.waitFor('window.ready === true', { timeoutMs: 1_000 })
     Expect(transient.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(2)
 
     const productFailure = new FakeCdpTransport()
     productFailure.evaluateResults.push(new Errors.HostEnvironmentError('Preview handler failed after dispatch.'))
+    // `productFailure` throws on its first evaluate, before any poll interval elapses.
     await Expect(
-      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }),
+      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }), // budget-ok: fails before the first poll, not on the timeout path.
     ).rejects.toThrow('Preview handler failed after dispatch.')
     Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })

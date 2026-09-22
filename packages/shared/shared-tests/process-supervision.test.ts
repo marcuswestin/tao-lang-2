@@ -42,7 +42,7 @@ async function startTree(spec: CLI.CommandSpec = {}): Promise<StartedTree> {
   const grandchildPid = await until(() => {
     const match = /^(\d+)\n/u.exec(text)
     return match?.[1] === undefined ? undefined : Number(match[1])
-  }, { description: 'the backgrounded grandchild to report its PID', timeoutMs: 4_000 })
+  }, { description: 'the backgrounded grandchild to report its PID' })
   abandoned.push(grandchildPid)
   const identities = await until(
     () => {
@@ -65,7 +65,7 @@ function isAlive(tracked: TrackedProcess): boolean {
 }
 
 async function waitForGone(tracked: TrackedProcess, description: string): Promise<void> {
-  await until(() => !isAlive(tracked), { description, timeoutMs: 5_000 })
+  await until(() => !isAlive(tracked), { description })
 }
 
 Describe('CLI process policy', () => {
@@ -124,6 +124,8 @@ Describe('CLI process policy', () => {
   })
 
   Test('a wall-clock bound stops the tree and names the bound it hit', async () => {
+    // This is the timeoutMs under test — it names the bound the tree gets stopped for hitting.
+    // budget-ok: not a speed budget on the test itself.
     const bounded = await startTree({ processPolicy: 'test', timeoutMs: 600 })
 
     const close = await bounded.command.waitForClose()
@@ -158,11 +160,13 @@ Describe('CLI process policy', () => {
   })
 
   Test('run surfaces the bound it hit through its CommandResult', async () => {
+    // This is the timeoutMs under test — the child sleeps 30s and the test proves the bound this run
+    // surfaces, not that the run is fast.
     const result = await CLI.run('/bin/sh', {
       args: ['-c', 'sleep 30'],
       processPolicy: 'test',
       stdio: 'pipe',
-      timeoutMs: 400,
+      timeoutMs: 400, // budget-ok: the timeout value under test.
     })
 
     Expect(result.signal).toBe('SIGTERM')
@@ -173,11 +177,13 @@ Describe('CLI process policy', () => {
     // With inherited stdio the child writes straight to the terminal, so the reason line has no
     // captured buffer, no `onOutput` and no prefixed log to land in. It must not vanish.
     const captured = await withCapturedOutput(async () => {
+      // This is the timeoutMs under test — the child sleeps 30s and the test proves the bound reaches
+      // the terminal, not that the run is fast.
       const command = CLI.start('/bin/sh', {
         args: ['-c', 'sleep 30'],
         processPolicy: 'test',
         stdio: 'inherit',
-        timeoutMs: 300,
+        timeoutMs: 300, // budget-ok: the timeout value under test.
       })
       return await command.waitForClose()
     })
@@ -188,10 +194,12 @@ Describe('CLI process policy', () => {
   })
 
   Test('a bound declared on a policy that cannot enforce it is refused', () => {
+    // budget-ok: refused synchronously by validation before any process runs, so no wait starts.
     Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], processPolicy: 'server', timeoutMs: 100 }))
       .toThrow(/timeoutMs only on a 'test' process policy/u)
     Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], idleOutputMs: 100 }))
       .toThrow(/idleOutputMs only on a 'test' process policy/u)
+    // budget-ok: refused synchronously by validation before any process runs, so no wait starts.
     Expect(() => CLI.start('/bin/sh', { args: ['-c', 'exit 0'], processPolicy: 'test', timeoutMs: 0 }))
       .toThrow(/a positive timeoutMs/u)
   })

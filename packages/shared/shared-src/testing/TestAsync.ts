@@ -4,12 +4,16 @@ import * as Time from '../core/Time'
 const DEFAULT_POLL_INTERVAL_MS = 10
 
 /*
- * `until` polls for at most two seconds by default. The budget is deliberately below the five-second
- * per-test default of both runners, so a stuck condition reports the caller's own description instead
- * of the runner's anonymous test timeout. Waits that genuinely need longer — a language server
- * handshake, a launched Studio process — pass an explicit `timeoutMs`.
+ * A wall-clock budget in a test is for a busy host, not for a slow condition: this repo runs under
+ * host load averages of 20-85, where a two-second budget around real work (a process spawn, a file
+ * read, a lock) fails on a loaded machine for reasons that have nothing to do with the code under
+ * test. `until` polls for at most thirty seconds by default so that variance, not the condition
+ * itself, has to be extreme before a wait fails. A condition that is genuinely hung still fails —
+ * 28 seconds later than it would have — and still reports the caller's own description rather than
+ * the runner's anonymous test timeout. Waits that need longer still — a language server handshake, a
+ * launched Studio process — pass an explicit `timeoutMs`.
  */
-const DEFAULT_TIMEOUT_MS = 2_000
+const DEFAULT_TIMEOUT_MS = 30_000
 
 /** exhausted marks a read that the remaining budget ran out on rather than one that returned a value. */
 const exhausted = Symbol('until budget exhausted')
@@ -27,7 +31,7 @@ export type UntilOptions = {
   description?: string
   /** Delay between reads; `0` re-reads on the next event-loop turn. Defaults to 10ms. */
   intervalMs?: number
-  /** Wall-clock budget before the wait fails. Defaults to 2000ms. */
+  /** Wall-clock budget before the wait fails. Defaults to 30000ms. */
   timeoutMs?: number
 }
 

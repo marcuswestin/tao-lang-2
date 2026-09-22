@@ -94,8 +94,8 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 - Runtime compatibility combines the native fingerprint used as the Expo runtime version with a
   canonical semantic data-schema fingerprint. Publication and rollback must be compatible with
   every supported binary; assets are exported and published as resolvable Expo artifacts.
-- `tao dev` starts Metro with `expo start --host lan` and opens Expo Go on simulators and connected
-  phones. Tao moved to Expo SDK 57 on 2026-09-15, so the physical-iPhone lane can no longer depend
+- `tao dev` starts Metro with `expo start --host lan` without opening a target by default; explicit
+  targets and the interactive controls can open supported runtimes. Tao moved to Expo SDK 57 on 2026-09-15, so the physical-iPhone lane can no longer depend
   on the App Store's SDK 54 Expo Go; it now needs a development build. The build this plan produces
   is that build's natural ancestor, so slice 4 folds the two together.
 - WordFlower already declares what the command derives from: `project { id "wordflower" name

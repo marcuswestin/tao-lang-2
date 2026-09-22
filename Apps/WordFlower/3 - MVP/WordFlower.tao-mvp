@@ -44,10 +44,11 @@ use Checkbox, Col, FormButton, Image, Panes, Placeholder, Progress, Row, ScrollV
 //   (Decisions §16); the states it drove are reached through the world controls — network, sync,
 //   and datasource fault injection — which have not landed yet.
 // - The universal app shell applies safe-area and keyboard insets without a source-level opt-in on
-//   every surface. The app root, every navigator, `ask`, `as sheet`, `as toast`, and auxiliaries do
-//   today; what remains is a `SplitNav` pane or an inline scene holding a window-owning navigator
-//   (inset twice), an `ask` under a navigator that does not own its window (its scrim stops short of
-//   the window edges), and Android keyboard avoidance, which is unproven.
+//   every surface. The app root, every navigator, a `SplitNav` pane or an inline scene holding a
+//   window-owning navigator, `ask` (which dims the whole window from the app host's window layer),
+//   `as sheet`, `as toast`, and auxiliaries do today; what remains is Android keyboard avoidance,
+//   which is unproven, and whether a plain `as overlay` presented under a navigator that does not
+//   own its window should reach the window edges the way `ask` now does.
 // - Property-function syntax must settle type-level addition and override plus the identity,
 //   equality, capture, and anonymous-expression consequences of per-value behavior.
 // - Design grows beyond flat tokens and clause bundles into recipes, variants, states, rules, and

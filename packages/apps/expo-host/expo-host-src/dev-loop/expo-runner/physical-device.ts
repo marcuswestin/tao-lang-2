@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Json } from '@shared'
+import { CLI, Errors, FS, HCI, Json } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { Android, type AndroidSession, EXPO_GO_SDK_VERSION } from './android'
 import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
@@ -56,6 +56,7 @@ export type IosPhysicalDevice = {
 export type PhysicalDeviceDependencies = {
   detectLanHost?: typeof detectLanIPv4
   listIosDevices?: () => Promise<IosPhysicalDevice[]>
+  selectDevice?: (choices: readonly { label: string; value: string }[]) => Promise<string>
 }
 
 /** expoGoUrl builds the Expo Go deep link for a reachable Metro host. */
@@ -107,19 +108,30 @@ export async function openPhysicalDevice(
     return false
   }
 
-  for (const device of iosDevices) {
-    DevLoopOutput.logDevLoop('dev', physicalIosUnsupportedMessage(device), 'warn')
-  }
-  if (androidSerials.length === 0) {
+  const choices = [
+    ...iosDevices.map(device => ({ label: `${device.name} (iOS)`, value: `ios:${device.id}` })),
+    ...androidSerials.map(serial => ({ label: `${serial} (Android)`, value: `android:${serial}` })),
+  ]
+  const selected = choices.length === 1
+    ? choices[0]!.value
+    : await (dependencies.selectDevice ?? (choices =>
+      HCI.askChoice({
+        message: 'Choose a connected physical device',
+        choices: [...choices],
+      })))(choices)
+  const iosDevice = iosDevices.find(device => selected === `ios:${device.id}`)
+  if (iosDevice !== undefined) {
+    DevLoopOutput.logDevLoop('dev', physicalIosUnsupportedMessage(iosDevice), 'warn')
     return false
+  }
+  const serial = androidSerials.find(candidate => selected === `android:${candidate}`)
+  if (serial === undefined) {
+    Errors.throwUserInput('The selected physical device is no longer connected.')
   }
 
   const host = await (dependencies.detectLanHost ?? detectLanIPv4)()
   const lanUrl = expoGoUrl(host, config.EXPO_PORT)
-  const opened = [
-    ...await Promise.all(androidSerials.map(serial => openAndroidExpoGo(config, android, serial, lanUrl))),
-  ]
-  return opened.some(Boolean)
+  return await openAndroidExpoGo(config, android, serial, lanUrl)
 }
 
 /**

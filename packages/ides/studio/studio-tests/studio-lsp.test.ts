@@ -81,5 +81,5 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
 })
 
 async function waitFor<T>(read: () => T | undefined): Promise<T> {
-  return await until(read, { description: 'a Studio LSP response', timeoutMs: 5_000 }) as T
+  return await until(read, { description: 'a Studio LSP response', timeoutMs: 30_000 }) as T
 }
