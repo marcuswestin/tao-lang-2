@@ -17,6 +17,7 @@ import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -494,6 +495,20 @@ await runWithCommands(commands => {
           : `${report.branch} has not landed: no ${report.archive} on origin as of this fetch.`,
       )
       Platform.runtimeProcess.setExitCode(report.landed ? 0 : 1)
+    })
+
+  commands
+    .command('open-pr')
+    .description(
+      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+    )
+    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .action(async (options: { pollIntervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await OpenPrCommand.run({
+          pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
     })
 
   commands

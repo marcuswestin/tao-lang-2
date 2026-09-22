@@ -4,7 +4,20 @@ const WEB_BROWSER_APP_NAME = 'Google Chrome'
 const EXPO_HOME_PATH = '.artifacts/cache/expo'
 export const PREFERRED_EXPO_PORT = 8081
 
+/**
+ * The Expo SDK generation `packages/apps/expo-host` pins. Every runtime this loop opens is measured
+ * against it: the Expo Go it sideloads onto Android, and the one a simulator must already carry. A
+ * repository test keeps this equal to the host package's own `expo` dependency, so an SDK upgrade
+ * cannot leave the dev loop installing last year's client.
+ */
+export const EXPO_SDK_VERSION = '57.0.0'
+
 export type ExpoPlatform = 'android' | 'ios' | 'web'
+
+/** expoSdkMajor reads the generation number two Expo runtimes must share to be compatible. */
+export function expoSdkMajor(version: string = EXPO_SDK_VERSION): string | undefined {
+  return version.match(/^(\d+)\./u)?.[1]
+}
 
 export type ExpoConfigOptions = {
   /** A custom URI scheme Expo CLI uses for dev-client deep links (`/_expo/link?choice=expo-dev-client`). */

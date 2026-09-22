@@ -38,7 +38,7 @@ Each entry: purpose, then what the body must contain. Derive content from `Docs/
 9. `tao-testing`
    - `.test.tao` behavior tests, scenarios and fixtures, tab labels and accessible names as targets, `tao test <paths>`, `tao review` for visual review, and how to read a failing test.
 10. `tao-run-and-ship`
-    - `tao dev` (Metro port discovery, Expo Go / dev client), Studio in one paragraph as a user, `tao project` metadata (`id`, `version`), `tao ship` through TestFlight and App Store Connect, and publishing a project for other projects to use.
+    - `tao dev` (Metro port discovery, Expo Go for the iOS Simulator and Android, a development build for a physical iPhone), Studio in one paragraph as a user, `tao project` metadata (`id`, `version`), `tao ship` through TestFlight and App Store Connect, and publishing a project for other projects to use.
 
 ## Context the implementer cannot derive from the repository alone
 

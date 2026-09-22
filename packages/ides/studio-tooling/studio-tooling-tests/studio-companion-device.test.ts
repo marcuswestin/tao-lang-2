@@ -941,12 +941,26 @@ Describe('Tao Companion shell configuration', () => {
         packageRoot,
       )),
     ).toBe(true)
-    Expect(config.expo.plugins?.[0]).toBe('expo-dev-client')
-    Expect(config.expo.plugins?.[1]).toEqual([
+    // By name rather than by position: the shell gains plugins as it gains capabilities, and an
+    // index assertion fails for the one reason that does not matter.
+    const plugins = config.expo.plugins ?? []
+    const pluginName = (plugin: unknown): string =>
+      typeof plugin === 'string' ? plugin : Array.isArray(plugin) ? String(plugin[0]) : ''
+    const declaredPlugin = (name: string): unknown => plugins.find(plugin => pluginName(plugin) === name)
+
+    Expect(plugins.map(pluginName)).toContain('expo-dev-client')
+    Expect(declaredPlugin('expo-build-properties')).toEqual([
       'expo-build-properties',
       { ios: { enableSceneSupport: true } },
     ])
-    const fmtPlugin = config.expo.plugins?.[2]
+    // A development build's entitlements come from the shell, not from the bundle it loads, so the
+    // Companion declares every iCloud service a Tao app can bind. The container is derived from this
+    // shell's own bundle identifier, which is why an app run here uses the Companion's container.
+    Expect(declaredPlugin('tao-icloud')).toEqual([
+      'tao-icloud',
+      { services: ['CloudDocuments', 'CloudKit'] },
+    ])
+    const fmtPlugin = plugins.find(plugin => typeof plugin === 'string' && plugin.startsWith('./'))
     Expect(typeof fmtPlugin).toBe('string')
     const pluginSource = await FS.readText(FS.resolvePath(String(fmtPlugin), packageRoot))
     Expect(pluginSource).toContain("require('../../../apps/expo-host/plugins/with-ios-fmt-compat.cjs')")

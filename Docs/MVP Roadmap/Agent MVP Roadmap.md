@@ -15,7 +15,9 @@ An item is marked **done** here only once it is on `main`. Work in progress live
 this document deliberately does not name because they move faster than it does: `./agent board`
 reports every worktree, its branch, and whether it carries a merge message, which is where to look
 before starting an item so two agents do not build the same thing. As of 2026-09-19 that board shows
-branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`.
+branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`. The `A4` branch named there,
+`feat/expo-go-deprecation-30c509`, never landed and was written against package paths that have
+since moved; its work is superseded rather than pending.
 
 ## Release blockers
 
@@ -110,19 +112,36 @@ today, or how to start.
 - Done: a visitor who reads only the README knows what Tao is, whether it fits them, and what to run
   first.
 
-### A4 — Retire Expo Go from the development loop
+### A4 — Retire Expo Go from the phone lane — **done**
 
-Tao moved to Expo SDK 57 on 2026-09-15, and the App Store's Expo Go carries SDK 54, which Expo has
-been unable to move past. `tao dev` still opens Expo Go, so the physical-device lane is broken for
-anyone outside this repository.
+Written on the premise that the App Store's Expo Go was stuck on SDK 54 while Tao had moved to SDK
+57. That premise expired: App Store Expo Go 57.0.9 shipped on 2026-09-02, and Expo publishes SDK 57
+clients for Android and the iOS Simulator as well. The lane that is actually closed to Tao is the
+physical iPhone, for a different reason. Since
+[2026-09-03](https://expo.dev/changelog/expo-go-57-login) Expo Go on iPhone requires an Expo account
+signed in both on the phone and in the terminal serving the bundle, and `expo-config.ts` gives Metro
+a repository-local Expo home, so a developer's own `expo login` never reaches it. Expo's own
+statement that "Login is not required for development builds" is the argument for `A9`.
 
-- Shape: remove or gate the Expo Go paths, point the device loop at the Tao-published development
-  build, and correct every document and message that still promises Expo Go.
+- Shape: refuse the physical iPhone with that reason and name the Companion instead; keep the
+  simulator, emulator and physical-Android Expo Go lanes, which work and need no account, until
+  `A9`'s prebuilt host replaces them; correct every document and message that rests on the SDK-54
+  claim.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` (the lane table and
   slice 4), `packages/apps/expo-host/expo-host-src/dev-loop/`, `packages/ides/studio-companion-app`.
-- Uses the shared companion host and compatibility-check decision (`R7`); retiring the broken
-  Expo Go promise does not wait on that host's completion.
-- Done: no surface offers Expo Go, and the documented device path is one a newcomer can complete.
+- Uses the shared companion host and compatibility-check decision (`R7`); retiring the broken phone
+  promise does not wait on that host's completion. **Decided 2026-09-22:** Expo Go stays on the
+  lanes where it works until the Companion beta exists, so "no surface offers Expo Go" is `A9`'s
+  completion rather than this item's.
+- Done: no surface offers Expo Go where Expo Go cannot work, every message and document gives the
+  real reason rather than the SDK gap, and the phone path a newcomer is pointed at is the one Tao
+  intends to support.
+- Landed 2026-09-22: a physical iPhone is refused with the account-wall reason and the
+  `studio-companion-install` command; the simulator remedy names the SDK it needs; Android installs
+  a matching Expo Go itself and falls back to a skipped lane with its reason if that fails.
+  `EXPO_SDK_VERSION` in `expo-config.ts` is the one SDK pin the loop measures clients against, and a
+  test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
+  research carry a dated correction of the SDK-54 claim.
 
 ## First-hour quality
 
@@ -220,8 +239,18 @@ from the development loop, which no virtualization approach can do.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
 - Uses the host-scope decision in `R7`; physical-device acceptance and beta distribution remain
-  implementation and release proofs.
-- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone.
+  implementation and release proofs. Carries the rest of `A4`: the simulator, emulator and
+  physical-Android Expo Go lanes are removed as this host replaces each one.
+- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone,
+  and no surface offers Expo Go.
+- Landed 2026-09-22: the Companion carries every native module an app host can reach, at the same
+  version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
+  CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
+  the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+- Remaining: the Android side of the Companion shell, the host compatibility check, `tao dev`
+  obtaining and launching a host, building and publishing hosts, and the proofs on each lane. The
+  entitlements need the iCloud container and push enabled on the app id before a device build signs.
 
 ### A10 — Publication hygiene audit — **done**
 
