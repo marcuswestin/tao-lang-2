@@ -25,8 +25,8 @@
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
 - **Proposed change:** The rest of Phase 0 of the linked report: compile what test variants share
-  once per run, a version-keyed cache for a packaged CLI, and a budget `./agent bench` asserts,
-  since it reports today and fails nothing.
+  once per run, and a version-keyed cache for a packaged CLI once one exists. `./agent bench` now
+  fails when a steady-state median passes its budget.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
   with them.
 - **Acceptance:** Uncached `tao check "Apps/WordFlower/1 - Current"` under 1s and `tao fix` of the

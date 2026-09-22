@@ -32,12 +32,16 @@ export const StudioClientDevReload = {
  * Everything outside `studio-src/client` and `studio-src/code-editor` is treated as server-owned: a
  * shared module reaches both, and saying "restart to be sure" is the safe direction to be wrong in. The
  * editor package is browser-bundled foreign-view code, not server code, even though it sits beside
- * `client/` rather than inside it.
+ * `client/` rather than inside it. Studio's own Tao client and its app-local packages under
+ * `Apps/Tao Studio/` are browser-bundled the same way and never server-loaded.
  */
 function isStudioServerSource(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
   if (normalized.includes('/studio-tooling-src/')) {
     return true
+  }
+  if (normalized.includes('/Apps/Tao Studio/')) {
+    return false
   }
   if (!normalized.includes('/studio-src/')) {
     return false
@@ -149,6 +153,7 @@ async function subscribeStudioClientSources(listener: StudioClientChangeListener
   const roots = [
     Repo.resolvePath('packages/ides/studio/studio-src'),
     Repo.resolvePath('packages/ides/studio-tooling/studio-tooling-src'),
+    Repo.resolvePath('Apps/Tao Studio'),
   ]
   const watcher = watch(roots, { ignoreInitial: true })
   let timer: ReturnType<typeof setTimeout> | undefined

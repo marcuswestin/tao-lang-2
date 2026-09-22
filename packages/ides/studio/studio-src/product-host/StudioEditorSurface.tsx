@@ -141,8 +141,8 @@ export function StudioLensBar(props: StudioLensBarProps): React.ReactElement {
   )
 }
 
-/** StudioEditorSurface is the Tao-mounted CodeEditor boundary over the host's revisioned active tab. */
-export function StudioEditorSurface(): React.ReactElement {
+/** StudioCodeEditor is the Tao-mounted CodeMirror boundary over the host's revisioned active tab. */
+export function StudioCodeEditor(): React.ReactElement {
   const state = React.useSyncExternalStore(
     subscribeStudioProductHostState,
     studioProductHostState,
