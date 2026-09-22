@@ -2,6 +2,7 @@ import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import type { MachineResourceOwner } from '../verification-src/MachineLanes'
 import {
+  landedReport,
   LandingIntegrationConflictError,
   type MergeCommandRunner,
   type MergeSnapshot,
@@ -409,6 +410,32 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 }
 
 Describe('merge-with-main', () => {
+  Test('landed report reads the broker archive instead of stale local refs', async () => {
+    const fake = fakeDependencies()
+    const queried: string[][] = []
+    fake.dependencies.inspectRemote = async (_root, branches) => {
+      queried.push([...branches])
+      return { refs: new Map([['merged/example', fake.repository.featureHead]]) }
+    }
+
+    Expect(await landedReport('feat/example', fake.dependencies, fake.repository.featureRoot)).toEqual({
+      archive: 'merged/example',
+      branch: 'feat/example',
+      landed: true,
+    })
+    Expect(queried).toEqual([['merged/example']])
+    Expect(fake.calls).toEqual([])
+
+    fake.dependencies.inspectRemote = async () => ({ refs: new Map() })
+    Expect((await landedReport('feat/example', fake.dependencies, fake.repository.featureRoot)).landed).toBe(false)
+  })
+
+  Test('landed report does not mistake an unavailable remote for an absent archive', async () => {
+    const fake = fakeDependencies({ failRemoteQuery: { stderr: 'credential denied' } })
+    await Expect(landedReport('feat/example', fake.dependencies, fake.repository.featureRoot))
+      .rejects.toThrow(Errors.CommandExecutionError)
+  })
+
   Test('validates the exact human squash-message shape', () => {
     Expect(
       validateMergeMessage(
