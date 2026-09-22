@@ -1,5 +1,6 @@
 {
   "name": "tao-studio-tooling",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "studio-tooling-src/StudioReview.ts",
