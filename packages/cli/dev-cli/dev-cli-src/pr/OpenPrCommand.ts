@@ -302,6 +302,12 @@ async function fetchChecks(dependencies: OpenPrDependencies, root: string, prNum
     cwd: root,
     stdio: 'pipe',
   })
+  // gh exits nonzero when a pull request has no checks at all, saying so on stderr. That is an
+  // ordinary state — Actions may be disabled for the repository, or no workflow may match this
+  // branch — and not a failure to run, so it reads as an empty list rather than an error.
+  if (result.error === undefined && `${result.stdout}${result.stderr}`.includes('no checks reported')) {
+    return []
+  }
   assertCommandSucceeded(result)
   return parseJson<CheckStatus[]>(result.stdout, [])
 }
@@ -324,7 +330,8 @@ function reportOutcome(checks: readonly CheckStatus[], report: (line: string) =>
   if (failed.length === 0) {
     report(
       checks.length === 0
-        ? 'PASS  No checks are configured for this pull request.'
+        ? 'PASS  No checks ran for this pull request. If one was expected, Actions may be disabled'
+          + ' for this repository, or no workflow matches this branch.'
         : `PASS  All ${checks.length} check(s) succeeded.`,
     )
     return 0

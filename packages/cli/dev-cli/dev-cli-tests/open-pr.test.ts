@@ -66,6 +66,31 @@ function fakeDependencies(
 }
 
 Describe('open-pr', () => {
+  Test('reads gh’s no-checks exit as an empty list rather than a failure', async () => {
+    // What the first real run met: a repository whose Actions were not yet enabled, so `gh pr
+    // checks` exited 1 saying "no checks reported". Treating that as a command failure reported the
+    // whole run as failed after it had pushed and opened the pull request successfully.
+    const routes = cleanFeatureBranchRoutes()
+    routes[
+      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
+    ] = {
+      stdout: '[{"number":2,"url":"https://github.com/o/r/pull/2"}]',
+    }
+    routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: '  --watch  Watch checks\n' }
+    routes[routeKey('gh', ['pr', 'checks', '2', '--watch'], ROOT)] = { exitCode: 1 }
+    routes[routeKey('gh', ['pr', 'checks', '2', '--json', 'name,state,link,bucket'], ROOT)] = {
+      exitCode: 1,
+      stderr: "no checks reported on the 'feat/example' branch\n",
+    }
+    const { dependencies } = fakeDependencies(routes)
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.lines.some(line => line.includes('No checks ran for this pull request'))).toBe(true)
+    Expect(result.lines.some(line => line.includes('Actions may be disabled'))).toBe(true)
+  })
+
   Test('refuses a detached HEAD', async () => {
     const { dependencies } = fakeDependencies({
       [routeKey('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], ROOT)]: { exitCode: 1, stdout: '' },
