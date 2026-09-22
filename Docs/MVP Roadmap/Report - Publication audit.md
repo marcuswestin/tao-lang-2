@@ -260,8 +260,8 @@ Frozen by `AGENTS.md`; historical rather than forward-looking, so it sets no exp
 ### P13 — `Docs/Spec/` and `Docs/Tutorials/` — Low
 
 The spec set (9 documents) is the implemented contract and the tutorials are the learning material.
-`Docs/Spec/Tao Design - WIP.md` carries a work-in-progress suffix. One tutorial reference is caught
-separately by `P16`.
+`Docs/Spec/Tao Design.md` carried a work-in-progress suffix; the rename (decision I) resolved it for
+this file. One tutorial reference is caught separately by `P16`.
 
 - **Recommendation:** publish. This is the material `A3` and `A5` are built on. Settle the `- WIP`
   suffix convention before launch — `Roadmap.md` already lists "write down the draft-suffix

@@ -73,7 +73,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   for (const member of namedMembers) {
     if (members.has(member.name)) {
       // The compiled design is one keyed map, so the later member simply replaces the earlier one and
-      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design - WIP.md).
+      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design.md).
       ctx.error(member.node, designValidationMessages.duplicateMember(member.name), {
         code: designValidationCodes.duplicateMember,
       })
@@ -100,7 +100,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   validateScreens(design, ctx)
   // A bundle named after a built-in clause can never be reached: TR-design.ts answers the built-in
   // head before it ever looks a bundle up, and text and style entries compile into the same bundle
-  // map. Static validation owns reserved names (Docs/Spec/Tao Design - WIP.md), so this is an error.
+  // map. Static validation owns reserved names (Docs/Spec/Tao Design.md), so this is an error.
   for (const member of design.block.members) {
     if (AST.isDesignBundle(member) && builtInHeads.has(member.name)) {
       ctx.error(member, designValidationMessages.reservedBundle(member.name), {

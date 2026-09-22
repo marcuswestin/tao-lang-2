@@ -127,6 +127,8 @@ the structured forms below remain future work unless a later tranche settles the
 
 ### Raw Tokens
 
+Status: design, not yet implemented.
+
 Raw tokens are primitive values owned by the selected design:
 
 ```tao
@@ -161,6 +163,8 @@ Token categories should start small: color, space, radius, typography, shadow/el
 
 ### Semantic Tokens
 
+Status: design, not yet implemented.
+
 Semantic tokens name intent:
 
 ```tao
@@ -183,6 +187,8 @@ design AppTheme {
 App code should normally use meanings such as `surface`, `muted`, `primary`, and `danger`, not raw colors.
 
 ### Component Recipes
+
+Status: design, not yet implemented.
 
 Recipes define reusable visual treatment for components:
 
@@ -216,6 +222,8 @@ The compiler should treat recipes as structured data, not text snippets. Runtime
 
 ### Pattern Recipes
 
+Status: design, not yet implemented.
+
 Pattern recipes describe larger screen grammar:
 
 ```tao
@@ -235,6 +243,8 @@ Patterns are deferred until component recipes and design application are stable,
 
 ### Design Rules
 
+Status: design, not yet implemented.
+
 Rules are constraints the compiler, validator, runtime, and design tooling can check:
 
 ```tao
@@ -252,6 +262,8 @@ rules {
 Some rules are source-only. Others require rendered context. The first implementation should start with deterministic source-level checks and defer screenshot/browser checks.
 
 ## Applying Design
+
+Status: design, not yet implemented.
 
 Tao needs both low-level and semantic design application:
 
@@ -297,6 +309,8 @@ Col() [gap md] {
 The exact condition syntax is future work. The important direction is that components should adapt to their context, not only to global breakpoints.
 
 ## App Selection And Defaults
+
+Status: design, not yet implemented.
 
 Project creation should give every app a coherent design immediately. A first app should not look like unstyled React Native.
 
@@ -352,6 +366,8 @@ Starter themes can be generated from the same underlying token architecture:
 These are presets over one design model, not separate style engines.
 
 ## Platform Adaptation
+
+Status: design, not yet implemented.
 
 Tao should not force every platform to look identical.
 
