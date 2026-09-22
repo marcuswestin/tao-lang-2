@@ -23,6 +23,31 @@ function identity(name: string): TR.DeclarationIdentity {
 }
 
 Describe('reactive writable values', () => {
+  Test('inspects retained readonly props without reading an inactive provider generation', () => {
+    const schema = TR.Data.Schema(noteDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Before') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]
+    let reads = 0
+    const argument = TR.Readonly<string>(TR.Alias(() => {
+      reads += 1
+      return TR.Member(TR.Value(note), ['Title'])
+    }))
+
+    Expect(argument.jsValue).toBe('Before')
+    TR.Data.Update(TR.Value(note), { Title: TR.Value('After') })
+    Expect(argument.jsValue).toBe('After')
+    Expect('set' in argument).toBe(false)
+    schema.configure(memoryConnection())
+
+    // React's development prop diff enumerates retained props after a provider replacement.
+    // Inspection must not execute the old argument's live read; explicit evaluation still must.
+    Expect(() => Object.assign({}, argument)).not.toThrow()
+    Expect(reads).toBe(2)
+    Expect(() => argument.evaluate()).toThrow(
+      "Entity handle 'Note-1' belongs to an inactive provider generation.",
+    )
+  })
+
   Test('reads a copied action cell through its action transaction before committing', async () => {
     const draft = TR.Cell<{ Title: string }>(TR.Value({ Title: 'Before' }))
     const save = TR.Action(() => {

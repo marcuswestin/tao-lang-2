@@ -477,12 +477,7 @@ class TR {
 
   /** Readonly removes mutation capability while keeping a value's live reads. */
   static Readonly<T>(value: TR.Evaluable): TR.Value<T> {
-    return {
-      evaluate: () => reactiveValue(value.evaluate().jsValue as T),
-      get jsValue() {
-        return value.evaluate().jsValue as T
-      },
-    }
+    return new RuntimeReadonlyValue<T>(value)
   }
 
   /** UseParameterCell creates mounted local storage only when the received argument is not writable. */
@@ -803,6 +798,23 @@ class RuntimeValue<T> {
 
   evaluate(): RuntimeValue<T> {
     return this
+  }
+}
+
+/** Live reads are non-enumerable so React prop inspection cannot evaluate a retired provider. */
+class RuntimeReadonlyValue<T> implements TR.Value<T> {
+  readonly #source: TR.Evaluable
+
+  constructor(source: TR.Evaluable) {
+    this.#source = source
+  }
+
+  evaluate(): TR.Value<T> {
+    return reactiveValue(this.#source.evaluate().jsValue as T)
+  }
+
+  get jsValue(): T {
+    return this.evaluate().jsValue
   }
 }
 
