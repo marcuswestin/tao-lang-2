@@ -1,8 +1,9 @@
 # DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention
 
-- **Status:** Resolved — the `until` helper's default budget is 30s, the runners' deadlines nest
-  strictly (a Jest journey under Bun's per-test bound under the node's idle and wall bounds) so the
-  nearest bound names what hung, and `repo-lint` refuses a test's `timeoutMs` under 10,000ms, a
+- **Status:** Resolved
+- **Resolution:** The `until` helper's default budget is 30s, the runners' deadlines nest strictly
+  (a Jest journey under Bun's per-test bound under the node's idle and wall bounds) so the nearest
+  bound names what hung, and `repo-lint` refuses a test's `timeoutMs` under 10,000ms, a
   `toBeLessThan` on a duration, or a `Promise.race` against a sleep unless a comment-only line
   carries `budget-ok: <reason>` (`TestBudgetConventions.ts`; landed 2026-09-22).
 - **Section:** External
