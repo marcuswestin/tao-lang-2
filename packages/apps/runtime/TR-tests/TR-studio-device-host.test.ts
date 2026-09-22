@@ -73,6 +73,7 @@ const {
   cellIdentityKey,
   clampBadgePosition,
   createNativeStudioDeviceClient,
+  deviceLensSample,
   describeDevice,
   deviceHostPresentation,
   parseScriptUrl,
@@ -246,6 +247,26 @@ Describe('Studio device host bootstrap', () => {
 })
 
 Describe('Studio device host presentation', () => {
+  Test('attaches only the published source version to a public Lens observation', () => {
+    const sample = {
+      actualDurationMs: 8.5,
+      causes: [{ kind: 'state' as const }, { entity: 'Story', kind: 'data' as const, schema: 'Stories' }],
+      identity: { end: 40, kind: 'render' as const, sourcePath: '/project/App.tao', start: 10 },
+      instanceId: 'native-render',
+      phase: 'update' as const,
+      timestamp: 100,
+    }
+    Expect(deviceLensSample(sample, { '/project/App.tao': 'text-v7' })).toEqual({
+      actualDurationMs: 8.5,
+      causes: sample.causes,
+      instanceId: 'native-render',
+      occurrence: { end: 40, sourcePath: '/project/App.tao', sourceVersion: 'text-v7', start: 10 },
+      phase: 'update',
+      timestamp: 100,
+    })
+    Expect(deviceLensSample(sample, {})).toBeUndefined()
+  })
+
   Test('shows a named overlay for every phase before a cell can render', () => {
     Expect(deviceHostPresentation(state(), publication)).toMatchObject({
       actions: ['reconnect'],
