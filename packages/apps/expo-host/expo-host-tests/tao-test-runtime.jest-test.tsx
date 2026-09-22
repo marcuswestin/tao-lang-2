@@ -1,10 +1,63 @@
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { FS, Platform } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('records only render occurrences mounted by one executed Tao journey', async () => {
+    await withTaoFiles(
+      'tao-runtime-journey-observations-',
+      {
+        'Main.test.tao': `
+          use RenderApp from ./
+          test "Render observations" {
+            test "mounts the greeting" {
+              run RenderApp
+              expect text "Hello from a journey"
+            }
+          }
+        `,
+        'Main.tao': `
+          use Text from @tao/ui
+          app RenderApp { view Main }
+          view Main() { render Text("Hello from a journey") }
+        `,
+      },
+      async paths => {
+        const directory = await mkTestDir('tao-journey-observations-')
+        const previous = Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV]
+        Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV] = directory
+        try {
+          const file = await RuntimeTesting.TestCompiler.Worker.compileTestPlan(paths['Main.test.tao']!)
+          const check = file.suites[0]?.checks[0]
+          Expect(check).toBeDefined()
+          const observation = await RuntimeTesting.runTestCheck('Render observations', check!)
+
+          Expect(observation.status).toBe('passed')
+          Expect(observation.renders).toHaveLength(1)
+          const render = observation.renders[0]
+          Expect(render?.renderId).toContain(`${paths['Main.tao']}:`)
+          Expect(render?.sourcePath).toBe(paths['Main.tao'])
+          Expect(render?.sourceVersion).toMatch(/^text-v1:/)
+          const artifact = await RuntimeTesting.JourneyObservations.read(directory)
+          Expect(artifact.format).toBe('tao-journey-observations')
+          Expect(artifact.version).toBe(1)
+          Expect(artifact.checks).toHaveLength(1)
+          Expect(artifact.checks[0]?.renders).toEqual(observation.renders)
+        } finally {
+          if (previous === undefined) {
+            delete Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV]
+          } else {
+            Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV] = previous
+          }
+          await FS.remove(directory)
+        }
+      },
+    )
+  })
+
   Test('runs keyboard attention steps directly through the reducer', async () => {
     await withTaoFiles(
       'tao-runtime-attention-test-plan-',

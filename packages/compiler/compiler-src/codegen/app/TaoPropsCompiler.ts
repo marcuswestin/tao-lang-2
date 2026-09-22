@@ -1,11 +1,16 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { studioRectMarkerPrefix, studioRenderIdentity } from '../../studio-render-identity'
+import { renderSourceIdentity, studioRectMarkerPrefix, studioRenderIdentity } from '../../studio-render-identity'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export const TaoPropsCompiler = {
+  /** StudioRenderIdentity emits the preview-only occurrence identity shared by native inspection and Lens profiling. */
+  StudioRenderIdentity(render: AST.Render, projectRoot: string | undefined): Compiled {
+    return compileStudioRenderOccurrence(render, projectRoot)
+  },
+
   /** RenderTaoProps compiles the __tao prop fragment for a render invocation. */
   RenderTaoProps(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const designSpec = render.layoutClause ? Compile.DesignSpec(render.layoutClause) : gen`undefined`
@@ -17,12 +22,16 @@ export const TaoPropsCompiler = {
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
     const layout = gen`undefined`
     const testTag = publicTestTagForRender(render)
-    const studio = options.studio === true ? compileStudioRenderOccurrence(render, options.projectRoot) : undefined
+    const studio = options.studio === true
+      ? TaoPropsCompiler.StudioRenderIdentity(render, options.projectRoot)
+      : undefined
+    const journeyObservation = options.journeyObservations === true ? compileJourneyRenderOccurrence(render) : undefined
     const fields: TaoPropsFields = {
       designDefault,
       designSource,
       designSpec,
       interaction: Compile.OutlineRenderInteraction(render),
+      journeyObservation,
       layout,
       studio,
       testTag,
@@ -40,6 +49,7 @@ type TaoPropsFields = {
   designSpec: Compiled
   /** interaction is the occurrence's outline metadata: the control it is, the row root it renders. */
   interaction: Compiled | undefined
+  journeyObservation: Compiled | undefined
   layout: Compiled
   studio: Compiled | undefined
   testTag: string | undefined
@@ -64,8 +74,21 @@ function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
   }${fields.designDefault ? gen`, designDefault: ${fields.designDefault}` : ''}${
     fields.testTag ? gen`, testTag: ${gen.jsLiteral(fields.testTag)}` : ''
   }${fields.studio ? gen`, studio: ${fields.studio}` : ''}${
-    fields.interaction ? gen`, interaction: ${fields.interaction}` : ''
-  } }`
+    fields.journeyObservation ? gen`, journeyObservation: ${fields.journeyObservation}` : ''
+  }${fields.interaction ? gen`, interaction: ${fields.interaction}` : ''} }`
+}
+
+/** compileJourneyRenderOccurrence carries source identity through test props without Studio runtime instrumentation. */
+function compileJourneyRenderOccurrence(render: AST.Render): Compiled {
+  const identity = renderSourceIdentity(render)
+  Assert.defined(identity, 'compiled render has source coordinates')
+  return gen`{
+    renderId: ${gen.jsLiteral(identity.renderId)},
+    sourcePath: ${gen.jsLiteral(identity.sourcePath)},
+    sourceVersion: ${gen.jsLiteral(identity.sourceVersion)},
+    start: ${identity.start},
+    end: ${identity.end},
+  }`
 }
 
 /**

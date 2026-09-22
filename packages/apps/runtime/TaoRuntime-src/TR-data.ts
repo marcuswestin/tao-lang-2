@@ -25,6 +25,7 @@ import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
+import { useStudioLensScope } from './TR-studio-lens'
 
 export { testProvider } from './TR-data-provider'
 
@@ -398,7 +399,34 @@ export const DataControls = {
   },
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
-    React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
+    const lensScope = useStudioLensScope()
+    const observedPlan = React.useRef(plan)
+    const fillStartedAt = React.useRef<number | undefined>(undefined)
+    observedPlan.current = plan
+    const subscribe = React.useCallback((notify: () => void) => {
+      if (lensScope === undefined) {
+        return schema.subscribe(notify)
+      }
+      return schema.subscribe(() => {
+        const activePlan = observedPlan.current
+        const fill = schema.fillState(activePlan)
+        let providerWaitMs: number | undefined
+        if (fill?.status === 'filling' && fillStartedAt.current === undefined) {
+          fillStartedAt.current = performance.now()
+        } else if (fill?.status !== 'filling' && fillStartedAt.current !== undefined) {
+          providerWaitMs = Math.max(0, performance.now() - fillStartedAt.current)
+          fillStartedAt.current = undefined
+        }
+        lensScope?.mark({
+          entity: activePlan.entity,
+          kind: 'data',
+          ...(providerWaitMs === undefined ? {} : { providerWaitMs }),
+          schema: schema.name,
+        })
+        notify()
+      })
+    }, [lensScope, schema])
+    React.useSyncExternalStore(subscribe, schema.snapshot, schema.snapshot)
     // A fill-capable provider is offered each live query's descriptor: on mount, and again
     // whenever the descriptor itself changes (a different row, order, or limit).
     const activationKey = schema.queryActivationKey(plan)

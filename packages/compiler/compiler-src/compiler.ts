@@ -120,6 +120,8 @@ export type CompileOptions = {
   appDatasourceConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** journeyObservations emits test-harness-only render locators into generated Tao props. */
+  journeyObservations?: boolean
   /** debug instruments every action statement with a debugger gate. */
   debug?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
@@ -251,6 +253,7 @@ function compileValidatedInput(
   options: CompileOptions,
 ): CompileResult {
   const studio = options.studio === true
+  const journeyObservations = options.journeyObservations === true
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files.filter(file =>
     file.ast.statements.length === 0
@@ -291,6 +294,7 @@ function compileValidatedInput(
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
+      journeyObservations,
       studio,
       studioViews,
       debug: options.debug === true,
@@ -441,6 +445,7 @@ type CompileSourceFileOptions = {
   projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
+  journeyObservations: boolean
   studio: boolean
   studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
   debug: boolean
@@ -456,6 +461,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     projectRoot,
     selectedAppDatasourceConfiguration,
     selectedAppName,
+    journeyObservations,
     studio,
     studioViews,
     debug,
@@ -538,6 +544,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   emitDataCatalog: ownsDataCatalog,
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
+                  journeyObservations,
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,

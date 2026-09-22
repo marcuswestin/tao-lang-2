@@ -163,6 +163,7 @@ import {
   type TaoStudioStateCapture,
   type TaoStudioStateSeed,
 } from './TR-studio-environment'
+import { StudioLensRender, type TaoStudioLensScope, useStudioLensScope } from './TR-studio-lens'
 import { StudioPreview } from './TR-studio-preview'
 import {
   StudioStateControls,
@@ -514,17 +515,24 @@ class TR {
    * mounted, which is what gives the value the holder's lifetime.
    */
   static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
+    const lensScope = useStudioLensScope()
     const initial = React.useRef<TR.Value<T> | undefined>(undefined)
     initial.current ??= initialValue().evaluate()
     const [jsValue, setJsValue] = React.useState<T>(() => initial.current!.jsValue)
     const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
     React.useEffect(
-      () => isReactiveValue(jsValue) ? jsValue.subscribe(onSelfDrivenChange) : undefined,
-      [jsValue, onSelfDrivenChange],
+      () =>
+        isReactiveValue(jsValue)
+          ? jsValue.subscribe(() => {
+            lensScope?.mark({ kind: 'state' })
+            onSelfDrivenChange()
+          })
+          : undefined,
+      [jsValue, lensScope, onSelfDrivenChange],
     )
     const jsValueRef = React.useRef(jsValue)
     jsValueRef.current = jsValue
-    return new RuntimeState(jsValueRef, setJsValue, initial.current.jsValue)
+    return new RuntimeState(jsValueRef, setJsValue, initial.current.jsValue, lensScope)
   }
 
   /** PersistedState creates one app-declaration-owned, device-local state store. */
@@ -716,6 +724,7 @@ class TR {
     ...StudioPreview,
     DeviceHost: StudioDeviceHost,
     Environment: StudioEnvironmentControls,
+    LensRender: StudioLensRender,
     State: StudioStateControls,
     SubjectHost: StudioSubjectHost,
   } as const
@@ -831,6 +840,7 @@ class RuntimeState<T> {
     private readonly jsValueRef: { current: T },
     private readonly setJsValue: React.Dispatch<React.SetStateAction<T>>,
     private readonly initialValue: T,
+    private readonly lensScope: TaoStudioLensScope | undefined,
   ) {}
 
   defaultValue(): RuntimeValue<T> {
@@ -871,7 +881,11 @@ class RuntimeState<T> {
   }
 
   private commit(value: T): void {
+    const changed = !Object.is(this.jsValueRef.current, value)
     this.jsValueRef.current = value
+    if (changed) {
+      this.lensScope?.mark({ kind: 'state' })
+    }
     this.setJsValue(value)
   }
 }

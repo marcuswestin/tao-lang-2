@@ -1,10 +1,11 @@
 import TR from '@runtime/TR'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '@runtime/TR-studio-device-client'
 import type { TaoStudioDeviceCellIdentity } from '@runtime/TR-studio-device-protocol'
+import { StudioLensHost, StudioLensRender, type TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
 import { Errors } from '@shared/core'
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { createElement } from 'react'
-import { LogBox, Text } from 'react-native'
+import { LogBox, Pressable, Text } from 'react-native'
 import { registerRuntimeE2ELifecycle } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
@@ -67,6 +68,7 @@ function stubClient(): {
       },
       selectCell() {},
       log() {},
+      lens() {},
       selectSource() {},
       setNetwork() {},
       sourceAction: () => 'request-1',
@@ -149,6 +151,32 @@ describe('Studio device host acknowledgement', () => {
     // The acknowledgement names what is on screen; an error screen is not the assigned revision.
     expect(stub.applied).toEqual([])
   })
+})
+
+test('a nested selected render inherits the state change that caused its commit', async () => {
+  const samples: TaoStudioLensRenderSample[] = []
+  const parent = { end: 30, kind: 'render' as const, sourcePath: '/project/Main.tao', start: 0 }
+  const child = { end: 20, kind: 'render' as const, sourcePath: '/project/Main.tao', start: 10 }
+  function Counter() {
+    const count = TR.State(() => TR.Value(0))
+    return createElement(
+      StudioLensRender,
+      { identity: child },
+      createElement(Pressable, {
+        onPress: () => TR.Set(count, () => TR.Value(1)),
+        testID: 'lens-counter',
+      }, createElement(Text, null, count.evaluate().jsValue)),
+    )
+  }
+  const screen = render(createElement(
+    StudioLensHost,
+    { publish: sample => samples.push(sample) },
+    createElement(StudioLensRender, { identity: parent }, createElement(Counter)),
+  ))
+  fireEvent.press(screen.getByTestId('lens-counter'))
+  await waitFor(() => expect(screen.getByText('1')).toBeTruthy())
+  expect(samples.findLast(sample => sample.identity.start === 10 && sample.phase === 'update')?.causes)
+    .toContainEqual({ kind: 'state' })
 })
 
 /**
