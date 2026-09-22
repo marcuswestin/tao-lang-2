@@ -1,4 +1,5 @@
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
+import type { TaoStudioLensCause, TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
 import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import type {
@@ -601,6 +602,16 @@ type StudioPreviewLogMessage = {
   type: 'preview-console'
 }
 
+export type StudioLensRenderSample = TaoStudioLensRenderSample & Readonly<{ sourceVersion: string }>
+
+type StudioPreviewLensRenderMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  sample: StudioLensRenderSample
+  type: 'preview-lens-render'
+}
+
 /** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
 type StudioDebugStep = {
   action: string
@@ -758,6 +769,7 @@ export type StudioWindowMessage =
   | StudioPreviewCanvasGestureMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
+  | StudioPreviewLensRenderMessage
   | StudioPreviewJourneyRecordingStateMessage
   | StudioPreviewJourneyReplayFailedMessage
   | StudioPreviewJourneyReplaySettledMessage
@@ -860,6 +872,7 @@ const windowMessageParsers: {
   'preview-journey-replay-failed': parsePreviewJourneyReplayFailed,
   'preview-journey-replay-settled': parsePreviewJourneyReplaySettled,
   'preview-journey-step-recorded': parsePreviewJourneyStepRecorded,
+  'preview-lens-render': parsePreviewLensRender,
   'preview-layout-measurements': parsePreviewLayoutMeasurements,
   'preview-runtime-capture-failed': parsePreviewRuntimeCaptureFailed,
   'preview-runtime-captured': parsePreviewRuntimeCaptured,
@@ -1242,6 +1255,131 @@ function parsePreviewLog(value: StudioJsonObject): StudioPreviewLogMessage | und
     timestamp,
     type: 'preview-console',
   })
+}
+
+function parsePreviewLensRender(value: StudioJsonObject): StudioPreviewLensRenderMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const raw = value['sample']
+  if (identity === undefined || !isObject(raw) || !isObject(raw['identity'])) {
+    return undefined
+  }
+  const source = raw['identity']
+  const start = nonNegativeInteger(source['start'])
+  const end = nonNegativeInteger(source['end'])
+  const timestamp = nonNegativeInteger(raw['timestamp'])
+  const causes = raw['causes']
+  if (
+    start === undefined || end === undefined || start > end || timestamp === undefined
+    || source['kind'] !== 'render'
+    || !boundedText(source['sourcePath'], 4_096)
+    || !optionalBoundedText(source['elementName'], 256)
+    || !optionalBoundedText(source['ownerName'], 256)
+    || !optionalBoundedText(source['studioRectId'], 256)
+    || !boundedText(raw['sourceVersion'], 256)
+    || !boundedText(raw['instanceId'], 256)
+    || (raw['phase'] !== 'mount' && raw['phase'] !== 'update')
+    || !boundedDuration(raw['actualDurationMs'])
+    || !Array.isArray(causes) || causes.length > 8
+  ) {
+    return undefined
+  }
+  const parsedCauses = causes.map(parseLensCause)
+  if (parsedCauses.some(cause => cause === undefined)) {
+    return undefined
+  }
+  const resolvedStyle = parseLensResolvedStyle(raw['resolvedStyle'])
+  if (raw['resolvedStyle'] !== undefined && resolvedStyle === undefined) {
+    return undefined
+  }
+  return envelope({
+    identity,
+    sample: {
+      actualDurationMs: raw['actualDurationMs'],
+      causes: parsedCauses as TaoStudioLensCause[],
+      identity: {
+        ...(source['elementName'] === undefined ? {} : { elementName: source['elementName'] as string }),
+        end,
+        kind: 'render' as const,
+        ...(source['ownerName'] === undefined ? {} : { ownerName: source['ownerName'] as string }),
+        sourcePath: source['sourcePath'],
+        start,
+        ...(source['studioRectId'] === undefined ? {} : { studioRectId: source['studioRectId'] as string }),
+      },
+      instanceId: raw['instanceId'],
+      phase: raw['phase'] as 'mount' | 'update',
+      ...(resolvedStyle === undefined ? {} : { resolvedStyle }),
+      sourceVersion: raw['sourceVersion'],
+      timestamp,
+    },
+    type: 'preview-lens-render',
+  })
+}
+
+const lensStyleProperties = new Set([
+  'background-color',
+  'border-radius',
+  'color',
+  'display',
+  'flex-direction',
+  'font-size',
+  'font-weight',
+  'gap',
+  'line-height',
+  'opacity',
+  'padding-bottom',
+  'padding-left',
+  'padding-right',
+  'padding-top',
+])
+
+function parseLensResolvedStyle(value: unknown): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (!isObject(value)) {
+    return undefined
+  }
+  const entries = Object.entries(value)
+  if (
+    entries.length > lensStyleProperties.size
+    || entries.some(([key, item]) =>
+      !lensStyleProperties.has(key) || typeof item !== 'string' || item.length === 0 || item.length > 128
+    )
+  ) {
+    return undefined
+  }
+  return Object.fromEntries(entries) as Readonly<Record<string, string>>
+}
+
+function parseLensCause(value: unknown): TaoStudioLensCause | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+  if (value['kind'] === 'state') {
+    return { kind: 'state' }
+  }
+  if (
+    value['kind'] !== 'data'
+    || !boundedText(value['schema'], 256)
+    || !boundedText(value['entity'], 256)
+    || (value['providerWaitMs'] !== undefined && !boundedDuration(value['providerWaitMs']))
+  ) {
+    return undefined
+  }
+  return {
+    entity: value['entity'],
+    kind: 'data',
+    ...(value['providerWaitMs'] === undefined ? {} : { providerWaitMs: value['providerWaitMs'] as number }),
+    schema: value['schema'],
+  }
+}
+
+function boundedDuration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 300_000
+}
+
+function optionalBoundedText(value: unknown, maximumLength: number): value is string | undefined {
+  return value === undefined || boundedText(value, maximumLength)
 }
 
 function parsePreviewRuntimeFailure(value: StudioJsonObject): StudioPreviewRuntimeFailureMessage | undefined {

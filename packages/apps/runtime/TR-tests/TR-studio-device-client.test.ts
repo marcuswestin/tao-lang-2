@@ -767,6 +767,18 @@ Describe('Studio device client sealed control plane', () => {
 
     run.client.report('info', 'drawn')
     Expect(session.received()).toEqual([{ level: 'info', message: 'drawn', type: 'device.report' }])
+
+    const lens = Array.from({ length: TaoStudioDeviceProtocol.lensBatchLimit + 1 }, (_, index) => ({
+      actualDurationMs: index + 0.5,
+      causes: [{ kind: 'state' as const }],
+      instanceId: `render-${index}`,
+      occurrence: { end: 20, sourcePath: 'Garden.tao', sourceVersion: 'text-v1', start: 10 },
+      phase: 'update' as const,
+      timestamp: index,
+    }))
+    run.client.lens(lens)
+    const observations = session.received().flatMap(message => (message as { samples?: typeof lens }).samples ?? [])
+    Expect(observations).toEqual(lens)
   })
 
   Test('re-selects the chosen cell after a reconnect instead of the manifest default', async () => {

@@ -10,6 +10,7 @@ import {
   publishStudioJourneyReplayResult,
   publishStudioScheme,
   replayStudioJourney,
+  resolvedStudioStyle,
   StudioPreview,
   type StudioPreviewConfig,
   type StudioPreviewElement,
@@ -969,6 +970,28 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.overlays.length).toBe(0)
     cleanup()
   })
+})
+
+Test('reads bounded resolved CSS from the matching committed browser node', () => {
+  const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+  const other = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 0, top: 0, width: 20 })
+  const { host } = previewHost([other, target])
+  host.window.getComputedStyle = element => ({
+    getPropertyValue: property => element === target && property === 'color' ? ' rgb(3, 4, 5) ' : '',
+  })
+  Expect(resolvedStudioStyle(host, { end: 20, kind: 'render', sourcePath: '/project/Main.tao', start: 10 }))
+    .toEqual({ color: 'rgb(3, 4, 5)' })
+})
+
+Test('does not attribute one repeated row style to every instance', () => {
+  const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+  const second = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 20, top: 0, width: 20 })
+  const { host } = previewHost([first, second])
+  host.window.getComputedStyle = element => ({
+    getPropertyValue: property => property === 'color' ? element === first ? 'red' : 'blue' : '',
+  })
+  Expect(resolvedStudioStyle(host, { end: 20, kind: 'render', sourcePath: '/project/Main.tao', start: 10 }))
+    .toBeUndefined()
 })
 
 function renderElement(

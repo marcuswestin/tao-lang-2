@@ -1,8 +1,9 @@
 import { ASTUtils } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { Assert } from '@shared'
+import { Assert, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import SourceActions from '@source-actions'
 
 const tsFence = '```ts'
 const fence = '```'
@@ -144,6 +145,10 @@ Describe('compiler: Studio render occurrences', () => {
 
       Expect(code).toContain(compact(studioOccurrence(rootRender, paths['Main.tao'])))
       Expect(code).toContain(compact(studioOccurrence(childRender, paths['Main.tao'])))
+      Expect(code).toContain(compact(`TR.Studio.LensRender identity={${studioIdentity(rootRender, paths['Main.tao'])}`))
+      Expect(code).toContain(
+        compact(`TR.Studio.LensRender identity={${studioIdentity(childRender, paths['Main.tao'])}`),
+      )
       Expect(code).toContain('designSpec: TR.Design.Spec([["gap",12]])')
       Expect(code).toContain('testTag: "selected"')
       Expect(code).toContain('...TR.TaoContext(_ViewProps.__tao)')
@@ -155,7 +160,25 @@ Describe('compiler: Studio render occurrences', () => {
 
       const production = await Workspace.compile(paths['Main.tao'], { appName: 'Second' })
       Expect(production.code).not.toContain('studio:')
+      Expect(production.code).not.toContain('TR.Studio.LensRender')
       Expect(production.code).not.toContain(paths['Main.tao'])
+    })
+  })
+
+  Test('uses Studio source text versions for test journey observations', async () => {
+    const source = `
+      app Preview { view Main }
+      view Main() { render Native() }
+      view Native() { render inject ${tsFence} return null ${fence} }
+    `
+    await withTaoFiles('tao-journey-observation-version-', { 'Main.tao': source }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { journeyObservations: true })
+      const compiledSource = await FS.readText(paths['Main.tao'])
+
+      Expect(compiled.code).toContain(
+        `sourceVersion: ${JSON.stringify(SourceActions.studioSourceVersion(compiledSource))}`,
+      )
+      Expect(compiled.code).not.toContain('studio:')
     })
   })
 
@@ -536,10 +559,14 @@ function requireRender(
 }
 
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
+  return `studio: ${studioIdentity(render, sourcePath)}`
+}
+
+function studioIdentity(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'render source coordinates')
   const elementName = ASTUtils.design.standardElementName(render)
-  return `studio: {
+  return `{
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},
     end: ${cstNode.end},
