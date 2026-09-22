@@ -23,7 +23,9 @@ The command runs the whole landing as one process with a bounded agent report. D
 36-44 minutes against 5-15 minutes of lane time, and the gap was model turns between commands, not
 compute. One process closes the gap without making any step faster.
 
-**Before the queue**, it rejects a sandboxed shell or missing host capabilities for full verification.
+**Before the queue**, it rejects missing host capabilities for full verification. It uses the required
+host probes rather than an inherited sandbox environment marker, because an approved command may
+retain that marker after the harness has given the process host access.
 Pause and ask Ro for the exact needed intervention; do not retry with alternate commands or skip
 the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
 `dev/*` branch checked out only here, no worktree has `main`, the archive branch is free, and
