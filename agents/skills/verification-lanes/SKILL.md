@@ -11,7 +11,7 @@ description: >-
 ## The machine-wide landing lock
 
 You do not claim it by hand. `verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it
-for the length of the run, and `just land` takes it once for the whole landing, so **`land-lock` and
+for the length of the run, and `./agent land` takes it once for the whole landing, so **`land-lock` and
 `land-unlock` are recovery and debugging tools**, not part of the normal path. Everything narrower
 needs no lock and never waits — `test-file`, a named test, `test-retry`, `check`, `fix`, `fmt`. While
 a **landing** holds it, `verify-changed` and `test-changed` additionally wait; lanes already running
@@ -21,7 +21,8 @@ forcing one is Ro's call, so bring `./agent board` to Ro rather than running `--
 
 ## `./agent finalize`
 
-It is the iteration-time readiness command, and not a step of the landing any more — `just land` does
+It is the iteration-time readiness command when landing is not yet authorized, not a step of an
+already authorized landing — `./agent land` does
 its own preparation, integration and verification in one process. It brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
 record already covers this exact tree, drafts the merge message from the branch's own commits when
@@ -36,8 +37,9 @@ read it before calling a slow lane a regression, and before landing, to see who 
 
 ## Whether to propose the landing or hold it back
 
-Ro's explicit yes lands a branch, given in the moment or ahead of time for a named slice; absent one a
-ready branch waits. What you ask for turns on whether the gates prove the change, not on its size.
+Ro's explicit yes authorizes landing the named slice for the rest of this thread, including retries;
+absent one a ready branch waits. What you ask for turns on whether the gates prove the change, not
+on its size.
 
 - **Propose it as ready to land** when the gates that ran green cover the change: documentation,
   roadmap, agent instructions, developer tooling, and test-only changes always; product code whose
@@ -68,7 +70,7 @@ waiting on it and a silent agent is indistinguishable from a stuck one. Backgrou
 in which to say something; it does not buy the right to say nothing.
 
 - Decide by how long the run is, not by which is tidier: a gate finishing inside a minute runs in the
-  foreground with a timeout, while `verify-full` and `just land` run backgrounded with a report.
+  foreground with a timeout, while `verify-full` and `./agent land` run backgrounded with a report.
 - Report about every 20 seconds from start to verdict, one line each: what finished since the last
   note, what is running now, and anything that has already failed. A note that the same node is still
   running is the report Ro wants, because it dates the silence — do not wait to be asked.

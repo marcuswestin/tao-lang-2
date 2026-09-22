@@ -29,9 +29,7 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
 /**
  * FALLBACK_DESCRIPTIONS covers a command whose recipe `just --list` never names: `setup` runs the
  * private `_setup`, and `typecheck`, `parser-gen`, and `ledger-index` run a recipe spelled
- * differently from the command (`_typecheck`, `_parser-gen`, `_fix-ledger-index`). Landing stays on
- * `just land`/`just merge-with-main`: an agent proposes a landing rather than making one, so
- * `./agent` deliberately has no landing command of its own.
+ * differently from the command (`_typecheck`, `_parser-gen`, `_fix-ledger-index`).
  */
 const FALLBACK_DESCRIPTIONS: Partial<Record<string, string>> = {
   'ledger-index': 'Regenerate the developer-environment ledger index from its entry files',

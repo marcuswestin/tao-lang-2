@@ -46,6 +46,7 @@ const VERIFY_GENERATED_OUTPUTS = GeneratedEvidence.outputsForGates([
 ])
 const MAX_SUMMARY_LENGTH = 72
 const DRAFT_PREFIX = 'DRAFT: '
+const DRAFT_REVIEW_VERSION = 1
 /** ROADMAP_LEDGER_PATH is the durable developer-environment ledger this brief is itself filed against. */
 const ROADMAP_LEDGER_PATH = 'Docs/Roadmap/Developer environment upgrades.md'
 
@@ -194,6 +195,13 @@ type MessageOutcome = {
   unconfirmedReason: string
 }
 
+/** Only message review is recorded here; it is never verification or landing evidence. */
+type DraftReviewState = {
+  draftText: string
+  headSha: string
+  version: typeof DRAFT_REVIEW_VERSION
+}
+
 type DraftCommit = {
   body: string
   subject: string
@@ -225,6 +233,7 @@ export const FinalizeCommand = {
       root,
       messageFile,
       priorState,
+      undefined,
       integration.mainSha,
       integration.headSha,
       check,
@@ -365,17 +374,35 @@ export async function prepareForLanding(
   const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
   const priorState = options.fresh === true ? undefined : await loadState(dependencies, statePath)
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
+  const reviewPath = `${messageFile}.review.json`
+  const draftReview = await loadDraftReview(dependencies, reviewPath)
+  const reviewedDraftHeadSha = draftReview?.headSha === headSha
+      && await dependencies.exists(messageFile)
+      && await dependencies.readText(messageFile) !== draftReview.draftText
+    ? headSha
+    : undefined
   const message = await draftOrKeepMessage(
     dependencies,
     root,
     messageFile,
     priorState,
+    reviewedDraftHeadSha,
     mainSha,
     headSha,
     false,
     options.redraft === true,
     lines,
   )
+  if (message.decision !== 'kept') {
+    await dependencies.writeJson(
+      reviewPath,
+      {
+        draftText: await dependencies.readText(messageFile),
+        headSha,
+        version: DRAFT_REVIEW_VERSION,
+      } satisfies DraftReviewState,
+    )
+  }
   remaining.push(...messageRemaining(message, messageFile))
   const advisories = await adviseOnDiff(dependencies, root, mainSha, headSha, branch, lines)
   for (const advisory of advisories) {
@@ -777,6 +804,7 @@ async function draftOrKeepMessage(
   root: string,
   messageFile: string,
   priorState: FinalizeState | undefined,
+  reviewedDraftHeadSha: string | undefined,
   mainSha: string,
   headSha: string,
   check: boolean,
@@ -790,7 +818,7 @@ async function draftOrKeepMessage(
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(priorState, headSha)
+    const unconfirmedReason = keptMessageReason(priorState, headSha, reviewedDraftHeadSha)
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -828,13 +856,39 @@ async function draftOrKeepMessage(
  * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
  * record proves it covers this HEAD.
  */
-function keptMessageReason(priorState: FinalizeState | undefined, headSha: string): string {
+function keptMessageReason(
+  priorState: FinalizeState | undefined,
+  headSha: string,
+  reviewedDraftHeadSha: string | undefined,
+): string {
+  if (reviewedDraftHeadSha === headSha) {
+    return ''
+  }
   if (priorState === undefined) {
     return 'nothing records which HEAD it was written for'
   }
   return priorState.messageHeadSha === headSha
     ? ''
     : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
+}
+
+async function loadDraftReview(
+  dependencies: FinalizeDependencies,
+  path: string,
+): Promise<DraftReviewState | undefined> {
+  if (!await dependencies.exists(path)) {
+    return undefined
+  }
+  try {
+    const value = await dependencies.readJson<Partial<DraftReviewState>>(path)
+    return value.version === DRAFT_REVIEW_VERSION
+        && typeof value.headSha === 'string'
+        && typeof value.draftText === 'string'
+      ? value as DraftReviewState
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 async function readFeatureCommits(

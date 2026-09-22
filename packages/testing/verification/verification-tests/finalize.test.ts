@@ -1035,6 +1035,27 @@ Describe('landing preparation', () => {
     Expect(preparation.lines.some(line => line.includes('Read origin/main at'))).toBe(true)
   })
 
+  Test('accepts an edited draft for the same HEAD without an out-of-lock finalize', async () => {
+    const fake = fakeDependencies()
+    const first = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(first.ok).toBe(false)
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+
+    const second = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(second.ok).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+
+    fake.states.set(`${path}.review.json`, {
+      draftText: 'DRAFT: Add the example workflow\n\n- Add the example workflow.\n',
+      headSha: 'oldhead0000000000000000000000000000000000',
+      version: 1,
+    })
+    const changedHead = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(changedHead.ok).toBe(false)
+  })
+
   Test('is ready once the message on disk is recorded against this HEAD', async () => {
     const fake = fakeDependencies()
     fake.files.set('/repo/.artifacts/merge/feat/example.msg', 'Land it\n\n- Do the thing.\n')
