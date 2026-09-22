@@ -14,7 +14,7 @@
   module graph the run loads, because the run root's path was part of Jest's configuration and Jest
   hashes its configuration into every cache key. The change that added this entry moved the
   entrypoints out of the run root, which cut the growth to 650 files per compile, and the change
-  after it stored the compiled apps by their contents, which cut it to 120 after an edit and none
+  after it stored the compiled apps by their contents, which cut it to 116 after an edit and none
   without one. The growth is now proportional to distinct compiled output rather than to runs, and
   still unbounded: entries written under a configuration or path that no longer exists can never be
   hit again.

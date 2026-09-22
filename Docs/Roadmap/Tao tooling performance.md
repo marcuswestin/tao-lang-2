@@ -259,13 +259,16 @@ of the eight compiled to one module tree byte for byte. Making those paths stabl
 a fixed directory per app that each compile overwrites — would have been unsound: a run could read
 a mixture while another compile wrote, and a published run root's manifest could come to name newer
 output than it was fingerprinted for, a stale green. What was built instead is a content-addressed
-store beside the run roots (`TestRunRoot.intern`): a module tree is stored once under the hash of
-its contents, an app under the hash of its own files plus that tree with `modules` a relative
-symlink to it, and a path in the store names immutable bytes. A run root now holds only its
-manifest. Counted the same way: a fresh run root with nothing changed adds **0** files to Jest's
-cache, and an edit to one WordFlower source file adds **120** — the one tree that changed and the
-three apps that link to it — where it added 650, and 2,135 before that. Jest resolves the symlink
-to its real path, so the shared tree is one cache entry however many apps link to it. The cache
+store beside the run roots (`TestRunRoot.intern`): everything the compiler writes beside `App.tsx`
+is stored once as a tree under the hash of its contents, an app under the hash of its `App.tsx`
+plus that tree with each entry of the tree a relative symlink beside `App.tsx`, and a path in the
+store names immutable bytes. A run root now holds only its manifest. Counted the same way: a fresh
+run root with nothing changed adds **0** files to Jest's cache, and an edit to one WordFlower source
+file adds **116** — the one tree that changed and the three apps that link to it — where it added
+650, and 2,135 before that. Jest resolves a symlink to its real path, so the shared tree is one
+cache entry however many apps link to it, and a module's import of `../../NavKinds`, a file the
+compiler writes beside `App.tsx`, resolves inside the tree; the first cut shared only `modules/` and
+broke exactly there, which is why the tree's boundary is `App.tsx` and nothing narrower. The cache
 itself never evicts anything and held 3.49 million files when counted; the ledger has the entry.
 
 ### 5.6 A Tao developer outside this repository has no cache at all

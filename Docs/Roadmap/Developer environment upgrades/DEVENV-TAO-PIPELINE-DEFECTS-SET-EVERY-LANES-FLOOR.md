@@ -19,7 +19,7 @@
   build (WordFlower check 1.22s, fix 0.80s); `tao test` writes its Jest entrypoints beside the run
   roots and stores each compiled app by the hash of its contents, so nothing Jest hashes into a
   cache key moves unless the output did — counted on WordFlower, a run after an edit re-transformed
-  all 2,135 modules it loads, then 650, and now 120, the one module tree the edit changed; an
+  all 2,135 modules it loads, then 650, and now 116, the one tree the edit changed; an
   unchanged run re-transforms nothing. Still open: validation runs once per entry over that entry's
   whole graph, and opening a workspace costs 0.10-0.15s in `Packages.createContext`.
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing

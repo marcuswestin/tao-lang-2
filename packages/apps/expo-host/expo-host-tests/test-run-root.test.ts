@@ -86,19 +86,25 @@ async function publishedRunRoot(runtimePackageRoot: string, fingerprint: string,
 }
 
 /**
- * compiledApp writes what the compiler leaves under a run root for one app — `App.tsx` beside a
- * `modules` tree — and interns it, returning the stable `App.tsx` path the store hands back.
+ * compiledApp writes what the compiler leaves under a run root for one app — `App.tsx` beside the
+ * files it reaches, by path relative to it — and interns it, returning the stable `App.tsx` path
+ * the store hands back.
  */
 async function compiledApp(
   runRoot: string,
-  contents: { app: string; modules: Record<string, string> },
+  contents: { app: string; files: Record<string, string> },
 ): Promise<string> {
   const generatedRoot = FS.resolvePath(`app-${Math.random().toString(36).slice(2)}/_gen_tao-app`, runRoot)
   await FS.writeText(FS.resolvePath('App.tsx', generatedRoot), contents.app)
-  for (const [name, code] of Object.entries(contents.modules)) {
-    await FS.writeText(FS.resolvePath(`modules/${name}`, generatedRoot), code)
+  for (const [relativePath, code] of Object.entries(contents.files)) {
+    await FS.writeText(FS.resolvePath(relativePath, generatedRoot), code)
   }
   return await TestRunRoot.intern(runRoot, generatedRoot)
+}
+
+/** treeOf is the store entry an interned app's `modules` link resolves into. */
+async function treeOf(appPath: string): Promise<string> {
+  return FS.dirname(await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath))))
 }
 
 /** manifestNaming gives a run root a manifest whose one check runs the app at `modulePath`. */
@@ -486,7 +492,7 @@ Describe('reusing a generated test run root', () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const first = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
       const second = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
-      const output = { app: 'import "./modules/a"', modules: { 'a.tsx': 'export const a = 1' } }
+      const output = { app: 'import "./modules/a"', files: { 'modules/a.tsx': 'export const a = 1' } }
 
       const firstPath = await compiledApp(first, output)
       const secondPath = await compiledApp(second, output)
@@ -506,8 +512,8 @@ Describe('reusing a generated test run root', () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
 
-      const first = await compiledApp(runRoot, { app: 'alone', modules: {} })
-      const again = await compiledApp(runRoot, { app: 'alone', modules: {} })
+      const first = await compiledApp(runRoot, { app: 'alone', files: {} })
+      const again = await compiledApp(runRoot, { app: 'alone', files: {} })
 
       Expect(again).toBe(first)
       Expect(await FS.readText(first)).toBe('alone')
@@ -516,39 +522,47 @@ Describe('reusing a generated test run root', () => {
     })
   })
 
-  // Five of WordFlower's eight test apps compile to one module tree byte for byte; only `App.tsx`
-  // differs. The tree is stored once and each app links to it, so an edit that changes the tree
-  // costs one re-transform of it rather than one per app.
-  Test('shares one module tree between apps that differ only in App.tsx', async () => {
+  // Five of WordFlower's eight test apps compile to the same files byte for byte except `App.tsx`.
+  // Everything but `App.tsx` is stored once as a tree and each app links to it entry by entry, so an
+  // edit that changes the tree costs one re-transform of it rather than one per app — and a module
+  // that imports `../../NavKinds`, as the compiled navigation module does, finds it in the tree,
+  // because Jest resolves the link to its real path and the file at the tree's top is real there.
+  Test('shares everything but App.tsx between apps, as one tree the app links into', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
-      const modules = { 'a.tsx': 'export const a = 1', 'nested/b.tsx': 'export const b = 2' }
+      const files = {
+        'modules/a.tsx': 'export const a = 1',
+        'modules/nested/b.tsx': "import '../../NavKinds'",
+        'NavKinds.ts': 'export const kinds = []',
+      }
 
-      const one = await compiledApp(runRoot, { app: 'one', modules })
-      const two = await compiledApp(runRoot, { app: 'two', modules })
+      const one = await compiledApp(runRoot, { app: 'one', files })
+      const two = await compiledApp(runRoot, { app: 'two', files })
 
       Expect(one).not.toBe(two)
-      const treeOf = async (appPath: string) => await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath)))
       Expect(await treeOf(one)).toBe(await treeOf(two))
       Expect(FS.dirname(await treeOf(one))).toBe(storeRoot(runtimePackageRoot))
-      Expect(await FS.isSymbolicLink(FS.resolvePath('modules', FS.dirname(one)))).toBe(true)
       Expect((await FS.listDir(storeRoot(runtimePackageRoot))).length).toBe(3)
+      for (const name of ['modules', 'NavKinds.ts']) {
+        Expect(await FS.isSymbolicLink(FS.resolvePath(name, FS.dirname(one)))).toBe(true)
+      }
+      // The path a module inside the tree resolves `../../NavKinds` against is the tree itself.
+      Expect(await FS.isFile(FS.resolvePath('NavKinds.ts', await treeOf(one)))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('modules/nested/b.tsx', await treeOf(one)))).toBe(true)
     })
   })
 
   Test('keeps the store entries a surviving run root names and prunes the rest once they are old', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const kept = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 9 * HOUR_MS)
-      const named = await compiledApp(kept, { app: 'named', modules: { 'a.tsx': 'shared' } })
+      const named = await compiledApp(kept, { app: 'named', files: { 'modules/a.tsx': 'shared' } })
       await manifestNaming(kept, named)
       const scratch = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
-      const oldOrphan = await compiledApp(scratch, { app: 'old orphan', modules: { 'a.tsx': 'orphaned' } })
-      const youngOrphan = await compiledApp(scratch, { app: 'young orphan', modules: { 'a.tsx': 'shared' } })
+      const oldOrphan = await compiledApp(scratch, { app: 'old orphan', files: { 'modules/a.tsx': 'orphaned' } })
+      const youngOrphan = await compiledApp(scratch, { app: 'young orphan', files: { 'modules/a.tsx': 'shared' } })
       await TestRunRoot.discard(scratch, { runtimePackageRoot })
       const entryOf = (appPath: string) => FS.basename(FS.dirname(appPath))
-      const treeOf = async (appPath: string) =>
-        FS.basename(await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath))))
-      const orphanedTree = await treeOf(oldOrphan)
+      const orphanedTree = FS.basename(await treeOf(oldOrphan))
       for (const entry of [entryOf(oldOrphan), orphanedTree]) {
         await FS.setModifiedTimeMs(FS.resolvePath(entry, storeRoot(runtimePackageRoot)), Date.now() - 2 * HOUR_MS)
       }
@@ -557,7 +571,7 @@ Describe('reusing a generated test run root', () => {
 
       const remaining = await FS.listDir(storeRoot(runtimePackageRoot))
       Expect(remaining).toContain(entryOf(named))
-      Expect(remaining).toContain(await treeOf(named))
+      Expect(remaining).toContain(FS.basename(await treeOf(named)))
       Expect(remaining).toContain(entryOf(youngOrphan))
       Expect(remaining).not.toContain(entryOf(oldOrphan))
       Expect(remaining).not.toContain(orphanedTree)
@@ -568,7 +582,7 @@ Describe('reusing a generated test run root', () => {
   Test('hands nothing back for a published run root whose compiled app is gone', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const runRoot = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 0)
-      const appPath = await compiledApp(runRoot, { app: 'gone', modules: { 'a.tsx': 'x' } })
+      const appPath = await compiledApp(runRoot, { app: 'gone', files: { 'modules/a.tsx': 'x' } })
       await manifestNaming(runRoot, appPath)
       Expect(await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot })).toBeDefined()
 

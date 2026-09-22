@@ -83,17 +83,21 @@ const RETAINED_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000
  * A compiled app used to live inside its run root, at a path that changed with every compile. Jest
  * keys its transform cache by path, so every compile re-transformed every compiled module — about
  * three hundred for WordFlower's eight test apps — although most of them had not changed and five of
- * the eight apps shared one module tree byte for byte. Here a module tree is stored once under the
- * hash of its contents, and an app is stored under the hash of its own files plus that tree, with
- * `modules` a relative symlink to the tree. A path in this store names immutable bytes: a compile
- * that produces the same output lands at the same path and is reused by Jest's cache, one that
- * produces different output lands at a different path, and a manifest that names a path can never
- * come to describe newer output than it was fingerprinted for.
+ * the eight apps shared everything but `App.tsx` byte for byte. Here everything the compiler wrote
+ * beside `App.tsx` — the module tree and the files at its side, such as `NavKinds.ts` — is stored
+ * once as a tree under the hash of its contents, and an app is stored under the hash of its
+ * `App.tsx` plus that tree, with each entry of the tree a relative symlink beside `App.tsx`. Jest
+ * resolves a symlink to its real path, so the tree's files are one cache entry however many apps
+ * link to them, and a relative import from inside the tree to a file at its top, which the compiler
+ * does emit, resolves inside the tree. A path in this store names immutable bytes: a compile that
+ * produces the same output lands at the same path and is reused by Jest's cache, one that produces
+ * different output lands at a different path, and a manifest that names a path can never come to
+ * describe newer output than it was fingerprinted for.
  */
 const COMPILED_STORE_DIRECTORY_NAME = '.compiled'
 
-/** MODULES_DIRECTORY_NAME is what the compiler names the module tree beside a generated `App.tsx`. */
-const MODULES_DIRECTORY_NAME = 'modules'
+/** APP_FILE_NAME is the one file of a compiled app that is its own: the entry the manifest names. */
+const APP_FILE_NAME = 'App.tsx'
 
 /** COMPILED_ENTRY_NAME matches the store's directory names, which are content hashes. */
 const COMPILED_ENTRY_NAME = /^[0-9a-f]{64}$/
@@ -166,12 +170,12 @@ async function create(category: string, options: TestRunRootOptions = {}): Promi
 /**
  * intern moves one compiled app out of its run root into the content-addressed store and returns
  * the stable path of its `App.tsx`. `generatedRoot` is the directory the compiler wrote, holding
- * `App.tsx` beside a `modules` tree, somewhere inside `runRoot`; afterwards it is gone and the
+ * `App.tsx` and whatever it reaches, somewhere inside `runRoot`; afterwards it is gone and the
  * caller's compiled-app directory under the run root is removed with it.
  *
- * The module tree is stored first, then the app around a symlink to it. Both land by rename, so a
- * reader sees a whole entry or none; an entry that already exists is kept and the newly compiled
- * copy discarded, since equal hashes are equal bytes.
+ * The tree is stored first, then the app around its symlinks. Both land by rename, so a reader sees
+ * a whole entry or none; an entry that already exists is kept and the newly compiled copy
+ * discarded, since equal hashes are equal bytes.
  */
 async function intern(runRoot: string, generatedRoot: string): Promise<string> {
   const runRootPath = FS.resolvePath(runRoot)
@@ -188,30 +192,37 @@ async function intern(runRoot: string, generatedRoot: string): Promise<string> {
   const storeRoot = FS.resolvePath(COMPILED_STORE_DIRECTORY_NAME, categoryRoot)
   await FS.mkdir(storeRoot)
 
-  // An app that reaches no module — one built of inline TSX alone, as test fixtures often are — has
+  const appFilePath = FS.resolvePath(APP_FILE_NAME, generatedPath)
+  Assert(await FS.isFile(appFilePath), 'a compiled app has its entry file', { generatedRoot })
+  const appIdentity = await FS.filesIdentity([[APP_FILE_NAME, appFilePath]])
+  const treeEntries = (await FS.listDir(generatedPath)).filter(name => name !== APP_FILE_NAME)
+
+  // An app that reaches nothing — one built of inline TSX alone, as test fixtures often are — has
   // no tree to share and is stored whole.
-  const modulesPath = FS.resolvePath(MODULES_DIRECTORY_NAME, generatedPath)
-  const treeHash = await FS.isDirectory(modulesPath)
-    ? await FS.filesIdentity((await walkedFiles(modulesPath)).map(path => [FS.relativePath(modulesPath, path), path]))
-    : undefined
-  if (treeHash !== undefined) {
-    await moveIntoStore(modulesPath, FS.resolvePath(treeHash, storeRoot))
+  if (treeEntries.length === 0) {
+    const appDir = FS.resolvePath(FS.contentIdentity([appIdentity, 'tree\nnone']), storeRoot)
+    await moveIntoStore(generatedPath, appDir)
+    await removeEmptyDirectoriesUpTo(FS.dirname(generatedPath), runRootPath)
+    return FS.resolvePath(APP_FILE_NAME, appDir)
   }
 
-  const ownFiles = (await FS.listDir(generatedPath)).filter(name => name !== MODULES_DIRECTORY_NAME)
-  const appHash = FS.contentIdentity([
-    await FS.filesIdentity(ownFiles.map(name => [name, FS.resolvePath(name, generatedPath)])),
-    `${MODULES_DIRECTORY_NAME}\n${treeHash ?? 'none'}`,
-  ])
-  if (treeHash !== undefined) {
+  // `App.tsx` steps aside into a directory of its own, so that what is left is exactly the tree.
+  const appStage = FS.resolvePath('app', FS.dirname(generatedPath))
+  await FS.move(appFilePath, FS.resolvePath(APP_FILE_NAME, appStage))
+  const treeHash = await FS.filesIdentity(
+    (await walkedFiles(generatedPath)).map(path => [FS.relativePath(generatedPath, path), path]),
+  )
+  await moveIntoStore(generatedPath, FS.resolvePath(treeHash, storeRoot))
+  for (const name of treeEntries) {
     // Relative, so the store survives a moved or renamed checkout.
-    await FS.symlink(`../${treeHash}`, modulesPath)
+    await FS.symlink(`../${treeHash}/${name}`, FS.resolvePath(name, appStage))
   }
-  await moveIntoStore(generatedPath, FS.resolvePath(appHash, storeRoot))
+  const appDir = FS.resolvePath(FS.contentIdentity([appIdentity, `tree\n${treeHash}`]), storeRoot)
+  await moveIntoStore(appStage, appDir)
 
-  // What the compiler was given as its package root is now empty of anything but that directory.
+  // What the compiler was given as its package root now holds nothing.
   await removeEmptyDirectoriesUpTo(FS.dirname(generatedPath), runRootPath)
-  return FS.resolvePath('App.tsx', FS.resolvePath(appHash, storeRoot))
+  return FS.resolvePath(APP_FILE_NAME, appDir)
 }
 
 /**
@@ -445,7 +456,7 @@ async function pruneGeneratedRoot(generatedRoot: string): Promise<void> {
 /**
  * pruneCompiledStore removes the store entries no surviving run root of the category names, once
  * nothing has produced them for the grace period either. An entry a surviving manifest names is
- * kept however old it is, and so is the module tree that entry's symlink points at; a surviving run
+ * kept however old it is, and so is the tree that entry's symlinks point into; a surviving run
  * root is exactly one that may still be replayed or read, so what it names must stay. An entry
  * nothing names is a passing run's output that was discarded rather than published, kept while runs
  * keep producing it so that Jest's transform cache keeps hitting it between one run and the next.
@@ -464,10 +475,15 @@ async function pruneCompiledStore(
         continue
       }
       referenced.add(FS.basename(appRoot))
-      const modulesPath = FS.resolvePath(MODULES_DIRECTORY_NAME, appRoot)
-      const target = await FS.realPath(modulesPath).catch(() => undefined)
-      if (target !== undefined && FS.dirname(target) === storeRoot) {
-        referenced.add(FS.basename(target))
+      for (const name of await listDirectory(appRoot)) {
+        const entry = FS.resolvePath(name, appRoot)
+        if (!await FS.isSymbolicLink(entry)) {
+          continue
+        }
+        const target = await FS.realPath(entry).catch(() => undefined)
+        if (target !== undefined && FS.pathIsWithin(target, storeRoot)) {
+          referenced.add(FS.relativePath(storeRoot, target).split('/')[0]!)
+        }
       }
     }
   }
