@@ -7,6 +7,8 @@
 # replaces an `export PATH=…` prefix on every command an agent runs — a prefix that also took the
 # command out of its allow rule and into permission review. Codex sets no such file and gets
 # setup alone. Hooks run outside the Bash sandbox, so the install setup performs is unrestricted.
+# A fresh detached worktree emits a useful warning from ./agent, but it is not a hook failure.
+# Show setup's output only when setup actually fails.
 emulate zsh
 set -e
 
@@ -14,7 +16,13 @@ SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h:h:h:h}"
 PROFILE_BIN="$REPO_ROOT/.devenv/profile/bin"
 
-"$REPO_ROOT/agent" setup
+if setup_output="$("$REPO_ROOT/agent" setup 2>&1)"; then
+  :
+else
+  setup_status=$?
+  print -r -- "$setup_output" >&2
+  exit "$setup_status"
+fi
 
 if [[ -n "${CLAUDE_ENV_FILE:-}" && -d "$PROFILE_BIN" ]]; then
   {
