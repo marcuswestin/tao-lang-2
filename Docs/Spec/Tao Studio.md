@@ -469,9 +469,14 @@ foreign component owns its native root and must render each accepted content cha
 Occurrence-level `render inject` remains a separate supported mechanism.
 
 The expo host copies the sidecar's transitive relative TypeScript, TSX, JavaScript, JSX, and JSON
-module graph while leaving installed packages external. Studio's code editor (`studio-src/code-editor/`)
-is the implemented reusable foreign component for CodeMirror 6: it accepts Tao-owned content and selection, publishes change/selection
-actions, and can attach the existing JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
+module graph while leaving installed packages external, copying one graph per sidecar file however
+many Tao files name that file, so the copies of a module that holds state stay a single instance.
+Studio's own client declares the foreign view in the app-local package `Apps/Tao Studio/@code-editor`,
+which names `studio-src/TaoStudioProductHost.tsx` — the same module the client's other views reach,
+so the editor subscribes to the host state the host publishes — and is backed by the CodeMirror
+component in `studio-src/code-editor/`, the implemented reusable foreign component for CodeMirror 6: it accepts
+Tao-owned content and selection, publishes change/selection actions, and can attach the existing
+JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
 the production editor slot. The legacy workbench editor remains as the hidden controller for file lifecycle,
 draft synchronization, tabs, diagnostics, and source actions while a typed ProductHost protocol mirrors its
 versioned ephemeral buffer and selection into Tao. The adopted named-slot declaration spelling is
@@ -588,7 +593,7 @@ relocated Node plus native-library closure rather than relying on the developer 
 
 ## Executable Tao client strangler
 
-`packages/ides/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
+`Apps/Tao Studio/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
 named ProductHost slots render the real StudioServer file hierarchy through recursive Tao `FileTree` and
 Studio-local `Disclosure` views, mount the stdlib Components and manifest-derived project View/Screen
 inventories, expose parser-owned DesignTokens, mount the code editor foreign view, and compose the

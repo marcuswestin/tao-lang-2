@@ -97,9 +97,12 @@ Describe('compiler: files and packages', () => {
 
         Expect(packageCode).toContain('_Scope.__tao_type_CustomStack = TR.Navigation.Declaration(')
         Expect(packageCode).toContain('_Scope.CustomStack = TR.Alias(TR.Navigation.Configure(')
+        // `LocalStack` inherits the same implementation file, so the app plans its copy first and
+        // the package imports that one copy rather than emitting a second of its own.
         Expect(packageCode).toContain(
-          "import { TestNavImpl as __tao_configuration_implementation_CustomStack__ } from './TestNavImpl'",
+          "import { TestNavImpl as __tao_configuration_implementation_CustomStack__ } from '../../../TestNavImpl'",
         )
+        Expect(files.filter(file => file.relativePath.endsWith('TestNavImpl.ts'))).toHaveLength(1)
         Expect(packageCode).toContain('_Scope.__tao_type_SnapshotStore = TR.Data.Declaration(')
         Expect(packageCode).toContain(
           'import { TestProviderImpl as __tao_configuration_implementation_SnapshotStore__ } '
@@ -727,6 +730,52 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('copies a sidecar named by two Tao files once', async () => {
+    await withTaoFiles(
+      'tao-compiler-shared-sidecar-',
+      {
+        'Project.tao': `project { id "compiler-shared-sidecar" name "Compiler shared sidecar" }`,
+        'Main.tao': `
+          use PanelSurface from @panel
+          app SharedApp { Name "Shared" view Home }
+          view Home() { render HostSurface() }
+          view HostSurface() from ./host/Host.tsx
+        `,
+        'packages/@panel/Panel.tao': `
+          public view PanelSurface() from ../../host/Host.tsx
+        `,
+        'host/Host.tsx': `
+          import React from 'react'
+          import { hostState } from './HostState'
+          export function HostSurface(): React.ReactElement {
+            return React.createElement('div', null, hostState())
+          }
+          export function PanelSurface(): React.ReactElement {
+            return React.createElement('div', null, hostState())
+          }
+        `,
+        'host/HostState.ts': `
+          let revision = 0
+          export function hostState(): number {
+            return ++revision
+          }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'SharedApp' })
+        const relativePaths = compiled.files.map(file => file.relativePath)
+        // Module-level state in the sidecar's graph is one instance at runtime only while the two
+        // Tao files that name it import one copy of it.
+        const copies = compiled.files.filter(file => file.sourcePath === paths['host/Host.tsx'])
+        const stateCopies = compiled.files.filter(file => file.sourcePath === paths['host/HostState.ts'])
+
+        Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+        Expect(copies).toHaveLength(1)
+        Expect(stateCopies).toHaveLength(1)
+      },
+    )
+  })
+
   Test('rejects graphs without an app declaration', async () => {
     await Expect(TestCompiler.compileCode(`
       view MainView() {
@@ -900,9 +949,12 @@ function requireCompiledFile(files: readonly CompiledFile[], sourcePath: string)
   return file!
 }
 
-/** sidecarCopy finds the one copy of a named TypeScript sidecar in a compiled output set. */
+/** sidecarCopy finds the one copy of a named TypeScript sidecar in a compiled output set,
+ * wherever it landed: a sidecar the entry file plans sits beside `App.tsx` at the generated root. */
 function sidecarCopy(files: readonly CompiledFile[], fileName: string): CompiledFile {
-  const file = files.find(compiledFile => compiledFile.relativePath.endsWith(`/${fileName}`))
+  const file = files.find(compiledFile =>
+    compiledFile.relativePath === fileName || compiledFile.relativePath.endsWith(`/${fileName}`)
+  )
   Expect(file).toBeDefined()
   return file!
 }

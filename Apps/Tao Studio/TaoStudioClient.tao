@@ -1,6 +1,7 @@
 // Tao Studio client strangler contract. Its mounted slice is a native Tao recursive Files panel over
 // the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
 // the host publishes versioned browser-local selection state into the external editor boundary.
+use StudioCodeEditor from @code-editor
 use SlotNav from @tao/nav
 use Checkbox, Col, Text, TextInput from @tao/ui
 
@@ -103,44 +104,44 @@ data DesignTokens / DesignToken {
 
 type StudioActionFailure is one of Conflict
 
-action SyncDraft(Path text, SourceVersion text, Content text) runs latest from ./TaoStudioServerActions.ts
+action SyncDraft(Path text, SourceVersion text, Content text) runs latest from ../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
 
-action ApplySourceAction(Envelope text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+action ApplySourceAction(Envelope text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
 
-action UndoSourceAction(Envelope text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+action UndoSourceAction(Envelope text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
 
-action CreateFile(Path text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+action CreateFile(Path text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action OpenFile(Path text) from ./TaoStudioProductHost.tsx
+action OpenFile(Path text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action OpenSource(Path text, SourceVersion text, Start number) from ./TaoStudioProductHost.tsx
+action OpenSource(Path text, SourceVersion text, Start number) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action InsertComponent(Name text) from ./TaoStudioProductHost.tsx
+action InsertComponent(Name text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action InsertProjectView(Name text) from ./TaoStudioProductHost.tsx
+action InsertProjectView(Name text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action OpenScreen(StableId text) from ./TaoStudioProductHost.tsx
+action OpenScreen(StableId text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action ApplyInspectorAction(Action text, Proposed boolean) from ./TaoStudioProductHost.tsx
+action ApplyInspectorAction(Action text, Proposed boolean) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action UndoInspectorAction() from ./TaoStudioProductHost.tsx
+action UndoInspectorAction() from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action ProductPanelAction(Name text, Payload text) from ./TaoStudioProductHost.tsx
+action ProductPanelAction(Name text, Payload text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action ApplyActiveCellEnvironment(CellId text, CellRevision number, Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ./TaoStudioProductHost.tsx
+action ApplyActiveCellEnvironment(CellId text, CellRevision number, Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 function StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) returns boolean {
-   return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ./StudioFolderExpansion.ts
+   return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }
 
 function StudioToggleFolder(CollapsedFolders list of text, FolderPath text) returns list of text {
-   return StudioToggleFolder(CollapsedFolders, FolderPath) from ./StudioFolderExpansion.ts
+   return StudioToggleFolder(CollapsedFolders, FolderPath) from ../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }
 
 view FilesPanel(CollapsedFolders list of text, ToggleFolder action(text)) {
@@ -157,9 +158,9 @@ view FilesPanel(CollapsedFolders list of text, ToggleFolder action(text)) {
       FileTree(FolderPath: "", CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
 }  }
 
-view FilesPanelSurface() accepts content from ./TaoStudioProductHost.tsx
+view FilesPanelSurface() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view FileCreateBar(Path text, Change action(text), Create action()) from ./TaoStudioProductHost.tsx
+view FileCreateBar(Path text, Change action(text), Create action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 // Disclosure stays Studio-local: Tao has no generic tree construct. The app owns its device-local
 // collapsed-path set, so recursive occurrences have explicit stable identity without ambient state.
@@ -174,7 +175,7 @@ view Disclosure(Label text, FolderPath text, CollapsedFolders list of text, Togg
          otherwise -> { }
 }  }  }
 
-view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ./TaoStudioProductHost.tsx
+view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view FileTree(FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
    query Files as Children {
@@ -244,19 +245,17 @@ view FileRow(File) {
    render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, Move: Move)
 }
 
-view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), Move action()) from ./TaoStudioProductHost.tsx
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), Move action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioEditorSurface() from ./TaoStudioProductHost.tsx
+view StudioPanelSurface(Title text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioPanelSurface(Title text) accepts content from ./TaoStudioProductHost.tsx
+view StudioPaletteRow(Label text, Detail text, Kind text, Name text, Insert action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioPaletteRow(Label text, Detail text, Kind text, Name text, Insert action()) from ./TaoStudioProductHost.tsx
+view StudioSourceRow(Label text, Detail text, Open action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioSourceRow(Label text, Detail text, Open action()) from ./TaoStudioProductHost.tsx
+view StudioDesignTokenRow(Label text, Detail text, Kind text, Open action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioDesignTokenRow(Label text, Detail text, Kind text, Open action()) from ./TaoStudioProductHost.tsx
-
-view StudioDesignTokenSection(Title text) accepts content from ./TaoStudioProductHost.tsx
+view StudioDesignTokenSection(Title text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view ComponentPaletteItem(Name text, Label text, Kind text) {
    action Insert() {
@@ -444,24 +443,24 @@ view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPres
          otherwise -> { StudioScenarioEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, ChangeWidthValid: ChangeWidthValid, ChangeHeightValid: ChangeHeightValid, ChangeLatencyValid: ChangeLatencyValid, ChangeErrorStatusValid: ChangeErrorStatusValid, Apply: ApplyEnvironment) }
 }  }  }
 
-view StudioContextPanelSurface() accepts content from ./TaoStudioProductHost.tsx
+view StudioContextPanelSurface() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ./TaoStudioProductHost.tsx
+view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 function StudioViewportPresetWidth(Preset text, Fallback number) returns number {
-   return StudioViewportPresetWidth(Preset, Fallback) from ./TaoStudioProductHost.tsx
+   return StudioViewportPresetWidth(Preset, Fallback) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioViewportPresetHeight(Preset text, Fallback number) returns number {
-   return StudioViewportPresetHeight(Preset, Fallback) from ./TaoStudioProductHost.tsx
+   return StudioViewportPresetHeight(Preset, Fallback) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioEnvironmentValid(WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, Network text, ErrorMessage text) returns boolean {
-   return StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage) from ./TaoStudioProductHost.tsx
+   return StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioNetworkShowsError(Network text) returns boolean {
-   return StudioNetworkShowsError(Network) from ./TaoStudioProductHost.tsx
+   return StudioNetworkShowsError(Network) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 view StudioScenarioEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), ChangeWidthValid action(boolean), ChangeHeightValid action(boolean), ChangeLatencyValid action(boolean), ChangeErrorStatusValid action(boolean), Apply action()) {
@@ -492,37 +491,37 @@ view StudioScenarioEnvironment(Preset text, Width number, Height number, Network
          StudioButton(Label: "Apply & remount", Press: Apply, Disabled: not StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage), Variant: "primary")
 }  }  }
 
-view StudioScenarioControlGroup(Title text) accepts content from ./TaoStudioProductHost.tsx
+view StudioScenarioControlGroup(Title text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioScenarioInspectorLabel(Label text) from ./TaoStudioProductHost.tsx
+view StudioScenarioInspectorLabel(Label text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ./TaoStudioProductHost.tsx
+view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 // The workbench controls. Tao owns every value, action, and enabled state; the host renders them on the
 // shared Studio sheet so the Tao-rendered panels and the shell share one vocabulary.
-view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ./TaoStudioProductHost.tsx
+view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx
+view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioChoice(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx
+view StudioChoice(Value text, Change action(text), Options list of text, Label text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioInspectorRow(Label text) accepts content from ./TaoStudioProductHost.tsx
+view StudioInspectorRow(Label text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioActions() accepts content from ./TaoStudioProductHost.tsx
+view StudioActions() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioSchemeNote(Requested text, Resolved text, Source text, Capability text) from ./TaoStudioProductHost.tsx
+view StudioSchemeNote(Requested text, Resolved text, Source text, Capability text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioScenarioIdentity() accepts content from ./TaoStudioProductHost.tsx
+view StudioScenarioIdentity() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioScenarioSource(Group text, Subject text, Cell text) from ./TaoStudioProductHost.tsx
+view StudioScenarioSource(Group text, Subject text, Cell text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioInspectorSection(Title text) accepts content from ./TaoStudioProductHost.tsx
+view StudioInspectorSection(Title text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioInspectorSummarySurface() accepts content from ./TaoStudioProductHost.tsx
+view StudioInspectorSummarySurface() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioInspectorField(Label text) accepts content from ./TaoStudioProductHost.tsx
+view StudioInspectorField(Label text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-view StudioInspectorUndoMarker() accepts content from ./TaoStudioProductHost.tsx
+view StudioInspectorUndoMarker() accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view StudioInspectorSummary(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) {
    render StudioInspectorSummarySurface() {
@@ -661,179 +660,179 @@ view StudioInspectorActionCommand(CurrentSourceVersion text, Inspection text, Se
 }
 
 function StudioInspectorReady(Inspection text, Selection text) returns boolean {
-   return StudioInspectorReady(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorReady(Inspection: Inspection, Selection: Selection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStatus(Inspection text, Selection text) returns text {
-   return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) returns list of text {
-   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) from ./TaoStudioProductHost.tsx
+   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) returns boolean {
-   return StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo) from ./TaoStudioProductHost.tsx
+   return StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutDrafts(Inspection text) returns text {
-   return StudioInspectorLayoutDrafts(Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutDrafts(Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutFieldIds() returns list of text {
-   return StudioInspectorLayoutFieldIds() from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutFieldIds() from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutFieldLabel(FieldId text) returns text {
-   return StudioInspectorLayoutFieldLabel(FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutFieldLabel(FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutFieldUsesPicker(FieldId text) returns boolean {
-   return StudioInspectorLayoutFieldUsesPicker(FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutFieldUsesPicker(FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutFieldOptions(FieldId text) returns list of text {
-   return StudioInspectorLayoutFieldOptions(FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutFieldOptions(FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorDraft(Drafts text, FieldId text) returns text {
-   return StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorUpdateDraft(Drafts text, FieldId text, Value text) returns text {
-   return StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value) from ./TaoStudioProductHost.tsx
+   return StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutActionIds() returns list of text {
-   return StudioInspectorLayoutActionIds() from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutActionIds() from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutActionLabel(ActionId text) returns text {
-   return StudioInspectorLayoutActionLabel(ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutActionLabel(ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text) returns boolean {
-   return StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorLayoutAction(Inspection text, Selection text, Drafts text, ActionId text) returns text {
-   return StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleDrafts(Inspection text) returns text {
-   return StudioInspectorStyleDrafts(Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleDrafts(Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleFieldIds() returns list of text {
-   return StudioInspectorStyleFieldIds() from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleFieldIds() from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleFieldLabel(FieldId text) returns text {
-   return StudioInspectorStyleFieldLabel(FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleFieldLabel(FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleFieldUsesPicker(FieldId text) returns boolean {
-   return StudioInspectorStyleFieldUsesPicker(FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleFieldUsesPicker(FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleFieldOptions(Inspection text, FieldId text) returns list of text {
-   return StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean) returns boolean {
-   return StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleAction(Inspection text, Selection text, Drafts text) returns text {
-   return StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStylePromotionIds(Inspection text) returns list of text {
-   return StudioInspectorStylePromotionIds(Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStylePromotionIds(Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStylePromotionLabel(Inspection text, PromotionId text) returns text {
-   return StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStylePromotionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text) returns boolean {
-   return StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStylePromotionAction(Inspection text, Selection text, PromotionId text) returns text {
-   return StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorStyleNotes(Inspection text) returns list of text {
-   return StudioInspectorStyleNotes(Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorStyleNotes(Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
-   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextAvailable(Inspection text, Selection text) returns boolean {
-   return StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextStatus(Inspection text, Selection text) returns text {
-   return StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextLiteral(Inspection text) returns text {
-   return StudioInspectorTextLiteral(Inspection: Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextLiteral(Inspection: Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorDraftsFor(Section text, Inspection text, Drafts text) returns text {
-   return StudioInspectorDraftsFor(Section: Section, Inspection: Inspection, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+   return StudioInspectorDraftsFor(Section: Section, Inspection: Inspection, Drafts: Drafts) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextDraft(Inspection text, Draft text) returns text {
-   return StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextUpdateDraft(Inspection text, Value text) returns text {
-   return StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorSetTextValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Draft text) returns boolean {
-   return StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft) from ./TaoStudioProductHost.tsx
+   return StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextCandidates(Inspection text) returns list of text {
-   return StudioInspectorTextCandidates(Inspection: Inspection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextCandidates(Inspection: Inspection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextBindingLabel(Inspection text, Expression text) returns text {
-   return StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean) returns boolean {
-   return StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy) from ./TaoStudioProductHost.tsx
+   return StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorSetTextAction(Selection text, Content text) returns text {
-   return StudioInspectorSetTextAction(Selection: Selection, Content: Content) from ./TaoStudioProductHost.tsx
+   return StudioInspectorSetTextAction(Selection: Selection, Content: Content) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorBindTextAction(Selection text, Expression text) returns text {
-   return StudioInspectorBindTextAction(Selection: Selection, Expression: Expression) from ./TaoStudioProductHost.tsx
+   return StudioInspectorBindTextAction(Selection: Selection, Expression: Expression) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorActionIds(Inspection text, Selection text) returns list of text {
-   return StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+   return StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorActionLabel(ActionId text) returns text {
-   return StudioInspectorActionLabel(ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorActionLabel(ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text) returns boolean {
-   return StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorAction(Selection text, ActionId text) returns text {
-   return StudioInspectorAction(Selection: Selection, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+   return StudioInspectorAction(Selection: Selection, ActionId: ActionId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 type StudioPanelAction is {
@@ -1161,10 +1160,10 @@ view StudioDataTableView(Table StudioDataPanelTable) {
       StudioDataRows(Rows: Table.Rows)
 }  }
 
-view StudioDataRows(Rows list of text) from ./TaoStudioProductHost.tsx
+view StudioDataRows(Rows list of text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 function StudioDataTableTitle(Datasource text, Entity text) returns text {
-   return StudioDataTableTitle(Datasource: Datasource, Entity: Entity) from ./TaoStudioProductHost.tsx
+   return StudioDataTableTitle(Datasource: Datasource, Entity: Entity) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 view StudioTestsPanelView(Tests StudioTestsPanel, Dispatch action(text, text)) {
@@ -1207,12 +1206,12 @@ view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
    render Col() {
       StudioPanelCommand(Label: "Clear logs", Command: Logs.ClearAction, Dispatch: Dispatch, Disabled: false)
       when Logs.Source {
-         empty -> { Text("Select a preview cell to inspect console history.") }
-         otherwise -> { Text("Active cell: { Logs.Source }") }
+         empty -> { Text("Device console history; select a preview cell for browser logs.") }
+         otherwise -> { Text("Active cell: { Logs.Source }; connected device lines are labeled below.") }
       }
       Text("Showing { Logs.RetainedCount } of { Logs.TotalCount } messages")
       when Logs.Rows {
-         empty -> { Text("No console messages from the active preview.") }
+         empty -> { Text("No console messages from the active preview or device.") }
          otherwise -> { loop Logs.Rows / Row {
             Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
          } }
@@ -1283,10 +1282,10 @@ view StudioSearchHitRow(Row StudioSearchPanelRow, Dispatch action(text, text)) {
    render StudioSearchHit(Label: Row.Label, Kind: Row.Kind, Detail: Row.Detail, Path: Row.Path, Line: Row.Line, Column: Row.Column, Open: Open)
 }
 
-view StudioSearchHit(Label text, Kind text, Detail text, Path text, Line number, Column number, Open action()) from ./TaoStudioProductHost.tsx
+view StudioSearchHit(Label text, Kind text, Detail text, Path text, Line number, Column number, Open action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 function StudioPanelSelected(Tab text, Panel text) returns boolean {
-   return StudioPanelSelected(Tab: Tab, Panel: Panel) from ./TaoStudioProductHost.tsx
+   return StudioPanelSelected(Tab: Tab, Panel: Panel) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text) {
@@ -1382,7 +1381,7 @@ view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable bo
                   otherwise -> { }
 }  }  }  }  }  }
 
-view StudioScenarioPanelSurface(Available boolean) accepts content from ./TaoStudioProductHost.tsx
+view StudioScenarioPanelSurface(Available boolean) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view StudioScenarioArgument(State text, Drafts text, ParameterId text, ChangeDrafts action(text)) {
    action Change(Value text) {
@@ -1396,130 +1395,130 @@ view StudioScenarioArgument(State text, Drafts text, ParameterId text, ChangeDra
 }  }  }
 
 function StudioScenarioAvailable(State text) returns boolean {
-   return StudioScenarioAvailable(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioAvailable(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentDrafts(State text) returns text {
-   return StudioScenarioArgumentDrafts(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentDrafts(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentIds(State text) returns list of text {
-   return StudioScenarioArgumentIds(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentIds(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioEntryLabel(State text) returns text {
-   return StudioScenarioEntryLabel(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioEntryLabel(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioGroupLabel(State text) returns text {
-   return StudioScenarioGroupLabel(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioGroupLabel(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioSubjectId(State text) returns text {
-   return StudioScenarioSubjectId(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioSubjectId(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioCellIdentity(State text) returns text {
-   return StudioScenarioCellIdentity(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioCellIdentity(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioCapturedLayers(State text) returns list of text {
-   return StudioScenarioCapturedLayers(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioCapturedLayers(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioFailureAvailable(State text) returns boolean {
-   return StudioScenarioFailureAvailable(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioFailureAvailable(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyActive(Recording text) returns boolean {
-   return StudioScenarioJourneyActive(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyActive(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyAvailable(Recording text) returns boolean {
-   return StudioScenarioJourneyAvailable(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyAvailable(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyBusy(Recording text) returns boolean {
-   return StudioScenarioJourneyBusy(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyBusy(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyCommand(Recording text) returns text {
-   return StudioScenarioJourneyCommand(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyCommand(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyCanRecord(State text, Recording text, Ready boolean) returns boolean {
-   return StudioScenarioJourneyCanRecord(State: State, Recording: Recording, Ready: Ready) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyCanRecord(State: State, Recording: Recording, Ready: Ready) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyCanSave(Recording text) returns boolean {
-   return StudioScenarioJourneyCanSave(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyCanSave(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyButtonLabel(Recording text) returns text {
-   return StudioScenarioJourneyButtonLabel(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyButtonLabel(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyLines(Recording text) returns list of text {
-   return StudioScenarioJourneyLines(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyLines(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyStatus(Recording text) returns text {
-   return StudioScenarioJourneyStatus(Recording) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyStatus(Recording) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioJourneyPayload(State text, CaptureSensitiveText boolean) returns text {
-   return StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: CaptureSensitiveText) from ./TaoStudioProductHost.tsx
+   return StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: CaptureSensitiveText) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioFixtureNameValid(FixtureName text) returns boolean {
-   return StudioScenarioFixtureNameValid(FixtureName) from ./TaoStudioProductHost.tsx
+   return StudioScenarioFixtureNameValid(FixtureName) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioIdentityPayload(State text) returns text {
-   return StudioScenarioIdentityPayload(State) from ./TaoStudioProductHost.tsx
+   return StudioScenarioIdentityPayload(State) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentDraft(Drafts text, ParameterId text) returns text {
-   return StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentUsesPicker(State text, ParameterId text) returns boolean {
-   return StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentLabel(State text, ParameterId text) returns text {
-   return StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentOptions(State text, ParameterId text) returns list of text {
-   return StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioUpdateArgumentDraft(Drafts text, ParameterId text, Value text) returns text {
-   return StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value) from ./TaoStudioProductHost.tsx
+   return StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentsValid(State text, Drafts text) returns boolean {
-   return StudioScenarioArgumentsValid(State: State, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentsValid(State: State, Drafts: Drafts) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentIssues(State text, Drafts text) returns text {
-   return StudioScenarioArgumentIssues(State: State, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentIssues(State: State, Drafts: Drafts) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioArgumentsPayload(State text, Drafts text, Appearance text) returns text {
-   return StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: Appearance) from ./TaoStudioProductHost.tsx
+   return StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: Appearance) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioFixturePayload(State text, FixtureName text) returns text {
-   return StudioScenarioFixturePayload(State: State, FixtureName: FixtureName) from ./TaoStudioProductHost.tsx
+   return StudioScenarioFixturePayload(State: State, FixtureName: FixtureName) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioScenarioReplayPayload(State text, Capture text) returns text {
-   return StudioScenarioReplayPayload(State: State, Capture: Capture) from ./TaoStudioProductHost.tsx
+   return StudioScenarioReplayPayload(State: State, Capture: Capture) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-view StudioFailureCaptureInput(Replay action(text)) from ./TaoStudioProductHost.tsx
+view StudioFailureCaptureInput(Replay action(text)) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
    render ProductHostBoundary() {
@@ -1533,8 +1532,8 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
       @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
-      @editor StudioEditorSurface()
+      @editor StudioCodeEditor()
       @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ./TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
