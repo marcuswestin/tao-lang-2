@@ -17,16 +17,16 @@
   3.2s to 0.8s). Fixed since: the scope provider remembers what each `use` statement resolves to; a
   workspace's entries are built once rather than once per entry, and `check` and `fix` read that
   build (WordFlower check 1.22s, fix 0.80s); `tao test` writes its Jest entrypoints beside the run
-  roots, so a compile no longer moves a directory Jest hashes into every cache key — counted on
-  WordFlower, a run after an edit re-transformed all 2,135 modules it loads and now re-transforms
-  650. Still open: those 650 are eight near-identical copies of the compiled app, one per test
-  variant, in paths that change with every compile; validation runs once per entry over that
-  entry's whole graph; and opening a workspace costs 0.10-0.15s in `Packages.createContext`.
+  roots and stores each compiled app by the hash of its contents, so nothing Jest hashes into a
+  cache key moves unless the output did — counted on WordFlower, a run after an edit re-transformed
+  all 2,135 modules it loads, then 650, and now 116, the one tree the edit changed; an
+  unchanged run re-transforms nothing. Still open: validation runs once per entry over that entry's
+  whole graph, and opening a workspace costs 0.10-0.15s in `Packages.createContext`.
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
-- **Proposed change:** The rest of Phase 0 of the linked report: compile what test variants share
-  once per run, and a version-keyed cache for a packaged CLI once one exists. `./agent bench` now
-  fails when a steady-state median passes its budget.
+- **Proposed change:** Phase 0 of the linked report is done bar its dropped item (a cache for a
+  packaged CLI, which Ro dropped until one exists). What remains here is past Phase 0: one
+  discovery per process in `Packages.createContext`, and validating a file once per batch.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
   with them.
 - **Acceptance:** Uncached `tao check "Apps/WordFlower/1 - Current"` under 1s and `tao fix` of the
