@@ -331,9 +331,7 @@ Product and codebase backlog, unordered.
     the Environment and scenario panel. It found and now guards a defect: a runtime update repeating
     the applied revisions rebuilt a cell's provider overlay without a remount, so one run in five
     mounted a cell with its heading and nothing else. With that fixed it passed twenty runs in twenty.
-  - Remaining: make that journey a `verify-full` gate. It is an explicit lane today
-    (`./agent studio-smoke <file>`), and registering it touches `VERIFY_FULL_GATES` in the `Justfile`,
-    `GateCatalog.ts`, and the three tests that pin the gate list.
+  - That journey is the `studio-network-simulation` gate in `verify-full`.
   - Two leads the diagnosis left open: `setMatrixManifest` emits `preview-manifest-changed` without
     checking the revision moved, which is the likely producer of the repeated update; and
     `resetFromRecovery()` reconfigures a datasource without a remount, which would strand live

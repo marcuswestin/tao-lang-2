@@ -20,6 +20,7 @@ export const JUST_COMMANDS = [
   // policy excludes. An agent has to be able to reach it by the name the failure prints.
   'fix-agent-config',
   'fmt',
+  'ide-extension-package',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
   // AGENTS.md rather than dropping to `just`.
