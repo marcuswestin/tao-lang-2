@@ -152,7 +152,7 @@ Describe('Studio device trust primitives', () => {
 
 Describe('Studio device protocol parsers', () => {
   const hello = {
-    device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26.6.1' },
+    device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26.6.1' },
     devicePublicKey: 'a'.repeat(43) + '=',
     ephemeralPublicKey: 'b'.repeat(43) + '=',
     metroPort: 8081,

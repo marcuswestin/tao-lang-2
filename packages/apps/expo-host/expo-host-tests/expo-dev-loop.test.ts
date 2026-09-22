@@ -506,7 +506,7 @@ en7: flags=8863
       result: {
         devices: [
           {
-            deviceProperties: { name: 'roPhone' },
+            deviceProperties: { name: 'example-phone' },
             hardwareProperties: { deviceType: 'iPhone', reality: 'physical', udid: 'UDID-1' },
             identifier: 'ID-1',
           },
@@ -520,19 +520,19 @@ en7: flags=8863
           },
         ],
       },
-    })).toEqual([{ id: 'UDID-1', name: 'roPhone' }])
+    })).toEqual([{ id: 'UDID-1', name: 'example-phone' }])
   })
 
   Test('keeps a physical device whose Xcode 26 report omits reality', () => {
     Expect(iosPhysicalDevicesFromDevicectl({
       result: {
         devices: [{
-          deviceProperties: { name: 'roPhone' },
+          deviceProperties: { name: 'example-phone' },
           hardwareProperties: { deviceType: 'iPhone', udid: '00008140-00163CD81481801C' },
           identifier: 'E4795A5B-C1B6-55BB-A855-1E96A66F15CF',
         }],
       },
-    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'roPhone' }])
+    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'example-phone' }])
   })
 
   Test('builds an Expo Go URL for the detected host', () => {
@@ -540,10 +540,10 @@ en7: flags=8863
   })
 
   Test('rejects App Store Expo Go on a generic physical iPhone for Expo 57', () => {
-    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'roPhone' })
+    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'example-phone' })
 
     Expect(message).toBe(
-      'Cannot open this Tao app on roPhone: App Store Expo Go does not support Expo SDK 57. '
+      'Cannot open this Tao app on example-phone: App Store Expo Go does not support Expo SDK 57. '
         + 'Use Android Expo Go or an iOS Simulator; physical iOS needs a maintained Tao development client.',
     )
   })
@@ -565,7 +565,7 @@ en7: flags=8863
             lanLookups += 1
             return '192.168.1.20'
           },
-          listIosDevices: async () => [{ id: 'PHONE-1', name: 'roPhone' }],
+          listIosDevices: async () => [{ id: 'PHONE-1', name: 'example-phone' }],
         },
       )
     )
