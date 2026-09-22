@@ -2,7 +2,7 @@
 
 Implement freehand UI sketching in Tao Studio, in the Tao repository.
 
-This is an implementation project with a short documentation phase in front of it. Ro has already
+This is an implementation project with a short documentation phase in front of it. The Developer has already
 ruled on every open question in the product draft; your first job is to record those rulings as a
 design record, reconcile the product document with them, and write the implementation plan. Your
 second job is to execute that plan's first slices as tested vertical slices, in the mandated order,
@@ -30,7 +30,7 @@ one definition; and does a good part of this on an iPad with a pencil. Everythin
 source. Everything that has not flowed yet is Studio data. The draft's user stories are the
 behavior to reach; the draft's proposals are superseded wherever the rulings below say otherwise.
 
-## Settled rulings (Ro, 2026-09-02)
+## Settled rulings (the Developer, 2026-09-02)
 
 Do not reopen these. Record them verbatim in the design record as FS-D1 to FS-D20 and cite them
 from the plan.
@@ -61,7 +61,7 @@ from the plan.
 5. **FS-D5 — Rendering the rectangles.** The language direction is a positioned container, working
    name `Canvas`, whose direct children carry an offset clause, working name `at x y`, with Studio's
    own Tao client as the forcing feature. It is decided through the tranche process; its spelling is
-   settled with Ro in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
+   settled with the Developer in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
    as a TypeScript overlay in the matrix view. Tao rendering must land before the companion slice.
 6. **FS-D6 — What travels with a view.** Declarations that relate only to the view, its `scenarios`
    group above all, live in the view's file. Shared declarations, the example fixture `Sketches`
@@ -159,7 +159,7 @@ slice needs it: scenario spellings for text scale, loading, and empty as world c
      app section of `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`
    - `packages/source-actions/source-actions-src/studio-actions.ts`,
      `packages/studio/studio-src/StudioInspector.ts`, `packages/studio/README.md`
-2. Inspect Git status, `git worktree list`, and the branch. Other agents and Ro work concurrently in
+2. Inspect Git status, `git worktree list`, and the branch. Other agents and the Developer work concurrently in
    other worktrees; preserve changes you did not make.
 3. Run `./agent verify` before any edit to confirm the green baseline.
 4. Use the repository skills: `git-workflow`, `studio-hybrid-client`, `runtime-codegen`,
@@ -173,7 +173,7 @@ slice needs it: scenario spellings for text scale, loading, and empty as world c
    written in Tao, absorbed into `1 - Current`, with `Decisions.md`, `Docs/Spec/`, and `Coverage.md`
    reconciled in the same change. Studio's own client is a forcing app and forces the positioned
    container; WordFlower still absorbs every new spelling in the same tranche.
-7. Anything a tranche's "Open before starting" list names is settled with Ro in `2 - Next` before
+7. Anything a tranche's "Open before starting" list names is settled with the Developer in `2 - Next` before
    the tranche begins. Do not guess spellings; do not reopen the rulings above.
 8. Run `./agent verify` before every commit. Keep a developer-environment ledger and carry every
    subagent's entries.
@@ -248,14 +248,14 @@ add the project under "Toward v1" pointing at the plan.
 
 Implement L1, the `@` tooling, slice 1, and slice 2, in that order, each as a tested vertical slice
 committed on its own with `./agent verify` green, then continue down FS-D20's order as far as budget
-and decision latency allow. A slice whose "Open before starting" list is unsettled waits for Ro; do
+and decision latency allow. A slice whose "Open before starting" list is unsettled waits for the Developer; do
 not skip ahead past a dependency. Stop cleanly: every commit leaves Current green and absorbed for
 what landed, and the tranche status honestly open where a decision is pending.
 
 ## Handoff
 
 End with a report that reconciles against this prompt: what landed per deliverable and slice, what
-is open and why, the decisions still waiting on Ro with your recommendation for each, the
+is open and why, the decisions still waiting on the Developer with your recommendation for each, the
 documents updated, and a `Developer environment` summary that separates issues fixed, remaining
 repository improvement suggestions, and external or policy limitations, with exact user steps for
 anything you could not complete. Say plainly when nothing was found.

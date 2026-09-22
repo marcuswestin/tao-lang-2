@@ -121,7 +121,7 @@ Describe('validator: use and imports', () => {
       {
         'Main.tao': importingApp(
           'use Name from ./Types.tao',
-          `let DisplayName = Name "Ro"
+          `let DisplayName = Name "the Developer"
            render Text(DisplayName)`,
           stubView('Text', 'Value text'),
         ),

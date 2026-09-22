@@ -12,5 +12,5 @@ merge only proves the text did not collide; it says nothing about whether the wo
    - Does anything already do, undo, or contradict part of this task?
 3. Three "no"s end it. This is a minute of reading subjects and paths, not a review of `main`.
 4. On a "yes", read that commit's diff and adapt: rebase the plan on the new helper, drop work that
-   landed elsewhere, move a fence, renumber a ledger entry, or put a changed decision to Ro.
-5. Say what was found in one line of the next report to Ro, including "nothing relevant".
+   landed elsewhere, move a fence, renumber a ledger entry, or put a changed decision to the Developer.
+5. Say what was found in one line of the next report to the Developer, including "nothing relevant".

@@ -44,7 +44,7 @@ document owns the _program-level_ process only; the tranche mechanics — the fo
   Start()/Running`, duration literals like `10.min`).
 - **Automations are not MVP.** Provider-owned scheduled work, notifications, and interruption
   levels wait for the app expansion (Skillet's timers and reminders force them honestly).
-- **Authority cluster deferred (Ro, 2026-09-22).** `access` rules, named transactions, invites,
+- **Authority cluster deferred (the Developer, 2026-09-22).** `access` rules, named transactions, invites,
   `publish`, and presence wait for the app expansion. MVP WordFlower keeps its single-user writes;
   collaborative workspaces do not enter MVP. `Coverage.md` assigns the deferred rows Post-MVP.
 

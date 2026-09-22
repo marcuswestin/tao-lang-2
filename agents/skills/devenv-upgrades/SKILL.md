@@ -1,7 +1,7 @@
 ---
 name: devenv-upgrades
 description: >-
-  Choose which reported developer-environment issues to fix next, work them, and archive what was addressed. Use when Ro asks to work on devenv issues, fix the developer environment, clear the DEVENV backlog, pick the next DEVENV entries, or archive the addressed ones.
+  Choose which reported developer-environment issues to fix next, work them, and archive what was addressed. Use when the Developer asks to work on devenv issues, fix the developer environment, clear the DEVENV backlog, pick the next DEVENV entries, or archive the addressed ones.
 ---
 
 # Developer Environment Upgrades
@@ -43,7 +43,7 @@ entry. In short: name a new entry after its own title, never a number, and recor
   `references/parallel-implementation.md`. `packages/cli/dev-cli/` and `packages/cli/agent-cli/`
   internals, the `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills
   rarely collide; entries touching the same file are one group.
-- Propose a batch of more than two entries to Ro before implementing — the name, the one-line cost,
+- Propose a batch of more than two entries to the Developer before implementing — the name, the one-line cost,
   and why it is in this batch.
 
 ## Working an entry

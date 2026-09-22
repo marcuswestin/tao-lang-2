@@ -1,6 +1,6 @@
 # Proposed Decisions amendment - Foreign views
 
-Status: adopted by Ro on 2026-08-31 and incorporated into
+Status: adopted by the Developer on 2026-08-31 and incorporated into
 `Docs/Roadmap/Tao Revolution/Decisions.md` §15. This file retains the Studio-specific implementation record.
 
 ## Typed foreign views

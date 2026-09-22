@@ -1,6 +1,6 @@
 # Merge list - live explorations
 
-For Ro's sign-off, per `Plan - Repository simplification 2.md` 4.f: groups of live `Docs/Roadmap/`
+For the Developer's sign-off, per `Plan - Repository simplification 2.md` 4.f: groups of live `Docs/Roadmap/`
 documents that overlap in topic. No merge has been done; this only proposes targets and what would
 be archived once a merge lands. Line counts are current-file `wc -l`.
 
@@ -19,14 +19,14 @@ be archived once a merge lands. Line counts are current-file `wc -l`.
 - **Studio AI**: `Tao Studio AI/Exploration - Semantic agent proof of concept.md` (784) and
   `Plan - Studio agent chat.md` (495) are both explicitly "proof-of-concept, not a production
   design," on the same semantic-agent idea. **Merge**: fold durable findings from the Exploration
-  into the Plan; **archive** the Exploration once absorbed (or keep as cited backing research — Ro's
+  into the Plan; **archive** the Exploration once absorbed (or keep as cited backing research — the Developer's
   call).
 - **Companion app**: `Plan - Tao Studio companion app.md` (529), `Prompt - Implement Slice 1.md`
   (228), `Slice 1 - Device protocol and trust.md` (407, "Barrier 0 contract for" the Prompt), and
   `Slice 2 - Everyday development canvas.md` (380, "in progress"). Lower confidence: each serves a
   distinct role (product plan, execution prompt, per-slice spec) rather than duplicating content.
   **Candidate**: once Slice 1 fully lands, fold `Prompt - Implement Slice 1.md` into
-  `Slice 1 - Device protocol and trust.md` and archive the Prompt, unless Ro wants the Prompt kept as
+  `Slice 1 - Device protocol and trust.md` and archive the Prompt, unless the Developer wants the Prompt kept as
   a reusable per-slice template.
 - **Proposed amendment**: `Proposed Decisions amendment - Action failures and transactions.md` (119,
   partially adopted) overlaps `Decision memo - Tao Studio v2.md`. Leave separate until the partial
@@ -75,4 +75,4 @@ slices; `Open questions...md` (197) and `Follow-ups...md` (58) are the live trac
 and `Research...md` (48) overlap directly; `Design tooling and rollout.md` (304) may duplicate the
 Plan's Step 5+ content — needs a read to confirm. **Merge**: fold `Research...md` into `Plan...md`.
 Worth checking together with `Component kits/Overview - Component kits.md` (186, same design-system
-territory) for a cross-folder overlap Ro may want in this group too.
+territory) for a cross-folder overlap the Developer may want in this group too.

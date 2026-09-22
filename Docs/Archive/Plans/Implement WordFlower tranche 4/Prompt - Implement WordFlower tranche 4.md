@@ -57,7 +57,7 @@ old roadmap fact still matches the code.
 You are expected to resolve ordinary implementation details independently: slice order, AST shapes,
 internal APIs, diagnostics wording, test placement, migration mechanics, and local refactors.
 
-Raise a question for Ro only when evidence reveals a genuine language-semantic contradiction or a
+Raise a question for the Developer only when evidence reveals a genuine language-semantic contradiction or a
 choice that would materially change the authored Tao model. Before asking, inspect Next, the active
 specifications, validators, and existing runtime seams; present the smallest concrete alternatives
 and a recommendation. Do not stop for routine uncertainty.

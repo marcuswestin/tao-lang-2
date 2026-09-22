@@ -1,6 +1,6 @@
-# Ro MVP Roadmap
+# Developer MVP Roadmap
 
-The judgments only Ro can make before Tao goes out to a small number of outside developers. The
+The judgments only the Developer can make before Tao goes out to a small number of outside developers. The
 agent-executable half is `Agent MVP Roadmap.md` beside this file, and its entries name the decision
 here they wait on.
 
@@ -51,7 +51,7 @@ their own product.
 ### R2 — What becomes public
 
 Publishing this repository as it stands also publishes the agent instruction set, the subagent and
-skill definitions, `Roadmap.md` including the `Ro STACK` section, machine-specific files, and a
+skill definitions, `Roadmap.md` including its personal working list, machine-specific files, and a
 committed `secrets/secrets.jsonc`.
 
 - Blocks: `A3` (what the README addresses), and the disposition of `A10`'s audit findings.

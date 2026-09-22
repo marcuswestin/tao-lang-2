@@ -3,14 +3,14 @@
 Implement the remaining Tao Studio v2 product work in the Tao repository.
 
 This is an implementation project, not a planning-only exercise. Inspect the live repository and
-implementation ledgers first, settle the explicitly unresolved language decisions with Ro, then
+implementation ledgers first, settle the explicitly unresolved language decisions with the Developer, then
 implement the remaining work as tested vertical slices.
 
 This prompt is the project's requirement authority. Commit it to
 `Docs/Roadmap/Tao Studio v2/Prompt - Complete Tao Studio v2.md` in your first commit so the final
 handoff can reconcile against it. Where this prompt and older repository documents disagree, this
 prompt reflects the newer intent; where it and `Docs/Roadmap/Tao Revolution/Decisions.md` disagree,
-Decisions remains the authoritative decided language until Ro amends it.
+Decisions remains the authoritative decided language until the Developer amends it.
 
 Do not redo landed Studio foundations. Preserve the existing architecture:
 
@@ -28,7 +28,7 @@ Do not redo landed Studio foundations. Preserve the existing architecture:
 
 ## Settled project rulings
 
-Ro has already ruled on the following; do not reopen them, and record them for adoption in Slice 13:
+The Developer has already ruled on the following; do not reopen them, and record them for adoption in Slice 13:
 
 1. **Studio is a forcing app.** `TaoStudioClient.tao` is a real product and may force language
    capabilities, amending the rule that only the four WordFlower versions force capabilities.
@@ -74,7 +74,7 @@ Ro has already ruled on the following; do not reopen them, and record them for a
 5. Work on a named `feat/<name>` branch.
 6. Preserve unrelated and concurrent changes.
 7. Never edit `Docs/Archive/`.
-8. Do not edit authoritative Tao Revolution decisions without Ro’s approval.
+8. Do not edit authoritative Tao Revolution decisions without the Developer’s approval.
 9. Language changes must proceed through the normal vertical slice:
    - decision/specification;
    - grammar;
@@ -87,7 +87,7 @@ Ro has already ruled on the following; do not reopen them, and record them for a
    - forcing-app migration.
 10. **Tranche mechanics.** WordFlower Current and Next are currently both `absorbed` and
     byte-identical; Next holds no pending Studio work. Cut a new tranche: author the tranche header
-    and the decided syntax in `2 - Next` first (after Ro settles it), then absorb into `1 - Current`
+    and the decided syntax in `2 - Next` first (after the Developer settles it), then absorb into `1 - Current`
     slice by slice per `Apps/WordFlower/README.md`. Current never leads Next. Studio-forced
     capabilities follow ruling 1 above.
 11. Run focused tests during every slice and `./agent verify` before commits.
@@ -113,22 +113,22 @@ remaining gates in:
 For every remaining item, classify it as:
 
 - implementation-ready;
-- requires a Ro language/product decision;
+- requires a language/product decision by the Developer;
 - validation-only;
 - explicitly deferred and out of scope.
 
 Keep the matrix in task context or ignored `.artifacts/` scratch state; do not add a tracked issue
 document.
 
-**Deliver every Ro decision request as one consolidated memo in your first working session**, not
+**Deliver every the Developer decision request as one consolidated memo in your first working session**, not
 trickled per slice. The memo must cover at least: view-instance key derivation and the remaining
 Slice 2 semantics; fixture-through-action result/handle semantics; the Scheme scenario-pin versus
 `Appearance`-preference precedence and capture/replay questions; and adoption of the proposed
-amendment wording. Then run the implementation-ready slices while Ro deliberates.
+amendment wording. Then run the implementation-ready slices while the Developer deliberates.
 
 ## Decisions that must not be invented
 
-The following areas require Ro’s decision before implementation (beyond the rulings above):
+The following areas require the Developer’s decision before implementation (beyond the rulings above):
 
 1. fixture-through-action result and handle semantics;
 2. view-instance persisted-state key derivation, schema/versioning, and the remaining Slice 2
@@ -477,7 +477,7 @@ Add behavior tests for each newly supported property family and live Studio test
 
 # Slice 7 — Fixture-through-action execution
 
-After Ro settles the result/handle semantics, implement fixture setup through actions.
+After the Developer settles the result/handle semantics, implement fixture setup through actions.
 
 The `through Action(...)` grammar, manifest plan, and validation already exist; the runtime and
 fixture generation currently **fail closed** on any `through` clause rather than bypassing the
@@ -595,7 +595,7 @@ Requirements:
 - Scheme must participate in cell environment identity and replay.
 - No browser-only CSS simulation.
 - Only `Scheme` is in scope; do not generalize to the other environment values.
-- Native parity may lag behind an honest, explicit capability boundary approved by Ro.
+- Native parity may lag behind an honest, explicit capability boundary approved by the Developer.
 - Preserve the existing inert UI until the real runtime path is complete.
 
 Add tests for:
@@ -680,7 +680,7 @@ run.
 
 # Slice 13 — Adopt approved decisions and close documentation
 
-After Ro approves the decision wording:
+After the Developer approves the decision wording:
 
 - update `Docs/Roadmap/Tao Revolution/Decisions.md`, including the Studio-as-forcing-app amendment
   from ruling 1;
@@ -701,7 +701,7 @@ Do not rewrite historical ledgers to imply validation that did not occur.
 
 # Explicitly out of scope
 
-Do not implement these deferred items unless Ro separately expands scope:
+Do not implement these deferred items unless the Developer separately expands scope:
 
 - canvas zoom or freeform panning;
 - component thumbnails;
@@ -775,7 +775,7 @@ Report:
 
 - branch and commits;
 - which requirements of this prompt are now complete, blocked, or deferred;
-- which decisions Ro approved;
+- which decisions the Developer approved;
 - which items remain externally blocked;
 - live browser behavior exercised;
 - native behavior actually observed;

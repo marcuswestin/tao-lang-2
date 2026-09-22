@@ -1,7 +1,7 @@
 # Overview - HTTP datasource
 
 Working draft. The protocol shape, availability cases, adapter contract, and relation handling below
-were settled with Ro in conversation while designing the HNReader app; spellings marked _proposed_
+were settled with the Developer in conversation while designing the HNReader app; spellings marked _proposed_
 are still mine to lose. HNReader (`Apps/HNReader`) is the forcing app.
 
 ## The premise (settled)

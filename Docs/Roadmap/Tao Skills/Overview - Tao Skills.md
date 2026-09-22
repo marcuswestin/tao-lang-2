@@ -30,7 +30,7 @@ Each entry: purpose, then what the body must contain. Derive content from `Docs/
 5. `tao-layout`
    - The view family, layout properties (alignment, distribution, sizing, spacing, wrapping, scroll, overflow, layers), text layout, adaptive panes. `references/flexbox-mapping.md`: table from each Tao sizing/spacing/alignment keyword to the React Native style it resolves to, derived from `packages/apps/runtime/TaoRuntime-src/layout-engine/LayoutResolve.ts` and `LayoutMerge.ts`, so an agent that knows Flexbox can predict rendering.
 6. `tao-design`
-   - `Design.tao`: what the implemented first slice supports (tokens, colors, how a design is applied to an app and to views), how to restyle without touching layout, and what is explicitly not yet supported so agents do not invent syntax. Source: `Tao Design - WIP.md` §Implemented First Slice and `Apps/Starters/*/Design.tao`.
+   - `Design.tao`: what the implemented first slice supports (tokens, colors, how a design is applied to an app and to views), how to restyle without touching layout, and what is explicitly not yet supported so agents do not invent syntax. Source: `Tao Design.md` §Implemented First Slice and `Apps/Starters/*/Design.tao`.
 7. `tao-data`
    - Entities and field types, `Datasource Local` vs `remote none`, queries and relations as implemented, fixtures in `Scenarios.tao`, and the sidecar-TypeScript adapter pattern (`Apps/HNReader/HNAdapter.ts`, `StubAdapter.ts`) for data the language cannot yet express.
 8. `tao-navigation-actions`

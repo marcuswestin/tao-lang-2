@@ -12,7 +12,7 @@ relocatable CLI remain in this standalone program. The decided command behavior 
 
 The plan for `A2 — A standalone tao executable` in `Agent MVP Roadmap.md`. It writes no code; it
 records what the toolchain actually reads at runtime, what was measured rather than assumed, the
-recommended shape, what is still uncertain, the slice sequence, and Ro's release decisions. The
+recommended shape, what is still uncertain, the slice sequence, and the Developer's release decisions. The
 five-target engineering survey below is broader than the decided first release: **macOS arm64, via
 an install script only**. Later targets and channels remain possible, not committed release scope.
 
@@ -392,7 +392,7 @@ for signing and notarization and a Windows runner for Authenticode, but not for 
       grammar/tao-lang.tmLanguage.json
       apple/tao-foundation-models-server   (macOS payload only, later)
     host/node_modules/             resolved once per version, shared by every project
-    node/                          managed Node for `tao test`, if Ro takes that option
+    node/                          managed Node for `tao test`, if the Developer takes that option
   cache/                           bun install cache, Expo home, downloads
   projects/<project-id>/           per-project generated app and Metro caches
 ```
@@ -455,7 +455,7 @@ first public release; Homebrew, npm, and other platforms are later possibilities
   architecture, downloads `tao-<version>-<target>`, verifies a published SHA-256, installs the shim
   into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin would be needed for Windows later.
 - **Homebrew tap.** `taolang/homebrew-tao` with a formula that installs the prebuilt binary per
-  platform. Ro creates the tap repository.
+  platform. The Developer creates the tap repository.
 - **npm wrapper.** `tao` with `optionalDependencies` on `@tao-lang/cli-darwin-arm64`,
   `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-win32-x64`, each containing only its binary, plus a
   `bin/tao.js` that execs the resolved one. This is the esbuild/swc pattern and is the cheapest
@@ -578,7 +578,7 @@ overlap with `A3` and `A8`.
 
 ## First-public-release decisions
 
-Ro settled the plan's eight questions on 2026-09-22. `Ro MVP Roadmap.md` owns the product decisions;
+The Developer settled the plan's eight questions on 2026-09-22. `Developer MVP Roadmap.md` owns the product decisions;
 this list makes their effect on the implementation sequence explicit.
 
 1. Ship `tao test` with a managed Node; consider a Node-free harness after the first release.

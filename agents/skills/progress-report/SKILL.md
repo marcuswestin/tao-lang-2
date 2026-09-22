@@ -1,16 +1,16 @@
 ---
 name: progress-report
 description: >-
-  Plan and report progress on multi-step work. Use when Ro asks for a progress report, status
+  Plan and report progress on multi-step work. Use when the Developer asks for a progress report, status
   update, percentage done or remaining, ETA, or how much longer — and whenever starting a
   multi-step task, to record the step weights a later report reads.
 ---
 
 # Progress Report
 
-Ro asks this to decide whether to wait, redirect, or walk away, so the first answer has to arrive
+The Developer asks this to decide whether to wait, redirect, or walk away, so the first answer has to arrive
 immediately and be roughly right. Accuracy comes second, and arrives second. Reporting never pauses
-the work: resume the task in the same turn unless Ro says to stop.
+the work: resume the task in the same turn unless the Developer says to stop.
 
 ## The ledger
 
@@ -38,18 +38,18 @@ Basis: 1-3 are code and tests; 4 is one landing, ~6 min of machine time, measure
 ## Write the plan before the first step
 
 When a task runs to more than about three steps, write the ledger before starting rather than when
-Ro first asks. Weights are rough on purpose: multiples of five, summing to 100, decided in under a
+the Developer first asks. Weights are rough on purpose: multiples of five, summing to 100, decided in under a
 minute.
 
 - **Weight by expected wall clock**, not by step count, difficulty, or how interesting the step is.
-  Ro is asking how long, not how much.
+  The Developer is asking how long, not how much.
 - **Look machine time up rather than guessing it.** A lane, a landing, a host gate are measured
   quantities: `.artifacts/timings/durations.json` holds per-node EMAs and
   `.artifacts/logs/<lane>/latest/summary.json` holds the last real run.
 - Give the unknown step a weight and mark it unknown rather than leaving it out. A plan that omits
   the risky part reports 90% and then runs for another hour.
 
-## When Ro asks
+## When the Developer asks
 
 Three phases, in this order, in one turn.
 
@@ -72,18 +72,18 @@ Three phases, in this order, in one turn.
   so: a commit, a passing gate, a file on disk. Work reported complete that a real run then
   contradicted is this repository's most expensive recurring error, and a progress report is where
   it compounds fastest.
-- **Separate machine time from your own.** "About 20 minutes, 12 of it a landing" tells Ro they can
+- **Separate machine time from your own.** "About 20 minutes, 12 of it a landing" tells the Developer they can
   leave the desk. "About 20 minutes" does not.
 - **Widen to a range when the remaining work is unlike the finished work.** Pace measured over four
   small edits does not predict a verification lane, a host gate, or a debugging step with no bottom
   to it. Name the assumption the range rests on in a clause, not a paragraph.
-- Percentages are of the effort remaining to the stopping point Ro asked about, usually the landing.
+- Percentages are of the effort remaining to the stopping point the Developer asked about, usually the landing.
   Name the stopping point when it is anything else.
 
 ## Edge cases
 
-- **No ledger when Ro asks.** Answer from context immediately, then write the ledger retroactively.
-  Never make Ro wait while you build one.
+- **No ledger when the Developer asks.** Answer from context immediately, then write the ledger retroactively.
+  Never make the Developer wait while you build one.
 - **No multi-step work running.** Say so in a line. Do not invent a plan to have something to report.
 - **Scope changed underneath you.** Re-weight in phase 2 and let the divergence rule decide whether
   it is worth saying. A plan that silently grows is how 80% stays 80% for an hour.

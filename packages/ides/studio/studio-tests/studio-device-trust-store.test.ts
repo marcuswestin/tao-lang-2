@@ -18,10 +18,10 @@ Describe('Studio device trust store', () => {
       Expect(await FS.isFile(FS.resolvePath('trusted-devices.json', root))).toBe(false)
 
       const device = StudioDeviceTrust.generateIdentity()
-      await store.trust(record(device.publicKey, 'roPhone'))
+      await store.trust(record(device.publicKey, 'example-phone'))
       Expect(store.isTrusted(device.publicKey)).toBe(true)
       Expect(store.trusted()).toEqual([{
-        device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' },
+        device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' },
         devicePublicKey: device.publicKey,
         fingerprint: StudioDeviceTrust.fingerprint(device.publicKey),
         pairedAt: '2026-09-02T10:00:00.000Z',
@@ -39,14 +39,14 @@ Describe('Studio device trust store', () => {
       const store = await StudioDeviceTrustStore.open(root)
       const device = StudioDeviceTrust.generateIdentity()
       const other = StudioDeviceTrust.generateIdentity()
-      await store.trust(record(device.publicKey, 'roPhone'))
+      await store.trust(record(device.publicKey, 'example-phone'))
       await store.trust(record(other.publicKey, 'roPad'))
-      await store.trust({ ...record(device.publicKey, 'roPhone renamed'), fingerprint: 'ignored' })
+      await store.trust({ ...record(device.publicKey, 'example-phone renamed'), fingerprint: 'ignored' })
       Expect(await store.touch(device.publicKey, '2026-09-02T11:00:00.000Z')).toBe(true)
       Expect(await store.touch('unknown', '2026-09-02T11:00:00.000Z')).toBe(false)
 
       Expect(store.trusted().map(item => [item.device.name, item.lastSeenAt])).toEqual([
-        ['roPhone renamed', '2026-09-02T11:00:00.000Z'],
+        ['example-phone renamed', '2026-09-02T11:00:00.000Z'],
         ['roPad', undefined],
       ])
       Expect(store.trusted()[0]?.fingerprint).toBe(StudioDeviceTrust.fingerprint(device.publicKey))
@@ -65,7 +65,7 @@ Describe('Studio device trust store', () => {
       await FS.writeText(FS.resolvePath('studio-identity.json', root), '{"version": 1, "publicKey": "short"')
       await FS.writeJson(FS.resolvePath('trusted-devices.json', root), {
         devices: [
-          { device: { name: 'roPhone' }, devicePublicKey: 'short', pairedAt: 'never' },
+          { device: { name: 'example-phone' }, devicePublicKey: 'short', pairedAt: 'never' },
           'nonsense',
           record(StudioDeviceTrust.generateIdentity().publicKey, 'roPad'),
           { devicePublicKey: StudioDeviceTrust.generateIdentity().publicKey, pairedAt: 'not a date' },

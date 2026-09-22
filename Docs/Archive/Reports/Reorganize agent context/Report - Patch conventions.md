@@ -96,9 +96,9 @@ Status note: this report records the source patch and review context that motiva
 ### Validation And Git Safety
 
 - Use direct shell commands inside the platform sandbox and `./agent` for common repository workflows and specialized automation. Shared workflow definitions and human developer commands remain in `Justfile`.
-- Do not touch the Git index unless Ro explicitly asks in the current request.
+- Do not touch the Git index unless the Developer explicitly asks in the current request.
 - Use `./agent verify` as final validation after code/instruction/workflow changes.
-- Instance in this patch: validation used the repository recipe while index state remained Ro-owned even when file moves made staged status look awkward.
+- Instance in this patch: validation used the repository recipe while index state remained owned by the Developer even when file moves made staged status look awkward.
 
 ## Conventions That Should Become Stronger Instructions Or Automation
 

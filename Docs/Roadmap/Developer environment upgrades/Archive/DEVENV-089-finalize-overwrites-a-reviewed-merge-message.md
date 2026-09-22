@@ -3,7 +3,7 @@
 - **Status:** Resolved
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` redrafted `.artifacts/merge/<branch>.msg` even when the file already
-  held a message an agent wrote and Ro may have read, and the draft it wrote was a mechanical
+  held a message an agent wrote and the Developer may have read, and the draft it wrote was a mechanical
   concatenation of every commit subject and body line on the branch, each line prefixed with `- `.
   The result was not a valid merge message in substance — a `DRAFT:` summary, superseded commit
   subjects repeated as bullets, the branch's history rather than what lands — so the reviewed message

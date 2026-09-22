@@ -51,7 +51,7 @@ Describe('output discipline', () => {
     Expect(refusalFor('cat -n AGENTS.md').includes('Read tool')).toEqual(true)
   })
 
-  Test('sends an in-place substitution to the tool that shows Ro a diff', () => {
+  Test('sends an in-place substitution to the tool that shows the Developer a diff', () => {
     Expect(refusalFor('sed -i "" s/a/b/ AGENTS.md').includes('Edit tool')).toEqual(true)
   })
 
@@ -148,7 +148,7 @@ Describe('output discipline', () => {
     Expect(isAllowed('git stash list --format="%H %gs"')).toEqual(true)
   })
 
-  Test('refuses a shell redirect that writes content belonging in the diff Ro reads', () => {
+  Test('refuses a shell redirect that writes content belonging in the diff the Developer reads', () => {
     Expect(refusalFor("cat > packages/stdlib/@tao/text/Text.tao <<'EOF'\nx\nEOF").includes('Write or Edit'))
       .toEqual(true)
     Expect(refusalFor('echo "x" > Docs/Spec/Units.md').includes('Write or Edit')).toEqual(true)

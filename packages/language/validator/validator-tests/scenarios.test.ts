@@ -33,7 +33,7 @@ Describe('validator: fixtures and scenarios', () => {
     accepts(`
       data Households / Household { Name text }
       data Recipes / Recipe { Household Title text Servings number }
-      action StartKitchen(Ro item) { }
+      action StartKitchen(Sam item) { }
       view Main() {
         render inject ${tsFence}
           return null
@@ -41,9 +41,9 @@ Describe('validator: fixtures and scenarios', () => {
       }
       app Skillet { view Main }
       fixture HomeKitchen {
-        account Ro { Name: "Ro", Email: "ro@example.com" }
-        Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
-        Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
+        account Sam { Name: "Sam", Email: "sam@example.com" }
+        Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Sam)
+        Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Sam
       }
       scenarios Skillet "devices" {
         fixture HomeKitchen

@@ -206,11 +206,11 @@ Describe('Studio structured panel projection', () => {
       ...baseInput(),
       logs: studioPanelLogs(
         [{ arguments: ['browser ready'], level: 'log', timestamp: 20 }],
-        [{ deviceName: 'Ro’s iPhone', level: 'warn', message: 'network slow', sequence: 1, timestamp: 10 }],
+        [{ deviceName: 'the Developer’s iPhone', level: 'warn', message: 'network slow', sequence: 1, timestamp: 10 }],
       ),
     })
     Expect(panels.Drawer.Logs.Rows).toEqual([
-      { Level: 'warn', Message: 'Device Ro’s iPhone: network slow', Timestamp: 10 },
+      { Level: 'warn', Message: 'Device the Developer’s iPhone: network slow', Timestamp: 10 },
       { Level: 'log', Message: 'browser ready', Timestamp: 20 },
     ])
   })

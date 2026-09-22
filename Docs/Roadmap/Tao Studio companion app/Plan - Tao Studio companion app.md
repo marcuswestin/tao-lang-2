@@ -380,7 +380,7 @@ deterministic-simulation program defines the path from best-effort reproduction 
 
 One story can name several instances and personas:
 
-> On Ro's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
+> On the Developer's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
 
 Studio renders a lane per device/account plus one shared provider/world lane. It can pause all devices at a
 barrier, allow deliberate concurrency, partition the network, and assert convergence or authority refusal.
@@ -442,7 +442,7 @@ wait, and covering journey without manual correlation.
 
 ### 4. Record and replay a semantic journey (after public MVP)
 
-Ro deferred this entire slice on 2026-09-22. The saved source shape, expectation authoring,
+The Developer deferred this entire slice on 2026-09-22. The saved source shape, expectation authoring,
 unresolved native or foreign step behavior, and draft editing scope remain open decisions for when
 the slice resumes. Its acceptance below is not a public-MVP release gate.
 
