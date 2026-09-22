@@ -589,7 +589,16 @@ scrollable content an enclosing `AppSurfaceFrame` already padded, when its navig
 window. Absolute positioning there is relative to the content container, which sizes to content and
 can be shorter or taller than the true viewport, so the scrim does not reliably reach the actual
 window edges in that configuration — it is inset from them by at least the frame's own padding either
-way, but does not necessarily cover them exactly.
+way, but does not necessarily cover them exactly. Seen on an iPhone 17 simulator on 2026-09-21: under
+a root `SlotNav`, the scrim dims the padded content box only, leaving the status bar, the side
+margins, the Back affordance, and the home-indicator strip undimmed. The fix is to render `ask` in
+the app host's window-level layer, beside the toast layer, rather than in the navigator's overlay lane.
+
+Also seen there: a plain `as overlay` presented from inside a native sheet. The sheet hides while a
+later entry tops the overlay stack, so the overlay's content renders full-bleed over the root screen,
+under the status bar — the decided full-bleed behavior applied literally, with the sheet's own
+content gone. Whether an overlay presented from a sheet should stay inside the sheet's window is an
+open presentation question, not an inset one.
 
 Not yet covered, and not decided by what exists today:
 
