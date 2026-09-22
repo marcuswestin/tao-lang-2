@@ -20,13 +20,14 @@
   roots and stores each compiled app by the hash of its contents, so nothing Jest hashes into a
   cache key moves unless the output did — counted on WordFlower, a run after an edit re-transformed
   all 2,135 modules it loads, then 650, and now 116, the one tree the edit changed; an
-  unchanged run re-transforms nothing. Still open: validation runs once per entry over that entry's
-  whole graph, and opening a workspace costs 0.10-0.15s in `Packages.createContext`.
+  unchanged run re-transforms nothing; opening a workspace asks Git once instead of five times and
+  builds no Langium container of its own (`Workspace.open` 181ms to 37ms). Still open: validation
+  runs once per entry over that entry's whole graph.
 - **Workaround:** The check memo hides the cost on an unchanged tree inside this repository; nothing
   hides it after an edit, under `tao fix`, or inside a test that opens its own workspace.
 - **Proposed change:** Phase 0 of the linked report is done bar its dropped item (a cache for a
-  packaged CLI, which Ro dropped until one exists). What remains here is past Phase 0: one
-  discovery per process in `Packages.createContext`, and validating a file once per batch.
+  packaged CLI, which Ro dropped until one exists). What remains here is past Phase 0: validating a
+  file once per batch rather than once per entry that reaches it.
 - **Dependencies:** The CLI and package restructure moves some of the named files; the defects move
   with them.
 - **Acceptance:** Uncached `tao check "Apps/WordFlower/1 - Current"` under 1s and `tao fix` of the
