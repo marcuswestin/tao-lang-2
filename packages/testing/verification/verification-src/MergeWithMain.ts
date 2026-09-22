@@ -161,7 +161,11 @@ export type MergeCommandRunner = (
 
 /** MergeWithMainDependencies isolates process, filesystem, terminal, and clock effects for testing. */
 export type MergeWithMainDependencies = {
-  acquireLease: typeof MachineLanes.acquireResource
+  acquireLease: (
+    options: Parameters<typeof MachineLanes.acquireResource>[0] & {
+      onQueueWait?: () => Promise<void>
+    },
+  ) => Promise<MachineResourceLease>
   askConfirm: (message: string) => Promise<boolean>
   /** Report which phase of the landing the lock is being spent on. Never throws; see `LandingLock`. */
   beginPhase: (repositoryRoot: string, name: LandingPhaseName) => Promise<void>
@@ -528,24 +532,38 @@ export const MergeWithMainCommand = {
     // lock from the first ref it touches to the last, with a `finally` that gives the lock back
     // whichever way the transaction ends. Nothing between two commands waits on an agent any more:
     // that gap — not the merge, which measured 2-94s — is what held the lock for 36-44 minutes.
-    const lease = await acquireLandingLease(dependencies, preflight)
+    const acquisition = await acquireLandingLease(dependencies, preflight)
+    const lease = acquisition.lease
     try {
-      const snapshot = await createSnapshot(preflight, dependencies)
+      // Queue-side merges change HEAD, and another landing may move main during the wait. Refresh
+      // the preflight whenever either ref changed; an uncontended landing avoids a second remote
+      // query (and preserves the same evidence its existing tests exercise).
+      const currentHead = (await git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+      const currentMain = (await git(dependencies, preflight.featureRoot, ['rev-parse', `refs/heads/${MAIN_BRANCH}`]))
+        .stdout.trim()
+      const lockedPreflight = !acquisition.waited && currentHead === preflight.branchHead
+          && currentMain === preflight.mainHead
+        ? preflight
+        : await inspectMergePreflight(options, dependencies)
+      if (lockedPreflight.branch !== preflight.branch) {
+        Errors.throwUserInput('The feature branch changed while waiting for its landing turn.')
+      }
+      const snapshot = await createSnapshot(lockedPreflight, dependencies)
       writeLines(dependencies, [
-        ...preflight.warnings.map(warning => `WARN  ${warning}`),
-        `PASS  Landing lock held for ${preflight.branch}; every step below runs inside it.`,
+        ...lockedPreflight.warnings.map(warning => `WARN  ${warning}`),
+        `PASS  Landing lock held for ${lockedPreflight.branch}; every step below runs inside it.`,
         `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
       ])
 
       await stabilizeAndVerify(snapshot, options, dependencies)
       await verifyLandingSubject(snapshot, options, dependencies)
-      await beginPhase(preflight.featureRoot, 'push', dependencies)
-      await landSquash(snapshot, preflight, dependencies)
+      await beginPhase(lockedPreflight.featureRoot, 'push', dependencies)
+      await landSquash(snapshot, lockedPreflight, dependencies)
       await pushArchiveAndPreserve(snapshot, dependencies)
 
       const completed = [
-        `PASS  Merged '${preflight.branch}' into main and archived it as ${archiveName(preflight.branch)}.`,
-        `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
+        `PASS  Merged '${lockedPreflight.branch}' into main and archived it as ${archiveName(lockedPreflight.branch)}.`,
+        `PASS  Preserved the clean invoking worktree at ${lockedPreflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
       writeLines(dependencies, completed, 'success')
@@ -612,28 +630,62 @@ async function beginPhase(
 async function acquireLandingLease(
   dependencies: MergeWithMainDependencies,
   preflight: MergePreflight,
-): Promise<MachineResourceLease> {
+): Promise<{ lease: MachineResourceLease; waited: boolean }> {
+  let checkedAt = 0
+  let waited = false
+  const onQueueWait = async () => {
+    waited = true
+    const now = Date.now()
+    if (now - checkedAt < 15_000) {
+      return
+    }
+    checkedAt = now
+    const remote = await remoteHeads(dependencies, preflight.featureRoot, [MAIN_BRANCH])
+    if (remote.transport === 'direct') {
+      await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], preflight.featureRoot)
+    }
+    const current = remote.transport === 'broker'
+      ? remote.refs.get(MAIN_BRANCH)
+      : (await git(dependencies, preflight.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    if (current === undefined) {
+      Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting main.`)
+    }
+    const head = (await git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+    const ancestor = await dependencies.run('git', {
+      args: ['merge-base', '--is-ancestor', current, head],
+      cwd: preflight.featureRoot,
+    })
+    if (ancestor.exitCode === 0) {
+      return
+    }
+    if (ancestor.exitCode !== 1) {
+      assertCommandSucceeded(ancestor)
+    }
+    const merged = await dependencies.run('git', {
+      args: ['merge', '--no-edit', current],
+      cwd: preflight.featureRoot,
+      stdio: 'pipe',
+    })
+    if (merged.exitCode !== 0) {
+      Errors.throwUserInput(
+        `Merging main while queued conflicted. This landing left the ready queue without taking `
+          + 'the lock. Resolve the conflict, commit the merge, then run `./agent land` again.',
+      )
+    }
+    dependencies.writeLine(
+      `PASS  Refreshed queued branch with main at ${shortSha(current)}; full verification waits for the lock.`,
+    )
+  }
   const request = async (waitTimeoutMs: number) =>
     await dependencies.acquireLease({
       command: `merge-with-main ${preflight.branch}`,
       name: LANDING_RESOURCE_NAME,
       repositoryRoot: preflight.featureRoot,
       waitTimeoutMs,
+      onQueueWait,
     })
-  try {
-    return await request(0)
-  } catch (error) {
-    if (!(error instanceof MachineResourceBusyError)) {
-      throw error
-    }
-    const owner = error.owner
-    writeLines(dependencies, [
-      `WARN  Landing lease held by '${owner.command}' in ${owner.repositoryRoot} (PID ${owner.pid}), `
-      + `held for ${describeHeldFor(owner.startedAt, dependencies.now())}.`,
-      'WARN  Waiting for it; this landing starts as soon as that one ends.',
-    ])
-    return await request(LEASE_WAIT_TIMEOUT_MS)
-  }
+  const lease = await request(LEASE_WAIT_TIMEOUT_MS)
+  return { lease, waited }
 }
 
 /**
@@ -649,13 +701,14 @@ async function acquireLandingLease(
  * right, so it must not queue behind itself, and the release must leave that lock held because the
  * agent took it deliberately and returns it itself.
  */
-const acquireLandingLock: typeof MachineLanes.acquireResource = async options => {
+const acquireLandingLock: MergeWithMainDependencies['acquireLease'] = async options => {
   const repositoryRoot = options.repositoryRoot
   const hold = await LandingLock.acquire({
     label: options.command,
     // Marks the hold a landing rather than a lane, which is what makes the board's phase report
     // meaningful and what stops new diff-scoped lanes being admitted beside it.
     landing: true,
+    ...(options.onQueueWait === undefined ? {} : { onQueueWait: options.onQueueWait }),
     // Without this a landing blocked behind an abandoned lock says nothing for the whole six-hour
     // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
     // way the wait ever reaches a person.
@@ -706,16 +759,6 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
       })
     },
   }
-}
-
-/** Report how long a lease has been held, in the coarsest unit that still says something useful. */
-function describeHeldFor(startedAt: string, now: Date): string {
-  const elapsedMs = Math.max(0, now.getTime() - Date.parse(startedAt))
-  const minutes = Math.floor(elapsedMs / 60_000)
-  if (minutes < 1) {
-    return `${Math.max(1, Math.round(elapsedMs / 1_000))}s`
-  }
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
 }
 
 /** Report whether the feature branch's `just verify-full` pass is skipped, and by which flag. */

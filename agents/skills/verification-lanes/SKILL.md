@@ -10,7 +10,9 @@ description: >-
 
 ## The machine-wide landing lock
 
-You do not claim it by hand. `verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it
+You do not claim it by hand. Ready `./agent land` processes queue FIFO, ahead of new broad lanes;
+an active holder is never preempted. While queued, they refresh main without full verification.
+`verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it
 for the length of the run, and `./agent land` takes it once for the whole landing, so **`land-lock` and
 `land-unlock` are recovery and debugging tools**, not part of the normal path. Everything narrower
 needs no lock and never waits — `test-file`, a named test, `test-retry`, `check`, `fix`, `fmt`. While
