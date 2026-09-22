@@ -24,6 +24,7 @@ import {
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
+import { TaoAppSharedRun } from './TaoAppSharedRun'
 import { TestLedger } from './TestLedger'
 import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
@@ -95,8 +96,8 @@ export type RunGatesOptions = {
   machineCpuCount?: number
   /**
    * Injected load reading for deterministic coordination tests. A run's contention verdict decides
-   * whether it warns and whether it teaches the timings store, so a test that means an idle or a
-   * busy machine says which rather than inheriting whatever the host is doing.
+   * whether it warns and whether timings are limited to plausible CPU samples, so a test that means
+   * an idle or a busy machine says which rather than inheriting whatever the host is doing.
    */
   machineLoadAverage?: () => number
   now?: () => number
@@ -247,7 +248,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
 
   const states: WorkState[] = [
     ...gatesToRun.map(name => WorkGraph.createState(GateCatalog.node(name, location.repositoryRoot))),
-    ...testStates,
+    ...TaoAppSharedRun.attach(testStates, location.logRoot, location.repositoryRoot),
   ]
   await RunArtifacts.assignLogPaths(states, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
@@ -475,9 +476,9 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     })
   }
   await RunArtifacts.finishRun({
+    cpuOnly: contention.contended,
     location,
     extraDurations: testPlan === undefined ? undefined : TestNodes.suiteDurations(testPlan.states),
-    recordTimings: !contention.contended,
     states,
     summary,
   })

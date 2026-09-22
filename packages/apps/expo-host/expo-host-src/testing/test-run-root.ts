@@ -45,18 +45,16 @@ const CACHE_ENTRY_NAME = /^[0-9a-f]{16,128}\.json$/
  * RETAINED_CACHE_BYTES bounds the compiled output one category's index may point at, counted in the
  * content bytes each entry recorded when it was published.
  *
- * A count is the wrong bound here, and a small one was actively wrong. A lane does not run a suite
- * once: it splits it into shards, and a shard's set of test paths is part of the fingerprint, so
- * every shard publishes an entry of its own. That count is not written down anywhere — it is derived
- * per checkout from recorded durations, so it rises as the corpus grows — and a retained count of 4
- * was already smaller than an observed 4-shard plan plus the whole-corpus run a developer starts by
- * hand. The hand-run entry was evicted between one invocation and the next and recompiled every
- * time.
+ * A count is the wrong bound here, and a small one was actively wrong. A verification lane prepares
+ * one compile across the roots all of its shards will read, then hands that one root to every shard.
+ * A developer may still run several independent scopes, and those scopes are each cache entries, so
+ * a retained count can still evict the whole-corpus run a developer starts by hand between one
+ * invocation and the next.
  *
- * Bytes are the bound that a growing shard plan cannot silently outgrow, because sharding
- * *partitions* a corpus rather than duplicating it: N shards compile N disjoint slices, so a whole
- * plan costs about what the one whole-corpus run costs, whatever N is. Re-sharding 4 ways or 40 ways
- * moves the same bytes between more entries and changes this budget's arithmetic hardly at all.
+ * Bytes are the bound that a growing shard plan cannot silently outgrow, because sharding partitions
+ * execution rather than duplicating compiled output: N shard readers use one prepared corpus, so a
+ * whole plan costs about what one whole-corpus run costs, whatever N is. Re-sharding 4 ways or 40
+ * ways does not multiply retained compiled output.
  *
  * The number is grounded in this checkout: `./tao test Apps` — 30 test files, 37 compiled apps —
  * publishes a run root of 4.2 MB across 1,431 files, occupying 8.4 MB of blocks because the files
@@ -125,6 +123,7 @@ export const TestRunRoot = {
   intern,
   lookup,
   MANIFEST_FILE_NAME,
+  open,
   prune,
   publish,
   RETAINED_CACHE_AGE_MS,
@@ -294,20 +293,40 @@ async function lookup(
     return undefined
   }
   const runRoot = FS.resolvePath(entry.runRoot, categoryRoot)
-  const manifestPath = FS.resolvePath(MANIFEST_FILE_NAME, runRoot)
-  if (!isRunRoot(runRoot, generatedRoot) || !await FS.isFile(manifestPath)) {
+  const opened = await open(category, runRoot, options)
+  if (opened === undefined) {
+    return undefined
+  }
+  await writeCacheEntry(cacheEntryPath(categoryRoot, fingerprint), { ...entry, usedAt: new Date().toISOString() })
+  return opened
+}
+
+/**
+ * open returns a valid generated run root in `category`, or nothing when a handoff names output this
+ * runtime cannot safely replay. Unlike `lookup`, it has no cache identity and is therefore suitable
+ * for a live lane handing its one newly compiled root to several reader processes.
+ */
+async function open(
+  category: string,
+  runRoot: string,
+  options: TestRunRootOptions = {},
+): Promise<CachedRun | undefined> {
+  const generatedRoot = resolveGeneratedRoot(options)
+  const categoryRoot = FS.resolvePath(requireCategory(category), generatedRoot)
+  const path = FS.resolvePath(runRoot)
+  const manifestPath = FS.resolvePath(MANIFEST_FILE_NAME, path)
+  if (FS.dirname(path) !== categoryRoot || !isRunRoot(path, generatedRoot) || !await FS.isFile(manifestPath)) {
     return undefined
   }
   // The compiled apps the manifest names live in the store beside the run root; one that is gone,
   // however it went, makes this a run that cannot be replayed rather than one that fails to load.
-  for (const modulePath of await manifestModulePaths(runRoot)) {
+  for (const modulePath of await manifestModulePaths(path)) {
     if (!await FS.isFile(modulePath)) {
       return undefined
     }
   }
-  await markUsed(runRoot)
-  await writeCacheEntry(cacheEntryPath(categoryRoot, fingerprint), { ...entry, usedAt: new Date().toISOString() })
-  return { manifestPath, runRoot }
+  await markUsed(path)
+  return { manifestPath, runRoot: path }
 }
 
 /**
