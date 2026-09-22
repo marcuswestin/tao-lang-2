@@ -37,6 +37,16 @@ Describe('test wall-clock budget convention', () => {
     Expect(testBudgetConventionIssues([{ path: testPath, source }])).toEqual([])
   })
 
+  Test('does not let a trailing budget-ok on the previous line cover an unrelated short budget below it', () => {
+    const source = [
+      'doRealWork() // budget-ok: this call is the timeout under test, not the one below.',
+      'await until(() => false, { timeoutMs: 20 })',
+    ].join('\n')
+    const issues = testBudgetConventionIssues([{ path: testPath, source }])
+    Expect(issues).toHaveLength(1)
+    Expect(issues[0]).toContain(`${testPath}:2`)
+  })
+
   Test('flags a speed assertion on elapsed wall time below the threshold', () => {
     const source = [
       'const startedAt = Date.now()',
@@ -54,6 +64,11 @@ Describe('test wall-clock budget convention', () => {
 
   Test('allows a speed assertion whose operand has no timing keyword', () => {
     const source = 'Expect(report.contentionRatio).toBeLessThan(1.5)'
+    Expect(testBudgetConventionIssues([{ path: testPath, source }])).toEqual([])
+  })
+
+  Test('allows a speed assertion whose operand only holds Ms as part of another word', () => {
+    const source = 'Expect(errorMsgs.length).toBeLessThan(3)'
     Expect(testBudgetConventionIssues([{ path: testPath, source }])).toEqual([])
   })
 

@@ -1,8 +1,30 @@
+const os = require('node:os')
+
+// The per-journey budget an uncontended machine keeps. A Tao journey compiles and renders a whole
+// app, so its floor sits far above Jest's five-second default.
+const JOURNEY_BUDGET_MS = 30_000
+// Past this a deadline no longer tells a starved journey from a hung one; the bound the repository
+// already accepts as "only a hang trips it", and the same ceiling the Bun runner uses.
+const MAX_JOURNEY_DEADLINE_MS = 120_000
+
+/**
+ * Jest's deadline is wall time: the work a journey did plus the time it spent off CPU waiting for
+ * the rest of the machine. Held fixed, it judges a journey by how busy the host is — one tutorial
+ * journey ran 50s and was killed at a flat 30s with the load average at 52 on 18 CPUs, and passed
+ * alone. So the budget stays fixed and only the deadline stretches by the run-queue depth, the way
+ * the repository's Bun runner already does (`TestRunner.ts`, `starvationAdjustedTimeoutMs`), with
+ * the same allowance for the one-minute average lagging the load a test is feeling.
+ */
+function starvationAdjustedTimeoutMs(budgetMs) {
+  const observed = os.loadavg()[0] / Math.max(1, os.cpus().length) * 2
+  return Math.min(Math.round(budgetMs * Math.max(observed, 1)), MAX_JOURNEY_DEADLINE_MS)
+}
+
 function createRuntimeJestConfig(options) {
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
   return {
     preset: 'jest-expo',
-    testTimeout: options.testTimeout ?? 30_000,
+    testTimeout: starvationAdjustedTimeoutMs(options.testTimeout ?? JOURNEY_BUDGET_MS),
     testMatch: options.testMatch,
     // Jest builds the file map it discovers tests from by crawling `roots`, and `roots` defaults to
     // `rootDir` — this whole package. `rootDir` also holds `_gen_tao-app-test`, the cache of

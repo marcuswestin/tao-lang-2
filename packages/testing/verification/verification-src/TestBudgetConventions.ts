@@ -6,8 +6,11 @@
  * back: it flags a short `timeoutMs` literal, a `toBeLessThan`/`toBeLessThanOrEqual` speed assertion
  * on something that reads like elapsed wall time, and a `Promise.race` that arbitrates a real result
  * against a bare sleep, in the same test-file scope the sweep covered. `// budget-ok: <reason>` on the
- * line or the line above is the escape — for a budget the test is genuinely about, or a fake clock
- * that never spends real wall time — matching the repository's `# hook-ok:` idiom.
+ * line, or on a comment-only line directly above it, is the escape — for a budget the test is
+ * genuinely about, or a fake clock that never spends real wall time — matching the repository's
+ * `# hook-ok:` idiom. A trailing `// budget-ok:` on the line above answers only for that line's own
+ * call; it is not read as standing for the line below, which would let one call's escape cover an
+ * unrelated short budget it never named.
  */
 
 const BUDGET_THRESHOLD_MS = 10_000
@@ -27,7 +30,12 @@ const BUDGET_OK_PATTERN = /\/\/\s*budget-ok:\s*\S/
 
 const TIMEOUT_LITERAL_PATTERN = /\btimeoutMs\s*:\s*(\d[\d_]*)(?=\s*(?:[,)}]|$))/g
 const SPEED_ASSERTION_PATTERN = /\.toBeLessThan(?:OrEqual)?\(\s*(\d[\d_]*)\s*\)/g
-const SPEED_ASSERTION_KEYWORDS = ['Date.now()', 'performance.now()', 'elapsed', 'duration', 'Ms']
+/**
+ * A bare `Ms` also matches inside an unrelated identifier like `errorMsgs` or `logMsgCount`, so it is
+ * spelled only in the word-boundary shapes a real `...Ms` operand actually ends in: followed by the
+ * call's closing paren, a space before further text, or a `-` in a subtraction.
+ */
+const SPEED_ASSERTION_KEYWORDS = ['Date.now()', 'performance.now()', 'elapsed', 'duration', 'Ms)', 'Ms ', 'Ms -']
 const RACE_START_PATTERN = /Promise\.race\(\s*\[/
 const RACE_SLEEP_PATTERN = /Time\.sleep\(|setTimeout\(/
 /** How many lines a `Promise.race([...])` array is read across before giving up on finding its close. */
@@ -86,8 +94,22 @@ function literalMs(literal: string): number {
   return Number(literal.replaceAll('_', ''))
 }
 
+/**
+ * A `// budget-ok:` on the flagged line itself always answers for it. One on the line above answers
+ * for it only when that whole line is the comment — a trailing `// budget-ok:` on a line that also
+ * holds real code is that code's own escape, not a blanket clearance for whatever sits below it.
+ */
 function hasBudgetOk(lines: readonly string[], index: number): boolean {
-  return BUDGET_OK_PATTERN.test(lines[index] ?? '') || BUDGET_OK_PATTERN.test(lines[index - 1] ?? '')
+  if (BUDGET_OK_PATTERN.test(lines[index] ?? '')) {
+    return true
+  }
+  const previous = lines[index - 1] ?? ''
+  return isCommentOnlyLine(previous) && BUDGET_OK_PATTERN.test(previous)
+}
+
+/** isCommentOnlyLine is true when a line's only non-whitespace content is a `//` comment. */
+function isCommentOnlyLine(line: string): boolean {
+  return /^\s*\/\//.test(line)
 }
 
 function issueAt(path: string, lineIndex: number): string {
@@ -123,7 +145,13 @@ function raceAgainstSleepIssues(path: string, lines: readonly string[]): string[
 }
 
 function escapedAcross(lines: readonly string[], start: number, end: number): boolean {
-  for (let cursor = Math.max(0, start - 1); cursor <= end; cursor++) {
+  // The line before the race, like the line before any flagged line, answers for the race only when
+  // it is a comment-only line: a trailing `// budget-ok:` there belongs to whatever code sits on it.
+  const previous = lines[start - 1] ?? ''
+  if (isCommentOnlyLine(previous) && BUDGET_OK_PATTERN.test(previous)) {
+    return true
+  }
+  for (let cursor = start; cursor <= end; cursor++) {
     if (BUDGET_OK_PATTERN.test(lines[cursor] ?? '')) {
       return true
     }

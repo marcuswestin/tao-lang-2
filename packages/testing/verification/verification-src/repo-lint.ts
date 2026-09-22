@@ -582,6 +582,7 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/ides/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
   'packages/apps/expo-host/app-config.cjs:1',
+  'packages/apps/expo-host/jest.shared.config.cjs:1',
   'packages/apps/expo-host/app-config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:3',

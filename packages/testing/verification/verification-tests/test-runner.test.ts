@@ -112,7 +112,7 @@ Describe('test runner suite registry', () => {
     const { byName } = await discover()
 
     Expect(argsOf(byName, 'cli/dev-cli')).toContain('--concurrent')
-    Expect(argsOf(byName, 'cli/dev-cli')).toContain('--timeout=60000')
+    Expect(argsOf(byName, 'cli/dev-cli')).toContain(`--timeout=${TestRunner.MAX_TEST_DEADLINE_MS}`)
     // A suite that chose its own bound keeps exactly that one: a second `--timeout` would leave
     // which bound is in force up to Bun's argument precedence rather than to this table.
     Expect(argsOf(byName, 'cli/dev-cli').filter(argument => argument.startsWith('--timeout='))).toHaveLength(1)
@@ -292,21 +292,22 @@ Describe('test runner suite registry', () => {
     // three other lanes. Every Bun suite therefore carries an explicit bound.
     const bounds = argsOf(byName, 'ides/studio').filter(argument => argument.startsWith('--timeout='))
     Expect(bounds).toHaveLength(1)
-    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(7_500)
+    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(45_000)
   })
 
   Test('spends the per-test budget on work, and stretches the deadline only while the machine is loaded', () => {
     const { starvationAdjustedTimeoutMs } = TestRunner
 
     // A machine this run has to itself keeps the fixed budget, so a test that genuinely regresses
-    // is still caught. This is the case a flat sixty-second bound gives up.
-    Expect(starvationAdjustedTimeoutMs(2, 18)).toBe(7_500)
-    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(7_500)
+    // is still caught. This is the case a flat two-minute bound gives up.
+    Expect(starvationAdjustedTimeoutMs(2, 18)).toBe(45_000)
+    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(45_000)
     // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
-    // than in isolation. The deadline has to clear that multiple, and does.
-    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBeGreaterThan(7_500 * 3.7)
+    // than in isolation. The raised floor times that multiple is past the ceiling, so what the suite
+    // actually gets here is the ceiling itself rather than the scaled multiple.
+    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // Past the ceiling the deadline stops distinguishing a starved test from a hung one.
-    Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(60_000)
+    Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(120_000)
   })
 
   Test('names every Bun test file absolutely, so the runner never walks the repository to find it', async () => {

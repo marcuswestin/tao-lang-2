@@ -31,7 +31,7 @@ export type UntilOptions = {
   description?: string
   /** Delay between reads; `0` re-reads on the next event-loop turn. Defaults to 10ms. */
   intervalMs?: number
-  /** Wall-clock budget before the wait fails. Defaults to 2000ms. */
+  /** Wall-clock budget before the wait fails. Defaults to 30000ms. */
   timeoutMs?: number
 }
 
