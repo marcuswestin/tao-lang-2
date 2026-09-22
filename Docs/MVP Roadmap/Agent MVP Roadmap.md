@@ -353,8 +353,9 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 
 ### A16 — A reachable datasource for the public demo
 
-WordFlower's InstantDB datasource points at `localhost:9020`, which no tester's phone can reach, so
-the sync demo cannot be shown to anyone outside this machine.
+`WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
+`WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
+existence and live two-device sync still need confirmation before outside testers can use the demo.
 
 - Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
   onboarding requires an existing account because new signups are closed, and the production demo
