@@ -254,24 +254,40 @@ Describe('test runner suite registry', () => {
     Expect(serialPlan?.shards.map(shard => shard.length).toSorted()).toEqual([1, 3])
   })
 
-  // The package restructure renamed every suite at once. Each one lost the recorded duration held
-  // under its old name, so each ran as a single process, and the lane reported an ordinary green
-  // while running at a fraction of the machine. Nothing said a word for hours.
-  Test('says so when a suite runs whole because its recorded duration is under another name', () => {
+  // Most renamed suites still report missing history. The two measured long suites bootstrap their
+  // split instead, so the first verification in a new worktree need not repeat the old serial tail.
+  Test('says so when an ordinary suite runs whole because its recorded duration is missing', () => {
     const buildProcess: SelectedSuite['buildProcess'] = (_name, units) => ({ args: [], command: 'true', files: units })
     const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
     const noHistory = { nodes: {}, version: 1 as const }
 
     const plan = TestNodes.build({
       ledger: { tests: {}, version: 1 as const },
-      selected: [{ buildProcess, files, name: 'cli/tao-cli' }],
+      selected: [{ buildProcess, files, name: 'language/parser' }],
       timings: noHistory,
     })
 
     Expect(plan.plans[0]?.shards.length).toBe(1)
     Expect(plan.warnings).toHaveLength(1)
-    Expect(plan.warnings[0]).toContain('cli/tao-cli')
+    Expect(plan.warnings[0]).toContain('language/parser')
     Expect(plan.warnings[0]).toContain('12 units')
+  })
+
+  Test('starts the known long suites in multiple processes without local history', () => {
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, units) => ({ args: [], command: 'true', files: units })
+    const files = Array.from({ length: 16 }, (_, index) => `unit-${index}`)
+    const plan = TestNodes.build({
+      ledger: { tests: {}, version: 1 as const },
+      selected: [
+        { buildProcess, files, name: 'cli/tao-cli' },
+        { buildProcess, files: ['Apps'], name: 'tao-apps', shardUnits: files },
+      ],
+      timings: { nodes: {}, version: 1 as const },
+    })
+
+    Expect(plan.plans.find(item => item.suite === 'cli/tao-cli')?.shards.length).toBe(8)
+    Expect(plan.plans.find(item => item.suite === 'tao-apps')?.shards.length).toBe(2)
+    Expect(plan.warnings).toEqual([])
   })
 
   // A small suite running whole is ordinary, and a warning on every one of them is a warning nobody
@@ -441,8 +457,9 @@ Describe('test runner suite registry', () => {
 
     // The widths belong to the catalog, but they only mean anything once they reach a node: this is
     // where a suite renamed in the registry silently loses its reservation.
-    Expect(byName.get('tao-apps')?.node.cost).toBe(8)
-    Expect(byName.get('tao-apps')?.node.priority).toBe(5)
+    Expect(byName.get('tao-apps#1')?.node.cost).toBe(2)
+    Expect(byName.get('tao-apps#2')?.node.cost).toBe(2)
+    Expect(byName.get('tao-apps#1')?.node.priority).toBe(5)
     Expect(byName.get('runtime-jest')?.node.cost).toBe(3)
     Expect(byName.get('apps/expo-host')?.node.cost).toBe(2)
     // An untuned Bun suite is one unsharded process that cannot use more than one core, so it
@@ -453,7 +470,7 @@ Describe('test runner suite registry', () => {
     // processes uses more than one core, which is what the reservation is for.
     Expect(byName.get('cli/dev-cli')?.node.cost).toBe(2)
     Expect(byName.get('cli/dev-cli')?.node.serial).toBe(false)
-    Expect(byName.get('tao-apps')?.node.serial).toBe(false)
+    Expect(byName.get('tao-apps#1')?.node.serial).toBe(false)
     // Every node is bounded, so no runaway can hold a lane open for three quarters of an hour.
     Expect(byName.get('cli/dev-cli')?.node.timeoutMs).toBeGreaterThan(0)
     Expect(byName.get('cli/dev-cli')?.node.idleTimeoutMs).toBeGreaterThan(0)

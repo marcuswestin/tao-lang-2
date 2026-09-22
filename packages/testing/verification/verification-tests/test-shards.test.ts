@@ -166,6 +166,18 @@ Describe('test shard counts', () => {
     Expect(TestShards.suiteOf('dev')).toBe('dev')
   })
 
+  Test('uses a bounded initial split only until a suite has local timing history', () => {
+    const files = Array.from({ length: 10 }, (_, index) => `file-${index}.test.ts`)
+    const cold = plan({ coldShardCount: 4, files })
+    const measured = plan({ coldShardCount: 4, files, measuredMs: 8_000 })
+
+    Expect(cold.shards.length).toBe(4)
+    Expect(allFiles(cold.shards)).toEqual(files.toSorted())
+    Expect(cold.reason).toBe('4 initial shards: no recorded duration yet')
+    Expect(measured.shards.length).toBe(2)
+    Expect(plan({ coldShardCount: 4, files: files.slice(0, 1) }).shards.length).toBe(1)
+  })
+
   Test('plans the same shards twice, whatever order the files arrive in', () => {
     const files = ['a', 'b', 'c', 'd', 'e', 'f'].map(name => `packages/demo/demo-tests/${name}.test.ts`)
     // Equal costs make the file-name tiebreak the only thing that can order the packing.
