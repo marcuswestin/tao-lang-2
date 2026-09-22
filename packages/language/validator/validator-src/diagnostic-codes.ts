@@ -16,6 +16,8 @@ export const designValidationCodes = {
   duplicateMember: 'design-check-duplicate-member',
   duplicateStyleProperty: 'design-check-duplicate-style-property',
   exploration: 'design-check-exploration',
+  flatCatalog: 'design-check-flat-catalog',
+  legacyVisualHead: 'design-check-legacy-visual-head',
   placeholderShipping: 'design-check-placeholder-shipping',
   reservedBundle: 'design-check-reserved-bundle',
 } as const

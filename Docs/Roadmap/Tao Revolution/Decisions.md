@@ -1955,6 +1955,14 @@ design SkilletDesign {
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
+- **`background` and `ink` are the visual clause heads; `bg` and `fg` are legacy spellings**
+  (decided 2026-09-22). The legacy spellings stay accepted and lower identically, and every use
+  draws a warning naming the decided head, so MVP source is written the way Revolution writes it
+  (Process principle 1). One bundle spelling the same property both ways remains an error.
+- **The flat catalog is deprecated** (decided 2026-09-22). A color or bundle written directly in
+  `design { }`, outside the typed blocks, is still accepted, but its design draws one warning to
+  move colors into `colors { }` and bundles into `styles { }`. `tao create` writes only the typed
+  form.
 - **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
   placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
   element defaults. If a demo finds a need a view cannot meet, it returns.
@@ -1992,17 +2000,19 @@ design SkilletDesign {
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
 - **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
-  `view Card(Title text) [pad 12, bg paper] { … }`, after the parameters and any `responds`, applied
+  `view Card(Title text) [pad 12, background paper] { … }`, after the parameters and any `responds`, applied
   to the occurrence root of every render branch, on `view` and `scene` alike. The header is the
   declaration's public style surface; what a `render` inside the body sets is private.
 - **Precedence is one left-to-right list: design element default, then the header, then the caller.**
   The later same-clause value replaces the earlier and unrelated clauses remain — the rule bundles
   and direct clauses already follow. A caller may give any clause, declared in the header or not.
 - **The root render's own clauses win over that public chain.** `view Card() [hug] { render Col()
-  [bg red] { … } }` rendered as `Card() [fill, bg none]` fills, and stays red: `hug` was public and
-  the caller replaced it, `bg red` was private and the caller cannot reach it. To let a caller
+  [background red] { … } }` rendered as `Card() [fill, background none]` fills, and stays red: `hug`
+  was public and the caller replaced it, `background red` was private and the caller cannot reach
+  it. To let a caller
   change something, declare it in the header.
-- **`none` after a clause head clears it**: `bg none`, `border none`, `pad none`, `pad left none`.
+- **`none` after a clause head clears it**: `background none`, `border none`, `pad none`,
+  `pad left none`.
   The merged list ends without that slot, so the element renders as if the clause were never given;
   a later `pad 8` sets it again. `pad 0` stays "set to zero", and a raw `0` is not inline design
   exploration for the release check — `none` is the way to remove a clause, `0` a value like any
