@@ -1,6 +1,6 @@
 # DEVENV-096 — The devenv Bun cannot produce a runnable compiled binary on macOS 27
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Toolchain pin
 - **Impact:** `bun build --compile` is the mechanism behind the standalone `tao` executable
@@ -17,15 +17,21 @@
   official releases on the same host and input: 1.3.13 invalid and killed, 1.3.14 invalid but ran
   once (a signature cache, not a fix), 1.4.0 invalid and killed, 1.4.2 valid and runs. A 1.4.2 binary
   also survives `codesign --force --sign - --options runtime` and still runs `tao check`, which is
-  what notarization needs.
+  what notarization needs. Reproduced on 2026-09-22 in the standalone CLI bootstrap worktree:
+  the old 1.3.13 profile's compiled `hello` failed `codesign --verify` and exited 137; the new
+  1.4.2 profile's compiled `hello` passed signature validation and printed `hello`. The compiled
+  Tao CLI also passed signature validation and ran `--help`, `fmt`, and `check` from outside the
+  checkout on a self-contained Tao project. Bun 1.4.2 stopped native file-edit events in two
+  CLI watch tests on this host, so the shared watcher now polls on macOS for that version; both
+  tests pass without a test-only environment override.
 - **Workaround:** Download an official Bun 1.4.2 and call it explicitly for `--compile` work; the
   profile's Bun remains correct for everything else.
-- **Proposed change:** Move the devenv Bun to 1.4.2 or later. Nothing pins a version string —
-  `devenv.nix` sets `languages.javascript.bun.enable = true` and the version comes from
-  `devenv.lock`'s nixpkgs input — so this is a lock update or an explicit `bun.package` override, and
-  it moves every worktree sharing the profile at once. Verify the full gates against it rather than
-  bumping in a feature branch alone.
+- **Proposed change:** Pin Bun 1.4.2 through a dedicated `bun-nixpkgs` input and
+  `languages.javascript.bun.package`, leaving the other toolchain packages on their existing
+  nixpkgs pin. Refresh each worktree's profile to adopt it and verify the complete gate against
+  the new profile.
 - **Dependencies:** None.
 - **Acceptance:** `bun build --compile` from the profile's Bun produces a binary that `codesign -v`
   calls valid and that runs on macOS 27, and `verify --complete` passes on the bumped profile.
 - **Source:** 2026-09-17 standalone Tao CLI planning task.
+- **Archived:** 2026-09-22

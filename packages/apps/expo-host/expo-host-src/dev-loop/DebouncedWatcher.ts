@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import chokidar from 'chokidar'
 
 /** WATCH_DEBOUNCE_MS is the quiet period every dev-loop-style watcher settles on before it fires. */
@@ -78,10 +78,14 @@ export function startDebouncedWatcher(
   options: DebouncedWatcherOptions,
 ): DebouncedWatcher {
   const debouncer = createEventDebouncer(onChange, options)
+  // Bun 1.4.2 drops native edit events on macOS 27 in both tao test --watch and the dev loop.
+  // Poll only for that measured runtime; callers can still choose a backend explicitly.
+  const usePolling = options.usePolling
+    ?? (Platform.hostPlatform === 'darwin' && Platform.runtimeBunVersion === '1.4.2')
   const watcher = chokidar.watch([...paths], {
     ignoreInitial: true,
     ignored: shouldIgnoreWatchPath,
-    usePolling: options.usePolling,
+    usePolling,
   })
   watcher.on('all', debouncer.handle)
   return {
