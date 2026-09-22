@@ -58,7 +58,7 @@ the injected TypeScript scope. Richer event vocabularies remain future work.
 
 The exploration below is retained as background.
 
-Ro wants `ui Greeting <params> <layouts> { <event handlers> … }` kept for readability. The open part is
+The Developer wants `ui Greeting <params> <layouts> { <event handlers> … }` kept for readability. The open part is
 the mapping. Parameters are clearly slots. Layout is Q1. Event handlers are the unclear ones: is
 `on press` a slot the caller may fill, a derived slot, or neither?
 

@@ -236,4 +236,4 @@ branch's landing, and should:
    drop what is already fixed or was legitimately refuted, and carry the rest as new findings
    through the same implement-with-tests process the first branch used.
 4. Take the low-priority cleanups in item 5 of **Known open items**.
-5. Settle the lens question in **Still open** item 2 with Ro if it is a decision rather than a bug.
+5. Settle the lens question in **Still open** item 2 with the Developer if it is a decision rather than a bug.

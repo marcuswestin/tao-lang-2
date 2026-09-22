@@ -8,7 +8,7 @@
   agent interprets it one model turn at a time at the point in a session where its context, and
   therefore its per-turn latency, is largest.
 - **Evidence:** Finalization is not a terminal step but a loop: across 16 worktrees the same branch
-  re-enters it a median of 5 and a mean of 7.4 times, driven by Ro's corrections, by retries after a
+  re-enters it a median of 5 and a mean of 7.4 times, driven by the Developer's corrections, by retries after a
   red lane, and by the agent's own re-entry after a background job reports — and every round replays
   the whole protocol, because nothing persists what the previous round established. 119 such
   stretches across this repository's Claude Code transcripts,

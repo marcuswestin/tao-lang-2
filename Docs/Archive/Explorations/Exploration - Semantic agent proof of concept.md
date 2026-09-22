@@ -398,7 +398,7 @@ design based on the evidence collected here.
 
 The implementer owns routine choices and should optimize for learning speed. They do not need approval to
 choose a temporary schema, transport, graph representation, endpoint, prompt, UI, test strategy, or forcing
-app. They should ask Ro only when the demonstration requires a genuine Tao semantic or product decision
+app. They should ask the Developer only when the demonstration requires a genuine Tao semantic or product decision
 that cannot be avoided or safely treated as a PoC convenience.
 
 The following minimum boundaries remain because violating them would weaken rather than strengthen the proof:

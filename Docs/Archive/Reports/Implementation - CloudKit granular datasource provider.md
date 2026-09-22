@@ -146,7 +146,7 @@ into the snapshot the store already loads.
 1. Two devices on one iCloud account with a CloudKit-entitled development build: create, update,
    delete, relaunch, and conflict scenarios against the real `CKSyncEngine`, including a kill
    between fetch and acknowledgement to prove the inbox replays.
-2. Settle open questions 1, 2, and 5 with Ro and adjust the fold if the answers differ from the
+2. Settle open questions 1, 2, and 5 with the Developer and adjust the fold if the answers differ from the
    assumptions above; decide the tombstone retention and purge.
 3. Decide whether CloudKit or InstantDB carries the household demos, which need sharing and
    server-side rules the private database cannot provide.

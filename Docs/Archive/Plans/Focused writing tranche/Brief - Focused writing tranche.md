@@ -79,7 +79,7 @@ Read from the live checkout at the cut. Each is a seam the implementation crosse
 
 ## Decisions taken at the cut
 
-Each is derivable from `Decisions.md` and recorded in the Next header; the first is the one Ro
+Each is derivable from `Decisions.md` and recorded in the Next header; the first is the one the Developer
 should confirm before slice 2 begins, because it touches the import model.
 
 1. **`use time from @tao/time` binds the package under its lowercase service name** and
@@ -88,7 +88,7 @@ should confirm before slice 2 begins, because it touches the import model.
    reading is: a lowercase name in a `use` line imports the package itself; capitalized names import
    declarations. This needs a scope rule, not a new declaration form. The alternative —
    `use Interval from @tao/time` and bare `Interval(1.s)` — respells a decided example and would
-   have to amend `Decisions.md` in the same change (Process principle 5). **Confirm with Ro.**
+   have to amend `Decisions.md` in the same change (Process principle 5). **Confirm with the Developer.**
 2. **Duration is the only family registered.** The mechanism is a shared family/unit/ratio table so
    adding distance or mass is a row, but nothing forces them (Process principle 2), so they stay out
    and `Coverage.md` stays honest.

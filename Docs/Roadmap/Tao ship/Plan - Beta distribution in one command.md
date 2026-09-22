@@ -5,7 +5,7 @@ slice proposals remain below to preserve how the direction was chosen; this stat
 surface_ describe what landed. External App Store/TestFlight success, an installed OTA, signed or
 notarized Studio, and physical-device acceptance have not been established by repository tests.
 
-**Direction settled, 2026-09-02.** Two spellings, ruled by Ro:
+**Direction settled, 2026-09-02.** Two spellings, ruled by the Developer:
 
 ```bash
 tao ship            # build locally, upload, and submit to App Store review, automating as much as possible
@@ -114,7 +114,7 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 
 ### Command surface
 
-**Settled by Ro on 2026-09-02**, in three refinements, superseding the earlier sketch:
+**Settled by the Developer on 2026-09-02**, in three refinements, superseding the earlier sketch:
 
 ```bash
 tao ship [path] [--app NAME] [--patch | --minor | --major] [--yes] [--ignore-git] [--dry-run]   # App Store
@@ -170,7 +170,7 @@ tao ship [path] ... --update [--rollback]                                       
   are remembered on Apple's side, so a bare `--beta` re-ships to the groups as they stand. The
   command prints who will be notified as part of the action list. Recipient addresses are not
   written into the lock.
-- **Dropped:** Android until Ro reopens it, and Expo entirely, ruled on 2026-09-02: no Expo
+- **Dropped:** Android until the Developer reopens it, and Expo entirely, ruled on 2026-09-02: no Expo
   publishing, no EAS build lane, no EAS Update. Publishing through Expo would reach only members
   of an Expo organization, only inside the Expo Go shell, and only while Tao stays on the SDK the
   App Store Expo Go carries, which Expo has been unable to move past since spring; TestFlight
@@ -187,7 +187,7 @@ never passed.
 
 ### Build lane: local first
 
-Ro prefers building on the developer's own Mac, and the research supports it. A paid Apple
+The Developer prefers building on the developer's own Mac, and the research supports it. A paid Apple
 Developer Program membership and an Expo account are different things: Apple owns signing, App
 Store Connect, and TestFlight; Expo's EAS is a separate cloud service for builds, submission,
 and updates, with its own account and quota. Nothing in slice 1 needs EAS.
@@ -224,7 +224,7 @@ What EAS would have given, for the record: macOS builders for machines without X
 agents; managed credential custody; a maintained pipeline that tracks Expo SDK versions; a
 submission service; and EAS Update as a server for compiled-bundle updates. It is not faster
 than a warm Apple-silicon Mac, and its free tier meters builds. Local builds are unlimited and
-offline from everything but Apple. Ro ruled Expo out entirely on 2026-09-02. The library that
+offline from everything but Apple. The Developer ruled Expo out entirely on 2026-09-02. The library that
 exists for this automation is fastlane, whose `match`, `gym`, `pilot`, and `deliver` cover the
 same four steps in Ruby over Apple's private session where the public API stops. Slice 1 uses
 the Apple tooling directly because the four steps are short and typed, and keeps fastlane as
@@ -280,7 +280,7 @@ derives, creates, or dictates everything else.
 Two further items are automated by the tool rather than provided: the developer's own Apple ID
 on the App Store Connect team, which `tao ship` can invite through the API, though the
 developer still clicks the activation email; and the hosted InstantDB app for the
-WordFlowerInstantDB acceptance run. For that run Ro provided the app id
+WordFlowerInstantDB acceptance run. For that run the Developer provided the app id
 `9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f` on 2026-09-02 and allows the implementer any action on
 it, including deleting its data. It is the id the repository already seeds into the local
 InstantDB stack, so the implementer first confirms it exists on the hosted service at
@@ -535,7 +535,7 @@ code)" — lowered to provider-native rules. So the hosted runtime's job is narr
 the store, enforce the derived rules, evaluate automation schedules, deliver push, answer auth — and
 _not_ run app code. An automation cannot write (§12); it `do`es a transaction, whose authority
 question (§12 gap: what identity does a server-side scheduled `do` carry?) is a real language
-decision this program must put to Ro.
+decision this program must put to the Developer.
 
 Provisioning is a ship-time act: `tao ship` diffs the derived backend (schema, rules, indices,
 automation schedules, push config) against what the service currently runs for that variant, shows
@@ -751,7 +751,7 @@ What people pay for, and why it is defensible:
   production-bundle assertion (no Studio machinery in release builds) is proven by slice 1, landed.
 - **Authority & multiplayer**: the `secret` value type vs deploy-config wording; the InstantDB
   provider's config/auth surface; per-app account semantics. Shared dependencies — collisions
-  get surfaced to Ro, not designed past.
+  get surfaced to the Developer, not designed past.
 - **AI in Tao apps**: hosted agent execution, agent access to production data, on-device model
   entitlements in store builds, and eval runs against shipped model versions are intersections;
   noted here, owned there.
@@ -784,7 +784,7 @@ What people pay for, and why it is defensible:
 - Desktop Electrobun app shipping — signed, notarized, auto-updating — the Studio shell itself as
   first customer.
 
-## Decisions for Ro
+## Decisions for the Developer
 
 Each has a recommended default so slice 1 can start on the ruling alone.
 
@@ -792,12 +792,12 @@ Each has a recommended default so slice 1 can start on the ruling alone.
    TestFlight. `tao publish` stays the package registry's verb. The MVP Justfile's
    `tao build --profile` recipes and the Tao Future Justfiles' `build` and `publish` recipes are
    replaced by `tao ship` recipes.
-2. **Where the identifier facts live.** Settled on 2026-09-02, after the search Ro asked for;
+2. **Where the identifier facts live.** Settled on 2026-09-02, after the search the Developer asked for;
    see _Precedent: accepted project metadata_ below. The ship facts are accepted project metadata
    in the project's `.tao-project/` folder: the `ship` section of one repository-tracked
    `lock.jsonc` that the developer commits,
    written by `tao ship` and never hand-edited, with the bundle identifier rule
-   `<namespace>.<project id>[.<variant>]`. Ro's follow-up ruling the same day: one lock file for
+   `<namespace>.<project id>[.<variant>]`. The Developer's follow-up ruling the same day: one lock file for
    the whole project, sectioned, rather than one file per concern with a shared envelope.
    A `bundle` or `version` fact in the `project` block stays a possible later grammar addition
    for the one or two values a developer authors rather than accepts.
@@ -814,7 +814,7 @@ Each has a recommended default so slice 1 can start on the ruling alone.
 
 ## Precedent: accepted project metadata
 
-Ro recalled an earlier specification of a per-project metadata directory full of Tao-generated
+The Developer recalled an earlier specification of a per-project metadata directory full of Tao-generated
 data that nobody edits by hand, introduced partly for automatic AI design decisions. The search
 on 2026-09-02 found it in three places, and together they say what decision 2 should be.
 
@@ -865,7 +865,7 @@ the design lock's contract rather than inventing one:
 
 ## The Tao Studio companion app
 
-**Direction settled, 2026-09-02.** Ro decided to create a Tao Studio companion app. It exists
+**Direction settled, 2026-09-02.** The Developer decided to create a Tao Studio companion app. It exists
 for an improved development experience first, paired with Tao Studio while developing, and
 also for pre-release testing and feedback by members a developer has invited to their project
 on the Tao Lang servers, where every member must have created an account. The sections below

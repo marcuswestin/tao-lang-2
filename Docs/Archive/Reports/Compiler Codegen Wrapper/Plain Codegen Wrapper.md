@@ -1,6 +1,6 @@
 # Plain Codegen Wrapper
 
-Status: implemented, pending Ro review.
+Status: implemented, pending the Developer review.
 
 - "Plain" means no custom generator class and no tracing/source maps yet; the wrapper still uses Langium generator nodes.
 - Added `gen` for dedented source templates and indentation-aware multiline substitutions.
