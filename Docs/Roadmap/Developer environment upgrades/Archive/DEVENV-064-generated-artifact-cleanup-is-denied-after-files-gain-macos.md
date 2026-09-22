@@ -55,6 +55,7 @@
   persistent runtime and IDE outputs byte-for-byte intact and reports one failure, while successful
   publication removes stale files across both IDE roots as one transaction. The managed task
   namespace now completes ordinary HNReader and WordFlower `tao test` runs without generated
-  directory-rename or directory-removal denial; the real lane's shared preparation also passed.
+  directory-rename or directory-removal denial; `./agent verify` also passed its shared preparation
+  and both Tao app shards.
 - **Source:** 2026-09-16 September remediation Wave 1 and acceptance remediation.
 - **Archived:** 2026-09-22

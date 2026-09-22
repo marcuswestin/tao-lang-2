@@ -2,6 +2,9 @@ import { AST } from '@parser'
 import { collapsesToOneLine, type FormatHandlers } from '../formatting'
 
 export const ActionsFormatter = {
+  RetryStatement(f) {
+    f.oneSpaceAfter('retry')
+  },
   /** ActionBlock formats action bodies with one indented statement per line. */
   ActionBlock(f) {
     f.oneSpaceBefore('{')

@@ -270,6 +270,9 @@ equals MVP.
 - Waits on: step 4 (`R5`) must settle the authority-cluster scope before the tranche list is known;
   tranches touching the deferred runtime contracts wait on `R6`.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
+  snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
+  acceptance. These are not implied by the implemented projected inputs and writable parameters.
 
 ### A14 — Plans already written
 

@@ -46,7 +46,6 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
-- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/Archive/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Resolved
 - [DEVENV-064 — Generated-artifact cleanup is denied after files gain macOS provenance](<Developer environment upgrades/Archive/DEVENV-064-generated-artifact-cleanup-is-denied-after-files-gain-macos.md>) — Resolved
 - [DEVENV-070 — This ledger no longer fits one agent read](<Developer environment upgrades/Archive/DEVENV-070-this-ledger-no-longer-fits-one-agent-read.md>) — Resolved
 - [DEVENV-075 — A tracked process was re-identified by a name that changes at `exec`](<Developer environment upgrades/Archive/DEVENV-075-process-supervision-survival-assertions-flake-under-load.md>) — Resolved
@@ -69,5 +68,6 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
+- [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved

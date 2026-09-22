@@ -32,6 +32,8 @@ const SHARED_RUN_HANDOFF_VERSION = 1
 
 /** TestCommandOptions configures one `tao test` run. */
 export type TestCommandOptions = {
+  /** journeyObservationsPath receives the versioned live-render observations requested by Studio. */
+  journeyObservationsPath?: string
   /** Run only the journeys whose full name matches this pattern, instead of every journey found. */
   name?: string
   output?: TestOutputMode
@@ -218,6 +220,7 @@ export async function runTestCommandOnce(
   const testPaths = await testPathsUnder(roots)
   if (testPaths.length === 0) {
     HCI.writeLine(`No Tao tests found under ${displayedRoots}`)
+    await writeJourneyObservations(options, undefined)
     return { failed: false }
   }
   for (const testPath of testPaths) {
@@ -229,18 +232,22 @@ export async function runTestCommandOnce(
   const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
     ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
   if (compiled === 'validation-failed') {
+    await writeJourneyObservations(options, undefined)
     return { failed: true }
   }
   if (!await reportSelectedJourneys(compiled, options, fingerprint, displayedRoots)) {
+    await writeJourneyObservations(options, undefined)
     return { failed: false }
   }
   HCI.logProcessInfo('test', 'Running Tao tests')
-  const run = await runCompiledTaoTests(compiled, mode, options.name)
+  const observationDirectory = await prepareJourneyObservations(compiled, options)
+  const run = await runCompiledTaoTests(compiled, mode, options.name, undefined, observationDirectory)
   const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
   // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
   // the generated code, and which a passing run either publishes for reuse or discards below.
   const logPath = await writeTestOutputLog(compiled, run.output)
   TestOutput.reportFinishedRun({ failed, logPath, mode, output: run.output })
+  await writeJourneyObservations(options, observationDirectory)
   if (failed) {
     if (run.result?.error) {
       HCI.writeErrorLine(Errors.formatForUser(run.result.error))
@@ -535,6 +542,7 @@ async function runCompiledTaoTests(
   mode: TestOutputMode,
   namePattern: string | undefined,
   testPaths?: readonly string[],
+  journeyObservationDirectory?: string,
 ): Promise<CompletedTestRun> {
   if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined || compiled.runRoot === undefined) {
     return { output: '' }
@@ -564,6 +572,9 @@ async function runCompiledTaoTests(
     env: {
       [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
       [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
+      ...(journeyObservationDirectory === undefined
+        ? {}
+        : { [RuntimeTesting.JourneyObservations.ENV]: journeyObservationDirectory }),
     },
     onOutput: (_stream, chunk) => {
       chunks.push(chunk)
@@ -573,6 +584,34 @@ async function runCompiledTaoTests(
   })
   writer?.flush()
   return { output: Buffer.concat(chunks).toString('utf8'), result }
+}
+
+/** prepareJourneyObservations gives this execution a fresh worker-safe directory, including when compiled apps were reused. */
+async function prepareJourneyObservations(
+  compiled: CompiledTaoTests,
+  options: TestCommandOptions,
+): Promise<string | undefined> {
+  if (options.journeyObservationsPath === undefined || compiled.runRoot === undefined) {
+    return undefined
+  }
+  const directory = FS.resolvePath(RuntimeTesting.JourneyObservations.DIRECTORY_NAME, compiled.runRoot)
+  await FS.remove(directory)
+  await FS.mkdir(directory)
+  return directory
+}
+
+/** writeJourneyObservations publishes only live renderer records, never source-derived coverage. */
+async function writeJourneyObservations(
+  options: TestCommandOptions,
+  directory: string | undefined,
+): Promise<void> {
+  if (options.journeyObservationsPath === undefined) {
+    return
+  }
+  const artifact = directory === undefined
+    ? RuntimeTesting.JourneyObservations.artifact([])
+    : await RuntimeTesting.JourneyObservations.read(directory)
+  await FS.writeJson(FS.resolvePath(options.journeyObservationsPath), artifact)
 }
 
 /**

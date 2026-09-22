@@ -17,7 +17,10 @@ TypeDeclaration:
     ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference);
 
 TypeExpression:
-    DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
+    ProjectedItemTypeExpression | DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
+
+ProjectedItemTypeExpression:
+    base=TypeReference ('{' fields+=ID (',' fields+=ID)* '}' | 'without' '{' excludedFields+=ID (',' excludedFields+=ID)* '}');
 
 DerivedTypeExpression:
     base=TypeReference 'with' slots=ItemTypeExpression;

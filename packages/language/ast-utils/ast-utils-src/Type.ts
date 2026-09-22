@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { parameterRequiresWritable } from './reactive-parameters'
 import { type UnitFamily, Units } from './Units'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
@@ -38,8 +39,14 @@ export type TaoType =
   | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
 
-/** ItemShape is the effective slot surface of an item type, including derived slots. */
-export type ItemShape = { readonly properties: readonly AST.TypeProperty[] }
+export type ItemShapeField = AST.TypeProperty | AST.EntityDataField
+
+/** ItemShape is the effective slot surface of an item type, including projected data fields. */
+export type ItemShape = {
+  readonly properties: readonly AST.TypeProperty[]
+  readonly dataFields?: readonly DataFieldDefinition[]
+  readonly projectedEntity?: DataEntityDefinition
+}
 
 export type DataEntityDefinition = AST.EntityDataDeclaration
 export type DataFieldDefinition = AST.EntityDataField
@@ -47,8 +54,11 @@ type QueryDefinition = AST.EntityQueryDeclaration
 
 /** TaoActionParameter declares one positional input accepted by an action value. */
 type TaoActionParameter = {
+  name?: string
   type: TaoType
   optional: boolean
+  /** writable stays internal: written action(...) contracts always promise readonly inputs. */
+  writable: boolean
 }
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
@@ -233,6 +243,26 @@ export class Type {
   /** slotsOf returns the supplied-slot shape carried by an item or primitive-family type. */
   static slotsOf(type: TaoType): ItemShape | undefined {
     return slotShape(type)
+  }
+
+  static itemFields(shape: ItemShape): readonly ItemShapeField[] {
+    return [...shape.properties, ...(shape.dataFields ?? [])]
+  }
+
+  static itemFieldType(field: ItemShapeField): TaoType {
+    return AST.isEntityDataField(field) ? Type.dataFieldType(field) : Type.ofProperty(field)
+  }
+
+  static itemFieldIsFilled(field: ItemShapeField): field is AST.TypeProperty {
+    return AST.isTypeProperty(field) && Type.propertyIsFilled(field)
+  }
+
+  static itemFieldRequiresValue(field: ItemShapeField): boolean {
+    return AST.isEntityDataField(field) ? !field.optional : Type.propertyRequiresValue(field)
+  }
+
+  static projectedEntityOf(type: TaoType): DataEntityDefinition | undefined {
+    return type.kind === 'item' ? type.item?.projectedEntity : undefined
   }
 
   /** ofProperty resolves the expected value type of one item property declaration. */
@@ -435,6 +465,17 @@ export class Type {
       return primitiveType('text')
     }
     return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
+  }
+
+  /** entityBuiltinMemberType resolves the runtime write-status members available on every entity. */
+  static entityBuiltinMemberType(member: string): TaoType | undefined {
+    if (member === 'WritesQueued' || member === 'WritesFailed') {
+      return primitiveType('number')
+    }
+    if (member === 'WriteError') {
+      return primitiveType('text')
+    }
+    return member === 'CanRetryWrites' ? primitiveType('boolean') : undefined
   }
 
   /** dimensionalResult returns the type an operator yields over unit values, or none when illegal. */
@@ -742,19 +783,23 @@ function actionTypeIsAssignable(
     const actualParameter = actual.parameters[index]
     // Callback inputs are contravariant: an implementation must accept every value
     // its declared callback contract permits the caller to provide.
-    return actualParameter !== undefined && Type.isAssignable(parameter.type, actualParameter.type)
+    return actualParameter !== undefined
+      && (!actualParameter.writable || parameter.writable)
+      && Type.isAssignable(parameter.type, actualParameter.type)
   })
 }
 
 function actionDisplayName(type: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
   const parameters = type.parameters.map(parameter =>
-    `${Type.displayName(parameter.type)}${parameter.optional ? '?' : ''}`
+    `${parameter.writable ? 'writable ' : ''}${Type.displayName(parameter.type)}${parameter.optional ? '?' : ''}`
   )
   return `action(${parameters.join(', ')})`
 }
 
 function actionParameterIdentityKey(parameter: TaoActionParameter): string {
-  return `${Type.identityKey(parameter.type) ?? 'unresolved'}${parameter.optional ? '?' : ''}`
+  return `${Type.identityKey(parameter.type) ?? 'unresolved'}${parameter.optional ? '?' : ''}${
+    parameter.writable ? '!' : ''
+  }`
 }
 
 function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolean {
@@ -828,7 +873,11 @@ function nominalsAreCastCompatible(from: AST.TypeDefinition, target: AST.TypeDef
   return nominalChain(from).includes(target) || nominalChain(target).includes(from)
 }
 
-function propertyNamed(itemType: ItemShape, name: string): AST.TypeProperty | undefined {
+function propertyNamed(itemType: ItemShape, name: string): ItemShapeField | undefined {
+  return Type.itemFields(itemType).find(property => property.name === name)
+}
+
+function typePropertyNamed(itemType: ItemShape, name: string): AST.TypeProperty | undefined {
   return itemType.properties.find(property => property.name === name)
 }
 
@@ -852,11 +901,15 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
     if (member === 'Id') {
       return primitiveType('text')
     }
+    const builtin = Type.entityBuiltinMemberType(member)
+    if (builtin) {
+      return builtin
+    }
     const field = dataFieldNamed(current.entity, member)
     return field && Type.dataFieldType(field)
   }
   const property = isItemKind(current) && current.item ? propertyNamed(current.item, member) : undefined
-  return property && Type.ofPropertyRead(property)
+  return property && (AST.isEntityDataField(property) ? Type.dataFieldType(property) : Type.ofPropertyRead(property))
 }
 
 class TypeResolutionContext {
@@ -881,7 +934,11 @@ class TypeResolutionContext {
     return Switch.type(type, {
       ActionTypeReference: reference =>
         actionType(
-          reference.parameterTypes.map(parameter => ({ type: this.ofReference(parameter), optional: false })),
+          reference.parameterTypes.map(parameter => ({
+            type: this.ofReference(parameter),
+            optional: false,
+            writable: false,
+          })),
         ),
       ListTypeReference: reference => ({ kind: 'list', element: this.ofReference(reference.elementType) }),
       NamedTypeReference: reference => {
@@ -916,6 +973,7 @@ class TypeResolutionContext {
       ConfigurationConstructor: value => Type.ofConfiguredValue(value),
       InferredConfigurationConstructor: value => Type.ofInferredConfiguration(value),
       PrimitiveConfigurationConstructor: value => primitiveType(value.primitive),
+      CopyExpression: copy => copy.type ? this.ofReference(copy.type) : this.ofExpression(copy.value),
       RefinementExpression: reference => {
         const target = reference.target.ref
         if (AST.isCommandDeclaration(target)) {
@@ -1050,8 +1108,10 @@ class TypeResolutionContext {
   private actionTypeOfParameters(parameters: readonly AST.ParameterDeclaration[]): TaoType {
     return actionType(
       parameters.map(parameter => ({
+        name: Type.parameterName(parameter),
         type: this.ofParameter(parameter),
         optional: parameter.defaultValue !== undefined,
+        writable: parameterRequiresWritable(parameter),
       })),
     )
   }
@@ -1145,6 +1205,7 @@ class TypeResolutionContext {
       DerivedTypeExpression: derived => this.derivedType(derived),
       CaseSetTypeExpression: caseSet => ({ kind: 'enum', declaration: caseSet.$container as AST.TypeDeclaration }),
       ItemTypeExpression: item => ({ kind: 'item', item }),
+      ProjectedItemTypeExpression: projected => this.projectedItemType(projected),
       YesNoTypeExpression: () => primitiveType('boolean'),
       UnionTypeExpression: union => ({
         kind: 'union',
@@ -1174,6 +1235,19 @@ class TypeResolutionContext {
     return base.kind === 'item'
       ? { ...base, item: { properties } }
       : { ...base, slots: { properties } }
+  }
+
+  private projectedItemType(projected: AST.ProjectedItemTypeExpression): TaoType {
+    const base = this.ofReference(projected.base)
+    if (base.kind !== 'entity') {
+      return unresolvedType()
+    }
+    const excluded = new Set(projected.excludedFields)
+    const selected = projected.fields.length > 0 ? new Set(projected.fields) : undefined
+    const dataFields = Type.dataFields(base.entity).filter(field =>
+      selected ? selected.has(field.name) : !excluded.has(field.name)
+    )
+    return { kind: 'item', item: { properties: [], dataFields, projectedEntity: base.entity } }
   }
 }
 
@@ -1293,7 +1367,7 @@ function definitionAtMemberPath(
     if (!itemType) {
       return undefined
     }
-    current = propertyNamed(itemType, member)
+    current = typePropertyNamed(itemType, member)
     if (!current) {
       return undefined
     }
@@ -1310,7 +1384,7 @@ function parameterTypeDeclarationNamed(
 
 function itemConstructorProperty(reference: AST.NamedTypeReference, name: string): AST.TypeProperty | undefined {
   const itemType = owningItemLiteralType(reference)
-  return itemType ? propertyNamed(itemType, name) : undefined
+  return itemType ? typePropertyNamed(itemType, name) : undefined
 }
 
 function owningItemLiteralType(reference: AST.NamedTypeReference): ItemShape | undefined {

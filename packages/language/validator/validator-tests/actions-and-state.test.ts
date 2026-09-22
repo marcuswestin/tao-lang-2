@@ -2,6 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { ActionsValidator } from '../validator-src/validators/ActionsValidator'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
+import { ReactiveParametersValidator } from '../validator-src/validators/ReactiveParametersValidator'
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
@@ -15,6 +16,7 @@ import {
 } from './test-validate'
 
 const invocationMessages = InvocationsValidator.messages
+const reactiveParameterMessages = ReactiveParametersValidator.messages
 const textView = stubView('Text', 'Value text')
 const stackLayout = stubContainer('Stack')
 
@@ -23,6 +25,235 @@ function actionApp(body: string, extra = ''): string {
 }
 
 Describe('validator: actions and state', () => {
+  Test(
+    'rejects a computed argument for a view parameter inferred writable',
+    rejects(
+      app(
+        'let Draft = "draft"\nrender Editor(Draft)',
+        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+      ),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test(
+    'allows a writable parameter inferred from a direct mutation',
+    accepts(
+      app(
+        'state Draft = "draft"\nrender Editor(Draft)',
+        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+      ),
+    ),
+  )
+
+  Test(
+    'propagates writable storage through a presented view',
+    accepts(
+      app(
+        'render Parent("draft")',
+        `workspace ${textView}
+         view Parent(Value text) { action OpenEditor() { present Editor(Value) } render Text(Value) }
+         view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+      ),
+    ),
+  )
+
+  Test(
+    'allows a literal view argument to own its inferred writable storage',
+    accepts(
+      app(
+        'render Editor("draft")',
+        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+      ),
+    ),
+  )
+
+  Test(
+    'allows a literal default for an inferred-writable view parameter',
+    accepts(app(
+      'render Editor()',
+      `workspace ${textView}\nview Editor(Value text default "draft") { action Save() { set Value += "!" } render Text(Value) }`,
+    )),
+  )
+
+  Test(
+    'rejects a literal default for an inferred-writable action parameter',
+    rejects(
+      app('action Edit(Value text default "draft") { set Value += "!" }\nrender Text("ready")', textView),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test(
+    'rejects a computed default for an inferred-writable action parameter',
+    rejects(
+      app(
+        'let Draft = "draft"\naction Edit(Value text default Draft) { set Value += "!" }\nrender Text("ready")',
+        textView,
+      ),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test(
+    'allows writable state as an inferred-writable action default',
+    accepts(app(
+      'state Draft = "draft"\naction Edit(Value text default Draft) { set Value += "!" }\nrender Text("ready")',
+      textView,
+    )),
+  )
+
+  Test(
+    'allows a copied action parameter to own its literal default',
+    accepts(app(
+      'action Edit(copy Value text default "draft") { set Value += "!" }\nrender Text("ready")',
+      textView,
+    )),
+  )
+
+  Test(
+    'propagates writable requirements through a nested action default',
+    rejects(
+      app(
+        'let Draft = "draft"\nrender Editor(Draft)',
+        `workspace ${textView}
+         view Editor(Value text) {
+           action Edit(Local text default Value) { set Local += "!" }
+           render Text(Value)
+         }`,
+      ),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test(
+    'rejects an incompatible value assigned to a writable parameter',
+    rejects(
+      app(
+        'render Editor(1)',
+        `workspace ${textView}\nview Editor(Value number) { action Save() { set Value = "wrong" } render Text("ready") }`,
+      ),
+      StateValidator.messages.mutableSetTypeMismatch('Value', 'Editor.Value', 'text'),
+    ),
+  )
+
+  Test(
+    'allows mutation of a field on a writable item parameter',
+    accepts(app(
+      'state Draft = Note { Title "old" }\nrender Editor(Draft)',
+      `workspace ${textView}
+       type Note is { Title text }
+       view Editor(Value Note) { action Save() { set Value.Title = "new" } render Text(Value.Title) }`,
+    )),
+  )
+
+  Test(
+    'terminates writable inference through recursive forwarding',
+    accepts(app(
+      'state Draft = "draft"\nrender First(Draft)',
+      `workspace ${textView}
+      view First(Value text) { action Save() { set Value = "saved" } render Second(Value) }
+      view Second(Value text) { render First(Value) }
+    `,
+    )),
+  )
+
+  Test(
+    'lets a copied parameter provide writable storage to a nested view',
+    accepts(
+      app(
+        'state Draft = "draft"\nrender Wrapper(Draft)',
+        `
+        workspace ${textView}
+        view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }
+        view Wrapper(copy Value text) { render Editor(Value) }
+      `,
+      ),
+    ),
+  )
+
+  Test(
+    'allows a computed input when an ordinary Change argument owns its updates',
+    accepts(app(
+      'let Draft = "draft"\nrender Editor(Draft)',
+      `
+      workspace ${stubView('TextInput', 'mutable Value text, Change action(text), Submit action()')}
+      view Editor(Value text) {
+        action SetTitle(Next text) { }
+        action Save() { }
+        render TextInput(Value: Value, Change: SetTitle, Submit: Save)
+      }
+    `,
+    )),
+  )
+
+  Test(
+    'rejects a mutating action passed to a native readonly Change callback',
+    rejects(
+      app(
+        'action Normalize(Value text) { set Value = "normalized" }\nrender TextInput(Value: "draft", Change: Normalize, Submit: action { })',
+        stubView('TextInput', 'mutable Value text, Change action(text), Submit action()'),
+      ),
+      invocationMessages.namedArgumentType('TextInput', 'Change', 'action(text)', 'action(writable Normalize.Value)'),
+    ),
+  )
+
+  Test(
+    'rejects a mutating action passed to an ordinary readonly callback',
+    rejects(
+      app(
+        'action Normalize(Value text) { set Value = "normalized" }\nrender Wrapper(Callback: Normalize)',
+        `${textView}\nview Wrapper(Callback action(text)) { render Text("ready") }`,
+      ),
+      invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action(writable Normalize.Value)'),
+    ),
+  )
+
+  Test(
+    'allows a copied action parameter through a readonly callback contract',
+    accepts(
+      app(
+        'action Normalize(copy Value text) { set Value = "normalized" }\nrender Wrapper(Callback: Normalize)',
+        `${textView}\nview Wrapper(Callback action(text)) { render Text("ready") }`,
+      ),
+    ),
+  )
+
+  Test(
+    'rejects a literal passed through an alias to a mutating action',
+    rejects(
+      app(
+        'action Mutate(Value text) { set Value = "saved" }\nlet Alias = Mutate\naction Run() { do Alias("draft") }\nrender Text("ready")',
+        textView,
+      ),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test(
+    'allows writable state passed through an alias to a mutating action',
+    accepts(app(
+      'state Draft = "draft"\naction Mutate(Value text) { set Value = "saved" }\nlet Alias = Mutate\naction Run() { do Alias(Draft) }\nrender Text("ready")',
+      textView,
+    )),
+  )
+
+  Test(
+    'propagates writable requirements through an aliased action call',
+    rejects(
+      app(
+        'let Draft = "draft"\nrender Editor(Draft)',
+        `workspace ${textView}
+         view Editor(Value text) {
+           action Mutate(Value text) { set Value = "saved" }
+           let Alias = Mutate
+           action Run() { do Alias(Value) }
+           render Text(Value)
+         }`,
+      ),
+      reactiveParameterMessages.readonlyArgument('Value'),
+    ),
+  )
   Test(
     'allows file-level actions as render arguments',
     accepts(
@@ -82,6 +313,11 @@ Describe('validator: actions and state', () => {
       [
         'allows compound mutation of a state declared as number',
         'state Count is number = 0\naction Bump() { set Count += 1 }',
+        '',
+      ],
+      [
+        'allows compound text concatenation',
+        'state Name = "Ro"\naction Greet() { set Name += "!" }',
         '',
       ],
     ] as const
@@ -179,8 +415,8 @@ Describe('validator: actions and state', () => {
       },
       {
         title: 'rejects compound mutation of non-number state',
-        body: 'state Name = "Ro"\naction BadCompound() { set Name += "!" }',
-        messages: [StateValidator.messages.compoundStateType('Name', '+=', 'text')],
+        body: 'state Ready = false\naction BadCompound() { set Ready += true }',
+        messages: [StateValidator.messages.compoundStateType('Ready', '+=', 'boolean')],
       },
       {
         title: 'checks set values against the declared state type rather than its initial value',
@@ -239,12 +475,12 @@ Describe('validator: actions and state', () => {
     Test(title, rejects(actionApp(body, extra), ...messages))
   }
 
-  Test('reports only the operator error when a compound mutation also has a mismatched value', async () => {
+  Test('reports the assignment error when text concatenation has a mismatched value', async () => {
     const result = await testValidateCodeWithErrors(
       actionApp('state Name = "Ro"\naction BadCompound() { set Name += 1 }'),
     )
     Expect(validationErrorMessages(result)).toEqual([
-      StateValidator.messages.compoundStateType('Name', '+=', 'text'),
+      StateValidator.messages.setTypeMismatch('Name', 'text', 'number'),
     ])
   })
 

@@ -54,7 +54,9 @@ Describe('compiler: typed values', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
     Expect(code).toContain("import { OpenUrl as __tao_bridge_1__ } from './OpenStoryLink'")
     Expect(code).toContain('_Scope.OpenUrl = TR.Alias(TR.BridgedAction(__tao_bridge_1__))')
-    Expect(code).toContain('TR.Do(_Scope.OpenUrl.evaluate(), TR.Value("https://example.com/story"))')
+    Expect(code).toContain(
+      'TR.Do(_Scope.OpenUrl.evaluate(), TR.Readonly(TR.Alias(() => TR.Value("https://example.com/story"))))',
+    )
     Expect(code).not.toContain('Linking')
   })
 })

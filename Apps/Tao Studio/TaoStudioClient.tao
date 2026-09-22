@@ -365,7 +365,7 @@ view DesignTokensPanel() {
       DesignTokenKindGroup(TokenKind: "token", Title: "tokens")
 }  }
 
-view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text) {
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text, LensLines list of text, LensJourneyPath text) {
    action ApplyInspector(Action text, Proposed boolean) {
       do ApplyInspectorAction(Action, Proposed)
    }
@@ -375,12 +375,26 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
    render StudioContextPanelSurface() {
       StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
       StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Content: ActiveFileContent, Path: ActiveFilePath)
+      StudioLensPanel(Lines: LensLines, JourneyPath: LensJourneyPath)
       StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
       StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
       StudioInspectorText(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
 }  }
+
+view StudioLensPanel(Lines list of text, JourneyPath text) {
+   action OpenJourney() {
+      do OpenFile(JourneyPath)
+   }
+   render StudioInspectorSection("Tao Lens") {
+      loop Lines / Line {
+         Text(Line)
+      }
+      when JourneyPath {
+         empty -> { }
+         otherwise -> { StudioButton(Label: "Open covering journey", Press: OpenJourney, Disabled: false, Variant: "secondary") }
+}  }  }
 
 // The active cell's environment is edited in one place, the Scenario pane, and this view owns the drafts.
 view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text) {
@@ -1533,7 +1547,7 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
       @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
       @editor StudioCodeEditor()
-      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
+      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null", LensLines: [], LensJourneyPath: "")
 }  }
 
 view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx

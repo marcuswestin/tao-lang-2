@@ -12,6 +12,8 @@ export const TaoStudioDeviceProtocol = {
   frameLimitBytes: 262_144,
   /** The most log entries one `device.log` frame may carry; the device batches to fit it. */
   logBatchLimit: 200,
+  /** Render timings are batched; this caps one device Lens frame. */
+  lensBatchLimit: 64,
   handshakeTimeoutMs: 20_000,
   heartbeatMs: 15_000,
   name: 'tao-studio-device-v1',
@@ -168,6 +170,7 @@ export type TaoStudioDeviceDeviceMessage =
   | { error: string; requestId: string; type: 'device.runtimeCaptureFailed' }
   | { level: 'error' | 'info'; message: string; type: 'device.report' }
   | { entries: readonly TaoStudioDeviceLogEntry[]; type: 'device.log' }
+  | { samples: readonly TaoStudioDeviceLensSample[]; type: 'device.lens' }
   | { occurrence: TaoStudioDeviceOccurrence; type: 'device.selectSource' }
   | { network: TaoStudioDeviceNetworkCondition; type: 'device.setNetwork' }
   | {
@@ -212,6 +215,22 @@ export type TaoStudioDeviceLogEntry = {
   message: string
   timestamp: number
 }
+
+/** One public React Profiler observation from a paired native device. */
+export type TaoStudioDeviceLensSample = {
+  actualDurationMs: number
+  /** Invalidation categories only: the protocol never carries state or provider values. */
+  causes: readonly TaoStudioDeviceLensCause[]
+  instanceId: string
+  /** The published source version belongs to the occurrence, not a mutable device assertion. */
+  occurrence: TaoStudioDeviceOccurrence
+  phase: 'mount' | 'update'
+  timestamp: number
+}
+
+export type TaoStudioDeviceLensCause =
+  | { kind: 'state' }
+  | { entity: string; kind: 'data'; providerWaitMs?: number; schema: string }
 
 /**
  * TaoStudioDeviceNetworkCondition is the network the phone asks Studio to put its cell under.
@@ -371,6 +390,21 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
       parsed.push({ level: entry['level'], message: entry['message'], timestamp: entry['timestamp'] })
     }
     return { entries: parsed, type: 'device.log' }
+  },
+  'device.lens': value => {
+    const samples = value['samples']
+    if (!Array.isArray(samples) || samples.length === 0 || samples.length > TaoStudioDeviceProtocol.lensBatchLimit) {
+      return undefined
+    }
+    const parsed: TaoStudioDeviceLensSample[] = []
+    for (const sample of samples) {
+      const lens = parseLensSample(sample)
+      if (lens === undefined) {
+        return undefined
+      }
+      parsed.push(lens)
+    }
+    return { samples: parsed, type: 'device.lens' }
   },
   'device.setNetwork': value =>
     value['network'] === 'normal' || value['network'] === 'offline' || value['network'] === 'slow'
@@ -551,6 +585,65 @@ function parseOccurrence(value: unknown): TaoStudioDeviceOccurrence | undefined 
   }
 }
 
+function parseLensSample(value: unknown): TaoStudioDeviceLensSample | undefined {
+  if (
+    !isObject(value)
+    || !finiteNonNegative(value['actualDurationMs'])
+    || value['actualDurationMs'] > 60_000
+    || !nonEmptyString(value['instanceId'])
+    || value['instanceId'].length > 256
+    || (value['phase'] !== 'mount' && value['phase'] !== 'update')
+    || !nonNegativeInteger(value['timestamp'])
+  ) {
+    return undefined
+  }
+  const occurrence = parseOccurrence(value['occurrence'])
+  const causes = value['causes']
+  if (occurrence === undefined || !Array.isArray(causes) || causes.length > 8) {
+    return undefined
+  }
+  const parsedCauses: TaoStudioDeviceLensCause[] = []
+  for (const cause of causes) {
+    const parsed = parseLensCause(cause)
+    if (parsed === undefined) {
+      return undefined
+    }
+    parsedCauses.push(parsed)
+  }
+  return {
+    actualDurationMs: value['actualDurationMs'],
+    causes: parsedCauses,
+    instanceId: value['instanceId'],
+    occurrence,
+    phase: value['phase'],
+    timestamp: value['timestamp'],
+  }
+}
+
+function parseLensCause(value: unknown): TaoStudioDeviceLensCause | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+  if (value['kind'] === 'state') {
+    return { kind: 'state' }
+  }
+  if (
+    value['kind'] !== 'data'
+    || !nonEmptyString(value['schema'])
+    || !nonEmptyString(value['entity'])
+    || (value['providerWaitMs'] !== undefined
+      && (!finiteNonNegative(value['providerWaitMs']) || value['providerWaitMs'] > 60_000))
+  ) {
+    return undefined
+  }
+  return {
+    entity: value['entity'],
+    kind: 'data',
+    ...(value['providerWaitMs'] === undefined ? {} : { providerWaitMs: value['providerWaitMs'] }),
+    schema: value['schema'],
+  }
+}
+
 /** A move needs something to move and somewhere to put it; neither anchor is a move to nowhere. */
 function parseMoveRender(value: unknown): TaoStudioDeviceMoveRender | undefined {
   if (
@@ -681,6 +774,10 @@ function positiveInteger(value: unknown): value is number {
 
 function nonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function finiteNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
 function nonEmptyString(value: unknown): value is string {

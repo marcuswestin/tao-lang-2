@@ -83,6 +83,8 @@ export type StudioProductHostState = Readonly<{
     inspection?: StudioRenderInspection
     selection?: StudioInspectorSelection
   }>
+  lensLines?: readonly string[]
+  lensJourneyPath?: string
   panels?: StudioProductHostPanels
   selectedRender?: Readonly<{
     path: string
@@ -151,6 +153,7 @@ export function publishStudioProductHostState(
     activeCell: freezeOptional(state.activeCell),
     activeFile: freezeOptional(state.activeFile),
     inspector: freezeOptional(state.inspector),
+    lensLines: state.lensLines === undefined ? undefined : Object.freeze([...state.lensLines]),
     panels: freezeOptional(state.panels),
     revision: activeState.revision + 1,
     selectedRender: freezeOptional(state.selectedRender),

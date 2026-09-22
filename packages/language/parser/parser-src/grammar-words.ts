@@ -28,6 +28,7 @@ const DECLARATION_WORDS: Readonly<Record<string, string>> = {
   FixtureValueDeclaration: 'fixture value',
   FunctionDeclaration: 'function',
   ListedDeclaration: 'data entity or value',
+  MutableDeclaration: 'state or parameter',
   NamedDeclaration: 'declaration',
   RefinementBaseDeclaration: 'type or value',
   RenderSlotContract: 'render slot',

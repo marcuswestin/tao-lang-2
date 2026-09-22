@@ -5,9 +5,15 @@ message format, and how a red lane is classified.
 
 Remote inspection and push automatically use the host-owned landing broker when installed. If the
 command says it is unavailable, ask Ro to run `just landing-setup` in a normal terminal; never grant
-the repository access to `~/.config/gh` and never run mutable repository code wholesale outside the
-sandbox. The broker exposes only this repository's fixed HTTPS remote and an atomic, lease-checked
-main/archive update, not a general Git or credential API.
+the repository direct access to `~/.config/gh`. The broker exposes only this repository's fixed HTTPS
+remote and an atomic, lease-checked main/archive update, not a general Git or credential API.
+
+Ro explicitly approved unsandboxed, non-interactive Codex landing parity with Claude Code. The
+canonical Codex exceptions in `.rulesync/permissions.jsonc` cover `just land` and its direct
+landing aliases; they also give all edited repository code those commands invoke host access.
+Use that access only for an explicitly authorized landing, never as a general unsandboxed shell.
+Codex loads project-local rules only for a trusted project and at task startup, so a task that
+predates a rule change may need restarting before it can use the new permission.
 
 ## `just land`
 
