@@ -1,8 +1,9 @@
 # Plan - Repository simplification 2
 
-Status: Waves 0 and 1 landed; Wave 2 integrated. Decisions settled
-with Ro on 2026-09-19. The `simplify-repo` skill owns the repeatable method; this document owns this
-run: its baseline, fences, waves, and ledger.
+Status: Landed. Waves 0-3 and the package restructure are in on `main`, stepwise rather than in the
+single mechanical commit Wave 3 originally called for. Decisions settled with Ro on 2026-09-19 and
+2026-09-21. The `simplify-repo` skill owns the repeatable method; this document owns this run: its
+baseline, fences, waves, and ledger.
 
 The first pass is archived at `Docs/Archive/Plans/Repository simplification/`. It and its three
 follow-ups took dead exports, name-level duplicate helpers, typed errors, the Studio wire contract,
@@ -154,11 +155,20 @@ do not move.
 
 Record per wave: non-test source lines, instruction lines, allowlist entries, defects fixed.
 
-| Wave | Source lines | Instruction lines | Allowlist entries | Chain files | Defects fixed |
-| ---- | ------------ | ----------------- | ----------------- | ----------- | ------------- |
-| 0    | 141,135      | 1,761             | 145               | 23          | none          |
-| 1    | 141,422      | 1,411             | 145               | 3           | 3             |
-| 2    | 141,652      | 1,428             | 135               | 3           | none          |
+| Wave    | Source lines | Instruction lines | Allowlist entries | Chain files | Defects fixed |
+| ------- | ------------ | ------------------ | ------------------ | ----------- | ------------- |
+| 0       | 141,135      | 1,761              | 145                | 23          | none          |
+| 1       | 141,422      | 1,411              | 145                | 3           | 3             |
+| 2       | 141,652      | 1,428              | 135                | 3           | none          |
+| Closing | 146,462      | 1,727              | 155                | 3           | see below     |
+
+The closing row is `./agent simplify-audit` on 2026-09-21 across 21 packages, at the end of the CLI
+restructure and package regroup that followed Wave 2. Source and instruction lines rose against the
+baseline: this row measures the repository, not this run's removals — `main` gained features and
+other sessions' instructions throughout the run alongside this run's own reductions, and the audit
+cannot separate the two. Defects fixed in the package-restructure and front-door work are named in
+"What this run taught" below rather than counted here, since several were structural fixes rather
+than single-line counts.
 
 ### Wave 1 notes
 
@@ -327,10 +337,62 @@ dev loop moved into `packages/apps/expo-host` behind an injected `DevLoopReporte
 remained of `packages/dev` split into `packages/cli/dev-cli` and `packages/cli/agent-cli` —
 dissolving `dev` for good.
 
-Later slices, in order:
+Later slices, in order, and where each stands at the close of this run:
 
 1. **SDK surface**, adding `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` inside the runtime
    package next to `core`, with a surface snapshot test and a gate that apps import only the SDK,
-   never runtime internals.
+   never runtime internals. Deferred, awaiting Ro's go: the export list depends on what
+   `Apps/HNReader` and the stdlib TypeScript implementations actually use, which needs deriving
+   before the surface is drawn.
 2. **Studio as a Tao app**, with `packages/services/tao-cloud` and `packages/providers/instantdb`.
-3. **A vocabulary pass on "host"**, which today names more than one thing.
+   Split out into its own plan and task:
+   `Docs/Roadmap/Tao Studio as a Tao app/Plan - Tao Studio as a Tao app.md`.
+3. **A vocabulary pass on "host"**, which today names more than one thing across roughly 2,000 uses.
+   Deferred to a quiet day.
+
+## What this run taught
+
+Every real defect a package move exposed was a string, a regex, a table key, a cache key, an
+allowlist entry, or a runtime resolution — never a type error. Tests nested in a `-tests` folder
+belonged to no suite; `tao check` and `tao test` caches keyed on the parser's old path failed open;
+a cross-package lint read two packages moved into one group as one package; four tools counted
+directories to reach a sibling (`../x`, `:h:h:h:h`, `../../node_modules`); the packaged Studio
+payload listed `packages/` one level deep and threw; `DependencyCompatibility` silently skipped
+grouped packages. After any move sweep every one of these classes, and prefer resolving through a
+package name over counting directories to reach a sibling.
+
+A deep-tier read-only review before every landing found what the gates could not: two React
+instances in one Ink tree (`tao dev` raised "Invalid hook call" only on a real TTY, which no test
+mounted) — fixed by structure, the CLI that renders owns the TUI and the dev loop takes a reporter,
+plus a dependency-compatibility rule; a session-start hook that would have failed every new session;
+a front door that orphaned its child on cancel and dropped `land-unlock`'s confirmation prompt. None
+of the three would have failed a green gate.
+
+Deduplication across a package boundary can change behaviour silently: replacing `tao-cli`'s output
+helper with the shared sanitizer turned a lone carriage return from a newline into nothing, and
+would have hidden `Tests:` summary lines had a test not caught it.
+
+Narrow checks while iterating (typecheck, formatting, the touched test files) and one wide `verify`
+when a slice looks done are iteration evidence, not merge evidence; only `finalize` before landing
+is that.
+
+Shared machine state outlives a worktree: `.git/hooks` is shared and last-writer-wins, so a hook
+that names a missing script exits 0 and the guards it was supposed to run silently vanish. `./agent
+doctor` now checks for this.
+
+Groups, not merges, for packages whose tests are cached and sharded per package; merge only where
+one package is the other's front door and no consumer reaches one without the other.
+
+## Unproven
+
+No gate in this run exercised the Android, Appium, or physical-device lanes; the VS Code extension
+in a real editor; or a real packaged Studio app build (its payload fix has a unit test only).
+
+## Deferred
+
+- The `@tao/runtime/sdk` and `@tao/runtime/sdk/providers` slice above, awaiting Ro's go.
+- A vocabulary pass on the word "host", about 2,000 uses across several meanings, deferred to a
+  quiet day.
+- Studio as a Tao app, `packages/services/tao-cloud`, and `packages/providers/instantdb`: a separate
+  task, planned at `Docs/Roadmap/Tao Studio as a Tao app/Plan - Tao Studio as a Tao app.md`.
+

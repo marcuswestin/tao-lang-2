@@ -1,0 +1,17 @@
+{
+  "name": "tao-skills",
+  "private": true,
+  "type": "module",
+  "module": "skills-src/tao-skills.ts",
+  "files": [
+    "skills",
+    "skills-src"
+  ],
+  "exports": {
+    ".": "./skills-src/tao-skills.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  },
+  "version": "1.0.0"
+}

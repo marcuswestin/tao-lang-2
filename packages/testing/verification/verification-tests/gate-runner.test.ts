@@ -147,6 +147,7 @@ Describe('repository gate runner', () => {
       'keyboard-navigation-smoke',
       'studio-dialog-browser',
       'studio-agent-browser',
+      'studio-network-simulation',
       'studio-smoke-native',
       'studio-canary',
     ]

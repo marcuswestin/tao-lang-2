@@ -243,10 +243,9 @@ function archiveName(branch: string): string {
  * twice in a single session.
  *
  * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
- * landing and at no other time, so the ref exists if and only if the branch landed. This reads the
- * local remote-tracking ref after a fetch rather than asking the remote directly: `git ls-remote`
- * authenticates, and credential paths are denied inside the agent sandbox, so the question an agent
- * most needs to ask would be answerable only outside it.
+ * landing and at no other time, so the ref exists if and only if the branch landed. Use the same
+ * credential-isolated broker as landing to inspect the remote, with the normal direct remote path
+ * when the broker is unavailable. A failed remote query must not look like an absent archive.
  */
 export async function landedReport(
   branch?: string,
@@ -261,15 +260,8 @@ export async function landedReport(
     )
   }
   const archive = archiveName(named)
-  // A fetch keeps the answer current; a remote that cannot be reached still leaves the last known
-  // refs readable, so the check degrades to "as of the last fetch" rather than failing outright.
-  await dependencies.run('git', { args: ['fetch', 'origin', '--quiet'], cwd: root, stdio: 'pipe' })
-  const result = await dependencies.run('git', {
-    args: ['for-each-ref', '--format=%(refname:short)', `refs/remotes/origin/${archive}`],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  return { archive, branch: named, landed: (result.stdout ?? '').trim().length > 0 }
+  const remote = await remoteHeads(dependencies, root, [archive])
+  return { archive, branch: named, landed: remote.refs.has(archive) }
 }
 
 /** currentBranch names this worktree's branch, or undefined on a detached HEAD. */
