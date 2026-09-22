@@ -23,17 +23,24 @@
   - `watch-project` resolves a checkout to an existing enclosing watch before its own root marker.
     One watch of the primary checkout held 1,473,953 files across 19 worktrees, with
     `MustScanSubDirs UserDropped` recrawls. After `watch-del`, this worktree watched itself at
-    195,601 entries, and at 55,934 with the root `.watchmanconfig` this change adds. Ignoring
+    195,601 entries, and at 188,494 with the root `.watchmanconfig` this change adds, which leaves
+    out only logs, test output, and the toolchain profile, because Metro needs `node_modules`. Ignoring
     `.claude/worktrees` in the primary checkout would not help: a worktree inside an ignored
     directory still folds into the enclosing watch and then sees no files at all.
   - Both harnesses render a socket entry as a Seatbelt `subpath` rule, which matches the resolved
     path. A directory rule reaches `<login>-state/sock` for any login, and a link planted in the
     directory cannot reach another socket. Probed with the exact rule shape, a sibling-directory
     control, and a symlink control.
-  - Not measured: the EMFILE failure of the no-Watchman fallback. It rests on an earlier sandboxed
-    `tao dev` failure. On `metro-file-map` 0.84.5 the macOS fallback is one recursive FSEvents watch
-    (`NativeWatcher`) plus a Node crawl, so any descriptor exhaustion would now come from the crawl,
-    not from a watch per directory.
+  - The EMFILE is the sandbox, not the tree's size. Inside an agent sandbox a single Node
+    `fs.watch` of an empty directory, recursive or not, fails once it runs with
+    `EMFILE: too many open files, watch`, with a soft descriptor limit of 1,048,576. Outside the
+    sandbox, Node's recursive watch held a constant ~12 descriptors whether it watched 0 or 500
+    files. Metro 0.84.5's no-Watchman path is one such watch per watch folder (`NativeWatcher`), so
+    inside a sandbox Watchman is the only file watching there is.
+  - Metro's watch folders include the whole repository `node_modules` (`metro.config.cjs:38-46`:
+    108,661 files, 18,722 directories, 5,118 symlinks here), and Metro needs it visible through
+    Watchman to hash what it resolves. So `.watchmanconfig` must never ignore a Metro watch folder:
+    a watch folder inside an ignored directory gets an empty file list. A test holds that.
 - **Workaround:** Run `./agent doctor`. It names a denied socket (fix the sandbox rule, then
   restart the session), a stopped server (the exact start command, using the primary checkout's
   client so the LaunchAgent survives worktree cleanup), and an enclosing watch root (the

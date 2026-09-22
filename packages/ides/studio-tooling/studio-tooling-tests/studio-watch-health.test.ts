@@ -71,6 +71,19 @@ Describe('Studio watch health', () => {
     Expect(unwatchedSourceRoots(installed)).toEqual([])
   })
 
+  Test('keeps every folder Metro watches visible to Watchman', async () => {
+    // Watchman answers a query under an ignored directory with no files at all, so ignoring a
+    // folder Metro watches hands Metro an empty file map and every package fails to resolve.
+    const root = Repo.getRoot()
+    const installed = await readWatchFacts(root)
+    const config = await FS.readJson<{ ignore_dirs?: string[] }>(FS.resolvePath('.watchmanconfig', root))
+    const ignored = (config.ignore_dirs ?? []).map(path => FS.resolvePath(path, root))
+
+    Expect(installed.metroWatchFolders.length).toBeGreaterThan(0)
+    Expect(installed.metroWatchFolders.filter(folder => ignored.some(dir => FS.pathIsWithin(folder, dir))))
+      .toEqual([])
+  })
+
   Test('records the three trees this repository deliberately watches twice', async () => {
     const installed = await readWatchFacts(Repo.getRoot())
     const overlaps = overlappingWatchFolders(installed.metroWatchFolders)

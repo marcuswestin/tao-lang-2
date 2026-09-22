@@ -203,10 +203,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     // Read here rather than exported into the environment: everything Studio starts inherits an environment,
     // and only the chat needs these. `--native` takes the same path, which is why it was missing them too.
     const agentSecrets = await SecretsFile.readDecryptedSecrets()
-    if (
-      agentSecrets['ANTHROPIC_API_KEY'] === undefined && Platform.runtimeProcess.env['ANTHROPIC_API_KEY'] === undefined
-    ) {
-      HCI.logProcessInfo('studio', 'Agent chat: no ANTHROPIC_API_KEY; run `just secrets` to decrypt one.')
+    const agentKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+    if (agentKeys.every(key => agentSecrets[key] === undefined && Platform.runtimeProcess.env[key] === undefined)) {
+      HCI.logProcessInfo(
+        'studio',
+        `Agent chat: no ${
+          agentKeys.join(' or ')
+        }; run \`just secrets\` to decrypt one, or \`just secrets add <NAME>\`.`,
+      )
     }
     server = await startStudioSessionServer(manager, {
       agentSecrets,
@@ -714,7 +718,7 @@ function watchmanSocketName(output: string): string | undefined {
 
 function throwWatchmanPreflightError(problem: string, remediation: string): never {
   Errors.throwHostEnvironment(
-    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to Node watching and can exhaust macOS file descriptors (EMFILE). ${remediation}`,
+    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching, which an agent sandbox refuses outright (Node reports it as EMFILE). ${remediation}`,
   )
 }
 

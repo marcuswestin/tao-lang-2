@@ -4,9 +4,10 @@ import type { DoctorCheck } from './RepositoryDoctor'
 /**
  * What the doctors know about Watchman, read without starting it or creating a watch.
  *
- * Metro and Jest fall back to crawling and watching through the OS when Watchman does not answer,
- * silently, and a sandboxed dev loop on this repository has died of that fallback with EMFILE; so
- * every way Watchman can be unusable is a failure here rather than a warning.
+ * Metro and Jest fall back to watching through the OS when Watchman does not answer, silently. An
+ * agent sandbox refuses OS file watching outright — even one `fs.watch` of an empty directory fails,
+ * reported as `EMFILE: too many open files, watch` although nothing is exhausted — so inside a sandbox
+ * Watchman is the only watching there is, and every way it can be unusable is a failure here.
  *
  * The server is asked directly over its socket, never through the `watchman` client: the client
  * spawns a server when it may, so a diagnosis would change the machine, and answers some commands
@@ -24,7 +25,7 @@ const PERMISSIONS_SOURCE = '.rulesync/permissions.jsonc'
 /** The pinned client inside a checkout's devenv profile. */
 const PROFILE_WATCHMAN = '.devenv/profile/bin/watchman'
 
-const FALLBACK = 'Metro and Jest fall back to crawling and watching through the OS, which has failed here with EMFILE'
+const FALLBACK = 'Metro and Jest fall back to OS file watching, which an agent sandbox refuses (reported as EMFILE)'
 
 /** WatchmanServer is what connecting to the server's socket found. */
 export type WatchmanServer =
