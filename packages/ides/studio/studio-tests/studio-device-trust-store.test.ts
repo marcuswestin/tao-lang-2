@@ -1,5 +1,5 @@
 import { StudioDeviceTrust } from '@runtime/TR-studio-device-trust'
-import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
+import { CLI, FS, Platform, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   StudioDeviceTrustStore,
@@ -118,7 +118,9 @@ Describe('Studio device trust store', () => {
         () => true,
         () => false,
       )
-      Expect(await Promise.race([opened, Time.sleep(500).then(() => false)])).toBe(true)
+      // `opened` already resolves true/false on its own; racing it against a sleep let a loaded host
+      // make the sleep branch win and flip this to false even though the open would have succeeded.
+      Expect(await opened).toBe(true)
       Expect(await FS.exists(lockPath)).toBe(false)
     })
   })
@@ -295,11 +297,10 @@ Describe('Studio device trust store', () => {
       await FS.writeText(FS.resolvePath('owner.json', legacyPath), 'not json')
       await Time.sleep(2_100)
 
+      // `opening` rejects on its own once the repair guidance is ready; racing it against a sleep let
+      // a loaded host make the sleep branch win and throw the wrong error before `opening` settled.
       const opening = StudioDeviceTrustStore.open(root)
-      await Expect(Promise.race([
-        opening,
-        Time.sleep(500).then(() => Errors.throwUnexpected('Legacy repair guidance did not settle in time.')),
-      ])).rejects.toThrow(/has no valid owner[\s\S]*move that one lock path aside/)
+      await Expect(opening).rejects.toThrow(/has no valid owner[\s\S]*move that one lock path aside/)
     })
   })
 

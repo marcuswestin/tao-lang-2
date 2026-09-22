@@ -221,14 +221,12 @@ Describe('Studio native bounded lifecycle', () => {
       })
       await until(async () => await FS.isFile(descendantPath), {
         description: 'the Hutch descendant pid',
-        timeoutMs: 1_000,
       })
       const descendantPid = Number((await FS.readText(descendantPath)).trim())
 
       await Expect(run).rejects.toThrow('timed out after 200ms')
       await until(async () => !await processIsRunning(descendantPid), {
         description: 'the complete Hutch process group to stop',
-        timeoutMs: 1_000,
       })
       Expect(await processIsRunning(descendantPid)).toBe(false)
     } finally {

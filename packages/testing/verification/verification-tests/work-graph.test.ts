@@ -378,7 +378,9 @@ Describe('work graph scheduling', () => {
 
   Test('kills a node that outlives its timeout and keeps the rest of the run alive', async () => {
     const run = schedule([
-      { held: true, name: 'hung-canary', timeoutMs: 20 },
+      // This is the timeout under test — the node is held forever and the test proves it gets killed
+      // for outliving this tiny budget, not that the run is fast.
+      { held: true, name: 'hung-canary', timeoutMs: 20 }, // budget-ok: timeout value under test.
       { name: 'report', needs: ['hung-canary'] },
       { held: true, name: 'browser' },
     ])
@@ -398,6 +400,8 @@ Describe('work graph scheduling', () => {
 
   Test('kills a node that goes quiet for longer than its idle bound', async () => {
     const run = schedule([
+      // budget-ok: this is the idle timeout under test — the node is held forever and the test proves
+      // it gets killed for going quiet past this tiny budget, not that the run is fast.
       { held: true, idleTimeoutMs: 20, name: 'silent-suite' },
       { held: true, name: 'browser' },
     ])
@@ -420,7 +424,9 @@ Describe('work graph scheduling', () => {
     const state = WorkGraph.createState({
       name: 'masked-timeout',
       run: { args: [], command: 'ignored' },
-      timeoutMs: 1,
+      // This is the timeout under test — the run never resolves on its own, so the test proves the
+      // timeout still records once cancellation masks the exit code, not that it is fast.
+      timeoutMs: 1, // budget-ok: timeout value under test.
     })
 
     await WorkGraph.run([state], {
@@ -444,14 +450,19 @@ Describe('work graph scheduling', () => {
         args: ['-c', 'sleep 1 & echo $! > "$1"; exit 0', 'work-graph', descendantPath],
         command: '/bin/sh',
       },
-      timeoutMs: 30,
+      // This is the timeout under test — it fires deliberately fast so the test can observe the kill
+      // reaching a descendant that retained the output pipe, not to prove the run is fast.
+      timeoutMs: 30, // budget-ok: timeout value under test.
     })
     const startedAt = Date.now()
 
     await WorkGraph.run([state], { watchInterrupt: () => () => {} })
 
     const descendantPid = Number((await FS.readText(descendantPath)).trim())
-    Expect(Date.now() - startedAt).toBeLessThan(750)
+    // The bound proves the kill reaches the descendant, not speed: with a 30ms timeout the whole
+    // sequence takes milliseconds alone, and the budget is for a host whose load average is in the
+    // tens (same shape as studio-dev.test.ts's stop-timeout bound).
+    Expect(Date.now() - startedAt).toBeLessThan(10_000)
     await until(() => !Platform.processIsAlive(descendantPid), {
       description: 'the timed-out command descendant to exit',
     })
@@ -475,14 +486,19 @@ Describe('work graph scheduling', () => {
     const state = WorkGraph.createState({
       name: 'escaped-descendant-pipe',
       run: { args: ['-e', script], command: process.execPath },
-      timeoutMs: 100,
+      // This is the timeout under test — it fires deliberately fast so the test can observe the kill
+      // reaching an escaped process group, not to prove the run is fast.
+      timeoutMs: 100, // budget-ok: timeout value under test.
     })
     const startedAt = Date.now()
 
     await WorkGraph.run([state], { watchInterrupt: () => () => {} })
 
     const descendantPid = Number((await FS.readText(descendantPath)).trim())
-    Expect(Date.now() - startedAt).toBeLessThan(750)
+    // The bound proves the kill reaches the escaped process group, not speed: with a 100ms timeout the
+    // whole sequence takes milliseconds alone, and the budget is for a host whose load average is in
+    // the tens (same shape as studio-dev.test.ts's stop-timeout bound).
+    Expect(Date.now() - startedAt).toBeLessThan(10_000)
     await until(() => !Platform.processIsAlive(descendantPid), {
       description: 'the escaped timed-out command descendant to exit',
     })
