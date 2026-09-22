@@ -3,37 +3,58 @@
 - **Status:** Planned
 - **Section:** Deferred
 - **Area:** Studio browser smoke
-- **Impact:** The complete simulated-user journey cannot run in the managed host when Chrome aborts with
-  `SIGABRT` before exposing DevTools; ordinary `verify` intentionally omits this proof.
-- **Evidence:** The smoke's non-browser checks pass, but every exact and reduced Chrome launch aborts
-  before DevTools dispatch. The macOS crash stack ends in
-  `TransformProcessType -> _RegisterApplication -> abort`, and LaunchServices cannot resolve the
-  otherwise valid signed Chrome application from this task namespace. Repository CDP tests remain green.
-  On 2026-09-17 the same branch's headless browser journeys launched Chrome normally from an
-  ordinary unsandboxed desktop shell, so the abort is specific to that managed task namespace.
-  On 2026-09-16 the host wrote 25 Chrome crash reports, one at 12:23 and 24 between 19:02 and 19:42.
-  Every one was launched inside the Codex app's coalition (`com.openai.codex`, responsible process
-  ChatGPT) and every one aborted at startup in `TransformProcessType -> _RegisterApplication`: macOS
-  refusing to register Chrome as an app from that process context, before any repository Chrome code
-  runs. Sandbox escalation did not help, and direct `--no-sandbox` launches aborted the same way; two
-  React Native DevTools crashes that evening are the same failure. No fix is known.
-- **Workaround:** From a normal terminal run
-  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts review-cycle` or
-  `just verify-full`; when selecting another supported browser explicitly, set
-  `TAO_STUDIO_CHROME_PATH` in that terminal.
-- **Proposed change:** After Studio branches land, evaluate headless Chromium and attach-to-existing-browser
-  modes, then add a reliable CI or pre-merge host lane without slowing ordinary `verify`.
-- **Candidate mitigations:** None implemented yet. (a) Fail fast in `StudioCdp.launchChrome` using the
-  `hasWindowServerSession()` probe already in `StudioDoctor.ts` (`launchctl managername == Aqua`) plus a
-  single-abort latch, so one clear error replaces about twenty crash dialogs. (b) Probe
-  `chrome-headless-shell` through the existing `TAO_STUDIO_CHROME_PATH`: it has no `.app` bundle and
-  should never reach that registration step (unverified, roughly fifteen minutes to test). (c) Probe an
-  `open -na` or `launchctl asuser` handoff. (d) If those fail, run one persistent browser in the GUI
-  session and use the existing `StudioCdp.attach()` with a fresh browser context per run instead of
-  launching per run — noting that (d) turns per-run launches into shared state that no single lane owns,
-  which interacts with parallelization and with the rule that a lane may only stop processes it started.
+- **Impact:** Studio's simulated-user browser journey and React Native DevTools startup work from an
+  independent desktop terminal, but GUI application startup in a managed task can abort before CDP
+  becomes available. Ordinary `verify` intentionally omits this host proof.
+- **Evidence:** On 2026-09-21, the unlanded diagnostic commit `2f55493d` recorded one managed-task
+  Chrome launch and one React Native DevTools launch exiting with `SIGABRT` in
+  `_RegisterApplication`. The React Native DevTools crash report identified Python as parent and
+  `com.openai.codex` as resource coalition. `launchctl managername` returned `Aqua`, so that check
+  cannot identify the failing context. `open -na` and `launchctl asuser` could not resolve the
+  signed apps. No standalone `chrome-headless-shell` binary was available, and the pinned download
+  was blocked. These are findings from that commit, not changes incorporated here.
+  A separate full-access task in the same `com.openai.codex` coalition reached Chrome CDP, passed
+  the Studio simulated-user journey, and launched the pinned React Native DevTools shell through
+  `@react-native/debugger-shell` 0.86.3. Coalition membership alone therefore does not explain
+  the managed-task abort. The earlier direct Electron CDP probe passed an unsupported
+  `--remote-debugging-port` option, which the app rejected; that probe does not establish frontend
+  load.
+  On 2026-09-21, an independent iTerm2 session was recorded before either app launch. Its shell
+  and CLI inherited iTerm2 resource coalition 46131; `TERM_PROGRAM=iTerm.app` and
+  `CODEX_SANDBOX` was absent. One `./agent studio-smoke
+  packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts terminal-session-proof`
+  run passed after `./agent parser-gen`: Chrome PID 34719, parent 34648, a fresh profile, CDP
+  `/json/version` reachable on port 56432, and an empty browser-console artifact. One bounded
+  launch through the pinned debugger-shell package API returned 0. macOS logs identified React
+  Native DevTools PID 36854, iTerm2 as responsible application, LaunchServices check-in,
+  foreground activation, an Electron window, and exit when its 12-second launcher ended. No new
+  `.ips` crash report appeared. The live monitor missed the DevTools process, so its direct parent
+  and resource coalition were not captured; the ProcessManager check-in named iTerm2's jetsam
+  coalition 46132. The supported API exposed no CDP port. Rendered frontend content and attachment
+  to a live Hermes target remain unverified. This proves an ordinary iTerm2 desktop host, not
+  Terminal.app specifically or reliable managed-task startup.
+- **Workaround:** From an independent desktop terminal, run `./agent parser-gen` if generated
+  parser artifacts are missing, then `./agent studio-smoke
+  packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts <unique-run-id>`.
+  `StudioCdp.launchChrome` owns a fresh browser profile and closes it. Use the pinned
+  `@react-native/debugger-shell` API with `frontendUrl` and `windowKey` for a bounded DevTools
+  startup proof; do not pass Chrome's CDP flag to that API.
+- **Proposed change:** Establish a repeatable host-only lane for the Studio journey and supported
+  React Native DevTools startup. Diagnose the managed session's GUI registration boundary before
+  changing repository sandbox rules. Record the launcher's ancestry, selected non-secret
+  environment, launch method, app parent and coalition when observable, exit status, crash stack,
+  and CDP reachability. Use one bounded launch per app in each new host context. Keep frontend
+  and Hermes attachment claims separate from shell registration.
+- **Candidate mitigations:** A standalone pinned headless shell remains untested and would cover
+  Chrome only. LaunchServices handoffs failed in the managed task. `StudioCdp.attach()` selects an
+  existing page without creating an isolated browser context or owning the process, so a shared
+  browser is not yet safe for parallel lanes. A fast-fail based only on `launchctl managername` is
+  invalid on the failing host because it also reports `Aqua`.
 - **Dependencies:** Semantic-agent, companion, and freehand Studio changes must land first.
-- **Acceptance:** The full browser journey runs repeatably in its supported host and is required for
-  Studio-heavy landing evidence.
-- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation acceptance;
-  2026-09-16 runaway-process investigation.
+- **Acceptance:** The full Studio browser journey and the supported React Native DevTools launch
+  run repeatably in their declared host context; failures yield one bounded, actionable report.
+  Studio-heavy landing evidence requires the browser proof. DevTools frontend load and live Hermes
+  attachment require separate evidence if claimed.
+- **Source:** 2026-09-03 freehand implementation summary; 2026-09-16 September remediation
+  acceptance and runaway-process investigation; 2026-09-21 unlanded diagnostic `2f55493d` and
+  independent iTerm2 host proof.
