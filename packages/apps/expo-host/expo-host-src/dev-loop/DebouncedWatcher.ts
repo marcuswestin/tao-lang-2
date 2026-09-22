@@ -101,6 +101,8 @@ export function shouldIgnoreWatchPath(path: string): boolean {
     || normalized.endsWith('/.git')
     || normalized.includes('/.artifacts/')
     || normalized.endsWith('/.artifacts')
+    || normalized.includes('/.tao/')
+    || normalized.endsWith('/.tao')
     || normalized.includes('/.expo/')
     || normalized.endsWith('/.expo')
     || normalized.includes('/_gen_')

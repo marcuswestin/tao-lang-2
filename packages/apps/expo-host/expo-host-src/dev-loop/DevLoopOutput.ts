@@ -1,6 +1,6 @@
 import { HCI, Switch } from '@shared'
 
-type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'p' | 'q' | 'r' | 's' | 't' | 'v' | 'w'
+type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'p' | 'q' | 'r' | 's' | 't' | 'v' | 'w' | 'x'
 
 export type DevLoopControl = {
   key: DevLoopControlKey
@@ -35,18 +35,19 @@ export type DevLoopReporter = {
 
 export const DEV_LOOP_CONTROLS: DevLoopControl[] = [
   { key: 'q', label: 'quit' },
-  { key: 'd', label: 'open connected device' },
-  { key: 'p', label: 'reload dev process' },
-  { key: 'r', label: 'recompile and reload Expo app' },
+  { key: 'd', label: 'Tao desktop app (not yet available)' },
+  { key: 'p', label: 'open connected physical device' },
+  { key: 'x', label: 'restart dev process' },
+  { key: 'r', label: 'reload app' },
   { key: 'w', label: 'open web' },
   { key: 'i', label: 'open iOS simulator' },
   { key: 'a', label: 'open Android' },
   { key: 's', label: 'switch app' },
-  { key: 'c', label: 'clean, install deps, and reload' },
-  { key: 'f', label: 'fix' },
-  { key: 't', label: 'test' },
-  { key: 'v', label: 'verify' },
-  { key: 'e', label: 'install IDE extension' },
+  { key: 'c', label: 'clean Tao checkout, install deps, and reload (source checkout)' },
+  { key: 'f', label: 'fix Tao checkout (source checkout)' },
+  { key: 't', label: 'test Tao checkout (source checkout)' },
+  { key: 'v', label: 'verify Tao checkout (source checkout)' },
+  { key: 'e', label: 'install IDE extension (source checkout)' },
 ]
 
 const errorLinePattern = /\berrors?\b|\bfailed\b|\bfailure\b|\bfatal\b|\bexception\b|^\s*[✖✘×]/i
