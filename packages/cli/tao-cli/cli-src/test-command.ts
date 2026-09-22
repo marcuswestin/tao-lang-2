@@ -1,7 +1,7 @@
 import { RuntimeToolchainPaths } from '@expo-host'
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { AST, Langium, Parser } from '@parser'
-import { CLI, Errors, FS, HCI, Platform, Repo, TaoTestProtocol } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, Repo, TaoTestProtocol } from '@shared'
 import { TaoAppModules } from './app-modules'
 import { findTaoFiles } from './tao-files'
 import { type FingerprintRequest, TestCache } from './test-cache'
@@ -16,6 +16,19 @@ type CompiledTaoTests = {
   runtimeRoot?: string
   testPaths: readonly string[]
 }
+
+/** SharedRunHandoff is the immutable compiled output one verification lane hands to its Tao app shards. */
+type SharedRunHandoff = {
+  fingerprint?: string
+  manifestPath: string
+  reused: boolean
+  runRoot: string
+  runtimeRoot: string
+  testPaths: readonly string[]
+  version: 1
+}
+
+const SHARED_RUN_HANDOFF_VERSION = 1
 
 /** TestCommandOptions configures one `tao test` run. */
 export type TestCommandOptions = {
@@ -45,6 +58,127 @@ type TaoTestValidationError = RuntimeTesting.TestCompiler.ValidationError
 
 /** TestRunOutcome reports whether one repeatable run of the selected test set failed. */
 export type TestRunOutcome = { failed: boolean }
+
+/** prepareSharedTaoTestRun validates and compiles one selected corpus for later shard processes. */
+export async function prepareSharedTaoTestRun(
+  paths: string | readonly string[],
+  handoffPath: string,
+): Promise<TestRunOutcome> {
+  const roots = resolvedTestRoots(paths)
+  const testPaths = await testPathsUnder(roots)
+  if (testPaths.length === 0) {
+    HCI.writeLine(`No Tao tests found under ${displayRoots(roots)}`)
+    return { failed: false }
+  }
+  for (const testPath of testPaths) {
+    await TaoAppModules.ensureForPath(testPath)
+  }
+  const runtimeRoot = testRuntimeRoot()
+  const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
+  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
+    ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
+  if (compiled === 'validation-failed') {
+    return { failed: true }
+  }
+  if (compiled.manifestPath === undefined || compiled.runRoot === undefined || compiled.runtimeRoot === undefined) {
+    return Errors.throwUnexpected('A prepared Tao test run has no compiled manifest.')
+  }
+  const handoff: SharedRunHandoff = {
+    ...(fingerprint === undefined ? {} : { fingerprint }),
+    manifestPath: compiled.manifestPath,
+    reused: compiled.reused === true,
+    runRoot: compiled.runRoot,
+    runtimeRoot: compiled.runtimeRoot,
+    testPaths,
+    version: SHARED_RUN_HANDOFF_VERSION,
+  }
+  const outputPath = FS.resolvePath(handoffPath)
+  await FS.mkdir(FS.dirname(outputPath))
+  await FS.writeJson(outputPath, handoff)
+  HCI.logProcessInfo('test', `Prepared shared Tao test run: ${FS.displayPath(outputPath)}`)
+  return { failed: false }
+}
+
+/** runSharedTaoTestRun executes only the prepared test files covered by this shard's roots. */
+export async function runSharedTaoTestRun(
+  handoffPath: string,
+  paths: string | readonly string[],
+  options: TestCommandOptions = {},
+): Promise<TestRunOutcome> {
+  const handoff = await readSharedRunHandoff(handoffPath)
+  const runtimeRoot = testRuntimeRoot()
+  if (handoff.runtimeRoot !== runtimeRoot) {
+    return Errors.throwUserInput(
+      `Shared Tao test handoff belongs to ${FS.displayPath(handoff.runtimeRoot)}, not this runtime root.`,
+    )
+  }
+  const opened = await RuntimeTesting.TestRunRoot.open(
+    TestCache.CATEGORY,
+    handoff.runRoot,
+    testRunRootOptions(runtimeRoot),
+  )
+  if (opened === undefined || opened.manifestPath !== handoff.manifestPath) {
+    return Errors.throwUserInput(
+      `Shared Tao test handoff does not name a usable Tao test run: ${FS.displayPath(handoffPath)}.`,
+    )
+  }
+  const roots = resolvedTestRoots(paths)
+  const testPaths = shardTestPaths(handoff.testPaths, roots)
+  const compiled: CompiledTaoTests = {
+    manifestPath: opened.manifestPath,
+    reused: handoff.reused,
+    runRoot: opened.runRoot,
+    runtimeRoot,
+    testPaths,
+  }
+  const mode = options.output ?? 'lines'
+  if (
+    !await reportSelectedJourneys(compiled, options, undefined, displayRoots(roots), {
+      settleRunRoot: false,
+      testPaths,
+    })
+  ) {
+    return { failed: false }
+  }
+  HCI.logProcessInfo('test', 'Running shared Tao tests')
+  const run = await runCompiledTaoTests(compiled, mode, options.name, testPaths)
+  const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
+  // The work graph owns a distinct log for every shard; writing the normal run-root log here would
+  // make concurrent readers overwrite one another.
+  TestOutput.reportFinishedRun({ failed, mode, output: run.output })
+  if (failed && run.result?.error) {
+    HCI.writeErrorLine(Errors.formatForUser(run.result.error))
+  }
+  return { failed }
+}
+
+/** finalizeSharedTaoTestRun publishes or discards a successful lane's prepared output. */
+export async function finalizeSharedTaoTestRun(handoffPath: string): Promise<void> {
+  const handoff = await readSharedRunHandoff(handoffPath)
+  const runtimeRoot = testRuntimeRoot()
+  if (handoff.runtimeRoot !== runtimeRoot) {
+    return Errors.throwUserInput(
+      `Shared Tao test handoff belongs to ${FS.displayPath(handoff.runtimeRoot)}, not this runtime root.`,
+    )
+  }
+  const opened = await RuntimeTesting.TestRunRoot.open(
+    TestCache.CATEGORY,
+    handoff.runRoot,
+    testRunRootOptions(runtimeRoot),
+  )
+  if (opened === undefined || opened.manifestPath !== handoff.manifestPath) {
+    return Errors.throwUserInput(
+      `Shared Tao test handoff does not name a usable Tao test run: ${FS.displayPath(handoffPath)}.`,
+    )
+  }
+  await keepOrDiscardRunRoot({
+    manifestPath: opened.manifestPath,
+    reused: handoff.reused,
+    runRoot: opened.runRoot,
+    runtimeRoot,
+    testPaths: handoff.testPaths,
+  }, handoff.fingerprint)
+}
 
 /**
  * runTestCommand runs the user-facing `tao test` command for one or more paths, compiled and run as
@@ -80,18 +214,12 @@ export async function runTestCommandOnce(
   options: TestCommandOptions = {},
 ): Promise<TestRunOutcome> {
   const mode = options.output ?? 'lines'
-  const roots = (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
-  const displayRoots = roots.map(root => FS.displayPath(root)).join(', ')
-  HCI.logProcessInfo('test', `Finding Tao tests under ${displayRoots}`)
-  const found = new Set<string>()
-  for (const root of roots) {
-    for (const testPath of await findTaoTestFiles(root)) {
-      found.add(testPath)
-    }
-  }
-  const testPaths = [...found].sort()
+  const roots = resolvedTestRoots(paths)
+  const displayedRoots = displayRoots(roots)
+  HCI.logProcessInfo('test', `Finding Tao tests under ${displayedRoots}`)
+  const testPaths = await testPathsUnder(roots)
   if (testPaths.length === 0) {
-    HCI.writeLine(`No Tao tests found under ${displayRoots}`)
+    HCI.writeLine(`No Tao tests found under ${displayedRoots}`)
     await writeJourneyObservations(options, undefined)
     return { failed: false }
   }
@@ -107,13 +235,13 @@ export async function runTestCommandOnce(
     await writeJourneyObservations(options, undefined)
     return { failed: true }
   }
-  if (!await reportSelectedJourneys(compiled, options, fingerprint, displayRoots)) {
+  if (!await reportSelectedJourneys(compiled, options, fingerprint, displayedRoots)) {
     await writeJourneyObservations(options, undefined)
     return { failed: false }
   }
   HCI.logProcessInfo('test', 'Running Tao tests')
   const observationDirectory = await prepareJourneyObservations(compiled, options)
-  const run = await runCompiledTaoTests(compiled, mode, options.name, observationDirectory)
+  const run = await runCompiledTaoTests(compiled, mode, options.name, undefined, observationDirectory)
   const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
   // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
   // the generated code, and which a passing run either publishes for reuse or discards below.
@@ -153,9 +281,11 @@ async function reusedTaoTests(
   if (fingerprint === undefined) {
     return undefined
   }
-  const cached = await RuntimeTesting.TestRunRoot.lookup(TestCache.CATEGORY, fingerprint, {
-    runtimePackageRoot: runtimeRoot,
-  })
+  const cached = await RuntimeTesting.TestRunRoot.lookup(
+    TestCache.CATEGORY,
+    fingerprint,
+    testRunRootOptions(runtimeRoot),
+  )
   if (cached === undefined) {
     return undefined
   }
@@ -175,7 +305,10 @@ async function keepOrDiscardRunRoot(compiled: CompiledTaoTests, fingerprint: str
   if (compiled.reused === true) {
     return
   }
-  const options = { runtimePackageRoot: compiled.runtimeRoot }
+  if (compiled.runtimeRoot === undefined) {
+    return Errors.throwUnexpected('Compiled Tao tests have no runtime root.')
+  }
+  const options = testRunRootOptions(compiled.runtimeRoot)
   const published = fingerprint !== undefined
     && await RuntimeTesting.TestRunRoot.publish(TestCache.CATEGORY, fingerprint, compiled.runRoot, options)
   if (!published) {
@@ -206,16 +339,19 @@ async function reportSelectedJourneys(
   options: TestCommandOptions,
   fingerprint: string | undefined,
   displayRoots: string,
+  selection: { settleRunRoot?: boolean; testPaths?: readonly string[] } = {},
 ): Promise<boolean> {
   const pattern = options.name
   if (pattern === undefined) {
     return true
   }
-  const journeys = await compiledJourneyNames(compiled)
+  const journeys = await compiledJourneyNames(compiled, selection.testPaths)
   const matcher = journeyMatcher(pattern)
   const matched = journeys.filter(journey => matcher.test(journey))
   if (matched.length === 0) {
-    await keepOrDiscardRunRoot(compiled, fingerprint)
+    if (selection.settleRunRoot !== false) {
+      await keepOrDiscardRunRoot(compiled, fingerprint)
+    }
     const searched = `Searched ${journeys.length} ${
       journeys.length === 1 ? 'journey' : 'journeys'
     } under ${displayRoots}`
@@ -257,12 +393,12 @@ function journeyMatcher(pattern: string): RegExp {
 }
 
 /** compiledJourneyNames lists every journey in one compiled run under the name the runner gives it. */
-async function compiledJourneyNames(compiled: CompiledTaoTests): Promise<string[]> {
+async function compiledJourneyNames(compiled: CompiledTaoTests, testPaths?: readonly string[]): Promise<string[]> {
   if (compiled.manifestPath === undefined) {
     return []
   }
   const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(compiled.manifestPath)
-  return manifest.files.flatMap(file =>
+  return manifestForTestPaths(manifest, testPaths).files.flatMap(file =>
     file.suites.flatMap(suite => suite.checks.map(check => RuntimeTesting.TestCaseName.full(file, suite, check)))
   )
 }
@@ -301,7 +437,7 @@ async function validateAndCompileTaoTests(
     }
 
     HCI.logProcessInfo('test', 'Compiling apps')
-    const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
+    const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, testRunRootOptions(runtimeRoot))
     const filesByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
@@ -330,7 +466,7 @@ async function validateAndCompileTaoTestsInProcess(
     return 'validation-failed'
   }
   HCI.logProcessInfo('test', 'Compiling apps')
-  const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, { runtimePackageRoot: runtimeRoot })
+  const runRoot = await RuntimeTesting.TestRunRoot.create(TestCache.CATEGORY, testRunRootOptions(runtimeRoot))
   const context: RuntimeTesting.TestCompiler.Context = { appModulePaths: new Map(), runRoot }
   const files = []
   for (const testPath of testPaths) {
@@ -386,7 +522,8 @@ function maxTestWorkers(): number {
  *   switches off; a lane running `--no-cache` sets it, because a memoized compile is not fresh work.
  * - `TAO_TEST_JEST_PATH`: the test runner entrypoint to execute instead of the resolved one.
  * - `TAO_TEST_NODE_PATH`: the Node executable that runs it instead of the pinned repository Node.
- * - `TAO_TEST_RUNTIME_ROOT`: the expo-host package root one run compiles into.
+ * - `TAO_TEST_RUNTIME_ROOT`: an explicit expo-host package root for an isolated fixture; without
+ *   one, the runtime stays at the installed package while generated run roots live in host temp.
  * - `TAO_TEST_RUNTIME_MANIFEST`: set by this command for its child; `RuntimeTesting` owns the name.
  * - `TAO_TEST_RUNTIME_ENTRYPOINTS`: set by this command for its child, naming the generated Jest
  *   entrypoints its run is split into; `TestHarnessFiles` owns the name.
@@ -404,14 +541,20 @@ async function runCompiledTaoTests(
   compiled: CompiledTaoTests,
   mode: TestOutputMode,
   namePattern: string | undefined,
-  journeyObservationDirectory: string | undefined,
+  testPaths?: readonly string[],
+  journeyObservationDirectory?: string,
 ): Promise<CompletedTestRun> {
   if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined || compiled.runRoot === undefined) {
     return { output: '' }
   }
   const writer = TestOutput.createWriter(mode)
   const chunks: Buffer[] = []
-  const entrypoints = await writeJourneyEntrypoints(compiled.manifestPath, compiled.runRoot, namePattern)
+  const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(compiled.manifestPath)
+  const entrypoints = await writeJourneyEntrypoints(
+    manifestForTestPaths(manifest, testPaths),
+    compiled.runRoot,
+    namePattern,
+  )
   const result = await CLI.run(await testNodePath(), {
     args: [
       await testJestPath(compiled.runtimeRoot),
@@ -481,11 +624,10 @@ async function writeJourneyObservations(
  * directory Jest is configured with stays put across compiles; `TestHarnessFiles.write` owns why.
  */
 async function writeJourneyEntrypoints(
-  manifestPath: string,
+  manifest: RuntimeTesting.TestCompiler.Manifest,
   runRoot: string,
   namePattern: string | undefined,
 ): Promise<RuntimeTesting.TestHarnessFiles.Generated> {
-  const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(manifestPath)
   return await RuntimeTesting.TestHarnessFiles.write(
     FS.dirname(runRoot),
     selectableFiles(manifest, namePattern),
@@ -552,6 +694,102 @@ export async function findTaoTestFiles(path: string): Promise<string[]> {
   return declared.sort()
 }
 
+/** resolvedTestRoots turns the command's path spellings into the absolute roots a compile reads. */
+function resolvedTestRoots(paths: string | readonly string[]): string[] {
+  return (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
+}
+
+function displayRoots(roots: readonly string[]): string {
+  return roots.map(root => FS.displayPath(root)).join(', ')
+}
+
+/** testPathsUnder discovers each declaration once when explicit roots overlap. */
+async function testPathsUnder(roots: readonly string[]): Promise<string[]> {
+  const found = new Set<string>()
+  for (const root of roots) {
+    for (const testPath of await findTaoTestFiles(root)) {
+      found.add(testPath)
+    }
+  }
+  return [...found].sort()
+}
+
+/** shardTestPaths rejects a shard root for which the prepared plan contains no compiled test file. */
+function shardTestPaths(preparedPaths: readonly string[], roots: readonly string[]): string[] {
+  const selected = new Set<string>()
+  for (const root of roots) {
+    const covered = preparedPaths.filter(path => pathIsAtOrUnder(path, root))
+    if (covered.length === 0) {
+      return Errors.throwUserInput(
+        `Shared Tao test handoff has no compiled test files under shard root ${FS.displayPath(root)}.`,
+      )
+    }
+    for (const path of covered) {
+      selected.add(path)
+    }
+  }
+  return [...selected].sort()
+}
+
+function pathIsAtOrUnder(path: string, root: string): boolean {
+  const resolvedPath = FS.resolvePath(path)
+  const resolvedRoot = FS.resolvePath(root)
+  return resolvedPath === resolvedRoot || FS.pathIsWithin(resolvedPath, resolvedRoot)
+}
+
+/** readSharedRunHandoff accepts only the complete handoff shape a prepare phase wrote. */
+async function readSharedRunHandoff(handoffPath: string): Promise<SharedRunHandoff> {
+  const path = FS.resolvePath(handoffPath)
+  let value: unknown
+  try {
+    value = await FS.readJson(path)
+  } catch (error) {
+    return Errors.throwUserInput(
+      `Cannot read shared Tao test handoff ${FS.displayPath(path)}: ${Errors.messageOf(error)}`,
+    )
+  }
+  if (
+    !Json.isRecord(value)
+    || value['version'] !== SHARED_RUN_HANDOFF_VERSION
+    || typeof value['manifestPath'] !== 'string'
+    || typeof value['reused'] !== 'boolean'
+    || typeof value['runRoot'] !== 'string'
+    || typeof value['runtimeRoot'] !== 'string'
+    || !Array.isArray(value['testPaths'])
+    || !value['testPaths'].every(path => typeof path === 'string')
+    || (value['fingerprint'] !== undefined && typeof value['fingerprint'] !== 'string')
+  ) {
+    return Errors.throwUserInput(`Shared Tao test handoff is invalid: ${FS.displayPath(path)}.`)
+  }
+  return {
+    ...(typeof value['fingerprint'] === 'string' ? { fingerprint: value['fingerprint'] } : {}),
+    manifestPath: value['manifestPath'],
+    reused: value['reused'],
+    runRoot: value['runRoot'],
+    runtimeRoot: value['runtimeRoot'],
+    testPaths: value['testPaths'],
+    version: SHARED_RUN_HANDOFF_VERSION,
+  }
+}
+
+/** manifestForTestPaths narrows a compiled manifest without recompiling any source. */
+function manifestForTestPaths(
+  manifest: RuntimeTesting.TestCompiler.Manifest,
+  testPaths: readonly string[] | undefined,
+): RuntimeTesting.TestCompiler.Manifest {
+  if (testPaths === undefined) {
+    return manifest
+  }
+  const requested = new Set(testPaths.map(path => FS.resolvePath(path)))
+  const files = manifest.files.filter(file => requested.delete(FS.resolvePath(file.sourcePath)))
+  if (requested.size > 0) {
+    return Errors.throwUserInput(
+      `Shared Tao test handoff is missing compiled output for ${[...requested].map(FS.displayPath).join(', ')}.`,
+    )
+  }
+  return { files }
+}
+
 function groupPathsByDirectory(paths: readonly string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>()
   for (const path of paths) {
@@ -598,6 +836,18 @@ async function testNodePath(): Promise<string> {
 
 function testRuntimeRoot(): string {
   return Platform.runtimeProcess.env['TAO_TEST_RUNTIME_ROOT'] ?? RuntimeToolchainPaths.packageRoot
+}
+
+/** Keep Jest's runtime path while placing disposable compiled output where directory moves work. */
+function testRunRootOptions(runtimeRoot: string): { generatedRoot?: string; runtimePackageRoot: string } {
+  if (Platform.runtimeProcess.env['TAO_TEST_RUNTIME_ROOT'] !== undefined) {
+    // An explicit runtime root is also the CLI tests' isolated output root.
+    return { runtimePackageRoot: runtimeRoot }
+  }
+  return {
+    generatedRoot: RuntimeTesting.TestRunRoot.hostGeneratedRoot(runtimeRoot),
+    runtimePackageRoot: runtimeRoot,
+  }
 }
 
 function writeTaoTestValidationErrors(errors: readonly TaoTestValidationError[]): void {
