@@ -287,16 +287,16 @@ is the declaration's public style surface: a caller's clause replaces a header v
 that clause rather than setting it:
 
 ```tao
-view Card(Title text) [pad 12, bg paper] {
+view Card(Title text) [pad 12, background paper] {
    render Col() [gap 8] {
       Text(Title)
       @@content
    }
 }
 
-render Card("Notes")                  // pad 12, bg paper, gap 8
-render Card("Notes") [pad 0, bg none] // no padding, no background; gap 8 is the root's, private
-render Card("Notes") [gap 0]          // still gap 8: the header never declared gap
+render Card("Notes")                          // pad 12, background paper, gap 8
+render Card("Notes") [pad 0, background none] // no padding, no background; gap 8 is the root's, private
+render Card("Notes") [gap 0]                  // still gap 8: the header never declared gap
 ```
 
 The resolution order is one left-to-right list — the design's element default, the header, the
