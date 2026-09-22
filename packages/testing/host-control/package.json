@@ -1,5 +1,6 @@
 {
   "name": "tao-host-control",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "main": "host-control-src/host-control.ts",
