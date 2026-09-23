@@ -30,27 +30,44 @@ const APK_OUTPUT_PATH = 'app/build/outputs/apk/debug/app-debug.apk'
 const DEFAULT_ARCHITECTURES = ['arm64-v8a', 'x86_64'] as const
 const DEVENV_ANDROID_SDK_PATH = '.devenv/profile/libexec/android-sdk'
 const GRADLE_DAEMON_JVM_ARGS = '-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8'
+const IOS_DERIVED_DATA_PATH = 'build'
+const HOST_PLATFORMS: readonly HostPlatform[] = ['android', 'ios-simulator']
+const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' }
 
-/** CompanionHostBuildOptions narrows a build, principally so a developer can build one ABI faster. */
+/** CompanionHostBuildOptions choose the platform, and narrow an Android build to fewer ABIs. */
 export type CompanionHostBuildOptions = {
   architectures?: readonly string[]
+  platform?: HostPlatform
   repositoryRoot?: string
 }
 
-/** runCompanionHostBuild builds the Android host into the checkout's host cache and returns an exit code. */
+/** runCompanionHostBuild builds one platform's host into the checkout's host cache and returns an exit code. */
 export async function runCompanionHostBuild(options: CompanionHostBuildOptions = {}): Promise<number> {
   const root = options.repositoryRoot ?? Repo.getRoot()
   const packageRoot = FS.resolvePath(CompanionIdentity.packagePath, root)
-  const androidRoot = FS.resolvePath('android', packageRoot)
-  const architectures = options.architectures ?? DEFAULT_ARCHITECTURES
+  const platform = options.platform ?? 'android'
 
-  HCI.writeLine(`Generating the ${CompanionIdentity.name} Android project with expo prebuild.`)
+  HCI.writeLine(`Generating the ${CompanionIdentity.name} ${platform} project with expo prebuild.`)
   await CLI.mustRun('bunx', {
-    args: ['expo', 'prebuild', '--platform', 'android', '--no-install'],
+    args: ['expo', 'prebuild', '--platform', platform === 'android' ? 'android' : 'ios', '--no-install'],
     cwd: packageRoot,
     stdio: 'inherit',
   })
+  const binary = platform === 'android'
+    ? await assembleAndroid(root, packageRoot, options.architectures ?? DEFAULT_ARCHITECTURES)
+    : await buildIosSimulator(packageRoot)
 
+  const manifest = await companionHostManifest(packageRoot, platform)
+  const hostDirectory = checkoutHostDirectory(root, manifest)
+  await placeHost(hostDirectory, binary, manifest)
+  HCI.writeSuccess(
+    `Built ${CompanionIdentity.name} ${manifest.hostVersion} for ${platform} at ${FS.displayPath(hostDirectory)}.\n`,
+  )
+  return 0
+}
+
+async function assembleAndroid(root: string, packageRoot: string, architectures: readonly string[]): Promise<string> {
+  const androidRoot = FS.resolvePath('android', packageRoot)
   HCI.writeLine(`Assembling ${CompanionIdentity.name} for ${architectures.join(', ')} with Gradle.`)
   const gradle = await CLI.run(FS.resolvePath('gradlew', androidRoot), {
     args: [':app:assembleDebug', ...companionGradleArgs(architectures, Platform.runtimeProcess.env)],
@@ -63,14 +80,60 @@ export async function runCompanionHostBuild(options: CompanionHostBuildOptions =
   if (gradle.error !== undefined || gradle.exitCode !== 0) {
     Errors.throwHostEnvironment(`Gradle could not assemble ${CompanionIdentity.name}; its output above says why.`)
   }
+  const apk = FS.resolvePath(APK_OUTPUT_PATH, androidRoot)
+  if (!await FS.isFile(apk)) {
+    Errors.throwUnexpected(`Expected: Gradle's assembleDebug leaves its APK at ${FS.displayPath(apk)}.`)
+  }
+  return apk
+}
 
-  const manifest = await companionHostManifest(packageRoot, 'android')
-  const hostDirectory = checkoutHostDirectory(root, manifest)
-  await placeHost(hostDirectory, FS.resolvePath(APK_OUTPUT_PATH, androidRoot), manifest)
-  HCI.writeSuccess(
-    `Built ${CompanionIdentity.name} ${manifest.hostVersion} for Android at ${FS.displayPath(hostDirectory)}.\n`,
-  )
-  return 0
+/**
+ * The simulator host is an unsigned debug build for every simulator architecture — Apple silicon
+ * and Intel Macs both run it — with Xcode's derived data kept inside the package's own `ios/`, so the
+ * built app is found at a known path. CocoaPods needs a UTF-8 locale to read the podspecs.
+ */
+async function buildIosSimulator(packageRoot: string): Promise<string> {
+  const iosRoot = FS.resolvePath('ios', packageRoot)
+  HCI.writeLine(`Installing ${CompanionIdentity.name}'s pods.`)
+  await CLI.mustRun('pod', { args: ['install'], cwd: iosRoot, env: UTF8_LOCALE, stdio: 'inherit' })
+
+  const workspace = (await FS.listDir(iosRoot)).find(name => name.endsWith('.xcworkspace'))
+  if (workspace === undefined) {
+    Errors.throwUnexpected(`Expected: expo prebuild leaves an Xcode workspace in ${FS.displayPath(iosRoot)}.`)
+  }
+  HCI.writeLine(`Building ${CompanionIdentity.name} for the iOS Simulator with xcodebuild.`)
+  const xcodebuild = await CLI.run('xcodebuild', {
+    args: [
+      '-workspace',
+      workspace,
+      '-scheme',
+      workspace.replace(/\.xcworkspace$/u, ''),
+      '-configuration',
+      'Debug',
+      '-sdk',
+      'iphonesimulator',
+      '-destination',
+      'generic/platform=iOS Simulator',
+      '-derivedDataPath',
+      IOS_DERIVED_DATA_PATH,
+      'ARCHS=arm64 x86_64',
+      'ONLY_ACTIVE_ARCH=NO',
+      'CODE_SIGNING_ALLOWED=NO',
+      'build',
+    ],
+    cwd: iosRoot,
+    env: UTF8_LOCALE,
+    stdio: 'inherit',
+  })
+  if (xcodebuild.error !== undefined || xcodebuild.exitCode !== 0) {
+    Errors.throwHostEnvironment(`xcodebuild could not build ${CompanionIdentity.name}; its output above says why.`)
+  }
+  const products = FS.resolvePath(`${IOS_DERIVED_DATA_PATH}/Build/Products/Debug-iphonesimulator`, iosRoot)
+  const app = (await FS.listDir(products)).find(name => name.endsWith('.app'))
+  if (app === undefined) {
+    Errors.throwUnexpected(`Expected: xcodebuild leaves the built app in ${FS.displayPath(products)}.`)
+  }
+  return FS.resolvePath(app, products)
 }
 
 /** CompanionHostPublishOptions are the seams a test replaces: the checkout and the process runner. */
@@ -87,24 +150,39 @@ export type CompanionHostPublishOptions = {
 export async function runCompanionHostPublish(options: CompanionHostPublishOptions = {}): Promise<number> {
   const root = options.repositoryRoot ?? Repo.getRoot()
   const run = options.run ?? CLI.run
-  const expected = await companionHostManifest(FS.resolvePath(CompanionIdentity.packagePath, root), 'android')
-  const hostDirectory = checkoutHostDirectory(root, expected)
-  const built = await readHostManifest(hostDirectory)
-  const binary = FS.resolvePath(HOST_BINARIES.android, hostDirectory)
-  if (built === undefined || !await FS.isFile(binary)) {
+  const packageRoot = FS.resolvePath(CompanionIdentity.packagePath, root)
+  const built: { binary: string; manifest: HostManifest }[] = []
+  let expectedKey = ''
+  for (const platform of HOST_PLATFORMS) {
+    const expected = await companionHostManifest(packageRoot, platform)
+    expectedKey = hostKey(expected)
+    const directory = checkoutHostDirectory(root, expected)
+    const manifest = await readHostManifest(directory)
+    const binary = FS.resolvePath(HOST_BINARIES[platform], directory)
+    if (manifest !== undefined && await FS.exists(binary)) {
+      built.push({ binary, manifest })
+    }
+  }
+  const first = built[0]
+  if (first === undefined) {
     Errors.throwUserInput(
-      `No Android host is built for ${CompanionIdentity.name} as it stands (${hostKey(expected)}). `
+      `No host is built for ${CompanionIdentity.name} as it stands (${expectedKey}). `
         + 'Run `just companion-host-build` first.',
     )
   }
 
   const repository = hostReleasesRepository()
-  const tag = hostReleaseTag(built)
-  const names = hostReleaseAssets('android')
+  const tag = hostReleaseTag(first.manifest)
+  const platforms = built.map(host => host.manifest.platform).join(' and ')
   const staging = await FS.mkTmpDir(FS.resolvePath('tao-host-publish-', FS.tmpdir()))
   try {
-    await FS.copyFile(binary, FS.resolvePath(names.binary, staging))
-    await FS.writeJson(FS.resolvePath(names.manifest, staging), built)
+    const assets: string[] = []
+    for (const host of built) {
+      const names = hostReleaseAssets(host.manifest.platform)
+      await FS.writeJson(FS.resolvePath(names.manifest, staging), host.manifest)
+      await stageReleaseBinary(host.binary, FS.resolvePath(names.binary, staging))
+      assets.push(FS.resolvePath(names.manifest, staging), FS.resolvePath(names.binary, staging))
+    }
     const existing = await run('gh', { args: ['release', 'view', tag, '--repo', repository, '--json', 'tagName'] })
     if (existing.error !== undefined) {
       Errors.throwUserInput('gh is not installed. Install the GitHub CLI, then run `gh auth login`.')
@@ -119,7 +197,7 @@ export async function runCompanionHostPublish(options: CompanionHostPublishOptio
         '--prerelease',
         '--latest=false',
         '--title',
-        `${CompanionIdentity.name} ${built.hostVersion} host (${hostKey(built)})`,
+        `${CompanionIdentity.name} ${first.manifest.hostVersion} host (${hostKey(first.manifest)})`,
         '--notes',
         `Prebuilt ${CompanionIdentity.name} hosts that \`tao dev\` downloads when their native kit covers its own. `
         + `Each platform carries a \`tao-host-<platform>.json\` manifest beside its binary.`,
@@ -132,14 +210,24 @@ export async function runCompanionHostPublish(options: CompanionHostPublishOptio
       '--repo',
       repository,
       '--clobber',
-      FS.resolvePath(names.manifest, staging),
-      FS.resolvePath(names.binary, staging),
+      ...assets,
     ])
   } finally {
     await FS.remove(staging)
   }
-  HCI.writeSuccess(`Published ${CompanionIdentity.name} ${built.hostVersion} for Android to ${repository} as ${tag}.\n`)
+  HCI.writeSuccess(
+    `Published ${CompanionIdentity.name} ${first.manifest.hostVersion} for ${platforms} to ${repository} as ${tag}.\n`,
+  )
   return 0
+}
+
+/** A release carries an app bundle zipped with its folder, which `ditto` unpacks whole again. */
+async function stageReleaseBinary(binary: string, asset: string): Promise<void> {
+  if (await FS.isDirectory(binary)) {
+    await CLI.mustRun('ditto', { args: ['-c', '-k', '--keepParent', binary, asset] })
+  } else {
+    await FS.copyFile(binary, asset)
+  }
 }
 
 async function mustRunGh(run: typeof CLI.run, args: string[]): Promise<void> {
@@ -252,14 +340,20 @@ async function companionVersion(packageRoot: string): Promise<string> {
  * cache meanwhile finds the old host, then none, then the new one — never an APK without its
  * manifest or a manifest describing a different APK.
  */
-async function placeHost(hostDirectory: string, apkPath: string, manifest: HostManifest): Promise<void> {
-  if (!await FS.isFile(apkPath)) {
-    Errors.throwUnexpected(`Expected: Gradle's assembleDebug leaves its APK at ${FS.displayPath(apkPath)}.`)
-  }
+async function placeHost(hostDirectory: string, binaryPath: string, manifest: HostManifest): Promise<void> {
   const staging = `${hostDirectory}.staging-${Platform.randomUUID()}`
   await FS.mkdir(staging)
-  await FS.copyFile(apkPath, FS.resolvePath(HOST_BINARIES.android, staging))
+  await copyHostBinary(binaryPath, FS.resolvePath(HOST_BINARIES[manifest.platform], staging))
   await writeHostManifest(staging, manifest)
   await FS.remove(hostDirectory)
   await FS.move(staging, hostDirectory)
+}
+
+/** An app bundle is copied with `ditto`, which keeps its symbolic links, modes, and signature intact. */
+async function copyHostBinary(from: string, to: string): Promise<void> {
+  if (await FS.isDirectory(from)) {
+    await CLI.mustRun('ditto', { args: [from, to] })
+  } else {
+    await FS.copyFile(from, to)
+  }
 }

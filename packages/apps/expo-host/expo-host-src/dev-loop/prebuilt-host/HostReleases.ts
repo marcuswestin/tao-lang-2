@@ -1,4 +1,4 @@
-import { Errors, FS, Json, Platform } from '@shared'
+import { CLI, Errors, FS, Json, Platform } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { CompanionIdentity } from './CompanionIdentity'
 import {
@@ -174,11 +174,6 @@ async function installHost(
   if (await readHostManifest(directory) !== undefined && await FS.exists(binaryPath)) {
     return { binaryPath, directory, manifest }
   }
-  // An iOS Simulator host is an app bundle, published zipped; nothing unpacks one yet, and nothing
-  // publishes one either, so a release carrying one is refused plainly rather than written as a file.
-  if (manifest.platform !== 'android') {
-    Errors.throwHostEnvironment(`Downloading a ${manifest.platform} host is not supported yet.`)
-  }
   DevLoopOutput.logDevLoop(
     'dev',
     `Downloading ${CompanionIdentity.name} ${manifest.hostVersion} for ${manifest.platform} `
@@ -192,7 +187,11 @@ async function installHost(
   }
   const staging = `${directory}.staging-${Platform.randomUUID()}`
   await FS.mkdir(staging)
-  await FS.writeFile(FS.resolvePath(HOST_BINARIES[manifest.platform], staging), bytes)
+  if (manifest.platform === 'android') {
+    await FS.writeFile(FS.resolvePath(HOST_BINARIES.android, staging), bytes)
+  } else {
+    await unzipAppBundle(bytes, staging, HOST_BINARIES[manifest.platform])
+  }
   await writeHostManifest(staging, manifest)
   try {
     await FS.move(staging, directory)
@@ -203,4 +202,18 @@ async function installHost(
     }
   }
   return { binaryPath, directory, manifest }
+}
+
+/**
+ * A simulator host is published as its app bundle zipped with its folder; `ditto` unpacks it whole,
+ * keeping the bundle's symbolic links and modes, and the zip is removed once the bundle is in place.
+ */
+async function unzipAppBundle(bytes: Uint8Array, staging: string, bundleName: string): Promise<void> {
+  const archive = FS.resolvePath('host.zip', staging)
+  await FS.writeFile(archive, bytes)
+  await CLI.mustRun('ditto', { args: ['-x', '-k', archive, staging] })
+  await FS.remove(archive)
+  if (!await FS.isDirectory(FS.resolvePath(bundleName, staging))) {
+    Errors.throwHostEnvironment(`The downloaded host archive did not hold ${bundleName}.`)
+  }
 }
