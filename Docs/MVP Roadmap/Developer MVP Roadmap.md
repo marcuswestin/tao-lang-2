@@ -7,6 +7,34 @@ here they wait on.
 Each entry states the question, what it blocks, the options as they stand, and a marked
 recommendation. A recommendation is a starting position for the decision, never the decision.
 
+## Release checklist — before the repository goes public
+
+Run down this list before the first public push. Each item points at the entry that owns it.
+
+- [ ] **Revoke the App Store Connect API key.** Untracking the WordFlower ship lock (`P15`,
+      2026-09-22) removed it from the tree, not from history. Revoke the key its `keyId` names and
+      issue a replacement for `tao ship`; the issuer ID, app ID, and TestFlight group IDs are
+      identifiers, not credentials, and cannot be rotated.
+- [ ] **Re-run the full-history credential scan** (`P22`, clean as of 2026-09-20) over the history
+      being pushed, and revoke anything it finds.
+- [ ] **Apply the app-safe licence structure** (`R1`, decided 2026-09-22 to land before the first
+      public release; `P24`).
+- [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
+      Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
+- [ ] **Review every public identifier before it is claimed.** Most cannot be changed once
+      published or once users depend on them. As they stand:
+  - The domain: `tao-lang.dev` (`updates.tao-lang.dev`, the `dev.tao-lang.*` bundle prefixes) and
+    `tao-lang.org` (`updates.tao-lang.org`, the iCloud podspec) are both in use — pick one.
+  - The VS Code extension: publisher `tao`, name `tao-ide-extension`
+    (`packages/ides/ide-extension/package.json`), and the Open VSX namespace.
+  - The npm names: `tao-cli`, `tao-runtime`, `tao-stdlib`, and the other packages are unscoped
+    today; decide between those names and a scope, and check each is free.
+  - The companion apps: iOS bundle ID `dev.tao-lang.studio.companion`, Android package
+    `dev.tao_lang.studio.companion`, URL scheme `taostudiocompanion`
+    (`packages/ides/studio-companion-app/app.json`), and the store listing names.
+  - Anything else claimed on a registry or store before release: the Homebrew formula, the GitHub
+    organization, the macOS Studio app's bundle ID.
+
 ## Decide first — these block the release path
 
 ### R1 — The license
@@ -74,12 +102,8 @@ committed `secrets/secrets.jsonc`.
   prerequisites under every option and they are now the only blocking work.
 - Apply the audit's `P1`, `P2`, and `P7`–`P10` findings through that public-audience edit. The
   mandatory `P15`–`P18` and `P24` fixes above remain separate prerequisites.
-- [ ] **Before the first public push, invalidate what history still exposes.** Untracking the
-      WordFlower ship lock (`P15`, 2026-09-22) removed it from the tree, not from history. Revoke the App
-      Store Connect API key its `keyId` names and issue a replacement for `tao ship`; the issuer ID, app
-      ID, and TestFlight group IDs are identifiers, not credentials, and cannot be rotated. Then re-run
-      the audit's full-history credential scan (`P22`, clean as of 2026-09-20) over the history being
-      pushed, and revoke anything it finds.
+- The key rotation and the history re-scan these prerequisites leave open are on the release
+  checklist at the top of this document.
 
 ### R3 — Launch timing, positioning, and the stability promise
 
