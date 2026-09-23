@@ -1,13 +1,16 @@
 import {
+  hostKey,
   hostKitProblems,
   type HostManifest,
   nativeKitOf,
   readHostManifest,
   writeHostManifest,
 } from '@expo-host/dev-loop/prebuilt-host/HostManifest'
-import { findCompatibleHost } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
-import { FS, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { downloadCompatibleHost, type HostDownloadOptions } from '@expo-host/dev-loop/prebuilt-host/HostReleases'
+import { findCompatibleHost, obtainCompatibleHost } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
+import { prepareSimulatorCompanion } from '@expo-host/dev-loop/prebuilt-host/SimulatorCompanion'
+import { CLI, Errors, FS, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 
 /**
  * A fake app host: a package whose dependencies are installed under its own `node_modules`, the
@@ -161,6 +164,196 @@ Describe('prebuilt host search', () => {
       Expect(search.refused[1]).toContain('no tao-companion.apk beside its manifest')
       Expect(search.refused[2]).toContain('is not one this Tao can read')
     })
+  })
+})
+
+Describe('prebuilt host releases', () => {
+  const RELEASES_URL = 'https://api.github.com/repos/tao/tao/releases?per_page=30'
+  // One byte per character, so the string's length is the asset's size in bytes.
+  const APK = 'a prebuilt Companion'
+
+  function hostManifest(nativeKit: Record<string, string>): HostManifest {
+    return { format: 1, hostVersion: '1.0.0', nativeKit, platform: 'android' }
+  }
+
+  function release(tag: string, base: string) {
+    return {
+      assets: [
+        { browser_download_url: `${base}/tao-host-android.json`, name: 'tao-host-android.json', size: 100 },
+        {
+          browser_download_url: `${base}/tao-companion-android.apk`,
+          name: 'tao-companion-android.apk',
+          size: APK.length,
+        },
+      ],
+      draft: false,
+      tag_name: tag,
+    }
+  }
+
+  /** A fake GitHub answering the release list and each asset by URL, recording every URL it served. */
+  function fakeGitHub(routes: Record<string, unknown>, served: string[] = []): HostDownloadOptions['fetch'] {
+    return async url => {
+      served.push(url)
+      const body = routes[url]
+      if (body === undefined) {
+        return new Response('Not Found', { status: 404, statusText: 'Not Found' })
+      }
+      return typeof body === 'string' || body instanceof ArrayBuffer ? new Response(body) : Response.json(body)
+    }
+  }
+
+  Test('downloads the newest release whose kit covers this Tao, once, and names the ones it refused', async () => {
+    await withHostDirectory(async hostsRoot => {
+      const compatible = hostManifest({ 'react-native': '0.86.3' })
+      const served: string[] = []
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: [
+          release('companion-host-9.0.0-newer', 'https://dl/newer'),
+          { assets: [], draft: false, tag_name: 'v0.1.0' },
+          release('companion-host-1.0.0-match', 'https://dl/match'),
+        ],
+        'https://dl/newer/tao-host-android.json': hostManifest({ 'react-native': '0.87.0' }),
+        'https://dl/match/tao-host-android.json': compatible,
+        'https://dl/match/tao-companion-android.apk': APK,
+      }, served)
+      const options = { fetch, hostsRoot, repository: 'tao/tao' }
+
+      const first = await withCapturedOutput(() =>
+        downloadCompatibleHost('android', { 'react-native': '0.86.3' }, options)
+      )
+      const second = await downloadCompatibleHost('android', { 'react-native': '0.86.3' }, options)
+
+      const directory = FS.resolvePath(`${hostKey(compatible)}/android`, hostsRoot)
+      Expect(first.result.host?.directory).toBe(directory)
+      Expect(first.result.refused).toEqual([
+        'tao/tao release companion-host-9.0.0-newer: it carries react-native 0.87.0 where this Tao needs 0.86.3',
+      ])
+      Expect(first.stdout).toContain('Downloading Tao Companion 1.0.0 for android')
+      Expect(await FS.readText(FS.resolvePath('tao-companion.apk', directory))).toBe('a prebuilt Companion')
+      Expect(await readHostManifest(directory)).toEqual(compatible)
+      Expect(second.host?.directory).toBe(directory)
+      Expect(served.filter(url => url.endsWith('.apk'))).toEqual(['https://dl/match/tao-companion-android.apk'])
+      Expect((await FS.listDir(FS.resolvePath(hostKey(compatible), hostsRoot))).toSorted()).toEqual(['android'])
+    })
+  })
+
+  Test('unpacks a simulator host published as a zipped app bundle', async () => {
+    await withHostDirectory(async root => {
+      const app = FS.resolvePath('bundle/Tao Companion.app', root)
+      await FS.writeText(FS.resolvePath('Info.plist', app), '<plist/>')
+      const zip = FS.resolvePath('tao-companion-ios-simulator.app.zip', root)
+      await CLI.mustRun('ditto', { args: ['-c', '-k', '--keepParent', app, zip] })
+      const archive = (await FS.readFile(zip)).slice().buffer
+      const manifest: HostManifest = { format: 1, hostVersion: '1.0.0', nativeKit: {}, platform: 'ios-simulator' }
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: [{
+          assets: [
+            { browser_download_url: 'https://dl/ios/m.json', name: 'tao-host-ios-simulator.json', size: 1 },
+            {
+              browser_download_url: 'https://dl/ios/app.zip',
+              name: 'tao-companion-ios-simulator.app.zip',
+              size: archive.byteLength,
+            },
+          ],
+          draft: false,
+          tag_name: 'companion-host-1.0.0-ios',
+        }],
+        'https://dl/ios/m.json': manifest,
+        'https://dl/ios/app.zip': archive,
+      })
+      const hostsRoot = FS.resolvePath('hosts', root)
+
+      const search = await withCapturedOutput(() =>
+        downloadCompatibleHost('ios-simulator', {}, { fetch, hostsRoot, repository: 'tao/tao' })
+      )
+
+      const directory = FS.resolvePath(`${hostKey(manifest)}/ios-simulator`, hostsRoot)
+      Expect(search.result.host?.binaryPath).toBe(FS.resolvePath('Tao Companion.app', directory))
+      Expect(await FS.readText(FS.resolvePath('Tao Companion.app/Info.plist', directory))).toBe('<plist/>')
+      Expect((await FS.listDir(directory)).toSorted()).toEqual(['Tao Companion.app', 'tao-host.json'])
+    })
+  })
+
+  Test('refuses a truncated download rather than installing it', async () => {
+    await withHostDirectory(async hostsRoot => {
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: [release('companion-host-1.0.0-match', 'https://dl/match')],
+        'https://dl/match/tao-host-android.json': hostManifest({}),
+        'https://dl/match/tao-companion-android.apk': APK.slice(0, 5),
+      })
+
+      await Expect(
+        withCapturedOutput(() => downloadCompatibleHost('android', {}, { fetch, hostsRoot, repository: 'tao/tao' })),
+      )
+        .rejects.toThrow(`stopped at 5 of ${APK.length} bytes`)
+      Expect(await FS.listDir(hostsRoot)).toEqual([])
+    })
+  })
+
+  Test('falls back to the cached search, saying why, when no host can be downloaded', async () => {
+    await withHostDirectory(async root => {
+      const captured = await withCapturedOutput(() =>
+        obtainCompatibleHost('android', {}, {
+          download: async () => Errors.throwHostEnvironment('api.github.com answered 404 Not Found'),
+          roots: [root],
+        })
+      )
+
+      Expect(captured.result).toEqual({ refused: [] })
+      Expect(captured.stdout).toContain('No prebuilt host could be downloaded: api.github.com answered 404 Not Found')
+    })
+  })
+
+  Test('reports a repository whose releases cannot be read, as a private one answers', async () => {
+    await withHostDirectory(async hostsRoot => {
+      await Expect(downloadCompatibleHost('android', {}, { fetch: fakeGitHub({}), hostsRoot, repository: 'tao/tao' }))
+        .rejects.toThrow(`api.github.com answered 404 Not Found for ${RELEASES_URL}.`)
+    })
+  })
+})
+
+Describe('prebuilt host on the iOS Simulator', () => {
+  const host = {
+    binaryPath: '/hosts/1.0.0-abc/ios-simulator/Tao Companion.app',
+    directory: '/hosts/1.0.0-abc/ios-simulator',
+    manifest: { format: 1 as const, hostVersion: '1.0.0', nativeKit: {}, platform: 'ios-simulator' as const },
+  }
+
+  Test('installs a compatible Companion only when the simulator lacks that build', async () => {
+    const installs: string[] = []
+    let installedMatches = false
+    const dependencies = {
+      findPrebuiltHost: async () => ({ host, refused: [] }),
+      install: async (udid: string) => {
+        installs.push(udid)
+      },
+      installedMatches: async () => installedMatches,
+    }
+
+    const first = await withCapturedOutput(() => prepareSimulatorCompanion('SIM-1', 'iPhone 17', dependencies))
+    installedMatches = true
+    const second = await withCapturedOutput(() => prepareSimulatorCompanion('SIM-1', 'iPhone 17', dependencies))
+
+    Expect(first.result).toBe(true)
+    Expect(first.stdout).toContain('Installing Tao Companion 1.0.0 on iPhone 17')
+    Expect(second.result).toBe(true)
+    Expect(second.stdout).toContain('Tao Companion 1.0.0 is already installed on iPhone 17')
+    Expect(installs).toEqual(['SIM-1'])
+  })
+
+  Test('leaves the simulator on Expo Go, naming each host passed over, when none fits', async () => {
+    const captured = await withCapturedOutput(() =>
+      prepareSimulatorCompanion('SIM-1', 'iPhone 17', {
+        findPrebuiltHost: async () => ({ refused: ['/hosts/0.9.0/ios-simulator: it lacks expo-haptics 57.0.3'] }),
+        install: async () => Errors.throwUnexpected('Expected: nothing is installed without a host.'),
+      })
+    )
+
+    Expect(captured.result).toBe(false)
+    Expect(`${captured.stdout}${captured.stderr}`).toContain(
+      'Passed over the prebuilt host at /hosts/0.9.0/ios-simulator: it lacks expo-haptics 57.0.3.',
+    )
   })
 })
 
