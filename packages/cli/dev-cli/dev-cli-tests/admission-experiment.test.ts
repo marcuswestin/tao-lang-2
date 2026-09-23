@@ -24,13 +24,21 @@ function fakeDependencies(options: {
   lanes?: readonly { lane: string; repositoryRoot: string }[]
   loadAverage?: number
   scripts?: Record<string, LaneScript>
+  /** Simulates a command that died before publishing its new summary. */
+  staleAfterFirst?: boolean
 } = {}) {
   const calls: Array<{ args: readonly string[]; cwd?: string; env?: unknown }> = []
   let clock = 0
+  const runs = new Map<string, number>()
+  const published = new Map<string, number>()
   const dependencies: AdmissionExperimentDependencies = {
     activeLanes: async () => options.lanes ?? [],
     cpuCount: () => 18,
     loadAverage: () => options.loadAverage ?? 1,
+    latestSummaryPath: async (_lane, root) => {
+      const run = published.get(root)
+      return run === undefined ? undefined : `${root}/run-${run}/summary.json`
+    },
     now: () => {
       clock += 1_000
       return new Date(clock)
@@ -50,6 +58,15 @@ function fakeDependencies(options: {
     },
     run: async (_command, spec) => {
       calls.push({ args: spec.args ?? [], cwd: spec.cwd, env: spec.env })
+      const root = spec.cwd ?? ''
+      const run = (runs.get(root) ?? 0) + 1
+      runs.set(root, run)
+      if (
+        Object.keys(options.scripts ?? {}).some(candidate => root.includes(candidate))
+        && !(options.staleAfterFirst === true && run > 1)
+      ) {
+        published.set(root, run)
+      }
       return {
         args: [...(spec.args ?? [])],
         command: 'x',
@@ -141,6 +158,23 @@ Describe('admission experiment', () => {
     Expect(report.trial.unmeasured).toBe(2)
     Expect(report.acceptanceMet).toBe(false)
     Expect(renderAdmissionReport(report)).toContain('nothing here is a measurement')
+  })
+
+  Test('does not report a prior passing summary as a failed later run', async () => {
+    const fake = fakeDependencies({
+      scripts: { '/repo/a': { elapsedMs: 10_000 } },
+      staleAfterFirst: true,
+    })
+
+    const report = await runAdmissionExperiment(
+      { lanes: 1, repeats: 2, repositoryRoots: ['/repo/a'] },
+      fake.dependencies,
+    )
+
+    Expect(report.baseline.unmeasured).toBe(1)
+    Expect(report.trial.unmeasured).toBe(1)
+    Expect(report.acceptanceMet).toBe(false)
+    Expect(report.baseline.outcomes[1]?.status).toBe('failed')
   })
 
   // Filtering only on a leading `--` left `verify` from `--lane verify` looking exactly like a

@@ -1,6 +1,13 @@
 # DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound
 
-- **Status:** Candidate
+- **Status:** In progress
+- **Update:** This review branch adds per-run receipts and same-checkout pruning during ordinary
+  host-test invocations. Successful proof runs shed generated build and export trees at completion while retaining
+  named logs; explicit `prepare` and `export` outputs remain inspectable within count, age, and byte
+  bounds. Recent failures have separate count, age, and byte bounds. Focused lifecycle controls and
+  a real Clockwork `prepare` output passed, but a real native/browser proof has not yet proved
+  completed-build cleanup end to end. Older unmarked roots remain for owner-reviewed
+  migration because they have no reliable liveness receipt.
 - **Section:** External
 - **Area:** Host testing and temporary artifacts
 - **Impact:** Each `./agent test-host` invocation creates a fresh `.artifacts/host-testing/<run-id>` tree. Browser exports and native builds can occupy hundreds of megabytes per run. The command has no retention or cleanup path, so repeated normal runs fill an otherwise live worktree until someone removes it by hand.

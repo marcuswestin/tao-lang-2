@@ -95,6 +95,8 @@ export type LedgerEntry = {
   name: string
   /** The entry's own `**Status:**`, or an empty string when the file states none. */
   status: string
+  /** Whether Status continues on another physical line, which the index cannot represent. */
+  statusMultiline?: boolean
   /** The entry's own `# DEVENV-... — Title` heading text, without the leading `# `, or `''` when absent. */
   heading?: string
   /** The entry's own `**Section:**`; meaningful only for an entry that lives in the open directory. */
@@ -176,6 +178,11 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
+      if (entry.statusMultiline === true) {
+        issues.push(
+          `${linkPrefix}${entry.name} must keep \`**Status:**\` on one physical line; move detail to an update field.`,
+        )
+      }
       if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
         issues.push(
           archiveSide
@@ -1211,6 +1218,7 @@ async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexP
       name,
       section: source.match(/^- \*\*Section:\*\* (.*)$/m)?.[1]?.trim() ?? '',
       status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+      statusMultiline: /^- \*\*Status:\*\* [^\n]*\n[ \t]{2,}\S/m.test(source),
     })
   }
   const index = FS.resolvePath(indexPath, repoRoot)

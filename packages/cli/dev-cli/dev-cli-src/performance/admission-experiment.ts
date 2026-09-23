@@ -97,6 +97,8 @@ export type AdmissionExperimentDependencies = {
   cpuCount: () => number
   loadAverage: () => number
   now: () => Date
+  /** The physical summary path, so a prior run's `latest` link cannot impersonate this run. */
+  latestSummaryPath: (lane: string, repositoryRoot: string) => Promise<string | undefined>
   readJson: <ValueT>(path: string) => Promise<ValueT>
   run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 }
@@ -106,6 +108,10 @@ const defaultDependencies: AdmissionExperimentDependencies = {
   cpuCount: Platform.cpuCount,
   loadAverage: Platform.loadAverage,
   now: () => new Date(),
+  latestSummaryPath: async (lane, repositoryRoot) =>
+    await FS.realPath(
+      FS.resolvePath(`.artifacts/logs/${lane}/latest/summary.json`, repositoryRoot),
+    ).catch(() => undefined),
   readJson: FS.readJson,
   run: CLI.run,
 }
@@ -217,6 +223,7 @@ async function runLane(
   dependencies: AdmissionExperimentDependencies,
 ): Promise<AdmissionLaneOutcome> {
   const startedAt = dependencies.now()
+  const previousSummaryPath = await dependencies.latestSummaryPath(lane, repositoryRoot)
   // `--no-cache` because a recorded green tree would let a lane finish without doing the work, and a
   // lane that skipped its work measures nothing about how the machine shares itself.
   // No `TAO_OUTPUT_MODE` here, deliberately. Setting it to `quiet` seemed harmless and was not:
@@ -230,7 +237,11 @@ async function runLane(
     cwd: repositoryRoot,
   })
   const wallMs = dependencies.now().getTime() - startedAt.getTime()
-  const summary = await readLaneSummary(lane, repositoryRoot, dependencies)
+  const currentSummaryPath = await dependencies.latestSummaryPath(lane, repositoryRoot)
+  const summary = currentSummaryPath !== undefined && currentSummaryPath !== previousSummaryPath
+    ? await readLaneSummary(lane, repositoryRoot, dependencies)
+    : undefined
+  const commandFailed = result.exitCode !== 0 || result.error !== undefined || result.signal !== null
 
   return {
     failedGates: (summary?.gates ?? [])
@@ -243,7 +254,7 @@ async function runLane(
     startedAt: startedAt.toISOString(),
     // The lane's own elapsed time excludes process startup, which is what the bar is about; the
     // wall time is kept when the lane wrote no summary at all, which is itself a result.
-    status: summary?.status ?? (result.exitCode === 0 ? 'passed' : 'failed'),
+    status: commandFailed ? 'failed' : summary?.status ?? 'failed',
     wallMs: summary?.elapsedMs ?? wallMs,
   }
 }

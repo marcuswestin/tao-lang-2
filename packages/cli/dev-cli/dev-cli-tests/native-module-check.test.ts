@@ -72,19 +72,26 @@ Describe('native module compiler check', () => {
     Expect(output).toEqual(['Native module check passed for 2 pod targets: A, B'])
   })
 
-  Test('discovers only direct packages/*/ios/*.podspec files in stable order', async () => {
+  Test('discovers podspecs from standalone and grouped package roots in stable order', async () => {
     const root = await mkTestDir('tao-native-module-discovery-')
     try {
       await Promise.all([
-        FS.writeText(FS.resolvePath('packages/z/ios/Z.podspec', root), ''),
+        FS.writeText(FS.resolvePath('packages/a/package.json', root), '{}'),
         FS.writeText(FS.resolvePath('packages/a/ios/A.podspec', root), ''),
         FS.writeText(FS.resolvePath('packages/a/ios/not-a-podspec.txt', root), ''),
         FS.writeText(FS.resolvePath('packages/a/ios/nested/Hidden.podspec', root), ''),
+        FS.writeText(FS.resolvePath('packages/providers/icloud/package.json', root), '{}'),
+        FS.writeText(FS.resolvePath('packages/providers/icloud/ios/TaoICloudNative.podspec', root), ''),
+        FS.writeText(FS.resolvePath('packages/providers/ios/Group.podspec', root), ''),
+        FS.writeText(FS.resolvePath('packages/unpackaged/ios/Unpackaged.podspec', root), ''),
         FS.writeText(FS.resolvePath('packages/root/Root.podspec', root), ''),
+        FS.writeText(FS.resolvePath('packages/z/package.json', root), '{}'),
+        FS.writeText(FS.resolvePath('packages/z/ios/Z.podspec', root), ''),
       ])
 
       Expect(await NativeModuleCheck.testing.discoverPodspecs(root)).toEqual([
         FS.resolvePath('packages/a/ios/A.podspec', root),
+        FS.resolvePath('packages/providers/icloud/ios/TaoICloudNative.podspec', root),
         FS.resolvePath('packages/z/ios/Z.podspec', root),
       ])
     } finally {

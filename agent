@@ -40,7 +40,7 @@ function needs_build() {
 
   for source_path in \
     "$AGENT_CLI_PACKAGE_DIR"/agent-cli-src/**/*.ts(N) \
-    "$CLI_KIT_PACKAGE_DIR"/cli-kit-src/RunWithCommands.ts(N) \
+    "$CLI_KIT_PACKAGE_DIR"/cli-kit-src/**/*.ts(N) \
     "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
     "$SCRIPT_DIR"/package.json \
     "$SCRIPT_DIR"/bun.lock \

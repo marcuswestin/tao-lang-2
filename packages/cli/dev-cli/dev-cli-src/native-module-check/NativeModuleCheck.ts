@@ -111,7 +111,7 @@ async function run(
     phase = 'discover native podspecs'
     const podspecPaths = await dependencies.discoverPodspecs(repositoryRoot)
     if (podspecPaths.length === 0) {
-      Errors.throwHostEnvironment('No native module podspecs exist under packages/*/ios/*.podspec.')
+      Errors.throwHostEnvironment('No native module podspecs exist under a package ios/*.podspec directory.')
     }
 
     const targetNames: string[] = []
@@ -225,8 +225,8 @@ async function prepareHost(runtimeToolchainRoot: string, hostRoot: string): Prom
 async function discoverPodspecs(repositoryRoot: string): Promise<readonly string[]> {
   const packagesRoot = FS.resolvePath('packages', repositoryRoot)
   const paths: string[] = []
-  for (const packageName of await FS.listDir(packagesRoot)) {
-    const iosRoot = FS.resolvePath(`${packageName}/ios`, packagesRoot)
+  for (const packageRoot of await packageRoots(packagesRoot)) {
+    const iosRoot = FS.resolvePath('ios', packageRoot)
     if (!await FS.isDirectory(iosRoot)) {
       continue
     }
@@ -238,6 +238,28 @@ async function discoverPodspecs(repositoryRoot: string): Promise<readonly string
     }
   }
   return paths.toSorted()
+}
+
+/** packageRoots finds both standalone packages and one-level package groups. */
+async function packageRoots(packagesRoot: string): Promise<readonly string[]> {
+  const roots: string[] = []
+  for (const name of await FS.listDir(packagesRoot)) {
+    const groupRoot = FS.resolvePath(name, packagesRoot)
+    if (!await FS.isDirectory(groupRoot)) {
+      continue
+    }
+    if (await FS.isFile(FS.resolvePath('package.json', groupRoot))) {
+      roots.push(groupRoot)
+      continue
+    }
+    for (const nested of await FS.listDir(groupRoot)) {
+      const packageRoot = FS.resolvePath(nested, groupRoot)
+      if (await FS.isFile(FS.resolvePath('package.json', packageRoot))) {
+        roots.push(packageRoot)
+      }
+    }
+  }
+  return roots
 }
 
 function podTargetName(output: string, podspecPath: string): string {

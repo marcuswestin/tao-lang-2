@@ -94,12 +94,54 @@ Test('Studio releases a queued Save after phone disconnect timeout and marks the
   await until(() => waits.length === 2, { description: 'second disconnected phone wait', intervalMs: 0 })
   Expect(writes).toEqual([1])
   waits[1]!.resolve()
-  await until(() => waits.length === 3, { description: 'phone disconnect timeout', intervalMs: 0 })
-  Expect(writes).toEqual([1])
-  waits[2]!.resolve()
   await second
   Expect(writes).toEqual([1, 2])
   Expect(unsynced).toEqual([1])
+})
+
+Test('Studio releases a queued Save when a connected phone never advances to the compiled revision', async () => {
+  const writes: number[] = []
+  const unsynced: number[] = []
+  const waits: Array<ReturnType<typeof Deferred<void>>> = []
+  let clock = 0
+  const gate = new StudioPhoneSaveGate({
+    now: () => clock,
+    onUnsynced: revision => unsynced.push(revision),
+    pollMs: 5,
+    sleep: async ms => {
+      const wait = Deferred<void>()
+      waits.push(wait)
+      await wait.promise
+      clock += ms
+    },
+    status: async () => ({
+      connection: { appliedRevision: 0, state: 'connected' } as StudioDeviceConnection,
+    }),
+    // budget-ok: the injected clock advances only when the test resolves each in-memory wait.
+    timeoutMs: 10,
+  })
+
+  await gate.run(async () => {
+    writes.push(1)
+    return compiled(1)
+  })
+  const second = gate.run(async () => {
+    writes.push(2)
+    return compiled(2)
+  })
+
+  await until(() => waits.length === 1, { description: 'first connected phone wait', intervalMs: 0 })
+  waits[0]!.resolve()
+  await until(() => waits.length === 2, { description: 'connected phone deadline', intervalMs: 0 })
+  waits[1]!.resolve()
+  await until(
+    () => writes.length === 2 || waits.length === 3,
+    { description: 'queued Save release at the connected phone deadline', intervalMs: 0 },
+  )
+
+  Expect(writes).toEqual([1, 2])
+  Expect(unsynced).toEqual([1])
+  await second
 })
 
 Test('closing an editor session cancels its queued Save without waiting for a connected phone', async () => {

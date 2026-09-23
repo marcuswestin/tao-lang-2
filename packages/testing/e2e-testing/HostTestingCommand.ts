@@ -1,6 +1,7 @@
-import { FS, HCI, Platform, Repo, Switch } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
 import { runBrowserHostProof } from './BrowserHostProof'
 import { runPlaywrightHostDriverProof } from './DriverHostProof'
+import { HostTestingArtifacts } from './HostTestingArtifacts'
 import { runHostTestingMaintenance } from './HostTestingMaintenance'
 import {
   type HostTestingContext,
@@ -15,7 +16,26 @@ export async function runHostTesting(mode: string, options: HostTestingOptions):
   const request = parseHostTestingRequest(mode, options)
   const context = await createHostTestingContext(request)
   HCI.writeLine(`Host-testing artifacts: ${context.artifactRoot}`)
-  await dispatchHostTestingRequest(request, context)
+  await HostTestingArtifacts.begin(context.runId, mode)
+  await pruneWithWarning()
+  let passed = false
+  try {
+    await dispatchHostTestingRequest(request, context)
+    passed = true
+  } finally {
+    // A failed proof keeps bounded diagnostic artifacts; a killed process is reclaimed by a later
+    // ordinary invocation once its PID is gone and the grace period has elapsed.
+    await HostTestingArtifacts.finish(context.runId, passed ? 'passed' : 'failed').catch(error => {
+      HCI.writeLine(`WARN Host-testing receipt could not be finished: ${Errors.messageOf(error)}`)
+    })
+    await pruneWithWarning()
+  }
+}
+
+async function pruneWithWarning(): Promise<void> {
+  await HostTestingArtifacts.prune().catch(error => {
+    HCI.writeLine(`WARN Host-testing artifact cleanup did not finish: ${Errors.messageOf(error)}`)
+  })
 }
 
 async function createHostTestingContext(request: HostTestingRequest): Promise<HostTestingContext> {

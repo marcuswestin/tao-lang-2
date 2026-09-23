@@ -15,7 +15,7 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     artifactRoots: [{ path: '.artifacts/tmp', present: true, sizeBytes: 2_500_000, writable: true }],
     branch: 'feat/example',
     bunTempDir: { path: '/w/.artifacts/tmp', writable: true },
-    bunVersion: '1.3.13',
+    bunVersion: '1.4.2',
     dependencyIssues: [],
     devenvProfileNode: '/w/.devenv/profile/bin/node',
     direnvAllowed: true,
@@ -24,7 +24,7 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       kernel: { name: 'Darwin', version: '27.0.0' },
       os: { build: '26A428', name: 'macOS', version: '27.0' },
       tao: { commit: '3e1ae411dff6', describe: '3e1ae411', modified: false },
-      toolchain: [{ name: 'bun', present: true, version: '1.3.13' }],
+      toolchain: [{ name: 'bun', present: true, version: '1.4.2' }],
       version: 1,
     },
     generatedParserArtifacts: [{ path: 'packages/language/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
@@ -68,6 +68,13 @@ Describe('repository doctor', () => {
     Expect(report.status).toBe('pass')
     Expect(report.version).toBe(1)
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
+  })
+
+  Test('rejects Bun too old for the pinned standalone build workflow', () => {
+    const report = doctorReport(facts({ bunVersion: '1.3.13' }))
+
+    Expect(check(report, 'bun')?.status).toBe('fail')
+    Expect(check(report, 'bun')?.detail).toContain('>=1.4.2')
   })
 
   Test('fails a checkout that cannot run Tao commands at all', () => {
@@ -365,7 +372,7 @@ Describe('repository doctor', () => {
 
     // The screen is where somebody about to file a report learns that a pasteable block exists.
     Expect(printed.stdout).toContain('macOS 27.0 (26A428) · Darwin 27.0.0 · arm64')
-    Expect(printed.stdout).toContain('Tao 3e1ae411dff6 · bun 1.3.13')
+    Expect(printed.stdout).toContain('Tao 3e1ae411dff6 · bun 1.4.2')
     Expect(printed.stdout).toContain('./agent doctor --fingerprint')
     Expect((JSON.parse(json.stdout) as DoctorReport).fingerprint).toEqual(report.fingerprint)
   })

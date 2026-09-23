@@ -1,6 +1,9 @@
 # DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN — `./agent doctor` passes a Bun older than the one devenv pins
 
-- **Status:** Candidate
+- **Status:** In progress
+- **Update:** This review branch raises doctor's minimum to Bun 1.4.2 and adds a regression for
+  1.3.13, so the observed stale profile now fails with a reload instruction. The check still does
+  not derive the version from the Nix pin, so a later pin bump could reopen the mismatch.
 - **Section:** External
 - **Area:** Host tooling
 - **Impact:** A worktree whose devenv profile was built before a Bun bump keeps running the old Bun

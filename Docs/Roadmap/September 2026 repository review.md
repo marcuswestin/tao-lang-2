@@ -189,6 +189,27 @@ The findings below are review results, not fixes in this pass. Every cited curre
 | P3       | `a14ac0fa`, `f145eaf1` | The queued-landing main refresh now satisfies `DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK.md` acceptance, yet that entry and its index remain Candidate.                                                                                                                                                      | Archive the resolved entry and regenerate both indexes after checking its remaining message-confirmation clause.                                                                                                                 |
 | P3       | `7f32eae2`             | `Docs/Roadmap/Tao CLI workflows/Decisions - Development build ship and clean.md:3` still says the landed web/desktop build and clean work is pending integration.                                                                                                                                                            | Mark implementation landed while retaining external acceptance limits.                                                                                                                                                           |
 
+## Remediation on this review branch
+
+The initial findings above describe the frozen `main` tree. This branch subsequently changed the
+four P1 paths and the P2 correctness paths: the generated web server now confines decoded file
+requests to its site and binds to loopback; landing restricts the message path, rejects both silent
+verification skips, and requires an edit to a generated draft; Studio Save has a deadline; admission
+results cannot reuse a prior summary and cleanup reports leftover worktrees; native podspec discovery,
+package-path cache invalidation, Lens assignment isolation, bootstrap freshness, doctor Bun minimum,
+and the shipped `tao dev` skill have focused regressions. The two wrapped ledger statuses and stale
+CLI workflow status were corrected; the queued-landing entry was archived after its existing
+lock-wait regression was rechecked. These changes are on `feat/recurring-review-2026-09-22`, not
+landed on `main` by this report.
+
+Normal host-test runs now record ownership and results, prune this checkout at startup and finish,
+retain a bounded set of failed runs, and remove generated builds/exports after successful proofs.
+Explicit `prepare` and `export` outputs remain inspectable within the same age and byte budget.
+Focused lifecycle controls, host typecheck, and a real Clockwork `prepare` run passed; real browser
+or native proof cleanup has not been exercised. Older unmarked directories in another worktree and
+the machine-wide Jest cache were left untouched because their ownership/liveness and separate
+retention policy still need resolution. The tracked `uuid` advisory remains open.
+
 ## Temporary state and dependency checks
 
 - **Host-testing output:** A read-only size inventory found about 31 GB across 234 `.artifacts/host-testing/<run-id>` directories in one worktree. The oldest and newest top-level modification times observed were September 19 and 20. `HostTestingCommand.runHostTesting` creates a unique root per invocation and has no finish or later-run retention path; generated app builds and web exports live beneath it. [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND](<Developer environment upgrades/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) records a normal-operation lifecycle fix. The worktree may still belong to another active task; nothing was removed.
@@ -201,5 +222,5 @@ The findings below are review results, not fixes in this pass. Every cited curre
 
 - **Complete within the chosen boundary:** 142 first-parent landings were accounted for; the prior independent audit covers 7, the Developer accepted the 74-commit catch-up handoff as reviewed, and this pass reviewed the remaining 61. The five specialist clusters and the CLI/workspace/test cluster inspected historical diffs and traced their touched behavior into frozen `ff4f017c`. Findings were rechecked against current paths before inclusion. The commit ledger retains a disposition for every landing.
 - **Static review limits:** No broad gate, CocoaPods/Xcode build, physical phone or emulator, packaged Studio run, signed/notarized installation, Linux closure, real CloudKit/InstantDB external acceptance, marketplace publication, or end-to-end generated web-server run was performed. The path-traversal URL/file behavior and symlink retargeting were reproduced in focused local probes; the report does not treat those as host acceptance.
-- **Next repair slice:** Address the four P1 paths first, then the P2 correctness issues with focused regressions. Recheck P3 ledger/doc status separately. The host-test artifact lifecycle and Jest cache need bounded cleanup in ordinary runs; no existing output was deleted during this pass. After fixes, run the focused proofs and the appropriate repository verification lane before landing.
+- **Next repair slice:** The remediation section records fixes made after this initial review; `verify-changed` and `verify --complete` passed on the repair tree. Review the merge message before any authorized landing. The Jest cache and older unmarked host-test roots remain separate lifecycle work.
 - **Boundary for the next recurring pass:** start after `ff4f017ceb100c39c7d55bec8c228ef967097be4`, inspect these findings' repair commits, and revisit the tracked `uuid`/Nixpkgs advisories and temporary-state budgets. Do not infer any external acceptance from this static pass.

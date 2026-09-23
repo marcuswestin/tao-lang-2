@@ -22,7 +22,7 @@ import { type LaneRecord, MachineLanes } from './MachineLanes'
 
 /** The Node major devenv.nix pins, and the Bun the lockfile and workflow scripts assume. */
 const SUPPORTED_NODE_MAJOR = 24
-const SUPPORTED_BUN_RANGE = '>=1.3.0'
+const SUPPORTED_BUN_RANGE = '>=1.4.2'
 
 /** Ports Tao conventionally occupies, so an occupied one is reported with its owner. */
 const CONVENTIONAL_PORTS = [
@@ -314,7 +314,7 @@ function nodeCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: `${facts.nodeVersion}, but devenv.nix pins Node ${SUPPORTED_NODE_MAJOR}`,
     name: 'node',
-    remediation: 'Run Tao commands through ./agent or ./dev so the pinned profile is used.',
+    remediation: 'Reload the pinned devenv profile with direnv reload, then rerun ./agent doctor.',
     status: 'warn',
   }
 }
@@ -334,7 +334,7 @@ function bunCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: `${facts.bunVersion}, outside the supported ${SUPPORTED_BUN_RANGE}`,
     name: 'bun',
-    remediation: 'Run Tao commands through ./agent or ./dev so the pinned profile is used.',
+    remediation: 'Reload the pinned devenv profile with direnv reload, then rerun ./agent doctor.',
     status: 'fail',
   }
 }

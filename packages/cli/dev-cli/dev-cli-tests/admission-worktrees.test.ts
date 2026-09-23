@@ -60,6 +60,18 @@ Describe('admission worktrees', () => {
     Expect(removals.length).toBe(2)
   })
 
+  Test('names a worktree left after partial provisioning and failed cleanup', async () => {
+    const fake = fakeDependencies({
+      failSetupAt: 2,
+      failRemove: ['/private/tmp/tao-admission/2026-09-21T12-00-00-000Z/lane-1'],
+    })
+
+    await Expect(provisionWorktrees(3, fake.dependencies)).rejects.toThrow(
+      'Cleanup could not remove /private/tmp/tao-admission/2026-09-21T12-00-00-000Z/lane-1',
+    )
+    Expect(fake.removedDirectories).toEqual([])
+  })
+
   Test('removes what it made when the checkout itself cannot be created', async () => {
     const fake = fakeDependencies({ failAddAt: 3 })
 
