@@ -259,6 +259,26 @@ _bench-check:
     }
   })
 
+  Test('ignores generated Tao dev directories before reading WordFlower files', async () => {
+    const root = await mkTestDir('tao-repo-lint-dev-')
+    try {
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+      await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime/App.tsx', root), 'generated\n')
+      await FS.symlink(
+        FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
+        FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/node_modules', root),
+      )
+
+      Expect(await repoLintIssues(root)).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('scans Apps, runtime, and CommonJS executable sources for raw errors', async () => {
     const root = await mkTestDir('tao-repo-lint-sources-')
     try {

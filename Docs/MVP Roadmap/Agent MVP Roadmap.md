@@ -357,8 +357,11 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 `WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
 existence is confirmed. On 2026-09-22, a direct Expo web export of the hosted variant loaded an
 empty library, created a disposable workspace, retained it after reload, and delivered a second
-workspace to a second browser origin without reload. Physical-device sync still needs acceptance
-before outside testers can use the demo.
+workspace to a second browser origin without reload. On 2026-09-23, the development build ran
+`WordFlowerInstantDB` on a connected iPhone: a phone-created workspace (`P923A`) appeared in an
+independent browser client, and a browser-created workspace (`B923A`) appeared on the phone after
+the app was relaunched. This accepts live hosted sync on a physical device; TestFlight installation
+and distribution remain separate release checks.
 
 - Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
   onboarding requires an existing account because new signups are closed, and the production demo
