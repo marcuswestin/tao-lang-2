@@ -108,10 +108,15 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
-# Build the Tao Companion as a prebuilt Android host; tao dev then opens emulator apps in it, not Expo Go
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
+
+# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+[group('Run')]
+companion-host-publish:
+    ./dev companion-host-publish
 
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
@@ -183,10 +188,16 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stab
 standalone-cli-build: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
 
-# Build the standalone Tao binary and prove it creates, checks, and compiles a project outside any checkout with no Bun or Node on PATH
+# Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-acceptance: standalone-cli-build
-    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/build/tao
+standalone-cli-release version: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
+[group('Ship')]
+standalone-cli-acceptance: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0-acceptance
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0-acceptance
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
@@ -276,11 +287,11 @@ my-branch name='':
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
 [group('Mine')]
-my-resolve *ARGS:
+my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]

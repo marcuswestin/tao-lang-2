@@ -340,7 +340,7 @@ export async function readStudioDoctorFacts(repositoryRoot = Repo.getRoot()): Pr
       .filter(issue => issue.includes('react')),
     releaseHostConfigured: isHttpsUrl(Platform.runtimeProcess.env['TAO_STUDIO_RELEASE_BASE_URL']),
     repositoryRoot,
-    watch: await readWatchFacts(repositoryRoot, repositoryRoot),
+    watch: await readWatchFacts(repositoryRoot),
   }
 }
 

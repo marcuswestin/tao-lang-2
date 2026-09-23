@@ -50,8 +50,13 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     processRealPath: '/w',
     repositoryRoot: '/w',
     satisfies: Platform.semverSatisfies,
-    watchmanHealthy: true,
-    watchmanVersion: '2026.01.19.00',
+    watchman: {
+      clientVersion: '2026.01.19.00',
+      repositoryRoot: '/w',
+      server: { roots: ['/w'], state: 'answering' },
+      socket: '/home/.local/state/watchman/someone-state/sock',
+      stableClient: '/w/.devenv/profile/bin/watchman',
+    },
     ...overrides,
   }
 }
@@ -87,16 +92,24 @@ Describe('repository doctor', () => {
   })
 
   Test('treats optional tooling as a warning, never a failure', () => {
-    const report = doctorReport(facts({
-      direnvAllowed: undefined,
-      watchmanHealthy: undefined,
-      watchmanVersion: undefined,
-    }))
+    const report = doctorReport(facts({ direnvAllowed: undefined }))
 
-    Expect(check(report, 'watchman')?.status).toBe('warn')
-    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
     Expect(check(report, 'direnv')?.status).toBe('warn')
     Expect(report.status).toBe('warn')
+  })
+
+  Test('fails a checkout whose Watchman does not answer, because the fallback dies with EMFILE', () => {
+    const report = doctorReport(facts({
+      watchman: {
+        clientVersion: '2026.01.19.00',
+        repositoryRoot: '/w',
+        stableClient: '/w/.devenv/profile/bin/watchman',
+      },
+    }))
+
+    Expect(check(report, 'watchman')?.status).toBe('fail')
+    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
+    Expect(report.status).toBe('fail')
   })
 
   Test('fails an incomplete dependency graph with a repair command', () => {

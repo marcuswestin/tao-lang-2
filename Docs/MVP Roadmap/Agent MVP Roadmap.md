@@ -77,10 +77,11 @@ is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
   evidence, a nine-slice sequence, and the first-release decisions.
-- Progress: slices 1 and 2 have landed. The binary unpacks its stdlib, runtime, and host files on
-  first run and creates, checks, and compiles a project outside any checkout;
-  `just standalone-cli-acceptance` proves that much. `tao dev` and `tao test` do not yet work from
-  it.
+- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
+  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
+  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
+  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
+  `tao test` do not yet work from it.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -253,12 +254,22 @@ from the development loop, which no virtualization approach can do.
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
   opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
 - Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
-  a debug APK into `.artifacts/hosts/<version>/android/` beside a `tao-host.json` naming its native
+  a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
   kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
   place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
   the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
-- Remaining: the iOS Simulator host (its build waits on CoreSimulator, unavailable on this Mac until
-  a restart); publishing hosts to GitHub Releases and downloading them into `~/.tao/hosts`; physical
+- Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
+  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
+  lists those releases without signing in and downloads the newest whose kit covers its own into
+  `~/.tao/hosts`. The download is proven against a fake GitHub only: until the repository is public
+  the listing answers 404, and `tao dev` says so and uses Expo Go.
+- Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
+  builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
+  embedded, and `tao dev --ios` installs a compatible host unless the simulator already has that
+  build and opens the app in it. Publishing zips it beside the Android host on the same release.
+  Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
+  and CloudKit aborted it, which the build now refuses.
+- Remaining: the first published host and a live download once the repository is public; physical
   Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs.
@@ -357,8 +368,11 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 `WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
 existence is confirmed. On 2026-09-22, a direct Expo web export of the hosted variant loaded an
 empty library, created a disposable workspace, retained it after reload, and delivered a second
-workspace to a second browser origin without reload. Physical-device sync still needs acceptance
-before outside testers can use the demo.
+workspace to a second browser origin without reload. On 2026-09-23, the development build ran
+`WordFlowerInstantDB` on a connected iPhone: a phone-created workspace (`P923A`) appeared in an
+independent browser client, and a browser-created workspace (`B923A`) appeared on the phone after
+the app was relaunched. This accepts live hosted sync on a physical device; TestFlight installation
+and distribution remain separate release checks.
 
 - Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
   onboarding requires an existing account because new signups are closed, and the production demo

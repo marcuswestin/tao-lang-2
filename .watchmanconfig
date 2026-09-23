@@ -1,0 +1,9 @@
+{
+  "ignore_dirs": [
+    ".devenv",
+    ".artifacts/logs",
+    ".artifacts/tests",
+    ".artifacts/timings",
+    ".artifacts/verify"
+  ]
+}

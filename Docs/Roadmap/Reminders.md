@@ -16,7 +16,9 @@ the change that acts on it.
   main request context 294k median and 615k p90, subagent 135k median, session start 64k for a main
   agent and 52k for a subagent, `cat`/`sed -n`/`git show`/`git diff` at 42% of all Bash output
   characters, and 16% of Bash calls opening with a `cd` or assignment prefix. Read the same fields
-  from the transcripts under `~/.claude/projects/-Users-ro-code-tao-lang-2*`: per assistant message,
+  from each harness's session logs — the baseline counted only Claude Code's, under
+  `~/.claude/projects/` in the directories named after this checkout's path; Codex keeps its own
+  under `~/.codex/sessions/` with differently named usage fields. In Claude Code's, per assistant message,
   `message.usage` summed over `input_tokens`, `cache_creation_input_tokens` and
   `cache_read_input_tokens` is the context of that request, and `/subagents/` in the path separates
   the two populations. A week is the shortest span that holds enough sessions to compare. Read

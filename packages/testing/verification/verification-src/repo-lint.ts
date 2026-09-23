@@ -63,7 +63,7 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc'
+  return file.path !== '.tao-project/lock.jsonc' && !file.path.startsWith('.tao/')
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -1243,7 +1243,12 @@ async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDire
 
 async function readDirectoryFiles(directoryPath: string): Promise<SourceFile[]> {
   const files: SourceFile[] = []
-  for await (const path of FS.walk(directoryPath, { includeHidden: true })) {
+  for await (
+    const path of FS.walk(directoryPath, {
+      excludeDirectory: name => name === '.tao',
+      includeHidden: true,
+    })
+  ) {
     const bytes = await FS.readFile(path)
     files.push({
       bytes,

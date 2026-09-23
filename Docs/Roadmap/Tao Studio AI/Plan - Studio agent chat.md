@@ -42,7 +42,8 @@ Decisions taken for this slice, to be recorded as SAI-D029 onward once the imple
   defined with `tool()` from JSON Schema or zod, structured stage outputs with `Output.object`, and
   `needsApproval` on every tool that writes. The loop runs in the Studio server process, never in the
   browser client, so credentials and source never pass through the client.
-- Provider choice is configuration, not code. Anthropic is the first provider; the model id is a
+- Provider choice is configuration, not code. Anthropic and OpenAI are both wired, chosen per session
+  in the panel, with `TAO_STUDIO_AGENT_PROVIDER` naming where a session starts; each model id is a
   setting with a sensible default. A community on-device provider for the AI SDK exists and may be
   evaluated for read-only turns, but nothing in this slice depends on it.
 - Sending project source to a hosted model is an explicit, visible, per-session choice in Studio. No
@@ -474,7 +475,10 @@ model, so the loop's behavior is tested without a network.
 
 **Phase 1, ask.** `readTools` is the whole read surface, and `AgentChatFacts` is what an advisory answer may
 rest on. `AgentChatProvider` holds the two separate gates: a key in the environment, and the person turning
-cloud use on for the session.
+cloud use on for the session. It also holds which vendor answers — Anthropic (`ANTHROPIC_API_KEY`,
+`claude-sonnet-5`) or OpenAI (`OPENAI_API_KEY`, `gpt-5.6-terra`), each model overridable through
+`TAO_STUDIO_AGENT_ANTHROPIC_MODEL` or `TAO_STUDIO_AGENT_OPENAI_MODEL` — and switching vendor turns cloud use
+off again, since consent to send a project to one vendor is not consent to send it to the other.
 
 **Phase 2, build.** Every change is proposed and applied in two steps, and only the applying pauses for
 approval — so the approval card carries the diff rather than the arguments that produced it. `proposeFlag`
@@ -539,7 +543,8 @@ staging and the gate are all tested; whether a real model uses them well is not.
 - whether a model respects `requestCodeChanges` and stops, rather than finding another way;
 - cost and latency per story.
 
-Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` set, cloud turned on in the panel,
+Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set, that
+provider chosen and cloud turned on in the panel,
 and someone reading what comes back. That is the next thing to do, and it is the only thing that can settle
 whether this approach works.
 
