@@ -483,17 +483,17 @@ It opens visible native Studio and records these results in a separate report:
 
 ## Release
 
-Building a signed, notarized release needs credentials this repository never holds. Use a normal
-macOS terminal, outside an agent's managed shell, for the native build and clean installation.
-The release recipes target a **public GitHub Releases repository** and stable updates only:
+Building a signed, notarized release needs credentials this repository never holds. Agents can run
+the preparation command with host access; publication remains a separate operator step. The
+release recipes target a **public GitHub Releases repository** and stable updates only:
 
 ```bash
-just studio-release-prepare OWNER/REPO 0.0.1
+./agent prepare-release studio --repo OWNER/REPO --version 0.0.1
 # Inspect the local artifacts and release report before making them public.
 just studio-release-publish OWNER/REPO
 ```
 
-The first recipe builds with the embedded update URL
+The preparation command builds with the embedded update URL
 `https://github.com/OWNER/REPO/releases/latest/download`, discovers the built `.app` and `.dmg`,
 runs `studio-release-check`, and records the artifact hashes. It checks GitHub release history so a
 first release can correctly have no differential patch; later releases still require one. The second
@@ -502,7 +502,12 @@ repository. It creates a draft
 `studio-vVERSION` release, uploads every file from the build's `artifacts/` directory without
 renaming it, publishes the release, and downloads each file anonymously to compare its hash.
 If publication stops after creating a draft, the same command resumes it; if the release is already
-public, it verifies the hosted files without replacing them.
+public, it verifies the hosted files without replacing them. Studio and CLI downloads can share the
+public Tao Lang repository. GitHub has one `latest` release per repository, so each CLI-only release
+must use `--latest=false`: Studio's updater reads Studio files from that repository's `latest`
+download URL. The CLI install script can select the highest stable `vVERSION` release from GitHub's
+release list and download its assets by tag. Studio releases are explicitly marked latest by the
+publication command.
 
 The existing `just studio-package` and `just studio-release-check` remain available as lower-level
 diagnostics. Their manual equivalent is:

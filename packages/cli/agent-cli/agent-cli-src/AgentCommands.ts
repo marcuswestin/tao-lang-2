@@ -1,7 +1,8 @@
 /**
  * The one table of what `./agent` exposes: `agent-dev.ts` registers a Commander command for each
- * name below, and `OutputDiscipline` reads the same table to redirect a raw `just <recipe>` call
- * back through the front door. Neither owns its own copy, so the two cannot drift apart.
+ * name below. Most commands wrap Just recipes; `prepare-release` passes arguments directly to
+ * `./dev` so its host-capable entry point never interpolates arguments into a shell command.
+ * `OutputDiscipline` reads the recipe subset to redirect raw `just <recipe>` calls.
  */
 
 export const JUST_COMMANDS = [
@@ -37,6 +38,7 @@ export const JUST_COMMANDS = [
   // second spelling.
   'open-pr',
   'parser-gen',
+  'prepare-release',
   'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
@@ -84,6 +86,6 @@ export function recipeFor(command: AgentCommand): string {
  * permission rule for `--force`.
  */
 export const EXPOSED_RECIPES: ReadonlyMap<string, AgentCommand> = new Map(
-  JUST_COMMANDS.filter(command => command !== 'land-unlock')
+  JUST_COMMANDS.filter(command => command !== 'land-unlock' && command !== 'prepare-release')
     .map(command => [recipeFor(command), command]),
 )

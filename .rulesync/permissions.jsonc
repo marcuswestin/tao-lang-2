@@ -131,10 +131,12 @@
   // Explicit host-access exceptions for Codex. Unlike Claude's sandbox exclusions, Codex needs
   // prefix rules to make these commands both unsandboxed and non-interactive. Each must also be
   // covered by a Bash allow rule and a Claude exclusion; the generator checks both. This grants
-  // the landing command and all repository code it invokes host access, which the Developer explicitly chose.
+  // landing and the two release-preparation targets host access, including their repository code.
   "codex": {
     "outsideSandboxCommands": [
       "./agent land",
+      "./agent prepare-release studio",
+      "./agent prepare-release ide-extension",
     ],
   },
   "claudecode": {
@@ -143,7 +145,7 @@
       "excludedCommands": [
         // These commands need host process or native-service access the sandbox cannot express.
         // Codex derives only fixed, read-only command shapes from this intersection by default.
-        // Its mutable landing exceptions are explicit in `codex.outsideSandboxCommands` above.
+        // Its mutable host exceptions are explicit in `codex.outsideSandboxCommands` above.
         "ps -axo pid=,ppid=,lstart=,command=",
         "ps -o lstart= -p *",
         "adb devices *",
@@ -154,10 +156,16 @@
         // exceptions: if the sandbox denies one, diagnose it and ask the Developer before retrying.
         "git ls-remote origin *",
         "git ls-remote --heads origin *",
-        // The single unsandboxed write entry point. It owns integration through push under one
-        // lock; it is usable only after the Developer has authorized landing this named slice in the thread.
+        // Landing owns integration through push under one lock; it is usable only after the
+        // Developer has authorized landing this named slice in the thread.
         "./agent land",
         "./agent land *",
+        // Preparation builds or installs on the host, but never publishes. Keep target prefixes
+        // explicit so adding another release target does not silently grant it host access.
+        "./agent prepare-release studio",
+        "./agent prepare-release studio *",
+        "./agent prepare-release ide-extension",
+        "./agent prepare-release ide-extension *",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.

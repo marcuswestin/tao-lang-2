@@ -59,8 +59,9 @@ behind it.
   a host requirement from a broken command. If a write needs host access, tell the Developer the exact
   operation and why, then pause until the Developer explicitly approves it in the conversation. Tool-level
   auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
-  change to route around the denial. `./agent land` is the one standing host-write exception after
-  the Developer authorizes landing that named slice.
+  change to route around the denial. `./agent land` is the standing integration exception after
+  the Developer authorizes landing that named slice; `./agent prepare-release studio|ide-extension`
+  has host access for local preparation only.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Run them through
   `./agent studio-smoke` or `./agent studio-proof-real-app`; if the host blocks Chrome there,
   rerun only with explicit review, and never reuse an existing browser profile.

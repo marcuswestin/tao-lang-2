@@ -644,7 +644,10 @@ above; where the two disagree, these are later and win.
    the Developer ID certificate exists.
 5. **The install script** is served from the public repository's Releases. It detects whichever
    user-writable bin directory is already on `PATH`, symlinks the shim there, and prints the `PATH`
-   line only when there is none.
+   line only when there is none. It lists published GitHub releases, ignores drafts, prereleases,
+   and non-CLI tags, chooses the highest stable `vVERSION` tag by semantic version, and downloads
+   the binary and checksum by that tag. CLI releases use `--latest=false` so Studio's fixed update
+   URL can keep using the repository's `latest` release.
 6. **The first host install** asks permission before downloading, then shows a progress line naming
    the one-time cost.
 7. **A pinned version that is not installed** asks when interactive, and when not, fails naming the

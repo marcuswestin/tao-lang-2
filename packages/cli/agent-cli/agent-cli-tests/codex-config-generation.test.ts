@@ -160,7 +160,7 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders fixed host commands and explicit landing exceptions only', () => {
+  Test('renders fixed host commands and explicit mutable exceptions only', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
     Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
@@ -174,6 +174,17 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
     Expect(rendered).toContain('Use ./agent setup')
+  })
+
+  Test('grants host access only to the two local release preparation targets', async () => {
+    const source = await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc'))
+    const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(source))
+
+    Expect(rendered).toContain('pattern=["./agent","prepare-release","studio"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","prepare-release","ide-extension"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["./agent","prepare-release"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["./dev","release-studio-prepare"]')
+    Expect(rendered).not.toContain('pattern=["./dev","release-ide-prepare"]')
   })
 
   Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {

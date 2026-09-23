@@ -817,6 +817,31 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('prepare-release')
+    .description('Prepare a Studio or IDE extension release locally; does not publish.')
+    .argument('<target>', 'studio or ide-extension.')
+    .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
+    .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
+    .action(async (target: string, options: { repo?: string; version?: string }) => {
+      await runReleaseAction(async () => {
+        const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+        if (target === 'studio') {
+          if (options.repo === undefined) {
+            Errors.throwUserInput('Studio preparation needs --repo owner/name.')
+          }
+          await ReleaseWorkflow.prepareStudio(options.repo, options.version ?? '0.0.1')
+        } else if (target === 'ide-extension') {
+          if (options.repo !== undefined || options.version !== undefined) {
+            Errors.throwUserInput('IDE extension preparation takes no --repo or --version.')
+          }
+          await ReleaseWorkflow.prepareIde()
+        } else {
+          Errors.throwUserInput('Expected release target studio or ide-extension.')
+        }
+      })
+    })
+
+  commands
     .command('release-studio-prepare')
     .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
     .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')

@@ -84,7 +84,11 @@
       "git ls-remote origin *",
       "git ls-remote --heads origin *",
       "./agent land",
-      "./agent land *"
+      "./agent land *",
+      "./agent prepare-release studio",
+      "./agent prepare-release studio *",
+      "./agent prepare-release ide-extension",
+      "./agent prepare-release ide-extension *"
     ],
     "filesystem": {
       "allowWrite": [
