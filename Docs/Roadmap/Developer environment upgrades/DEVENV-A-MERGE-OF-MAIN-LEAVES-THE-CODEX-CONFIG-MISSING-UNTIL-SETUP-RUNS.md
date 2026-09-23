@@ -1,6 +1,6 @@
 # DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS — A merge of main leaves the Codex config missing until setup runs
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Section:** External
 - **Area:** Landing, generated harness files, worktrees
 - **Impact:** `main` at `174e49a5` stopped tracking `.codex/config.toml` and made it a per-machine
@@ -13,10 +13,9 @@
   with `ENOENT: no such file or directory, open '…/.codex/config.toml'`. `./agent setup` rendered the
   file in 2.5s and the retried landing passed. Measured: the failure, the rendered file, the retry.
 - **Workaround:** Run `./agent setup` after merging `main`, before landing.
-- **Proposed change:** Have the landing's preflight (and `./agent doctor`) check that every generated,
-  untracked harness file exists and name `./agent setup` when one is missing; failing that, have the
-  test report the missing file with that remedy instead of an `ENOENT`.
+- **Proposed change:** Restore the tracked `.codex/config.toml` so a new worktree has its startup
+  permission profile before setup runs. Keep the generated profile and its canonical sources in sync.
 - **Dependencies:** None.
-- **Acceptance:** Deleting `.codex/config.toml` and running `./agent land` refuses before the lock,
-  naming `./agent setup`.
+- **Acceptance:** A fresh worktree from the landed change contains `.codex/config.toml` without
+  setup, starts a default Codex task, and keeps a clean Git status after setup on this machine.
 - **Source:** 2026-09-23, landing the iOS Simulator host for `A9`.
