@@ -4,6 +4,7 @@ import { AgentConfigFreshness } from '../agent-cli-src/agent-config/AgentConfigF
 import { agentHostCommands, renderClaudeHostSettings } from '../agent-cli-src/agent-config/AgentHostCommands'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
 import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy'
+import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
 
 const expected = [
   'land',
@@ -16,35 +17,38 @@ const expected = [
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
-  './tao dev',
-  'xcrun simctl list devices',
-  'xcrun simctl boot',
-  'xcrun simctl get_app_container',
-  'xcrun simctl install',
-  'xcrun simctl openurl',
-  'xcrun simctl uninstall',
-  'xcrun devicectl list devices',
-  'xcrun devicectl device info apps',
-  'xcrun devicectl device process launch',
-  'xcodebuild -version',
-  'xcodebuild -checkFirstLaunchStatus',
-  'xcodebuild -showsdks',
-  'xcodebuild -project',
-  'xcodebuild -workspace',
-  'xcodebuild -exportArchive',
-  'pod install',
-  'pod ipc spec',
-  'open -a Simulator',
-  'adb devices',
-  'adb get-state',
-  'emulator -list-avds',
-  'emulator -avd',
-  'git fetch origin',
-  'git ls-remote origin',
-  'git ls-remote --heads origin',
-  'git ls-remote --exit-code origin',
-  'ps -axo pid=,ppid=,lstart=,command=',
-  'ps -o lstart= -p',
+  'native-module-check',
+  'app-dev',
+  'simulators list',
+  'simulators boot',
+  'simulators run',
+  'simulators app-container',
+  'simulators install',
+  'simulators open-url',
+  'simulators uninstall',
+  'simulators open',
+  'devices list',
+  'devices apps',
+  'devices launch',
+  'xcode version',
+  'xcode setup-status',
+  'xcode sdks',
+  'xcode build-project',
+  'xcode build-workspace',
+  'xcode export-archive',
+  'pods install',
+  'pods spec',
+  'android devices',
+  'android state',
+  'android emulators',
+  'android boot',
+  'android ensure',
+  'remote fetch',
+  'remote refs',
+  'remote heads',
+  'remote exists',
+  'processes list',
+  'processes started',
 ]
 
 Describe('agent host command permissions', () => {
@@ -54,6 +58,7 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -82,13 +87,19 @@ Describe('agent host command permissions', () => {
   })
 
   Test('accepts only whole listed prefixes and rejects malformed entries', () => {
-    const prefixes = [['land'], ['xcrun', 'simctl', 'list', 'devices']]
+    const prefixes = [['land'], ['simulators', 'list']]
     Expect(hostCommandKind(['land', '--dry-run'], prefixes)).toBe('agent')
-    Expect(hostCommandKind(['xcrun', 'simctl', 'list', 'devices', 'booted'], prefixes)).toBe('external')
+    Expect(hostCommandKind(['simulators', 'list', 'booted'], prefixes)).toBe('named')
     Expect(hostCommandKind(['land-unlock'], prefixes)).toBeUndefined()
-    Expect(hostCommandKind(['xcrun', 'simctl', 'erase', 'all'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['simulators', 'erase', 'all'], prefixes)).toBeUndefined()
+    Expect(hostCommandTarget(['simulators', 'list'])).toEqual({
+      command: 'xcrun',
+      fixedArgs: ['simctl', 'list', 'devices'],
+    })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })
