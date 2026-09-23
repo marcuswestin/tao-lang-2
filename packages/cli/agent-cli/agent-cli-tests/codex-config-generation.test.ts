@@ -7,7 +7,7 @@ import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/D
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
-  "agentHostCommands": ["land", "finalize", "landed", "capabilities"],
+  "agentHostCommands": ["land", "xcrun simctl list devices"],
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
@@ -26,9 +26,6 @@ const canonicalRules = `{
       "**/.env.*": "deny",
       "~/.ssh/**": "deny",
     },
-  },
-  "codex": {
-    "outsideSandboxCommands": ["./agent land"],
   },
   "claudecode": {
     "sandbox": {
@@ -168,34 +165,13 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders fixed host commands and explicit landing exceptions only', () => {
+  Test('renders only wrapper host prefixes from the canonical list', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
-    Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
-    Expect(rendered).not.toContain('pattern=["ps","-o","pid=,command=","-p"]')
-    Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
-    Expect(rendered).not.toContain('pattern=["git","merge"]')
-    Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
-    Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
-    Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
-    for (const command of ['land', 'finalize', 'landed', 'capabilities']) {
-      Expect(rendered).toContain(`pattern=["./agent","unsandboxed","${command}"], decision="allow"`)
-    }
-    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed"],')
-    Expect(rendered).not.toContain('pattern=["just"]')
-    Expect(rendered).not.toContain('git status')
-    Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
-    Expect(rendered).toContain('Use ./agent setup')
-  })
-
-  Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {
-    const permissions = CodexConfigGenerator.parsePermissions(
-      canonicalRules.replace(
-        '"outsideSandboxCommands": ["./agent land"]',
-        '"outsideSandboxCommands": ["just unreviewed"]',
-      ),
-    )
-    Expect(() => CodexConfigGenerator.renderRules(permissions)).toThrow()
+    Expect(rendered.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual([
+      'prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository-approved host command.")',
+      'prefix_rule(pattern=["./agent","unsandboxed","xcrun","simctl","list","devices"], decision="allow", justification="Repository-approved host command.")',
+    ])
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -239,7 +215,7 @@ Describe('Codex config generation', () => {
       const written = await FS.readText(FS.resolvePath('.codex/config.toml', root))
       Expect(written).toContain('default_permissions = "tao-workspace"')
       Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root)))
-        .toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
+        .toContain('pattern=["./agent","unsandboxed","land"]')
 
       const skipped: string[] = []
       await CodexConfigGenerator.generate({
@@ -254,8 +230,8 @@ Describe('Codex config generation', () => {
       await FS.writeText(
         FS.resolvePath('.rulesync/permissions.jsonc', root),
         canonicalRules.replace(
-          '"ps -axo pid=,ppid=,lstart=,command=": "allow"',
-          '"ps -axo pid=,ppid=,lstart=,command=": "ask"',
+          '"agentHostCommands": ["land", "xcrun simctl list devices"]',
+          '"agentHostCommands": ["land", "xcrun simctl boot"]',
         ),
       )
       await Expect(CodexConfigGenerator.generate({
@@ -345,13 +321,12 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["git","merge"]')
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
-    Expect(rules).not.toContain('studio-smoke')
     Expect(rules).not.toContain('pattern=["just","land"], decision="allow"')
     Expect(rules).not.toContain('pattern=["./dev","land"], decision="allow"')
     Expect(rules).not.toContain('pattern=["just","merge-with-main"], decision="allow"')
     Expect(rules).not.toContain('pattern=["./dev","merge-with-main"], decision="allow"')
     Expect(rules).not.toContain('pattern=["just","my-land"], decision="allow"')
-    Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
+    Expect(rules).not.toContain('pattern=["./agent","land"]')
   })
 
   Test('tracks the startup profile and limits machine paths to its required sockets', async () => {

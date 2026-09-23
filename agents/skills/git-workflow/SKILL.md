@@ -19,10 +19,10 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
   `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
-  files move, but protected paths stay dirty. Do not try alternate commands or switch to an
-  unsandboxed shell to finish one. Diagnose the exact state read-only, report the write needed, and
-  pause for the Developer's explicit approval. An authorized `./agent unsandboxed land` performs its
-  own integration under the landing lock.
+  files move, but protected paths stay dirty. Do not try alternate commands or another host shape
+  to finish one. Diagnose the exact state read-only, report the write needed, and pause for the
+  Developer's explicit approval. An authorized `./agent unsandboxed land` performs its own
+  integration under the landing lock.
 
 ## Moving a branch ref
 

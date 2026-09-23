@@ -8,6 +8,9 @@ description: >-
 
 `./agent help` and each command's own `--help` print the lane scopes, their composition, and the flags (`--no-cache`, target resolution, `--json`); read those rather than a second copy here. This skill owns what they do not print: the caching and test-selection reasoning (`references/caching-and-selection.md`), the landing command's mechanics and failure classification (`references/landing.md`), and the judgment calls below.
 
+Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
+the plain `./agent` shape stays sandboxed.
+
 ## The machine-wide landing lock
 
 You do not claim it by hand. Ready `./agent unsandboxed land` processes queue FIFO, ahead of new broad lanes;
