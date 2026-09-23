@@ -105,8 +105,9 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
   "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
   WordFlowerInstantDBStore }`. Its datasource uses Instant Cloud and the existing app ID; the
-  separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. A real beta
-  still needs that app ID confirmed on Instant Cloud and live device sync acceptance.
+  separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. The hosted
+  app and live phone-to-browser/browser-to-phone sync were confirmed through a development build on
+  2026-09-23. TestFlight installation and beta distribution remain untested.
 - The release bundle proof rejects Studio markers before native packaging.
 - The previous repository ran a development client on physical devices with `expo prebuild` and
   `expo run:ios --device`, and pinned `eas-cli` as a dependency. Its `app.json` is a usable

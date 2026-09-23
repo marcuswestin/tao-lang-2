@@ -32,7 +32,6 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
       effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-      landingBrokerReady: true,
     },
     gitHooks: ['commit-msg', 'pre-commit'].map(event => ({
       event,
@@ -156,14 +155,6 @@ Describe('repository doctor', () => {
         effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       },
     }))
-    const missingBroker = doctorReport(facts({
-      githubTransport: {
-        configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-        credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
-        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-        landingBrokerReady: false,
-      },
-    }))
 
     Expect(check(ssh, 'GitHub transport')?.status).toBe('fail')
     Expect(check(ssh, 'GitHub transport')?.remediation).toContain('just github-setup')
@@ -171,8 +162,6 @@ Describe('repository doctor', () => {
     Expect(check(rewritten, 'GitHub transport')?.detail).toContain('stored as git@github.com')
     Expect(check(missingHelper, 'GitHub transport')?.status).toBe('warn')
     Expect(check(missingHelper, 'GitHub transport')?.detail).toContain('no GitHub CLI credential helper')
-    Expect(check(missingBroker, 'GitHub transport')?.status).toBe('warn')
-    Expect(check(missingBroker, 'GitHub transport')?.remediation).toContain('just landing-setup')
   })
 
   Test('warns when a shared hook was never installed', () => {

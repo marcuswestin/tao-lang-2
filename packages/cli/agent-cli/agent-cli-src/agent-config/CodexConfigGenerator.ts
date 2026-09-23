@@ -1,6 +1,7 @@
-import { Assert, Errors, FS, Text } from '@shared'
+import { Errors, FS, Text } from '@shared'
 import * as CLI from '@shared/CLI'
 import { DELEGATION_SKILL_PATH, tierModels } from '../delegation/DelegationProfiles'
+import { agentHostCommands } from './AgentHostCommands'
 import { type AgentProfiles, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
 
 /**
@@ -22,12 +23,14 @@ const UNRESTRICTED_PROFILE_BASE = ':danger-full-access'
 /**
  * gitDirectory is the Git directory every worktree of the checkout at `root` shares, which Codex
  * needs as a write rule the canonical rules do not describe. It is read from the checkout rather
- * than spelled here because the generated file is machine-local (see `header`), so it can name
- * wherever this clone lives; a root that is not a checkout gets its own `.git`.
+ * than spelled here so a root that is not a checkout gets its own `.git`. Home-relative paths
+ * stay portable between logins when the clone has the same location under each home directory.
  */
 async function gitDirectory(root: string): Promise<string> {
   const common = await CLI.run('git', { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root })
-  return common.exitCode === 0 ? common.stdout.trim() : FS.resolvePath('.git', root)
+  const absolute = common.exitCode === 0 ? common.stdout.trim() : FS.resolvePath('.git', root)
+  const home = FS.homeDir()
+  return absolute.startsWith(`${home}/`) ? `~/${absolute.slice(home.length + 1)}` : absolute
 }
 
 /**
@@ -44,12 +47,9 @@ const MAX_CONCURRENT_SUBAGENTS = 5
 
 /** CanonicalPermissions is the subset of `.rulesync/permissions.jsonc` this renderer reads. */
 type CanonicalPermissions = {
-  codex?: {
-    outsideSandboxCommands?: readonly string[]
-  }
+  agentHostCommands?: unknown
   claudecode?: {
     sandbox?: {
-      excludedCommands?: readonly string[]
       filesystem?: {
         allowWrite?: readonly string[]
       }
@@ -118,6 +118,10 @@ function renderCodexConfig(
   sharedGitDirectory = '.git',
 ): string {
   const read = permissions.permission?.read ?? {}
+  // Codex refuses to bypass its sandbox for an explicit host allow rule when the active profile
+  // contains any denied-read path. Keep those protections in the read-only review profile, but
+  // leave them out of the default workspace profile so its exact host commands can run.
+  const hostCapableRead = Object.fromEntries(Object.entries(read).filter(([, action]) => action !== 'deny'))
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
   return [
@@ -150,9 +154,7 @@ function renderCodexConfig(
     `extends = ${quote(PROFILE_BASE)}`,
     'description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."',
     '',
-    ...filesystemSection(PROFILE, read, allowWrite, sharedGitDirectory),
-    '',
-    ...workspaceRootsSection(PROFILE, read),
+    ...filesystemSection(PROFILE, hostCapableRead, allowWrite, sharedGitDirectory),
     '',
     ...networkSection(PROFILE, network, network.allowUnixSockets ?? []),
     '',
@@ -216,52 +218,17 @@ function overlayProfileName(name: string): string {
   return `tao-${name}`
 }
 
-/**
- * renderCodexRules normally emits only fixed command shapes that are both auto-approved and
- * excluded from Claude's sandbox. Mutable entrypoints need a separate, explicit Codex grant:
- * a prefix rule runs the command and everything it spawns with host access, including edited
- * repository code. The canonical list is validated against Claude's allow and exclusion rules.
- */
+/** Render only the canonical wrapper prefixes; no direct command has host access. */
 function renderCodexRules(permissions: CanonicalPermissions): string {
-  const bash = Object.entries(permissions.permission?.bash ?? {})
-  const allowed = bash
-    .filter(([, action]) => action === 'allow')
-    .map(([pattern]) => pattern)
-  const excluded = permissions.claudecode?.sandbox?.excludedCommands ?? []
-  const prefixes = allowed
-    .filter(pattern => excluded.some(exclusion => commandPatternCovers(exclusion, pattern)))
-    .map(fixedCommandPattern)
-    .filter((tokens): tokens is string[] => tokens !== undefined)
-  const hostCommands = (permissions.codex?.outsideSandboxCommands ?? []).map(command => {
-    const tokens = fixedCommandPattern(command)
-    Assert(
-      tokens !== undefined && allowed.some(pattern => commandPatternCovers(pattern, command))
-        && excluded.some(pattern => commandPatternCovers(pattern, command)),
-      `Codex host command ${command} to be fixed, allowed, and excluded by Claude Code`,
-    )
-    return tokens
-  })
-  const unique = new Map([...prefixes, ...hostCommands].map(tokens => [JSON.stringify(tokens), tokens]))
-  const denied = bash
-    .filter(([, action]) => action === 'deny')
-    .map(([pattern]) => parseCommandPattern(pattern)?.prefix)
-    .filter((tokens): tokens is string[] => tokens !== undefined)
-  const uniqueDenied = new Map(denied.map(tokens => [JSON.stringify(tokens), tokens]))
+  const wrapperCommands = agentHostCommands(permissions).map(prefix => ['./agent', 'unsandboxed', ...prefix])
   return [
     '# Generated by `./agent setup` from .rulesync/permissions.jsonc. Edit that file, not this one.',
-    '# These commands need host capabilities the sandbox cannot express. The explicitly listed',
-    '# landing entrypoint also runs its repository code and child processes outside the sandbox.',
-    '# Other allowed commands remain inside the active filesystem and network permission profile.',
+    '# Only the listed ./agent unsandboxed prefixes run on the host. The wrapper checks argv again.',
     '',
-    ...[...unique.values()].map(tokens =>
+    ...wrapperCommands.map(tokens =>
       `prefix_rule(pattern=${
         JSON.stringify(tokens)
       }, decision="allow", justification="Repository-approved host command.")`
-    ),
-    ...[...uniqueDenied.values()].map(tokens =>
-      `prefix_rule(pattern=${
-        JSON.stringify(tokens)
-      }, decision="forbidden", justification="Use ./agent setup for repository dependencies.")`
     ),
     '',
   ].join('\n')
@@ -288,9 +255,9 @@ function header(): string[] {
     '# Repo-local filesystem, network, and approval settings for Tao development.',
     '# Git metadata writes outside the worktree are routed through Auto-review.',
     '#',
-    '# Machine-local and untracked: Codex needs Unix sockets as absolute paths and does not expand',
-    "# `~` in them, and this checkout's Git directory lives wherever it was cloned, so a committed",
-    "# copy would carry one person's home directory. `./agent setup` renders it for this machine.",
+    '# Tracked so a new worktree has its permission profile before setup or session hooks run.',
+    '# Unix socket entries must be absolute; setup refreshes those machine-specific values.',
+    '# Review any resulting config diff before committing it on another machine.',
     '#',
     `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}`,
     `# and ${PROFILES_SOURCE}. Edit those canonical files, not either generated Codex output:`,
@@ -329,10 +296,14 @@ function filesystemSection(
 }
 
 function workspaceRootsSection(profile: string, read: Record<string, string>): string[] {
+  const denied = workspaceRules(read, 'deny')
+  if (denied.length === 0) {
+    return []
+  }
   return [
     `[permissions.${profile}.filesystem.":workspace_roots"]`,
     "# Not `.env*`: that pattern also matches this repository's own `.envrc`.",
-    ...workspaceRules(read, 'deny').map(pattern => `${quote(pattern)} = "deny"`),
+    ...denied.map(pattern => `${quote(pattern)} = "deny"`),
   ]
 }
 
@@ -386,35 +357,6 @@ function unixSocketSection(profile: string, sockets: readonly string[], comments
  */
 function codexSocketPath(path: string): string {
   return path === '~' ? FS.homeDir() : path.startsWith('~/') ? FS.resolvePath(path.slice(2), FS.homeDir()) : path
-}
-
-type CommandPattern = { prefix: string[]; trailingWildcard: boolean }
-
-/** parseCommandPattern accepts the deliberately simple command globs this repository uses for host escapes. */
-function parseCommandPattern(pattern: string): CommandPattern | undefined {
-  const tokens = pattern.trim().split(/\s+/).filter(Boolean)
-  const trailingWildcard = tokens.at(-1) === '*'
-  if (trailingWildcard) {
-    tokens.pop()
-  }
-  return tokens.length > 0 && tokens.every(token => !/[?*\[]/.test(token))
-    ? { prefix: tokens, trailingWildcard }
-    : undefined
-}
-
-function commandPatternCovers(exclusion: string, allowed: string): boolean {
-  const outer = parseCommandPattern(exclusion)
-  const inner = parseCommandPattern(allowed)
-  if (outer === undefined || inner === undefined || outer.prefix.length > inner.prefix.length) {
-    return false
-  }
-  const samePrefix = outer.prefix.every((token, index) => token === inner.prefix[index])
-  return samePrefix && (outer.trailingWildcard || outer.prefix.length === inner.prefix.length)
-}
-
-function fixedCommandPattern(pattern: string): string[] | undefined {
-  const parsed = parseCommandPattern(pattern)
-  return parsed?.trailingWildcard === false ? parsed.prefix : undefined
 }
 
 /**

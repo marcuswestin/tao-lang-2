@@ -18,6 +18,8 @@
     "local-services": {
       "description": "Tao local services: opt in to the Docker daemon used by the local InstantDB stack.",
       // Docker can control the host through mounts and networking, so it is not in the default profile.
+      // The Justfile's local InstantDB recipes invoke Docker directly inside this opt-in session;
+      // they do not pass through ./agent and Docker is not in the default host prefix list.
       "allow": ["docker compose *", "docker ps *"],
       "excludedCommands": ["docker *"],
       "unixSockets": ["/var/run/docker.sock", "~/.docker/run/docker.sock"],
