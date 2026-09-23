@@ -6,46 +6,19 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Most recent catch-up:** the 2026-09-21 pass reviewed the 74 first-parent `main` commits after
-  `18505fafbb5b4cae20351c1e8ef5dfbdc805e499`, through
-  `5e3526439008882a2c15da3e1cbdc44b7976cc91`. The earlier remediation and its external
-  acceptance boundary remain in
-  [`September squash-merge remediation.md`](<../Archive/Reports/September squash-merge remediation.md>).
-- **Covered:** changed language/CLI, Studio and native host control, developer automation, and
-  verification seams; focused reproductions and tests for accepted defects; `bun audit` on the
-  recorded lock graph; and the Nixpkgs tracker and upstream notices for pinned `devenv.lock` inputs.
-- **Outcome and limits:** remediation on `feat/recurring-repository-pass-september-catchup` addresses the confirmed
-  CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
-  workflow defects. The lock graph resolves Appium's `@xmldom/xmldom@0.9.12`, Expo's compatible
-  `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; 43 other Bun audit records predated this range.
-  Subsequent [dependency advisory follow-up](<Dependency advisory follow-up.md>) on
-  `feat/dependency-advisory-health` reduced those records to one and repaired the stale-link health
-  check. The pinned Linux Nixpkgs input still needs an update and Linux acceptance. Agent-config
-  recovery now resolves dprint plugins from installed local packages, including with a cold cache.
-  This pass did not establish physical-device, real CloudKit,
-  installed-binary OTA, signed Studio, or distribution acceptance. The later `2bc90866` package
-  restructure was integrated for compatibility but has not had a repository-wide pass.
+- **Reviewed through:** `ff4f017ceb100c39c7d55bec8c228ef967097be4` on `main` (2026-09-22). The [September 2026 repository review](<September 2026 repository review.md>) accounts for all 142 first-parent landings in the September 7–22 window: 7 in the independent earlier audit, 74 in the Developer-accepted catch-up handoff through `5e352643`, and 61 reviewed in this pass. Its commit ledger, ranked candidate list, findings, and limits are the detailed evidence.
+- **Outcome:** The new reviews found surviving web-artifact file disclosure, an unrestricted host-access merge-message path, a verification-free landing flag combination, a Studio Save wait that can stall after a failed phone render, and several P2 correctness issues. These are review findings; fixes and external host/device acceptance remain separate. This pass also measured about 31 GB of unbounded host-test artifacts in one worktree and opened [the owning DEVENV entry](<Developer environment upgrades/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>). The existing Jest-cache entry remains open. No artifacts were removed.
+- **Security follow-up:** The frozen Bun graph still reports one moderate `uuid` advisory; the existing [dependency advisory follow-up](<Dependency advisory follow-up.md>) owns its review date and call-site analysis. The pinned Nixpkgs input still needs upstream/security comparison and a Linux closure/host acceptance run.
 
 ## Consider next time
 
-- Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
-  entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
-  and current risks rather than repeating every category.
-- Recheck the Appium transitive pins when its Base Driver publishes `morgan@1.12.0`; remove the
-  override when it can resolve without one. Follow the remaining `uuid` and Linux Nixpkgs items in
-  [Dependency advisory follow-up](<Dependency advisory follow-up.md>), and use the installed-link
-  health check after lock changes. Use real host or device evidence before claiming external
-  acceptance.
-- Include a quick dependency-advisory check in every security review. Inspect dependency changes and
-  research current advisories or security releases from primary sources:
-  - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run
-    [`bun audit`](https://bun.sh/docs/pm/cli/audit) and investigate relevant reported or skipped
-    packages against their official advisories.
-  - For inputs recorded by `devenv.lock`, inspect changed inputs, the
-    [Nixpkgs security tracker](https://tracker.security.nixos.org/), and the affected upstream
-    projects' official security notices.
-  - If the repository gains another dependency system, identify its official audit command or
-    advisory source during planning and add it here only if future passes will need it.
+- Start after `ff4f017ceb100c39c7d55bec8c228ef967097be4`. Check repair commits for the ranked findings in the September report before opening new scope, especially the web server, landing permissions and verification, Studio Save gate, and normal-run cleanup for host-test output. Preserve active worktree state while measuring retention.
+- Recheck the remaining `uuid` and Linux Nixpkgs items in [Dependency advisory follow-up](<Dependency advisory follow-up.md>). Use real host or device evidence before claiming native, Cloud, signing, distribution, or installed-binary acceptance.
+- Inspect where repository tools and agent workflows create temporary state, then measure size and age across worktrees and relevant machine-wide locations. For material buildup, trace ownership and design bounded cleanup during ordinary operations, including failed and interrupted runs. Preserve active state and avoid a one-time purge as the only remedy.
+- Include a quick dependency-advisory check in every security review. Inspect dependency changes and research current advisories or security releases from primary sources:
+  - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run [`bun audit`](https://bun.sh/docs/pm/cli/audit) and investigate relevant reported or skipped packages against their official advisories.
+  - For inputs recorded by `devenv.lock`, inspect changed inputs, the [Nixpkgs security tracker](https://tracker.security.nixos.org/), and the affected upstream projects' official security notices.
+  - If the repository gains another dependency system, identify its official audit command or advisory source during planning and add it here only if future passes will need it.
 
 ## Run a pass
 
@@ -59,11 +32,14 @@ notes after each completed pass; Git history is the longer record.
    commits or paths when different specialties need the same evidence. Keep assessment subagents
    read-only until their findings have been checked and reconciled; use a later implementation phase
    for any accepted fixes included in the approved pass.
-4. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+4. Check temporary-state growth: identify creation sites and retention rules, measure worktree and
+   machine-wide accumulation, and distinguish active state from abandoned output. For each material
+   source, specify and verify a bounded cleanup path in normal agent operations; preserve live runs.
+5. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
    from host or external acceptance that was not exercised. For each unresolved dependency advisory,
    keep a short live record of its disposition, owner, review-by date, and primary evidence; close
    it explicitly when resolved.
-5. When the approved work is complete, replace **Current status** and **Consider next time** with the
+6. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 
