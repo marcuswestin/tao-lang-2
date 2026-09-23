@@ -84,9 +84,10 @@ Examples:
   ./agent unsandboxed land --dry-run
   ./agent setup --refresh-lockfile
 
-unsandboxed forwards the named command and arguments unchanged. Default Codex and Claude sessions
-grant host execution only to land, finalize, landed, and capabilities. The same command without
-unsandboxed runs under the active sandbox, except the legacy direct land permission.
+unsandboxed forwards the named command and arguments unchanged after checking for sandbox signals.
+Codex and Claude rules request host execution only for land, finalize, landed, and capabilities.
+If the harness still runs the wrapper inside a sandbox, it fails before dispatch. The same command
+without unsandboxed runs under the active sandbox, except the legacy direct land permission.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites

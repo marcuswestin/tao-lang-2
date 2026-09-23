@@ -13,6 +13,10 @@ if [[ "${1:-}" == unsandboxed ]]; then
     echo 'Usage: ./agent unsandboxed <command> [args...]' >&2
     exit 2
   fi
+  if [[ -n "${CODEX_SANDBOX:-}" ]] || ! ps -axo pid=,ppid=,lstart=,command= >/dev/null 2>&1; then
+    echo 'FAIL  ./agent unsandboxed is still running inside a sandbox; the host command was not started.' >&2
+    exit 1
+  fi
 fi
 
 SCRIPT_DIR="${0:A:h}"

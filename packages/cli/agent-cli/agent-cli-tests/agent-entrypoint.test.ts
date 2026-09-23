@@ -37,12 +37,20 @@ Describe('agent entrypoint', () => {
       await FS.writeText(stamp, '')
       await FS.mkdir(bin)
       const fakeBun = FS.resolvePath('bun', bin)
+      const fakePs = FS.resolvePath('ps', bin)
       await FS.writeText(fakeBun, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
       await FS.chmod(fakeBun, 0o755)
+      await FS.writeText(fakePs, '#!/bin/zsh\nexit 0\n')
+      await FS.chmod(fakePs, 0o755)
+      const env = {
+        PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+        TAO_TEST_ARGS: marker,
+        CODEX_SANDBOX: '',
+      }
       const run = await CLI.run('zsh', {
         args: [agent, 'unsandboxed', 'test', 'two words', 'a "quoted" value', '--json', 'literal $HOME'],
         cwd: root,
-        env: { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_TEST_ARGS: marker },
+        env,
       })
       Expect(run.exitCode).toBe(0)
       Expect((await FS.readText(marker)).split('\n').filter(Boolean)).toEqual([
@@ -57,6 +65,26 @@ Describe('agent entrypoint', () => {
       const missing = await CLI.run('zsh', { args: [agent, 'unsandboxed'], cwd: root })
       Expect(missing.exitCode).toBe(2)
       Expect(missing.stderr).toContain('Usage: ./agent unsandboxed <command> [args...]')
+
+      await FS.remove(marker)
+      const sandboxed = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'capabilities'],
+        cwd: root,
+        env: { ...env, CODEX_SANDBOX: 'seatbelt' },
+      })
+      Expect(sandboxed.exitCode).toBe(1)
+      Expect(sandboxed.stderr).toContain('the host command was not started')
+      Expect(await FS.exists(marker)).toBe(false)
+
+      await FS.writeText(fakePs, '#!/bin/zsh\nexit 1\n')
+      const deniedProcessTable = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'capabilities'],
+        cwd: root,
+        env,
+      })
+      Expect(deniedProcessTable.exitCode).toBe(1)
+      Expect(deniedProcessTable.stderr).toContain('the host command was not started')
+      Expect(await FS.exists(marker)).toBe(false)
     } finally {
       await FS.remove(root)
     }
