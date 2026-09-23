@@ -113,6 +113,11 @@ studio-companion-simulator simulator="":
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
 
+# Publish the built Android host to its GitHub release, where tao dev downloads it; needs gh
+[group('Run')]
+companion-host-publish:
+    ./dev companion-host-publish
+
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
 test-host *ARGS:
