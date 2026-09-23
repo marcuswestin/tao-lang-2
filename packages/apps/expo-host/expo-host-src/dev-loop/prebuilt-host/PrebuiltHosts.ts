@@ -1,25 +1,22 @@
-import { Errors, FS, Platform, Repo } from '@shared'
+import { Errors, FS, Repo } from '@shared'
+import { DevLoopOutput } from '../DevLoopOutput'
 import {
+  HOST_BINARIES,
   hostKitProblems,
   type HostManifest,
   type HostPlatform,
   type NativeKit,
   readHostManifest,
 } from './HostManifest'
+import { downloadCompatibleHost, taoHostsRoot } from './HostReleases'
 
 /*
  * Where `tao dev` finds a prebuilt host, and which one it takes. Hosts are cached as
- * `<root>/<hostVersion>/<platform>/`, a binary beside its manifest, but the path is only where one
- * was put: a host is taken because its manifest's native kit covers the kit this Tao computes for
+ * `<root>/<hostKey>/<platform>/`, a binary beside its manifest, but the path is only where one was
+ * put: a host is taken because its manifest's native kit covers the kit this Tao computes for
  * itself, never because of the directory it sits in. The roots are Tao's own home — `$TAO_HOME`, or
- * `~/.tao` — and, inside a Tao checkout, the hosts that checkout built.
+ * `~/.tao` — where downloaded hosts land, and, inside a Tao checkout, the hosts that checkout built.
  */
-
-/** HOST_BINARIES names the binary each platform's host directory carries beside its manifest. */
-export const HOST_BINARIES: Readonly<Record<HostPlatform, string>> = {
-  android: 'tao-companion.apk',
-  'ios-simulator': 'Tao Companion.app',
-}
 
 /** CHECKOUT_HOSTS_PATH is where a Tao checkout's own host builds land, relative to its root. */
 export const CHECKOUT_HOSTS_PATH = '.artifacts/hosts'
@@ -39,13 +36,36 @@ export type HostSearch = {
 
 /** hostRoots lists the directories hosts are cached under, in the order a search prefers them. */
 function hostRoots(): string[] {
-  const taoHome = Platform.runtimeProcess.env['TAO_HOME'] ?? FS.resolvePath('.tao', FS.homeDir())
-  const roots = [FS.resolvePath('hosts', taoHome)]
+  const roots = [taoHostsRoot()]
   const checkoutHosts = Repo.tryResolvePath(CHECKOUT_HOSTS_PATH)
   if (checkoutHosts !== undefined) {
     roots.push(checkoutHosts)
   }
   return roots
+}
+
+/**
+ * obtainCompatibleHost is how `tao dev` gets a host: a cached one whose kit covers `required`, or
+ * else the newest published one that does, downloaded into Tao's home. A download that cannot
+ * happen — offline, rate-limited, or releases not yet public — is one calm line, and the caller
+ * falls back to Expo Go as it would with no host at all.
+ */
+export async function obtainCompatibleHost(
+  platform: HostPlatform,
+  required: NativeKit,
+  seams: { download?: typeof downloadCompatibleHost; roots?: readonly string[] } = {},
+): Promise<HostSearch> {
+  const cached = await findCompatibleHost(platform, required, seams.roots)
+  if (cached.host !== undefined) {
+    return cached
+  }
+  try {
+    const published = await (seams.download ?? downloadCompatibleHost)(platform, required)
+    return { ...published, refused: [...cached.refused, ...published.refused] }
+  } catch (error) {
+    DevLoopOutput.logDevLoop('dev', `No prebuilt host could be downloaded: ${Errors.formatForUser(error)}`)
+    return cached
+  }
 }
 
 /**
