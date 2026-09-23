@@ -22,12 +22,14 @@ const UNRESTRICTED_PROFILE_BASE = ':danger-full-access'
 /**
  * gitDirectory is the Git directory every worktree of the checkout at `root` shares, which Codex
  * needs as a write rule the canonical rules do not describe. It is read from the checkout rather
- * than spelled here because the generated file is machine-local (see `header`), so it can name
- * wherever this clone lives; a root that is not a checkout gets its own `.git`.
+ * than spelled here so a root that is not a checkout gets its own `.git`. Home-relative paths
+ * stay portable between logins when the clone has the same location under each home directory.
  */
 async function gitDirectory(root: string): Promise<string> {
   const common = await CLI.run('git', { args: ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd: root })
-  return common.exitCode === 0 ? common.stdout.trim() : FS.resolvePath('.git', root)
+  const absolute = common.exitCode === 0 ? common.stdout.trim() : FS.resolvePath('.git', root)
+  const home = FS.homeDir()
+  return absolute.startsWith(`${home}/`) ? `~/${absolute.slice(home.length + 1)}` : absolute
 }
 
 /**
@@ -288,9 +290,9 @@ function header(): string[] {
     '# Repo-local filesystem, network, and approval settings for Tao development.',
     '# Git metadata writes outside the worktree are routed through Auto-review.',
     '#',
-    '# Machine-local and untracked: Codex needs Unix sockets as absolute paths and does not expand',
-    "# `~` in them, and this checkout's Git directory lives wherever it was cloned, so a committed",
-    "# copy would carry one person's home directory. `./agent setup` renders it for this machine.",
+    '# Tracked so a new worktree has its permission profile before setup or session hooks run.',
+    '# Unix socket entries must be absolute; setup refreshes those machine-specific values.',
+    '# Review any resulting config diff before committing it on another machine.',
     '#',
     `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}`,
     `# and ${PROFILES_SOURCE}. Edit those canonical files, not either generated Codex output:`,

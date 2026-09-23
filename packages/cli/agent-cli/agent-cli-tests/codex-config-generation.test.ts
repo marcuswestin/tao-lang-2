@@ -317,7 +317,7 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('[agents]')
   })
 
-  Test('keeps the machine-local Codex profile identical to a fresh render', async () => {
+  Test('keeps the tracked Codex profile identical to a fresh render', async () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
@@ -345,14 +345,16 @@ Describe('Codex config generation', () => {
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
   })
 
-  Test('commits no harness file that names a home directory or a login', async () => {
-    // A committed path under one person's home works for nobody else, and silently: the sandbox
-    // denies the socket or write it was meant to allow, and the tool falls back without saying so.
+  Test('tracks the startup profile and limits machine paths to its required sockets', async () => {
+    // A new managed worktree must load this before either setup or a session hook can run.
     const root = Repo.getRoot()
     const tracked = await CLI.run('git', { args: ['ls-files', '.claude', '.codex', '.cursor', '.rulesync'], cwd: root })
     const login = Platform.runtimeProcess.env['USER'] ?? FS.basename(FS.homeDir())
     const offending: string[] = []
     for (const path of tracked.stdout.split('\n').filter(Boolean)) {
+      if (path === '.codex/config.toml') {
+        continue
+      }
       const file = FS.resolvePath(path, root)
       if (!(await FS.isFile(file))) {
         continue
@@ -365,6 +367,16 @@ Describe('Codex config generation', () => {
 
     Expect(tracked.exitCode).toBe(0)
     Expect(offending).toEqual([])
-    Expect(tracked.stdout).not.toContain('.codex/config.toml')
+    Expect(tracked.stdout.split('\n')).toContain('.codex/config.toml')
+    const configText = await FS.readText(FS.resolvePath('.codex/config.toml', root))
+    const config = Platform.parseToml(configText) as any
+    Expect(config.default_permissions).toBe('tao-workspace')
+    Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
+    Expect(config.permissions['tao-workspace'].filesystem['~/code/tao-lang-2/.git']).toBe('write')
+    const machinePaths = configText.split('\n').filter(line => line.includes(FS.homeDir()))
+    Expect(machinePaths).toEqual([
+      `"${FS.resolvePath('.local/state/watchman', FS.homeDir())}" = "allow"`,
+      `"${FS.resolvePath('.docker/run/docker.sock', FS.homeDir())}" = "allow"`,
+    ])
   })
 })

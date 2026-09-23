@@ -381,6 +381,10 @@ Three test files also embed absolute paths, but only one is personal:
   clone runs on its default permissions until that session's start hook has run setup. The personal
   fixture now uses a neutral path, and a test fails if any tracked harness file names a home
   directory or a `<login>-state` segment.
+- **Follow-up (2026-09-23):** An untracked config was absent when Codex opened a fresh managed
+  worktree, and task creation failed before its setup hook could run. The config is tracked again so
+  the startup profile exists at checkout time. Its two absolute socket entries are still specific to
+  the machine that generated it; setup refreshes them for another machine and that diff needs review.
 
 ### P19 — `local.properties` — Low, already handled
 
