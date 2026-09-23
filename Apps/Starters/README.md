@@ -13,7 +13,8 @@ restricted to what the toolchain runs today: `App.tao` (project and app), `Data.
 and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), `<App>.test.tao` (behavior
 tests), `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled runtime),
 the committed empty generated-package scaffold `@/.gitkeep`, and copied Tao skills plus
-`AGENTS.md`, `CLAUDE.md`, and `.tao-project/skills.version`. Access, Rules, and Words join as
+`AGENTS.md` (which Codex reads directly), the `CLAUDE.md` that points Claude Code at it, and
+`.tao-project/skills.version`. Access, Rules, and Words join as
 their tranches land.
 
 To change a starter, change the lowering, reference plan, or

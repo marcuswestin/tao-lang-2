@@ -587,7 +587,7 @@ Describe('Studio sketch session protocol', () => {
       const onDisk = await FS.readText(catalogPath)
       const generatedPath = FS.resolvePath('@/studio/View1.tao', root)
       const before = snapped.catalog.sketches[0]!.snapped[0]!.target
-      const refreshedRenderId = '/Users/dev/.codex/worktrees/other/Garden/@/studio/View1.tao:1:2'
+      const refreshedRenderId = '/elsewhere/worktrees/other/Garden/@/studio/View1.tao:1:2'
       session.setMatrixManifest({
         capabilities: { captureDomains: [], scheme: 'reactive-browser' },
         cells: [],

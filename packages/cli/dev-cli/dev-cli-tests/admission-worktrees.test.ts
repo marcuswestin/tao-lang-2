@@ -75,7 +75,7 @@ Describe('admission worktrees', () => {
 
     await Expect(
       removeWorktrees(
-        { repositoryRoots: ['/Users/someone/code/tao-lang-2/.claude/worktrees/busy'], runRoot: '/private/tmp/x' },
+        { repositoryRoots: ['/Users/someone/code/tao-lang-2/worktrees/busy'], runRoot: '/private/tmp/x' },
         fake.dependencies,
       ),
     ).rejects.toThrow('not under this run')
