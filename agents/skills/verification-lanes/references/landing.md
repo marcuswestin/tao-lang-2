@@ -1,22 +1,22 @@
 # Landing Mechanics
 
-`git-workflow` owns the underlying Git commands; this covers what `./agent land` does, its flags, its
+`git-workflow` owns the underlying Git commands; this covers what `./agent unsandboxed land` does, its flags, its
 message format, and how a red lane is classified.
 
-Remote inspection and push automatically use the host-owned landing broker when installed. If the
-command says it is unavailable, ask the Developer to run `just landing-setup` in a normal terminal; never grant
-the repository direct access to `~/.config/gh`. The broker exposes only this repository's fixed HTTPS
-remote and an atomic, lease-checked main/archive update, not a general Git or credential API.
+Remote inspection and push run directly on the host through `./agent unsandboxed land`. The host
+process runs repository code and has the normal GitHub credential helper available. The final push
+updates main, the archive, and feature-branch deletion atomically with ref leases.
 
-The only preapproved unsandboxed write command for agents is `./agent land`. Its canonical Codex
-and Claude exceptions in `.rulesync/permissions.jsonc` give the entire landing process host access.
-Use it only after the Developer authorizes landing this named slice; that authorization persists for retries in
+The host command whitelist in `.rulesync/permissions.jsonc` grants `./agent unsandboxed land`,
+`finalize`, `landed`, and `capabilities` to default Codex and Claude agents. The old direct
+`./agent land` rule remains for Codex tasks started before this change.
+Use landing only after the Developer authorizes this named slice; that authorization persists for retries in
 the same thread unless the Developer revokes it. Direct `just` and `./dev` landing aliases are human/recovery
 entry points, not agent host-access exceptions.
 Codex loads project-local rules only for a trusted project and at task startup, so a task that
 predates a rule change may need restarting before it can use the new permission.
 
-## `./agent land`
+## `./agent unsandboxed land`
 
 The command runs the whole landing as one process with a bounded agent report. Do not assemble it out of
 `land-lock`, `finalize`, `verify-full` and `merge-with-main` any more: the lock used to be held for
@@ -30,7 +30,7 @@ Pause and ask the Developer for the exact needed intervention; do not retry with
 the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
 `dev/*` branch checked out only here, no worktree has `main`, the archive branch is free, and
 `.artifacts/merge/<branch>.msg` exists and validates. On the first call it drafts a missing message
-and refuses, having taken no lock; read and edit the draft, then rerun `./agent land`. A small
+and refuses, having taken no lock; read and edit the draft, then rerun `./agent unsandboxed land`. A small
 review record ties that edit to this HEAD. A new commit makes the record stale and requires review
 again; an already-written message for an older HEAD is handled the same way. Do not run `finalize`
 merely to prepare this authorized landing: it could integrate and
@@ -39,7 +39,7 @@ verify outside the lock, then lose that proof to another landing.
 **While queued**, the process keeps its FIFO position, refreshes from new `main` tips, and does not
 run full verification. New broad lanes yield to ready landings, but running lanes finish normally.
 A queued merge conflict removes this request from the queue without taking the lock: resolve and
-commit it here, then rerun `./agent land`. A dead waiter is pruned; the lock itself is never stolen.
+commit it here, then rerun `./agent unsandboxed land`. A dead waiter is pruned; the lock itself is never stolen.
 `./agent board` shows the live queue and holder.
 
 **Inside the lock**, in one `try`/`finally`, it rechecks the preflight, fetches `origin/main`, merges it into the
@@ -55,7 +55,7 @@ about to commit.` A red barrier costs ~30s and releases the lock immediately.
 
 **A conflict while integrating `main` ends the lock and hands the worktree back**, durable claim
 included. Resolve it here, unlocked, with the machine free for everyone else; commit the merge with
-`git commit --no-edit`; run `./agent land` again. It re-integrates whatever `main` has become by then.
+`git commit --no-edit`; run `./agent unsandboxed land` again. It re-integrates whatever `main` has become by then.
 
 It touches no checkout but the invoking one: it builds the squash commit with `git commit-tree` from
 the verified feature tree and moves `refs/heads/main` with `git update-ref` and an expected old
@@ -88,12 +88,11 @@ separates a lock doing useful work from one waiting on an agent — `held for 36
 gates: 34m so far` is a stuck command, `host proof: 9m so far` is a landing earning its turn. Nothing
 reclaims a lock on a timer; forcing one is still the Developer's call, and `board` is what to bring to the Developer.
 
-Ask `./agent landed [branch]` whether a branch landed; never infer it. The landing runs for minutes
+Ask `./agent unsandboxed landed [branch]` whether a branch landed; never infer it. The landing runs for minutes
 behind a wrapper, and every other signal is ambiguous: a stopped wrapper, a task reported failed
 because the shell it was piped into exited non-zero, a `summary.json` read while the lane was still
 writing it. `merge-with-main` pushes `merged/<name>` on success and at no other time, so that ref is
-the fact. The command reads it through the same credential-isolated broker as landing, falling back
-to a direct remote query where the broker is unavailable. A failed remote query reports an error,
+the fact. The command queries the remote directly. A failed remote query reports an error,
 never "not landed." Guessing costs more than asking: one branch was re-landed twice in a session
 because a successful landing read as a failure.
 
@@ -115,7 +114,7 @@ Read `.artifacts/logs/<lane>/latest/summary.json` first — it names each node's
 separately recorded retry, not concatenated output, owns the final classification: a node failing
 again on its isolated retry is `repository`, not `machine-contention`.
 
-For an authorized agent landing, let `./agent land` run the broad lanes under its lock; do not run
+For an authorized agent landing, let `./agent unsandboxed land` run the broad lanes under its lock; do not run
 them immediately beforehand unless diagnosing a failure. `verify-full-sandbox` is a useful managed
 shell diagnostic but never proves host-only browser and native UI gates passed. Human landing
 workflows may still run `verify-full` separately from an unsandboxed terminal.

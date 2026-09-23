@@ -4,8 +4,6 @@ import { DeveloperBranchCommand, SyncMainCommand } from '@verification/Developer
 import { FinalizeCommand, LandCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
-import { landingBrokerIsReady } from '@verification/landing-broker/LandingBrokerClient'
-import { LandingBrokerInstaller } from '@verification/landing-broker/LandingBrokerInstaller'
 import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
@@ -348,25 +346,6 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
-    })
-
-  commands
-    .command('landing-broker-install')
-    .description('Install or update the host-owned GitHub landing broker for this repository.')
-    .action(async () => {
-      await runExitCommand(async () => {
-        await LandingBrokerInstaller.install()
-        return 0
-      })
-    })
-
-  commands
-    .command('landing-broker-status')
-    .description('Check whether the host-owned GitHub landing broker is available.')
-    .action(async () => {
-      const ready = await landingBrokerIsReady()
-      HCI.writeLine(ready ? 'PASS  Tao landing broker is ready.' : 'FAIL  Tao landing broker is not available.')
-      Platform.runtimeProcess.exit(ready ? 0 : 1)
     })
 
   commands

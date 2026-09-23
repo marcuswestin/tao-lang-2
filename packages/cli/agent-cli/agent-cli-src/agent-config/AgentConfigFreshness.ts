@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { generate } from 'rulesync'
+import { generateClaudeHostSettings } from './AgentHostCommands'
 import { ClaudeProfilesGenerator } from './ClaudeProfilesGenerator'
 import { CodexConfigGenerator } from './CodexConfigGenerator'
 
@@ -50,6 +51,14 @@ async function rulesyncOutputs(root: string): Promise<Map<string, string>> {
         silent: true,
         targets: [output.target],
       })
+      if (output.target === 'claudecode') {
+        await FS.mkdir(FS.resolvePath('.rulesync', scratch))
+        await FS.copyFile(
+          FS.resolvePath('.rulesync/permissions.jsonc', root),
+          FS.resolvePath('.rulesync/permissions.jsonc', scratch),
+        )
+        await generateClaudeHostSettings(scratch)
+      }
       outputs.set(output.path, await FS.readText(regenerated))
     }
   } finally {

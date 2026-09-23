@@ -7,6 +7,14 @@ emulate zsh
 unsetopt BASH_REMATCH
 set -e
 
+if [[ "${1:-}" == unsandboxed ]]; then
+  shift
+  if (( $# == 0 )); then
+    echo 'Usage: ./agent unsandboxed <command> [args...]' >&2
+    exit 2
+  fi
+fi
+
 SCRIPT_DIR="${0:A:h}"
 AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
 DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"

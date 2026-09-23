@@ -1,10 +1,4 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
-import {
-  inspectLandingRemote,
-  type LandingBrokerInspection,
-  type LandingBrokerPush,
-  pushLandingRemote,
-} from './landing-broker/LandingBrokerClient'
 import { LandingLock, LandingLockBusyError, type LandingPhaseName } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
 import { extractLaneReport } from './RunSummary'
@@ -175,14 +169,12 @@ export type MergeWithMainDependencies = {
   endPhases: (repositoryRoot: string) => Promise<void>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
-  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   move: (fromPath: string, toPath: string) => Promise<void>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
-  pushRemote?: (repositoryRoot: string, push: LandingBrokerPush) => Promise<LandingBrokerInspection | undefined>
   writeJson: (path: string, value: unknown) => Promise<void>
   writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
@@ -212,14 +204,12 @@ const defaultDependencies: MergeWithMainDependencies = {
   },
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
-  inspectRemote: inspectLandingRemote,
   move: FS.move,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
   remove: FS.remove,
   run: CLI.run,
-  pushRemote: pushLandingRemote,
   writeJson: FS.writeJson,
   writeLine: (line, kind) => {
     if (kind === 'success') {
@@ -247,9 +237,8 @@ function archiveName(branch: string): string {
  * twice in a single session.
  *
  * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
- * landing and at no other time, so the ref exists if and only if the branch landed. Use the same
- * credential-isolated broker as landing to inspect the remote, with the normal direct remote path
- * when the broker is unavailable. A failed remote query must not look like an absent archive.
+ * landing and at no other time, so the ref exists if and only if the branch landed. Query the
+ * remote directly; a failed query must not look like an absent archive.
  */
 export async function landedReport(
   branch?: string,
@@ -640,14 +629,11 @@ async function acquireLandingLease(
       return
     }
     checkedAt = now
-    const remote = await remoteHeads(dependencies, preflight.featureRoot, [MAIN_BRANCH])
-    if (remote.transport === 'direct') {
-      await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], preflight.featureRoot)
-    }
-    const current = remote.transport === 'broker'
-      ? remote.refs.get(MAIN_BRANCH)
-      : (await git(dependencies, preflight.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    if (current === undefined) {
+    await remoteHeads(dependencies, preflight.featureRoot, [MAIN_BRANCH])
+    await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], preflight.featureRoot)
+    const current = (await git(dependencies, preflight.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`]))
+      .stdout.trim()
+    if (current.length === 0) {
       Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting main.`)
     }
     const head = (await git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -957,7 +943,7 @@ async function stabilizeAndVerify(
     }
 
     const remoteMain = (
-      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], snapshot.remoteTransport)
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])
     ).refs.get(MAIN_BRANCH)
     if (!remoteMain) {
       Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting refs/heads/main.`)
@@ -1068,16 +1054,6 @@ async function refreshRemoteMain(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<string> {
-  if (snapshot.remoteTransport === 'broker') {
-    const inspection = await dependencies.inspectRemote?.(snapshot.featureRoot, [MAIN_BRANCH])
-    const main = inspection?.refs.get(MAIN_BRANCH)
-    if (main === undefined) {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-    return main
-  }
   await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
   return (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
 }
@@ -1320,93 +1296,69 @@ async function pushRemoteRefs(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  if (snapshot.remoteTransport === 'broker') {
-    const landedHead = snapshot.landedHead
-    if (landedHead === undefined) {
-      Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
-    }
-    const pushed = await dependencies.pushRemote?.(snapshot.featureRoot, {
-      branch: snapshot.branch,
-      expectedRemoteFeatureHead: snapshot.remoteFeatureHead ?? null,
-      expectedRemoteMainHead: snapshot.remoteMainHead,
-      featureHead: snapshot.currentFeatureHead,
-      landedHead,
-    })
-    if (pushed === undefined) {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-    if (
-      pushed.refs.get(MAIN_BRANCH) !== landedHead
-      || pushed.refs.get(archiveName(snapshot.branch)) !== snapshot.currentFeatureHead
-      || snapshot.remoteFeatureHead !== undefined && pushed.refs.has(snapshot.branch)
-    ) {
-      Errors.throwHostEnvironment('The landing broker returned refs that do not match the requested landing.')
-    }
+  const landedHead = snapshot.landedHead
+  if (landedHead === undefined) {
+    Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
+  }
+  const archive = archiveName(snapshot.branch)
+  const args = [
+    'push',
+    '--porcelain',
+    '--atomic',
+    `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
+    `--force-with-lease=refs/heads/${archive}:`,
+  ]
+  if (snapshot.remoteFeatureHead !== undefined) {
+    args.push(`--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`)
+  }
+  args.push(
+    REMOTE,
+    `${landedHead}:refs/heads/${MAIN_BRANCH}`,
+    `${snapshot.currentFeatureHead}:refs/heads/${archive}`,
+  )
+  if (snapshot.remoteFeatureHead !== undefined) {
+    args.push(`:refs/heads/${snapshot.branch}`)
+  }
+  const pushed = await dependencies.run('git', {
+    args,
+    cwd: snapshot.featureRoot,
+    stdio: 'stream',
+  })
+  // The process result can be lost after the remote accepts an atomic push. Inspect every affected
+  // ref before deciding whether the landing succeeded or a retry can safely begin before the push.
+  const observed = (await remoteHeads(
+    dependencies,
+    snapshot.featureRoot,
+    [MAIN_BRANCH, archive, snapshot.branch],
+  )).refs
+  const fullyLanded = observed.get(MAIN_BRANCH) === landedHead
+    && observed.get(archive) === snapshot.currentFeatureHead
+    && (snapshot.remoteFeatureHead === undefined || !observed.has(snapshot.branch))
+  if (fullyLanded) {
     await advanceSnapshot(snapshot, 'pushed', dependencies)
     await advanceSnapshot(snapshot, 'archived', dependencies)
     return
   }
-
-  const pushMain = await dependencies.run('git', {
-    args: [
-      'push',
-      REMOTE,
-      `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
-      `${MAIN_BRANCH}:${MAIN_BRANCH}`,
-    ],
-    cwd: snapshot.featureRoot,
-    stdio: 'stream',
-  })
-  if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
-    const observedMain = (
-      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], 'direct')
-    ).refs.get(MAIN_BRANCH)
-    if (observedMain === snapshot.currentMainHead) {
-      // A transport can report failure after the remote accepted the update. The exact remote ref
-      // is stronger evidence than the process result, so recovery must stay on the irreversible side.
-      await advanceSnapshot(snapshot, 'pushed', dependencies)
-    } else if (observedMain !== undefined && observedMain !== snapshot.remoteMainHead) {
-      // The force-with-lease proves this push changed nothing. Restore the reversible phase so the
-      // guarded abort may remove only the local squash commit before a fresh preflight.
+  const noLandingRefsChanged = observed.get(archive) === undefined
+    && observed.get(snapshot.branch) === snapshot.remoteFeatureHead
+    && observed.get(MAIN_BRANCH) !== landedHead
+  if (pushed.exitCode !== 0 || pushed.error !== undefined || pushed.signal !== null) {
+    if (noLandingRefsChanged) {
       snapshot.phase = 'committed'
       await persistSnapshot(snapshot, dependencies)
       Errors.throwHostEnvironment(
-        `${REMOTE}/main moved to ${shortSha(observedMain)} before the verified squash could be pushed. `
-          + `The remote was not changed; abort this snapshot with ./dev merge-with-main --abort ${snapshot.snapshotPath}, `
+        `The atomic remote push changed no landing refs; ${REMOTE}/main is at `
+          + `${shortSha(observed.get(MAIN_BRANCH) ?? '')}. `
+          + `Abort this snapshot with ./dev merge-with-main --abort ${snapshot.snapshotPath}, `
           + 'then merge current main into the feature branch, verify, and retry.',
       )
-    } else {
-      assertCommandSucceeded(pushMain)
     }
-  } else {
-    await advanceSnapshot(snapshot, 'pushed', dependencies)
+    assertCommandSucceeded(pushed)
   }
-
-  const archive = archiveName(snapshot.branch)
-  await runChecked(
-    dependencies,
-    'git',
-    ['push', REMOTE, `--force-with-lease=refs/heads/${archive}:`, `${snapshot.branch}:refs/heads/${archive}`],
-    snapshot.featureRoot,
-    true,
+  Errors.throwHostEnvironment(
+    'The atomic push returned, but remote main, archive, and feature refs do not match the landing. '
+      + `Inspect the remote refs and snapshot ${snapshot.snapshotPath} before recovery.`,
   )
-  if (snapshot.remoteFeatureHead !== undefined) {
-    await runChecked(
-      dependencies,
-      'git',
-      [
-        'push',
-        REMOTE,
-        `--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`,
-        `:refs/heads/${snapshot.branch}`,
-      ],
-      snapshot.featureRoot,
-      true,
-    )
-  }
-  await advanceSnapshot(snapshot, 'archived', dependencies)
 }
 
 async function abortMerge(
@@ -1616,27 +1568,14 @@ async function remoteHeads(
   dependencies: MergeWithMainDependencies,
   cwd: string,
   branches: readonly string[],
-  requiredTransport?: RemoteTransport,
 ): Promise<{ refs: Map<string, string>; transport: RemoteTransport }> {
-  if (requiredTransport !== 'direct') {
-    const broker = await dependencies.inspectRemote?.(cwd, branches)
-    if (broker !== undefined) {
-      return { refs: new Map(broker.refs), transport: 'broker' }
-    }
-    if (requiredTransport === 'broker') {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker is unavailable. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-  }
   const result = await dependencies.run('git', {
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
   })
   if (CLI.isSandboxDenial(result)) {
     Errors.throwHostEnvironment(
-      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
-        + "Install the credential-isolated service with 'just landing-setup' in a normal terminal, then retry.",
+      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. Run this command with ./agent unsandboxed.`,
       {
         cause: new Errors.CommandExecutionError(result),
         details: { command: result.command, stderr: result.stderr },

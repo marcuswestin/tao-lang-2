@@ -55,7 +55,15 @@
       "WebSearch",
       "mcp__Claude_Browser__*",
       "mcp__Claude_Code_iOS_Simulator__*",
-      "mcp__claude-in-chrome__*"
+      "mcp__claude-in-chrome__*",
+      "Bash(./agent unsandboxed land)",
+      "Bash(./agent unsandboxed land *)",
+      "Bash(./agent unsandboxed finalize)",
+      "Bash(./agent unsandboxed finalize *)",
+      "Bash(./agent unsandboxed landed)",
+      "Bash(./agent unsandboxed landed *)",
+      "Bash(./agent unsandboxed capabilities)",
+      "Bash(./agent unsandboxed capabilities *)"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -84,7 +92,15 @@
       "git ls-remote origin *",
       "git ls-remote --heads origin *",
       "./agent land",
-      "./agent land *"
+      "./agent land *",
+      "./agent unsandboxed land",
+      "./agent unsandboxed land *",
+      "./agent unsandboxed finalize",
+      "./agent unsandboxed finalize *",
+      "./agent unsandboxed landed",
+      "./agent unsandboxed landed *",
+      "./agent unsandboxed capabilities",
+      "./agent unsandboxed capabilities *"
     ],
     "filesystem": {
       "allowWrite": [

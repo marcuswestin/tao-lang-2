@@ -6,6 +6,7 @@ import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/D
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
+  "agentHostCommands": ["land", "finalize", "landed", "capabilities"],
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
@@ -170,6 +171,10 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
     Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
     Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
+    for (const command of ['land', 'finalize', 'landed', 'capabilities']) {
+      Expect(rendered).toContain(`pattern=["./agent","unsandboxed","${command}"], decision="allow"`)
+    }
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed"],')
     Expect(rendered).not.toContain('pattern=["just"]')
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
