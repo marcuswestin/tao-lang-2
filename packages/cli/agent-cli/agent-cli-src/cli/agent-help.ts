@@ -82,12 +82,13 @@ Examples:
   ./agent verify-full-sandbox
   ./agent unsandboxed capabilities
   ./agent unsandboxed land --dry-run
+  ./agent unsandboxed xcrun simctl list devices booted
+  ./agent unsandboxed ./tao dev
   ./agent setup --refresh-lockfile
 
-unsandboxed forwards the named command and arguments unchanged after checking for sandbox signals.
-Codex and Claude rules request host execution only for land, finalize, landed, and capabilities.
-If the harness still runs the wrapper inside a sandbox, it fails before dispatch. The same command
-without unsandboxed runs under the active sandbox, except the legacy direct land permission.
+unsandboxed accepts only literal argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.
+It forwards matching arguments unchanged and fails before dispatch if still sandboxed. Other host
+operations need the Developer's explicit approval; plain commands remain sandboxed.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites

@@ -70,10 +70,12 @@ const gatePipeRefusal = (gate: string): string =>
   + '`.artifacts/logs/agent/<command>/latest.log`, so there is nothing left to filter for. Run it '
   + 'plain, or capture it: `cmd > out 2>&1; echo "EXIT=$?"`.'
 
-const justRecipeRefusal = (recipe: string, agentCommand: string): string =>
-  `\`just ${recipe}\` is reachable through \`./agent ${agentCommand}\`, which captures the run, bounds `
-  + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
-  + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`
+const justRecipeRefusal = (recipe: string, agentCommand: string): string => {
+  const entry = agentCommand === 'land' ? './agent unsandboxed land' : `./agent ${agentCommand}`
+  return `\`just ${recipe}\` is reachable through \`${entry}\`, which captures the run, bounds `
+    + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
+    + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`
+}
 
 const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts its own run (AGENTS.md). Use `./agent '
   + 'test-file <path>` for one file or directory, or pass `--cwd` when the target is another worktree.'
@@ -398,7 +400,7 @@ function firstJustOperand(words: readonly string[]): string | undefined {
 function justRecipeDenial(stage: Stage): string | undefined {
   const [command, ...rest] = commandAfterWrappers(stage.words)
   if (command === './dev' && (rest[0] === 'land' || rest[0] === 'merge-with-main')) {
-    return 'Use `./agent land` for an authorized landing; direct `./dev` landing bypasses the agent entry point.'
+    return 'Use `./agent unsandboxed land` for an authorized landing; direct `./dev` landing bypasses the agent entry point.'
   }
   if (command !== 'just') {
     return undefined
@@ -408,7 +410,7 @@ function justRecipeDenial(stage: Stage): string | undefined {
     return undefined
   }
   if (recipe === 'my-land' || recipe === 'merge-with-main') {
-    return 'Use `./agent land` for an authorized landing; direct landing recipes bypass the agent entry point.'
+    return 'Use `./agent unsandboxed land` for an authorized landing; direct landing recipes bypass the agent entry point.'
   }
   const agentCommand = EXPOSED_RECIPES.get(recipe)
   return agentCommand === undefined ? undefined : justRecipeRefusal(recipe, agentCommand)
