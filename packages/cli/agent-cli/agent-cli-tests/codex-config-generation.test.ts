@@ -7,6 +7,7 @@ import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/D
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
+  "agentHostCommands": ["land", "finalize", "landed", "capabilities"],
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
@@ -131,7 +132,8 @@ Describe('Codex config generation', () => {
     Expect(profile['extends']).toBe(':workspace')
     Expect(profile['filesystem']['/clones/elsewhere/tao/.git']).toBe('write')
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
-    Expect(profile['filesystem']['~/.ssh/**']).toBe('deny')
+    Expect(profile['filesystem']['~/.ssh/**']).toBeUndefined()
+    Expect(parsed['permissions']['tao-review']['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
     // Codex matches a socket rule as a directory prefix, so Watchman's state directory covers the
@@ -176,6 +178,10 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
     Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
     Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
+    for (const command of ['land', 'finalize', 'landed', 'capabilities']) {
+      Expect(rendered).toContain(`pattern=["./agent","unsandboxed","${command}"], decision="allow"`)
+    }
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed"],')
     Expect(rendered).not.toContain('pattern=["just"]')
     Expect(rendered).not.toContain('git status')
     Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
@@ -204,19 +210,22 @@ Describe('Codex config generation', () => {
     // harness is keeping.
     Expect(filesystem['~/.bun']).toBe('write')
     Expect(filesystem['~/.cache']).toBe('write')
-    // A credential deny inside a granted tree still has to win, so denies are rendered last.
-    Expect(filesystem['~/.ssh/**']).toBe('deny')
+    // The default profile must have no denied reads or Codex cannot run its exact host rules.
+    Expect(filesystem['~/.ssh/**']).toBeUndefined()
   })
 
-  Test("denies dotenv files without denying this repository's own .envrc", () => {
+  Test('keeps denied reads out of the host-capable default but in the review profile', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
     )
-    const workspaceRoots =
-      (Platform.parseToml(rendered) as any)['permissions']['tao-workspace']['filesystem'][':workspace_roots']
+    const profiles = (Platform.parseToml(rendered) as any)['permissions']
+    const workspace = profiles['tao-workspace']['filesystem']
+    const review = profiles['tao-review']['filesystem']
 
-    Expect(Object.keys(workspaceRoots).toSorted()).toEqual(['**/.env', '**/.env.*'])
+    Expect(Object.values(workspace)).not.toContain('deny')
+    Expect(workspace[':workspace_roots']).toBeUndefined()
+    Expect(Object.keys(review[':workspace_roots']).toSorted()).toEqual(['**/.env', '**/.env.*'])
     Expect(rendered).not.toContain('**/.env*"')
   })
 

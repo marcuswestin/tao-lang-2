@@ -62,6 +62,7 @@ function formatAgentHelpText(justLines: readonly string[]): string {
 Usage:
   ./agent help
   ./agent <just-command> [args...]
+  ./agent unsandboxed <host-command> [args...]
 
 Agent commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
@@ -79,7 +80,14 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
+  ./agent unsandboxed capabilities
+  ./agent unsandboxed land --dry-run
   ./agent setup --refresh-lockfile
+
+unsandboxed forwards the named command and arguments unchanged after checking for sandbox signals.
+Codex and Claude rules request host execution only for land, finalize, landed, and capabilities.
+If the harness still runs the wrapper inside a sandbox, it fails before dispatch. The same command
+without unsandboxed runs under the active sandbox, except the legacy direct land permission.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites

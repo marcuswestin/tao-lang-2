@@ -99,14 +99,6 @@ description = "Tao worktree: write the workspace, read the reference repo, reach
 "~/Library/Caches" = "write"
 # The previous repository is reference material only (see AGENTS.md).
 "~/code/tao-lang" = "read"
-"~/.aws/**" = "deny"
-"~/.config/gh/**" = "deny"
-"~/.ssh/**" = "deny"
-
-[permissions.tao-workspace.filesystem.":workspace_roots"]
-# Not `.env*`: that pattern also matches this repository's own `.envrc`.
-"**/.env" = "deny"
-"**/.env.*" = "deny"
 
 [permissions.tao-workspace.network]
 enabled = true
