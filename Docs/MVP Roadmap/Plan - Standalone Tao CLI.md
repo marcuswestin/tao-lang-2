@@ -570,6 +570,34 @@ version index with the binary on GitHub Releases in the public repository, sign 
 and publish the install script. Later releases may add the other four targets, Windows signing,
 Homebrew, and an npm wrapper with per-platform optional dependencies.
 
+_Landed 2026-09-23, unpublished._ `just standalone-cli-release 0.4.0` writes one release's files to
+`.artifacts/release/v0.4.0/` and prints the `gh release create` command; publishing waits on the
+public repository. What it settled:
+
+- The binary ships gzipped as `tao-darwin-arm64.gz` (28 MB, from 67 MB), beside its `.sha256`, the
+  install script, `release.json` (version, commit, and each target's asset and hash), and draft
+  notes. Asset names carry no version, so `releases/latest/download/` finds them.
+- `tao --version` prints the version the release build stamps in with `--define`, or `development`
+  from source. The install script reads the version from the binary rather than parsing an index,
+  and that first run unpacks the resources inside the version's own directory before it is renamed
+  into place.
+- The install script puts the binary in `versions/<version>/`, points `bin/tao` at it until slice
+  8's shim replaces that link, and links `tao` into the first writable directory under `$HOME` on
+  `PATH` that does not hold another `tao`, printing the `PATH` line only when there is none.
+  `TAO_VERSION` pins a release, `TAO_HOME` relocates everything, and `TAO_RELEASES` points at another
+  copy of the releases.
+- `curl` sets no `com.apple.quarantine`, only `com.apple.provenance`, which Gatekeeper does not act
+  on, so an unsigned binary fetched by the install script runs without a Gatekeeper prompt. Signing
+  still matters for a binary someone downloads with a browser.
+- `standalone-install.test.ts` covers the install script in the ordinary suite with a stand-in
+  binary. `just standalone-cli-acceptance` installs a real release through `curl | sh` into a
+  throwaway `$HOME` and runs `create`, `check`, and `compile` from `PATH`. It stays a recipe rather
+  than a suite test while the lanes on this machine run Bun 1.3.13 (see
+  `DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN`), because a binary that Bun builds is killed
+  on launch.
+- The release notes list what the binary cannot do yet from `KNOWN_GAPS` in `standalone-build.ts`,
+  which later slices shorten as they land.
+
 **8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
 resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
 
@@ -676,9 +704,15 @@ re-derived from scratch.
   because of Bun's symlink farm and phantom-dependency store — an image we lay out ourselves could
   ship a flat real tree and remove the reason. Metro's transform cache, Jest's cache and the
   file-map cache already default outside `node_modules`, and no package in the set has a
-  `postinstall` writing into it, so Watchman was the only writer found. Still unmeasured: image
-  size, mount time, and module-resolution speed from a mount, because `hdiutil` cannot run under the
-  agent sandbox.
+  `postinstall` writing into it, so Watchman was the only writer found. **Measured 2026-09-23**
+  (`.artifacts/tmp/host-image-measurement.sh`, run unsandboxed on a loaded machine): the 397 MB,
+  39,917-file tree becomes a **309 MB** UDZO/APFS image in 36 s, a build-time cost only; it mounts
+  read-only in **3 s**; one `require.resolve('metro')` from a fresh process takes 35–41 ms from the
+  plain tree and 41–62 ms from the mount, mostly process startup. What the image clearly wins is
+  lifecycle: copying the tree took 40 s and deleting it 6 s, against effectively zero for the one
+  file. Still unmeasured, and the number that would decide it: Metro's full crawl and hashing of
+  the host from a mount. macOS now warns that `hdiutil attach -nobrowse -readonly` is deprecated in
+  favour of `diskutil image attach`.
 - **Embed Metro and the Expo CLI and run them in-process.** Technically real — Metro exposes
   `runMetro`, `runServer` and `loadConfig`, and both of its worker pools have in-band modes, so
   `maxWorkers: 1` avoids the `jest-worker` fork that would otherwise relaunch the Tao binary as its
