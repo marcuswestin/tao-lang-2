@@ -853,6 +853,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                     entry.arguments,
                     this.entryTaoProps(item, taoProps),
                   ),
+                  fill: isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface(),
                   hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
                   key: `${item.key}-${entry.instanceId}`,
                   region: presentedOccurrenceRegion(this, entry, 'content'),

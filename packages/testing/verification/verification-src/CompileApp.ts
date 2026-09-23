@@ -31,7 +31,7 @@ const STAMP_PATH = '.artifacts/compile-app-stamp.json'
  * stale, never as an error. Raise this whenever the set of inputs or the way they are hashed
  * changes, or a stamp written under the old scheme is honoured against inputs it never covered.
  */
-const STAMP_VERSION = 2
+const STAMP_VERSION = 3
 
 /** Where `./tao compile` writes the generated app, relative to the repository root. */
 const DEFAULT_OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
@@ -82,8 +82,8 @@ export const COMPILE_INPUT_FILES: readonly string[] = [
   'packages/language/validator/package.json',
 ]
 
-/** Directories no input walk descends: installed dependencies and Git's own store. */
-const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git'])
+/** Installed dependencies, Git state, and generated Tao dev output cannot change source compilation. */
+const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git', '.tao'])
 
 /**
  * TypeScript's incremental build state is rewritten by every typecheck without any source changing.
