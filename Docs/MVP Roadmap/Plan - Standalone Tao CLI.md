@@ -676,9 +676,15 @@ re-derived from scratch.
   because of Bun's symlink farm and phantom-dependency store — an image we lay out ourselves could
   ship a flat real tree and remove the reason. Metro's transform cache, Jest's cache and the
   file-map cache already default outside `node_modules`, and no package in the set has a
-  `postinstall` writing into it, so Watchman was the only writer found. Still unmeasured: image
-  size, mount time, and module-resolution speed from a mount, because `hdiutil` cannot run under the
-  agent sandbox.
+  `postinstall` writing into it, so Watchman was the only writer found. **Measured 2026-09-23**
+  (`.artifacts/tmp/host-image-measurement.sh`, run unsandboxed on a loaded machine): the 397 MB,
+  39,917-file tree becomes a **309 MB** UDZO/APFS image in 36 s, a build-time cost only; it mounts
+  read-only in **3 s**; one `require.resolve('metro')` from a fresh process takes 35–41 ms from the
+  plain tree and 41–62 ms from the mount, mostly process startup. What the image clearly wins is
+  lifecycle: copying the tree took 40 s and deleting it 6 s, against effectively zero for the one
+  file. Still unmeasured, and the number that would decide it: Metro's full crawl and hashing of
+  the host from a mount. macOS now warns that `hdiutil attach -nobrowse -readonly` is deprecated in
+  favour of `diskutil image attach`.
 - **Embed Metro and the Expo CLI and run them in-process.** Technically real — Metro exposes
   `runMetro`, `runServer` and `loadConfig`, and both of its worker pools have in-band modes, so
   `maxWorkers: 1` avoids the `jest-worker` fork that would otherwise relaunch the Tao binary as its
