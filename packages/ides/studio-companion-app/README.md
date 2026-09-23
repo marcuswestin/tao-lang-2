@@ -79,17 +79,23 @@ change. Tao, TypeScript, and UI changes never need a rebuild.
 ```sh
 just companion-host-build             # arm64-v8a and x86_64
 just companion-host-build --abi arm64-v8a
+just companion-host-publish           # needs gh signed in
 ```
 
 Expo prebuilds the `android/` project here, Gradle assembles a debug APK, and the APK lands in
-`.artifacts/hosts/<version>/android/` beside `tao-host.json`, a manifest naming the native kit it was
-built with: every native-code dependency and the version it was built from, plus a hash of the
-native sources of Tao's own unpublished packages, whose versions never move. From then on
-`tao dev --android`, or `a` in a running dev loop, installs that APK on the emulator (only when the
-installed copy's bytes differ) and opens the app in it rather than in Expo Go. A host whose kit does
-not cover the one `tao dev` computes from `packages/apps/expo-host` is passed over by name and Expo
-Go is used instead; the directory name decides nothing. `tao dev` also looks under `~/.tao/hosts`
-(`$TAO_HOME/hosts`), where downloaded hosts will go.
+`.artifacts/hosts/<version>-<kit digest>/android/` beside `tao-host.json`, a manifest naming the
+native kit it was built with: every native-code dependency and the version it was built from, plus a
+hash of the native sources of Tao's own unpublished packages, whose versions never move. From then
+on `tao dev --android`, or `a` in a running dev loop, installs that APK on the emulator (only when
+the installed copy's bytes differ) and opens the app in it rather than in Expo Go. A host whose kit
+does not cover the one `tao dev` computes from `packages/apps/expo-host` is passed over by name and
+Expo Go is used instead; the directory name decides nothing.
+
+Publishing puts the manifest and APK on a GitHub release tagged `companion-host-<version>-<kit
+digest>`, marked as a prerelease and never as latest. When no cached host fits, `tao dev` lists those
+releases without signing in, downloads the newest whose kit covers its own into `~/.tao/hosts`
+(`$TAO_HOME/hosts`), and uses it. While the repository is private that listing answers 404, which
+`tao dev` reports in one line before falling back to Expo Go.
 
 Gradle ignores `HTTPS_PROXY`, so the build hands it to the JVM itself, which lets it run behind a
 proxy and inside the agent sandbox. The first launch shows the development client's one-time menu

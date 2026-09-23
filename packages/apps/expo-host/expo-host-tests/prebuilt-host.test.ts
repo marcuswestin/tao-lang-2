@@ -1,13 +1,15 @@
 import {
+  hostKey,
   hostKitProblems,
   type HostManifest,
   nativeKitOf,
   readHostManifest,
   writeHostManifest,
 } from '@expo-host/dev-loop/prebuilt-host/HostManifest'
-import { findCompatibleHost } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
-import { FS, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { downloadCompatibleHost, type HostDownloadOptions } from '@expo-host/dev-loop/prebuilt-host/HostReleases'
+import { findCompatibleHost, obtainCompatibleHost } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
+import { Errors, FS, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 
 /**
  * A fake app host: a package whose dependencies are installed under its own `node_modules`, the
@@ -160,6 +162,115 @@ Describe('prebuilt host search', () => {
       Expect(search.refused[0]).toContain('it carries react-native 0.85.0 where this Tao needs 0.86.3')
       Expect(search.refused[1]).toContain('no tao-companion.apk beside its manifest')
       Expect(search.refused[2]).toContain('is not one this Tao can read')
+    })
+  })
+})
+
+Describe('prebuilt host releases', () => {
+  const RELEASES_URL = 'https://api.github.com/repos/tao/tao/releases?per_page=30'
+  // One byte per character, so the string's length is the asset's size in bytes.
+  const APK = 'a prebuilt Companion'
+
+  function hostManifest(nativeKit: Record<string, string>): HostManifest {
+    return { format: 1, hostVersion: '1.0.0', nativeKit, platform: 'android' }
+  }
+
+  function release(tag: string, base: string) {
+    return {
+      assets: [
+        { browser_download_url: `${base}/tao-host-android.json`, name: 'tao-host-android.json', size: 100 },
+        {
+          browser_download_url: `${base}/tao-companion-android.apk`,
+          name: 'tao-companion-android.apk',
+          size: APK.length,
+        },
+      ],
+      draft: false,
+      tag_name: tag,
+    }
+  }
+
+  /** A fake GitHub answering the release list and each asset by URL, recording every URL it served. */
+  function fakeGitHub(routes: Record<string, unknown>, served: string[] = []): HostDownloadOptions['fetch'] {
+    return async url => {
+      served.push(url)
+      const body = routes[url]
+      if (body === undefined) {
+        return new Response('Not Found', { status: 404, statusText: 'Not Found' })
+      }
+      return typeof body === 'string' ? new Response(body) : Response.json(body)
+    }
+  }
+
+  Test('downloads the newest release whose kit covers this Tao, once, and names the ones it refused', async () => {
+    await withHostDirectory(async hostsRoot => {
+      const compatible = hostManifest({ 'react-native': '0.86.3' })
+      const served: string[] = []
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: [
+          release('companion-host-9.0.0-newer', 'https://dl/newer'),
+          { assets: [], draft: false, tag_name: 'v0.1.0' },
+          release('companion-host-1.0.0-match', 'https://dl/match'),
+        ],
+        'https://dl/newer/tao-host-android.json': hostManifest({ 'react-native': '0.87.0' }),
+        'https://dl/match/tao-host-android.json': compatible,
+        'https://dl/match/tao-companion-android.apk': APK,
+      }, served)
+      const options = { fetch, hostsRoot, repository: 'tao/tao' }
+
+      const first = await withCapturedOutput(() =>
+        downloadCompatibleHost('android', { 'react-native': '0.86.3' }, options)
+      )
+      const second = await downloadCompatibleHost('android', { 'react-native': '0.86.3' }, options)
+
+      const directory = FS.resolvePath(`${hostKey(compatible)}/android`, hostsRoot)
+      Expect(first.result.host?.directory).toBe(directory)
+      Expect(first.result.refused).toEqual([
+        'tao/tao release companion-host-9.0.0-newer: it carries react-native 0.87.0 where this Tao needs 0.86.3',
+      ])
+      Expect(first.stdout).toContain('Downloading Tao Companion 1.0.0 for android')
+      Expect(await FS.readText(FS.resolvePath('tao-companion.apk', directory))).toBe('a prebuilt Companion')
+      Expect(await readHostManifest(directory)).toEqual(compatible)
+      Expect(second.host?.directory).toBe(directory)
+      Expect(served.filter(url => url.endsWith('.apk'))).toEqual(['https://dl/match/tao-companion-android.apk'])
+      Expect((await FS.listDir(FS.resolvePath(hostKey(compatible), hostsRoot))).toSorted()).toEqual(['android'])
+    })
+  })
+
+  Test('refuses a truncated download rather than installing it', async () => {
+    await withHostDirectory(async hostsRoot => {
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: [release('companion-host-1.0.0-match', 'https://dl/match')],
+        'https://dl/match/tao-host-android.json': hostManifest({}),
+        'https://dl/match/tao-companion-android.apk': APK.slice(0, 5),
+      })
+
+      await Expect(
+        withCapturedOutput(() => downloadCompatibleHost('android', {}, { fetch, hostsRoot, repository: 'tao/tao' })),
+      )
+        .rejects.toThrow(`stopped at 5 of ${APK.length} bytes`)
+      Expect(await FS.listDir(hostsRoot)).toEqual([])
+    })
+  })
+
+  Test('falls back to the cached search, saying why, when no host can be downloaded', async () => {
+    await withHostDirectory(async root => {
+      const captured = await withCapturedOutput(() =>
+        obtainCompatibleHost('android', {}, {
+          download: async () => Errors.throwHostEnvironment('api.github.com answered 404 Not Found'),
+          roots: [root],
+        })
+      )
+
+      Expect(captured.result).toEqual({ refused: [] })
+      Expect(captured.stdout).toContain('No prebuilt host could be downloaded: api.github.com answered 404 Not Found')
+    })
+  })
+
+  Test('reports a repository whose releases cannot be read, as a private one answers', async () => {
+    await withHostDirectory(async hostsRoot => {
+      await Expect(downloadCompatibleHost('android', {}, { fetch: fakeGitHub({}), hostsRoot, repository: 'tao/tao' }))
+        .rejects.toThrow(`api.github.com answered 404 Not Found for ${RELEASES_URL}.`)
     })
   })
 })
