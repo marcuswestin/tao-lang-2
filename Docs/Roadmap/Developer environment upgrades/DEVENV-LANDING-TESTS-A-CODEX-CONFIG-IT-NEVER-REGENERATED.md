@@ -12,7 +12,10 @@
   `174e49a5` (agent file watching) and `verify-full` failed only on
   `Codex config generation > keeps the machine-local Codex profile identical to a fresh render`
   (`packages/cli/agent-cli/agent-cli-tests/codex-config-generation.test.ts:329`). `./agent setup`
-  regenerated the file, the test passed, and the tracked tree did not change.
+  regenerated the file, the test passed, and the tracked tree did not change. The same day, landing
+  `feat/ios-simulator-host-26f553` met the other shape of it: that branch still tracked
+  `.codex/config.toml`, so integrating `174e49a5` deleted the file outright and the test failed with
+  a bare `ENOENT` that never names `./agent setup`.
 - **Workaround:** Run `./agent setup` in the worktree and land again.
 - **Proposed change:** Have the landing regenerate git-ignored harness config after integrating
   `main` and before verifying, or have the test compare against a render into a temporary path
