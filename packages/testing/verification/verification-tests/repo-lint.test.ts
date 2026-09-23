@@ -316,6 +316,8 @@ _bench-check:
       [
         file('WordFlower.tao', absorbed),
         file('.tao-project/lock.jsonc', '{ "ship": true }'),
+        file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
+        file('.tao/sessions/session.json', '{ "status": "active" }'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])
