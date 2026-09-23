@@ -1,7 +1,7 @@
 # Tao Companion
 
 The Expo development build that renders a Tao project on a real iPhone or iPad while Tao Studio runs
-on the Mac, and the prebuilt host `tao dev` opens Android emulator apps in. It is a shell: a Metro
+on the Mac, and the prebuilt host `tao dev` opens emulator and simulator apps in. It is a shell: a Metro
 server serves the bundle, and nothing in this package knows which one. Its identity (`Tao
 Companion`, `tao-studio-companion`, `taostudiocompanion://`, `dev.tao-lang.studio.companion` on iOS
 and `dev.tao_lang.studio.companion` on Android, which admits no hyphen) is fixed in
@@ -11,9 +11,9 @@ repeats the same values and a test keeps them equal.
 This is also, today, the only way a Tao app reaches a physical iPhone or iPad. Since 2026-09-03,
 Expo Go 57 on iOS requires the developer to be logged in to both the Expo CLI and the Expo Go app,
 and `tao dev`'s Metro server runs under a repository-local Expo home directory that a developer's
-own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. The iOS
-Simulator and physical Android keep using Expo Go, and so does the Android emulator until an
-Android host is built (below).
+own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. Physical
+Android keeps using Expo Go, and so do the Android emulator and the iOS Simulator until a host for
+them is built or downloaded (below).
 
 ## What the shell carries
 
@@ -74,32 +74,39 @@ lines appear with device labels in Studio's Logs drawer.
 Run the install again only after a native dependency, config plugin, entitlement, or `app.json`
 change. Tao, TypeScript, and UI changes never need a rebuild.
 
-## The Android host
+## Prebuilt hosts for emulators and simulators
 
 ```sh
-just companion-host-build             # arm64-v8a and x86_64
+just companion-host-build                           # Android, arm64-v8a and x86_64
 just companion-host-build --abi arm64-v8a
-just companion-host-publish           # needs gh signed in
+just companion-host-build --platform ios-simulator  # needs Xcode and an unsandboxed shell
+just companion-host-publish                         # needs gh signed in
 ```
 
-Expo prebuilds the `android/` project here, Gradle assembles a debug APK, and the APK lands in
-`.artifacts/hosts/<version>-<kit digest>/android/` beside `tao-host.json`, a manifest naming the
-native kit it was built with: every native-code dependency and the version it was built from, plus a
-hash of the native sources of Tao's own unpublished packages, whose versions never move. From then
-on `tao dev --android`, or `a` in a running dev loop, installs that APK on the emulator (only when
-the installed copy's bytes differ) and opens the app in it rather than in Expo Go. A host whose kit
-does not cover the one `tao dev` computes from `packages/apps/expo-host` is passed over by name and
-Expo Go is used instead; the directory name decides nothing.
+For Android, Expo prebuilds the `android/` project here and Gradle assembles a debug APK. For the
+iOS Simulator, CocoaPods and `xcodebuild` build a debug app for both simulator architectures, signed
+ad hoc: the simulator reads an app's entitlements from a section Xcode writes only while signing, and
+without them CloudKit aborts the app at its first container request, so the build refuses an app that
+lacks them. Either binary lands in `.artifacts/hosts/<version>-<kit digest>/<platform>/` beside
+`tao-host.json`, a manifest naming the native kit it was built with: every native-code dependency and
+the version it was built from, plus a hash of the native sources of Tao's own unpublished packages,
+whose versions never move.
 
-Publishing puts the manifest and APK on a GitHub release tagged `companion-host-<version>-<kit
-digest>`, marked as a prerelease and never as latest. When no cached host fits, `tao dev` lists those
-releases without signing in, downloads the newest whose kit covers its own into `~/.tao/hosts`
-(`$TAO_HOME/hosts`), and uses it. While the repository is private that listing answers 404, which
-`tao dev` reports in one line before falling back to Expo Go.
+From then on `tao dev --android` and `tao dev --ios`, or `a` and `i` in a running dev loop, install
+that host (only when the installed build differs) and open the app in it rather than in Expo Go. A
+host whose kit does not cover the one `tao dev` computes from `packages/apps/expo-host` is passed
+over by name and Expo Go is used instead; the directory name decides nothing.
+
+Publishing puts each built platform's manifest and binary — the simulator app zipped — on a GitHub
+release tagged `companion-host-<version>-<kit digest>`, marked as a prerelease and never as latest.
+When no cached host fits, `tao dev` lists those releases without signing in, downloads the newest
+whose kit covers its own into `~/.tao/hosts` (`$TAO_HOME/hosts`), and uses it. While the repository
+is private that listing answers 404, which `tao dev` reports in one line before falling back to Expo
+Go.
 
 Gradle ignores `HTTPS_PROXY`, so the build hands it to the JVM itself, which lets it run behind a
-proxy and inside the agent sandbox. The first launch shows the development client's one-time menu
-introduction over the app.
+proxy and inside the agent sandbox. The first Android launch shows the development client's one-time
+menu introduction over the app.
 
 ## The local-network prompt
 

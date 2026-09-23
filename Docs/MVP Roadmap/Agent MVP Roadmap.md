@@ -262,8 +262,13 @@ from the development loop, which no virtualization approach can do.
   lists those releases without signing in and downloads the newest whose kit covers its own into
   `~/.tao/hosts`. The download is proven against a fake GitHub only: until the repository is public
   the listing answers 404, and `tao dev` says so and uses Expo Go.
-- Remaining: the iOS Simulator host (its build waits on CoreSimulator, unavailable on this Mac until
-  a restart); the first published host and a live download once the repository is public; physical
+- Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
+  builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
+  embedded, and `tao dev --ios` installs a compatible host unless the simulator already has that
+  build and opens the app in it. Publishing zips it beside the Android host on the same release.
+  Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
+  and CloudKit aborted it, which the build now refuses.
+- Remaining: the first published host and a live download once the repository is public; physical
   Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs.

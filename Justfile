@@ -108,12 +108,12 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
-# Build the Tao Companion as a prebuilt Android host; tao dev then opens emulator apps in it, not Expo Go
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
 
-# Publish the built Android host to its GitHub release, where tao dev downloads it; needs gh
+# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
 [group('Run')]
 companion-host-publish:
     ./dev companion-host-publish
