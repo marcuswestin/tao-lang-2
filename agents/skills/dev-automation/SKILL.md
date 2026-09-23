@@ -7,6 +7,9 @@ description: >-
 # Dev Automation
 
 - Keep common workflow definitions and human developer commands in `Justfile`; keep shell entrypoints and the `./tao` wrapper thin.
+- Keep agent-only host operations named in `HostCommandTargets.ts`, permitted by the single
+  `agentHostCommands` list in `.rulesync/permissions.jsonc`, and invoked as `./agent unsandboxed <operation>`.
+  Add a host operation only for a repository-used shape; regenerate both harnesses with `./agent setup`.
 - Keep one setup entry, `./agent setup`, and route every harness through it: Worktrunk's blocking `pre-start` hook as `direnv allow && direnv exec . ./agent setup` (`.config/wt.toml`), the Claude Code and Codex `SessionStart` hooks (one source, `.rulesync/hooks.jsonc`, with harness-neutral commands), and Cursor's blocking worktree setup (`.cursor/worktrees.json` and its script). Trust, dependencies, and generated agent adapters must exist before a harness reads them; when setup changes, update the comments that cross-reference each other in all four places.
 - Never name a Bun install backend — `environment-recovery` says why. Bun's macOS default clones whole directories and installs fine in a linked worktree.
 - Keep `./agent` able to reuse the primary checkout's pinned devenv profile in linked worktrees where sandboxing hides `.envrc`; never fall back to an unpinned host Node. `direnv allow && direnv exec . ./agent setup` remains the fallback when no shared profile exists.
@@ -40,4 +43,6 @@ description: >-
 - Keep test selection, ledger, reporting, and merge usage in the `verification-lanes` skill rather than duplicating that workflow here.
 - `just` has no named-argument syntax. `just recipe run_id="local"` passes the literal string `run_id=local` as the recipe's _first positional_ parameter, so a composed recipe silently runs with the wrong arguments. Pass positionals in declaration order.
 - Chrome never synthesizes HTML5 drag-and-drop from `Input.dispatchMouseEvent`. Pointer-driven UI (dividers, resizers) works with mouse events; anything using `dragstart`/`drop` needs drag interception: `Input.setInterceptDrags`, then the payload from `Input.dragIntercepted`, replayed through `Input.dispatchDragEvent`. A mouse-only drag against a drop target fails silently.
-- `agents/skills/` is outside the agent sandbox's write allowlist. Editing a skill needs an unsandboxed shell; a sandboxed write fails with `PermissionError: Operation not permitted`.
+- A task may be unable to rewrite protected generated harness files such as `.codex/rules/tao.rules`.
+  After changing `.rulesync/`, run `./agent setup`; if it reports that protected output is stale,
+  ask the Developer to run that setup once from a normal terminal. An unchanged worktree needs no refresh.
