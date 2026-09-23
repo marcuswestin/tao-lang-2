@@ -10,6 +10,7 @@ type Availability = {
   enabled: boolean
   provider: string
   model: string
+  providers: { configured: boolean; label: string; model: string; name: string }[]
   reason?: string
 }
 
@@ -79,6 +80,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
         <option value="chat">Chat</option>
         <option value="scenario">Scenario</option>
       </select>
+      <select class="chat-provider studio-select" aria-label="Model provider" title="Which hosted model answers. Switching turns Cloud off until you turn it on for the new provider."></select>
       <label class="studio-switch" title="Send this project's declarations to a hosted model">
         <input class="chat-cloud" type="checkbox"> Cloud
       </label>
@@ -99,6 +101,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   const input = panel.querySelector<HTMLInputElement>('.chat-input')!
   const send = panel.querySelector<HTMLButtonElement>('.chat-send')!
   const mode = panel.querySelector<HTMLSelectElement>('.chat-mode')!
+  const provider = panel.querySelector<HTMLSelectElement>('.chat-provider')!
   const announcer = panel.querySelector<HTMLElement>('.chat-announcer')!
   let busy = false
   let cloudConfigured = true
@@ -108,6 +111,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     send.disabled = value
     input.disabled = value
     mode.disabled = value
+    provider.disabled = value
     cloud.disabled = value || !cloudConfigured
   }
 
@@ -202,6 +206,14 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   }
 
   function showAvailability(state: Availability): void {
+    // Rebuilt each time, since whether a provider has a key is the server's to say.
+    provider.replaceChildren(...state.providers.map(option => {
+      const element = document.createElement('option')
+      element.value = option.name
+      element.textContent = option.configured ? `${option.label} · ${option.model}` : `${option.label} (no key)`
+      return element
+    }))
+    provider.value = state.provider
     cloudConfigured = state.configured
     cloud.checked = state.enabled
     cloud.disabled = busy || !state.configured
@@ -319,6 +331,12 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   cloud.addEventListener('change', () => {
     void (async () => {
       showAvailability(await StudioApiClient.agentChat<Availability>('enable', { enabled: cloud.checked }))
+    })()
+  })
+
+  provider.addEventListener('change', () => {
+    void (async () => {
+      showAvailability(await StudioApiClient.agentChat<Availability>('provider', { provider: provider.value }))
     })()
   })
 

@@ -113,6 +113,11 @@ studio-companion-simulator simulator="":
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
 
+# Publish the built Android host to its GitHub release, where tao dev downloads it; needs gh
+[group('Run')]
+companion-host-publish:
+    ./dev companion-host-publish
+
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
 test-host *ARGS:
@@ -282,11 +287,11 @@ my-branch name='':
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
 [group('Mine')]
-my-resolve *ARGS:
+my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]

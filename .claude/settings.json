@@ -102,7 +102,7 @@
       "allowLocalBinding": true,
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
-        "~/.local/state/watchman/ro-state/sock"
+        "~/.local/state/watchman"
       ],
       "allowedDomains": [
         "registry.npmjs.org",
@@ -207,6 +207,26 @@
           {
             "type": "command",
             "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" create"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" remove"
           }
         ]
       }

@@ -254,12 +254,17 @@ from the development loop, which no virtualization approach can do.
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
   opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
 - Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
-  a debug APK into `.artifacts/hosts/<version>/android/` beside a `tao-host.json` naming its native
+  a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
   kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
   place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
   the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
+- Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
+  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
+  lists those releases without signing in and downloads the newest whose kit covers its own into
+  `~/.tao/hosts`. The download is proven against a fake GitHub only: until the repository is public
+  the listing answers 404, and `tao dev` says so and uses Expo Go.
 - Remaining: the iOS Simulator host (its build waits on CoreSimulator, unavailable on this Mac until
-  a restart); publishing hosts to GitHub Releases and downloading them into `~/.tao/hosts`; physical
+  a restart); the first published host and a live download once the repository is public; physical
   Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs.

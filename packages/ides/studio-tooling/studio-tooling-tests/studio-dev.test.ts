@@ -901,6 +901,59 @@ Describe('Studio smoke resource isolation', () => {
     })).rejects.toThrow('missing Metro capability')
   })
 
+  /** A Watchman whose enclosing watch of `/clone` has `subscriptions`, and which gives the checkout its own watch once that one is gone. */
+  function enclosingWatchman(subscriptions: string[]) {
+    const calls: string[][] = []
+    let released = false
+    const run = async (command: string, spec: CLI.CommandSpec) => {
+      const args = [...(spec.args ?? [])]
+      calls.push(args)
+      if (args[0] === 'watch-del') {
+        released = true
+      }
+      return {
+        args,
+        command,
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: args[0] === 'watch-project'
+          ? released ? '{"watch":"/clone/worktrees/task"}' : '{"watch":"/clone","relative_path":"worktrees/task"}'
+          : args.includes('debug-get-subscriptions')
+          ? JSON.stringify({ subscribers: subscriptions, subscriptions })
+          : args.includes('get-sockname')
+          ? '{"sockname":"/clone/.watchman.sock"}'
+          : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
+      }
+    }
+    return { calls, run }
+  }
+
+  Test('stops before Metro when a dev server still uses a watch that encloses this checkout', async () => {
+    const watchman = enclosingWatchman(['metro-in-the-primary-checkout'])
+
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/clone/worktrees/task',
+      run: watchman.run,
+    })).rejects.toThrow('still subscribed')
+    Expect(watchman.calls.some(args => args[0] === 'watch-del')).toBe(false)
+  })
+
+  Test('releases an enclosing watch nothing uses and watches this checkout on its own', async () => {
+    const watchman = enclosingWatchman([])
+
+    const environment = await StudioDev.testing.studioWatchmanEnvironment({
+      environment: { PATH: '/usr/bin' },
+      isFile: async () => true,
+      repositoryRoot: '/clone/worktrees/task',
+      run: watchman.run,
+    })
+
+    Expect(watchman.calls.filter(args => args[0] === 'watch-del')).toEqual([['watch-del', '/clone']])
+    Expect(environment['WATCHMAN_SOCK']).toBe('/clone/.watchman.sock')
+  })
+
   Test("stops before Metro when Watchman omits Metro's required version field", async () => {
     await Expect(StudioDev.testing.studioWatchmanEnvironment({
       isFile: async () => true,
@@ -1340,8 +1393,8 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('gives each worktree its own port block, so two checkouts never claim one port', () => {
     const here = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')
-    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-a')
-    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-b')
+    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/worktrees/feature-a')
+    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/worktrees/feature-b')
 
     // Every lane bound 42000 upward from shard 0, so the second worktree to start a Studio lane
     // died on a port the first one was serving.
