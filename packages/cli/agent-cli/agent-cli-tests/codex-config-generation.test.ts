@@ -1,4 +1,5 @@
 import { Errors, FS, Platform, Repo } from '@shared'
+import * as CLI from '@shared/CLI'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../agent-cli-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
@@ -35,7 +36,7 @@ const canonicalRules = `{
       },
       "network": {
         "allowLocalBinding": true,
-        "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman/test-state/sock"],
+        "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman"],
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
       "excludedCommands": [
@@ -101,7 +102,7 @@ Describe('Codex config generation', () => {
     ])
     Expect(permissions.claudecode?.sandbox?.network?.allowUnixSockets).toEqual([
       '/nix/var/nix/daemon-socket/socket',
-      '~/.local/state/watchman/test-state/sock',
+      '~/.local/state/watchman',
     ])
   })
 
@@ -120,17 +121,22 @@ Describe('Codex config generation', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
+      '',
+      '/clones/elsewhere/tao/.git',
     )
     const parsed = Platform.parseToml(rendered) as Record<string, any>
     const profile = parsed['permissions']['tao-workspace']
 
     Expect(parsed['default_permissions']).toBe('tao-workspace')
     Expect(profile['extends']).toBe(':workspace')
+    Expect(profile['filesystem']['/clones/elsewhere/tao/.git']).toBe('write')
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
     Expect(profile['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
-    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman/test-state/sock', FS.homeDir())])
+    // Codex matches a socket rule as a directory prefix, so Watchman's state directory covers the
+    // `<login>-state/sock` it names after whoever is running it.
+    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman', FS.homeDir())])
       .toBe('allow')
     Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBeUndefined()
     Expect(profile['network']['domains']['*']).toBeUndefined()
@@ -322,12 +328,13 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('[agents]')
   })
 
-  Test('keeps the committed Codex profile identical to a fresh render', async () => {
+  Test('keeps the machine-local Codex profile identical to a fresh render', async () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
       await readProfiles(root),
       await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, root)),
+      await CodexConfigGenerator.gitDirectory(root),
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)
@@ -347,5 +354,28 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["./dev","merge-with-main"], decision="allow"')
     Expect(rules).not.toContain('pattern=["just","my-land"], decision="allow"')
     Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
+  })
+
+  Test('commits no harness file that names a home directory or a login', async () => {
+    // A committed path under one person's home works for nobody else, and silently: the sandbox
+    // denies the socket or write it was meant to allow, and the tool falls back without saying so.
+    const root = Repo.getRoot()
+    const tracked = await CLI.run('git', { args: ['ls-files', '.claude', '.codex', '.cursor', '.rulesync'], cwd: root })
+    const login = Platform.runtimeProcess.env['USER'] ?? FS.basename(FS.homeDir())
+    const offending: string[] = []
+    for (const path of tracked.stdout.split('\n').filter(Boolean)) {
+      const file = FS.resolvePath(path, root)
+      if (!(await FS.isFile(file))) {
+        continue
+      }
+      const text = await FS.readText(file)
+      if (text.includes(FS.homeDir()) || text.includes(`${login}-state`)) {
+        offending.push(path)
+      }
+    }
+
+    Expect(tracked.exitCode).toBe(0)
+    Expect(offending).toEqual([])
+    Expect(tracked.stdout).not.toContain('.codex/config.toml')
   })
 })

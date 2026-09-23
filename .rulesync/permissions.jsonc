@@ -193,13 +193,13 @@
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client talks to its server over this socket, and Metro falls back to
-        // watching through the OS without it — which this repository exceeds, so Metro dies
-        // with EMFILE partway through its first bundle. The `<user>-state` segment is
-        // Watchman's own naming; a glob is not matched here, so the path is spelled out.
+        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
+        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
+        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
+        // rule matches the resolved path, so a link planted here reaches no other socket.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman/ro-state/sock",
+          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",

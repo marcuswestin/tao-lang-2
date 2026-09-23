@@ -140,6 +140,24 @@ Describe('app compilation staleness stamp', () => {
     }
   })
 
+  Test('ignores generated Tao dev state, including links to directories', async () => {
+    const root = await repository()
+    const tao = compiler()
+    try {
+      await run(root, tao.compile)
+      await FS.writeText(FS.resolvePath('Apps/Example/.tao/dev/runtime/App.tsx', root), 'generated dev app\n')
+      await FS.symlink(
+        FS.resolvePath('packages/stdlib', root),
+        FS.resolvePath('Apps/Example/.tao/dev/runtime/node_modules/tao-runtime', root),
+      )
+
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls).toEqual(['Apps/Example/Example.tao#Example'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('recompiles when the compiler source changes, not only when the app does', async () => {
     const root = await repository()
     const tao = compiler()

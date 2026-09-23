@@ -100,5 +100,25 @@
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true",
       },
     ],
+    // Claude Code otherwise creates its worktrees inside the checkout, under `.claude/worktrees/`,
+    // which puts each one inside every watch of the primary checkout: Watchman answers a path
+    // under an existing watch with that watch, by design (WorktreePlacement.ts has the rest). These
+    // two replace its `git worktree add` and `git worktree remove` so worktrees live beside the
+    // checkout. Codex already keeps its own outside, and rulesync renders these two events for
+    // Claude Code alone. The create hook's stdout is the worktree path the harness adopts, and a
+    // failure must reach the harness, so neither command swallows one. A checkout that predates the
+    // script borrows the primary checkout's copy rather than failing every worktree it would make.
+    "worktreeCreate": [
+      {
+        "type": "command",
+        "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" create",
+      },
+    ],
+    "worktreeRemove": [
+      {
+        "type": "command",
+        "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" remove",
+      },
+    ],
   },
 }

@@ -732,16 +732,38 @@ await runWithCommands(commands => {
   commands
     .command('companion-host-build')
     .description(
-      'Build the Tao Companion as a prebuilt Android host into .artifacts/hosts, which tao dev installs on an emulator in place of Expo Go.',
+      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao dev installs on an emulator or simulator in place of Expo Go.',
     )
+    .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
-    .action(async (options: { abi?: string }) => {
+    .action(async (options: { abi?: string; platform: string }) => {
       try {
+        if (options.platform !== 'android' && options.platform !== 'ios-simulator') {
+          Errors.throwUserInput(`--platform takes android or ios-simulator, not ${options.platform}.`)
+        }
         const { runCompanionHostBuild } = await import('@studio-tooling/CompanionHostBuild')
         const architectures = options.abi?.split(',').map(abi => abi.trim()).filter(Boolean)
         Platform.runtimeProcess.exit(
-          await runCompanionHostBuild(architectures === undefined ? {} : { architectures }),
+          await runCompanionHostBuild({
+            platform: options.platform,
+            ...(architectures === undefined ? {} : { architectures }),
+          }),
         )
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('companion-host-publish')
+    .description(
+      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao dev downloads it.',
+    )
+    .action(async () => {
+      try {
+        const { runCompanionHostPublish } = await import('@studio-tooling/CompanionHostBuild')
+        Platform.runtimeProcess.exit(await runCompanionHostPublish())
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
