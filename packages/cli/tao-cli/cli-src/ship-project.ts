@@ -60,7 +60,7 @@ export async function discoverShipProject(targetPath: string): Promise<ShipProje
   const parserContext = Parser.createContext()
   while (true) {
     const candidates = (await Repo.filesUnder(directory, { extensions: ['.tao'] }))
-      .filter(path => FS.dirname(path) === directory)
+      .filter(path => FS.dirname(path) === directory && !path.endsWith('.test.tao'))
     const projectFiles: Array<{ path: string; project: AST.ProjectDeclaration }> = []
     for (const path of candidates) {
       const parsed = await Parser.parseSource(parserContext, await FS.readText(path), {
