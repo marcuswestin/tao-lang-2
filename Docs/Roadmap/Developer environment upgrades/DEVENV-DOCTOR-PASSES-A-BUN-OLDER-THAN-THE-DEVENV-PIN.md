@@ -18,10 +18,25 @@
   usable`, and the slice-2 landing's `verify-full` ran on that Bun. A 1.4.2 Bun was already in the
   Nix store.
 - **Workaround:** Bring the primary checkout past the pin and reload its profile (`direnv reload`,
-  unsandboxed), or run the one command that needs the newer Bun with the store path directly.
-  `standalone-build.ts` refuses a Bun older than 1.4.2 on macOS and names the stale profile.
-- **Proposed change:** Have doctor compare the profile's Bun against the version the worktree's own
-  `devenv.nix` pins and report a mismatch as a failure naming whose profile is stale, rather than
-  passing whatever Bun is on `PATH`. Separately, decide whether a linked worktree should keep
-  borrowing a profile built from another branch's `devenv.nix` at all.
+  unsandboxed), or give one worktree its own profile by running `direnv allow && direnv exec .
+  ./agent setup` in it from an ordinary terminal. `standalone-build.ts` refuses a Bun older than
+  1.4.2 on macOS and names the stale profile.
+- **Proposed change:** Tie each worktree's toolchain to its own devenv inputs, discussed with the
+  Developer on 2026-09-23:
+  - A profile is keyed by the hash of the worktree's `devenv.nix`, `devenv.lock`, and `devenv.yaml`
+    rather than borrowed from whichever branch the primary checkout holds. Worktrees with identical
+    inputs link one shared profile, as fast as today's link; the first worktree with new inputs
+    builds it. A Bun-only pin reuses everything else already in the store; a `devenv.lock` bump that
+    moves nixpkgs can fetch the Android SDK and NDK the profile carries, so it may take minutes.
+  - The session-start hook builds or links that profile. It already runs outside the Bash sandbox
+    (`.rulesync/hooks.jsonc`), where the Nix daemon is reachable; the sandbox cannot connect to it.
+  - Setup asserts, on every run, that the Bun on the profile's `PATH` is the one the worktree's own
+    `devenv.nix` pins, and fails naming whose profile is stale. Doctor reports the same check.
+  - **Mid-session gap.** A branch that merges a toolchain change mid-session keeps its old profile
+    until something outside the sandbox rebuilds it; setup's assertion is what makes that visible.
+    No new session is needed to repair it: `./agent` resolves `.devenv/profile` on every call, and
+    the `PATH` the session-start hook exports names that link rather than a store path, so a person
+    running `./agent setup` in the worktree from an ordinary terminal hands the running agent the
+    new toolchain on its next command. Processes already running, such as a dev server or a watch,
+    keep the old Bun until restarted.
 - **Dependencies:** None.
