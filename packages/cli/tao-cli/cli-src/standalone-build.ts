@@ -7,19 +7,41 @@ import { StandaloneResources } from './standalone-resources'
  * unpacks on first run embedded inside it. `just standalone-cli-build` runs it after generating the
  * parser, which the binary bundles and a fresh worktree does not yet have.
  *
+ *   standalone-build.ts [outfile]                         a development binary, no version stamped
+ *   standalone-build.ts --release <version> [--releases <url>]
+ *                                                         the files one GitHub release publishes
+ *
  * The payload is staged as a real tree before it is packed, in the layout `TaoResources` reads, so a
  * failure can be inspected on disk and the staged tree can stand in for an installed one through
  * `TAO_RESOURCES`.
  */
 
 const BUILD_ROOT = '.artifacts/build'
+const RELEASE_ROOT = '.artifacts/release'
 const ENTRY_POINT = 'packages/cli/tao-cli/cli-src/tao-standalone.ts'
+const INSTALL_SCRIPT = 'packages/cli/tao-cli/cli-src/standalone-install.sh'
+
+/** RELEASES_PLACEHOLDER is the token in the install script that a release replaces with its URL. */
+const RELEASES_PLACEHOLDER = '@TAO_RELEASES@'
 
 /**
  * MINIMUM_DARWIN_BUN is the first Bun whose compiled binary macOS 27 will run: earlier ones append
  * their payload after the code signature, and the kernel kills the result on launch.
  */
 const MINIMUM_DARWIN_BUN = '1.4.2'
+
+/** A release version is plain semver, because the install script puts it in a download URL. */
+const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+
+/**
+ * KNOWN_GAPS is what a release's notes say the standalone binary cannot do yet. Each slice of the
+ * standalone plan removes its line when it lands, so a release cannot overstate the binary.
+ */
+const KNOWN_GAPS = [
+  '`tao dev` does not run from the standalone binary yet; use a checkout for the dev loop.',
+  '`tao test` does not run from the standalone binary yet; `tao create` needs `--skip-tests`.',
+  'The binary is not signed or notarized yet.',
+] as const
 
 /** Package paths the payload copies, each package to its place in the resource layout. */
 const COPIED_TREES = [
@@ -30,13 +52,67 @@ const COPIED_TREES = [
 ] as const
 
 try {
-  await buildStandalone(Platform.runtimeProcess.argv[2] ?? `${BUILD_ROOT}/tao`)
+  await main(Platform.runtimeProcess.argv.slice(2))
 } catch (error) {
   HCI.writeErrorLine(Errors.formatForUser(error))
   Platform.runtimeProcess.exit(1)
 }
 
-async function buildStandalone(outfile: string): Promise<void> {
+async function main(args: readonly string[]): Promise<void> {
+  const version = optionValue(args, '--release')
+  if (version === undefined) {
+    await buildBinary(args[0] ?? `${BUILD_ROOT}/tao`)
+  } else {
+    await buildRelease(version, optionValue(args, '--releases'))
+  }
+}
+
+/**
+ * buildRelease writes the files one release publishes into `.artifacts/release/v<version>/`: the
+ * gzipped binary under a name without its version, so `releases/latest/download/` can find it; its
+ * SHA-256; the install script pointed at these releases; a release index; and draft notes. It prints
+ * the `gh release create` command rather than running it, because publishing is the Developer's step.
+ */
+async function buildRelease(version: string, releasesOption: string | undefined): Promise<void> {
+  if (!RELEASE_VERSION.test(version)) {
+    Errors.throwUserInput(`A release version is semver like 0.4.0; ${JSON.stringify(version)} is not.`)
+  }
+  const repoRoot = Repo.getRoot()
+  const releases = releasesOption ?? await originReleases(repoRoot)
+  const target = hostTarget()
+  const directory = FS.resolvePath(`${RELEASE_ROOT}/v${version}`, repoRoot)
+  const binary = FS.resolvePath(`${BUILD_ROOT}/standalone/tao-${version}`, repoRoot)
+  await buildBinary(binary, version)
+
+  await FS.remove(directory)
+  const asset = `tao-${target}.gz`
+  const compressed = Bun.gzipSync(new Uint8Array(await FS.readFile(binary)), { level: 9 })
+  const sha256 = Platform.sha256Hex(compressed)
+  await FS.writeFile(FS.resolvePath(asset, directory), compressed)
+  await FS.writeText(FS.resolvePath(`${asset}.sha256`, directory), `${sha256}  ${asset}\n`)
+
+  const installScript = await FS.readText(FS.resolvePath(INSTALL_SCRIPT, repoRoot))
+  await FS.writeText(FS.resolvePath('install.sh', directory), installScript.replaceAll(RELEASES_PLACEHOLDER, releases))
+  const commit = (await CLI.mustRun('git', { args: ['rev-parse', 'HEAD'], cwd: repoRoot })).stdout.trim()
+  await FS.writeJson(FS.resolvePath('release.json', directory), {
+    schemaVersion: 1,
+    version,
+    commit,
+    targets: { [target]: { asset, sha256 } },
+  })
+  await FS.writeText(FS.resolvePath('notes.md', directory), releaseNotes(version, releases))
+
+  const relative = FS.relativePath(repoRoot, directory)
+  const files = [asset, `${asset}.sha256`, 'install.sh', 'release.json'].map(name => `${relative}/${name}`)
+  HCI.logProcessInfo('standalone', `Wrote the Tao ${version} release to ${relative}.`)
+  HCI.writeLine(
+    `Publish it from the repository root, after reading notes.md:\n\n  gh release create v${version} `
+      + `${files.join(' ')} --title "Tao ${version}" --notes-file ${relative}/notes.md\n`,
+  )
+}
+
+/** buildBinary stages and packs the resource payload, then compiles the binary around it. */
+async function buildBinary(outfile: string, releaseVersion?: string): Promise<void> {
   assertBunCanCompile()
   const repoRoot = Repo.getRoot()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
@@ -52,8 +128,12 @@ async function buildStandalone(outfile: string): Promise<void> {
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
+  // `tao-version.ts` declares this global and nothing else defines it.
+  const stamp = releaseVersion === undefined
+    ? []
+    : ['--define', `TAO_RELEASE_VERSION=${JSON.stringify(releaseVersion)}`]
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
-    args: ['build', '--compile', '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
+    args: ['build', '--compile', ...stamp, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
     cwd: repoRoot,
     stdio: 'inherit',
   })
@@ -79,6 +159,48 @@ async function packTree(root: string, archive: string): Promise<number> {
   await FS.mkdir(FS.dirname(archive))
   await Bun.Archive.write(archive, files, { compress: 'gzip' })
   return Object.keys(files).length
+}
+
+/** originReleases is the Releases page of the GitHub repository `origin` names. */
+async function originReleases(repoRoot: string): Promise<string> {
+  const origin = (await CLI.mustRun('git', { args: ['remote', 'get-url', 'origin'], cwd: repoRoot })).stdout.trim()
+  const match = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(origin)
+  if (match === null) {
+    return Errors.throwUserInput(`origin is ${origin}, not a GitHub repository; pass --releases <url>.`)
+  }
+  return `https://github.com/${match[1]}/${match[2]}/releases`
+}
+
+/**
+ * hostTarget names this machine the way the install script does. The binary is built for the host,
+ * and the first release is macOS on Apple silicon only.
+ */
+function hostTarget(): string {
+  const target = `${Platform.hostPlatform}-${Platform.hostArch}`
+  if (target !== 'darwin-arm64') {
+    Errors.throwUserInput(`Releases are built on macOS on Apple silicon so far; this host is ${target}.`)
+  }
+  return target
+}
+
+function releaseNotes(version: string, releases: string): string {
+  return [
+    `Tao ${version} for macOS on Apple silicon.`,
+    '',
+    '```sh',
+    `curl -fsSL ${releases}/latest/download/install.sh | sh`,
+    '```',
+    '',
+    'Not yet in this release:',
+    '',
+    ...KNOWN_GAPS.map(gap => `- ${gap}`),
+    '',
+  ].join('\n')
+}
+
+function optionValue(args: readonly string[], name: string): string | undefined {
+  const index = args.indexOf(name)
+  return index === -1 ? undefined : args[index + 1]
 }
 
 function assertBunCanCompile(): void {

@@ -77,10 +77,11 @@ is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
   evidence, a nine-slice sequence, and the first-release decisions.
-- Progress: slices 1 and 2 have landed. The binary unpacks its stdlib, runtime, and host files on
-  first run and creates, checks, and compiles a project outside any checkout;
-  `just standalone-cli-acceptance` proves that much. `tao dev` and `tao test` do not yet work from
-  it.
+- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
+  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
+  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
+  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
+  `tao test` do not yet work from it.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
