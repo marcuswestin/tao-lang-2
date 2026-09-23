@@ -7,16 +7,16 @@ Remote inspection and push run directly on the host through `./agent unsandboxed
 process runs repository code and has the normal GitHub credential helper available. The final push
 updates main, the archive, and feature-branch deletion atomically with ref leases.
 
-The host command whitelist in `.rulesync/permissions.jsonc` grants `./agent unsandboxed land`,
-`finalize`, `landed`, and `capabilities` to default Codex and Claude agents. The old direct
-`./agent land` rule remains for Codex tasks started before this change.
+The one host prefix list in `.rulesync/permissions.jsonc` generates only `./agent unsandboxed …`
+rules for Codex and Claude Code. The wrapper checks the same list before dispatch; a plain
+`./agent land` stays sandboxed.
 Use landing only after the Developer authorizes this named slice; that authorization persists for retries in
 the same thread unless the Developer revokes it. Direct `just` and `./dev` landing aliases are human/recovery
 entry points, not agent host-access exceptions.
-A session can hold the permission rules it started with: Codex loads project-local rules only for
-a trusted project and at task startup, and Claude Code's `.claude/settings.json` is regenerated only
-by an unsandboxed `./agent fix-agent-config`. So a task that predates a rule change may need
-restarting before it can use the new permission.
+A session can hold the permission rules it started with: Codex loads project-local rules at task
+startup, so a new wrapper prefix needs a new task after it lands. Generated rules are tracked for
+fresh worktrees; after changing their source, `./agent setup` refreshes them where writable, or
+`./agent unsandboxed fix-agent-config` can refresh them in a task that has that prefix loaded.
 
 ## `./agent unsandboxed land`
 
