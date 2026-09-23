@@ -1,0 +1,2 @@
+# Codex needs this ignored, machine-local profile before a new managed task starts.
+.codex/config.toml
