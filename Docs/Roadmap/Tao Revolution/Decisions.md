@@ -1943,6 +1943,12 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
+- **A clause list names only lowercase styles** (decided 2026-09-23). An element default applies by
+  element and is never named in a clause list; a default that needs another's clauses restates them
+  or takes a condition, the way a state does. Design names — colors, sizes, text styles, and styles
+  — are lowercase, and a Capitalized word in a clause list is a value (a parameter, state, or
+  environment value), so a clause head, a design name, and a value never share a spelling and no
+  reference marker is needed.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
@@ -1997,6 +2003,9 @@ design SkilletDesign {
   contrast, naming, heading order, and declared tap minimums are build diagnostics; layout-dependent
   rules (200% clipping, overflow) are measured over the scenario gallery; perceptual rules (meaning
   without colour) are stated here as review criteria the gallery surfaces, never as pass/fail.
+  **Deferred past MVP** (decided 2026-09-23): the MVP ships no `rules { }` checks, no runtime
+  validation, and no review automation. The static analysis this needs, and why it waits, is in
+  the design system plan's "Design rules — deferred past MVP".
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
 - **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
@@ -2389,7 +2398,8 @@ scenarios Recipe "devices" {
     Because raw values are confined to the design and screens speak in names (§13), contrast to WCAG
     AA is checkable per (ink, background, scheme) pair at compile time; unnamed interactive elements,
     heading order, declared tap-target minimums, and raw-values-outside-the-design are ordinary
-    validator errors.
+    validator warnings, not errors (decided 2026-09-23). The rule checks are deferred past MVP
+    (§13); raw values outside the design already warn.
   - **Rules that need rendered layout annotate the scenario gallery for human review.** `tao review`
     renders every `scenario` (each is a pinned, buildable state — that is what they are for) into a
     gallery, flagging what it can measure there — text clipping at 200% scale, horizontal overflow —
