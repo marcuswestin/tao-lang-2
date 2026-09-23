@@ -118,7 +118,9 @@ async function buildIosSimulator(packageRoot: string): Promise<string> {
       IOS_DERIVED_DATA_PATH,
       'ARCHS=arm64 x86_64',
       'ONLY_ACTIVE_ARCH=NO',
-      'CODE_SIGNING_ALLOWED=NO',
+      // Signed ad hoc, not unsigned: Xcode embeds a simulator app's entitlements only while signing
+      // it, and without them CloudKit aborts the app the first time a Tao app asks for a container.
+      'CODE_SIGN_IDENTITY=-',
       'build',
     ],
     cwd: iosRoot,
@@ -133,7 +135,31 @@ async function buildIosSimulator(packageRoot: string): Promise<string> {
   if (app === undefined) {
     Errors.throwUnexpected(`Expected: xcodebuild leaves the built app in ${FS.displayPath(products)}.`)
   }
-  return FS.resolvePath(app, products)
+  const appPath = FS.resolvePath(app, products)
+  await requireSimulatorEntitlements(appPath)
+  return appPath
+}
+
+/**
+ * The simulator reads an app's entitlements from a `__TEXT,__entitlements` section of its main
+ * executable, which Xcode writes only for a signed build. The Companion always claims entitlements
+ * (`tao-icloud`'s iCloud and push), and its Info.plist tells the CloudKit module they are there, so a
+ * build without the section would pass that module's guard and then abort inside CloudKit. It is
+ * refused here instead, where the cause is still visible.
+ */
+async function requireSimulatorEntitlements(appPath: string): Promise<void> {
+  const executable = await CLI.mustRun('plutil', {
+    args: ['-extract', 'CFBundleExecutable', 'raw', FS.resolvePath('Info.plist', appPath)],
+  })
+  const loadCommands = await CLI.mustRun('otool', {
+    args: ['-l', FS.resolvePath(executable.stdout.trim(), appPath)],
+  })
+  if (!/sectname __entitlements\b/u.test(loadCommands.stdout)) {
+    Errors.throwHostEnvironment(
+      `xcodebuild built ${CompanionIdentity.name} without embedded entitlements; a simulator host must be `
+        + 'signed (ad hoc is enough) for Xcode to embed them, or CloudKit aborts the app at launch.',
+    )
+  }
 }
 
 /** CompanionHostPublishOptions are the seams a test replaces: the checkout and the process runner. */
