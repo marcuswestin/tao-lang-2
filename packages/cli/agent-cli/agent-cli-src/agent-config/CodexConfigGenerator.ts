@@ -113,6 +113,10 @@ function renderCodexConfig(
   delegationSkill = '',
 ): string {
   const read = permissions.permission?.read ?? {}
+  // Codex refuses to bypass its sandbox for an explicit host allow rule when the active profile
+  // contains any denied-read path. Keep those protections in the read-only review profile, but
+  // leave them out of the default workspace profile so its exact host commands can run.
+  const hostCapableRead = Object.fromEntries(Object.entries(read).filter(([, action]) => action !== 'deny'))
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
   return [
@@ -145,9 +149,7 @@ function renderCodexConfig(
     `extends = ${quote(PROFILE_BASE)}`,
     'description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."',
     '',
-    ...filesystemSection(PROFILE, read, allowWrite),
-    '',
-    ...workspaceRootsSection(PROFILE, read),
+    ...filesystemSection(PROFILE, hostCapableRead, allowWrite),
     '',
     ...networkSection(PROFILE, network, network.allowUnixSockets ?? []),
     '',
@@ -318,10 +320,14 @@ function filesystemSection(profile: string, read: Record<string, string>, allowW
 }
 
 function workspaceRootsSection(profile: string, read: Record<string, string>): string[] {
+  const denied = workspaceRules(read, 'deny')
+  if (denied.length === 0) {
+    return []
+  }
   return [
     `[permissions.${profile}.filesystem.":workspace_roots"]`,
     "# Not `.env*`: that pattern also matches this repository's own `.envrc`.",
-    ...workspaceRules(read, 'deny').map(pattern => `${quote(pattern)} = "deny"`),
+    ...denied.map(pattern => `${quote(pattern)} = "deny"`),
   ]
 }
 

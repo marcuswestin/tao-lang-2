@@ -93,6 +93,9 @@
     "read": {
       // The previous repository is reference material (see AGENTS.md).
       "~/code/tao-lang/**": "allow",
+      // Claude Code and Codex's read-only review profile enforce these denials. Codex's default
+      // workspace profile omits them: Codex will not honor an explicit host command rule when
+      // any denied-read pattern is active. AGENTS.md still forbids agents from reading them.
       // Not `.env*`: that pattern also matches this repository's own `.envrc`.
       "**/.env": "deny",
       "**/.env.*": "deny",

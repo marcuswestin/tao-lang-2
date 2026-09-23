@@ -128,7 +128,8 @@ Describe('Codex config generation', () => {
     Expect(parsed['default_permissions']).toBe('tao-workspace')
     Expect(profile['extends']).toBe(':workspace')
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
-    Expect(profile['filesystem']['~/.ssh/**']).toBe('deny')
+    Expect(profile['filesystem']['~/.ssh/**']).toBeUndefined()
+    Expect(parsed['permissions']['tao-review']['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
     Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman/test-state/sock', FS.homeDir())])
@@ -203,19 +204,22 @@ Describe('Codex config generation', () => {
     // harness is keeping.
     Expect(filesystem['~/.bun']).toBe('write')
     Expect(filesystem['~/.cache']).toBe('write')
-    // A credential deny inside a granted tree still has to win, so denies are rendered last.
-    Expect(filesystem['~/.ssh/**']).toBe('deny')
+    // The default profile must have no denied reads or Codex cannot run its exact host rules.
+    Expect(filesystem['~/.ssh/**']).toBeUndefined()
   })
 
-  Test("denies dotenv files without denying this repository's own .envrc", () => {
+  Test('keeps denied reads out of the host-capable default but in the review profile', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
     )
-    const workspaceRoots =
-      (Platform.parseToml(rendered) as any)['permissions']['tao-workspace']['filesystem'][':workspace_roots']
+    const profiles = (Platform.parseToml(rendered) as any)['permissions']
+    const workspace = profiles['tao-workspace']['filesystem']
+    const review = profiles['tao-review']['filesystem']
 
-    Expect(Object.keys(workspaceRoots).toSorted()).toEqual(['**/.env', '**/.env.*'])
+    Expect(Object.values(workspace)).not.toContain('deny')
+    Expect(workspace[':workspace_roots']).toBeUndefined()
+    Expect(Object.keys(review[':workspace_roots']).toSorted()).toEqual(['**/.env', '**/.env.*'])
     Expect(rendered).not.toContain('**/.env*"')
   })
 
