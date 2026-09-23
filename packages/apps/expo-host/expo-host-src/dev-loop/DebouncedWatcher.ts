@@ -78,10 +78,7 @@ export function startDebouncedWatcher(
   options: DebouncedWatcherOptions,
 ): DebouncedWatcher {
   const debouncer = createEventDebouncer(onChange, options)
-  // Bun 1.4.2 drops native edit events on macOS 27 in both tao test --watch and the dev loop.
-  // Poll only for that measured runtime; callers can still choose a backend explicitly.
-  const usePolling = options.usePolling
-    ?? (Platform.hostPlatform === 'darwin' && Platform.runtimeBunVersion === '1.4.2')
+  const usePolling = options.usePolling ?? defaultsToPolling(Platform.hostPlatform, Platform.runtimeBunVersion)
   const watcher = chokidar.watch([...paths], {
     ignoreInitial: true,
     ignored: shouldIgnoreWatchPath,
@@ -94,6 +91,24 @@ export function startDebouncedWatcher(
       await watcher.close()
     },
   }
+}
+
+/**
+ * FIRST_BUN_WITHOUT_MACOS_EVENTS is the Bun that stopped delivering native file-edit events on macOS
+ * 27, in both `tao test --watch` and the dev loop; 1.3.13 delivered them.
+ */
+const FIRST_BUN_WITHOUT_MACOS_EVENTS = '1.4.2'
+
+/**
+ * defaultsToPolling reports whether a watcher on this platform and runtime polls when its caller does
+ * not choose. Every Bun from the one that broke native events onward polls, not only that release:
+ * polling on a Bun that has since fixed them costs some CPU, while native watching on one that has
+ * not misses edits without a word. Under Node there is no Bun version, and native events work.
+ */
+export function defaultsToPolling(platform: string, bunVersion: string | undefined): boolean {
+  return platform === 'darwin'
+    && bunVersion !== undefined
+    && Platform.semverSatisfies(bunVersion, `>=${FIRST_BUN_WITHOUT_MACOS_EVENTS}`)
 }
 
 /** shouldIgnoreWatchPath excludes noisy, generated, or vendored paths every dev-loop watcher skips. */

@@ -5,6 +5,7 @@ import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
+import { TaoVersion } from './tao-version'
 
 type InPlaceLabels = {
   /** changed labels per-file and summary output, e.g. `formatted`. */
@@ -34,6 +35,7 @@ function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
+    .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
     .command('create')
