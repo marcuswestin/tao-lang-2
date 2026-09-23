@@ -568,8 +568,8 @@ whether each name is set — and none of them belongs in a file that is committe
 
 4. **Choose the release repository.** Create a public GitHub repository with a `main` branch. Its
    latest published release must always carry the stable Studio update files. A dedicated Studio
-   releases repository is simplest. A shared Tao repository works only if every later release carries them;
-   an unrelated CLI-only release would become GitHub's `latest` and break Studio updates. GitHub's
+   releases repository is simplest. In a shared Tao repository, publish CLI releases with
+   `--latest=false` so the latest release continues to carry Studio updates. GitHub's
    `latest` URL excludes prereleases, so use another static host for auto-updating canary builds.
    Log in with `gh auth login` on the release machine. The prepare recipe derives the URL from
    `OWNER/REPO`; `TAO_STUDIO_RELEASE_BASE_URL` remains available for lower-level builds.

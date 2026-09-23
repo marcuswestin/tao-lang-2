@@ -216,8 +216,8 @@ standalone-cli-release version: _parser-gen
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0-acceptance
-    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0-acceptance
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
