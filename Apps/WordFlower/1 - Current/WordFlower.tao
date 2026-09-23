@@ -554,6 +554,11 @@ app WordFlowerInstantDB = WordFlower with {
    Datasource WordFlowerInstantDBStore
 }
 
+app WordFlowerLocalInstantDB = WordFlower with {
+   Name "WordFlower - Local InstantDB"
+   Datasource WordFlowerLocalInstantDBStore
+}
+
 fixture StudioWorkspace {
    Novel = create Workspace {
       Name: "Novel"
@@ -619,8 +624,14 @@ datasource DeviceStore = Local {
    StorageKey "WordFlowerData"
 }
 
-// Experimental sync fixture backed by `just start-local-instantdb`.
+// The public sync demo uses the hosted app. InstantDB's default endpoints reach Instant Cloud.
 datasource WordFlowerInstantDBStore = InstantDB {
+   StorageKey "WordFlowerData"
+   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
+}
+
+// Local development keeps the same app ID in the repository's self-hosted fixture.
+datasource WordFlowerLocalInstantDBStore = InstantDB {
    StorageKey "WordFlowerData"
    AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
    ApiURI "http://localhost:9020"
