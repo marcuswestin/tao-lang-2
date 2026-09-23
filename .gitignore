@@ -8,6 +8,8 @@ node_modules
 .claude/agents/
 .claude/worktrees/
 .codex/agents/
+# Rendered per machine by `./agent setup`: its socket and Git paths are absolute (see its header).
+.codex/config.toml
 .cursor/agents/
 
 .android

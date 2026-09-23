@@ -118,6 +118,7 @@ Describe('agent hooks', () => {
         'stage, unstage',
         'developer environment',
         'no agent identity',
+        'cover every provider in use',
         'Messaging another agent',
       ]
     ) {
