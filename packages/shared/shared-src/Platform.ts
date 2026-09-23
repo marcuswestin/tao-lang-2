@@ -50,6 +50,9 @@ export function randomUUID(): string {
 /** hostPlatform is the OS on which the CLI process runs. */
 export const hostPlatform = process.platform
 
+/** hostArch is the CPU architecture the CLI process runs on, as Node names it: `arm64`, `x64`. */
+export const hostArch = process.arch
+
 /** runtimeBunVersion identifies runtime-specific host workarounds without probing the CLI path. */
 export const runtimeBunVersion = process.versions.bun
 

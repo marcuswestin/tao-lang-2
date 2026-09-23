@@ -570,6 +570,34 @@ version index with the binary on GitHub Releases in the public repository, sign 
 and publish the install script. Later releases may add the other four targets, Windows signing,
 Homebrew, and an npm wrapper with per-platform optional dependencies.
 
+_Landed 2026-09-23, unpublished._ `just standalone-cli-release 0.4.0` writes one release's files to
+`.artifacts/release/v0.4.0/` and prints the `gh release create` command; publishing waits on the
+public repository. What it settled:
+
+- The binary ships gzipped as `tao-darwin-arm64.gz` (28 MB, from 67 MB), beside its `.sha256`, the
+  install script, `release.json` (version, commit, and each target's asset and hash), and draft
+  notes. Asset names carry no version, so `releases/latest/download/` finds them.
+- `tao --version` prints the version the release build stamps in with `--define`, or `development`
+  from source. The install script reads the version from the binary rather than parsing an index,
+  and that first run unpacks the resources inside the version's own directory before it is renamed
+  into place.
+- The install script puts the binary in `versions/<version>/`, points `bin/tao` at it until slice
+  8's shim replaces that link, and links `tao` into the first writable directory under `$HOME` on
+  `PATH` that does not hold another `tao`, printing the `PATH` line only when there is none.
+  `TAO_VERSION` pins a release, `TAO_HOME` relocates everything, and `TAO_RELEASES` points at another
+  copy of the releases.
+- `curl` sets no `com.apple.quarantine`, only `com.apple.provenance`, which Gatekeeper does not act
+  on, so an unsigned binary fetched by the install script runs without a Gatekeeper prompt. Signing
+  still matters for a binary someone downloads with a browser.
+- `standalone-install.test.ts` covers the install script in the ordinary suite with a stand-in
+  binary. `just standalone-cli-acceptance` installs a real release through `curl | sh` into a
+  throwaway `$HOME` and runs `create`, `check`, and `compile` from `PATH`. It stays a recipe rather
+  than a suite test while the lanes on this machine run Bun 1.3.13 (see
+  `DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN`), because a binary that Bun builds is killed
+  on launch.
+- The release notes list what the binary cannot do yet from `KNOWN_GAPS` in `standalone-build.ts`,
+  which later slices shorten as they land.
+
 **8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
 resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
 

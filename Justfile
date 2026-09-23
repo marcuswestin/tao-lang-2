@@ -183,10 +183,16 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stab
 standalone-cli-build: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
 
-# Build the standalone Tao binary and prove it creates, checks, and compiles a project outside any checkout with no Bun or Node on PATH
+# Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-acceptance: standalone-cli-build
-    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/build/tao
+standalone-cli-release version: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
+[group('Ship')]
+standalone-cli-acceptance: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0-acceptance
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0-acceptance
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
