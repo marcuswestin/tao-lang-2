@@ -13,8 +13,10 @@ and Claude exceptions in `.rulesync/permissions.jsonc` give the entire landing p
 Use it only after the Developer authorizes landing this named slice; that authorization persists for retries in
 the same thread unless the Developer revokes it. Direct `just` and `./dev` landing aliases are human/recovery
 entry points, not agent host-access exceptions.
-Codex loads project-local rules only for a trusted project and at task startup, so a task that
-predates a rule change may need restarting before it can use the new permission.
+A session can hold the permission rules it started with: Codex loads project-local rules only for
+a trusted project and at task startup, and Claude Code's `.claude/settings.json` is regenerated only
+by an unsandboxed `./agent fix-agent-config`. So a task that predates a rule change may need
+restarting before it can use the new permission.
 
 ## `./agent land`
 

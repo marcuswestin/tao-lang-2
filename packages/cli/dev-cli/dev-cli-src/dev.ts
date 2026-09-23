@@ -737,6 +737,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('companion-host-publish')
+    .description(
+      'Publish the Android host built for the Tao Companion as it stands to its GitHub release, where tao dev downloads it.',
+    )
+    .action(async () => {
+      try {
+        const { runCompanionHostPublish } = await import('@studio-tooling/CompanionHostBuild')
+        Platform.runtimeProcess.exit(await runCompanionHostPublish())
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('studio-native')
     .description(
       'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',

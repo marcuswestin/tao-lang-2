@@ -23,6 +23,7 @@ import {
   StudioSessionPath,
   type StudioSessionResource,
 } from '@studio'
+import { enclosingWatchRoot } from '@verification/WatchmanHealth'
 import betterOpen from 'better-opn'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
@@ -202,10 +203,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     // Read here rather than exported into the environment: everything Studio starts inherits an environment,
     // and only the chat needs these. `--native` takes the same path, which is why it was missing them too.
     const agentSecrets = await SecretsFile.readDecryptedSecrets()
-    if (
-      agentSecrets['ANTHROPIC_API_KEY'] === undefined && Platform.runtimeProcess.env['ANTHROPIC_API_KEY'] === undefined
-    ) {
-      HCI.logProcessInfo('studio', 'Agent chat: no ANTHROPIC_API_KEY; run `just secrets` to decrypt one.')
+    const agentKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+    if (agentKeys.every(key => agentSecrets[key] === undefined && Platform.runtimeProcess.env[key] === undefined)) {
+      HCI.logProcessInfo(
+        'studio',
+        `Agent chat: no ${
+          agentKeys.join(' or ')
+        }; run \`just secrets\` to decrypt one, or \`just secrets add <NAME>\`.`,
+      )
     }
     server = await startStudioSessionServer(manager, {
       agentSecrets,
@@ -634,7 +639,8 @@ async function studioWatchmanEnvironment(
     )
   }
   const watchRoot = options.watchRoot ?? repositoryRoot
-  const result = await (options.run ?? CLI.run)(executable, {
+  const run = options.run ?? CLI.run
+  const result = await run(executable, {
     args: ['watch-project', watchRoot],
     stdio: 'pipe',
   })
@@ -649,6 +655,26 @@ async function studioWatchmanEnvironment(
     throwWatchmanPreflightError(
       `not usable at ${executable}`,
       `Run \`${executable} version\` to diagnose Watchman, then retry Studio.`,
+    )
+  }
+  // Watchman answers with an existing watch that encloses the checkout before it honors the
+  // checkout's own root marker, so a watched primary checkout folds every worktree nested in it into
+  // one watch. One that no dev server subscribes to is released and the watch asked for again; one
+  // still in use is left alone, and Studio refuses rather than have Metro crawl every worktree.
+  const checkout = await FS.realPath(repositoryRoot).catch(() => repositoryRoot)
+  const enclosingIn = (output: string) => {
+    const watched = watchmanWatchRoot(output)
+    return watched === undefined ? undefined : enclosingWatchRoot([watched], checkout)
+  }
+  let enclosing = enclosingIn(result.stdout)
+  if (enclosing !== undefined && await watchIsIdle(run, executable, enclosing)) {
+    await run(executable, { args: ['watch-del', enclosing], stdio: 'pipe' })
+    const again = await run(executable, { args: ['watch-project', watchRoot], stdio: 'pipe' })
+    enclosing = again.error === undefined && again.exitCode === 0 ? enclosingIn(again.stdout) : enclosing
+  }
+  if (enclosing !== undefined) {
+    Errors.throwHostEnvironment(
+      `Tao Studio cannot start Metro on its own watch: Watchman is watching ${enclosing}, which encloses this checkout, and a dev server is still subscribed to it, so Metro would crawl every worktree beneath it. Once that server stops, retry Studio: it releases an enclosing watch nothing uses.`,
     )
   }
   const environment = options.environment ?? Platform.runtimeProcess.env
@@ -680,6 +706,32 @@ function watchmanCapabilityNames(output: string): ReadonlySet<string> {
   }
 }
 
+/** watchIsIdle is true only when Watchman positively reports no subscription on `root`. */
+async function watchIsIdle(
+  run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>,
+  executable: string,
+  root: string,
+): Promise<boolean> {
+  const listed = await run(executable, { args: ['--no-pretty', 'debug-get-subscriptions', root], stdio: 'pipe' })
+  try {
+    const parsed: unknown = JSON.parse(listed.stdout)
+    return listed.exitCode === 0 && Json.isRecord(parsed)
+      && Array.isArray(parsed['subscribers']) && parsed['subscribers'].length === 0
+      && Array.isArray(parsed['subscriptions']) && parsed['subscriptions'].length === 0
+  } catch {
+    return false
+  }
+}
+
+function watchmanWatchRoot(output: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(output)
+    return Json.isRecord(parsed) && typeof parsed['watch'] === 'string' ? parsed['watch'] : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function watchmanSocketName(output: string): string | undefined {
   try {
     const parsed: unknown = JSON.parse(output)
@@ -693,7 +745,7 @@ function watchmanSocketName(output: string): string | undefined {
 
 function throwWatchmanPreflightError(problem: string, remediation: string): never {
   Errors.throwHostEnvironment(
-    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to Node watching and can exhaust macOS file descriptors (EMFILE). ${remediation}`,
+    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching, which an agent sandbox refuses outright (Node reports it as EMFILE). ${remediation}`,
   )
 }
 

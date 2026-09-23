@@ -5,7 +5,7 @@
 - **Area:** Worktree setup
 - **Impact:** The one setup entry leaves a new worktree unable to run the product; the first Studio launch
   fails with a module error that reads like a broken checkout rather than a missing step.
-- **Evidence:** In a new `.claude/worktrees/` checkout, `./agent setup` ran only `bun install`; `./dev studio
+- **Evidence:** In a new linked agent worktree, `./agent setup` ran only `bun install`; `./dev studio
   Apps/HNReader` then exited with `Cannot find module './_gen_tao-parser/module'` until
   `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` gate) had run.
   `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file

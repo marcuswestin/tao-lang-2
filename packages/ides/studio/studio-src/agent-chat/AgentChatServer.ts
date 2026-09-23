@@ -628,6 +628,9 @@ export const AgentChat = {
     if (command === 'enable') {
       return conversation.provider.enable(body['enabled'] === true)
     }
+    if (command === 'provider') {
+      return conversation.provider.choose(String(body['provider'] ?? ''))
+    }
     if (command === 'reset') {
       await conversation.reset()
       return { status: 'reset' }

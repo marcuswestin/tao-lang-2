@@ -1,14 +1,28 @@
 import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
-import { type HostManifest, nativeKitOf, writeHostManifest } from '@expo-host/dev-loop/prebuilt-host/HostManifest'
-import { CHECKOUT_HOSTS_PATH, HOST_BINARIES } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
+import {
+  HOST_BINARIES,
+  hostKey,
+  type HostManifest,
+  type HostPlatform,
+  nativeKitOf,
+  readHostManifest,
+  writeHostManifest,
+} from '@expo-host/dev-loop/prebuilt-host/HostManifest'
+import {
+  hostReleaseAssets,
+  hostReleasesRepository,
+  hostReleaseTag,
+} from '@expo-host/dev-loop/prebuilt-host/HostReleases'
+import { CHECKOUT_HOSTS_PATH } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 
 /*
- * Builds the Tao Companion as a prebuilt Android host. Expo prebuild writes the native project,
- * Gradle assembles a debug APK — a development client, which runs whatever bundle Metro serves it —
- * and the APK lands in this checkout's host cache beside a manifest naming the native kit it was
- * built with. `tao dev` installs it on an emulator whenever that kit covers the one it computes for
- * itself, and falls back to Expo Go when none does.
+ * Builds the Tao Companion as a prebuilt Android host, and publishes one. Expo prebuild writes the
+ * native project, Gradle assembles a debug APK — a development client, which runs whatever bundle
+ * Metro serves it — and the APK lands in this checkout's host cache beside a manifest naming the
+ * native kit it was built with. `tao dev` installs it on an emulator whenever that kit covers the one
+ * it computes for itself, and falls back to Expo Go when none does. Publishing puts the same two
+ * files on a GitHub release, where any `tao dev` can download them.
  */
 
 const APK_OUTPUT_PATH = 'app/build/outputs/apk/debug/app-debug.apk'
@@ -50,18 +64,102 @@ export async function runCompanionHostBuild(options: CompanionHostBuildOptions =
     Errors.throwHostEnvironment(`Gradle could not assemble ${CompanionIdentity.name}; its output above says why.`)
   }
 
-  const manifest: HostManifest = {
-    format: 1,
-    hostVersion: await companionVersion(packageRoot),
-    nativeKit: await nativeKitOf(packageRoot),
-    platform: 'android',
-  }
-  const hostDirectory = FS.resolvePath(`${CHECKOUT_HOSTS_PATH}/${manifest.hostVersion}/android`, root)
-  await publishHost(hostDirectory, FS.resolvePath(APK_OUTPUT_PATH, androidRoot), manifest)
+  const manifest = await companionHostManifest(packageRoot, 'android')
+  const hostDirectory = checkoutHostDirectory(root, manifest)
+  await placeHost(hostDirectory, FS.resolvePath(APK_OUTPUT_PATH, androidRoot), manifest)
   HCI.writeSuccess(
     `Built ${CompanionIdentity.name} ${manifest.hostVersion} for Android at ${FS.displayPath(hostDirectory)}.\n`,
   )
   return 0
+}
+
+/** CompanionHostPublishOptions are the seams a test replaces: the checkout and the process runner. */
+export type CompanionHostPublishOptions = {
+  repositoryRoot?: string
+  run?: typeof CLI.run
+}
+
+/**
+ * runCompanionHostPublish puts the Android host built for the Companion as it stands on its GitHub
+ * release, creating the release when it is new. A host built from an older Companion is refused
+ * rather than published under the current name, since the release tag is the kit it carries.
+ */
+export async function runCompanionHostPublish(options: CompanionHostPublishOptions = {}): Promise<number> {
+  const root = options.repositoryRoot ?? Repo.getRoot()
+  const run = options.run ?? CLI.run
+  const expected = await companionHostManifest(FS.resolvePath(CompanionIdentity.packagePath, root), 'android')
+  const hostDirectory = checkoutHostDirectory(root, expected)
+  const built = await readHostManifest(hostDirectory)
+  const binary = FS.resolvePath(HOST_BINARIES.android, hostDirectory)
+  if (built === undefined || !await FS.isFile(binary)) {
+    Errors.throwUserInput(
+      `No Android host is built for ${CompanionIdentity.name} as it stands (${hostKey(expected)}). `
+        + 'Run `just companion-host-build` first.',
+    )
+  }
+
+  const repository = hostReleasesRepository()
+  const tag = hostReleaseTag(built)
+  const names = hostReleaseAssets('android')
+  const staging = await FS.mkTmpDir(FS.resolvePath('tao-host-publish-', FS.tmpdir()))
+  try {
+    await FS.copyFile(binary, FS.resolvePath(names.binary, staging))
+    await FS.writeJson(FS.resolvePath(names.manifest, staging), built)
+    const existing = await run('gh', { args: ['release', 'view', tag, '--repo', repository, '--json', 'tagName'] })
+    if (existing.error !== undefined) {
+      Errors.throwUserInput('gh is not installed. Install the GitHub CLI, then run `gh auth login`.')
+    }
+    if (existing.exitCode !== 0) {
+      await mustRunGh(run, [
+        'release',
+        'create',
+        tag,
+        '--repo',
+        repository,
+        '--prerelease',
+        '--latest=false',
+        '--title',
+        `${CompanionIdentity.name} ${built.hostVersion} host (${hostKey(built)})`,
+        '--notes',
+        `Prebuilt ${CompanionIdentity.name} hosts that \`tao dev\` downloads when their native kit covers its own. `
+        + `Each platform carries a \`tao-host-<platform>.json\` manifest beside its binary.`,
+      ])
+    }
+    await mustRunGh(run, [
+      'release',
+      'upload',
+      tag,
+      '--repo',
+      repository,
+      '--clobber',
+      FS.resolvePath(names.manifest, staging),
+      FS.resolvePath(names.binary, staging),
+    ])
+  } finally {
+    await FS.remove(staging)
+  }
+  HCI.writeSuccess(`Published ${CompanionIdentity.name} ${built.hostVersion} for Android to ${repository} as ${tag}.\n`)
+  return 0
+}
+
+async function mustRunGh(run: typeof CLI.run, args: string[]): Promise<void> {
+  const result = await run('gh', { args, stdio: 'inherit' })
+  if (result.error !== undefined || result.exitCode !== 0) {
+    Errors.throwHostEnvironment(`gh ${args.slice(0, 2).join(' ')} failed; its output above says why.`)
+  }
+}
+
+async function companionHostManifest(packageRoot: string, platform: HostPlatform): Promise<HostManifest> {
+  return {
+    format: 1,
+    hostVersion: await companionVersion(packageRoot),
+    nativeKit: await nativeKitOf(packageRoot),
+    platform,
+  }
+}
+
+function checkoutHostDirectory(root: string, manifest: HostManifest): string {
+  return FS.resolvePath(`${CHECKOUT_HOSTS_PATH}/${hostKey(manifest)}/${manifest.platform}`, root)
 }
 
 /**
@@ -154,7 +252,7 @@ async function companionVersion(packageRoot: string): Promise<string> {
  * cache meanwhile finds the old host, then none, then the new one — never an APK without its
  * manifest or a manifest describing a different APK.
  */
-async function publishHost(hostDirectory: string, apkPath: string, manifest: HostManifest): Promise<void> {
+async function placeHost(hostDirectory: string, apkPath: string, manifest: HostManifest): Promise<void> {
   if (!await FS.isFile(apkPath)) {
     Errors.throwUnexpected(`Expected: Gradle's assembleDebug leaves its APK at ${FS.displayPath(apkPath)}.`)
   }

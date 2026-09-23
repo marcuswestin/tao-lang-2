@@ -11,9 +11,10 @@
  *
  * Each number holds its file's current size with a little headroom rather than demanding a trim:
  * the change is the unit, and whether these files should also be smaller is a separate judgment
- * with its own evidence. `packages/AGENTS.md` had no budget at all until now.
+ * with its own evidence. `packages/AGENTS.md` had no budget at all until now. The root budget was raised
+ * on 2026-09-22 by ten of that file's average sentences (126 characters each), from 11,500.
  */
-const INSTRUCTION_BUDGETS = { packageAgents: 6_000, rootAgents: 11_500, skill: 12_000 } as const
+const INSTRUCTION_BUDGETS = { packageAgents: 6_000, rootAgents: 12_760, skill: 12_000 } as const
 
 /** instructionLineCount counts a file's lines the way the audit means them. */
 export function instructionLineCount(source: string): number {

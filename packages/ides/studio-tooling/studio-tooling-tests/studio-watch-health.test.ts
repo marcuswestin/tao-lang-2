@@ -14,11 +14,7 @@ const repositoryRoot = '/w'
 function facts(overrides: Partial<WatchFacts> = {}): WatchFacts {
   return {
     metroWatchFolders: WATCHED_SOURCE_ROOTS.map(path => FS.resolvePath(path, repositoryRoot)),
-    projectRoot: '/w/Apps/HNReader',
     repositoryRoot,
-    watchmanReachable: true,
-    watchmanRoots: ['/w'],
-    watchmanVersion: '2026.01.19.00',
     ...overrides,
   }
 }
@@ -33,7 +29,6 @@ Describe('Studio watch health', () => {
 
     Expect(unwatchedSourceRoots(facts())).toEqual([])
     Expect(check(checks, 'studio watch coverage')?.status).toBe('pass')
-    Expect(check(checks, 'studio watch')?.status).toBe('pass')
   })
 
   Test('fails when an edit in a workspace package could never reach the preview', () => {
@@ -69,25 +64,24 @@ Describe('Studio watch health', () => {
     Expect(duplication?.detail).toContain('redundant crawl')
   })
 
-  Test('names the defined fallback when Watchman is unavailable', () => {
-    const withoutWatchman = check(studioWatchChecks(facts({ watchmanVersion: undefined })), 'studio watch')
-
-    Expect(withoutWatchman?.status).toBe('warn')
-    Expect(withoutWatchman?.detail).toContain('Metro falls back to watching through the OS')
-  })
-
-  Test('treats a project not yet watched as expected before a launch', () => {
-    const notYet = check(studioWatchChecks(facts({ watchmanRoots: [] })), 'studio watch')
-
-    Expect(notYet?.status).toBe('pass')
-    Expect(notYet?.detail).toContain('not watching')
-  })
-
   Test('every workspace source root this repository ships is watched by Metro today', async () => {
     const installed = await readWatchFacts(Repo.getRoot())
 
     Expect(installed.metroWatchFolders.length).toBeGreaterThan(0)
     Expect(unwatchedSourceRoots(installed)).toEqual([])
+  })
+
+  Test('keeps every folder Metro watches visible to Watchman', async () => {
+    // Watchman answers a query under an ignored directory with no files at all, so ignoring a
+    // folder Metro watches hands Metro an empty file map and every package fails to resolve.
+    const root = Repo.getRoot()
+    const installed = await readWatchFacts(root)
+    const config = await FS.readJson<{ ignore_dirs?: string[] }>(FS.resolvePath('.watchmanconfig', root))
+    const ignored = (config.ignore_dirs ?? []).map(path => FS.resolvePath(path, root))
+
+    Expect(installed.metroWatchFolders.length).toBeGreaterThan(0)
+    Expect(installed.metroWatchFolders.filter(folder => ignored.some(dir => FS.pathIsWithin(folder, dir))))
+      .toEqual([])
   })
 
   Test('records the three trees this repository deliberately watches twice', async () => {

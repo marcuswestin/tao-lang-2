@@ -57,7 +57,7 @@ Describe('board', () => {
   Test('parses git worktree list --porcelain, dropping prunable and bare records', () => {
     const source = [
       'worktree /repo\nHEAD aaa\nbranch refs/heads/main',
-      'worktree /repo/.claude/worktrees/feat-x\nHEAD bbb\nbranch refs/heads/feat/x',
+      'worktree /repo/worktrees/feat-x\nHEAD bbb\nbranch refs/heads/feat/x',
       'worktree /repo/stale\nHEAD ccc\nbranch refs/heads/feat/gone\nprunable gitdir file points to non-existent location',
       'worktree /repo\nbare',
     ].join('\n\n')

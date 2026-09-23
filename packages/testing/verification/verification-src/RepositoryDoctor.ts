@@ -11,6 +11,7 @@ import {
 } from './EnvironmentFingerprint'
 import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
 import { type LaneRecord, MachineLanes } from './MachineLanes'
+import { readWatchmanFacts, watchmanChecks, type WatchmanFacts } from './WatchmanHealth'
 
 /**
  * The repository half of `doctor`: everything a checkout needs before any Tao command can work.
@@ -156,8 +157,7 @@ export type DoctorFacts = {
   processRealPath: string
   repositoryRoot: string
   satisfies: (version: string, range: string) => boolean
-  watchmanVersion?: string
-  watchmanHealthy?: boolean
+  watchman: WatchmanFacts
 }
 
 /** repositoryDoctorChecks diagnoses a checkout from a gathered snapshot of its state. */
@@ -174,7 +174,7 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     dependencyCompatibilityCheck(facts),
     githubTransportCheck(facts),
     ...gitHooksChecks(facts),
-    watchmanCheck(facts),
+    ...watchmanChecks(facts.watchman),
     machineLanesCheck(facts),
     parserArtifactCheck(facts),
     ...artifactRootChecks(facts),
@@ -495,30 +495,6 @@ function gitHooksChecks(facts: DoctorFacts): DoctorCheck[] {
   })
 }
 
-function watchmanCheck(facts: DoctorFacts): DoctorCheck {
-  if (facts.watchmanVersion === undefined) {
-    return {
-      // Metro then watches through the OS directly, which this repository exceeds: the
-      // preview process dies with EMFILE partway through its first bundle.
-      detail: 'watchman is not answering; Metro will watch through the OS and can fail with EMFILE',
-      name: 'watchman',
-      remediation: 'It ships in the pinned devenv profile: direnv exec . watchman version',
-      status: 'warn',
-    }
-  }
-  if (facts.watchmanHealthy === false) {
-    return {
-      // Same consequence as a missing Watchman: Metro falls back and this repository trips EMFILE.
-      detail: `watchman ${facts.watchmanVersion} is installed but not answering; `
-        + 'Metro will watch through the OS and can fail with EMFILE',
-      name: 'watchman',
-      remediation: 'Restart it with: watchman shutdown-server',
-      status: 'warn',
-    }
-  }
-  return { detail: facts.watchmanVersion, name: 'watchman', status: 'pass' }
-}
-
 /**
  * What every other check cannot see: this machine belongs to every worktree on it. A second agent
  * running `verify` next door is the ordinary explanation for a slow lane or a timed-out test, and
@@ -653,7 +629,7 @@ export async function readDoctorFacts(
     readLinkedWorktree(repositoryRoot),
     readCommandVersion('bun', ['--version']),
     readCommandVersion('node', ['--version']),
-    readWatchman(),
+    readWatchmanFacts(repositoryRoot),
     readDirenvAllowed(repositoryRoot),
     Promise.all(ARTIFACT_ROOTS.map(path => readArtifactRoot(repositoryRoot, path))),
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
@@ -706,8 +682,7 @@ export async function readDoctorFacts(
     processRealPath,
     repositoryRoot: canonicalRepositoryRoot,
     satisfies: Platform.semverSatisfies,
-    watchmanHealthy: watchman.healthy,
-    watchmanVersion: watchman.version,
+    watchman,
   }
 }
 
@@ -831,15 +806,6 @@ async function readCommandVersion(command: string, args: readonly string[]): Pro
     return undefined
   }
   return result.stdout.trim().split('\n')[0]?.trim()
-}
-
-async function readWatchman(): Promise<{ healthy?: boolean; version?: string }> {
-  const version = await readCommandVersion('watchman', ['--version'])
-  if (version === undefined) {
-    return {}
-  }
-  const status = await CLI.run('watchman', { args: ['version'] })
-  return { healthy: status.error === undefined && status.exitCode === 0, version }
 }
 
 async function readDirenvAllowed(repositoryRoot: string): Promise<boolean | undefined> {
