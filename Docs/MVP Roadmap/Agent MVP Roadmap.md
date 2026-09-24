@@ -181,11 +181,12 @@ of whether a new language feels real.
   extension resolving a `tao` from the user's machine rather than a repository path.
 - Packaging progress: the VSIX carries a minified, bundled language server and standard library,
   its own README, and the repository licence. The editor/CLI version relationship still needs to
-  follow the standalone CLI work; an isolated VS Code installation and both marketplace releases
-  remain unproved.
+  follow the standalone CLI work. On 2026-09-24, host preparation installed the `0.0.1` VSIX in an
+  isolated VS Code profile and confirmed `tao.tao-ide-extension@0.0.1` was listed. Opening a `.tao`
+  file in that profile and both marketplace releases remain unproved.
 - Release workflow progress: `./agent unsandboxed prepare-release ide-extension` packages and checks a clean VS Code
-  installation; `just ide-extension-release-publish` uploads the same VSIX to both registries. Both
-  still need host acceptance, publisher accounts, and the final licence before use.
+  installation; `just ide-extension-release-publish` uploads the same VSIX to both registries. Publication
+  still needs editor activation acceptance, publisher accounts, and the final licence before use.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
 - Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
   Both marketplaces are in the first public-release scope (`R12`).
