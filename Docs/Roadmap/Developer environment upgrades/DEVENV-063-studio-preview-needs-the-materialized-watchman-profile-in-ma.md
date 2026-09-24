@@ -25,8 +25,8 @@
   with `EMFILE`. The pinned `list-capabilities --no-spawn` and `get-sockname --no-spawn` succeeded
   afterward, while `watch-list` attempted a denied LaunchAgent write. The no-spawn probes alone do
   not prove a running daemon remains reachable for Metro.
-- **Workaround:** Run Studio acceptance from an ordinary host shell where Watchman can use
-  `~/Library/LaunchAgents`.
+- **Workaround:** Run a listed agent Studio proof through `./agent unsandboxed studio-smoke` or
+  `./agent unsandboxed studio-proof-real-app`, where Watchman can use `~/Library/LaunchAgents`.
 - **Proposed change:** Keep the existing pinned profile and generated-runtime watch preflight, then
   detect a daemon that disappears or becomes unreachable between preflight and Metro's crawler.
   Refuse startup with a host diagnostic when that happens, rather than presenting Node watcher

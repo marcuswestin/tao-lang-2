@@ -13,15 +13,16 @@
   change left `./agent setup` printing `EPERM: operation not permitted, open .claude/settings.json`
   followed by `Skipped claudecode agent config`, because the Bash sandbox denies that path; the run
   still exited 0, so only the freshness gate would have caught the stale file.
-- **Workaround:** Regenerate from a host, profile, or unsandboxed shell allowed to update the
-  generated outputs, then run `codex-config-generation.test.ts` and the freshness gate to prove exact
-  parity. An agent that edits `.rulesync/` should expect to need that second run.
+- **Workaround:** After a `.rulesync/` change, have the Developer run `./agent setup` once from a
+  normal terminal if the task cannot write a protected generated output. Then run
+  `codex-config-generation.test.ts` and the freshness gate to prove exact parity. An unchanged
+  worktree needs no regeneration.
 - **Proposed change:** Provide a repository-owned regeneration path that can replace the generated
   harness files without granting general writes to mutable harness configuration, and make `./agent
   setup` exit non-zero, rather than 0, when it skipped a generated file it was asked to write.
 - **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/profiles.jsonc`,
-  `packages/dev/dev-src/agent-config/CodexConfigGenerator.ts`, and
-  `packages/dev/dev-src/agent-config/AgentConfigFreshness.ts`.
+  `packages/cli/agent-cli/agent-cli-src/agent-config/CodexConfigGenerator.ts`, and
+  `packages/cli/agent-cli/agent-cli-src/agent-config/AgentConfigFreshness.ts`.
 - **Acceptance:** Starting from deliberately stale generated harness files, the documented setup
   command refreshes them — or fails loudly naming what it could not write — and the exact-parity and
   freshness gates pass in each harness's default supported workflow.

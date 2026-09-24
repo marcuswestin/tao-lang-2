@@ -18,7 +18,8 @@ behind it.
   results as different declarations, and `./agent typecheck` fails with types that are not
   assignable to themselves (`Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`) naming no cause.
 - `./agent doctor`'s `worktree path` check names it. `git worktree move <given> <real>` fixes it,
-  and needs an unsandboxed shell: report the exact command and pause for the Developer's approval. The rule is the symlink, not the location — worktrees under
+  but has no named host operation: report the exact move and ask the Developer before adding one.
+  The rule is the symlink, not the location — worktrees under
   `/private/tmp` are fine, and a symlinked home or network mount hits the same failure.
 
 ## The devenv profile
@@ -43,8 +44,8 @@ behind it.
   `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
   denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
   install and the same remediation. Only the tempdir case is resumable. For either protected-path
-  failure, report the denied path and exact `./agent setup` retry, then pause for the Developer's approval of
-  that unsandboxed write. Do not start `just session-unsandboxed` on your own.
+  failure, report the denied path and exact `./agent setup` retry for the Developer to run from a
+  normal terminal. Do not start `just session-unsandboxed` on your own.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 
@@ -67,9 +68,9 @@ behind it.
 
 ## Processes and ports
 
-- Inspect all processes with `./agent unsandboxed ps -axo pid=,ppid=,lstart=,command=`, one
-  process's start time with `./agent unsandboxed ps -o lstart= -p <pid>`, and one listening port
-  with sandboxed `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Other `ps` shapes need the Developer's
+- Inspect all processes with `./agent unsandboxed processes list`, one process's start time with
+  `./agent unsandboxed processes started <pid>`, and one listening port with sandboxed
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Other process probes need the Developer's
   approval, and every signal stays under review since a prefix cannot validate a PID.
 - Repository code reads process facts through `ProcessTree`, never through `ps`. On macOS it uses
   libproc with no subprocess, so a sandbox denial cannot silently degrade its PID-reuse protection.

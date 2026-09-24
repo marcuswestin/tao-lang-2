@@ -5,6 +5,8 @@ Studio _is_ as an implemented product contract; this package README owns the ope
 around it — launch modes, ports, artifact roots, manifests, diagnostics, smoke lanes, and release
 steps. Launch, doctor, smoke, and packaging commands live in `packages/ides/studio-tooling` and the
 Justfile; they are documented here because they are how this package is exercised.
+Commands below are the human developer menu. An agent runs a host operation only through a listed
+`./agent unsandboxed` name; an unlisted Studio operation needs a named entry before agent use.
 
 ## Launch modes
 
@@ -85,8 +87,9 @@ Networking: the phone must reach the Mac's LAN address that Expo advertises (the
 an active `169.254.*` cable interface is offered as another candidate but must succeed from the
 phone. `localhost` is never sent to a device. A denied Local Network permission, a captive portal,
 a VPN interface, or a firewall shows up as a named diagnostic in the popover rather than a hang.
-`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies, so run Studio from an
-ordinary shell when a device is involved. A simulator avoids all of this, which makes it the target
+`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies. A person can run Studio
+from an ordinary shell when a device is involved; an agent needs a named `./agent unsandboxed`
+Studio launch operation before it can run that host workflow. A simulator avoids all of this, which makes it the target
 to reach for when the question is whether the app renders rather than how it behaves on real
 hardware.
 

@@ -17,10 +17,10 @@
   does not cover; unsandboxed it succeeds in about two minutes and proves the Swift module against
   ExpoModulesCore. Autolinking only finds a podspec in a top-level subdirectory of the package
   (`ios/`), never at its root.
-- **Workaround:** The three commands above, with `pod install` in a subshell and `xcodebuild`
-  unsandboxed.
+- **Workaround:** Run the repository's complete host proof with
+  `./agent unsandboxed native-module-check`.
 - **Proposed change:** Implemented as typed `./dev native-module-check` orchestration behind the standalone
-  `just native-module-check` host proof, with bounded phases, isolated build roots, podspec and target
+  `./agent unsandboxed native-module-check` host proof, with bounded phases, isolated build roots, podspec and target
   discovery, retained failure artifacts, the canonical Maven network allowlist, and native-package
   documentation. The mutable repository recipe deliberately remains reviewed outside the sandbox.
 - **Dependencies:** None.

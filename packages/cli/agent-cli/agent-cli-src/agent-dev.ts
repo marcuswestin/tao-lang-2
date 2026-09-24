@@ -41,8 +41,8 @@ await runWithCommands(commands => {
         const exitCode = await runAgentCommand({
           args,
           command,
-          spawnArgs: [command === 'prepare-release' ? 'prepare-release' : recipeFor(command)],
-          spawnCommand: command === 'prepare-release' ? './dev' : 'just',
+          spawnArgs: [recipeFor(command)],
+          spawnCommand: 'just',
         })
         Platform.runtimeProcess.setExitCode(exitCode)
       })

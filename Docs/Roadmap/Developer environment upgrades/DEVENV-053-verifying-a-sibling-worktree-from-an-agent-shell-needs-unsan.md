@@ -12,8 +12,9 @@
   '<sibling>/packages/ast-utils/tsconfig.tsbuildinfo': EPERM`, because the sandbox write allowlist
   covers only the session worktree. `bun --cwd <sibling> test <file>` reports `Script not found "test"`;
   `bun test --cwd <sibling> <file>` runs sandboxed because it writes nothing.
-- **Workaround:** Run the typecheck and `./agent verify` for the sibling worktree unsandboxed; use
-  `bun test --cwd <worktree> <files>` for focused tests.
+- **Workaround:** Start a task rooted in the sibling worktree, or have the Developer run its
+  `./agent verify` from a normal terminal. Use `bun test --cwd <worktree> <files>` for focused
+  read-only tests from this task. There is no named operation for an agent to verify another checkout.
 - **Proposed change:** Give `./agent verify` a documented `--worktree <path>` form for verifying another
   checkout the agent owns, or allow sandbox writes under the repository's own `.claude/worktrees/*` so a
   branch an agent was asked to land can be verified in place.
