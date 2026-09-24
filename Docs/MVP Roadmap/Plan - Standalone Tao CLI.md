@@ -682,8 +682,8 @@ public repository. What it settled:
   from source. The install script selects a stable CLI release from the published release listing,
   confirms the downloaded binary reports that version, and unpacks its resources inside the
   version's own directory before it is renamed into place.
-- The install script puts the binary in `versions/<version>/`, points `bin/tao` at it until slice
-  8's shim replaces that link, and links `tao` into the first writable directory under `$HOME` on
+- The install script puts the binary in `versions/<version>/`, points `bin/tao` at it (slice 8 keeps
+  that link, making each release binary its own shim), and links `tao` into the first writable directory under `$HOME` on
   `PATH` that does not hold another `tao`, printing the `PATH` line only when there is none.
   `TAO_VERSION` pins a release, `TAO_HOME` relocates everything, and `TAO_RELEASES` points at another
   copy of the releases.
@@ -700,7 +700,36 @@ public repository. What it settled:
   which later slices shorten as they land.
 
 **8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
-resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
+resolve-and-exec, `tao check-for-updates`, and `tao create` writing the pin. Implementation decision 3
+replaced the `tao install <version>` and `tao update` this slice first named.
+
+_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` checks the pin `tao create`
+writes, that `tao +<v>` and `TAO_VERSION` reach that release, that a missing release names its install
+command, and that `check-for-updates` reads the listing.
+
+- **Every release binary is its own shim**, so there is no separate shim binary and `bin/tao` stays
+  the installer's link to the default release. Before the CLI loads, `tao-standalone.ts` asks
+  `ToolchainPin.delegate` which release the run wants: `tao +0.4.1 …`, then `TAO_VERSION`, then the
+  nearest `.tao-project/lock.jsonc`'s `toolchain.version`. The nearest lock decides even when it pins
+  nothing, so a nested project does not inherit an outer pin. Another release runs the command on the
+  same terminal and this one exits with its status, so a handed-off run pays a second binary start;
+  `TAO_HANDED_OFF_BY` stops a mislabelled binary from handing the run on forever. A development build
+  ignores pins.
+- **A pinned release that is not installed** is downloaded after asking, checked against its
+  published SHA-256, confirmed with `--version`, and placed in `versions/<v>/` without moving
+  `bin/tao`. With no terminal it fails naming `curl -fsSL …/download/v<v>/install.sh | TAO_VERSION=<v>
+  sh`. The acceptance has no terminal, so the interactive download is covered by no test.
+- **`tao check-for-updates`** reads the release listing the install script reads and picks the same
+  way; it installs nothing and moves no pin. The release build stamps `TAO_RELEASES_URL` beside the
+  version for it and the shim.
+- **Asking a download its version** happens from `/` with no version named, in the install script and
+  the shim alike, because asked from inside a pinned project the new binary would hand the question
+  to the pinned release. The install script also refuses a relative `TAO_HOME` and ignores a relative
+  `XDG_DATA_HOME`, as `TaoHome` does.
+- **A `tao dev` hang the acceptance found**, in a checkout too: the dev loop reserves Metro's port
+  during the first compile, and a simulator or emulator dev client retrying 8081 connects to that
+  reservation. `server.close` then waited on the connection forever, so Expo never started. The
+  reservation now drops connections.
 
 **9. The macOS payload and the remaining gaps.** The prebuilt, signed Apple Foundation Models helper
 (needs the Developer ID certificate), removal of `tao review` and its Studio graph from the first

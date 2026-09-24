@@ -103,7 +103,7 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   const target = hostTarget()
   const directory = FS.resolvePath(`${RELEASE_ROOT}/v${version}`, repoRoot)
   const binary = FS.resolvePath(`${BUILD_ROOT}/standalone/tao-${version}`, repoRoot)
-  await buildBinary(binary, version)
+  await buildBinary(binary, { releases, version })
 
   await FS.remove(directory)
   const asset = `tao-${target}.gz`
@@ -135,8 +135,11 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   )
 }
 
-/** buildBinary stages and packs the resource payload, then compiles the binary around it. */
-async function buildBinary(outfile: string, releaseVersion?: string): Promise<void> {
+/**
+ * buildBinary stages and packs the resource payload, then compiles the binary around it. A release
+ * build also stamps in its version and where its releases are published.
+ */
+async function buildBinary(outfile: string, release?: { releases: string; version: string }): Promise<void> {
   assertBunCanCompile()
   const repoRoot = Repo.getRoot()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
@@ -155,9 +158,12 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
   // `tao-version.ts` and `tao-cli.ts` declare these globals and nothing else defines them.
-  const stamp = releaseVersion === undefined
-    ? []
-    : ['--define', `TAO_RELEASE_VERSION=${JSON.stringify(releaseVersion)}`]
+  const stamp = release === undefined ? [] : [
+    '--define',
+    `TAO_RELEASE_VERSION=${JSON.stringify(release.version)}`,
+    '--define',
+    `TAO_RELEASES_URL=${JSON.stringify(release.releases)}`,
+  ]
   const defines = ['--define', 'TAO_STANDALONE=true', ...stamp]
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
     args: ['build', '--compile', ...defines, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],

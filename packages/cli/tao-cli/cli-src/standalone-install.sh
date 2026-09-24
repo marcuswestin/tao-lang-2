@@ -16,12 +16,23 @@ set -eu
 releases="${TAO_RELEASES:-@TAO_RELEASES@}"
 releases="${releases%/}"
 requested="${TAO_VERSION:-}"
-tao_home="${TAO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tao}"
+# As `TaoHome.ts` resolves it: a relative XDG_DATA_HOME is ignored, and a relative TAO_HOME refused.
+data_home="${XDG_DATA_HOME:-}"
+case "$data_home" in
+  /*) ;;
+  *) data_home="$HOME/.local/share" ;;
+esac
+tao_home="${TAO_HOME:-$data_home/tao}"
 
 fail() {
   printf 'Tao install: %s\n' "$*" >&2
   exit 1
 }
+
+case "$tao_home" in
+  /*) ;;
+  *) fail "TAO_HOME must be an absolute path, and $tao_home is not." ;;
+esac
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=darwin-arm64 ;;
@@ -112,8 +123,10 @@ gunzip -c "$staging/$asset" > "$staging/tao"
 rm -f "$staging/$asset" "$staging/$asset.sha256"
 chmod 755 "$staging/tao"
 
-# The binary confirms the selected version and unpacks the resources it carries beside it.
-version="$("$staging/tao" --version)" || fail "the downloaded binary did not run."
+# The binary confirms the selected version and unpacks the resources it carries beside it. It is asked
+# from `/` with no version named, so a project pin in the current directory cannot hand the check to
+# another installed release.
+version="$(cd / && unset TAO_VERSION && "$staging/tao" --version)" || fail "the downloaded binary did not run."
 if [ "$version" != "$requested" ]; then
   fail "asked for $requested, but the download is $version."
 fi

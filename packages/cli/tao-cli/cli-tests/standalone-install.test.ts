@@ -4,7 +4,9 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 // The binary here is a shell script standing in for Tao, so these cover the install script alone
 // and run anywhere; `just standalone-cli-acceptance` installs a real build the same way.
 const INSTALL_SCRIPT = Repo.resolvePath('packages/cli/tao-cli/cli-src/standalone-install.sh')
-const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && echo 0.4.0\n'
+// It answers only when asked the way the installer must ask, from `/` and naming no version, because a
+// real release asked from inside a pinned project would hand the question to the release pinned there.
+const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && [ "$(pwd)" = / ] && [ -z "${TAO_VERSION:-}" ] && echo 0.4.0\n'
 
 Describe('standalone install script', () => {
   Test('installs the release under the Tao home and links it into a user bin directory on PATH', async () => {
@@ -83,6 +85,24 @@ Describe('standalone install script', () => {
       const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
 
       Expect(result.exitCode).toBe(0)
+    })
+  })
+
+  Test('asks the download its version from outside the current project, naming none', async () => {
+    await withRelease(async ({ install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
+
+      Expect(result.stderr).toBe('')
+      Expect(result.exitCode).toBe(0)
+    })
+  })
+
+  Test('refuses a relative TAO_HOME, as the binary does', async () => {
+    await withRelease(async ({ install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: 'tao-home' })
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toContain('TAO_HOME must be an absolute path')
     })
   })
 

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Text, Time } from '@shared'
 
 /**
  * standalone-acceptance proves a release installs and works the way a newcomer meets it: the install
@@ -82,6 +82,7 @@ async function accept(release: string): Promise<void> {
     }
     await shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests')
     const project = FS.resolvePath('a-tally-counter', home)
+    await versionPinWorks(environment, project, version)
     await shell(project, 'tao check .')
     await shell(project, 'tao compile App.tao')
 
@@ -138,6 +139,33 @@ async function accept(release: string): Promise<void> {
     )
   } finally {
     await FS.remove(root)
+  }
+}
+
+/**
+ * versionPinWorks checks the created project pins the release that made it, that `+version` and
+ * `TAO_VERSION` both reach that release, that a pinned release which is not installed is named with
+ * its install command when there is no terminal to ask, and that `tao check-for-updates` reads the
+ * release listing.
+ */
+async function versionPinWorks(environment: Platform.ProcessEnv, project: string, version: string): Promise<void> {
+  const lock = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao-project/lock.jsonc', project))))
+  if (lock?.toolchain?.version !== version) {
+    Errors.throwUnexpected(`tao create pinned ${JSON.stringify(lock?.toolchain)}, not Tao ${version}.`)
+  }
+  const shell = newcomerShell(environment)
+  for (const script of [`tao +${version} --version`, `TAO_VERSION=${version} tao --version`]) {
+    if ((await shell(project, script)).trim() !== version) {
+      Errors.throwUnexpected(`\`${script}\` did not run Tao ${version}.`)
+    }
+  }
+  const missing = await CLI.run('/bin/sh', { args: ['-c', 'tao +9.9.9 --version'], cwd: project, env: environment })
+  if (missing.exitCode === 0 || !missing.stderr.includes('download/v9.9.9/install.sh')) {
+    Errors.throwUnexpected(`A missing release did not name its install command:\n${missing.stdout}${missing.stderr}`)
+  }
+  const updates = await shell(project, 'tao check-for-updates')
+  if (!updates.includes(`Tao ${version} is the latest release.`)) {
+    Errors.throwUnexpected(`tao check-for-updates did not recognise Tao ${version} as the latest:\n${updates}`)
   }
 }
 

@@ -168,6 +168,19 @@ function createCommands(): Command {
       }
     })
 
+  commands
+    .command('check-for-updates')
+    .description('Say whether a newer Tao release is published, and how to install it.')
+    .action(async () => {
+      try {
+        const { runCheckForUpdates } = await import('./check-for-updates')
+        await runCheckForUpdates()
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
   // The standalone binary leaves `tao review` out, because it reaches the whole Studio graph, which
   // the first release does not ship (`R12`). Its build defines this global, and the bundler then drops
   // the branch and the import inside it.
