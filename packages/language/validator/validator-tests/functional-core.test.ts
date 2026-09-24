@@ -149,7 +149,9 @@ Describe('validator: functional core', () => {
   Test(
     'rejects a check nested in a guard case, which would stop only that case',
     rejects(
-      functionalApp('state Name = "" action Add() { guard Name empty -> { check Name is empty } } render Text("Ready")'),
+      functionalApp(
+        'state Name = "" action Add() { guard Name empty -> { check Name is empty } } render Text("Ready")',
+      ),
       FunctionalCoreValidator.messages.checkPlacement,
     ),
   )
