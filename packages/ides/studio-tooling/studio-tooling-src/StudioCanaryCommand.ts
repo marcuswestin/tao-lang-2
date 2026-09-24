@@ -308,6 +308,7 @@ type ReleaseCheckOptions = {
   /** The directory the build wrote its artifacts into. Its contents are read, not described. */
   artifactsRoot: string
   diskImagePath?: string
+  firstRelease?: boolean
   payloadRoot: string
   releaseBaseUrl?: string
 }
@@ -327,7 +328,7 @@ async function runStudioReleaseCheck(options: ReleaseCheckOptions): Promise<numb
   }
   const validation = releaseValidation(
     await readPayloadInventory(options.payloadRoot),
-    await readArtifactInventory(options.artifactsRoot, options.releaseBaseUrl),
+    await readArtifactInventory(options.artifactsRoot, options.releaseBaseUrl, options.firstRelease),
     await readExternalGates({ appPath: options.appPath, diskImagePath: options.diskImagePath }),
   )
   HCI.writeLine(formatReleaseValidation(validation))

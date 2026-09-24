@@ -15,6 +15,7 @@ Describe('standalone install script', () => {
       const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
 
       Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('Downloading Tao 0.4.0')
       const installed = FS.resolvePath('.local/share/tao/versions/0.4.0/tao', home)
       Expect(await FS.isFile(installed)).toBe(true)
       Expect(await FS.realPath(FS.resolvePath('tao', userBin))).toBe(await FS.realPath(installed))
@@ -48,7 +49,7 @@ Describe('standalone install script', () => {
   Test('refuses a download that does not match its published checksum', async () => {
     await withRelease(async ({ home, install, releases }) => {
       await FS.writeText(
-        FS.resolvePath('latest/download/tao-darwin-arm64.gz.sha256', releases),
+        FS.resolvePath('download/v0.4.0/tao-darwin-arm64.gz.sha256', releases),
         `${'0'.repeat(64)}  x\n`,
       )
 
@@ -64,7 +65,7 @@ Describe('standalone install script', () => {
     await withRelease(async ({ install, releases }) => {
       for (const name of ['tao-darwin-arm64.gz', 'tao-darwin-arm64.gz.sha256']) {
         await FS.copyFile(
-          FS.resolvePath(`latest/download/${name}`, releases),
+          FS.resolvePath(`download/v0.4.0/${name}`, releases),
           FS.resolvePath(`download/v0.5.0/${name}`, releases),
         )
       }
@@ -75,11 +76,30 @@ Describe('standalone install script', () => {
       Expect(result.stderr).toContain('asked for 0.5.0, but the download is 0.4.0')
     })
   })
+
+  Test('a pinned version does not need a release listing', async () => {
+    await withRelease(async ({ install, listing }) => {
+      await FS.remove(listing)
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
+
+      Expect(result.exitCode).toBe(0)
+    })
+  })
+
+  Test('rejects a version that could alter the download path', async () => {
+    await withRelease(async ({ install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '../studio' })
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toContain('TAO_VERSION must be a stable three-part version')
+    })
+  })
 })
 
 type Release = {
   home: string
   releases: string
+  listing: string
   install: (env: Record<string, string>) => Promise<CLI.CommandResult>
 }
 
@@ -88,22 +108,31 @@ async function withRelease(run: (release: Release) => Promise<void>): Promise<vo
   try {
     const releases = FS.resolvePath('releases', root)
     const asset = Bun.gzipSync(new TextEncoder().encode(STAND_IN))
-    const download = FS.resolvePath('latest/download', releases)
+    const download = FS.resolvePath('download/v0.4.0', releases)
     await FS.writeFile(FS.resolvePath('tao-darwin-arm64.gz', download), asset)
     await FS.writeText(
       FS.resolvePath('tao-darwin-arm64.gz.sha256', download),
       `${Platform.sha256Hex(asset)}  tao-darwin-arm64.gz\n`,
     )
+    const listing = FS.resolvePath('releases.json', root)
+    await FS.writeJson(listing, [
+      { tag_name: 'studio-v0.4.1', draft: false, prerelease: false },
+      { tag_name: 'v0.3.0', draft: false, prerelease: false },
+      { tag_name: 'v0.5.0', draft: true, prerelease: false },
+      { tag_name: 'v0.6.0', draft: false, prerelease: true },
+      { tag_name: 'v0.4.0', draft: false, prerelease: false },
+    ])
     const home = FS.resolvePath('home', root)
     await FS.mkdir(home)
     await run({
       home,
       releases,
+      listing,
       install: env =>
         CLI.run('/bin/sh', {
           args: [INSTALL_SCRIPT],
           cwd: home,
-          env: { HOME: home, TAO_RELEASES: `file://${releases}`, ...env },
+          env: { HOME: home, TAO_RELEASES: `file://${releases}`, TAO_RELEASE_INDEX_URL: `file://${listing}`, ...env },
         }),
     })
   } finally {

@@ -15,9 +15,10 @@
   suppression, typed simulator/sandbox remedies, explicit Studio Open/reconnect UI, fresh deep links,
   and client foreground redial have landed with focused coverage. No test or physical journey yet
   reproduces the original old-client/dead-Metro blank screen end to end.
-- **Workaround:** Pass `--app`, run device tooling from a normal terminal, and re-point a stale
-  development client with `xcrun simctl openurl booted "taostudiocompanion://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<metroPort>"` from an
-  unsandboxed shell, which is faster than reinstalling.
+- **Workaround:** Pass `--app`, run device tooling through named host commands, and re-point a
+  stale development client with `./agent unsandboxed simulators open-url booted
+  "taostudiocompanion://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<metroPort>"`,
+  which is faster than reinstalling.
 - **Proposed change:** Run the stale-Metro journey on a simulator or physical device and prove that
   Studio's fresh Open/deep-link action recovers the client. Add persistent or automatic discovery only
   if that real journey shows the explicit recovery is insufficient.

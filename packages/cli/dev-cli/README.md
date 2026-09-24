@@ -337,9 +337,9 @@ staged-squash **tree-equality assertion** runs under every combination, includin
 because it is a correctness check rather than an optimization: the squash must be the same tree the
 verification proved, and a mismatch stops the landing.
 
-Default Codex and Claude agents run `./agent unsandboxed land` for host access. The wrapper forwards
-its arguments to the ordinary landing handler; the generated harness rules allow only the four
-named host commands in `.rulesync/permissions.jsonc`. Landing uses a single lease-checked
+Default agents run `./agent unsandboxed land` for host access. The wrapper forwards its arguments
+to the ordinary landing handler; the generated harness rules allow only the named operations in
+`.rulesync/permissions.jsonc`. Landing uses a single lease-checked
 `git push --atomic` for main, the archive, and feature-branch deletion. The host process runs
 repository code with normal filesystem and GitHub credential access. After a direct landing is
 confirmed, a person can remove an older installed LaunchAgent with `just landing-broker-teardown`.

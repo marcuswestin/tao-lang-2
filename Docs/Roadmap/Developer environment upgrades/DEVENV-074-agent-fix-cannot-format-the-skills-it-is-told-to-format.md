@@ -11,8 +11,9 @@
   `Error writing file '…/agents/skills/delegation/SKILL.md': Operation not permitted (os error 1)`
   and `Had 1 error formatting.`; the same command outside the sandbox formatted the file and
   reported `Formatted 1 file. 0 fixed, 124 unchanged`.
-- **Workaround:** Run `./agent fix` unsandboxed after editing a skill. The harness's own edit tools
-  write these paths normally; only Bash is denied, so the restriction bites exactly one command.
+- **Workaround:** Run `dprint check <file>` to see the formatting diff and apply it with the edit
+  tool, or have the Developer run `./agent fix` from a normal terminal. There is no named agent host
+  operation for general formatting.
 - **Proposed change:** Decide which the policy means. If skills are protected against shell writes
   on purpose, `fix` should say so — detect the denial on a known-protected path and print the
   unsandboxed retry — rather than surfacing `os error 1`. If the protection is incidental, exempt

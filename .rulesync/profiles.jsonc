@@ -7,8 +7,8 @@
   "profiles": {
     "native": {
       "description": "Tao native host: add Simulator and Xcode working directories; host commands still follow project rules.",
-      // The default rules auto-approve only read-only discovery. Every unlisted device or simulator
-      // mutation remains reviewed without a broad ask glob shadowing those discovery commands.
+      // The default host rules cover only named operations in agentHostCommands. Every unlisted
+      // device or simulator operation remains reviewed without a broad ask glob shadowing them.
       "allowWrite": [
         "~/Library/Developer/CoreSimulator",
         "~/Library/Developer/Xcode/DerivedData",

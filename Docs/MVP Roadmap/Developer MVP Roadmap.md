@@ -234,6 +234,14 @@ extension. Studio is the most impressive and the least finished.
   launch. Offer the companion host as an invitation beta, with physical-device acceptance still to
   prove. Defer `tao review` from the first standalone CLI binary; excluding its imported Studio
   graph requires a packaging slice.
+- **Decided 2026-09-24:** defer build and distribution acceptance that needs release accounts,
+  signing certificates, notarization credentials, or an authorized physical device until the
+  near-release pass. Do not run certificate-dependent Studio or CLI signing and notarization,
+  physical-iPhone Companion builds, hosted-binary or installed-update proofs, or marketplace
+  publication checks as current branch or landing gates. Keep their guarded commands available;
+  revisit and complete the release-required proofs before declaring the first public release
+  ready. Ordinary tests, local packaging, simulator checks, and credential-free editor acceptance
+  continue.
 
 ### R13 — The standalone CLI's remaining questions
 

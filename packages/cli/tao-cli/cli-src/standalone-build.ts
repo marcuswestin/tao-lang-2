@@ -69,7 +69,7 @@ async function main(args: readonly string[]): Promise<void> {
 
 /**
  * buildRelease writes the files one release publishes into `.artifacts/release/v<version>/`: the
- * gzipped binary under a name without its version, so `releases/latest/download/` can find it; its
+ * gzipped binary under a name without its version, addressed through its release tag; its
  * SHA-256; the install script pointed at these releases; a release index; and draft notes. It prints
  * the `gh release create` command rather than running it, because publishing is the Developer's step.
  */
@@ -92,7 +92,10 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   await FS.writeText(FS.resolvePath(`${asset}.sha256`, directory), `${sha256}  ${asset}\n`)
 
   const installScript = await FS.readText(FS.resolvePath(INSTALL_SCRIPT, repoRoot))
-  await FS.writeText(FS.resolvePath('install.sh', directory), installScript.replaceAll(RELEASES_PLACEHOLDER, releases))
+  await FS.writeText(
+    FS.resolvePath('install.sh', directory),
+    installScript.replaceAll(RELEASES_PLACEHOLDER, releases).replaceAll('@TAO_VERSION@', version),
+  )
   const commit = (await CLI.mustRun('git', { args: ['rev-parse', 'HEAD'], cwd: repoRoot })).stdout.trim()
   await FS.writeJson(FS.resolvePath('release.json', directory), {
     schemaVersion: 1,
@@ -107,7 +110,7 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   HCI.logProcessInfo('standalone', `Wrote the Tao ${version} release to ${relative}.`)
   HCI.writeLine(
     `Publish it from the repository root, after reading notes.md:\n\n  gh release create v${version} `
-      + `${files.join(' ')} --title "Tao ${version}" --notes-file ${relative}/notes.md\n`,
+      + `${files.join(' ')} --title "Tao ${version}" --notes-file ${relative}/notes.md --latest=false\n`,
   )
 }
 
@@ -188,7 +191,7 @@ function releaseNotes(version: string, releases: string): string {
     `Tao ${version} for macOS on Apple silicon.`,
     '',
     '```sh',
-    `curl -fsSL ${releases}/latest/download/install.sh | sh`,
+    `curl -fsSL ${releases}/download/v${version}/install.sh | sh`,
     '```',
     '',
     'Not yet in this release:',
