@@ -1,4 +1,5 @@
 import { Errors, FS, Platform, Repo } from '@shared'
+import * as CLI from '@shared/CLI'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../agent-cli-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
@@ -6,6 +7,7 @@ import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/D
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
+  "agentHostCommands": ["land", "xcrun simctl list devices"],
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
@@ -25,9 +27,6 @@ const canonicalRules = `{
       "~/.ssh/**": "deny",
     },
   },
-  "codex": {
-    "outsideSandboxCommands": ["./agent land"],
-  },
   "claudecode": {
     "sandbox": {
       "filesystem": {
@@ -35,7 +34,7 @@ const canonicalRules = `{
       },
       "network": {
         "allowLocalBinding": true,
-        "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman/test-state/sock"],
+        "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman"],
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
       "excludedCommands": [
@@ -101,7 +100,7 @@ Describe('Codex config generation', () => {
     ])
     Expect(permissions.claudecode?.sandbox?.network?.allowUnixSockets).toEqual([
       '/nix/var/nix/daemon-socket/socket',
-      '~/.local/state/watchman/test-state/sock',
+      '~/.local/state/watchman',
     ])
   })
 
@@ -120,17 +119,23 @@ Describe('Codex config generation', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
+      '',
+      '/clones/elsewhere/tao/.git',
     )
     const parsed = Platform.parseToml(rendered) as Record<string, any>
     const profile = parsed['permissions']['tao-workspace']
 
     Expect(parsed['default_permissions']).toBe('tao-workspace')
     Expect(profile['extends']).toBe(':workspace')
+    Expect(profile['filesystem']['/clones/elsewhere/tao/.git']).toBe('write')
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
-    Expect(profile['filesystem']['~/.ssh/**']).toBe('deny')
+    Expect(profile['filesystem']['~/.ssh/**']).toBeUndefined()
+    Expect(parsed['permissions']['tao-review']['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
-    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman/test-state/sock', FS.homeDir())])
+    // Codex matches a socket rule as a directory prefix, so Watchman's state directory covers the
+    // `<login>-state/sock` it names after whoever is running it.
+    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman', FS.homeDir())])
       .toBe('allow')
     Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBeUndefined()
     Expect(profile['network']['domains']['*']).toBeUndefined()
@@ -160,30 +165,13 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders fixed host commands and explicit landing exceptions only', () => {
+  Test('renders only wrapper host prefixes from the canonical list', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
-    Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
-    Expect(rendered).not.toContain('pattern=["ps","-o","pid=,command=","-p"]')
-    Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
-    Expect(rendered).not.toContain('pattern=["git","merge"]')
-    Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
-    Expect(rendered).not.toContain('pattern=["just","land"], decision="allow"')
-    Expect(rendered).toContain('pattern=["./agent","land"], decision="allow"')
-    Expect(rendered).not.toContain('pattern=["just"]')
-    Expect(rendered).not.toContain('git status')
-    Expect(rendered).toContain('pattern=["bun","install"], decision="forbidden"')
-    Expect(rendered).toContain('Use ./agent setup')
-  })
-
-  Test('rejects Codex host exceptions that Claude does not allow and exclude', () => {
-    const permissions = CodexConfigGenerator.parsePermissions(
-      canonicalRules.replace(
-        '"outsideSandboxCommands": ["./agent land"]',
-        '"outsideSandboxCommands": ["just unreviewed"]',
-      ),
-    )
-    Expect(() => CodexConfigGenerator.renderRules(permissions)).toThrow()
+    Expect(rendered.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual([
+      'prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository-approved host command.")',
+      'prefix_rule(pattern=["./agent","unsandboxed","xcrun","simctl","list","devices"], decision="allow", justification="Repository-approved host command.")',
+    ])
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -198,19 +186,22 @@ Describe('Codex config generation', () => {
     // harness is keeping.
     Expect(filesystem['~/.bun']).toBe('write')
     Expect(filesystem['~/.cache']).toBe('write')
-    // A credential deny inside a granted tree still has to win, so denies are rendered last.
-    Expect(filesystem['~/.ssh/**']).toBe('deny')
+    // The default profile must have no denied reads or Codex cannot run its exact host rules.
+    Expect(filesystem['~/.ssh/**']).toBeUndefined()
   })
 
-  Test("denies dotenv files without denying this repository's own .envrc", () => {
+  Test('keeps denied reads out of the host-capable default but in the review profile', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
     )
-    const workspaceRoots =
-      (Platform.parseToml(rendered) as any)['permissions']['tao-workspace']['filesystem'][':workspace_roots']
+    const profiles = (Platform.parseToml(rendered) as any)['permissions']
+    const workspace = profiles['tao-workspace']['filesystem']
+    const review = profiles['tao-review']['filesystem']
 
-    Expect(Object.keys(workspaceRoots).toSorted()).toEqual(['**/.env', '**/.env.*'])
+    Expect(Object.values(workspace)).not.toContain('deny')
+    Expect(workspace[':workspace_roots']).toBeUndefined()
+    Expect(Object.keys(review[':workspace_roots']).toSorted()).toEqual(['**/.env', '**/.env.*'])
     Expect(rendered).not.toContain('**/.env*"')
   })
 
@@ -224,7 +215,7 @@ Describe('Codex config generation', () => {
       const written = await FS.readText(FS.resolvePath('.codex/config.toml', root))
       Expect(written).toContain('default_permissions = "tao-workspace"')
       Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root)))
-        .toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
+        .toContain('pattern=["./agent","unsandboxed","land"]')
 
       const skipped: string[] = []
       await CodexConfigGenerator.generate({
@@ -239,8 +230,8 @@ Describe('Codex config generation', () => {
       await FS.writeText(
         FS.resolvePath('.rulesync/permissions.jsonc', root),
         canonicalRules.replace(
-          '"ps -axo pid=,ppid=,lstart=,command=": "allow"',
-          '"ps -axo pid=,ppid=,lstart=,command=": "ask"',
+          '"agentHostCommands": ["land", "xcrun simctl list devices"]',
+          '"agentHostCommands": ["land", "xcrun simctl boot"]',
         ),
       )
       await Expect(CodexConfigGenerator.generate({
@@ -311,12 +302,13 @@ Describe('Codex config generation', () => {
     Expect(rendered).not.toContain('[agents]')
   })
 
-  Test('keeps the committed Codex profile identical to a fresh render', async () => {
+  Test('keeps the tracked Codex profile identical to a fresh render', async () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
       await readProfiles(root),
       await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, root)),
+      await CodexConfigGenerator.gitDirectory(root),
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)
@@ -329,12 +321,46 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["git","merge"]')
     Expect(rules).not.toContain('pattern=["kill"')
     Expect(rules).not.toContain('pattern=["/bin/kill"')
-    Expect(rules).not.toContain('studio-smoke')
     Expect(rules).not.toContain('pattern=["just","land"], decision="allow"')
     Expect(rules).not.toContain('pattern=["./dev","land"], decision="allow"')
     Expect(rules).not.toContain('pattern=["just","merge-with-main"], decision="allow"')
     Expect(rules).not.toContain('pattern=["./dev","merge-with-main"], decision="allow"')
     Expect(rules).not.toContain('pattern=["just","my-land"], decision="allow"')
-    Expect(rules).toContain('pattern=["bun","install"], decision="forbidden"')
+    Expect(rules).not.toContain('pattern=["./agent","land"]')
+  })
+
+  Test('tracks the startup profile and limits machine paths to its required sockets', async () => {
+    // A new managed worktree must load this before either setup or a session hook can run.
+    const root = Repo.getRoot()
+    const tracked = await CLI.run('git', { args: ['ls-files', '.claude', '.codex', '.cursor', '.rulesync'], cwd: root })
+    const login = Platform.runtimeProcess.env['USER'] ?? FS.basename(FS.homeDir())
+    const offending: string[] = []
+    for (const path of tracked.stdout.split('\n').filter(Boolean)) {
+      if (path === '.codex/config.toml') {
+        continue
+      }
+      const file = FS.resolvePath(path, root)
+      if (!(await FS.isFile(file))) {
+        continue
+      }
+      const text = await FS.readText(file)
+      if (text.includes(FS.homeDir()) || text.includes(`${login}-state`)) {
+        offending.push(path)
+      }
+    }
+
+    Expect(tracked.exitCode).toBe(0)
+    Expect(offending).toEqual([])
+    Expect(tracked.stdout.split('\n')).toContain('.codex/config.toml')
+    const configText = await FS.readText(FS.resolvePath('.codex/config.toml', root))
+    const config = Platform.parseToml(configText) as any
+    Expect(config.default_permissions).toBe('tao-workspace')
+    Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
+    Expect(config.permissions['tao-workspace'].filesystem['~/code/tao-lang-2/.git']).toBe('write')
+    const machinePaths = configText.split('\n').filter(line => line.includes(FS.homeDir()))
+    Expect(machinePaths).toEqual([
+      `"${FS.resolvePath('.local/state/watchman', FS.homeDir())}" = "allow"`,
+      `"${FS.resolvePath('.docker/run/docker.sock', FS.homeDir())}" = "allow"`,
+    ])
   })
 })

@@ -25,6 +25,12 @@ export type NativeKit = Readonly<Record<string, string>>
 /** HostPlatform is the runtime a prebuilt host binary installs onto. */
 export type HostPlatform = 'android' | 'ios-simulator'
 
+/** HOST_BINARIES names the binary each platform's host directory carries beside its manifest. */
+export const HOST_BINARIES: Readonly<Record<HostPlatform, string>> = {
+  android: 'tao-companion.apk',
+  'ios-simulator': 'Tao Companion.app',
+}
+
 /** HostManifest is what a prebuilt host carries beside its binary. */
 export type HostManifest = {
   format: typeof HOST_MANIFEST_FORMAT
@@ -128,6 +134,16 @@ export function hostKitProblems(carried: NativeKit, required: NativeKit): string
   return problems
 }
 
+/**
+ * hostKey names a host build wherever it is cached or published: the Companion's version, which
+ * rarely moves, and a digest of the native kit it carries, which moves with every native change.
+ * Two builds of one version with different kits therefore never share a directory or a release.
+ */
+export function hostKey(manifest: HostManifest): string {
+  const kit = Object.entries(manifest.nativeKit).toSorted(([left], [right]) => left.localeCompare(right))
+  return `${manifest.hostVersion}-${Platform.sha256Hex(JSON.stringify(kit)).slice(0, 12)}`
+}
+
 /** writeHostManifest records a host's manifest beside its binary in `hostDirectory`. */
 export async function writeHostManifest(hostDirectory: string, manifest: HostManifest): Promise<void> {
   await FS.writeJson(FS.resolvePath(HOST_MANIFEST_FILE, hostDirectory), manifest)
@@ -143,7 +159,14 @@ export async function readHostManifest(hostDirectory: string): Promise<HostManif
   if (!await FS.isFile(path)) {
     return undefined
   }
-  const manifest = await FS.readJson<unknown>(path)
+  return parseHostManifest(await FS.readJson<unknown>(path), path, ' Remove that host directory and run again.')
+}
+
+/**
+ * parseHostManifest accepts a manifest this Tao can read, whether it came from disk or a release,
+ * and names `source` and the caller's remedy in the failure otherwise.
+ */
+export function parseHostManifest(manifest: unknown, source: string, remedy = ''): HostManifest {
   if (
     !Json.isRecord(manifest)
     || manifest['format'] !== HOST_MANIFEST_FORMAT
@@ -152,9 +175,7 @@ export async function readHostManifest(hostDirectory: string): Promise<HostManif
     || !Json.isRecord(manifest['nativeKit'])
     || !Object.values(manifest['nativeKit']).every(identity => typeof identity === 'string')
   ) {
-    return Errors.throwHostEnvironment(
-      `The prebuilt host manifest at ${path} is not one this Tao can read. Remove that host directory and run again.`,
-    )
+    return Errors.throwHostEnvironment(`The prebuilt host manifest at ${source} is not one this Tao can read.${remedy}`)
   }
   return manifest as HostManifest
 }

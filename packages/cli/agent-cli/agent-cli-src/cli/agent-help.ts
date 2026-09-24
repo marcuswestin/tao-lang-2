@@ -62,6 +62,7 @@ function formatAgentHelpText(justLines: readonly string[]): string {
 Usage:
   ./agent help
   ./agent <just-command> [args...]
+  ./agent unsandboxed <host-command> [args...]
 
 Agent commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
@@ -79,7 +80,15 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
+  ./agent unsandboxed capabilities
+  ./agent unsandboxed land --dry-run
+  ./agent unsandboxed xcrun simctl list devices booted
+  ./agent unsandboxed ./tao dev
   ./agent setup --refresh-lockfile
+
+unsandboxed accepts only literal argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.
+It forwards matching arguments unchanged and fails before dispatch if still sandboxed. Other host
+operations need the Developer's explicit approval; plain commands remain sandboxed.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites

@@ -39,6 +39,22 @@ Test('Studio project root selection resolves a family folder to its sole nested 
   })
 })
 
+Test('Studio project root selection ignores a test sidecar project beside the app', async () => {
+  await withProjectFolders({
+    'WordFlower.tao': 'project { id "word-flower" name "WordFlower" }',
+    'Harness.test.tao': 'project { id "harness" name "Harness" }',
+  }, async root => {
+    const canonicalRoot = await FS.realPath(root)
+
+    Expect(await discoverStudioProjectRoots(root)).toEqual([canonicalRoot])
+    Expect(await resolveStudioProjectRoot(root)).toEqual({
+      inputRoot: canonicalRoot,
+      projectRoot: canonicalRoot,
+      selectedDescendant: false,
+    })
+  })
+})
+
 Test('Studio project root selection reports no candidate and asks for one project root', async () => {
   await withProjectFolders({
     'Notes.tao': 'view Notes() { }',

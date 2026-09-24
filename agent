@@ -7,6 +7,16 @@ emulate zsh
 unsetopt BASH_REMATCH
 set -e
 
+HOST_COMMAND_REQUESTED=false
+if [[ "${1:-}" == unsandboxed ]]; then
+  shift
+  if (( $# == 0 )); then
+    echo 'Usage: ./agent unsandboxed <command> [args...]' >&2
+    exit 2
+  fi
+  HOST_COMMAND_REQUESTED=true
+fi
+
 SCRIPT_DIR="${0:A:h}"
 AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
 DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"
@@ -31,6 +41,18 @@ function enter_devenv_if_needed() {
 }
 
 enter_devenv_if_needed
+if [[ "$HOST_COMMAND_REQUESTED" == true ]]; then
+  HOST_COMMAND_KIND="$(bun "$AGENT_CLI_PACKAGE_DIR/agent-cli-src/cli/agent-host-command-check.ts" \
+    "$SCRIPT_DIR/.rulesync/permissions.jsonc" "$@")" || exit $?
+  if [[ -n "${CODEX_SANDBOX:-}" ]] || ! ps -axo pid=,ppid=,lstart=,command= >/dev/null 2>&1; then
+    echo 'FAIL  ./agent unsandboxed is still running inside a sandbox; the host command was not started.' >&2
+    exit 1
+  fi
+  if [[ "$HOST_COMMAND_KIND" == external ]]; then
+    cd "$SCRIPT_DIR"
+    exec "$@"
+  fi
+fi
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
 

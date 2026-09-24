@@ -201,7 +201,7 @@ Describe('Studio agent chat server', () => {
     const availability = before['availability'] as Record<string, unknown>
     Expect(availability['enabled']).toBe(false)
     Expect(String(availability['reason'])).toBe(
-      'Cloud use is off for this session. Turn it on to send this project to a hosted model.',
+      'Cloud use is off for this session. Turn it on to send this project to Anthropic.',
     )
   })
 

@@ -32,7 +32,6 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
       configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
       effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-      landingBrokerReady: true,
     },
     gitHooks: ['commit-msg', 'pre-commit'].map(event => ({
       event,
@@ -51,8 +50,13 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     processRealPath: '/w',
     repositoryRoot: '/w',
     satisfies: Platform.semverSatisfies,
-    watchmanHealthy: true,
-    watchmanVersion: '2026.01.19.00',
+    watchman: {
+      clientVersion: '2026.01.19.00',
+      repositoryRoot: '/w',
+      server: { roots: ['/w'], state: 'answering' },
+      socket: '/home/.local/state/watchman/someone-state/sock',
+      stableClient: '/w/.devenv/profile/bin/watchman',
+    },
     ...overrides,
   }
 }
@@ -88,16 +92,24 @@ Describe('repository doctor', () => {
   })
 
   Test('treats optional tooling as a warning, never a failure', () => {
-    const report = doctorReport(facts({
-      direnvAllowed: undefined,
-      watchmanHealthy: undefined,
-      watchmanVersion: undefined,
-    }))
+    const report = doctorReport(facts({ direnvAllowed: undefined }))
 
-    Expect(check(report, 'watchman')?.status).toBe('warn')
-    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
     Expect(check(report, 'direnv')?.status).toBe('warn')
     Expect(report.status).toBe('warn')
+  })
+
+  Test('fails a checkout whose Watchman does not answer, because the fallback dies with EMFILE', () => {
+    const report = doctorReport(facts({
+      watchman: {
+        clientVersion: '2026.01.19.00',
+        repositoryRoot: '/w',
+        stableClient: '/w/.devenv/profile/bin/watchman',
+      },
+    }))
+
+    Expect(check(report, 'watchman')?.status).toBe('fail')
+    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
+    Expect(report.status).toBe('fail')
   })
 
   Test('fails an incomplete dependency graph with a repair command', () => {
@@ -136,14 +148,6 @@ Describe('repository doctor', () => {
         effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
       },
     }))
-    const missingBroker = doctorReport(facts({
-      githubTransport: {
-        configuredOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-        credentialHelpers: ['!/nix/store/gh/bin/gh auth git-credential'],
-        effectiveOriginUrl: 'https://github.com/marcuswestin/tao-lang-2.git',
-        landingBrokerReady: false,
-      },
-    }))
 
     Expect(check(ssh, 'GitHub transport')?.status).toBe('fail')
     Expect(check(ssh, 'GitHub transport')?.remediation).toContain('just github-setup')
@@ -151,8 +155,6 @@ Describe('repository doctor', () => {
     Expect(check(rewritten, 'GitHub transport')?.detail).toContain('stored as git@github.com')
     Expect(check(missingHelper, 'GitHub transport')?.status).toBe('warn')
     Expect(check(missingHelper, 'GitHub transport')?.detail).toContain('no GitHub CLI credential helper')
-    Expect(check(missingBroker, 'GitHub transport')?.status).toBe('warn')
-    Expect(check(missingBroker, 'GitHub transport')?.remediation).toContain('just landing-setup')
   })
 
   Test('warns when a shared hook was never installed', () => {

@@ -2,7 +2,7 @@ import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { companionDevClientUrl, CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import { nativeKitOf } from '../prebuilt-host/HostManifest'
-import { findCompatibleHost, type HostSearch, type PrebuiltHost } from '../prebuilt-host/PrebuiltHosts'
+import { type HostSearch, obtainCompatibleHost, type PrebuiltHost } from '../prebuilt-host/PrebuiltHosts'
 import { EXPO_SDK_VERSION, ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
@@ -33,7 +33,7 @@ const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so
 export type AndroidSession = ReturnType<typeof createAndroid>
 
 export type AndroidCompatibilityDependencies = {
-  /** Finds a prebuilt host able to run this Tao's app host; the default searches `hostRoots()`. */
+  /** Finds a prebuilt host able to run this Tao's app host; the default searches the caches, then releases. */
   findPrebuiltHost?: () => Promise<HostSearch>
   findRunningEmulator?: typeof findRunningEmulator
   installCompanion?: (serial: string, host: PrebuiltHost) => Promise<void>
@@ -233,7 +233,7 @@ async function prepareRuntimeOnSerial(
 }
 
 async function findPrebuiltHostFor(config: ExpoSessionConfig): Promise<HostSearch> {
-  return await findCompatibleHost('android', await nativeKitOf(Repo.resolvePath(config.RUNTIME_TOOLCHAIN_PATH)))
+  return await obtainCompatibleHost('android', await nativeKitOf(Repo.resolvePath(config.RUNTIME_TOOLCHAIN_PATH)))
 }
 
 async function ensureCompanionOnSerial(
