@@ -140,7 +140,9 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   // A mirror is detached, so its HEAD is a commit of its own: it stays where it is when main moves,
   // exactly as a real detached worktree does, until something checks a new commit out in it.
   repository.mirrorHead ??= repository.mainHead
-  const calls: Array<{ args: string[]; command: string; cwd?: string; stdio?: CLI.CommandStdio }> = []
+  const calls: Array<
+    { args: string[]; command: string; cwd?: string; env?: CLI.CommandSpec['env']; stdio?: CLI.CommandStdio }
+  > = []
   const files = new Map<string, string>([
     [
       '/repo-feature/.artifacts/merge/feat/example.msg',
@@ -158,6 +160,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
   /** The phases the landing reported, in order, which is what the lock exposes to the board. */
   const phases: string[] = []
   const lockState = { durableClaimsEnded: 0, phasesEnded: 0 }
+  const priorityState = { acquired: 0, released: 0 }
   const ancestorExitCodes = [...(repository.ancestorExitCodes ?? [])]
   const remoteMainSequence = [...(repository.remoteMainSequence ?? [])]
   let advertisedRemoteMain = repository.remoteMainHead
@@ -165,7 +168,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const runner: MergeCommandRunner = async (command, spec) => {
     const args = [...(spec.args ?? [])]
-    calls.push({ args, command, cwd: spec.cwd, stdio: spec.stdio })
+    calls.push({ args, command, cwd: spec.cwd, env: spec.env, stdio: spec.stdio })
     if (command === 'just') {
       return result(command, args, spec.cwd)
     }
@@ -361,6 +364,15 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const dependencies: MergeWithMainDependencies = {
     acquireLease: async () => leases.take(),
+    acquireVerificationPriority: async () => {
+      priorityState.acquired += 1
+      return {
+        token: 'fixture-priority',
+        release: async () => {
+          priorityState.released += 1
+        },
+      }
+    },
     askConfirm: async () => true,
     beginPhase: async (_repositoryRoot, name) => {
       phases.push(name)
@@ -422,6 +434,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     lockState,
     moves,
     phases,
+    priorityState,
     repository,
     snapshots,
     successLines,
@@ -972,6 +985,9 @@ Describe('merge-with-main', () => {
     // `stream` used to forward a nested lane's own output live, which a non-interactive landing has
     // no terminal to show as it arrives; `pipe` still captures every byte for `extractLaneReport`.
     Expect(verificationCalls.map(call => call.stdio)).toEqual(['pipe'])
+    Expect(verificationCalls.map(call => call.env?.['TAO_LANDING_PRIORITY_TOKEN'])).toEqual(['fixture-priority'])
+    Expect(fake.calls.find(call => call.command === 'just' && call.args[0] === 'land-barrier')?.env)
+      .toBeUndefined()
     Expect(outcome.mode).toBe('executed')
     Expect(fake.calls.filter(call => call.args[0] === 'push')).toHaveLength(1)
   })
@@ -1025,6 +1041,7 @@ Describe('merge-with-main', () => {
     Expect(fake.lines).toContain('verify-full: FAILED in 12.0s — first failure: shared')
     Expect(fake.lines).toContain('Failed:')
     Expect(fake.lines.some(line => line.includes('shared › renders the board'))).toBe(true)
+    Expect(fake.priorityState).toEqual({ acquired: 1, released: 1 })
     // The rollup and the raw tail are what the flood used to consist of; still absent here.
     Expect(fake.lines.some(line => line.includes('_typecheck: passed'))).toBe(false)
   })
@@ -1698,6 +1715,7 @@ Describe('merge-with-main', () => {
       const realPhases: string[] = []
       const dependencies: MergeWithMainDependencies = {
         acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
+        acquireVerificationPriority: async () => ({ token: 'fixture-priority', release: async () => {} }),
         askConfirm: async () => true,
         beginPhase: async (_repositoryRoot, name) => {
           realPhases.push(name)
@@ -1859,6 +1877,7 @@ async function realLandingFixture(): Promise<{
   const snapshots: string[] = []
   const dependencies: MergeWithMainDependencies = {
     acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
+    acquireVerificationPriority: async () => ({ token: 'fixture-priority', release: async () => {} }),
     askConfirm: async () => true,
     beginPhase: async () => {},
     endDurableClaim: async () => {},

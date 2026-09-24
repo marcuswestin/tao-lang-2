@@ -1,6 +1,11 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { LandingLock, LandingLockBusyError, type LandingPhaseName } from './LandingLock'
-import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
+import {
+  type LandingPriorityLease,
+  MachineLanes,
+  MachineResourceBusyError,
+  type MachineResourceLease,
+} from './MachineLanes'
 import { extractLaneReport } from './RunSummary'
 
 const SNAPSHOT_VERSION = 1
@@ -160,6 +165,7 @@ export type MergeWithMainDependencies = {
       onQueueWait?: () => Promise<void>
     },
   ) => Promise<MachineResourceLease>
+  acquireVerificationPriority: (repositoryRoot: string) => Promise<LandingPriorityLease | undefined>
   askConfirm: (message: string) => Promise<boolean>
   /** Report which phase of the landing the lock is being spent on. Never throws; see `LandingLock`. */
   beginPhase: (repositoryRoot: string, name: LandingPhaseName) => Promise<void>
@@ -192,6 +198,7 @@ const defaultDependencies: MergeWithMainDependencies = {
   // Forwarded rather than referenced, because the adapter is declared with the landing code it
   // belongs beside rather than up here with the rest of the injected effects.
   acquireLease: async options => await acquireLandingLock(options),
+  acquireVerificationPriority: async () => await MachineLanes.beginLandingPriority(),
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
   beginPhase: async (repositoryRoot, name) => {
     await LandingLock.beginPhase({ name, repositoryRoot })
@@ -1636,6 +1643,7 @@ async function runAndSnapshot(
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
   options: {
+    env?: CLI.CommandSpec['env']
     mutation?: 'feature' | 'none'
     onOutput?: CLI.CommandSpec['onOutput']
     stdio?: CLI.CommandStdio
@@ -1647,6 +1655,7 @@ async function runAndSnapshot(
     args,
     cwd,
     stdio: options.stdio ?? 'stream',
+    ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.onOutput === undefined ? {} : { onOutput: options.onOutput }),
   })
   const succeeded = result.exitCode === 0 && result.error === undefined && result.signal === null
@@ -1696,24 +1705,37 @@ async function runVerificationLane(
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
 ): Promise<CLI.CommandResult> {
-  if (dependencies.isInteractive()) {
-    return await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
-      stdio: 'inherit',
-    })
+  const priority = args[0] === LAND_BARRIER_LANE
+    ? undefined
+    : await dependencies.acquireVerificationPriority(snapshot.featureRoot)
+  if (args[0] !== LAND_BARRIER_LANE && priority === undefined) {
+    dependencies.writeLine('WARN  Landing verification priority unavailable; other lanes may contend for this run.')
   }
-  const capture = mergedOutputCapture()
+  const env = priority === undefined ? undefined : { [MachineLanes.LANDING_PRIORITY_ENV_KEY]: priority.token }
   try {
-    const result = await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
-      onOutput: capture.onOutput,
-      stdio: 'pipe',
-    })
-    writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, result), result.error))
-    return result
-  } catch (error) {
-    if (error instanceof Errors.CommandExecutionError) {
-      writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, error.result), error.result.error))
+    if (dependencies.isInteractive()) {
+      return await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+        env,
+        stdio: 'inherit',
+      })
     }
-    throw error
+    const capture = mergedOutputCapture()
+    try {
+      const result = await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+        env,
+        onOutput: capture.onOutput,
+        stdio: 'pipe',
+      })
+      writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, result), result.error))
+      return result
+    } catch (error) {
+      if (error instanceof Errors.CommandExecutionError) {
+        writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, error.result), error.result.error))
+      }
+      throw error
+    }
+  } finally {
+    await priority?.release()
   }
 }
 
