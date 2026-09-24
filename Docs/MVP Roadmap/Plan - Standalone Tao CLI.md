@@ -129,11 +129,15 @@ $ codesign --force --sign - --options runtime tao-bin      # hardened runtime
 $ tao-bin check .                                          # still runs, exit 0
 ```
 
-The 2026-09-22 upgrade also exposed a macOS 27 watcher regression: with the same CLI watch tests,
-Bun 1.3.13 delivered native file-edit events and 1.4.2 did not, including with host access.
-Chokidar polling delivered the edits. Tao's shared debounced watcher therefore uses polling on
-macOS with Bun 1.4.2, preserving `tao test --watch` and the development loop without changing
-the backend for other runtime versions.
+The 2026-09-22 upgrade also appeared to expose a macOS 27 watcher regression: with the same CLI
+watch tests, Bun 1.3.13 delivered native file-edit events and 1.4.2 did not. **Corrected
+2026-09-24:** the loss is the agent sandbox, not Bun or macOS. The sandbox refuses the FSEvents
+service, and Bun 1.3.14 moved macOS `fs.watch` onto FSEvents for single files as well as
+directories, so a sandboxed Bun 1.4.2 receives nothing. Outside the sandbox on macOS 27.0, Bun
+1.3.13, Bun 1.4.2, and Node 24 all delivered every event probed. Tao's shared debounced watcher
+still polls on macOS under Bun 1.3.14 or later, which costs an ordinary Mac some CPU, until the
+sandbox is allowed to reach FSEvents; `DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START`
+tracks that change.
 
 ### F4 — What the CLI reads at runtime, and whether it can be embedded
 
