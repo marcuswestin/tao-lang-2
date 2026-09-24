@@ -86,4 +86,3 @@ change that addressed it.
 - [DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES — Tao build snapshot loses project packages](<Developer environment upgrades/DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES.md>) — Candidate
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate, largely overtaken 2026-09-21 — the cost this entry is about fell by two
 - [DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR — Tao pipeline defects set every lane's floor](<Developer environment upgrades/DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR.md>) — Candidate
-- [DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX — The Android emulator cannot start in the sandbox](<Developer environment upgrades/DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX.md>) — Candidate
