@@ -2,6 +2,7 @@ import { devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
 import { createDevLoopExpoSession } from '@expo-host/dev-loop/expo-dev-loop'
 import {
   createAndroid,
+  emulatorExitMessage,
   expoGoSupportsSdk,
   expoGoVersionFromPackageInfo,
 } from '@expo-host/dev-loop/expo-runner/android'
@@ -607,6 +608,26 @@ en7: flags=8863
     )
     Expect(result).toBe(true)
     Expect(opened).toEqual(['ANDROID-B'])
+  })
+
+  Test('names why an emulator exited before booting, from the last line of its log', () => {
+    const qtRefusal = [
+      'INFO         | Android emulator version 36.6.5.0 (build_id 15221694) (CL:N/A)',
+      'Incompatible processor. This Qt build requires the following features:',
+      '    neon',
+    ].join('\n')
+
+    Expect(emulatorExitMessage(qtRefusal, '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted: Incompatible processor. This Qt build requires the following'
+        + " features: neon That check fails when a sandboxed shell hides the CPU's features; start the emulator"
+        + ' from an ordinary shell. Its log is /tmp/emulator.log.',
+    )
+    Expect(emulatorExitMessage('INFO | starting\nFATAL | AVD is locked\n', '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted: FATAL | AVD is locked. Its log is /tmp/emulator.log.',
+    )
+    Expect(emulatorExitMessage('', '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted, leaving nothing in /tmp/emulator.log.',
+    )
   })
 
   Test('accepts only Android Expo Go clients from the configured SDK generation', () => {
