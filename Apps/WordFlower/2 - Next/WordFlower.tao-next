@@ -4,7 +4,13 @@ use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: absorbed
+// Tranche status: open
+//
+// CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
+// action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
+// carries on. It is a statement in actions only; `guard` stays the view-side construct and tests a
+// data object's availability, never a boolean. A notice that explains the stop is an ordinary `if`
+// before the `check`, as `AddWorkspace` shows.
 //
 // REACTIVE EDITING. Input projections and explicit copies produce ordinary local values.
 // Writable view/action parameters share storage; copy parameters detach explicitly. Native

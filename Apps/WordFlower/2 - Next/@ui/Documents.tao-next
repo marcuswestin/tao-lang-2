@@ -46,7 +46,7 @@ view DocumentEditor(Document) {
          Final: Value
    }  }
    action SaveDocument() {
-      guard Input.Title empty
+      check Input.Title is not empty
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -64,7 +64,7 @@ view DocumentEditor(Document) {
       }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
-      guard ParagraphText empty
+      check ParagraphText is not empty
       // `async` starts as a later root, so capture the submitted value before clearing the input.
       // A failed detached write enters the datasource error state.
       set DetachedParagraphText = ParagraphText
