@@ -58,7 +58,7 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'ps',
     display: 'ps -axo pid=,ppid=,lstart=,command=',
     name: 'process table',
-    remediation: 'Run the displayed read-only whole-table shape directly when the active harness can broker it.',
+    remediation: 'Run ./agent unsandboxed processes list for the read-only whole-table view.',
   },
   {
     args: ['-0', String(Platform.runtimeProcess.pid)],
@@ -94,7 +94,8 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'xcrun',
     display: 'xcrun simctl list devices --json available',
     name: 'CoreSimulator service',
-    remediation: 'After a runtime install, restart macOS, open Device Hub once, then retry the displayed command.',
+    remediation:
+      'After a runtime install, restart macOS, open Device Hub once, then retry ./agent unsandboxed simulators list --json available.',
   },
   {
     args: ['ps', '--format', '{{.ID}}'],

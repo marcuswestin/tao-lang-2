@@ -1,4 +1,5 @@
 import { JUST_COMMANDS } from '../AgentCommands'
+import { hostCommandTarget } from './HostCommandTargets'
 
 type HostCommandSource = { agentHostCommands?: unknown }
 
@@ -14,7 +15,14 @@ export function agentHostCommands(source: HostCommandSource): string[][] {
       throw new TypeError(`Invalid or duplicate agentHostCommands prefix: ${String(entry)}`)
     }
     seen.add(entry)
-    return entry.split(' ')
+    const prefix = entry.split(' ')
+    if (
+      !(prefix.length === 1 && JUST_COMMANDS.includes(prefix[0] as (typeof JUST_COMMANDS)[number]))
+      && hostCommandTarget(prefix) === undefined
+    ) {
+      throw new TypeError(`agentHostCommands prefix has no named implementation: ${entry}`)
+    }
+    return prefix
   })
 }
 
@@ -22,12 +30,22 @@ export function agentHostCommands(source: HostCommandSource): string[][] {
 export function hostCommandKind(
   argv: readonly string[],
   prefixes: readonly (readonly string[])[],
-): 'agent' | 'external' | undefined {
-  const matched = prefixes.some(prefix =>
-    prefix.length <= argv.length && prefix.every((token, index) => token === argv[index])
-  )
-  if (!matched) {
+): 'agent' | 'named' | undefined {
+  const match = hostCommandPrefix(argv, prefixes)
+  if (match === undefined) {
     return undefined
   }
-  return JUST_COMMANDS.includes(argv[0] as (typeof JUST_COMMANDS)[number]) ? 'agent' : 'external'
+  return match.length === 1 && JUST_COMMANDS.includes(match[0] as (typeof JUST_COMMANDS)[number])
+    ? 'agent'
+    : 'named'
+}
+
+/** Resolve the longest listed whole-token prefix before a named implementation runs. */
+export function hostCommandPrefix(
+  argv: readonly string[],
+  prefixes: readonly (readonly string[])[],
+): readonly string[] | undefined {
+  return prefixes
+    .filter(prefix => prefix.length <= argv.length && prefix.every((token, index) => token === argv[index]))
+    .sort((a, b) => b.length - a.length)[0]
 }

@@ -1,7 +1,7 @@
 /**
- * The one table of what `./agent` exposes: `agent-dev.ts` registers a Commander command for each
- * name below, and `OutputDiscipline` reads the same table to redirect a raw `just <recipe>` call
- * back through the front door. Neither owns its own copy, so the two cannot drift apart.
+ * The one table of Just recipes `./agent` exposes: `agent-dev.ts` registers each name below, and
+ * `OutputDiscipline` reads it to redirect raw `just <recipe>` calls. Named host tool operations
+ * have separate implementations in HostCommandTargets and permission in agentHostCommands.
  */
 
 export const JUST_COMMANDS = [
@@ -32,6 +32,7 @@ export const JUST_COMMANDS = [
   // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
   'landed',
   'ledger-index',
+  'native-module-check',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a
   // second spelling.

@@ -380,7 +380,7 @@ problem. No ordinary-Terminal comparison result has been supplied. No host reboo
 browser permission workaround, or secret-file access was attempted.
 
 1. In a fresh turn with Full access selected, confirm the actual supplied permission policy and run
-   read-only `xcrun simctl list devices available --json`. Judge capabilities from actual results,
+   read-only `./agent unsandboxed simulators list available --json`. Judge capabilities from actual results,
    not just the mode label: the previous session allowed writes under `/` while retaining a sandbox.
    If still blocked, distinguish a task restriction from host failure before retrying or proposing
    a reboot. Use this exact worktree; do not clone or create another worktree, which would omit the
