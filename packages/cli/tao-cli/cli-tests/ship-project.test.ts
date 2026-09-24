@@ -31,6 +31,21 @@ Describe('tao ship project discovery', () => {
     })
   })
 
+  Test('ignores a test sidecar project beside the release project', async () => {
+    await withTaoFiles('tao-ship-project-', {
+      'App.tao': projectSource,
+      'Harness.test.tao': `
+        project { id "notes-harness" name "Notes Harness" }
+        app Harness { view HarnessView }
+        view HarnessView() { }
+      `,
+    }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      Expect(project.projectSourcePath).toBe(paths['App.tao'])
+      Expect(project.apps.map(app => app.name)).toEqual(['Notes', 'NotesBeta'])
+    })
+  })
+
   Test('discovers a package app and a cross-file variant under root project metadata', async () => {
     await withTaoFiles('tao-ship-split-project-', {
       'Project.tao': `

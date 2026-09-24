@@ -19,6 +19,9 @@ export async function discoverStudioProjectRoots(input: string): Promise<string[
   })
 
   for (const path of paths) {
+    if (path.endsWith('.test.tao')) {
+      continue
+    }
     const source = await FS.readText(path)
     const parsed = await Parser.parseSource(parserContext, source, { uri: Langium.URI.file(path), validation: false })
     const count = parsed.entry.ast.statements.filter(AST.isProjectDeclaration).length

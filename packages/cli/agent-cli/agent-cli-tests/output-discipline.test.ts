@@ -186,14 +186,14 @@ Describe('output discipline', () => {
   })
 
   Test('routes agent landing through its single approved entry point', () => {
-    Expect(refusalFor('just land')).toContain('./agent land')
-    Expect(isAllowed('./agent land')).toEqual(true)
-    Expect(refusalFor('just merge-with-main')).toContain('./agent land')
-    Expect(refusalFor('just my-land')).toContain('./agent land')
-    Expect(refusalFor('./dev land')).toContain('./agent land')
-    Expect(refusalFor('./dev merge-with-main')).toContain('./agent land')
+    Expect(refusalFor('just land')).toContain('./agent unsandboxed land')
+    Expect(isAllowed('./agent unsandboxed land')).toEqual(true)
+    Expect(refusalFor('just merge-with-main')).toContain('./agent unsandboxed land')
+    Expect(refusalFor('just my-land')).toContain('./agent unsandboxed land')
+    Expect(refusalFor('./dev land')).toContain('./agent unsandboxed land')
+    Expect(refusalFor('./dev merge-with-main')).toContain('./agent unsandboxed land')
     Expect(isAllowed('just land-barrier')).toEqual(true)
-    Expect(isAllowed('just landing-setup')).toEqual(true)
+    Expect(isAllowed('just landing-broker-teardown')).toEqual(true)
   })
 
   Test('leaves a `just` recipe `./agent` does not expose, and land-unlock, which keeps its own rule', () => {

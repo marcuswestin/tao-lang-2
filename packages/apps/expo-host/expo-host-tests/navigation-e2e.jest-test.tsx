@@ -1481,6 +1481,42 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('gives a native StackNav inside a JS selection item definite height', () => {
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props =>
+        createElement(RN.View, { testID: 'selected-native-stack', style: props.style }, props.children),
+      ScreenStackItem: props => createElement(RN.View, null, props.children),
+    })
+    try {
+      const home = TR.Navigation.View({
+        name: 'Selected native home',
+        render: () => createElement(RN.Text, null, 'Selected native content'),
+      })
+      const stack = configuredStack('Selected native stack', home)
+      const selection = configuredSelection({
+        display: TR.Value('drawer'),
+        initial: 'home',
+        items: { home: { content: stack, label: TR.Value('Home') } },
+        name: 'Selected native navigation',
+      })
+      const app = TR.Navigation.App({
+        name: 'Selected native app',
+        navigator: () => selection,
+        auxiliaries: () => ({}),
+      })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+      ExpectScreen(screen).toHaveText('Selected native content')
+      // ScreenStack needs both its own flex and a filling selection level. Without the latter,
+      // the iPhone lays the nested stack out at zero height and the selected app looks blank.
+      const nativeStack = screen.getByTestId('selected-native-stack')
+      Expect(RN.StyleSheet.flatten(nativeStack.props.style)).toMatchObject({ flex: 1 })
+      Expect(RN.StyleSheet.flatten(nativeStack.parent?.props.style)).toMatchObject({ flex: 1 })
+    } finally {
+      restoreNative()
+    }
+  })
+
   Test('lets only the active selected Stack own chrome selectors and the web document title', async () => {
     const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
     Object.defineProperty(globalThis, 'document', { configurable: true, value: { title: 'Host title' } })
