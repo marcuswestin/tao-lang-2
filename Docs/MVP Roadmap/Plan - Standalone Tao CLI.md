@@ -612,6 +612,29 @@ iCloud-backed app from the binary will not find it; that belongs with shipping f
 `tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
+_Web built 2026-09-24, not yet landed; iOS still open._ Most of this slice had already happened on
+`main`: `tao dev` generates its host under the project's `.tao/dev/runtime`, keeps Expo's log and
+dev data in the project, watches only the project outside a checkout, and gates the checkout-only
+keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
+
+- `DevRuntime` installs the host's packages through `HostDependencies` and links them from where
+  they are installed, instead of requiring a `node_modules` inside the host's files.
+- The dev loop starts Expo with `RuntimeToolchainPaths.installedExpoLauncher`: the binary acting as
+  Bun on Expo's script, with the three Metro locations in its environment. A checkout keeps `bunx`.
+  `ExpoServer`'s launcher gained `namesExpoScript`, because the start arguments open with the
+  package name `bunx` wants and Expo otherwise read `expo` as its project root.
+- `just standalone-cli-acceptance` now starts `tao dev` from the installed binary, waits for Metro,
+  fetches the web bundle, and checks it contains the app. Inside an agent sandbox, which refuses
+  FSEvents, Metro needs Watchman, so `TAO_ACCEPTANCE_WATCHMAN` names a `watchman` binary for that
+  run; a person's terminal needs neither.
+
+Still open for iOS: `run-targets.ts:114` calls `Repo.resolvePath(RUNTIME_TOOLCHAIN_PATH)` whenever
+the Simulator opens, which throws outside a checkout; `RuntimeToolchainPaths.packageRoot` is the
+replacement. That file belongs to the device-loop work (`A4`, `A9`), so the change is left to it,
+as is the same pattern at `android.ts:236,484` and in the unused `ExpoRunner.startExpo`.
+Separately, packaged Studio's `packagedExpoCommand` (`StudioPackagedService.ts:40-50`) launches
+Expo's script with the same `expo`-first arguments and may hit the same project-root error.
+
 **5. `tao test` off the checkout.** Resolve the managed Node runner per Tao version, remove the
 `.devenv/profile/bin` fallbacks in `test-command.ts` and `test-compiler/Worker.ts`, and make
 `tao create`'s post-create test run work outside the repository. Done when `tao create` without
@@ -682,7 +705,11 @@ overlap with `A3` and `A8`.
 4. **Does `expo start` need `typescript` resolvable from the project root?** `DEVENV-064` records
    that it does for the Studio preview. The probe host here had no `typescript` and bundled fine.
    Settle by adding it to the host lockfile and running `tao dev` on a project outside the
-   repository.
+   repository. **Settled 2026-09-24:** `expo start` refuses to run without `typescript` and
+   `@types/react` once a project has TypeScript files, although `expo export` did not ask for them.
+   The installed host now carries both, pinned to the repository's versions (`typescript` 5.9.3,
+   while Expo would suggest `~6.0.3`), and Expo writes its own `tsconfig.json` into the project's
+   dev runtime.
 5. **Do hardened-runtime entitlements need `com.apple.security.cs.allow-jit`?** `tao check` ran
    clean under `--options runtime` with no entitlements (F3). Re-verify with `tao dev` and a
    genuinely notarized build, since Metro exercises far more of the JIT.

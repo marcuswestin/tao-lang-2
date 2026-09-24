@@ -38,7 +38,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  * standalone plan removes its line when it lands, so a release cannot overstate the binary.
  */
 const KNOWN_GAPS = [
-  '`tao dev` does not run from the standalone binary yet; use a checkout for the dev loop.',
+  '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
   '`tao test` does not run from the standalone binary yet; `tao create` needs `--skip-tests`.',
   'The binary is not signed or notarized yet.',
 ] as const
@@ -58,6 +58,12 @@ const HOST_MANIFEST = 'packages/apps/expo-host/package.json'
 
 /** HOST_DEPENDENCY_ROOTS are where the repository's install puts the host's resolved dependencies. */
 const HOST_DEPENDENCY_ROOTS = ['packages/apps/expo-host/node_modules', 'node_modules'] as const
+
+/**
+ * DEV_SERVER_TOOLING is what `expo start` refuses to run without once a project has TypeScript
+ * files. Inside the repository it resolves from the root install; an installed host carries it.
+ */
+const DEV_SERVER_TOOLING = ['typescript', '@types/react'] as const
 
 /** BASE_TSCONFIG is the repository-wide compiler configuration the host's tsconfig extends. */
 const BASE_TSCONFIG = 'packages/tsconfig.base.json'
@@ -171,6 +177,9 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string): Promis
     if (!range.startsWith('workspace:')) {
       dependencies[name] = await installedVersion(repoRoot, name)
     }
+  }
+  for (const name of DEV_SERVER_TOOLING) {
+    dependencies[name] = await installedVersion(repoRoot, name)
   }
   await FS.writeJson(FS.resolvePath('package.json', stagedHost), {
     name: manifest.name,

@@ -31,6 +31,7 @@ export const RuntimeToolchainPaths = {
   dependencyRoot,
   expoCommand,
   expoEnvironment,
+  installedExpoLauncher,
 } as const
 
 /** dependencyRoot is the `node_modules` a run of the host resolves packages from. */
@@ -51,6 +52,21 @@ function expoEnvironment(): Record<string, string> {
     TAO_RUNTIME_SOURCE_ROOT: FS.resolvePath(`${TaoResources.RUNTIME_DIRECTORY}/TaoRuntime-src`, resourceRoot),
     TAO_SHARED_CORE_SOURCE_ROOT: FS.resolvePath(TaoResources.SHARED_CORE_DIRECTORY, resourceRoot),
   }
+}
+
+/**
+ * installedExpoLauncher is how the dev loop starts Expo from an installed Tao: the binary acting as
+ * Bun on Expo's script, with the locations Metro needs. It is undefined inside a checkout, where the
+ * dev loop keeps launching Expo through `bunx` as it always has.
+ */
+function installedExpoLauncher(
+  runtimeRoot: string,
+): { argsPrefix: string[]; env: Record<string, string>; executable: string; namesExpoScript: true } | undefined {
+  if (resourceRoot === undefined) {
+    return undefined
+  }
+  const expo = expoCommand(runtimeRoot, [])
+  return { argsPrefix: expo.args, env: expo.env, executable: expo.command, namesExpoScript: true }
 }
 
 /** ExpoCommand is one Expo CLI invocation: what to run, with which arguments and extra environment. */

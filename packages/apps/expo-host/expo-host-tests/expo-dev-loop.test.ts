@@ -286,6 +286,39 @@ Describe('Expo dev-loop command helpers', () => {
     ].join('\n'))
   })
 
+  // `bunx` takes the package name first; an installed Tao's launcher already names Expo's script,
+  // and Expo reads a stray `expo` as its project root.
+  Test('drops the package name only for a launcher that already names Expo’s script', async () => {
+    const firstArgument = async (namesExpoScript: boolean): Promise<string> => {
+      const root = await mkTestDir('tao-expo-launcher-args-')
+      const argsPath = FS.resolvePath('args.txt', root)
+      const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
+        command: {
+          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0"', argsPath],
+          executable: '/bin/sh',
+          namesExpoScript,
+        },
+        logRoot: root,
+        runtimeToolchainSourceRoot: root,
+        stopTimeoutMs: 25,
+      })
+      try {
+        await server.start()
+        for (let attempt = 0; attempt < 200 && !await FS.isFile(argsPath); attempt += 1) {
+          await Time.sleep(10)
+        }
+        await Time.sleep(20)
+        return (await FS.readText(argsPath)).split('\n')[0] ?? ''
+      } finally {
+        await server.stop().catch(() => undefined)
+        await FS.remove(root)
+      }
+    }
+
+    Expect(await firstArgument(false)).toBe('expo')
+    Expect(await firstArgument(true)).toBe('start')
+  })
+
   Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
     const root = await mkTestDir('tao-expo-process-tree-')
     const descendantPidPath = FS.resolvePath('descendant.pid', root)
