@@ -7,7 +7,7 @@ Written material about Tao, in five folders.
 - **`MVP Roadmap/`** — what remains before Tao is released to outside developers, split into the
   work agents can execute (`Agent MVP Roadmap.md`) and the judgments only the Developer can make
   (`Developer MVP Roadmap.md`). It points into `Roadmap/` for per-workstream context and duplicates none of
-  it.
+  it. `Plan - Initial release QA.md` organizes the final new-user review of the integrated release.
 - **`Spec/`** — the authoritative contract for what the toolchain implements today. If the code and
   a spec page disagree, one of them is a bug. Operational how-to for a product or package (launch,
   ports, doctor, release) lives next to that package — for Studio, `packages/ides/studio/README.md` —
