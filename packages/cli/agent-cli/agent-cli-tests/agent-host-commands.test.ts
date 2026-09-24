@@ -110,6 +110,14 @@ Describe('agent host command permissions', () => {
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })
 
+  Test('runs CocoaPods under a UTF-8 locale, which it needs to read podspecs', () => {
+    // An agent's host shell carries no LANG, and `pod install` then fails normalizing an
+    // ASCII-8BIT string before it reads a single pod.
+    for (const operation of [['pods', 'install'], ['pods', 'spec']]) {
+      Expect(hostCommandTarget(operation)?.env).toEqual({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })
+    }
+  })
+
   Test('removes stale Claude host rules when the canonical list changes', () => {
     const initial = JSON.stringify({
       permissions: { allow: ['Bash(./agent *)', 'Bash(./agent unsandboxed board)'] },
