@@ -8,12 +8,15 @@ description: >-
 
 `./agent help` and each command's own `--help` print the lane scopes, their composition, and the flags (`--no-cache`, target resolution, `--json`); read those rather than a second copy here. This skill owns what they do not print: the caching and test-selection reasoning (`references/caching-and-selection.md`), the landing command's mechanics and failure classification (`references/landing.md`), and the judgment calls below.
 
+Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
+the plain `./agent` shape stays sandboxed.
+
 ## The machine-wide landing lock
 
-You do not claim it by hand. Ready `./agent land` processes queue FIFO, ahead of new broad lanes;
+You do not claim it by hand. Ready `./agent unsandboxed land` processes queue FIFO, ahead of new broad lanes;
 an active holder is never preempted. While queued, they refresh main without full verification.
 `verify`, `verify-full`, `verify-full-sandbox`, and `test-all` take it
-for the length of the run, and `./agent land` takes it once for the whole landing, so **`land-lock` and
+for the length of the run, and `./agent unsandboxed land` takes it once for the whole landing, so **`land-lock` and
 `land-unlock` are recovery and debugging tools**, not part of the normal path. Everything narrower
 needs no lock and never waits — `test-file`, a named test, `test-retry`, `check`, `fix`, `fmt`. While
 a **landing** holds it, `verify-changed` and `test-changed` additionally wait; lanes already running
@@ -24,7 +27,7 @@ forcing one is the Developer's call, so bring `./agent board` to the Developer r
 ## `./agent finalize`
 
 It is the iteration-time readiness command when landing is not yet authorized, not a step of an
-already authorized landing — `./agent land` does
+already authorized landing — `./agent unsandboxed land` does
 its own preparation, integration and verification in one process. It brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
 record already covers this exact tree, drafts the merge message from the branch's own commits when
@@ -72,7 +75,7 @@ waiting on it and a silent agent is indistinguishable from a stuck one. Backgrou
 in which to say something; it does not buy the right to say nothing.
 
 - Decide by how long the run is, not by which is tidier: a gate finishing inside a minute runs in the
-  foreground with a timeout, while `verify-full` and `./agent land` run backgrounded with a report.
+  foreground with a timeout, while `verify-full` and `./agent unsandboxed land` run backgrounded with a report.
 - Report about every 20 seconds from start to verdict, one line each: what finished since the last
   note, what is running now, and anything that has already failed. A note that the same node is still
   running is the report the Developer wants, because it dates the silence — do not wait to be asked.

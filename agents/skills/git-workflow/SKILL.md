@@ -19,10 +19,10 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
   `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
-  files move, but protected paths stay dirty. Do not try alternate commands or switch to an
-  unsandboxed shell to finish one. Diagnose the exact state read-only, report the write needed, and
-  pause for the Developer's explicit approval. An authorized `./agent land` is the exception and performs its
-  own integration under the landing lock.
+  files move, but protected paths stay dirty. Do not try alternate commands or another host shape
+  to finish one. Diagnose the exact state read-only, report the write needed, and pause for the
+  Developer's explicit approval. An authorized `./agent unsandboxed land` performs its own
+  integration under the landing lock.
 
 ## Moving a branch ref
 
@@ -49,7 +49,7 @@ the SHA. It preserves Git's squash appendix on `main` — summary, bullets, a bl
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
 landing command's mechanics, evidence, and message format. After the Developer authorizes landing this slice,
-run `./agent land`: it fetches and integrates current `main`, verifies, and pushes while holding
+run `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.

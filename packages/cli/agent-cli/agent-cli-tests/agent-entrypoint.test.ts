@@ -1,5 +1,5 @@
-import { CLI, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 /**
  * Exercises `agent-dev.ts` itself rather than a unit underneath it, because the behavior under test
@@ -17,6 +17,111 @@ async function runEntrypoint(args: readonly string[]): Promise<{ exitCode: numbe
 }
 
 Describe('agent entrypoint', () => {
+  Test('unsandboxed forwards the command, quoted arguments, and flags unchanged', async () => {
+    const root = await mkTestDir('tao-agent-unsandboxed-')
+    try {
+      const agent = FS.resolvePath('agent', root)
+      const helper = FS.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh', root)
+      const dependencyScript = FS.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh', root)
+      const build = FS.resolvePath('.artifacts/build/agent-dev/agent-dev.js', root)
+      const stamp = FS.resolvePath('.artifacts/build/agent-dev/agent-dev.stamp', root)
+      const bin = FS.resolvePath('bin', root)
+      const marker = FS.resolvePath('argv.txt', root)
+      await FS.copyFile(Repo.resolvePath('agent'), agent)
+      await FS.writeText(
+        FS.resolvePath('.rulesync/permissions.jsonc', root),
+        '{ "agentHostCommands": ["test", "xcrun simctl list devices"] }',
+      )
+      await FS.writeText(
+        helper,
+        'tao_activate_devenv_profile() { return 0; }\ntao_bun_temp_dir() { echo "$1"; }\ntao_warn_on_detached_head() { :; }\n',
+      )
+      await FS.writeText(dependencyScript, '#!/bin/zsh\nexit 0\n')
+      await FS.writeText(build, '')
+      await FS.writeText(stamp, '')
+      await FS.mkdir(bin)
+      const fakeBun = FS.resolvePath('bun', bin)
+      const fakePs = FS.resolvePath('ps', bin)
+      const fakeXcrun = FS.resolvePath('xcrun', bin)
+      await FS.writeText(
+        fakeBun,
+        '#!/bin/zsh\nif [[ "$1" == */agent-host-command-check.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_CHECKER" "$@"; fi\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n',
+      )
+      await FS.chmod(fakeBun, 0o755)
+      await FS.writeText(fakePs, '#!/bin/zsh\nexit 0\n')
+      await FS.chmod(fakePs, 0o755)
+      await FS.writeText(fakeXcrun, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
+      await FS.chmod(fakeXcrun, 0o755)
+      const env = {
+        PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+        TAO_TEST_ARGS: marker,
+        TAO_REAL_BUN: Platform.runtimeProcess.execPath,
+        TAO_REAL_CHECKER: Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-command-check.ts'),
+        CODEX_SANDBOX: '',
+      }
+      const run = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'test', 'two words', 'a "quoted" value', '--json', 'literal $HOME'],
+        cwd: root,
+        env,
+      })
+      Expect(run.exitCode).toBe(0)
+      Expect((await FS.readText(marker)).split('\n').filter(Boolean)).toEqual([
+        build,
+        'test',
+        'two words',
+        'a "quoted" value',
+        '--json',
+        'literal $HOME',
+      ])
+
+      await FS.remove(marker)
+      const native = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'xcrun', 'simctl', 'list', 'devices', 'booted'],
+        cwd: root,
+        env,
+      })
+      Expect(native.exitCode).toBe(0)
+      Expect((await FS.readText(marker)).split('\n').filter(Boolean))
+        .toEqual(['simctl', 'list', 'devices', 'booted'])
+
+      await FS.remove(marker)
+      const unlisted = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'xcrun', 'simctl', 'erase', 'all'],
+        cwd: root,
+        env,
+      })
+      Expect(unlisted.exitCode).toBe(2)
+      Expect(unlisted.stderr).toContain('agentHostCommands in .rulesync/permissions.jsonc')
+      Expect(await FS.exists(marker)).toBe(false)
+
+      const missing = await CLI.run('zsh', { args: [agent, 'unsandboxed'], cwd: root })
+      Expect(missing.exitCode).toBe(2)
+      Expect(missing.stderr).toContain('Usage: ./agent unsandboxed <command> [args...]')
+
+      await FS.remove(marker)
+      const sandboxed = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'test'],
+        cwd: root,
+        env: { ...env, CODEX_SANDBOX: 'seatbelt' },
+      })
+      Expect(sandboxed.exitCode).toBe(1)
+      Expect(sandboxed.stderr).toContain('the host command was not started')
+      Expect(await FS.exists(marker)).toBe(false)
+
+      await FS.writeText(fakePs, '#!/bin/zsh\nexit 1\n')
+      const deniedProcessTable = await CLI.run('zsh', {
+        args: [agent, 'unsandboxed', 'test'],
+        cwd: root,
+        env,
+      })
+      Expect(deniedProcessTable.exitCode).toBe(1)
+      Expect(deniedProcessTable.stderr).toContain('the host command was not started')
+      Expect(await FS.exists(marker)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('hints that a front-door flag belongs after the command, not before it', async () => {
     const result = await runEntrypoint(['--verbose', 'board'])
 

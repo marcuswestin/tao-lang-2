@@ -9,7 +9,6 @@ import {
   environmentFingerprint,
   readFingerprintFacts,
 } from './EnvironmentFingerprint'
-import { landingBrokerIsReady } from './landing-broker/LandingBrokerClient'
 import { type LaneRecord, MachineLanes } from './MachineLanes'
 import { readWatchmanFacts, watchmanChecks, type WatchmanFacts } from './WatchmanHealth'
 
@@ -125,7 +124,6 @@ type GitHubTransport = {
   configuredOriginUrl?: string
   credentialHelpers: readonly string[]
   effectiveOriginUrl?: string
-  landingBrokerReady?: boolean
 }
 
 /** DoctorFacts is the machine state the checks read, gathered once so the checks stay pure. */
@@ -442,16 +440,8 @@ function githubTransportCheck(facts: DoctorFacts): DoctorCheck {
       status: 'warn',
     }
   }
-  if (facts.githubTransport.landingBrokerReady === false) {
-    return {
-      detail: `${effectiveOriginUrl} is configured, but the credential-isolated landing broker is unavailable`,
-      name: 'GitHub transport',
-      remediation: 'Install or refresh it from a normal terminal with: just landing-setup',
-      status: 'warn',
-    }
-  }
   return {
-    detail: `${effectiveOriginUrl} with the GitHub CLI credential helper and landing broker`,
+    detail: `${effectiveOriginUrl} with the GitHub CLI credential helper`,
     name: 'GitHub transport',
     status: 'pass',
   }
@@ -687,14 +677,13 @@ export async function readDoctorFacts(
 }
 
 async function readGitHubTransport(repositoryRoot: string): Promise<GitHubTransport> {
-  const [configured, effective, helpers, landingBrokerReady] = await Promise.all([
+  const [configured, effective, helpers] = await Promise.all([
     CLI.run('git', { args: ['config', '--local', '--get', 'remote.origin.url'], cwd: repositoryRoot }),
     CLI.run('git', { args: ['remote', 'get-url', 'origin'], cwd: repositoryRoot }),
     CLI.run('git', {
       args: ['config', '--get-all', 'credential.https://github.com.helper'],
       cwd: repositoryRoot,
     }),
-    landingBrokerIsReady().catch(() => false),
   ])
   return {
     configuredOriginUrl: successfulLine(configured),
@@ -702,7 +691,6 @@ async function readGitHubTransport(repositoryRoot: string): Promise<GitHubTransp
       ? helpers.stdout.split('\n').map(line => line.trim()).filter(line => line.length > 0)
       : [],
     effectiveOriginUrl: successfulLine(effective),
-    landingBrokerReady,
   }
 }
 

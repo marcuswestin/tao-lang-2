@@ -1,0 +1,163 @@
+# Repo-local filesystem, network, and approval settings for Tao development.
+# Git metadata writes outside the worktree are routed through Auto-review.
+#
+# Tracked so a new worktree has its permission profile before setup or session hooks run.
+# Unix socket entries must be absolute; setup refreshes those machine-specific values.
+# Review any resulting config diff before committing it on another machine.
+#
+# Generated with .codex/rules/tao.rules by `./agent setup` from .rulesync/permissions.jsonc
+# and .rulesync/profiles.jsonc. Edit those canonical files, not either generated Codex output:
+# rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a
+# curated domain allowlist, so this profile is rendered by
+# packages/cli/agent-cli/agent-cli-src/agent-config/CodexConfigGenerator.ts instead.
+#
+# The sibling .codex/hooks.json is generated from .rulesync/hooks.jsonc by the same setup and
+# runs `./agent setup` when a session starts, the one setup entry Worktrunk (.config/wt.toml),
+# Claude Code (.claude/settings.json hooks), and Cursor (.cursor/worktrees.json) reach too.
+# Codex trusts a repository hook once per content hash through its /hooks command.
+
+default_permissions = "tao-workspace"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
+# Live retrieval so agents can research language, tooling, and dependency questions
+# without an approval round-trip.
+web_search = "live"
+
+# Required for the per-profile domain rules below to be enforced.
+[features]
+network_proxy = true
+
+# Delegation defaults. The model is the standard tier of the routing table in
+# agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
+[agents]
+enabled = true
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "medium"
+max_concurrent_threads_per_session = 5
+
+[permissions.tao-review]
+extends = ":read-only"
+description = "Tao review: inspect the worktree and reference repository without editing them."
+
+[permissions.tao-review.filesystem]
+# The previous repository is reference material only (see AGENTS.md).
+"~/code/tao-lang" = "read"
+"~/.aws/**" = "deny"
+"~/.config/gh/**" = "deny"
+"~/.ssh/**" = "deny"
+
+[permissions.tao-review.filesystem.":workspace_roots"]
+# Not `.env*`: that pattern also matches this repository's own `.envrc`.
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+
+[permissions.tao-review.network]
+enabled = true
+
+
+# Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.
+[permissions.tao-review.network.domains]
+"**.anthropic.com" = "allow"
+"**.appstoreconnect.apple.com" = "allow"
+"**.cachix.org" = "allow"
+"**.developer.apple.com" = "allow"
+"**.expo.dev" = "allow"
+"**.expo.io" = "allow"
+"**.github.com" = "allow"
+"**.githubusercontent.com" = "allow"
+"**.itunes.apple.com" = "allow"
+"**.nodejs.org" = "allow"
+"**.npmjs.org" = "allow"
+"**.openai.com" = "allow"
+"appleid.apple.com" = "allow"
+"cache.nixos.org" = "allow"
+"contentdelivery.apple.com" = "allow"
+"devimages-cdn.apple.com" = "allow"
+"exp.host" = "allow"
+"gsa.apple.com" = "allow"
+"idmsa.apple.com" = "allow"
+"repo1.maven.org" = "allow"
+"swcdn.apple.com" = "allow"
+"swdist.apple.com" = "allow"
+
+[permissions.tao-workspace]
+extends = ":workspace"
+description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."
+
+[permissions.tao-workspace.filesystem]
+"~/code/tao-lang-2/.git" = "write"
+# Caches and shared state the pinned toolchain writes outside the worktree. One list serves
+# both harnesses: these are Claude Code's sandbox write paths, spelled as Codex rules.
+"~/.bun" = "write"
+"~/.cache" = "write"
+"~/.gradle" = "write"
+"~/.android" = "write"
+"~/.expo" = "write"
+"~/.hutch" = "write"
+"~/.local/state/watchman" = "write"
+"~/Library/Caches" = "write"
+# The previous repository is reference material only (see AGENTS.md).
+"~/code/tao-lang" = "read"
+
+[permissions.tao-workspace.network]
+enabled = true
+# Tao's dev loop binds Metro, Studio, and the local InstantDB stack to loopback ports.
+allow_local_binding = true
+
+[permissions.tao-workspace.network.unix_sockets]
+"/nix/var/nix/daemon-socket/socket" = "allow"
+"/Users/ro/.local/state/watchman" = "allow"
+
+# Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.
+[permissions.tao-workspace.network.domains]
+"**.anthropic.com" = "allow"
+"**.appstoreconnect.apple.com" = "allow"
+"**.cachix.org" = "allow"
+"**.developer.apple.com" = "allow"
+"**.expo.dev" = "allow"
+"**.expo.io" = "allow"
+"**.github.com" = "allow"
+"**.githubusercontent.com" = "allow"
+"**.itunes.apple.com" = "allow"
+"**.nodejs.org" = "allow"
+"**.npmjs.org" = "allow"
+"**.openai.com" = "allow"
+"appleid.apple.com" = "allow"
+"cache.nixos.org" = "allow"
+"contentdelivery.apple.com" = "allow"
+"devimages-cdn.apple.com" = "allow"
+"exp.host" = "allow"
+"gsa.apple.com" = "allow"
+"idmsa.apple.com" = "allow"
+"repo1.maven.org" = "allow"
+"swcdn.apple.com" = "allow"
+"swdist.apple.com" = "allow"
+
+[permissions.tao-native]
+extends = "tao-workspace"
+description = "Tao native host: add Simulator and Xcode working directories; host commands still follow project rules."
+
+[permissions.tao-native.filesystem]
+"~/Library/Developer/CoreSimulator" = "write"
+"~/Library/Developer/Xcode/DerivedData" = "write"
+"~/Library/Logs/CoreSimulator" = "write"
+
+[permissions.tao-local-services]
+extends = "tao-workspace"
+description = "Tao local services: opt in to the Docker daemon used by the local InstantDB stack."
+
+[permissions.tao-local-services.network.unix_sockets]
+"/var/run/docker.sock" = "allow"
+"/Users/ro/.docker/run/docker.sock" = "allow"
+
+[permissions.tao-release]
+extends = "tao-native"
+description = "Tao release: add the local Xcode archive destination; credentials and publication remain denied or reviewed."
+
+[permissions.tao-release.filesystem]
+"~/Library/Developer/Xcode/Archives" = "write"
+
+[permissions.tao-unsandboxed]
+extends = ":danger-full-access"
+description = "Tao unsandboxed: run with the Bash sandbox off; a running session can switch with /sandbox."

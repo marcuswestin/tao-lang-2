@@ -50,29 +50,27 @@ behind it.
 
 ## Sandbox or host
 
-- `./agent capabilities` distinguishes a sandbox denial from a missing host tool. Reach for it
+- `./agent unsandboxed capabilities` distinguishes a sandbox denial from a missing host tool. Reach for it
   before concluding the host lacks something.
 - Opt-in permission profiles launch as harness sessions — see `just --list`'s Sessions group.
   Codex reads the same profiles as `tao-review`, `tao-native`, `tao-local-services`, and
   `tao-release`, defaulting to `tao-workspace`.
-- On a sandbox violation, use the failed command's report and `./agent capabilities` to distinguish
+- On a sandbox violation, use the failed command's report and `./agent unsandboxed capabilities` to distinguish
   a host requirement from a broken command. If a write needs host access, tell the Developer the exact
   operation and why, then pause until the Developer explicitly approves it in the conversation. Tool-level
   auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
-  change to route around the denial. `./agent land` is the standing integration exception after
-  the Developer authorizes landing that named slice; `./agent prepare-release studio|ide-extension`
-  has host access for local preparation only.
-- The browser and native UI lanes cannot run inside the managed Bash sandbox. Run them through
-  `./agent studio-smoke` or `./agent studio-proof-real-app`; if the host blocks Chrome there,
-  rerun only with explicit review, and never reuse an existing browser profile.
+  change to route around the denial. `.rulesync/permissions.jsonc` grants only the named
+  `./agent unsandboxed` host commands in default sessions; landing still needs authorization for the named slice.
+- The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
+  `./agent unsandboxed studio-smoke` or `./agent unsandboxed studio-proof-real-app`; if the host
+  blocks Chrome there, rerun only with explicit review, and never reuse an existing browser profile.
 
 ## Processes and ports
 
-- Inspect all processes with the fixed read-only shape `ps -axo pid=,ppid=,lstart=,command=`, one
-  process's start time with `ps -o lstart= -p <pid>`, and one listening port with
-  `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Any other `ps` shape fails `operation not permitted`
-  (add it to `.rulesync/permissions.jsonc` if genuinely needed), and every signal stays under
-  review since a wildcard rule cannot validate a PID.
+- Inspect all processes with `./agent unsandboxed ps -axo pid=,ppid=,lstart=,command=`, one
+  process's start time with `./agent unsandboxed ps -o lstart= -p <pid>`, and one listening port
+  with sandboxed `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Other `ps` shapes need the Developer's
+  approval, and every signal stays under review since a prefix cannot validate a PID.
 - Repository code reads process facts through `ProcessTree`, never through `ps`. On macOS it uses
   libproc with no subprocess, so a sandbox denial cannot silently degrade its PID-reuse protection.
 - After review, confirm the PID belongs to the intended task. Send `kill -TERM <pid>` first and

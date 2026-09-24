@@ -183,7 +183,7 @@ of whether a new language feels real.
   its own README, and the repository licence. The editor/CLI version relationship still needs to
   follow the standalone CLI work; an isolated VS Code installation and both marketplace releases
   remain unproved.
-- Release workflow progress: `./agent prepare-release ide-extension` packages and checks a clean VS Code
+- Release workflow progress: `./agent unsandboxed prepare-release ide-extension` packages and checks a clean VS Code
   installation; `just ide-extension-release-publish` uploads the same VSIX to both registries. Both
   still need host acceptance, publisher accounts, and the final licence before use.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.

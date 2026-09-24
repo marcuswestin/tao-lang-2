@@ -1,7 +1,6 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { GeneratedEvidence } from './GeneratedEvidence'
 import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
-import { inspectLandingRemote, type LandingBrokerInspection } from './landing-broker/LandingBrokerClient'
 import { MergeWithMainCommand, validateMergeMessage } from './MergeWithMain'
 import { VerificationLanes } from './VerificationLanes'
 
@@ -113,7 +112,6 @@ export type FinalizeDependencies = {
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
   makeProbeDirectory: (prefix: string) => Promise<string>
-  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
@@ -127,7 +125,6 @@ export type FinalizeDependencies = {
 const defaultDependencies: FinalizeDependencies = {
   exists: FS.exists,
   findGreenTree: GreenTree.find,
-  inspectRemote: inspectLandingRemote,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
   now: () => new Date(),
@@ -524,7 +521,7 @@ async function assertCleanWorktree(dependencies: FinalizeDependencies, root: str
 }
 
 /**
- * Integrate main when the branch does not already contain it. The installed broker fetches the
+ * Integrate main when the branch does not already contain it. The remote fetches the
  * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
  * machines that have not installed it working, with local main as the final offline fallback.
  */
@@ -564,30 +561,23 @@ async function integrateMain(
 }
 
 /**
- * readMainSha answers "what is main" without changing anything, through the broker where it is
- * installed, a direct fetch where it is not, and the local ref offline. It is separate from
+ * readMainSha answers "what is main" with a direct fetch and the local ref offline. It is separate from
  * integrating because the landing transaction now integrates main itself, under the lock, while the
  * unlocked preparation still needs main's sha to draft a merge message against.
  */
 async function readMainSha(dependencies: FinalizeDependencies, root: string, lines: string[]): Promise<string> {
-  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
-  const brokerMain = broker?.refs.get(MAIN_BRANCH)
   let directMain: string | undefined
-  if (brokerMain === undefined) {
-    const fetch = await dependencies.run('git', {
-      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
-      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    }
+  const fetch = await dependencies.run('git', {
+    args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
+    directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
   }
-  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
+  const mainSha = directMain ?? await localMainSha(dependencies, root)
   lines.push(
-    brokerMain !== undefined
-      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
-      : directMain !== undefined
+    directMain !== undefined
       ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
       : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
   )

@@ -488,7 +488,7 @@ the preparation command with host access; publication remains a separate operato
 release recipes target a **public GitHub Releases repository** and stable updates only:
 
 ```bash
-./agent prepare-release studio --repo OWNER/REPO --version 0.0.1
+./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
 # Inspect the local artifacts and release report before making them public.
 just studio-release-publish OWNER/REPO
 ```

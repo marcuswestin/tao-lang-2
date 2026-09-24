@@ -28,13 +28,12 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
 
 /**
  * FALLBACK_DESCRIPTIONS covers a command whose recipe `just --list` never names: `setup` runs the
- * private `_setup`; `typecheck`, `parser-gen`, and `ledger-index` run recipes with different names;
- * `prepare-release` runs `./dev` directly to avoid shell interpolation of host-capable arguments.
+ * private `_setup`, and `typecheck`, `parser-gen`, and `ledger-index` run a recipe spelled
+ * differently from the command (`_typecheck`, `_parser-gen`, `_fix-ledger-index`).
  */
 const FALLBACK_DESCRIPTIONS: Partial<Record<string, string>> = {
   'ledger-index': 'Regenerate the developer-environment ledger index from its entry files',
   'parser-gen': 'Regenerate the parser from the grammar',
-  'prepare-release': 'Prepare Studio or the IDE extension locally with host access; never publish',
   setup: 'Install dependencies and generate agent adapters',
   typecheck: 'Type-check every package',
 }
@@ -62,7 +61,8 @@ function formatAgentHelpText(justLines: readonly string[]): string {
   return `
 Usage:
   ./agent help
-  ./agent <command> [args...]
+  ./agent <just-command> [args...]
+  ./agent unsandboxed <host-command> [args...]
 
 Agent commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
@@ -80,9 +80,17 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
-  ./agent prepare-release studio --repo OWNER/REPO --version 0.0.1
-  ./agent prepare-release ide-extension
+  ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
+  ./agent unsandboxed prepare-release ide-extension
+  ./agent unsandboxed capabilities
+  ./agent unsandboxed land --dry-run
+  ./agent unsandboxed xcrun simctl list devices booted
+  ./agent unsandboxed ./tao dev
   ./agent setup --refresh-lockfile
+
+unsandboxed accepts only literal argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.
+It forwards matching arguments unchanged and fails before dispatch if still sandboxed. Other host
+operations need the Developer's explicit approval; plain commands remain sandboxed.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
