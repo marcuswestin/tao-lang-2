@@ -337,13 +337,12 @@ staged-squash **tree-equality assertion** runs under every combination, includin
 because it is a correctness check rather than an optimization: the squash must be the same tree the
 verification proved, and a mismatch stops the landing.
 
-Remote reads and the final push prefer the host-owned Tao landing broker installed by
-`just landing-setup` (also installed by `just github-setup`). The bundled LaunchAgent owns the
-GitHub CLI credential boundary; its socket accepts only fixed-repository ref inspection and one
-atomic, lease-checked main/archive landing. It disables Git hooks and user/system Git config, never
-executes repository source, and never returns a credential. Without the broker, a normal terminal
-retains the direct-Git fallback; a sandboxed agent gets the installation command rather than a
-request to expose `~/.config/gh`.
+Default agents run `./agent unsandboxed land` for host access. The wrapper forwards its arguments
+to the ordinary landing handler; the generated harness rules allow only the named operations in
+`.rulesync/permissions.jsonc`. Landing uses a single lease-checked
+`git push --atomic` for main, the archive, and feature-branch deletion. The host process runs
+repository code with normal filesystem and GitHub credential access. After a direct landing is
+confirmed, a person can remove an older installed LaunchAgent with `just landing-broker-teardown`.
 
 Nothing verifies the same bytes twice. When an agent has already run `verify --complete`, the
 `verify-full` the merge runs at that same tree skips every gate that run recorded and executes only

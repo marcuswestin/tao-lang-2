@@ -4,14 +4,21 @@
   "version": "0.0.1",
   "license": "AGPL-3.0-only",
   "private": true,
-  "description": "Tao Lang VS Code extension",
+  "description": "Tao language support: syntax highlighting, diagnostics, formatting, and source actions",
   "publisher": "tao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcuswestin/tao-lang-2.git",
+    "directory": "packages/ides/ide-extension"
+  },
   "categories": [
     "Programming Languages"
   ],
   "type": "module",
   "main": "_gen_ide-extension/extension/main.cjs",
   "files": [
+    "LICENSE",
+    "README.md",
     "_gen_ide-extension/",
     "ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json",
     "language-configuration.json",

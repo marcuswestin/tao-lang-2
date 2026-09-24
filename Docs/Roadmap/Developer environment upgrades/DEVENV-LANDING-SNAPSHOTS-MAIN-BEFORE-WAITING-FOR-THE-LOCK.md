@@ -19,9 +19,9 @@
   refused before the lock because the by-hand merge of `main` counted as a new commit the merge
   message had not been confirmed for; the fourth landed in 45 s. Measured: the four logs. Inferred:
   that the mirror-worktree fast-forward another landing performs is what moves local `main`.
-- **Workaround:** `git merge origin/main` unsandboxed, `./agent finalize` twice (once to verify,
-  once to record the message for the new HEAD), then `just land` again — and hope no landing
-  finishes during the next wait.
+- **Workaround:** Run `./agent unsandboxed finalize` to integrate current main and record the
+  message for the new HEAD, then retry `./agent unsandboxed land`. If another landing moves main
+  during the next wait, repeat from `finalize`.
 - **Proposed change:** Re-read the preflight facts after the lease is granted, or take the snapshot
   of `main` inside the lock. `references/landing.md` already says local `main` being behind is no
   longer a precondition and that the landing integrates whatever `main` has become; the snapshot

@@ -59,40 +59,14 @@
       "git ls-files *": "allow",
       "git remote -v": "allow",
       "git tag --list *": "allow",
-      // The macOS sandbox denies process-table access outright, so every `ps` shape an agent may
-      // run has to be named here and excluded from the sandbox below; anything unlisted fails with
-      // "operation not permitted" rather than with a permission prompt.
-      //
-      // Prefer `ProcessTree` over any of these. On macOS it reads the same facts through libproc
-      // with no subprocess at all, which is why a `ps` denial cannot break it — and why a liveness
-      // check built on `ps` silently lost its start-time comparison in every sandboxed run.
-      //
-      // The whole-table read and the per-PID start time are both read-only. The residual hazard is
-      // the trailing wildcard: `ps -E` prints another same-user process's environment, which can
-      // hold tokens the `read` denies below exist to keep out. Nothing in this repository runs it,
-      // and there is no bash deny rule to forbid it, so it is recorded here as the boundary rather
-      // than hidden. Termination prefixes stay absent entirely.
-      "ps -axo pid=,ppid=,lstart=,command=": "allow",
-      "ps -o lstart= -p *": "allow",
       "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
-      // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
-      // remain approval boundaries and belong to an explicitly selected native workflow.
-      "adb devices *": "allow",
-      "adb get-state *": "allow",
-      "emulator -list-avds": "allow",
-      "xcrun simctl list *": "allow",
-      // Fetch writes Git objects but remains sandboxed; if it needs host access, the agent asks the Developer.
-      "git fetch origin *": "allow",
-      // Both orders, because git accepts the flag on either side of the remote and a pattern that
-      // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
-      // preflight runs `git ls-remote --heads origin refs/heads/...`, which `git ls-remote origin *`
-      // cannot match, so the landing command failed inside the sandbox on its own remote query.
-      "git ls-remote origin *": "allow",
-      "git ls-remote --heads origin *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
       "~/code/tao-lang/**": "allow",
+      // Claude Code and Codex's read-only review profile enforce these denials. Codex's default
+      // workspace profile omits them: Codex will not honor an explicit host command rule when
+      // any denied-read pattern is active. AGENTS.md still forbids agents from reading them.
       // Not `.env*`: that pattern also matches this repository's own `.envrc`.
       "**/.env": "deny",
       "**/.env.*": "deny",
@@ -128,37 +102,28 @@
       "*": "ask",
     },
   },
-  // Explicit host-access exceptions for Codex. Unlike Claude's sandbox exclusions, Codex needs
-  // prefix rules to make these commands both unsandboxed and non-interactive. Each must also be
-  // covered by a Bash allow rule and a Claude exclusion; the generator checks both. This grants
-  // the landing command and all repository code it invokes host access, which the Developer explicitly chose.
-  "codex": {
-    "outsideSandboxCommands": [
-      "./agent land",
-    ],
-  },
+  // Named argv prefixes accepted by ./agent unsandboxed, and the only host rules generated for
+  // the supported harnesses. HostCommandTargets implements tool operations; plain commands stay sandboxed.
+  "agentHostCommands": [
+    "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
+    "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
+    "native-module-check",
+    "prepare-release studio", "prepare-release ide-extension",
+    "app-dev",
+    "simulators list", "simulators boot", "simulators run", "simulators app-container",
+    "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
+    "devices list", "devices apps", "devices launch",
+    "xcode version", "xcode setup-status", "xcode sdks", "xcode build-project",
+    "xcode build-workspace", "xcode export-archive",
+    "pods install", "pods spec",
+    "android devices", "android state", "android emulators", "android boot", "android ensure",
+    "remote fetch", "remote refs", "remote heads", "remote exists",
+    "processes list", "processes started",
+  ],
   "claudecode": {
     "sandbox": {
       "enabled": true,
-      "excludedCommands": [
-        // These commands need host process or native-service access the sandbox cannot express.
-        // Codex derives only fixed, read-only command shapes from this intersection by default.
-        // Its mutable landing exceptions are explicit in `codex.outsideSandboxCommands` above.
-        "ps -axo pid=,ppid=,lstart=,command=",
-        "ps -o lstart= -p *",
-        "adb devices *",
-        "adb get-state *",
-        "emulator -list-avds",
-        "xcrun simctl list *",
-        // Read-only remote inspection may run on the host. Mutating Git operations are not
-        // exceptions: if the sandbox denies one, diagnose it and ask the Developer before retrying.
-        "git ls-remote origin *",
-        "git ls-remote --heads origin *",
-        // The single unsandboxed write entry point. It owns integration through push under one
-        // lock; it is usable only after the Developer has authorized landing this named slice in the thread.
-        "./agent land",
-        "./agent land *",
-      ],
+      "excludedCommands": [],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
       "credentials": {

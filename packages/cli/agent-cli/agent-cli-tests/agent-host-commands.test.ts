@@ -1,0 +1,132 @@
+import { FS, Repo } from '@shared'
+import { Describe, Expect, Test } from '@shared/test'
+import { AgentConfigFreshness } from '../agent-cli-src/agent-config/AgentConfigFreshness'
+import { agentHostCommands, renderClaudeHostSettings } from '../agent-cli-src/agent-config/AgentHostCommands'
+import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
+import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy'
+import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
+
+const expected = [
+  'land',
+  'finalize',
+  'landed',
+  'capabilities',
+  'open-pr',
+  'fix-agent-config',
+  'test-host',
+  'studio-smoke',
+  'studio-proof-real-app',
+  'admission-experiment',
+  'native-module-check',
+  'prepare-release studio',
+  'prepare-release ide-extension',
+  'app-dev',
+  'simulators list',
+  'simulators boot',
+  'simulators run',
+  'simulators app-container',
+  'simulators install',
+  'simulators open-url',
+  'simulators uninstall',
+  'simulators open',
+  'devices list',
+  'devices apps',
+  'devices launch',
+  'xcode version',
+  'xcode setup-status',
+  'xcode sdks',
+  'xcode build-project',
+  'xcode build-workspace',
+  'xcode export-archive',
+  'pods install',
+  'pods spec',
+  'android devices',
+  'android state',
+  'android emulators',
+  'android boot',
+  'android ensure',
+  'remote fetch',
+  'remote refs',
+  'remote heads',
+  'remote exists',
+  'processes list',
+  'processes started',
+]
+
+Describe('agent host command permissions', () => {
+  Test('one canonical list generates exact Codex and Claude host rules', async () => {
+    const source = CodexConfigGenerator.parsePermissions(
+      await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc')),
+    )
+    const prefixes = agentHostCommands(source)
+    Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
+    const rules = CodexConfigGenerator.renderRules(source)
+    const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
+      permissions: { allow: string[] }
+      sandbox: { excludedCommands: string[] }
+    }
+    Expect(rules.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual(
+      prefixes.map(prefix =>
+        `prefix_rule(pattern=${
+          JSON.stringify(['./agent', 'unsandboxed', ...prefix])
+        }, decision="allow", justification="Repository-approved host command.")`
+      ),
+    )
+    const shapes = expected.flatMap(command => [
+      `./agent unsandboxed ${command}`,
+      `./agent unsandboxed ${command} *`,
+    ])
+    Expect(settings.sandbox.excludedCommands).toEqual(shapes)
+    Expect(settings.permissions.allow.filter(rule => rule.startsWith('Bash(./agent unsandboxed')))
+      .toEqual(shapes.map(shape => `Bash(${shape})`))
+    Expect(settings.permissions.allow).not.toContain('Bash(./agent land)')
+    Expect(
+      (await AgentConfigFreshness.staleIssues(Repo.getRoot())).some(issue =>
+        issue.startsWith('.claude/settings.json ')
+      ),
+    ).toBe(false)
+  })
+
+  Test('accepts only whole listed prefixes and rejects malformed entries', () => {
+    const prefixes = [['land'], ['simulators', 'list']]
+    Expect(hostCommandKind(['land', '--dry-run'], prefixes)).toBe('agent')
+    Expect(hostCommandKind(['simulators', 'list', 'booted'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['land-unlock'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['simulators', 'erase', 'all'], prefixes)).toBeUndefined()
+    Expect(hostCommandTarget(['simulators', 'list'])).toEqual({
+      command: 'xcrun',
+      fixedArgs: ['simctl', 'list', 'devices'],
+    })
+    Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
+  })
+
+  Test('removes stale Claude host rules when the canonical list changes', () => {
+    const initial = JSON.stringify({
+      permissions: { allow: ['Bash(./agent *)', 'Bash(./agent unsandboxed board)'] },
+      sandbox: { excludedCommands: ['./agent unsandboxed board'] },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [['land']])) as {
+      permissions: { allow: string[] }
+      sandbox: { excludedCommands: string[] }
+    }
+    Expect(rendered.permissions.allow).toEqual([
+      'Bash(./agent *)',
+      'Bash(./agent unsandboxed land)',
+      'Bash(./agent unsandboxed land *)',
+    ])
+    Expect(rendered.sandbox.excludedCommands).toEqual([
+      './agent unsandboxed land',
+      './agent unsandboxed land *',
+    ])
+  })
+})

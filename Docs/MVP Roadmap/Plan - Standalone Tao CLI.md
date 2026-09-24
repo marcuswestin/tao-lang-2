@@ -577,11 +577,11 @@ public repository. What it settled:
 
 - The binary ships gzipped as `tao-darwin-arm64.gz` (28 MB, from 67 MB), beside its `.sha256`, the
   install script, `release.json` (version, commit, and each target's asset and hash), and draft
-  notes. Asset names carry no version, so `releases/latest/download/` finds them.
+  notes. The installer finds them under the release's `vVERSION` tag.
 - `tao --version` prints the version the release build stamps in with `--define`, or `development`
-  from source. The install script reads the version from the binary rather than parsing an index,
-  and that first run unpacks the resources inside the version's own directory before it is renamed
-  into place.
+  from source. The install script selects a stable CLI release from the published release listing,
+  confirms the downloaded binary reports that version, and unpacks its resources inside the
+  version's own directory before it is renamed into place.
 - The install script puts the binary in `versions/<version>/`, points `bin/tao` at it until slice
   8's shim replaces that link, and links `tao` into the first writable directory under `$HOME` on
   `PATH` that does not hold another `tao`, printing the `PATH` line only when there is none.
@@ -673,7 +673,10 @@ above; where the two disagree, these are later and win.
    the Developer ID certificate exists.
 5. **The install script** is served from the public repository's Releases. It detects whichever
    user-writable bin directory is already on `PATH`, symlinks the shim there, and prints the `PATH`
-   line only when there is none.
+   line only when there is none. It lists published GitHub releases, ignores drafts, prereleases,
+   and non-CLI tags, chooses the highest stable `vVERSION` tag by semantic version, and downloads
+   the binary and checksum by that tag. CLI releases use `--latest=false` so Studio's fixed update
+   URL can keep using the repository's `latest` release.
 6. **The first host install** asks permission before downloading, then shows a progress line naming
    the one-time cost.
 7. **A pinned version that is not installed** asks when interactive, and when not, fails naming the

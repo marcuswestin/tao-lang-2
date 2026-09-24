@@ -10,7 +10,7 @@
   was not responding. `xcrun devicectl list devices` separately timed out waiting for
   CoreDeviceService. Xcode 27 contains DeviceHub.app and no standalone Simulator.app.
 - **Workaround:** Restart macOS after the runtime download, open Device Hub once, and confirm
-  `xcrun simctl list devices available --json` succeeds before launching Tao.
+  `./agent unsandboxed simulators list available --json` succeeds before launching Tao.
 - **Proposed change:** Implemented: Tao presents Device Hub when the standalone Simulator app is absent,
   keeps simulator discovery on `simctl`, and diagnostics distinguish unavailable Apple services from
   sandbox denial. Reverify the real simulator journey after the host services recover.

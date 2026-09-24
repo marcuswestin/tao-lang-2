@@ -1,5 +1,6 @@
 import type { Command } from '@commander-js/extra-typings'
 import { CLI, HCI, Platform, Repo, Text } from '@shared'
+import { agentHostCommands } from '../agent-config/HostCommandPolicy'
 
 /** registerAgentHelpCommand registers `./agent help`. */
 export function registerAgentHelpCommand(commands: Command, justCommands: readonly string[]): void {
@@ -22,7 +23,11 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
     return result.error === undefined ? result.exitCode ?? 1 : 1
   }
 
-  HCI.write(formatAgentHelpText(justHelpLines(result.stdout, justCommands)))
+  const permissions = Bun.JSONC.parse(await Bun.file(Repo.resolvePath('.rulesync/permissions.jsonc')).text()) as {
+    agentHostCommands?: unknown
+  }
+  const hostOperations = agentHostCommands(permissions).map(prefix => prefix.join(' '))
+  HCI.write(formatAgentHelpText(justHelpLines(result.stdout, justCommands), hostOperations))
   return 0
 }
 
@@ -57,14 +62,18 @@ function justHelpLines(output: string, commands: readonly string[]): string[] {
 }
 
 /** formatAgentHelpText renders the `./agent help` output. */
-function formatAgentHelpText(justLines: readonly string[]): string {
+function formatAgentHelpText(justLines: readonly string[], hostOperations: readonly string[]): string {
   return `
 Usage:
   ./agent help
   ./agent <just-command> [args...]
+  ./agent unsandboxed <operation> [args...]
 
 Agent commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
+
+Allowed host operations (use after ./agent unsandboxed):
+${Text.indentLines(hostOperations.join('\n'), 2)}
 
 Examples:
   ./agent bench
@@ -79,7 +88,20 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
+  ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
+  ./agent unsandboxed prepare-release ide-extension
+  ./agent unsandboxed capabilities
+  ./agent unsandboxed land --dry-run
+  ./agent unsandboxed simulators list booted
+  ./agent unsandboxed simulators run <device-udid>
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
+
+unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.
+Each name runs its fixed host implementation with following arguments forwarded as argv, without
+a shell. It fails before dispatch if still sandboxed. Other host operations need the Developer's
+explicit approval; plain commands remain sandboxed.
 
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
@@ -99,11 +121,12 @@ that same membership in a managed shell without
 claiming its host-only lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway.
 
-Every command runs through the same front door: it captures the child's output rather than
-inheriting the terminal, writes the full capture to .artifacts/logs/agent/<command>/, and prints a
+Repository workflow commands capture the child's output rather than inheriting the terminal, write
+the full capture to .artifacts/logs/agent/<command>/, and print a
 bounded report ending in a verdict line, a Failed: block naming what broke when it did, and the log
 path — read that path for anything the report left out. --verbose streams the child's output live
 instead of holding it back; --json prints one JSON object and nothing else; --max-lines <n>
-overrides how much of the child's own output the report keeps.
+overrides how much of the child's own output the report keeps. Named host operations inherit the
+terminal so interactive native tools and long-running development servers keep working.
 `
 }

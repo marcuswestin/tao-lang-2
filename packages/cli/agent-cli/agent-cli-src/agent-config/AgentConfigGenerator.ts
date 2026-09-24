@@ -1,5 +1,6 @@
 import { FS, HCI } from '@shared'
 import { type Feature, generate, type GenerateOptions, type ToolTarget } from 'rulesync'
+import { generateClaudeHostSettings } from './AgentHostCommands'
 import { ClaudeProfilesGenerator } from './ClaudeProfilesGenerator'
 import { CodexConfigGenerator } from './CodexConfigGenerator'
 
@@ -51,6 +52,15 @@ async function generateAgentConfigs(options: GenerateAgentConfigOptions): Promis
       const path = (error as NodeJS.ErrnoException).path
       ;(options.onSkip ?? HCI.writeErrorLine)(`Skipped ${target} agent config: ${path} is not writable.`)
     }
+  }
+  try {
+    await generateClaudeHostSettings(options.root)
+  } catch (error) {
+    if (!isBlockedAdapterOutput(error, 'claudecode', options.root)) {
+      throw error
+    }
+    const path = (error as NodeJS.ErrnoException).path
+    ;(options.onSkip ?? HCI.writeErrorLine)(`Skipped claudecode host rules: ${path} is not writable.`)
   }
   await (options.generateCodexConfig ?? CodexConfigGenerator.generate)({
     onSkip: options.onSkip,

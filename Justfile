@@ -33,18 +33,18 @@ github-setup:
     gh auth setup-git --hostname github.com
     git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
     git ls-remote --exit-code origin refs/heads/main >/dev/null
-    ./dev landing-broker-install
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
-# Install or update the credential-isolated landing service for this repository
+# Remove an obsolete local Tao landing LaunchAgent after direct landing has been verified
 [group('Setup')]
-landing-setup:
-    ./dev landing-broker-install
-
-# Check the credential-isolated landing service without performing a GitHub operation
-[group('Setup')]
-landing-status:
-    ./dev landing-broker-status
+landing-broker-teardown:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    label='com.tao-lang.landing-broker'
+    plist="$HOME/Library/LaunchAgents/${label}.plist"
+    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+    rm -f "$plist"
+    printf 'Removed obsolete %s LaunchAgent if present.\n' "$label"
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -180,8 +180,28 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 [group('Ship')]
-studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
-    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native" version="0.0.1":
+    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}" --version "{{ version }}"
+
+# Build signed Studio artifacts and check the app, DMG, update metadata, and isolated payload before upload
+[group('Ship')]
+studio-release-prepare repo version="0.0.1":
+    ./dev release-studio-prepare --repo "{{ repo }}" --version "{{ version }}"
+
+# Upload the prepared Studio artifacts to a public GitHub Release and verify public download bytes
+[group('Ship')]
+studio-release-publish repo:
+    ./dev release-studio-publish --repo "{{ repo }}"
+
+# Package the IDE extension and prove the VSIX installs in a clean VS Code profile
+[group('Ship')]
+ide-extension-release-prepare:
+    ./dev release-ide-prepare
+
+# Publish the prepared VSIX to both registries; pass open-vsx or marketplace to retry one after a partial failure
+[group('Ship')]
+ide-extension-release-publish target="all":
+    ./dev release-ide-publish --target "{{ target }}"
 
 # Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
 [group('Ship')]
@@ -196,8 +216,8 @@ standalone-cli-release version: _parser-gen
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0-acceptance
-    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0-acceptance
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
@@ -452,7 +472,7 @@ simplify-audit *ARGS:
 bench iterations="10":
     bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
-# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
+# Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
     bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
@@ -608,9 +628,10 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
 
-_ide-extension-package: _ide-extension-build
+_ide-extension-package: _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && bun esbuild.config.ts --minify
+    cd packages/ides/ide-extension && bunx @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check

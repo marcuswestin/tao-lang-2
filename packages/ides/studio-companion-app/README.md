@@ -15,6 +15,10 @@ own `expo login` session in `~/.expo` never reaches, so that login can never be 
 Android keeps using Expo Go, and so do the Android emulator and the iOS Simulator until a host for
 them is built or downloaded (below).
 
+The `just` commands below are for a person at a host terminal. Agents use a listed
+`./agent unsandboxed` operation for host work; a companion build or publish needs a named entry
+before agent use.
+
 ## What the shell carries
 
 Because a development build runs the bundle Metro serves it, the shell — not the bundle — decides

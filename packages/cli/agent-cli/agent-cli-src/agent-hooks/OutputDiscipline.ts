@@ -17,6 +17,8 @@
  * rule wrongly catches; `HookOverrides` records each use so the rules can be tuned against what
  * actually misfires rather than against argument. */
 
+import { FS, Repo } from '@shared'
+import { agentHostCommands } from '../agent-config/HostCommandPolicy'
 import { EXPOSED_RECIPES } from '../AgentCommands'
 import { isGateInvocation, OUTPUT_FILTERS } from './ShellHabits'
 
@@ -70,10 +72,29 @@ const gatePipeRefusal = (gate: string): string =>
   + '`.artifacts/logs/agent/<command>/latest.log`, so there is nothing left to filter for. Run it '
   + 'plain, or capture it: `cmd > out 2>&1; echo "EXIT=$?"`.'
 
-const justRecipeRefusal = (recipe: string, agentCommand: string): string =>
-  `\`just ${recipe}\` is reachable through \`./agent ${agentCommand}\`, which captures the run, bounds `
-  + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
-  + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`
+/** Use the canonical host list to redirect a raw Just recipe to its named host entry. */
+function isNamedHostRecipe(agentCommand: string): boolean {
+  const sourcePath = Repo.tryResolvePath('.rulesync/permissions.jsonc')
+  if (sourcePath === undefined) {
+    return agentCommand === 'land'
+  }
+  try {
+    const source = Bun.JSONC.parse(FS.readTextSync(sourcePath)) as { agentHostCommands?: unknown }
+    return agentHostCommands(source).some(prefix => prefix.length === 1 && prefix[0] === agentCommand)
+  } catch {
+    // A broken hook must not block unrelated shell work. Keep the landing route explicit.
+    return agentCommand === 'land'
+  }
+}
+
+const justRecipeRefusal = (recipe: string, agentCommand: string): string => {
+  const entry = isNamedHostRecipe(agentCommand)
+    ? `./agent unsandboxed ${agentCommand}`
+    : `./agent ${agentCommand}`
+  return `\`just ${recipe}\` is reachable through \`${entry}\`, which captures the run, bounds `
+    + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
+    + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`
+}
 
 const BUN_TEST_REFUSAL = 'A bare `bun test` on a relative path silently corrupts its own run (AGENTS.md). Use `./agent '
   + 'test-file <path>` for one file or directory, or pass `--cwd` when the target is another worktree.'
@@ -398,7 +419,7 @@ function firstJustOperand(words: readonly string[]): string | undefined {
 function justRecipeDenial(stage: Stage): string | undefined {
   const [command, ...rest] = commandAfterWrappers(stage.words)
   if (command === './dev' && (rest[0] === 'land' || rest[0] === 'merge-with-main')) {
-    return 'Use `./agent land` for an authorized landing; direct `./dev` landing bypasses the agent entry point.'
+    return 'Use `./agent unsandboxed land` for an authorized landing; direct `./dev` landing bypasses the agent entry point.'
   }
   if (command !== 'just') {
     return undefined
@@ -408,7 +429,7 @@ function justRecipeDenial(stage: Stage): string | undefined {
     return undefined
   }
   if (recipe === 'my-land' || recipe === 'merge-with-main') {
-    return 'Use `./agent land` for an authorized landing; direct landing recipes bypass the agent entry point.'
+    return 'Use `./agent unsandboxed land` for an authorized landing; direct landing recipes bypass the agent entry point.'
   }
   const agentCommand = EXPOSED_RECIPES.get(recipe)
   return agentCommand === undefined ? undefined : justRecipeRefusal(recipe, agentCommand)
