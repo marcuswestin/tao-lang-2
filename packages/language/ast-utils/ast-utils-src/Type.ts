@@ -484,6 +484,26 @@ export class Type {
     return type.kind === 'item' && type.item?.projectedEntity ? type.item.dataFields ?? [] : undefined
   }
 
+  /**
+   * isCompletenessMember is whether reading `member` on `type` is a derived completeness read. Such a
+   * member is computed from the `required` fields, never stored, so it is not a writable path.
+   */
+  static isCompletenessMember(type: TaoType, member: string): boolean {
+    return Type.completenessFieldsOf(type) !== undefined && Type.completenessMemberType(member) !== undefined
+  }
+
+  /** completenessMemberDepth returns how many members a path reads up to a completeness member. */
+  static completenessMemberDepth(root: TaoType, members: readonly string[]): number | undefined {
+    let type = root
+    for (const [index, member] of members.entries()) {
+      if (Type.isCompletenessMember(type, member)) {
+        return index + 1
+      }
+      type = Type.atMemberPath(type, [member])
+    }
+    return undefined
+  }
+
   /** completenessMemberType resolves `Incomplete` and `Problems`, which `required` derives (§2). */
   static completenessMemberType(member: string): TaoType | undefined {
     if (member === 'Incomplete') {

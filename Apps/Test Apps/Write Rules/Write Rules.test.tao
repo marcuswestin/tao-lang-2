@@ -10,6 +10,8 @@ test "Write Rules" {
       }
       // Summary is required too, but the projection does not select it, so the form never asks.
       expect missing text "Needed: Summarize the note"
+      press #addNote // disabled by `Input.Incomplete`; the action behind it has no check of its own
+      expect text "Notes: 0"
       enter "Groceries" into #noteTitle
       expect missing text "Needed: Give the note a title"
       expect text "Needed: Pick a topic"
@@ -29,6 +31,9 @@ test "Write Rules" {
       submit #noteTitle // the Topic is still empty, so `check` skips the rest of the action
       expect text "Notes: 0"
       expect #noteTitle input value "Groceries"
+      enter "Errands" into #noteTopic
+      submit #noteTopic
+      expect text "Notes: 1"
    }
    test "stores an incomplete row, then reads it complete once the field is filled" {
       run WriteRulesApp

@@ -7,6 +7,8 @@ import { dataValidationMessages } from '../validator-src/validators/data-validat
 import { dataWriteValidationMessages } from '../validator-src/validators/data-write-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
+import { ReactiveParametersValidator } from '../validator-src/validators/ReactiveParametersValidator'
+import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
   accepts,
@@ -149,6 +151,48 @@ Describe('validator: types and expressions', () => {
       dataValidationMessages.duplicateModifier('Title', 'required'),
     ),
   )
+
+  Test(
+    'rejects writes to derived completeness members and binding one as writable storage',
+    rejects(
+      `
+        data Notes / Note { Title text (required "Name it") }
+        type NoteInput is Note { Title }
+        app EditorApp { view Main }
+        view Flip(Value boolean) {
+          action Go() { toggle Value }
+          render Empty()
+        }
+        view Main() {
+          state Input = NoteInput { Title: "" }
+          action Break() {
+            set Input.Incomplete = true
+            toggle Input.Incomplete
+          }
+          render Flip(Value: Input.Incomplete)
+        }
+        ${stubView('Empty')}
+      `,
+      StateValidator.messages.derivedMemberWrite('Input.Incomplete'),
+      ReactiveParametersValidator.messages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test('reports a derived-member write once, without the generic writable-path diagnostic', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Notes / Note { Title text (required "Name it") }
+      type NoteInput is Note { Title }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Input NoteInput) {
+        action Break() { set Input.Incomplete = true }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toEqual([StateValidator.messages.derivedMemberWrite('Input.Incomplete')])
+  })
 
   Test(
     'accepts a create from a projection that covers every field a create must supply',
