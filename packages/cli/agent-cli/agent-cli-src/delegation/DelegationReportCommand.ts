@@ -3,7 +3,17 @@ import { DELEGATION_EVENTS_PATH, type DelegationSummary, readDelegationLog, UNNA
 
 type RunDelegationReportOptions = { json?: boolean }
 
-const COLUMNS = ['Profile', 'Spawns', 'Model', 'Effort', 'Done', 'Median', 'Longest'] as const
+const COLUMNS = [
+  'Profile',
+  'Spawns',
+  'Selection',
+  'Explicit',
+  'Observed recent',
+  'Effort',
+  'Done',
+  'Median',
+  'Longest',
+] as const
 
 function formatDuration(milliseconds: number | undefined): string {
   if (milliseconds === undefined) {
@@ -49,7 +59,10 @@ function writeDelegationReport(summary: DelegationSummary, options: RunDelegatio
   writeTable(summary.profiles.map(profile => [
     profile.profile,
     String(profile.spawns),
-    [...profile.models, ...(profile.unnamedModels > 0 ? [UNNAMED_MODEL] : [])].join(', ') || UNNAMED_MODEL,
+    Object.entries(profile.selections).filter(([, total]) => total > 0)
+      .map(([source, total]) => `${source} ${total}`).join(', ') || UNNAMED_MODEL,
+    profile.models.join(', ') || '—',
+    profile.observedModels.join(', ') || '—',
     profile.efforts.join(', ') || '—',
     String(profile.completed),
     formatDuration(profile.medianMs),
@@ -58,9 +71,8 @@ function writeDelegationReport(summary: DelegationSummary, options: RunDelegatio
   HCI.writeLine('')
   if (summary.unnamedModels > 0) {
     HCI.writeLine(
-      `${summary.unnamedModels} of ${summary.spawns} delegations named no model, so each inherited the caller's.`,
+      `${summary.unnamedModels} of ${summary.spawns} delegations named no model. Selection sources use current profile configuration; only Observed confirms a resolved model.`,
     )
-    HCI.writeLine('The `delegation` skill asks for an explicit tier; an inherited one is usually the expensive one.')
   }
   if (summary.completed < summary.spawns) {
     HCI.writeLine('A delegation is timed only when its start and stop both reach the log; the rest are counted only.')

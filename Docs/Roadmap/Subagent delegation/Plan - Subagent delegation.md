@@ -41,15 +41,17 @@ The hooks and the "ask the Developer" clause exist to make the first months of t
 are temporary by design.
 
 `./agent delegation-report` answers four questions: which profiles are actually used, whether callers
-name a tier or inherit one, what effort the subagents ran at, and how long they took. An inherited
-model is the signal worth watching, because the guidance asks for an explicit tier and inheritance is
-how the expensive default returns.
+name a model or leave selection to a profile, harness default, or inheritance, what effort the
+subagents ran at, and how long they took. It shows resolved models only when a hook or bounded
+transcript metadata establishes one. An omitted spawn model is not itself evidence of inheritance.
 
 The report reconciles events rather than trusting any one of them. Only the spawning call knows the
 model and the brief; only the subagent's own start and stop carry the id that bounds a duration; and
 `effort` means different things on the two — the caller's on a spawn, since the subagent has not
 started, and the subagent's on a stop. Where a field never arrives the report says so instead of
-inferring it.
+inferring it. Spawn and start events have no shared agent ID, so the report cannot attribute a
+resolved model to one spawn; startup drift warnings use local model metadata and installed harness
+version until that seam has supported correlation.
 
 Ask the Developer when the routing table has no row for the work and confidence between two tiers is low, when
 the frontier tier or a long run is at stake, or when the log already shows the pattern — a task like

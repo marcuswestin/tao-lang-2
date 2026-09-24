@@ -46,6 +46,9 @@ notes after each completed pass; Git history is the longer record.
     projects' official security notices.
   - If the repository gains another dependency system, identify its official audit command or
     advisory source during planning and add it here only if future passes will need it.
+- Check the delegation routing table against official model availability, harness precedence, and
+  current input, cache-read, cache-write, and output pricing. Compare completed-task cost and review
+  quality before changing a tier; an API-equivalent estimate is not a plan or subscription bill.
 
 ## Run a pass
 
