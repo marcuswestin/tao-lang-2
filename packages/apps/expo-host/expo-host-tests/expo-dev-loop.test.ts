@@ -31,7 +31,7 @@ import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { createServer } from 'node:net'
+import { connect, createServer } from 'node:net'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -426,6 +426,22 @@ Describe('Expo dev-loop port helpers', () => {
       await new Promise<void>((resolve, reject) => {
         blocker.close(error => error ? reject(error) : resolve())
       })
+    }
+  })
+
+  // A dev client that retries Metro's port connects to the reservation long before Expo starts.
+  Test('drops a client that connects to a reserved port, so releasing it does not wait', async () => {
+    const session = await createDevLoopExpoSession(0)
+    const client = connect({ host: '127.0.0.1', port: session.config.EXPO_PORT })
+    const dropped = new Promise<void>(resolve => client.once('close', () => resolve()))
+    client.on('error', () => {})
+    try {
+      // Only a connection the reservation has accepted can hold its `close` open, so the reservation
+      // dropping it comes first. A reservation that kept it would time this test out at either wait.
+      await dropped
+      await session.releasePortReservation()
+    } finally {
+      client.destroy()
     }
   })
 
