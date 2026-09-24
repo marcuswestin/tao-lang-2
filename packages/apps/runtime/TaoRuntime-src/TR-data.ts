@@ -446,6 +446,16 @@ export const DataControls = {
     schema.create(entity, evaluatedFields(fields))
   },
 
+  /** CreateWith creates one row from every own field of a projected input item. */
+  CreateWith(schema: RuntimeDataSchema, entity: string, input: Evaluable): void {
+    const fields = input.evaluate().jsValue
+    RuntimeAssert.input(
+      fields !== null && typeof fields === 'object' && !Array.isArray(fields),
+      'Data create expects an input item.',
+    )
+    schema.create(entity, Object.fromEntries(Object.entries(fields)))
+  },
+
   Update(row: Evaluable, fields: Record<string, Evaluable>): void {
     const handle = entityHandle(row.evaluate().jsValue)
     RuntimeAssert.input(handle, 'Data update expects an entity handle.')

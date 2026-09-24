@@ -905,6 +905,26 @@ Projection types contain the selected fields and their types, without entity ide
 siblings. `update Document with Input` writes every supplied field by name and preserves omitted
 fields; it has no implicit dirty tracking or baseline. Explicit field updates remain available.
 
+_(Amended 2026-09-24, in the write-rules dialogue.)_ **A projection also carries the `required`
+sentences of the fields it selects**, so `Input.Incomplete` and `Input.Problems` read before any row
+exists, exactly as they would on a row (§2). **`create Entity with Input` creates a row from a
+projected input**, mirroring `update … with`; the projection must cover every field a create must
+supply. This is how a form for a new row is written now that entity drafts are retired:
+
+```tao
+type WorkspaceInput is Workspace { Name }
+
+scene WorkspaceList() {
+   state Input = WorkspaceInput { Name: "" }
+   action AddWorkspace() {
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
+   }
+   render FormButton("Add workspace", Disabled: Input.Incomplete) { on press AddWorkspace }
+}
+```
+
 ### Document write outcomes
 
 Write outcomes belong to the document, shared by every editor of that datasource/entity identity

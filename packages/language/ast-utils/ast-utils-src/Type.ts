@@ -467,6 +467,31 @@ export class Type {
     return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
   }
 
+  /** requiredSentence returns the sentence a field's `required` trait states, when it has one. */
+  static requiredSentence(field: DataFieldDefinition): string | undefined {
+    return (field.traits?.traits ?? []).find(AST.traitIsRequired)?.sentence
+  }
+
+  /**
+   * completenessFieldsOf returns the fields whose `required` sentences a value's `Incomplete` and
+   * `Problems` read: an entity row's own fields, or the ones a projection selected. Any other type
+   * has no completeness members.
+   */
+  static completenessFieldsOf(type: TaoType): readonly DataFieldDefinition[] | undefined {
+    if (type.kind === 'entity') {
+      return Type.dataFields(type.entity)
+    }
+    return type.kind === 'item' && type.item?.projectedEntity ? type.item.dataFields ?? [] : undefined
+  }
+
+  /** completenessMemberType resolves `Incomplete` and `Problems`, which `required` derives (§2). */
+  static completenessMemberType(member: string): TaoType | undefined {
+    if (member === 'Incomplete') {
+      return primitiveType('boolean')
+    }
+    return member === 'Problems' ? { kind: 'list', element: primitiveType('text') } : undefined
+  }
+
   /** entityBuiltinMemberType resolves the runtime write-status members available on every entity. */
   static entityBuiltinMemberType(member: string): TaoType | undefined {
     if (member === 'WritesQueued' || member === 'WritesFailed') {
@@ -896,6 +921,10 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
   const family = primitiveUnitFamily(current)
   if (family) {
     return Type.unitMemberType(family, member)
+  }
+  const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+  if (completeness) {
+    return completeness
   }
   if (current.kind === 'entity') {
     if (member === 'Id') {

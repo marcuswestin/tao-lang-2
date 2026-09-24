@@ -68,7 +68,7 @@ OrderDirection returns string:
     'asc' | 'desc';
 
 CreateStatement:
-    'create' entity=[EntityDataDeclaration:ID] block=DataWriteBlock;
+    'create' entity=[EntityDataDeclaration:ID] (block=DataWriteBlock | 'with' source=Expression);
 
 UpdateStatement:
     'update' target=DataRowExpression (block=DataWriteBlock | 'with' source=Expression);

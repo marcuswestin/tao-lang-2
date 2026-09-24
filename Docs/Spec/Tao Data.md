@@ -89,6 +89,22 @@ its press surface; the label remains outline metadata for a non-selectable row. 
 as an ordinary identifier and its spelling validated, so `title` stays a legal name elsewhere — a
 design bundle called `title` is exactly what an app declares.
 
+`required "<sentence>"` states completeness: the field is expected to be filled, but its absence
+never blocks a write. A row, and every projection that selects the field, derives two readonly
+members from it: `Incomplete`, a boolean, and `Problems`, the list of the missing fields' sentences
+in declaration order. A field is missing when it reads as `none` or as text or a list that `is empty`
+would match. A projection reports only the fields it selected, so a form built on `type NoteInput is
+Note { Title, Topic }` never reports a required `Summary`. `Incomplete` and `Problems` are therefore
+reserved field names, and `required` may appear at most once per field. The store-side invariant
+`validate` is not implemented yet.
+
+```tao
+data Notes / Note {
+   Title text (required "Give the note a title")
+   Summary text (default "", required "Summarize the note")
+}
+```
+
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
 `relation` modifier states the related declaration explicitly when inference is insufficient.
@@ -642,6 +658,26 @@ entity handles. `state Input = copy Document as DocumentInput` detaches editable
 `update Document with Input` writes every supplied field by name and preserves omitted fields.
 The existing explicit field block remains available. Both forms retain explicitly supplied fields
 through transaction commit and sync, including values equal to the earlier local snapshot.
+
+`create Note with Input` creates one row from a projected input item. The projection must be of
+that entity, may not select a to-many relationship, and must cover every field a `create { }` block
+would have to supply — every stored field without a default. Omitted defaulted fields receive their
+declared values. A projected input carries the `required` sentences of its fields, so a form reads
+`Input.Incomplete` and `Input.Problems` before any row exists:
+
+```tao
+type NoteInput is Note { Title, Topic }
+
+scene Notes() {
+   state Input = NoteInput { Title: "", Topic: "" }
+   action Add() {
+      check not Input.Incomplete
+      create Note with Input
+      set Input = NoteInput { Title: "", Topic: "" }
+   }
+   render FormButton(Title: "Add note", Disabled: Input.Incomplete) { on press Add }
+}
+```
 
 Entities expose readonly `WritesQueued`, `WritesFailed`, `WriteError`, and `CanRetryWrites`.
 They summarize unresolved submissions for that row in the mounted datasource. They are not data

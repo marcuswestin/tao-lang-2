@@ -21,7 +21,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Convertible unit families, dimensional arithmetic (§2)        | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
 | Entities, relations, yes/no poles (§2)                        | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
 | `relation` trait for a differently-named relation (§2)        | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
-| validate / required / refuse (§2)                             | WordFlower · document and workspace rules                                     | MVP      | partially in Current      |
+| validate / required / refuse (§2)                             | WordFlower · document and workspace rules                                     | MVP      | partially in Current[^16] |
 | Cross-row validate, lowered per write path (§2)               | Skillet · a kitchen needs an owner; Wayfare · a trip needs an owner           | Post-MVP | —                         |
 | `together` as one fact (§2)                                   | Skillet · an amount never syncs without its unit                              | Post-MVP | —                         |
 | Preferences incl. device scope (§2)                           | WordFlower · editor preferences                                               | MVP      | pending                   |
@@ -219,3 +219,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     every query locally. `refreshing` and `stale` are advisory cases a guard may skip, so a failed
     refresh over cached rows is never an error and offline stays a non-error. Staleness is declared
     with `CacheFor` and journeys bind a deterministic stub adapter through an ordinary app variant.
+
+[^16]: `required` and the `Incomplete` and `Problems` it derives on rows and projections are in the
+    language, with `create … with`, and the Write Rules test app proves them. WordFlower does not
+    use them yet: whether `Workspace.Name` and `Document.Title` carry `required` beside `validate` is
+    an open decision. `validate` and `refuse when` are not implemented, and neither is a stdlib view
+    that presents `Problems`, whose spelling is also open.

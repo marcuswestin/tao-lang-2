@@ -239,6 +239,16 @@ class TR {
     return condition.evaluate().jsValue !== true
   }
 
+  /** Incomplete reports whether any `required` field of a row or projected value is missing. */
+  static Incomplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
+    return TR.Value(missingRequiredFields(root, required).length > 0)
+  }
+
+  /** Problems lists the `required` sentences of a row's or projected value's missing fields. */
+  static Problems(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<string[]> {
+    return TR.Value(missingRequiredFields(root, required).map(([, sentence]) => sentence))
+  }
+
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
   static WhenCase<T>(
     subject: TR.Evaluable,
@@ -1140,6 +1150,8 @@ namespace TR {
   export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'set'>
   /** MemberValue is read-only by default and carries mutation methods only for writable roots. */
   export type MemberValue<T> = TR.Value<T> & Partial<TR.Writable<T>>
+  /** RequiredField pairs a field a `required` trait names with the sentence the trait states. */
+  export type RequiredField = readonly [field: string, sentence: string]
   /** NativeMutationLease is the mutation callback supplied to a mounted native implementation. */
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
@@ -1393,6 +1405,20 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
 
 const isCountableValue = (value: unknown): value is string | unknown[] =>
   Array.isArray(value) || typeof value === 'string'
+
+/**
+ * A `required` field is missing when it reads as none, or as text or a list that `is empty` would
+ * match. Declaration order is kept, so `Problems` reads the way the entity states its rules.
+ */
+function missingRequiredFields(
+  root: TR.Evaluable,
+  required: readonly TR.RequiredField[],
+): readonly TR.RequiredField[] {
+  return required.filter(([field]) => {
+    const value = TR.Member(root, [field]).evaluate().jsValue
+    return value === null || value === undefined || (isCountableValue(value) && value.length === 0)
+  })
+}
 
 function queryStatus(
   value: unknown,

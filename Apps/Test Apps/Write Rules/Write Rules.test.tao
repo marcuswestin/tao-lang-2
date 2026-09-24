@@ -1,0 +1,45 @@
+use WriteRulesApp from ./
+
+test "Write Rules" {
+   test "derives a form's problems from the required sentences its projection selects" {
+      run WriteRulesApp
+      expect {
+         text "Needed: Give the note a title"
+         text "Needed: Pick a topic"
+         text "Notes: 0"
+      }
+      // Summary is required too, but the projection does not select it, so the form never asks.
+      expect missing text "Needed: Summarize the note"
+      enter "Groceries" into #noteTitle
+      expect missing text "Needed: Give the note a title"
+      expect text "Needed: Pick a topic"
+      enter "Errands" into #noteTopic
+      expect missing text "Needed: Pick a topic"
+      press #addNote
+      expect {
+         text "Notes: 1"
+         text "Note: Groceries about Errands"
+      }
+      expect #noteTitle input value ""
+      expect text "Needed: Give the note a title"
+   }
+   test "stops the create with check while the input is incomplete" {
+      run WriteRulesApp
+      enter "Groceries" into #noteTitle
+      submit #noteTitle // the Topic is still empty, so `check` skips the rest of the action
+      expect text "Notes: 0"
+      expect #noteTitle input value "Groceries"
+   }
+   test "stores an incomplete row, then reads it complete once the field is filled" {
+      run WriteRulesApp
+      enter "Groceries" into #noteTitle
+      enter "Errands" into #noteTopic
+      press #addNote
+      // `required` never blocks a write: the row exists and says what it is missing.
+      expect text "Unfinished: Summarize the note"
+      select #notes[1] {
+         press #summarize
+      }
+      expect missing text "Unfinished: Summarize the note"
+   }
+}
