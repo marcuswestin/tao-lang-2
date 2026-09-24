@@ -31,6 +31,14 @@
   `UnexpectedBehaviorError: Something went wrong.` and never reached its blocked-directory report.
   A top-level `git merge main` then succeeded without conflicts. The probe cleanup needs to report
   its path and recovery when removal is denied; the current workaround is the top-level merge.
+- **Also, 2026-09-24:** the same half-write follows an ordinary branch start. A landing leaves its
+  worktree detached at the archived tip; `git switch -c feat/<next> main` from a sandboxed shell then
+  moved `HEAD` and every writable file but printed `unable to unlink old` for `.claude/settings.json`
+  and eight `agents/skills/**` files, leaving them at the previous tip. Nothing reports it as a
+  failure — the switch says `Switched to a new branch` — yet `repo-lint` then calls the settings
+  stale and two `agent-cli` tests fail on its old host-command rules, so `verify-changed` and
+  `finalize` stay red until a host-side restore. No named `./agent unsandboxed` operation performs
+  that restore. Seen on `feat/wordflower-check`.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox
