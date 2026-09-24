@@ -205,6 +205,7 @@ export async function runAdmissionExperiment(
     // A phase with an unmeasured lane has no numbers worth judging, so it can never meet the bar.
     acceptanceMet: contentionRatio <= 1.5
       && trial.falseReds === 0
+      && baseline.falseReds === 0
       && trial.unmeasured === 0
       && baseline.unmeasured === 0,
     admittedLanes: MachineLanes.ADMITTED_LANES,
@@ -284,7 +285,7 @@ function phaseOf(
   const earliest = byCompletion.slice(0, Math.max(1, firstCompletions))
 
   return {
-    falseReds: outcomes.filter(outcome => outcome.failedGates.length > 0).length,
+    falseReds: outcomes.filter(outcome => outcome.status !== 'passed').length,
     unmeasured: outcomes.filter(outcome => !outcome.measured).length,
     firstCompletionsMedianMs: summarizeSamples(earliest.map(outcome => outcome.wallMs)).medianMs,
     outcomes,
@@ -310,7 +311,7 @@ export function renderAdmissionReport(report: AdmissionReport): string {
     + `p95 ${seconds(report.trial.summary.p95Ms)}`,
     `  peak load: ${report.baseline.peakLoadAverage} alone, ${report.trial.peakLoadAverage} contended`,
     `  contention ratio: ${report.contentionRatio.toFixed(2)}x against a 1.5x bar`,
-    `  lanes with a failing gate: ${report.trial.falseReds} contended, ${report.baseline.falseReds} alone`,
+    `  failed lanes: ${report.trial.falseReds} contended, ${report.baseline.falseReds} alone`,
   ]
   if (report.trial.unmeasured > 0 || report.baseline.unmeasured > 0) {
     lines.push(
@@ -323,6 +324,8 @@ export function renderAdmissionReport(report: AdmissionReport): string {
       lines.push(`  NO RUN ${FS.basename(outcome.repositoryRoot)}: wrote no summary`)
     } else if (outcome.failedGates.length > 0) {
       lines.push(`  FAIL ${FS.basename(outcome.repositoryRoot)}: ${outcome.failedGates.join(', ')}`)
+    } else if (outcome.status !== 'passed') {
+      lines.push(`  FAIL ${FS.basename(outcome.repositoryRoot)}: lane failed without a failing-gate detail`)
     }
   }
   lines.push(report.acceptanceMet ? '  ACCEPTANCE MET' : '  ACCEPTANCE NOT MET')

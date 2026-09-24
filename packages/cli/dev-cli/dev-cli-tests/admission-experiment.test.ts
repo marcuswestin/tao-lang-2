@@ -21,6 +21,7 @@ type LaneScript = {
  * arithmetic under test here is exactly the arithmetic that will run against real lanes.
  */
 function fakeDependencies(options: {
+  commandFailureOnRuns?: readonly number[]
   lanes?: readonly { lane: string; repositoryRoot: string }[]
   loadAverage?: number
   scripts?: Record<string, LaneScript>
@@ -72,7 +73,7 @@ function fakeDependencies(options: {
         command: 'x',
         cwd: spec.cwd,
         error: undefined,
-        exitCode: 0,
+        exitCode: options.commandFailureOnRuns?.includes(run) === true ? 1 : 0,
         signal: null,
         stderr: '',
         stdout: '',
@@ -175,6 +176,40 @@ Describe('admission experiment', () => {
     Expect(report.trial.unmeasured).toBe(1)
     Expect(report.acceptanceMet).toBe(false)
     Expect(report.baseline.outcomes[1]?.status).toBe('failed')
+  })
+
+  Test('rejects a failed command even when it published a fresh summary with no failed gates', async () => {
+    const fake = fakeDependencies({
+      commandFailureOnRuns: [2],
+      scripts: { '/repo/a': { elapsedMs: 10_000 } },
+    })
+
+    const report = await runAdmissionExperiment(
+      { lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] },
+      fake.dependencies,
+    )
+
+    Expect(report.trial.outcomes[0]?.status).toBe('failed')
+    Expect(report.trial.unmeasured).toBe(0)
+    Expect(report.trial.falseReds).toBe(1)
+    Expect(report.acceptanceMet).toBe(false)
+    Expect(renderAdmissionReport(report)).toContain('FAIL a: lane failed without a failing-gate detail')
+  })
+
+  Test('rejects a failed uncontended baseline even when the trial passes', async () => {
+    const fake = fakeDependencies({
+      commandFailureOnRuns: [1],
+      scripts: { '/repo/a': { elapsedMs: 10_000 } },
+    })
+
+    const report = await runAdmissionExperiment(
+      { lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] },
+      fake.dependencies,
+    )
+
+    Expect(report.baseline.falseReds).toBe(1)
+    Expect(report.trial.falseReds).toBe(0)
+    Expect(report.acceptanceMet).toBe(false)
   })
 
   // Filtering only on a leading `--` left `verify` from `--lane verify` looking exactly like a

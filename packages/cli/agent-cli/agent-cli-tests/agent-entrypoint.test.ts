@@ -99,20 +99,20 @@ Describe('agent entrypoint', () => {
       Expect(missing.stderr).toContain('Usage: ./agent unsandboxed <command> [args...]')
 
       await FS.remove(marker)
-      const sandboxed = await CLI.run('zsh', {
+      const inheritedMarker = await CLI.run('zsh', {
         args: [agent, 'unsandboxed', 'test'],
         cwd: root,
         env: { ...env, CODEX_SANDBOX: 'seatbelt' },
       })
-      Expect(sandboxed.exitCode).toBe(1)
-      Expect(sandboxed.stderr).toContain('the host command was not started')
-      Expect(await FS.exists(marker)).toBe(false)
+      Expect(inheritedMarker.exitCode).toBe(0)
+      Expect((await FS.readText(marker)).split('\n').filter(Boolean)).toEqual([build, 'test'])
 
+      await FS.remove(marker)
       await FS.writeText(fakePs, '#!/bin/zsh\nexit 1\n')
       const deniedProcessTable = await CLI.run('zsh', {
         args: [agent, 'unsandboxed', 'test'],
         cwd: root,
-        env,
+        env: { ...env, CODEX_SANDBOX: 'seatbelt' },
       })
       Expect(deniedProcessTable.exitCode).toBe(1)
       Expect(deniedProcessTable.stderr).toContain('the host command was not started')

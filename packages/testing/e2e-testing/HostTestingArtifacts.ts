@@ -40,7 +40,7 @@ function artifactStore(): string {
   return Repo.resolvePath('.artifacts/host-testing')
 }
 
-/** begin records ownership before work starts, so concurrent pruning can preserve this run. */
+/** begin records ownership before creating the run directory, so interrupted setup is reclaimable. */
 async function begin(
   runId: string,
   mode: string,
@@ -95,8 +95,8 @@ async function compactSuccessfulRun(runRoot: string): Promise<void> {
 async function publishReceipt(root: string, receipt: RunReceipt): Promise<void> {
   for (
     const path of [
-      FS.resolvePath(`${receipt.runId}/${RECEIPT_FILE}`, root),
       FS.resolvePath(`${RECEIPT_DIRECTORY}/${receipt.runId}.json`, root),
+      FS.resolvePath(`${receipt.runId}/${RECEIPT_FILE}`, root),
     ]
   ) {
     const staged = `${path}.${Platform.randomUUID()}.tmp`
@@ -189,7 +189,21 @@ async function prune(root = artifactStore(), dependencies = defaultDependencies)
 }
 
 async function readReceipt(path: string, runId: string): Promise<RunReceipt | undefined> {
-  const value: unknown = await FS.readJson(FS.resolvePath(RECEIPT_FILE, path)).catch(() => undefined)
+  // The sidecar is published first. A killed process can leave a run root before its local copy.
+  for (const receiptPath of [
+    FS.resolvePath(`${RECEIPT_DIRECTORY}/${runId}.json`, FS.dirname(path)),
+    FS.resolvePath(RECEIPT_FILE, path),
+  ]) {
+    const value: unknown = await FS.readJson(receiptPath).catch(() => undefined)
+    const receipt = validReceipt(value, runId)
+    if (receipt !== undefined) {
+      return receipt
+    }
+  }
+  return undefined
+}
+
+function validReceipt(value: unknown, runId: string): RunReceipt | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined
   }

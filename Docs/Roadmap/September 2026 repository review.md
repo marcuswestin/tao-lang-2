@@ -224,3 +224,125 @@ retention policy still need resolution. The tracked `uuid` advisory remains open
 - **Static review limits:** No broad gate, CocoaPods/Xcode build, physical phone or emulator, packaged Studio run, signed/notarized installation, Linux closure, real CloudKit/InstantDB external acceptance, marketplace publication, or end-to-end generated web-server run was performed. The path-traversal URL/file behavior and symlink retargeting were reproduced in focused local probes; the report does not treat those as host acceptance.
 - **Next repair slice:** The remediation section records fixes made after this initial review; `verify-changed` and `verify --complete` passed on the repair tree. Review the merge message before any authorized landing. The Jest cache and older unmarked host-test roots remain separate lifecycle work.
 - **Boundary for the next recurring pass:** start after `ff4f017ceb100c39c7d55bec8c228ef967097be4`, inspect these findings' repair commits, and revisit the tracked `uuid`/Nixpkgs advisories and temporary-state budgets. Do not infer any external acceptance from this static pass.
+
+## September 24 continuation — main through `c4b627440f98508977bd2c4a8b6ef5860c4d6ffc`
+
+The earlier boundary is confirmed by first-parent ancestry and counts: 142 landings in the
+September 7–22 window, including 61 after the accepted `5e352643` catch-up, through
+`ff4f017ceb100c39c7d55bec8c228ef967097be4`. This continuation reviewed the 20 newer
+first-parent landings once each against the current `main` tree. Four distinct read-only
+review units covered host operations, temporary state, release/device/dependencies, and
+Studio/runtime; different reviewers challenged the surviving findings. The September 7–22
+commit reviews above were not repeated.
+
+| Landing | Disposition against `c4b62744` |
+| --- | --- |
+| `1c073062` | Release checklist accepted; later domain decision refined its identifier inventory. |
+| `482ffec8` | Prebuilt-host download accepted functionally; artifact authenticity remains a prepublication concern. |
+| `174e49a5` | File-watching placement accepted; its temporary removal of tracked Codex config was fixed by `0080044c`. |
+| `62d25e81` | Simulator Companion route accepted; simulator proof does not cover a physical installation. |
+| `24dc2360` | Standalone CLI release preparation accepted; unsigned install remains prepublication work. |
+| `e0814ac1` | Landing-friction record accepted; missing-config portion later consolidated by `e667b5a9`. |
+| `e667b5a9` | Deduplication accepted when landed; `0080044c` later left two now-stale active entries. |
+| `17e51655` | Physical-iPhone hosted-sync acceptance accepted as development-build evidence, not distribution proof. |
+| `0080044c` | Tracked Codex config repairs the fresh-worktree failure; two ledger entries need archival after clean integration proof. |
+| `a1cdad93` | Host landing accepted apart from a conditional inherited-sandbox-marker rejection. |
+| `0b4b8052` | Host wrapper accepted; later named-target dispatch in `f4c8114d` supersedes raw passthrough. |
+| `7a74afbf` | Per-identity Jest cache bound accepted; aggregate identities and direct-Jest fallback remain unbounded. |
+| `4cd16848` | Temporary-state review requirement accepted; this pass records the specific roots it exposed. |
+| `f4c8114d` | Named host operations accepted; the wrapper retains the marker rejection from `a1cdad93`. |
+| `533f7fa1` | Studio delay proof accepted; loading now precedes the latency assertion. |
+| `c098cb17` | Studio/IDE release preparation accepted; account, signing, marketplace and installed-product gates remain external. |
+| `2e9414bc` | `devtao.com` identifier move accepted; account/domain registration remains external. |
+| `24eb8d4a` | Release fixture name matches the new bundle identifier; no surviving finding. |
+| `cdcefefc` | Pagination and early exit handling work, but the fixed append-only emulator log can give a prior launch's reason. Five pages is a documented discovery limit, not proof every compatible host is reachable. |
+| `c4b62744` | Named CocoaPods dispatch gains the UTF-8 locale, but direct native-module-check and ship paths omitted it; this branch repairs both. Simulator-host pod install is not full device acceptance. |
+
+### Pending September repair recheck
+
+Every repair recorded above remains applicable at `c4b62744`; none was superseded by a
+newer main fix. The branch's proposed repairs were checked against current source and
+their focused regressions. Main integration must retain the later named host dispatch
+alongside the branch's agent bootstrap change.
+
+| Original finding | Disposition on the review branch |
+| --- | --- |
+| Web-server traversal and bind exposure | Containment and loopback repair valid; this continuation removes its test's port race. |
+| Alternate landing message paths | Restricted path repair valid. |
+| Connected phone Save can wait forever | Absolute deadline repair valid. |
+| Combined verification-skip flags | Rejection repair valid. |
+| Untouched generated landing draft | Author-edit requirement valid. |
+| Admission reuses a prior summary | Fresh-run check valid; this continuation also rejects failed current runs and baselines. |
+| Admission provisioning loses cleanup leftovers | Error and leftover preservation valid. |
+| Native podspec discovery misses grouped packages | Functional repair valid; helper duplication with `PackageGraph` is a later consolidation option. |
+| Cached package realpath survives symlink retarget | Build/update invalidation repair valid. |
+| Studio Lens samples cross assigned cells | Assignment identity reset repair valid. |
+| Agent bootstrap misses `cli-kit` imports | Full source-glob repair valid; preserve it when merging named host dispatch. |
+| Doctor accepts Bun below standalone minimum | Immediate 1.4.2 repair valid; shared-pin drift remains tracked. |
+| Shipped skill misstates bare `tao dev` | Source and starter-copy correction valid. |
+| Ledger status truncation | Single-line status and lint repair valid. |
+| Queued-landing entry remains active | Archive valid; this continuation restores its date and current command guidance. |
+| CLI build/clean status is stale | Landed-status correction valid. |
+
+### Findings, evidence, and disposition
+
+- **Measured temporary state:** On September 24, two read-only snapshots of
+  `~/.cache/tao/jest-transform-cache` found 574–618 identity directories and 2.14–2.21 GiB;
+  `jest-standalone` held about 1.18–1.19 GiB in ten identities. The managed implementation
+  enforces 25,000 files/256 MiB only inside one runtime-path identity and has no parent-level
+  retirement; direct Jest chooses a persistent path without entering that lifecycle. Those are
+  confirmed P2 lifecycle gaps, not measured growth rates. The legacy shared `$TMPDIR/jest_dx`
+  held 13.03 GiB/760,998 files, and `$TMPDIR/tao-test-runs` 763 MiB/137,778 files; neither
+  owner nor safe deletion was established. No shared state was removed.
+- **Measured host artifacts:** A separate worktree still held 31.3 GiB across 234 old
+  receipt-less host-test directories. Current `main` has no ordinary cleanup; the prior review
+  branch supplies receipt-based retention. A challenged interruption window on that branch
+  allowed allocation before receipt publication. This continuation publishes an independent
+  receipt first, treats it as authoritative across an interrupted local update, and lets
+  pruning recover an interrupted partial allocation. The focused host controls passed.
+  Old receipt-less directories were preserved for owner review.
+- **Conditional host operation defect:** `agent:47` rejects a nonempty inherited
+  `CODEX_SANDBOX` even when the host process probe is available, contrary to the landing
+  contract. The default host path here cleared the marker and worked; a focused entrypoint
+  regression proved the branch repair with a successful probe and retained marker. Failure
+  on a host runner that retains the marker is inferred, not observed on this default path.
+- **Repair quality:** A web-server containment test released a selected port before Bun could
+  bind it. The test now starts the generated server with `PORT=0` and reads its bound port;
+  it failed against the previous generator and passed after the change. The prior admission
+  experiment repair also missed a nonzero lane outcome that wrote a fresh summary without
+  failed gates and a failed baseline; focused regressions failed before the correction and
+  passed after it. The prior queued-landing archive now has its required final `Archived`
+  field and current command guidance.
+- **New main landing:** `cdcefefc` improves release discovery and ends a newly started
+  emulator's boot wait when its process exits. Its fixed `$TMPDIR/tao-android-emulator.log`
+  is opened for append, and the diagnostic searches all lines for `Incompatible processor`.
+  A later launch can therefore report an earlier launch's processor failure. This is a
+  source-confirmed P2 diagnostic error, not a measured second launch; use a per-launch log
+  with bounded cleanup after integration. The five-page release search cap is an explicit
+  request-budget limit; no compatible host beyond that cap was observed. `c4b62744` passes
+  UTF-8 locale variables through named CocoaPods dispatch without dropping inherited `PATH`,
+  but the direct pod invocations in native-module-check and `tao ship` still lacked them.
+  This branch now supplies the same locale on those paths; both focused regressions failed
+  before the correction and passed after it. No live direct-pod host run was performed.
+- **Release authenticity:** The standalone installer fetches executable and checksum from
+  one mutable release before execution; prebuilt Companion download trusts an unsigned
+  compatibility manifest and byte count, while publication permits asset replacement.
+  Independent review confirmed both as prepublication trust gaps. No public release or live
+  download was exercised, and implementing an immutable trust anchor requires a release
+  decision and signing inputs. Signing, notarization, store/marketplace publication, Linux
+  closure, and installed-binary acceptance remain external.
+- **Dependencies:** A fresh `bun audit` reported the existing moderate `uuid@7.0.3`
+  advisory through Expo's `xcode@3.0.1`; source review still found only an unaffected `v4()`
+  call in that parent. The [advisory register](<Dependency advisory follow-up.md>) remains
+  open for September 28. The pinned Nixpkgs glibc input still lacks a fresh Linux closure
+  and upstream-patch comparison. No manifest, version, or lockfile was changed.
+
+### Integration state
+
+The new review branch was created at the prior review tip `98a82c8a`. Its checkout switch
+could not replace protected `.codex/rules/tao.rules`, leaving that generated file dirty.
+A read-only merge preview names three document conflicts in the two developer-environment
+indexes and this recurring-pass handoff. The original review worktree, its index, and branch
+were untouched. Source fixes in this continuation have focused proof, but main integration,
+the full landing gate, and a landed archive ref are not yet established. The protected-path
+write needs a Developer-approved host operation before the branch can be made clean and landed.

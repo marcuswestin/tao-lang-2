@@ -1,4 +1,4 @@
-import { createConnection, createServer, type Server } from 'node:net'
+import { createConnection } from 'node:net'
 import { Errors } from './core/shared-core'
 
 const MAX_MESSAGE_BYTES = 256 * 1024
@@ -66,31 +66,6 @@ export async function request<ResponseT>(
       }
     })
   })
-}
-
-/** Selects a currently unused loopback port for a local test process; the port is not reserved. */
-export async function availablePort(host: string): Promise<number> {
-  const server = createServer()
-  await new Promise<void>((resolve, reject) => {
-    const fail = (error: Error) => reject(error)
-    server.once('error', fail)
-    server.listen({ exclusive: true, host, port: 0 }, () => {
-      server.off('error', fail)
-      resolve()
-    })
-  })
-  const address = server.address()
-  if (address === null || typeof address === 'string') {
-    await closeServer(server)
-    Errors.throwUnexpected('The local service did not receive a TCP port.')
-  }
-  const port = address.port
-  await closeServer(server)
-  return port
-}
-
-async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => server.close(error => error === undefined ? resolve() : reject(error)))
 }
 
 function describeEndpoint(endpoint: LocalSocketEndpoint): string {

@@ -58,8 +58,12 @@ Describe('native module compiler check', () => {
     Expect(commands.find(command => command.phase === 'CocoaPods install')).toMatchObject({
       args: ['install'],
       cwd: '/repo/.artifacts/native-module-check/run-1/host/ios',
+      env: { COCOAPODS_DISABLE_STATS: 'true', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
       timeoutMs: 300_000,
     })
+    for (const command of commands.filter(candidate => candidate.phase.startsWith('inspect podspec'))) {
+      Expect(command.env).toEqual({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })
+    }
     for (const command of commands.filter(candidate => candidate.phase.startsWith('compile pod target'))) {
       Expect(command.timeoutMs).toBe(600_000)
       Expect(command.args).toContain('-sdk')

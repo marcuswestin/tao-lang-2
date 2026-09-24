@@ -110,3 +110,41 @@ test('preserves legacy directories without ownership evidence', async () => {
     await FS.remove(root)
   }
 })
+
+test('reclaims an interrupted allocation using its independent receipt', async () => {
+  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  let now = Date.parse('2026-09-23T12:00:00.000Z')
+  const dependencies = { isAlive: () => false, now: () => new Date(now), pid: 123 }
+  try {
+    const runId = runIds[0]!
+    await HostTestingArtifacts.begin(runId, 'browser', root, dependencies)
+    await FS.writeText(FS.resolvePath(`${runId}/host-demo/build.bin`, root), 'interrupted build')
+    await FS.remove(FS.resolvePath(`${runId}/run.json`, root))
+    now += 8 * 24 * 60 * 60 * 1_000
+    await HostTestingArtifacts.prune(root, dependencies)
+    expect(await FS.isDirectory(FS.resolvePath(runId, root))).toBe(false)
+    expect(await FS.isFile(FS.resolvePath(`receipts/${runId}.json`, root))).toBe(true)
+  } finally {
+    await FS.remove(root)
+  }
+})
+
+test('uses the newer sidecar when completion was interrupted before the local receipt update', async () => {
+  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  let now = Date.parse('2026-09-23T12:00:00.000Z')
+  const dependencies = { isAlive: () => true, now: () => new Date(now), pid: 123 }
+  try {
+    const first = runIds[0]!
+    await HostTestingArtifacts.begin(first, 'check', root, dependencies)
+    const runningReceipt = await FS.readJson(FS.resolvePath(`${first}/run.json`, root))
+    await HostTestingArtifacts.finish(first, 'passed', root, dependencies)
+    await FS.writeJson(FS.resolvePath(`${first}/run.json`, root), runningReceipt)
+    now += 1_000
+    await HostTestingArtifacts.begin(runIds[1]!, 'check', root, dependencies)
+    await HostTestingArtifacts.finish(runIds[1]!, 'passed', root, dependencies)
+    await HostTestingArtifacts.prune(root, dependencies)
+    expect(await FS.isDirectory(FS.resolvePath(first, root))).toBe(false)
+  } finally {
+    await FS.remove(root)
+  }
+})

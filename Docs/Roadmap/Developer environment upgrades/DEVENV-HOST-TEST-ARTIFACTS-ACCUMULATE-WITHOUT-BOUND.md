@@ -8,6 +8,12 @@
   a real Clockwork `prepare` output passed, but a real native/browser proof has not yet proved
   completed-build cleanup end to end. Older unmarked roots remain for owner-reviewed
   migration because they have no reliable liveness receipt.
+- **Update, 2026-09-24:** Independent review found a kill window between run-directory
+  creation and receipt publication. This continuation publishes the independent
+  receipt first and uses it when a local receipt is missing. A mutation-tested
+  interrupted-allocation control passed through `./agent unsandboxed test-host check`.
+  A real browser/native success cleanup remains unproved; 31.3 GiB of receipt-less
+  output in another worktree was left for owner review.
 - **Section:** External
 - **Area:** Host testing and temporary artifacts
 - **Impact:** Each `./agent test-host` invocation creates a fresh `.artifacts/host-testing/<run-id>` tree. Browser exports and native builds can occupy hundreds of megabytes per run. The command has no retention or cleanup path, so repeated normal runs fill an otherwise live worktree until someone removes it by hand.

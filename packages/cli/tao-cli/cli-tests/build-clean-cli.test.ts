@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, LocalSocket, Repo } from '@shared'
+import { CLI, Errors, FS, Repo } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { type BuildRecord, executeBuildTargets } from '../cli-src/build-command'
 
@@ -77,16 +77,19 @@ Describe('Tao local build and clean CLI', () => {
 })
 
 async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
-  const port = await LocalSocket.availablePort('127.0.0.1')
   let output = ''
   const server = CLI.start('bun', {
     args: ['serve.ts'],
     cwd: FS.resolvePath('web', buildRoot),
-    env: { PORT: String(port) },
+    env: { PORT: '0' },
     onOutput: (_stream, chunk) => output += chunk.toString(),
     stdio: 'pipe',
   })
   try {
+    const port = await until(() => {
+      const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
+      return value > 0 ? value : undefined
+    }, { description: 'the standalone web server to announce its bound port' })
     await until(async () => {
       try {
         return (await fetch(`http://127.0.0.1:${port}/`)).status === 200 ? true : undefined

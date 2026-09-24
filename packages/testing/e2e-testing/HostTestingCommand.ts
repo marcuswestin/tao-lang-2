@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
+import { Errors, HCI, Platform, Repo, Switch } from '@shared'
 import { runBrowserHostProof } from './BrowserHostProof'
 import { runPlaywrightHostDriverProof } from './DriverHostProof'
 import { HostTestingArtifacts } from './HostTestingArtifacts'
@@ -41,7 +41,6 @@ async function pruneWithWarning(): Promise<void> {
 async function createHostTestingContext(request: HostTestingRequest): Promise<HostTestingContext> {
   const runId = Platform.randomUUID()
   const artifactRoot = Repo.resolvePath(`.artifacts/host-testing/${runId}`)
-  await FS.mkdir(artifactRoot)
   return {
     artifactRoot,
     environment: {

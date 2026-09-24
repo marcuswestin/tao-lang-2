@@ -23,9 +23,9 @@
   refused before the lock because the by-hand merge of `main` counted as a new commit the merge
   message had not been confirmed for; the fourth landed in 45 s. Measured: the four logs. Inferred:
   that the mirror-worktree fast-forward another landing performs is what moves local `main`.
-- **Workaround:** `git merge origin/main` unsandboxed, `./agent finalize` twice (once to verify,
-  once to record the message for the new HEAD), then `just land` again — and hope no landing
-  finishes during the next wait.
+- **Workaround:** Historical, before `a14ac0fa`: run `./agent unsandboxed finalize` to
+  integrate current main and refresh the reviewed message, then retry
+  `./agent unsandboxed land`. No workaround is needed for a clean queued landing now.
 - **Proposed change:** Re-read the preflight facts after the lease is granted, or take the snapshot
   of `main` inside the lock. `references/landing.md` already says local `main` being behind is no
   longer a precondition and that the landing integrates whatever `main` has become; the snapshot
@@ -35,3 +35,4 @@
   continues, and a test in `verification-tests` pins that a moved `main` during the lock wait does
   not refuse the landing.
 - **Source:** 2026-09-21 landing of `feat/smoke-gate-and-inset-decisions`.
+- **Archived:** 2026-09-23

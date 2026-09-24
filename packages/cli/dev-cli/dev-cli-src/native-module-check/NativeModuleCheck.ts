@@ -103,7 +103,7 @@ async function run(
       args: ['install'],
       command: 'pod',
       cwd: iosRoot,
-      env: { COCOAPODS_DISABLE_STATS: 'true' },
+      env: { COCOAPODS_DISABLE_STATS: 'true', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
       phase,
       timeoutMs: COCOAPODS_INSTALL_TIMEOUT_MS,
     })
@@ -121,6 +121,7 @@ async function run(
         args: ['ipc', 'spec', podspecPath],
         command: 'pod',
         cwd: FS.dirname(podspecPath),
+        env: { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
         phase,
         quiet: true,
         timeoutMs: POD_INSPECTION_TIMEOUT_MS,
