@@ -1,4 +1,4 @@
-import { CLI, HCI, Platform } from '@shared'
+import { CLI, FS, HCI, Platform } from '@shared'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
 
@@ -40,8 +40,23 @@ async function run(): Promise<number> {
     }
     return await openSimulator(args[0])
   }
+  let cwd: string | undefined
+  let forwardedArgs = args
+  if (prefix.join(' ') === 'pods install') {
+    if (args.length === 0 || args[0]!.startsWith('-')) {
+      HCI.writeErrorLine('Usage: ./agent unsandboxed pods install <ios-directory> [pod-options...]')
+      return 2
+    }
+    cwd = FS.resolvePath(args[0]!, Platform.runtimeProcess.cwd())
+    if (!FS.pathIsWithin(cwd, Platform.runtimeProcess.cwd()) || !await FS.isFile(FS.resolvePath('Podfile', cwd))) {
+      HCI.writeErrorLine(`FAIL  ${args[0]} must be a worktree directory containing a Podfile.`)
+      return 2
+    }
+    forwardedArgs = args.slice(1)
+  }
   const result = await CLI.run(target.command, {
-    args: [...target.fixedArgs, ...args],
+    args: [...target.fixedArgs, ...forwardedArgs],
+    cwd,
     processPolicy: target.server ? 'server' : 'tool',
     stdio: 'inherit',
   })

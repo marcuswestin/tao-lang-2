@@ -68,6 +68,42 @@ Describe('named host command dispatch', () => {
     }
   })
 
+  Test('runs CocoaPods from the selected Podfile directory', async () => {
+    const root = await mkTestDir('tao-pods-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const bin = FS.resolvePath('bin', root)
+      const ios = FS.resolvePath('ios', root)
+      const log = FS.resolvePath('pod.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["pods install"] }')
+      await FS.mkdir(bin)
+      await FS.mkdir(ios)
+      await FS.writeText(FS.resolvePath('Podfile', ios), '')
+      const pod = FS.resolvePath('pod', bin)
+      await FS.writeText(pod, '#!/bin/zsh\nprintf "%s\\n" "$PWD" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(pod, 0o755)
+      const env = { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_HOST_LOG: log }
+
+      const installed = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'pods', 'install', 'ios', '--repo-update'],
+        cwd: root,
+        env,
+      })
+      Expect(installed.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual([ios, 'install', '--repo-update'])
+
+      const invalid = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'pods', 'install', '..'],
+        cwd: root,
+        env,
+      })
+      Expect(invalid.exitCode).toBe(2)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual([ios, 'install', '--repo-update'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('keeps process probes to their named read-only shapes', async () => {
     const root = await mkTestDir('tao-process-host-')
     try {

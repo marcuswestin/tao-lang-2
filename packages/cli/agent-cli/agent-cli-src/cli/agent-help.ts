@@ -93,6 +93,7 @@ Examples:
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
 
 unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.
