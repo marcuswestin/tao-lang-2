@@ -706,6 +706,16 @@ resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writin
 (needs the Developer ID certificate), removal of `tao review` and its Studio graph from the first
 binary, and an honest statement of whatever is still absent. `tao review` may return later.
 
+_`tao review` removal built 2026-09-24, not yet landed; the helper waits on the certificate._ The
+standalone build defines `TAO_STANDALONE`, and `tao-cli.ts` registers `review` only when it is
+undefined, so the bundler drops the command and its import; a checkout keeps it. The acceptance
+checks the installed `tao --help` offers no `review`, and the release notes list it among what the
+binary does not do. The measured saving is small, 5 of 1,313 modules and about 80 KB, because that
+import was the CLI's only reach into Studio and `studio-review` pulls in little of Studio itself:
+F7's "pulls in the Studio graph" overstated it. The honest statement of what is absent is the
+release notes' `KNOWN_GAPS` list in `standalone-build.ts`: the iOS Simulator and Android from
+`tao dev`, `tao review`, and signing.
+
 Slices 1–5, first-release parts of 7–9, and the macOS payload are the standalone release path.
 Slice 6 and the other-platform and other-channel parts of 7 wait for later releases. Work can
 overlap with `A3` and `A8`.

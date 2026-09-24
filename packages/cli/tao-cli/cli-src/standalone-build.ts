@@ -39,6 +39,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  */
 const KNOWN_GAPS = [
   '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
 ] as const
 
@@ -153,12 +154,13 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
-  // `tao-version.ts` declares this global and nothing else defines it.
+  // `tao-version.ts` and `tao-cli.ts` declare these globals and nothing else defines them.
   const stamp = releaseVersion === undefined
     ? []
     : ['--define', `TAO_RELEASE_VERSION=${JSON.stringify(releaseVersion)}`]
+  const defines = ['--define', 'TAO_STANDALONE=true', ...stamp]
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
-    args: ['build', '--compile', ...stamp, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
+    args: ['build', '--compile', ...defines, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
     cwd: repoRoot,
     stdio: 'inherit',
   })

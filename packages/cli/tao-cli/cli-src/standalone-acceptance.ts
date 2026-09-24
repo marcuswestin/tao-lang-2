@@ -76,6 +76,10 @@ async function accept(release: string): Promise<void> {
     if (reported !== version) {
       Errors.throwUnexpected(`The installed tao reports ${JSON.stringify(reported)}, not ${version}.`)
     }
+    // The first release leaves `tao review` out (`R12`).
+    if (/^\s+review\b/m.test(await shell(home, 'tao --help'))) {
+      Errors.throwUnexpected('The installed tao still offers `tao review`, which the first release leaves out.')
+    }
     await shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests')
     const project = FS.resolvePath('a-tally-counter', home)
     await shell(project, 'tao check .')
