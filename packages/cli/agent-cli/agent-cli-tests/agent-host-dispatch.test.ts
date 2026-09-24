@@ -5,6 +5,34 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('forwards only the selected release preparation target as argv', async () => {
+    const root = await mkTestDir('tao-release-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["prepare-release studio", "prepare-release ide-extension"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(dev, 0o755)
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'prepare-release', 'studio', '--repo', 'owner/repo', '--version', '0.0.1'],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual([
+        'prepare-release',
+        'studio',
+        '--repo',
+        'owner/repo',
+        '--version',
+        '0.0.1',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('opens Device Hub when Simulator.app is unavailable', async () => {
     const root = await mkTestDir('tao-simulator-open-')
     try {

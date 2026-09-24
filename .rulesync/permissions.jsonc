@@ -108,6 +108,7 @@
     "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check",
+    "prepare-release studio", "prepare-release ide-extension",
     "app-dev",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",

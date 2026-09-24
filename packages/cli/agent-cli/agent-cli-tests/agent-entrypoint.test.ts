@@ -11,9 +11,9 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const ENTRYPOINT = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/agent-dev.ts')
 
-async function runEntrypoint(args: readonly string[]): Promise<{ exitCode: number; stderr: string }> {
+async function runEntrypoint(args: readonly string[]): Promise<{ exitCode: number; stderr: string; stdout: string }> {
   const result = await CLI.run('bun', { args: ['run', ENTRYPOINT, ...args], cwd: Repo.getRoot(), stdio: 'pipe' })
-  return { exitCode: result.exitCode ?? -1, stderr: result.stderr }
+  return { exitCode: result.exitCode ?? -1, stderr: result.stderr, stdout: result.stdout }
 }
 
 Describe('agent entrypoint', () => {
@@ -161,5 +161,12 @@ Describe('agent entrypoint', () => {
     // Still hinted: any option before the command is unknown to the top-level parser, front-door
     // flag or not, so the hint is the right answer for this one too rather than a special case.
     Expect(result.stderr).toContain('go after the command, not before it')
+  })
+
+  Test('requires the named host entry point for release preparation', async () => {
+    const result = await runEntrypoint(['prepare-release', 'studio'])
+
+    Expect(result.exitCode).toBe(1)
+    Expect(result.stderr).toContain('too many arguments')
   })
 })

@@ -18,6 +18,8 @@ const expected = [
   'studio-proof-real-app',
   'admission-experiment',
   'native-module-check',
+  'prepare-release studio',
+  'prepare-release ide-extension',
   'app-dev',
   'simulators list',
   'simulators boot',
@@ -58,6 +60,10 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {

@@ -49,6 +49,7 @@
       "Allow ordinary read-only shell commands used to inspect files, source code, git state, logs, test output, build artifacts, dependencies, and local environment information.",
       "Allow this repository's own sandboxed workflow commands — ./agent, ./tao other than dev, ./dev, just recipes, bun test, bun run, and dprint — including the ones that build, format, generate, or run tests.",
       "Run host operations only through a named ./agent unsandboxed operation listed in .rulesync/permissions.jsonc; use app-dev for the Tao development loop and simulators for simulator interactions.",
+      "Allow the named ./agent unsandboxed prepare-release studio and prepare-release ide-extension operations for local release preparation; neither publishes.",
       "Allow starting, querying, and stopping local development servers and previews bound to loopback addresses, and allow reading their pages, logs, and network activity in a browser or preview tool.",
       "Allow repository browser-smoke commands inside the active sandbox; any host escape still requires review."
     ],

@@ -88,6 +88,8 @@ Examples:
   ./agent verify-changed
   ./agent verify
   ./agent verify-full-sandbox
+  ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
+  ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
   ./agent unsandboxed land --dry-run
   ./agent unsandboxed simulators list booted

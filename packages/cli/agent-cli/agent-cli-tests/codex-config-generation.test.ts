@@ -174,6 +174,15 @@ Describe('Codex config generation', () => {
     ])
   })
 
+  Test('grants host access to each local release preparation target without admitting other targets', async () => {
+    const source = await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc'))
+    const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(source))
+
+    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","studio"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","ide-extension"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed","prepare-release"], decision="allow"')
+  })
+
   Test('grants both harnesses the same caches outside the worktree', () => {
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(canonicalRules),

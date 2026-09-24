@@ -5,9 +5,8 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * script piped from curl into `sh`, a throwaway `$HOME`, no checkout above anything, and neither Bun
  * nor Node on `PATH`. `just standalone-cli-acceptance` builds a release and runs this against it.
  *
- * The release directory is mirrored in GitHub's two URL shapes — `latest/download/` and
- * `download/v<version>/` — and served through `file://`, so the published install script runs
- * unchanged apart from where `TAO_RELEASES` points it.
+ * The release directory is mirrored at GitHub's tag-specific `download/v<version>/` URL and served
+ * through `file://`, with a release listing beside it for the unpinned install.
  *
  * Each slice of the standalone plan adds its step here as it lands. Today that is `tao create`, and
  * `tao check` and `tao compile` on what it created, so `tao dev` and `tao test` are not yet claimed.
@@ -33,8 +32,8 @@ try {
 async function accept(release: string): Promise<void> {
   const { version } = await FS.readJson<{ version: string }>(FS.resolvePath('release.json', release))
   const installScript = await FS.readText(FS.resolvePath('install.sh', release))
-  if (installScript.includes('@TAO_RELEASES@')) {
-    Errors.throwUnexpected('The published install script still names no releases URL.')
+  if (installScript.includes('@TAO_RELEASES@') || installScript.includes('@TAO_VERSION@')) {
+    Errors.throwUnexpected('The published install script still contains a release placeholder.')
   }
 
   const root = await FS.realPath(await FS.mkTmpDir('tao-standalone-acceptance-'))
@@ -46,17 +45,21 @@ async function accept(release: string): Promise<void> {
     }
     const releases = FS.resolvePath('releases', root)
     for (const name of INSTALLER_FILES) {
-      await FS.copyFile(FS.resolvePath(name, release), FS.resolvePath(`latest/download/${name}`, releases))
       await FS.copyFile(FS.resolvePath(name, release), FS.resolvePath(`download/v${version}/${name}`, releases))
     }
+    const listing = FS.resolvePath('releases.json', root)
+    await FS.writeJson(listing, [
+      { tag_name: 'studio-v99.0.0', draft: false, prerelease: false },
+      { tag_name: `v${version}`, draft: false, prerelease: false },
+    ])
     const home = FS.resolvePath('home', root)
     const userBin = FS.resolvePath('.local/bin', home)
     await FS.mkdir(userBin)
-    const shell = newcomerShell(home, `${userBin}:${SYSTEM_PATH}`, `file://${releases}`)
+    const shell = newcomerShell(home, `${userBin}:${SYSTEM_PATH}`, `file://${releases}`, `file://${listing}`)
 
-    await shell(home, 'curl -fsSL "$TAO_RELEASES/latest/download/install.sh" | sh')
-    // Again, pinned: the other URL shape, and replacing an installed version in place.
-    await shell(home, `curl -fsSL "$TAO_RELEASES/latest/download/install.sh" | TAO_VERSION=${version} sh`)
+    await shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | sh`)
+    // Again, pinned: no index needed, and replacing an installed version in place.
+    await shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | TAO_VERSION=${version} sh`)
 
     const reported = (await shell(home, 'tao --version')).trim()
     if (reported !== version) {
@@ -85,12 +88,18 @@ async function accept(release: string): Promise<void> {
  * newcomerShell runs commands the way a person who just installed Tao would: through `sh`, with only
  * the environment a fresh login has. It returns their output and fails on a non-zero exit.
  */
-function newcomerShell(home: string, path: string, releases: string) {
+function newcomerShell(home: string, path: string, releases: string, listing: string) {
   return async (cwd: string, script: string): Promise<string> => {
     const result = await CLI.run('/bin/sh', {
       args: ['-c', script],
       cwd,
-      env: { HOME: home, PATH: path, TAO_RELEASES: releases, TMPDIR: Platform.runtimeProcess.env['TMPDIR'] },
+      env: {
+        HOME: home,
+        PATH: path,
+        TAO_RELEASES: releases,
+        TAO_RELEASE_INDEX_URL: listing,
+        TMPDIR: Platform.runtimeProcess.env['TMPDIR'],
+      },
     })
     if (result.exitCode !== 0) {
       Errors.throwUnexpected(`\`${script}\` failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}`)
