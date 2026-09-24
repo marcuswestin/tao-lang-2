@@ -11,6 +11,9 @@ import { TaoVersion } from './tao-version'
 /** LISTING_ENV points at another release listing, as the install script also reads it. */
 const LISTING_ENV = 'TAO_RELEASE_INDEX_URL'
 
+/** PAGE_SIZE is the most releases GitHub returns in one page of the listing. */
+const PAGE_SIZE = 100
+
 /** A published CLI release tag: `v` and a stable three-part version. */
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/
 
@@ -22,7 +25,7 @@ export async function runCheckForUpdates(): Promise<void> {
     HCI.writeLine('This is a development build of Tao, not a published release, so there is nothing to compare.')
     return
   }
-  const latest = latestStableRelease(await fetchListing(listingUrl(releases)))
+  const latest = latestStableRelease(await fetchReleases(releases))
   if (latest === undefined) {
     HCI.writeLine(`No published Tao release was found at ${releases}.`)
     return
@@ -74,16 +77,39 @@ function compareVersions(left: string, right: string): number {
   return 0
 }
 
-function listingUrl(releases: string): string {
+/**
+ * fetchReleases reads the whole release listing, a page at a time until a short page, because the CLI
+ * shares the repository's releases with Studio and the prebuilt hosts. An override listing is one
+ * document, as the install script also reads it.
+ */
+async function fetchReleases(releases: string): Promise<unknown[]> {
   const override = Platform.runtimeProcess.env[LISTING_ENV]
   if (override !== undefined && override.length > 0) {
-    return override
+    const listing = await fetchListing(override)
+    return Array.isArray(listing) ? listing : []
   }
   const repository = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/?$/.exec(releases)?.[1]
   if (repository === undefined) {
     return Errors.throwHostEnvironment(`Cannot list releases at ${releases}; set ${LISTING_ENV} to a release listing.`)
   }
-  return `https://api.github.com/repos/${repository}/releases?per_page=100`
+  return await readReleasePages(page =>
+    fetchListing(`https://api.github.com/repos/${repository}/releases?per_page=${PAGE_SIZE}&page=${page}`)
+  )
+}
+
+/** readReleasePages joins listing pages from the first until one is short or is not a listing. */
+export async function readReleasePages(fetchPage: (page: number) => Promise<unknown>): Promise<unknown[]> {
+  const all: unknown[] = []
+  for (let page = 1;; page += 1) {
+    const listing = await fetchPage(page)
+    if (!Array.isArray(listing)) {
+      return all
+    }
+    all.push(...listing)
+    if (listing.length < PAGE_SIZE) {
+      return all
+    }
+  }
 }
 
 async function fetchListing(url: string): Promise<unknown> {

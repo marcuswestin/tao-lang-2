@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { latestStableRelease } from '../cli-src/check-for-updates'
+import { latestStableRelease, readReleasePages } from '../cli-src/check-for-updates'
 import { mergeProjectLocks, readProjectLock, writeProjectLock, writeToolchainPin } from '../cli-src/ship-lock'
 import { ToolchainPin } from '../cli-src/toolchain-pin'
 
@@ -136,6 +136,21 @@ Describe('check-for-updates', () => {
       { draft: false, prerelease: false, tag_name: 'v1.0.0-beta' },
     ])).toBe('0.4.10')
     Expect(latestStableRelease({ message: 'Not Found' })).toBeUndefined()
+  })
+
+  // Studio and the prebuilt hosts publish to the same listing, so the newest CLI release can sit
+  // past the first page.
+  Test('reads the listing a page at a time until a short page', async () => {
+    const hosts = Array.from({ length: 100 }, (_, index) => ({ tag_name: `host-${index}` }))
+    const requested: number[] = []
+
+    const releases = await readReleasePages(async page => {
+      requested.push(page)
+      return page === 1 ? hosts : [{ draft: false, prerelease: false, tag_name: 'v0.4.3' }]
+    })
+
+    Expect(requested).toEqual([1, 2])
+    Expect(latestStableRelease(releases)).toBe('0.4.3')
   })
 })
 
