@@ -37,7 +37,7 @@ const artifacts: ArtifactInventory = {
   root: '/build/artifacts',
   updateManifest: {
     schemaVersion: 1,
-    identifier: 'dev.tao-lang.studio',
+    identifier: 'com.devtao.studio',
     channel: 'stable',
     version: '1.0.0',
     hash: 'abc123',
