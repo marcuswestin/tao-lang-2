@@ -234,6 +234,11 @@ class TR {
     return condition.evaluate().jsValue === true ? body() : undefined
   }
 
+  /** Check evaluates a validated boolean once and reports whether its action must stop. */
+  static Check(condition: TR.Evaluable): boolean {
+    return condition.evaluate().jsValue !== true
+  }
+
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
   static WhenCase<T>(
     subject: TR.Evaluable,

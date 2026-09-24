@@ -54,7 +54,7 @@ test "WordFlower workspaces" {
       press #addWorkspace // disabled while the draft is empty, so nothing happens
       expect missing text "A workspace needs a name"
       submit #workspaceName
-      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
+      expect text "A workspace needs a name" // the `if` presents a notice; the `check` stops the create
       press #dismissNotice
       expect missing text "A workspace needs a name"
       expect text "No workspaces yet"

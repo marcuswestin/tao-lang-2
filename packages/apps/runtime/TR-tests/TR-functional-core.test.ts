@@ -62,6 +62,9 @@ Describe('TR functional core', () => {
     TR.If(TR.Value(false), () => ifRuns++)
     TR.If(TR.Value(true), () => ifRuns++)
     Expect(ifRuns).toBe(1)
+    // A check reports a stop whenever its validated boolean is not true.
+    Expect(TR.Check(TR.Value(true))).toBe(false)
+    Expect(TR.Check(TR.Value(false))).toBe(true)
 
     const query = [] as unknown as unknown[] & { Loading: boolean; Error: string }
     Object.defineProperties(query, {

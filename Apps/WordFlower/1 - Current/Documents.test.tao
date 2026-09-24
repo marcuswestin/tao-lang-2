@@ -123,6 +123,8 @@ test "WordFlower documents" {
       select #drafts[1] {
          press #edit
       }
+      submit #newParagraph // the empty-text `check` skips the create
+      expect text "Paragraphs: 0"
       enter "It began at sea." into #newParagraph
       submit #newParagraph
       // The statement after `async` clears the input without awaiting the write.

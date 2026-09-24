@@ -4,7 +4,7 @@ use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
 // action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
