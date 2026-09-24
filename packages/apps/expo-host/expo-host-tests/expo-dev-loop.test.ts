@@ -1,4 +1,4 @@
-import { devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
+import { DevLoopOutput, devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
 import { createDevLoopExpoSession } from '@expo-host/dev-loop/expo-dev-loop'
 import {
   createAndroid,
@@ -260,6 +260,21 @@ Describe('Expo dev-loop command helpers', () => {
       })
     )
     Expect(`${captured.stdout}${captured.stderr}`).toContain('requires a Tao source checkout')
+  })
+
+  Test('lists the source-checkout controls only when the loop runs from a checkout', async () => {
+    try {
+      DevLoopOutput.showCheckoutControls(false)
+      const outside = await withCapturedOutput(() => Commands.printControls())
+      DevLoopOutput.showCheckoutControls(true)
+      const inside = await withCapturedOutput(() => Commands.printControls())
+
+      Expect(outside.stdout).toContain('reload app')
+      Expect(outside.stdout).not.toContain('source checkout')
+      Expect(inside.stdout).toContain('verify Tao checkout (source checkout)')
+    } finally {
+      DevLoopOutput.showCheckoutControls(true)
+    }
   })
 
   Test('keeps child-process output as the useful dev-loop failure', () => {

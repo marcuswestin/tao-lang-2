@@ -63,6 +63,7 @@ async function runDevLoopWithActiveReporter(
   const repoRoot = toolchainRepo ?? selection.projectRoot
   const repositoryControlsAvailable = toolchainRepo !== undefined
     && FS.pathIsWithin(selection.projectRoot, toolchainRepo)
+  DevLoopOutput.showCheckoutControls(repositoryControlsAvailable)
   const { appName, appPath } = selection
   const stateRoot = FS.resolvePath('.tao/dev', selection.projectRoot)
   const runtime = await DevRuntime.prepare(selection.projectRoot)
