@@ -547,6 +547,7 @@ async function runCompiledTaoTests(
   if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined || compiled.runRoot === undefined) {
     return { output: '' }
   }
+  const runtimeRoot = compiled.runtimeRoot
   const writer = TestOutput.createWriter(mode)
   const chunks: Buffer[] = []
   const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(compiled.manifestPath)
@@ -555,33 +556,38 @@ async function runCompiledTaoTests(
     compiled.runRoot,
     namePattern,
   )
-  const result = await CLI.run(await testNodePath(), {
-    args: [
-      await testJestPath(compiled.runtimeRoot),
-      '--config',
-      'jest.tao-test.config.cjs',
-      '--no-watchman',
-      // The run was split into exactly the entrypoints its worker budget affords, so the pool is
-      // sized to the split rather than to the machine: every worker gets one entrypoint, and no
-      // worker waits behind another for a second one.
-      `--maxWorkers=${Math.max(1, entrypoints.shardCount)}`,
-      // One Jest case per Tao journey is what makes this select a journey rather than a whole file.
-      ...(namePattern === undefined ? [] : ['--testNamePattern', namePattern]),
-    ],
-    cwd: compiled.runtimeRoot,
-    env: {
-      [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
-      [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
-      ...(journeyObservationDirectory === undefined
-        ? {}
-        : { [RuntimeTesting.JourneyObservations.ENV]: journeyObservationDirectory }),
-    },
-    onOutput: (_stream, chunk) => {
-      chunks.push(chunk)
-      writer?.write(chunk)
-    },
-    stdio: 'pipe',
-  })
+  const result = await RuntimeTesting.JestTransformCache.run(
+    runtimeRoot,
+    async cacheDirectory =>
+      await CLI.run(await testNodePath(), {
+        args: [
+          await testJestPath(runtimeRoot),
+          '--config',
+          'jest.tao-test.config.cjs',
+          '--no-watchman',
+          // The run was split into exactly the entrypoints its worker budget affords, so the pool is
+          // sized to the split rather than to the machine: every worker gets one entrypoint, and no
+          // worker waits behind another for a second one.
+          `--maxWorkers=${Math.max(1, entrypoints.shardCount)}`,
+          // One Jest case per Tao journey is what makes this select a journey rather than a whole file.
+          ...(namePattern === undefined ? [] : ['--testNamePattern', namePattern]),
+        ],
+        cwd: runtimeRoot,
+        env: {
+          [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
+          [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
+          [RuntimeTesting.JestTransformCache.ENV]: cacheDirectory,
+          ...(journeyObservationDirectory === undefined
+            ? {}
+            : { [RuntimeTesting.JourneyObservations.ENV]: journeyObservationDirectory }),
+        },
+        onOutput: (_stream, chunk) => {
+          chunks.push(chunk)
+          writer?.write(chunk)
+        },
+        stdio: 'pipe',
+      }),
+  )
   writer?.flush()
   return { output: Buffer.concat(chunks).toString('utf8'), result }
 }
