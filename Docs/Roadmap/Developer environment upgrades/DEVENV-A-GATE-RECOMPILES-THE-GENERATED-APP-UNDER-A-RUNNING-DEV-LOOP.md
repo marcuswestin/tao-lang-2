@@ -27,7 +27,7 @@
   registration shows it owns the tree.
 - **Dependencies:** `Docs/Roadmap/Tao tooling performance.md` owns the compile cache the stamp is
   part of.
-- **Acceptance:** `./agent check` run while `./tao dev <app>` serves a different app leaves the served
+- **Acceptance:** `./agent check` run while `./agent unsandboxed app-dev <app>` serves a different app leaves the served
   app untouched, and a test in `verification-tests` pins that the gate's output root is not the dev
   loop's.
 - **Source:** 2026-09-22 simulator check of the ask window layer on `feat/inset-defects`.

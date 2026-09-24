@@ -12,7 +12,7 @@
   `1 passed, 1 failed, 9 skipped`. The harness edit tool may write `agents/skills/`; Bash may not,
   which `dev-automation` and `git-workflow` both record.
 - **Workaround:** Run `dprint check <file>` sandboxed to see the wanted text and apply it with the
-  edit tool, or run `./agent fix` from an unsandboxed shell.
+  edit tool, or have the Developer run `./agent fix` from a normal terminal.
 - **Proposed change:** When `_fix-dprint` hits a write denial, print the file and the `dprint check`
   diff and say which of the two recoveries applies, instead of failing as a generic formatter
   error. Separately, let the gates that do not read the unformatted file run rather than skip.

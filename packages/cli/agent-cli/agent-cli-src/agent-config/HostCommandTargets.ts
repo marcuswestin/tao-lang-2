@@ -1,0 +1,48 @@
+export type HostCommandTarget = {
+  argsPolicy?: 'none' | 'pid'
+  command: string
+  fixedArgs: readonly string[]
+  server?: boolean
+}
+
+/** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
+export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
+  'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
+  'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
+  'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
+  'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
+  'simulators app-container': { command: 'xcrun', fixedArgs: ['simctl', 'get_app_container'] },
+  'simulators install': { command: 'xcrun', fixedArgs: ['simctl', 'install'] },
+  'simulators open-url': { command: 'xcrun', fixedArgs: ['simctl', 'openurl'] },
+  'simulators uninstall': { command: 'xcrun', fixedArgs: ['simctl', 'uninstall'] },
+  'simulators open': { command: 'open', fixedArgs: ['-a', 'Simulator'] },
+  'devices list': { command: 'xcrun', fixedArgs: ['devicectl', 'list', 'devices'] },
+  'devices apps': { command: 'xcrun', fixedArgs: ['devicectl', 'device', 'info', 'apps'] },
+  'devices launch': { command: 'xcrun', fixedArgs: ['devicectl', 'device', 'process', 'launch'] },
+  'xcode version': { command: 'xcodebuild', fixedArgs: ['-version'], argsPolicy: 'none' },
+  'xcode setup-status': { command: 'xcodebuild', fixedArgs: ['-checkFirstLaunchStatus'], argsPolicy: 'none' },
+  'xcode sdks': { command: 'xcodebuild', fixedArgs: ['-showsdks'], argsPolicy: 'none' },
+  'xcode build-project': { command: 'xcodebuild', fixedArgs: ['-project'] },
+  'xcode build-workspace': { command: 'xcodebuild', fixedArgs: ['-workspace'] },
+  'xcode export-archive': { command: 'xcodebuild', fixedArgs: ['-exportArchive'] },
+  'pods install': { command: 'pod', fixedArgs: ['install'] },
+  'pods spec': { command: 'pod', fixedArgs: ['ipc', 'spec'] },
+  'android devices': { command: 'adb', fixedArgs: ['devices'], argsPolicy: 'none' },
+  'android state': { command: 'adb', fixedArgs: ['get-state'], argsPolicy: 'none' },
+  'android emulators': { command: 'emulator', fixedArgs: ['-list-avds'], argsPolicy: 'none' },
+  'android boot': { command: 'emulator', fixedArgs: ['-avd'], server: true },
+  'android ensure': { command: './dev', fixedArgs: ['android-emulator'], argsPolicy: 'none' },
+  'remote fetch': { command: 'git', fixedArgs: ['fetch', 'origin'] },
+  'remote refs': { command: 'git', fixedArgs: ['ls-remote', 'origin'] },
+  'remote heads': { command: 'git', fixedArgs: ['ls-remote', '--heads', 'origin'] },
+  'remote exists': { command: 'git', fixedArgs: ['ls-remote', '--exit-code', 'origin'] },
+  'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
+  'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
+}
+
+/** A named operation has a fixed implementation; suffix argv passes through without a shell. */
+export function hostCommandTarget(prefix: readonly string[]): HostCommandTarget | undefined {
+  return HOST_COMMAND_TARGETS[prefix.join(' ')]
+}
