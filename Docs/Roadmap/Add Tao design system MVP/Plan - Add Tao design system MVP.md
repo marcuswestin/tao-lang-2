@@ -12,7 +12,9 @@ MVP" onward, the tooling, artifacts, and later-phase direction around it.
 
 ## Goal
 
-Make Tao apps visually coherent through a deterministic, language-owned design system: design declarations, tokens, semantic tokens, component recipes, recipe application from UI call sites, runtime lowering to React Native styles, and initial design diagnostics.
+Make Tao apps visually coherent through a deterministic, language-owned design system: design
+declarations with typed value blocks, styles and element defaults (`Decisions.md` §13), application
+from UI call sites, runtime lowering to React Native styles, and deterministic design diagnostics.
 
 The first MVP should prove that ordinary Tao UI can get polished, consistent visual treatment without app authors hand-writing React Native styles or generated TypeScript duplicating style logic.
 
@@ -27,9 +29,9 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Assumptions
 
-- Layout and visual design entries share one typed `[ ... ]` application surface. The first design
-  declaration and named-bundle shape are implemented; recipe shapes remain later work, not a second
-  render-site delimiter.
+- Layout and visual design entries share one typed `[ ... ]` application surface. §13 replaced
+  recipes with lowercase styles, element defaults, and conditions, so there is no second render-site
+  delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
 - The first implementation updated the complete `Apps/WordFlower/1 - Current/` directory only after the slice was executable.
@@ -39,15 +41,15 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Tao code coverage
 
-Tranche 4 proved the first slice through the owning package suites and WordFlower. The broader design
-MVP should add a dedicated Test App only when a later tranche settles semantic tokens and recipes:
+Tranche 4 proved the first slice through the owning package suites and WordFlower. A dedicated Test
+App is warranted only for §13 surface WordFlower does not itself force:
 
 - Parser, validator, formatter, compiler, runtime, and expo-host tests cover flat tokens,
   named bundles, diagnostics, lowering, mounted-app lookup, and precedence.
 - `Apps/WordFlower/1 - Current/Design.tao` and the WordFlower journeys prove the end-to-end first
   slice in a product app.
-- A later focused Test App should demonstrate the accepted semantic-token and recipe surface, with
-  its purpose recorded in `Apps/Test Apps/README.md` before that app is created.
+- A later focused Test App, if one is needed, records its purpose in `Apps/Test Apps/README.md`
+  before it is created.
 
 ## Implementation steps
 
@@ -208,9 +210,17 @@ scene Inbox() {
   `Design.tao:87`, `:153`; both starters) names an element default in a clause list because the
   runtime picks one of the two defaults per tab (`TR-navigation-mounts.tsx:819`); it becomes one
   `NavigationTab` default with an active-tab condition.
-- Open: the name of the length type (`size` collides with the font-size clause), whether a `style`
-  type ships, the active-tab condition word, the severity of casing violations while existing source
-  migrates, and the forcing feature (`Process.md` principle 2) that proves the slice.
+- The length type is the `size` unit family already decided in §2 (`Decisions.md:145`), sharing its
+  word with the font-size clause the way the `sizes { }` block does.
+- **No forcing feature in the MVP app** (`Process.md` principle 2): a scan of all three WordFlower
+  tiers (2026-09-24) found no view rendered with different tints, no per-item color, and no
+  user-chosen accent; its only conditional style is `border accent when FocusBar is active`
+  (`Apps/WordFlower/1 - Current/@ui/Focus.tao:50`). The only real forcing case in the repository is
+  Skillet's per-aisle color (`Apps/Tao Future/Skillet/Shared.tao-revolution:100`), which forces
+  §13's parameterized entries (`aisle(Aisle)`) rather than typed values.
+- Open: whether the slice proceeds without a forcing feature, whether a `style` type ships, the
+  active-tab condition word (`selected` is unused anywhere; `is active` already means named-region
+  focus), and the severity of casing violations while existing source migrates.
 
 ## Design rules — deferred past MVP (notes, 2026-09-22/23)
 
@@ -253,8 +263,9 @@ or 18.66px bold).
   appear far from the edit that caused it; and a warning may hold under only one mounted design.
 
 **Contrast findings.** The generated starter palettes fail AA for muted text: Notebook `inkMuted` on
-`canvas` 3.53:1 and on `surface` 3.88:1, Pantry 3.52:1 and 3.90:1 — so the fault is
+`canvas` 3.53:1 and on `surface` 3.88:1, Pantry 3.52:1 and 3.90:1 — so the fault was
 `deriveDesignColors` (`packages/cli/tao-cli/cli-src/create/creation-colors.ts`), not one palette.
+Fixed 2026-09-24: muted ink is now the lightest blend that reaches 4.5:1 on canvas and surface.
 WordFlower passes (4.63:1 light, 8.51:1 dark).
 
 **`tap min`.** The decided spelling (`Decisions.md` §2 and its spelling table: `tap min 48`); its
