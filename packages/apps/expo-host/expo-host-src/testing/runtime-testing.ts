@@ -1,3 +1,4 @@
+import { JestTransformCache } from './jest-transform-cache'
 import {
   type JourneyCheckObservation,
   JourneyObservations,
@@ -49,6 +50,7 @@ export const RuntimeTesting = {
   TestCompiler: CoreTestCompiler,
   TestHarnessFiles,
   JourneyObservations,
+  JestTransformCache,
   TestRunId,
   TestRunRoot,
 }
