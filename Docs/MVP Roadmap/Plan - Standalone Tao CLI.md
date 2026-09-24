@@ -460,9 +460,10 @@ first public release; Homebrew, npm, and other platforms are later possibilities
 - **Install script.** `curl -fsSL https://<host>/install.sh | sh` detects platform and
   architecture, downloads `tao-<version>-<target>`, verifies a published SHA-256, installs the shim
   into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin would be needed for Windows later.
-- **Homebrew tap.** `taolang/homebrew-tao` with a formula that installs the prebuilt binary per
-  platform. The Developer creates the tap repository.
-- **npm wrapper.** `tao` with `optionalDependencies` on `@tao-lang/cli-darwin-arm64`,
+- **Homebrew tap.** `dev-tao/homebrew-tao` (fallback `tao-lang/homebrew-tao`) with a formula that
+  installs the prebuilt binary per platform. The Developer creates the tap repository.
+- **npm wrapper.** `tao` with `optionalDependencies` on `@dev-tao/cli-darwin-arm64` (fallback scope
+  `@tao-lang`),
   `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-win32-x64`, each containing only its binary, plus a
   `bin/tao.js` that execs the resolved one. This is the esbuild/swc pattern and is the cheapest
   route to `npx tao`. Note that all twenty packages are `private: true` today; what gets published

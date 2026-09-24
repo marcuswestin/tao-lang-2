@@ -11,7 +11,7 @@ import { Expect, Test } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 
 const revision = { build: 'studio-mac2-acceptance-1', source: 'studio-mac2-smoke' }
-const studioBundleIdentifier = 'dev.tao-lang.studio'
+const studioBundleIdentifier = 'com.devtao.studio'
 
 /**
  * This opt-in smoke opens the actual Studio native shell through a private Appium Mac2 home. It

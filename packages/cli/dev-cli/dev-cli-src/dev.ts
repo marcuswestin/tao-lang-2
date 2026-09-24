@@ -795,7 +795,7 @@ await runWithCommands(commands => {
     .description('Build Tao Studio release artifacts with Electrobun and Hutch.')
     .option('--output-root <path>', 'Application bundle output root.', '.artifacts/build/studio-native')
     .option('--app-name <name>', 'Application display and bundle name.', 'Tao Studio')
-    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'dev.tao-lang.studio')
+    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'com.devtao.studio')
     .option('--channel <channel>', 'Electrobun release channel: canary or stable.', 'stable')
     .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
     .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
