@@ -63,24 +63,25 @@ several tasks, with no correction from the Developer and no routing-table edit f
 delete the "ask the Developer" clause from the skill, remove the three delegation hooks from
 `.rulesync/hooks.jsonc`, and keep `./agent delegation-report` only if the log still earns its cost.
 
-### Compaction threshold experiment (deferred)
+### Compaction threshold experiment
 
 Claude Code [supports](https://code.claude.com/docs/en/model-config) `autoCompactWindow` values from
 100,000 to 1,000,000 tokens. A local Rulesync generation check confirmed that
-`claudecode.autoCompactWindow: 272000` reaches `.claude/settings.json`. The setting is currently
-unset; 272,000 is a proposed experiment, not an established cost improvement. On a native
-one-million-token model, it could compact substantially earlier than the documented default near
-967,000 tokens.
+`claudecode.autoCompactWindow: 272000` reaches `.claude/settings.json`. Enabled on 2026-09-24 as a
+reversible experiment at the Developer's request; 272,000 is the local Codex model catalog's
+listed context window, not a verified Codex compaction trigger or an established cost improvement.
+On a native one-million-token Claude model, it could compact substantially earlier than the
+documented default near 967,000 tokens.
 
 The 2026-09-23 sample of 19 Claude subagent transcripts supplies a cost-category observation, but
 no usable baseline for compaction count or `preTokens`, completed-task cost, post-compaction
-re-reads, or quality. Before enabling 272,000, record those values for comparable completed tasks,
+re-reads, or quality. Collect those values for comparable completed tasks under this threshold,
 including retries and reviewer work. For each task, separate cached reads, cache writes, uncached
-input, and output in an API-equivalent estimate, and record plan usage separately. Then compare
-the same task types with the threshold enabled, along with elapsed time, rework, and accepted review
-findings. Revert the threshold if cost per successfully completed task rises, re-reads or
-compactions rise without a quality gain, or quality falls. Keep it only if completed-task evidence
-shows a gain without weaker review.
+input, and output in an API-equivalent estimate, and record plan usage separately. Compare the
+same task types with the earlier setting where evidence permits, along with elapsed time, rework,
+and accepted review findings. Revert the threshold if cost per successfully completed task rises,
+re-reads or compactions rise without a quality gain, or quality falls. Keep it only if completed-task
+evidence shows a gain without weaker review.
 
 ### Record
 

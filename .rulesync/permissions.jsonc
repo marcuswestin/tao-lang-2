@@ -121,6 +121,7 @@
     "ps -axo pid=,ppid=,lstart=,command=", "ps -o lstart= -p",
   ],
   "claudecode": {
+    "autoCompactWindow": 272000,
     "sandbox": {
       "enabled": true,
       "excludedCommands": [],
