@@ -14,7 +14,7 @@
   the sandbox booted `emulator-5554` in seconds. `android.ts`'s `waitForBootedEmulator` polls
   `adb devices` until its deadline and never looks at the emulator process or its log. Measured:
   both runs and the log lines.
-- **Workaround:** Start the emulator from an unsandboxed shell (`./dev android-emulator`), then run
+- **Workaround:** Start the emulator with `./agent unsandboxed android ensure`, then run
   everything else sandboxed; `adb` itself works from the sandbox once the emulator is up.
 - **Proposed change:** Have `waitForBootedEmulator` stop polling once the emulator process has
   exited, and report the last non-empty line of its log with the remedy — for the Qt processor line,
