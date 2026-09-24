@@ -55,10 +55,16 @@ const HOST_DIRECTORY = 'host'
 const RUNTIME_DIRECTORY = 'modules/@tao/runtime'
 
 /**
+ * SHARED_SOURCE_DIRECTORY is where the `@shared` sources sit inside the resource root. The journey
+ * harness `tao test` runs under Jest imports them, so Jest has to find the whole package.
+ */
+const SHARED_SOURCE_DIRECTORY = 'shared/src'
+
+/**
  * SHARED_CORE_DIRECTORY is where the `@shared/core` sources sit inside the resource root. The
  * stdlib's data-provider sidecars import them, so Metro has to find them beside the runtime.
  */
-const SHARED_CORE_DIRECTORY = 'shared/core'
+const SHARED_CORE_DIRECTORY = `${SHARED_SOURCE_DIRECTORY}/core`
 
 /**
  * HOST_DEPENDENCIES_DIRECTORY is where an installed Tao resolves its host's dependencies: beside the
@@ -66,6 +72,18 @@ const SHARED_CORE_DIRECTORY = 'shared/core'
  * 400 MB of packages should not go with it.
  */
 const HOST_DEPENDENCIES_DIRECTORY = 'host'
+
+/**
+ * MANAGED_NODE_DIRECTORY is where an installed Tao keeps the Node `tao test` runs Jest under, beside
+ * the binary for the same reason as the host's dependencies: a new payload must not take it along.
+ */
+const MANAGED_NODE_DIRECTORY = 'node'
+
+/**
+ * MANAGED_NODE_MANIFEST names the Node a release runs its tests under — version, download URL, and
+ * SHA-256 — recorded in the resource root when the release is built.
+ */
+const MANAGED_NODE_MANIFEST = 'node.json'
 
 /**
  * installedProbe caches a found installed root. Only a hit is cached: the binary's entry point
@@ -82,8 +100,11 @@ export const TaoResources = {
   HOST_DEPENDENCIES_DIRECTORY,
   HOST_DIRECTORY,
   INSTALLED_DIRECTORY,
+  MANAGED_NODE_DIRECTORY,
+  MANAGED_NODE_MANIFEST,
   RUNTIME_DIRECTORY,
   SHARED_CORE_DIRECTORY,
+  SHARED_SOURCE_DIRECTORY,
   STDLIB_DIRECTORY,
   declaredRoot,
   installedDirectory,

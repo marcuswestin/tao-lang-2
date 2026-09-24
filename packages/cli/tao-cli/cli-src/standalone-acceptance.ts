@@ -8,9 +8,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
  * The release directory is mirrored at GitHub's tag-specific `download/v<version>/` URL and served
  * through `file://`, with a release listing beside it for the unpinned install.
  *
- * Each slice of the standalone plan adds its step here as it lands. Today that is `tao create`, then
- * `tao check`, `tao compile`, `tao build`, and `tao dev` serving the web target on what it created;
- * `tao test` and the native targets are not yet claimed.
+ * Each slice of the standalone plan adds its step here as it lands. Today that is `tao create` with
+ * its tests, then `tao check`, `tao compile`, `tao test`, `tao build`, and `tao dev` serving the web
+ * target on what it created; the native targets are not yet claimed.
  */
 
 /** A PATH with the system tools and nothing a Tao developer's shell would add. */
@@ -113,8 +113,14 @@ async function accept(release: string): Promise<void> {
     if (sites.length !== 1) {
       Errors.throwUnexpected('tao build --web reported success but wrote no index.html.')
     }
-    // A second project builds against the same install rather than resolving its own.
-    await shell(home, 'tao create "A reading list" --ai none --yes --skip-tests')
+    // `tao test` downloads the release's Node once and runs the project's journeys under it.
+    const tested = await shell(project, 'TAO_HOST_INSTALL=yes tao test')
+    if (!/Tests:\s+[1-9]\d* passed/.test(tested)) {
+      Errors.throwUnexpected(`tao test exited cleanly but reported no passing journeys:\n${tested}`)
+    }
+    // A second project is created with its tests run, as a newcomer's first `tao create` is, and
+    // builds against the same host install rather than resolving its own.
+    await shell(home, 'tao create "A reading list" --ai none --yes')
     const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
     if (second.includes(HOST_INSTALL_NOTICE)) {
       Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
@@ -122,9 +128,9 @@ async function accept(release: string): Promise<void> {
     await devLoopServesWeb(environment, project, 'ATallyCounter')
     HCI.logProcessInfo(
       'standalone',
-      `Accepted Tao ${version}: installed through curl | sh, then create, check, compile, build`
-        + ' --compile-only, build --web in two projects sharing one host install, and tao dev serving'
-        + ' web, outside a checkout.',
+      `Accepted Tao ${version}: installed through curl | sh, then create with its tests, check, compile,`
+        + ' test, build --compile-only, build --web in two projects sharing one host install, and tao dev'
+        + ' serving web, outside a checkout.',
     )
   } finally {
     await FS.remove(root)

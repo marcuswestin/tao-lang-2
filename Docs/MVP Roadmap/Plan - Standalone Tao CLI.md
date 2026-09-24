@@ -640,6 +640,28 @@ Expo's script with the same `expo`-first arguments and may hit the same project-
 `tao create`'s post-create test run work outside the repository. Done when `tao create` without
 `--skip-tests` finishes green on a clean machine.
 
+_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` now runs `tao test` from the
+installed binary and requires Jest's `Tests: N passed`, and creates its second project without
+`--skip-tests`; with a cold host install and Node download it takes about 40 s.
+
+- **Managed Node.** The release build records the Node the repository's devenv profile runs
+  (24.14.1) and that darwin-arm64 tarball's SHA-256 from nodejs.org's `SHASUMS256.txt`, in the
+  resource root's `node.json`. `ManagedNode.ensure` downloads exactly that file on the first
+  `tao test`, refuses a mismatched hash, and unpacks it with the system `tar` into
+  `versions/<v>/node`. It asks first, through the same `OneTimeDownload` question and
+  `TAO_HOST_INSTALL=yes` as the host install.
+- **In-process compile.** The test compiler's worker is a TypeScript file only the binary can read,
+  so an installed Tao validates and compiles in its own process, the path packaged Studio already
+  takes through `TAO_TEST_IN_PROCESS`.
+- **Jest from the installed host.** `HostDependencies` links the install as `node_modules` beside the
+  host's files, where Jest resolves its `jest-expo` preset and modules, and
+  `jest.shared.config.cjs` takes `TAO_RUNTIME_SOURCE_ROOT` and `TAO_SHARED_SOURCE_ROOT`, defaulting to
+  the repository layout. The journey harness imports the whole of `@shared`, so the payload now
+  carries all of `shared-src` rather than only its core.
+- Inside a checkout nothing changes: the devenv Node, worker processes, and the repository layout.
+  The `.devenv/profile/bin` fallbacks the text above names are kept for the checkout rather than
+  removed, since an installed Tao no longer reaches them.
+
 **6. Cross-platform correctness (later).** Windows-aware `commandPath`/`commandOnPath`, junction-or-copy
 instead of symlink, `lsof`-free port diagnostics, platform-correct browser opening, and a Linux and
 Windows CI lane running `create`, `check`, `fmt`, `compile`, `test`, and the web `dev` lane.

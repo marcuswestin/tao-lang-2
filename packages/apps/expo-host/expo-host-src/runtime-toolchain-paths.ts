@@ -28,6 +28,15 @@ export const RuntimeToolchainPaths = {
     ? undefined
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}`, resourceRoot),
 
+  /**
+   * managedNode is where an installed Tao keeps the Node `tao test` runs under and the manifest that
+   * names it, or undefined inside a checkout, whose devenv profile provides Node.
+   */
+  managedNode: resourceRoot === undefined ? undefined : {
+    installRoot: FS.resolvePath(`../${TaoResources.MANAGED_NODE_DIRECTORY}`, resourceRoot),
+    manifest: FS.resolvePath(TaoResources.MANAGED_NODE_MANIFEST, resourceRoot),
+  },
+
   dependencyRoot,
   expoCommand,
   expoEnvironment,
@@ -40,8 +49,9 @@ function dependencyRoot(): string {
 }
 
 /**
- * expoEnvironment is what an installed Tao hands Expo so `metro.config.cjs` finds each location it
- * would otherwise climb the repository to reach. Inside a checkout it is empty.
+ * expoEnvironment is what an installed Tao hands the host's tools so `metro.config.cjs` and
+ * `jest.shared.config.cjs` find each location they would otherwise climb the repository to reach.
+ * Inside a checkout it is empty.
  */
 function expoEnvironment(): Record<string, string> {
   if (resourceRoot === undefined) {
@@ -51,6 +61,7 @@ function expoEnvironment(): Record<string, string> {
     TAO_HOST_DEPENDENCY_ROOT: dependencyRoot(),
     TAO_RUNTIME_SOURCE_ROOT: FS.resolvePath(`${TaoResources.RUNTIME_DIRECTORY}/TaoRuntime-src`, resourceRoot),
     TAO_SHARED_CORE_SOURCE_ROOT: FS.resolvePath(TaoResources.SHARED_CORE_DIRECTORY, resourceRoot),
+    TAO_SHARED_SOURCE_ROOT: FS.resolvePath(TaoResources.SHARED_SOURCE_DIRECTORY, resourceRoot),
   }
 }
 

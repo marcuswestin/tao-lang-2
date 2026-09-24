@@ -39,7 +39,6 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  */
 const KNOWN_GAPS = [
   '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
-  '`tao test` does not run from the standalone binary yet; `tao create` needs `--skip-tests`.',
   'The binary is not signed or notarized yet.',
 ] as const
 
@@ -49,8 +48,9 @@ const COPIED_TREES = [
   // their declarations the project identity every compiled app's navigation is keyed on.
   { source: 'packages/apps/stdlib', within: ['@tao', 'Project.tao'], target: TaoResources.STDLIB_DIRECTORY },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
-  // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path.
-  { source: 'packages/shared/shared-src/core', within: ['.'], target: TaoResources.SHARED_CORE_DIRECTORY },
+  // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path, and the
+  // journey harness `tao test` runs under Jest imports the rest of `@shared`.
+  { source: 'packages/shared/shared-src', within: ['.'], target: TaoResources.SHARED_SOURCE_DIRECTORY },
 ] as const
 
 /** HOST_MANIFEST is the host's own manifest, which names workspace packages an install cannot reach. */
@@ -64,6 +64,9 @@ const HOST_DEPENDENCY_ROOTS = ['packages/apps/expo-host/node_modules', 'node_mod
  * files. Inside the repository it resolves from the root install; an installed host carries it.
  */
 const DEV_SERVER_TOOLING = ['typescript', '@types/react'] as const
+
+/** NODE_DOWNLOADS is where Node's official release tarballs and their checksum lists are published. */
+const NODE_DOWNLOADS = 'https://nodejs.org/dist'
 
 /** BASE_TSCONFIG is the repository-wide compiler configuration the host's tsconfig extends. */
 const BASE_TSCONFIG = 'packages/tsconfig.base.json'
@@ -146,6 +149,7 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
   }
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
   await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging))
+  await recordManagedNode(repoRoot, staging)
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
@@ -203,6 +207,34 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string): Promis
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
     args: ['install', '--lockfile-only', '--cwd', stagedHost],
     cwd: repoRoot,
+  })
+}
+
+/**
+ * recordManagedNode names the Node an installed Tao downloads for `tao test`: the version the
+ * repository's own devenv profile runs its tests under, and that tarball's SHA-256 as nodejs.org
+ * publishes it. Recording the hash here rather than trusting the list at install time means a
+ * download is checked against what the release was built with.
+ */
+async function recordManagedNode(repoRoot: string, staging: string): Promise<void> {
+  const devenvNode = FS.resolvePath('.devenv/profile/bin/node', repoRoot)
+  const node = await FS.isFile(devenvNode) ? devenvNode : 'node'
+  const version = (await CLI.mustRun(node, { args: ['--version'] })).stdout.trim().replace(/^v/, '')
+  const file = `node-v${version}-${hostTarget()}.tar.gz`
+  const release = `${NODE_DOWNLOADS}/v${version}`
+  const response = await fetch(`${release}/SHASUMS256.txt`)
+  if (!response.ok) {
+    Errors.throwHostEnvironment(`Could not read ${release}/SHASUMS256.txt (HTTP ${response.status}).`)
+  }
+  const line = (await response.text()).split('\n').find(entry => entry.endsWith(`  ${file}`))
+  const sha256 = line?.split(/\s+/)[0]
+  if (sha256 === undefined || !/^[0-9a-f]{64}$/.test(sha256)) {
+    return Errors.throwHostEnvironment(`${release}/SHASUMS256.txt lists no SHA-256 for ${file}.`)
+  }
+  await FS.writeJson(FS.resolvePath(TaoResources.MANAGED_NODE_MANIFEST, staging), {
+    sha256,
+    url: `${release}/${file}`,
+    version,
   })
 }
 
