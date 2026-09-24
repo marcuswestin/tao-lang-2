@@ -28,7 +28,7 @@ Run from an ordinary host terminal after the release source is committed and the
 applied:
 
 ```bash
-./agent prepare-release ide-extension
+./agent unsandboxed prepare-release ide-extension
 # Inspect the VSIX and open a .tao file in the isolated VS Code profile named by the command.
 just ide-extension-release-publish
 ```
