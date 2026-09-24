@@ -7,7 +7,7 @@
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "dev.tao-lang.studio.companion",
+      "bundleIdentifier": "com.devtao.studio.companion",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Tao Studio on your Mac renders the app you are editing. Tao Companion uses the local network to load that app from Studio and keep it in sync while you work.",
@@ -20,7 +20,7 @@
       }
     },
     "android": {
-      "package": "dev.tao_lang.studio.companion"
+      "package": "com.devtao.studio.companion"
     },
     "updates": {
       "enabled": false
