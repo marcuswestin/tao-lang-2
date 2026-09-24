@@ -669,6 +669,7 @@ Describe('tao test CLI', () => {
     const envStub = [
       `process.stderr.write(\`entrypoints: \${process.env.${RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV}}\\n\`)`,
       `process.stderr.write(\`manifest: \${process.env.${RuntimeTesting.TEST_MANIFEST_ENV}}\\n\`)`,
+      `process.stderr.write(\`jest cache: \${process.env.${RuntimeTesting.JestTransformCache.ENV}}\\n\`)`,
       '',
     ].join('\n')
     await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': envStub }, async rootDir => {
@@ -676,6 +677,7 @@ Describe('tao test CLI', () => {
         const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
         await withRuntimeRoot(runtimeRoot, async () => {
           const entrypointsOf = (output: string) => /entrypoints: (.+)/.exec(output)?.[1]
+          const jestCacheOf = (output: string) => /jest cache: (.+)/.exec(output)?.[1]
           const modulePathsOf = async (output: string) => {
             const manifestPath = /manifest: (.+)/.exec(output)?.[1]
             Expect(manifestPath).toBeDefined()
@@ -699,6 +701,9 @@ Describe('tao test CLI', () => {
           Expect(entrypointsOf(outputText(first))).toBeDefined()
           Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
           Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
+          Expect(jestCacheOf(outputText(first))).toContain('/.cache/tao/jest-transform-cache/')
+          Expect(jestCacheOf(outputText(second))).toBe(jestCacheOf(outputText(first)))
+          Expect(jestCacheOf(outputText(third))).toBe(jestCacheOf(outputText(first)))
           Expect(firstModules.length).toBeGreaterThan(0)
           const store = `/${RuntimeTesting.TestRunRoot.COMPILED_STORE_DIRECTORY_NAME}/`
           Expect(firstModules.every(path => path.includes(store))).toBe(true)
