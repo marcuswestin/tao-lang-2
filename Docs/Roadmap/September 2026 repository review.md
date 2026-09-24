@@ -318,7 +318,9 @@ alongside the branch's agent bootstrap change.
   is opened for append, and the diagnostic searches all lines for `Incompatible processor`.
   A later launch can therefore report an earlier launch's processor failure. This is a
   source-confirmed P2 diagnostic error, not a measured second launch; use a per-launch log
-  with bounded cleanup after integration. The five-page release search cap is an explicit
+  with bounded cleanup after integration. The
+  [emulator exit-log entry](<Developer environment upgrades/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
+  tracks that remaining repair. The five-page release search cap is an explicit
   request-budget limit; no compatible host beyond that cap was observed. `c4b62744` passes
   UTF-8 locale variables through named CocoaPods dispatch without dropping inherited `PATH`,
   but the direct pod invocations in native-module-check and `tao ship` still lacked them.
