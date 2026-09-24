@@ -5,7 +5,7 @@ design NotebookDesign {
       canvas #f6f4ee
       surface #ffffff
       ink #1f2421
-      inkMuted #80827d
+      inkMuted #6c6f6b
       accent #3f6f9a
       accentStrong #375c7c
       accentSoft #dce5ed

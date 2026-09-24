@@ -5,7 +5,7 @@ design PantryDesign {
       canvas #f7f3ea
       surface #ffffff
       ink #2b2118
-      inkMuted #878077
+      inkMuted #746d64
       accent #b5562a
       accentStrong #934926
       accentSoft #f2e1d9
