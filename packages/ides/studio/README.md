@@ -483,6 +483,11 @@ It opens visible native Studio and records these results in a separate report:
 
 ## Release
 
+The 2026-09-24 `R12` decision parks the signed build, notarization, hosted download, and installed
+update checks until the near-release pass. They are not current branch or landing gates. Keep the
+guarded commands below available for that pass; do not weaken their checks. Local Studio tests and
+credential-free simulator work continue. A public release still requires these proofs.
+
 Building a signed, notarized release needs credentials this repository never holds. Agents can run
 the preparation command with host access; publication remains a separate operator step. The
 release recipes target a **public GitHub Releases repository** and stable updates only:

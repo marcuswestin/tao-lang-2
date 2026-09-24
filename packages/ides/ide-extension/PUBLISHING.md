@@ -5,6 +5,11 @@ The first public release waits for the app-safe licence structure in
 in A6. The repository's current `AGPL-3.0-only` package is a local release candidate, not approval
 to publish it.
 
+The 2026-09-24 `R12` decision parks account-dependent Marketplace and Open VSX publication and
+listing checks until the near-release pass. The guarded commands below remain available for that
+pass. Local VSIX packaging, isolated installation, and editor acceptance can continue now; public
+release readiness still requires both listings.
+
 ## One-time accounts and identity
 
 1. Choose one permanent publisher ID, preferably `tao` if it is available and you control that

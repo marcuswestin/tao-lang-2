@@ -92,7 +92,8 @@ is `private`. Nobody outside the repository can install Tao.
 - Context: `packages/cli/tao-cli`, `packages/apps/expo-host` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
 - Waits on: nothing to start; public GitHub Releases hosting (`R11`), the final licence (`R1`), and
-  macOS signing and notarization must be ready before publication.
+  macOS signing and notarization must be ready before publication. The credential-dependent build
+  and hosted acceptance are parked until the near-release pass (`R12`).
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 
@@ -189,7 +190,9 @@ of whether a new language feels real.
   still needs editor activation acceptance, publisher accounts, and the final licence before use.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
 - Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
-  Both marketplaces are in the first public-release scope (`R12`).
+  Both marketplaces are in the first public-release scope, but their account-dependent publication
+  and listing checks are parked until the near-release pass (`R12`). Local VSIX and editor checks
+  can continue.
 - Done: `ext install` on a clean machine gives working Tao editing.
 
 ### A7 — Feedback intake
@@ -280,7 +283,8 @@ from the development loop, which no virtualization approach can do.
 - Remaining: the first published host and a live download once the repository is public; physical
   Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
-  enabled on the app id before a device build signs.
+  enabled on the app id before a device build signs. The account-dependent device build and release
+  proof are parked until the near-release pass (`R12`); simulator and Android work can continue.
 
 ### A10 — Publication hygiene audit — **done**
 
