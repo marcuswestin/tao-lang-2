@@ -549,19 +549,60 @@ from the text above:
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
-_In progress, 2026-09-24._ Two parts are done:
+_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` now installs a release
+through `curl | sh` into a throwaway home and runs `tao build --web` in two created projects, from
+the binary, with only system tools on `PATH`: the first build installs the host, the second reuses
+it. The whole run takes about 25 s.
 
 - `TaoHome` in `@shared` resolves the one home: `TAO_HOME`, else `$XDG_DATA_HOME/tao`, else
   `~/.local/share/tao`, reading `$HOME` as the install script does. The Companion's downloaded
   hosts move from `~/.tao/hosts` to its `hosts/`.
 - The per-project generated root already exists on `main`: `tao build --compile-only` writes under
   the project's `.tao/builds/`, and `tao dev` under `.tao/dev/runtime`. Only the retiring
-  `tao compile` still writes into the host, into the installed version's `resources/host/`. The
-  acceptance run now exercises `tao build --web --compile-only` from the installed binary as well.
+  `tao compile` still writes into the host, into the installed version's `resources/host/`.
+- The release build rewrites the staged host so it installs outside the repository (below), adds
+  `@shared/core` to the payload, and resolves the host's `bun.lock` once per release.
+- `HostDependencies.ensure` installs the host's packages beside the resource root, in
+  `versions/<v>/host/node_modules`, on the first command that needs them, with the package cache in
+  the Tao home. It asks a terminal first (decision 6). **Needs the Developer's confirmation:** a run
+  with no terminal is refused with a message unless `TAO_HOST_INSTALL=yes` approves the download
+  ahead of time, a name and behaviour chosen here, not decided.
+- `metro.config.cjs` takes `TAO_HOST_DEPENDENCY_ROOT`, `TAO_RUNTIME_SOURCE_ROOT`, and
+  `TAO_SHARED_CORE_SOURCE_ROOT` in place of its three repository climbs, which stay the defaults, so
+  the repository's own loop is unchanged; `RuntimeToolchainPaths.expoEnvironment` supplies them.
+  `tao build --web` and `--desktop` use them, and run Expo under the binary. `tao dev` (slice 4) and
+  `tao test`'s Jest configuration (slice 5) do not yet.
 
-Still open: installing the host's dependencies for the binary. Its `package.json` names five
-`workspace:*` packages that cannot resolve outside the repository, and the plan does not yet say
-how the embedded lockfile is produced or how those packages reach the installed host.
+The prototype that settled the shape, on 2026-09-24, in a scratch directory outside the repository
+with only the compiled binary on `PATH`: `expo export --platform web` bundled a created project's
+app (576 modules, 1.3 MB) in 4 s. What it took, each now implemented:
+
+- **No workspace packages in the installed manifest.** Of the host's five `workspace:*`
+  dependencies, `tao-instantdb` and `tao-compiler` are never reached from the host, `tao-runtime`
+  and `tao-shared` are reached by path rather than by name (`metro.config.cjs:8-12`,
+  `jest.shared.config.cjs:47-53`), and `tao-icloud` is an Expo config plugin that only iCloud
+  release builds name (`app-config.cjs:37`). The prototype dropped all five and pinned the 32
+  remaining dependencies to the versions the repository has installed; `BUN_BE_BUN=1 tao install`
+  then resolved 741 packages, 388 MB, in 12 s from a warm cache, and wrote the `bun.lock` a release
+  would embed. Transitive versions are resolved at release time rather than copied from the
+  repository's lock, so they can drift from what the repository tests.
+- **Expo through `--bun` on its script, not `x --bun`.** In the compiled binary, `BUN_BE_BUN=1 tao x
+  --bun expo` and `tao --bun x expo` both still run the script's `#!/usr/bin/env node` and fail with
+  `env: node: No such file or directory`; `BUN_BE_BUN=1 tao --bun <host>/node_modules/.bin/expo`
+  runs it under the binary. F5's record of `x --bun` working is therefore not reproducible with
+  this layout.
+- **A self-contained `tsconfig.json`.** The host's extends `../../tsconfig.base.json`; outside the
+  repository Expo's TypeScript resolver fails on it with Metro's `Invariant Violation: Failed to
+  collapse`, even with the file copied into place. Inlining the base's compiler options, without
+  its repository `paths`, fixed it.
+- **The runtime and `@shared/core` sources where the Metro config looks.** The config climbs
+  `../runtime/TaoRuntime-src`, `../../shared/shared-src/core`, and `../../../node_modules` from the
+  host. The stdlib's data-provider sidecars import `@shared/core`, which the payload did not carry.
+  The prototype recreated the repository's shape; the implementation names each location instead.
+
+Jest (`tao test`), the dev server, and native targets were not exercised. `tao-icloud`, which an
+iCloud release build names as a config plugin, is not in the installed host, so `tao ship` of an
+iCloud-backed app from the binary will not find it; that belongs with shipping from the binary.
 
 **4. A shipped dev loop.** Cut `@expo-host/dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through

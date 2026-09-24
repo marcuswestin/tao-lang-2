@@ -15,6 +15,12 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 /** A PATH with the system tools and nothing a Tao developer's shell would add. */
 const SYSTEM_PATH = '/usr/bin:/bin'
 
+/** HOST_INSTALL_NOTICE opens the line an installed Tao prints while it installs its host. */
+const HOST_INSTALL_NOTICE = "Installing Tao's Expo host"
+
+/** PROXY_ENV is the network setup a person's own shell would carry, which the host install needs. */
+const PROXY_ENV = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy'] as const
+
 /** The release files a GitHub release carries; `release.json` and the notes are not the installer's. */
 const INSTALLER_FILES = ['tao-darwin-arm64.gz', 'tao-darwin-arm64.gz.sha256', 'install.sh'] as const
 
@@ -87,10 +93,31 @@ async function accept(release: string): Promise<void> {
     if (compiled.length !== 1) {
       Errors.throwUnexpected('tao build --compile-only reported success but wrote no compiled web App.tsx.')
     }
+    // A full web build installs the host's packages first: a cold download into this throwaway
+    // home, approved ahead of time because there is no terminal to ask.
+    const first = await shell(project, 'TAO_HOST_INSTALL=yes tao build --web')
+    if (!first.includes(HOST_INSTALL_NOTICE)) {
+      Errors.throwUnexpected('The first web build did not say it was installing the host.')
+    }
+    const sites: string[] = []
+    for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+      if (path.includes('/web/') && path.endsWith('/index.html')) {
+        sites.push(path)
+      }
+    }
+    if (sites.length !== 1) {
+      Errors.throwUnexpected('tao build --web reported success but wrote no index.html.')
+    }
+    // A second project builds against the same install rather than resolving its own.
+    await shell(home, 'tao create "A reading list" --ai none --yes --skip-tests')
+    const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
+    if (second.includes(HOST_INSTALL_NOTICE)) {
+      Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
+    }
     HCI.logProcessInfo(
       'standalone',
-      `Accepted Tao ${version}: installed through curl | sh, then create, check, compile, and build`
-        + ' --compile-only outside a checkout.',
+      `Accepted Tao ${version}: installed through curl | sh, then create, check, compile, build`
+        + ' --compile-only, and build --web in two projects sharing one host install, outside a checkout.',
     )
   } finally {
     await FS.remove(root)
@@ -99,14 +126,17 @@ async function accept(release: string): Promise<void> {
 
 /**
  * newcomerShell runs commands the way a person who just installed Tao would: through `sh`, with only
- * the environment a fresh login has. It returns their output and fails on a non-zero exit.
+ * the environment a fresh login has, plus whatever proxy their network needs. It returns their
+ * output and fails on a non-zero exit.
  */
 function newcomerShell(home: string, path: string, releases: string, listing: string) {
+  const proxies = Object.fromEntries(PROXY_ENV.map(name => [name, Platform.runtimeProcess.env[name]]))
   return async (cwd: string, script: string): Promise<string> => {
     const result = await CLI.run('/bin/sh', {
       args: ['-c', script],
       cwd,
       env: {
+        ...proxies,
         HOME: home,
         PATH: path,
         TAO_RELEASES: releases,
