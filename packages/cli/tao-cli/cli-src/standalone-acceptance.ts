@@ -75,9 +75,22 @@ async function accept(release: string): Promise<void> {
     if (!await FS.isFile(generated)) {
       Errors.throwUnexpected(`tao compile reported success but wrote no ${generated}.`)
     }
+    // The decided replacement for `tao compile`, which writes into the project's own `.tao/builds/`
+    // rather than into the installed version.
+    await shell(project, 'tao build --web --compile-only')
+    const compiled: string[] = []
+    for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+      if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
+        compiled.push(path)
+      }
+    }
+    if (compiled.length !== 1) {
+      Errors.throwUnexpected('tao build --compile-only reported success but wrote no compiled web App.tsx.')
+    }
     HCI.logProcessInfo(
       'standalone',
-      `Accepted Tao ${version}: installed through curl | sh, then create, check, and compile outside a checkout.`,
+      `Accepted Tao ${version}: installed through curl | sh, then create, check, compile, and build`
+        + ' --compile-only outside a checkout.',
     )
   } finally {
     await FS.remove(root)

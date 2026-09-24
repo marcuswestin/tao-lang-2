@@ -22,6 +22,7 @@ import {
   Platform,
   Repo,
   Switch,
+  TaoHome,
   TaoResources,
   TaoStdlib,
   Text,
@@ -1366,6 +1367,34 @@ Describe('TaoStdlib', () => {
   })
 })
 
+Describe('TaoHome', () => {
+  // The install script spells the same rule in shell; these pin the paths it must agree with.
+  Test('defaults to ~/.local/share/tao', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: undefined }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+      Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.local/share/tao/hosts')
+    })
+  })
+
+  Test('honours XDG_DATA_HOME, and ignores a relative one as the specification asks', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/data/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: 'data' }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+    })
+  })
+
+  Test('takes TAO_HOME over everything, and refuses a relative one', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: '/opt/tao', XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/opt/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: 'tao', XDG_DATA_HOME: undefined }, () => {
+      Expect(() => TaoHome.root()).toThrow('TAO_HOME must be an absolute path')
+    })
+  })
+})
+
 Describe('TaoResources', () => {
   Test('names no root inside a checkout, so every reader keeps its own layout', async () => {
     await withDeclaredResourceRoot(undefined, () => {
@@ -1428,6 +1457,30 @@ Describe('TaoResources', () => {
     Expect(edited).not.toBe(declared)
   })
 })
+
+/**
+ * withEnvironment sets or unsets variables for one synchronous check and restores them. It is
+ * synchronous on purpose: with no await between the set and the restore, two uses cannot overlap.
+ */
+function withEnvironment(values: Record<string, string | undefined>, run: () => void): void {
+  const env = Platform.runtimeProcess.env
+  const previous = Object.fromEntries(Object.keys(values).map(name => [name, env[name]]))
+  const assign = (entries: Record<string, string | undefined>) => {
+    for (const [name, value] of Object.entries(entries)) {
+      if (value === undefined) {
+        delete env[name]
+      } else {
+        env[name] = value
+      }
+    }
+  }
+  assign(values)
+  try {
+    run()
+  } finally {
+    assign(previous)
+  }
+}
 
 async function withDeclaredResourceRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
   const previous = Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]

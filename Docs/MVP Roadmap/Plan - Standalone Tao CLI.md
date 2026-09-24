@@ -400,6 +400,7 @@ for signing and notarization and a Windows runner for Authenticode, but not for 
       apple/tao-foundation-models-server   (macOS payload only, later)
     host/node_modules/             resolved once per version, shared by every project
     node/                          the managed Node this version downloads for `tao test`
+  hosts/<version>-<kit>/<platform>/  prebuilt Companion hosts `tao dev` downloads (`A9`)
   cache/                           bun install cache, Expo home, downloads
 ```
 
@@ -547,6 +548,20 @@ from the text above:
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
+
+_In progress, 2026-09-24._ Two parts are done:
+
+- `TaoHome` in `@shared` resolves the one home: `TAO_HOME`, else `$XDG_DATA_HOME/tao`, else
+  `~/.local/share/tao`, reading `$HOME` as the install script does. The Companion's downloaded
+  hosts move from `~/.tao/hosts` to its `hosts/`.
+- The per-project generated root already exists on `main`: `tao build --compile-only` writes under
+  the project's `.tao/builds/`, and `tao dev` under `.tao/dev/runtime`. Only the retiring
+  `tao compile` still writes into the host, into the installed version's `resources/host/`. The
+  acceptance run now exercises `tao build --web --compile-only` from the installed binary as well.
+
+Still open: installing the host's dependencies for the binary. Its `package.json` names five
+`workspace:*` packages that cannot resolve outside the repository, and the plan does not yet say
+how the embedded lockfile is produced or how those packages reach the installed host.
 
 **4. A shipped dev loop.** Cut `@expo-host/dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through

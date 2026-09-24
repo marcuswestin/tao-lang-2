@@ -213,7 +213,7 @@ standalone-cli-build: _parser-gen
 standalone-cli-release version: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
 
-# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
