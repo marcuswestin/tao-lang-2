@@ -2,12 +2,12 @@
  * The fixed identity of the Tao Companion development build, the shared prebuilt host.
  * `packages/ides/studio-companion-app/app.json` declares the same values for Expo prebuild, and a
  * test holds the two equal, so a deep link, an installed-app check, and the native shell can never
- * disagree. Android package names admit no hyphen, so its application id spells `tao-lang` with an
- * underscore where the iOS bundle identifier keeps the hyphen.
+ * disagree. Both platforms' identifiers are the reverse of Tao's domain, devtao.com; it has no
+ * hyphen, which Android package names cannot carry, so the two spell the same.
  */
 export const CompanionIdentity = {
-  androidPackage: 'dev.tao_lang.studio.companion',
-  bundleIdentifier: 'dev.tao-lang.studio.companion',
+  androidPackage: 'com.devtao.studio.companion',
+  bundleIdentifier: 'com.devtao.studio.companion',
   name: 'Tao Companion',
   packagePath: 'packages/ides/studio-companion-app',
   scheme: 'taostudiocompanion',

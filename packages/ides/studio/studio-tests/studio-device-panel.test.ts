@@ -27,7 +27,7 @@ const idleStatus: StudioDeviceStatus = {
 }
 
 const launchInfo: StudioDeviceLaunchInfo = {
-  bundleIdentifier: 'dev.tao-lang.studio.companion',
+  bundleIdentifier: 'com.devtao.studio.companion',
   candidates: ['192.168.4.20'],
   diagnostics: [],
   hosts: [{ id: 'host-1', installed: true, kind: 'device', name: 'the Developer’s iPhone' }],

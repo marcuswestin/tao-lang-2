@@ -216,10 +216,10 @@ Describe('tao ship filesystem-only execution', () => {
         const refsBefore = await git(root, 'show-ref')
         const entry: ShipLockEntry = {
           accepted: {
-            bundleIdentifier: 'dev.tao-lang.notes',
+            bundleIdentifier: 'com.devtao.notes',
             issuerId: 'issuer',
             keyId: 'key',
-            namespace: 'dev.tao-lang',
+            namespace: 'com.devtao',
           },
           appStoreAppId: 'app-1',
           identity: 'notes/Notes',
@@ -247,7 +247,7 @@ Describe('tao ship filesystem-only execution', () => {
             usesDevDatasource: false,
           },
           buildNumber: '7',
-          bundleIdentifier: 'dev.tao-lang.notes',
+          bundleIdentifier: 'com.devtao.notes',
           channel: 'notes',
           entry,
           git: await inspectShipGit(root, { excludePaths: [lockPath] }),
@@ -307,12 +307,12 @@ function testAppleClient(options: { failDistribution: boolean; onNotes: (notes: 
   return {
     addBuildToBetaGroup: async () => {},
     apps: async () => [{
-      attributes: { bundleId: 'dev.tao-lang.notes', name: 'Notes', primaryLocale: 'en-US', sku: 'notes' },
+      attributes: { bundleId: 'com.devtao.notes', name: 'Notes', primaryLocale: 'en-US', sku: 'notes' },
       id: 'app-1',
       type: 'apps' as const,
     }],
     bundleIds: async () => [{
-      attributes: { identifier: 'dev.tao-lang.notes', seedId: 'TEAM' },
+      attributes: { identifier: 'com.devtao.notes', seedId: 'TEAM' },
       id: 'bundle-1',
       type: 'bundleIds' as const,
     }],
