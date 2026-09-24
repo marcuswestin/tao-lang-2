@@ -36,7 +36,11 @@ export const StateValidator = {
   checks: {
     [AST.StateDeclaration.$type]: [reportStateReferenceOrder, reportStatePlacement],
     [AST.SetStatement.$type]: [reportStateMutationTargetReferenceOrder, reportDerivedMemberWrite],
-    [AST.ToggleStatement.$type]: [reportStateMutationTargetReferenceOrder, reportToggleTarget, reportDerivedMemberWrite],
+    [AST.ToggleStatement.$type]: [
+      reportStateMutationTargetReferenceOrder,
+      reportToggleTarget,
+      reportDerivedMemberWrite,
+    ],
   } satisfies NodeValidationChecks,
   messages: stateValidationMessages,
   typeChecks: {
