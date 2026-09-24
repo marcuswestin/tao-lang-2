@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
   s.summary        = 'iCloud Drive documents for Tao datasources'
   s.description    = 'Coordinated reads, writes, conflict resolution, and change events for the named documents Tao datasource providers keep in the app\'s iCloud container.'
   s.author         = 'Tao'
-  s.homepage       = 'https://tao-lang.org'
+  s.homepage       = 'https://devtao.com'
   s.license        = { :type => 'Private' }
   s.platforms      = { :ios => '15.1' }
   s.swift_version  = '5.9'

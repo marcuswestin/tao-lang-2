@@ -54,7 +54,7 @@ separate device gateway.
 
    Both run Expo prebuild as needed and `expo run:ios --device <target> --no-bundler` from the
    companion package, and neither starts a Metro. A device needs Xcode, CocoaPods (from the devenv
-   profile), a signing identity for the fixed bundle id `dev.tao-lang.studio.companion`, and an
+   profile), a signing identity for the fixed bundle id `com.devtao.studio.companion`, and an
    unlocked screen. A simulator needs none of that: name any available one, or omit the name for the
    booted one, and the tooling boots it first. Xcode 27 presents simulators inside Device Hub; older
    Xcodes use Simulator.app. If Expo cannot bring that host forward because macOS automation is
