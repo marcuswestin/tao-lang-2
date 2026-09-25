@@ -18,7 +18,7 @@ scene SkillHome() {
    Title "Skill home"
    state Draft = ""
    action OpenDetail() {
-      guard Draft empty
+      check Draft is not empty
       present SkillDetail(Draft)
    }
    command OpenDetailCommand() {
@@ -67,7 +67,8 @@ nav SkillNavigator = SelectionNav {
 - `state Name = Value` is view-local and reactive. App state may use `state Name is Type = Value (persist)`.
 - `action Name(...) { ... }` may `set`, compound-set, `toggle`, `create`, `update`, `delete`, `do`,
   `present`, `dismiss`, `ask`, `respond`, or `fail`.
-- A `guard` exits its current action block on a match. One-sided `if` conditionally runs a block.
+- `check <condition>` stops the action when the condition is false; it may not sit inside an `if`.
+  One-sided `if` conditionally runs a block. `guard` belongs to views; in an action it is retired.
 - Root actions are serialized transactions; nested `do` joins the transaction. TypeScript effects
   cannot roll back. `async { ... }` starts a detached serialized root after its caller finishes.
 - A `command` supplies static `Title`, optional description/label/icon/key/enabled values, and one

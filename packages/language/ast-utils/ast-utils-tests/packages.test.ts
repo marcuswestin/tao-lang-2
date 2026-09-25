@@ -404,6 +404,37 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('never climbs past the temp-directory boundary to a project declared there', async () => {
+    const boundary = await mkTestDir('tao-packages-temp-boundary-')
+    try {
+      await FS.writeText(FS.resolvePath('Stray.tao', boundary), 'project { id "stray" name "Stray" }')
+      const fixture = FS.resolvePath('fixture', boundary)
+      await FS.writeText(FS.resolvePath('Main.tao', fixture), '')
+
+      const found = await Packages.containingProjectRoot(fixture, undefined, { temporaryRoot: boundary })
+
+      Expect(found).toBeUndefined()
+    } finally {
+      await FS.remove(boundary)
+    }
+  })
+
+  Test('still finds a project declared in a subdirectory of the temp-directory boundary', async () => {
+    const boundary = await mkTestDir('tao-packages-temp-boundary-nested-')
+    try {
+      const projectRoot = FS.resolvePath('project', boundary)
+      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      const nested = FS.resolvePath('screens', projectRoot)
+      await FS.writeText(FS.resolvePath('Main.tao', nested), '')
+
+      const found = await Packages.containingProjectRoot(nested, undefined, { temporaryRoot: boundary })
+
+      Expect(found).toBe(projectRoot)
+    } finally {
+      await FS.remove(boundary)
+    }
+  })
+
   Test('skips hidden future-source directories during recursive package discovery', async () => {
     const root = await mkTestDir('tao-packages-sketches-')
     try {

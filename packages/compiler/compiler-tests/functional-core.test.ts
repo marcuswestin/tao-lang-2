@@ -29,6 +29,7 @@ Describe('compiler: functional core', () => {
           check Ready
           toggle Ready
         }
+        action Nothing() { }
         render Stack(){
           when HasCount(2) {
             true -> {
@@ -52,6 +53,8 @@ Describe('compiler: functional core', () => {
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Check(')
+    // An empty action body still reads the continuation its callback declares.
+    Expect(compiled.files[0]?.code).toContain('void _TaoActionContinuation')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Binary(')
   })

@@ -133,6 +133,18 @@ view TextMultiline(Value text) {
    ```
 }
 
+// A form's unfinished-field sentences, usually a row's or projection's `Problems`: one line each,
+// in the order they arrive, and nothing at all when there are none. Clauses style every line.
+public
+view Problems(Items list of text) {
+   render inject Items, Layout @@layout, Tag @@tag ```ts
+      if (Items.length === 0) {
+        return null
+      }
+      return TR.Views.Text({ children: [Items.join('\n')], layout: Layout, tag: Tag }, { nativeProps: {} })
+   ```
+}
+
 public
 view Number(Value number) {
    render inject Value, Layout @@layout, Tag @@tag ```ts

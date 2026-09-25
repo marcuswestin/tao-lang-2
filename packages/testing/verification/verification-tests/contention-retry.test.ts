@@ -104,6 +104,7 @@ Describe('contended failure confirmation', () => {
         slots: 1,
       }),
       waitForAvailability: async () => {},
+      waitForLandingPriority: async () => {},
       waitReason: undefined,
     }
 

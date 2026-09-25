@@ -151,4 +151,29 @@ Describe('agent config generation', () => {
       await FS.remove(root)
     }
   })
+
+  Test('session-start passes the model-routing notice to the agent and survives a failed audit', async () => {
+    const root = await mkTestDir('tao-agent-session-notice-')
+    try {
+      const scriptPath = 'packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh'
+      const script = FS.resolvePath(scriptPath, root)
+      await FS.writeText(script, await FS.readText(Repo.resolvePath(scriptPath)))
+      await FS.chmod(script, 0o755)
+      const agent = FS.resolvePath('agent', root)
+      await FS.writeText(agent, '#!/bin/zsh\necho "setup chatter"\nexit 0\n')
+      await FS.chmod(agent, 0o755)
+      // Stands in for the profile's bun: it names the script it was asked to run, then fails.
+      const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+      await FS.writeText(bun, '#!/bin/zsh\necho "notice from ${2:t}"\nexit 3\n')
+      await FS.chmod(bun, 0o755)
+
+      const result = await CLI.run(script, { cwd: root, env: { CLAUDE_ENV_FILE: '' } })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toBe('notice from agent-model-audit.ts\n')
+      Expect(result.stderr).toBe('')
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

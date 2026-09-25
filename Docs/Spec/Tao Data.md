@@ -89,6 +89,10 @@ its press surface; the label remains outline metadata for a non-selectable row. 
 as an ordinary identifier and its spelling validated, so `title` stays a legal name elsewhere — a
 design bundle called `title` is exactly what an app declares.
 
+`search` marks a `text` field one of the entity's multi-field search fields, matched by a query's
+`search` clause (see _Queries_ below). It is legal only on a `text` field and may be declared on
+more than one field per entity — a row matches the term when it matches at least one of them.
+
 `required "<sentence>"` states completeness: the field is expected to be filled, but its absence
 never blocks a write. A row, and every projection that selects the field, derives two readonly
 members from it: `Incomplete`, a boolean, and `Problems`, the list of the missing fields' sentences
@@ -456,6 +460,11 @@ query FinishedDocuments from Workspace.Documents {
    where is Final
    order by CreatedAt desc
 }
+
+query Found from Workspace.Documents {
+   search Find
+   order by Title
+}
 ```
 
 The source is either a root plural or a plural relationship. A query may keep the source name or
@@ -466,6 +475,17 @@ Boolean filters use `where is <Case>`. One explicit order may override the sourc
 order. One `limit <count>` clause caps the result after filtering and ordering; the count is a
 whole-number literal of at least 1. Generated hooks are hoisted while preserving lexical visibility
 and the authored declaration-order rules.
+
+One `search <text expression>` clause matches a row when the term matches at least one of the
+source entity's `(search)` fields; the source entity must declare at least one. Matching reuses the
+attention matcher keyboard narrowing and the command palette already use: locale-aware
+word-prefix subsequence (`matchesNarrowing` in `TR-interaction-labels.ts`), not a second matcher. A
+blank term (empty or whitespace) matches every row. The term is an ordinary reactive expression, so
+a bound state's changes re-evaluate the query exactly as a `where` clause's value does. Search
+results keep the query's own `order by` and `limit`; `limit` applies after search, and there is no
+relevance ranking. Search is evaluated locally over the store for every provider, the same as
+`where`, `order by`, and `limit`; it is never offered to a fill connection; see _The Http
+datasource_ below.
 
 Queries and lists expose `.Count`. Emptiness is tested with `Value is empty`. The availability
 cases split into two kinds. The nothing-to-show cases are mutually exclusive:
@@ -519,7 +539,9 @@ is offered its descriptor — entity, equality-filter values, effective order fi
 the store keeps evaluating every query locally over its rows, exactly as for `Local` and `Memory`.
 A filter the API cannot express means the provider fetches a superset and the query block still
 filters locally. API-side ordering that no field derives (a front-page rank) is materialized by the
-adapter as a row field the query orders by.
+adapter as a row field the query orders by. A `search` clause is not part of the descriptor: it
+narrows only the rows already fetched, exactly like a filter the API cannot express, so a term
+change never re-offers the descriptor or re-fetches.
 
 Filled rows land in the entity's one shared row set, so distinct feeds over one entity must own
 their queryable facts: each feed materializes its own field (defaulted for rows other feeds fetch)

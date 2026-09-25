@@ -3,6 +3,7 @@ import type { TaoDataEntity, TaoDataField, TaoDataSchema, TaoQueryFilter } from 
 import { valueMatchesKind } from './TR-data-definition'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import type { StoredRow } from './TR-data-persistence'
+import { matchesNarrowing } from './TR-interaction-labels'
 import RuntimeSwitch from './TR-switch'
 import { Clock } from './TR-units'
 
@@ -184,6 +185,30 @@ export function matchesFilter(row: StoredRow, filter: TaoQueryFilter, expected: 
     '>': () => compare(actual, expected) > 0,
     '>=': () => compare(actual, expected) >= 0,
   })
+}
+
+/** searchFieldNames returns the entity's `(search)` field names, the multi-field corpus a query's search term matches against. */
+export function searchFieldNames(entity: TaoDataEntity): string[] {
+  return Object.entries(entity.fields).filter(([, field]) => field.search === true).map(([name]) => name)
+}
+
+/** querySearchTerm evaluates a query's own reactive search term, validated at compile time to be text. */
+export function querySearchTerm(search: () => Evaluable): string {
+  const term = search().evaluate().jsValue
+  RuntimeAssert(typeof term === 'string', 'validated query search term evaluates to text', { term })
+  return term
+}
+
+/**
+ * matchesSearch reuses the attention matcher's locale-aware word-prefix subsequence rule over one
+ * row's `(search)` field values, so a query's `search` clause narrows exactly like keyboard
+ * narrowing and the command palette do. A blank term matches every row.
+ */
+export function matchesSearch(row: StoredRow, fields: readonly string[], term: string): boolean {
+  const corpus = fields
+    .map(field => row[field])
+    .filter((value): value is string => typeof value === 'string')
+  return matchesNarrowing(corpus, term)
 }
 
 export function compare(left: unknown, right: unknown): number {

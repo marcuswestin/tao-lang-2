@@ -10,6 +10,8 @@ const messages = {
   binaryComparable: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
+  actionGuardRetired:
+    '`guard` in an action is retired: use `check <condition>` to stop the action, or `if` to branch. `guard` stays the view-side construct.',
   checkCondition: '`check` requires a boolean condition.',
   checkPlacement:
     '`check` stops its whole action, so it belongs in the action itself, not inside an `if` or `guard` block.',
@@ -90,6 +92,8 @@ export const FunctionalCoreValidator = {
     [AST.GuardDefaultStatement.$type]: validateGuardDefault,
     [AST.GuardActionStatement.$type]: (statement, ctx) => {
       validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
+      // §8 keeps `guard` for views; an action stops with `check`. Retired with a warning for now.
+      ctx.warning(statement, messages.actionGuardRetired)
     },
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)

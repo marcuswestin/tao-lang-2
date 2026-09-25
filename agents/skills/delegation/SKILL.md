@@ -22,7 +22,7 @@ You know the file and line (read it); the brief would take longer to write than 
 
 ## Parallelism
 
-Three to five concurrent agents is the working range; beyond that you become the bottleneck, since you still read and check every report. Launch, then continue, then collect, and reuse a finished agent for the next unblocked piece rather than waiting for the whole fan-out. Readers and a writer do not mix — a reader that opens a file while something else rewrites it reports a defect that was never there. Either the fan-out is read-only, or every agent owns its paths exclusively under `references/parallel-implementation.md`; never both over the same seam.
+Three to five concurrent agents is the working range; beyond that you become the bottleneck, since you still read and check every report. Launch, then continue, then collect each report as it lands rather than waiting for the whole fan-out. Hand a finished agent the next piece only when that piece needs what the agent already read: a resumed agent re-reads its whole history on every request, so an unrelated piece goes to a fresh one. Readers and a writer do not mix — a reader that opens a file while something else rewrites it reports a defect that was never there. Either the fan-out is read-only, or every agent owns its paths exclusively under `references/parallel-implementation.md`; never both over the same seam.
 
 ## Messaging another agent
 
@@ -50,7 +50,7 @@ Work is routed to a tier, spelled per harness in one table, so a model release c
 | deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
 | frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |
 
-Effort is separate from tier. `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
+`repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
 Downward is the usual direction: a deep or frontier orchestrator almost never lets a subagent inherit its model, so say the tier explicitly. Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; name the frontier tier on the call if you are already there, since `oracle` defaults to deep. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
 
