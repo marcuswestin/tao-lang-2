@@ -15,8 +15,8 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
 
 workspace
 data Documents / Document {
-   Title text (required "Name this document", title)
-   Body text (default "")
+   Title text (required "Name this document", search, title) // `search`: a query's `search` reads it
+   Body text (default "", search)
    Final yes / Draft no // an optional no-case alias name
    Public yes / Private no (default Public) // an explicit default may select either case
    CreatedAt time (default now)

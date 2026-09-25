@@ -181,8 +181,13 @@ export const ActionsCompiler = {
 
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
-    if (!actionInstrumentationEnabled() || !block) {
-      return gen.list(block?.statements ?? [], statement =>
+    // Every caller declares the continuation before the body; an empty body must still read it,
+    // or a generated app compiled with unused-local checks rejects `on submit -> { }`.
+    if (!block || block.statements.length === 0) {
+      return gen`void _TaoActionContinuation`
+    }
+    if (!actionInstrumentationEnabled()) {
+      return gen.list(block.statements, statement =>
         gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}

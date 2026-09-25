@@ -113,6 +113,22 @@ export const ExpressionsFormatter = {
     f.noSpaceBefore(')')
   },
 
+  /** PhraseDeclaration formats an optional parameter list and a `=` before its body. */
+  PhraseDeclaration(f) {
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('phrase')
+    f.noSpaceBefore('(')
+    f.oneSpaceAround('=')
+    if (f.node.forms.length > 0) {
+      f.oneSpaceAround('/')
+    }
+  },
+
+  /** PhraseForm spaces a plural category keyword before its interpolated string. */
+  PhraseForm(f) {
+    f.oneSpaceBeforeProperty('text')
+  },
+
   /** BinaryExpression formats operators with one space on each side. */
   BinaryExpression(f) {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')

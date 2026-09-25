@@ -122,6 +122,7 @@ import {
   type TaoWritableState,
   usePersistedState,
 } from './TR-persisted-state'
+import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
 import {
@@ -137,6 +138,7 @@ import {
   useParameterCell,
   writablePath,
 } from './TR-reactive-values'
+import { ReadNet, readNetCases, renderReadNet } from './TR-read-net'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -208,6 +210,15 @@ class TR {
   /** Interpolate concatenates Tao values, rendering absence as an empty string. */
   static Interpolate(parts: readonly TR.Evaluable[]): TR.Value<string> {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
+  }
+
+  /**
+   * Plural selects one of a phrase's CLDR-category forms for the running locale, falling back to
+   * `other` when that category has no form. `locale` defaults to English when the caller has none
+   * to offer.
+   */
+  static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
+    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
   }
 
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
@@ -283,15 +294,32 @@ class TR {
     return isPromiseLike(matched.result) ? Promise.resolve(matched.result).then(() => true) : true
   }
 
-  /** GuardRender renders a matching handler or the untouched remainder of the enclosing block. */
+  /**
+   * GuardRender renders a matching handler, the read net for an exceptional case no handler names,
+   * or the untouched remainder of the enclosing block. `siteProps` are the guarding view's own, so
+   * the net renders where the guard stands and finds the mounted app's `guard default`.
+   */
   static GuardRender(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     remaining: () => React.ReactNode,
+    siteProps?: TR.TaoProps,
   ): React.ReactNode {
-    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
-    return matched ? matched.result : remaining()
+    const value = subject.evaluate().jsValue
+    const matched = firstMatchedBranch(value, branches)
+    if (matched) {
+      return matched.result
+    }
+    const exceptional = readNetCases
+      .map(caseName => ({ caseName, match: matchSubjectCase(value, caseName) }))
+      .find(({ match }) => match.matched)
+    return exceptional
+      ? renderReadNet(exceptional.caseName, new RuntimeValue(exceptional.match.payload), siteProps)
+      : remaining()
   }
+
+  /** ReadNet freezes the handlers a project's compiled `guard default` replaces. */
+  static readonly ReadNet = ReadNet
 
   /** Member reads item fields and the built-in Count collection and text member. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.MemberValue<any> {
@@ -1163,6 +1191,10 @@ namespace TR {
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
+  /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
+  export type PluralCategory = TaoPluralCategory
+  /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
+  export type PluralForms = TaoPluralForms<TR.Evaluable>
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
