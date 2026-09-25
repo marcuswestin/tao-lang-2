@@ -127,8 +127,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
 
 [^2]: `if`, `when` in value and render position, the compact two-outcome `when`, view `guard`, and
     `check` — §8's action-only early exit — are in Current. A `check` may not sit inside an action's
-    `if` or `guard` block, where it would stop only that block. The language still accepts `guard` in
-    an action, which §8 reserves for views; WordFlower no longer uses it.
+    `if` or `guard` block, where it would stop only that block. `guard` in an action, which §8
+    reserves for views, still runs but draws a retirement warning; no app, starter, or tutorial
+    uses it.
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
     Declared failures (`fails`) are in the language but no WordFlower tier uses them yet; the MVP

@@ -10,7 +10,7 @@ scene IngredientList() {
    state NewName = ""
    query Ingredients { }
    action AddIngredient() {
-      guard NewName empty
+      check NewName is not empty
       create Ingredient {
          Name: NewName
       }
@@ -75,7 +75,7 @@ scene IngredientDetail(Ingredient) {
    Title Ingredient.Name
    state NameDraft = Ingredient.Name
    action SaveIngredient() {
-      guard NameDraft empty
+      check NameDraft is not empty
       update Ingredient {
          Name: NameDraft
    }  }
