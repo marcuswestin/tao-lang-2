@@ -37,7 +37,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Named transactions, for-caller (§5)                         | Skillet · StartKitchen and membership operations                              | Post-MVP | —                         |
 | One atomic commit across rows (§5)                          | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat       | Post-MVP | —                         |
 | Bulk write verbs (`update each`, `delete each`) (§5)        | Skillet · clear what was bought; Hearth · clear a finished list               | Post-MVP | —                         |
-| Guard default, effect outcomes (§5)                         | WordFlower · document availability                                            | MVP      | partially in Current      |
+| Guard default, effect outcomes (§5)                         | WordFlower · document availability and export outcomes                        | MVP      | in Current                |
 | Outcome vocabulary incl. `queued` (§5)                      | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
 | Queries: filters, ordering, limits (§6)                     | WordFlower · drafts, finished documents, paragraphs                           | MVP      | in Current                |
 | Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | in Current                |
@@ -98,14 +98,14 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Plural phrases (§14)                                        | WordFlower · the outline's paragraph count                                    | MVP      | in Current                |
 | Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
 | Measurement phrases (§14)                                   | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
-| TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | partially in Current[^3]  |
+| TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | in Current[^3]            |
 | Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | —                         |
 | Foreign views (`accepts content … from ./X.tsx`) (§15)      | **none — for the Developer**                                                  | TBD      | —                         |
 | Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
 | Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current[^18] |
 | Fault injection (§16)                                       | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
-| Foreign action failure stubs by declared case (§16)         | Test Apps · Effect Outcomes checks failure and check isolation                | MVP      | in Current                |
+| Foreign action failure stubs by declared case (§16)         | WordFlower · export outcomes; Test Apps · Effect Outcomes check isolation     | MVP      | in Current                |
 | Foreign action value-return stubs (§16)                     | Skillet · the import journey's success value                                  | Post-MVP | —                         |
 | World controls: network, sync, relaunch (§16)               | WordFlower · offline edits that sync on reconnect                             | MVP      | partially in Current      |
 | World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
@@ -133,8 +133,8 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     uses it.
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
-    Declared failures (`fails`) are in the language but no WordFlower tier uses them yet; the MVP
-    tier's document export will. `progress` was struck on 2026-09-25: no decision ever defined it.
+    WordFlower's Markdown export now uses a foreign action with declared failures. `progress` was
+    struck on 2026-09-25: no decision ever defined it.
 
 [^4]: The unified view tranche established one renderable family with content acceptance, render
     slots, and `responds` inferred from the body; the later host-read tranche added `scene is view`

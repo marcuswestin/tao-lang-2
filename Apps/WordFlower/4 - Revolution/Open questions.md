@@ -181,16 +181,6 @@ every render tree in the repository.
 
 Both came from `3 - MVP` rather than from this rewrite, and both are now marked at the use site.
 
-## Q11 — How does a foreign action's declared failure reach the calling site?
-
-§15 gives a foreign action `fails <Case> "<sentence>"` and says a provider failure "selects a
-declared case". §5 gives the calling site `queued`, `saved`, `rejected`, and `error`, and defines
-`rejected` as a `refuse when` or `validate` failure and `error` as a thrown exception. Neither says
-which arm a declared `fails` case arrives in, or whether the arm binds the case or the sentence.
-
-`ExportPanel` guesses: it treats `Offline` and `Rejected` as `rejected` and renders the bound
-sentence. The export journey rests on that guess.
-
 ## Q8 — Does the Revolution tier stay one file?
 
 §1 decides a file decomposition every app shares — `App`, `Data`, `Access`, `Rules`, `Chrome`,

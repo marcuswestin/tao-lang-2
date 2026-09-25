@@ -1,4 +1,4 @@
-use WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
+use ExportDocument, WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
 
 // Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
 // and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
@@ -42,6 +42,61 @@ test "WordFlower full target" {
       press #closeDocument
       press #confirmClose
       expect missing text "Document: Chapter one"
+   }
+
+   test "shares a saved document as Markdown" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect text "Ready to share"
+   }
+
+   test "reports a named export failure" {
+      action ExportDocument fails Offline
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect text "Exporting needs a connection."
+   }
+
+   test "reports an otherwise declared export failure" {
+      action ExportDocument fails TooLarge
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect text "This document is too long to export."
+   }
+
+   test "leaves a cancelled export quiet" {
+      action ExportDocument fails Cancelled
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect missing text "Ready to share"
    }
 
    test "saving presents a keyed toast" {

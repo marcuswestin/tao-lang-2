@@ -12,6 +12,8 @@ use Checkbox, Col, FormButton, Image, Panes, Placeholder, Problems, Progress, Ro
 // This file predates the Tao Revolution decisions (`Docs/Roadmap/Tao Revolution/Decisions.md`) and is
 // re-derived from the rewritten Revolution tier at Process step 4 — same spellings, fewer
 // capabilities. Requirements settled for that derivation, beyond what this sketch shows:
+// - Export shares the saved document as Markdown through the platform sheet. Declared Offline,
+//   TooLarge, and cancellation outcomes meet `when do`; format choice remains beyond MVP.
 // - No automations, notifications, or interruption levels in MVP; those wait for the app
 //   expansion (`Apps/Tao Future/`, Skillet first).
 // - Open at derivation time: whether the authority cluster (access rules, transactions, invites,
@@ -725,9 +727,15 @@ view FileTree(Workspace) {
 // The pane-level entry guards entity availability; the editor below assumes an available document.
 workspace
 scene DocumentScreen(Document) {
+   command Export() {
+      Title "Export document"
+      Description "Shares the saved document as Markdown."
+      Icon "square.and.arrow.up"
+      do -> { present ExportPanel(Document) as sheet }
+   }
    Title Document.Title
    // The unfilled entity slot is supplied from this presented scene's Document parameter.
-   Toolbar { Finish }
+   Toolbar { Finish, Export }
    render Col() [fill] {
       guard Document {
          missing -> { Text("Document { Document.Id } no longer exists.") } // the unavailable handle retains its stable Id
@@ -737,6 +745,38 @@ scene DocumentScreen(Document) {
 }
 
 type DocumentInput is Document { Title, Body }
+
+type ExportFailure is one of Offline, TooLarge, Cancelled
+workspace
+action ExportDocument(Document)
+   fails Offline "Exporting needs a connection."
+   fails TooLarge "This document is too long to export."
+   fails Cancelled ""
+   from ./Export.ts
+
+view ExportPanel(Document) {
+   action RunExport() {
+      when do ExportDocument(Document) {
+         saved -> { present ExportNotice("Ready to share") as toast (Key: "document-export", Duration: 3.s) }
+         Offline -> { present ExportNotice("Exporting needs a connection.") as toast (Key: "document-export", Duration: 5.s) }
+         Cancelled -> { }
+         rejected -> Problem { present ExportNotice(Problem) as toast (Key: "document-export", Duration: 5.s) }
+         error -> Message { present ExportNotice(Message) as toast (Key: "document-export", Duration: 5.s) }
+      }
+   }
+   render Col() [panel, formWidth] {
+      Text("Export { Document.Title }") [sectionTitle]
+      Text("Share a Markdown copy of the saved document.") [body]
+      #export
+      FormButton("Share Markdown") { on press RunExport }
+      #closeExport
+      FormButton("Close") { on press -> { dismiss } }
+   }
+}
+
+view ExportNotice(Message text) {
+   render Text(Message) [body]
+}
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
 workspace
