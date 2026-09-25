@@ -6,6 +6,11 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
+// `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
+// narrowing uses: locale-aware word prefixes, in order. A blank term keeps every row; the query's
+// order and limit apply afterwards. Grouping (`group by`) is Post-MVP.
+//
 // WRITE RULES. `required "<sentence>"` states completeness: it never blocks a write, and it derives
 // `Incomplete` and `Problems` on a row and on every projection that selects the field. A form for a
 // new row edits a projection (`type WorkspaceInput is Workspace { Name }`), `create Workspace with

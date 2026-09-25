@@ -152,6 +152,27 @@ test "WordFlower workspaces" {
       }
       expect text "No finished documents"
    }
+   test "finds documents in a workspace by the word prefixes of their titles" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Draft the intro" into #newDocumentTitle
+      submit #newDocumentTitle
+      enter "Outline chapter two" into #newDocumentTitle
+      submit #newDocumentTitle
+      expect text "Drafts: 2"
+      enter "out ch" into #findDocuments // word prefixes, in order
+      expect {
+         text "Drafts: 1"
+         text "Outline chapter two"
+      }
+      expect missing text "Draft the intro"
+      enter "" into #findDocuments // a blank term keeps every row
+      expect text "Drafts: 2"
+   }
    test "opens and narrows the generated command palette" {
       run WordFlower
 
