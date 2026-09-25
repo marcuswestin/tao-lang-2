@@ -25,7 +25,9 @@ named, inline, and typed foreign actions; inferred `fail` cases; `set`, compound
 write forms plus view-body queries;
 declaration-owned configuration; `ask`/`respond` on views declaring `responds`; the
 expression-position TypeScript boundary; prelude-declared host-facing supplied-slot fills; commands
-as configured values with their own slots; and transparent configurable-type aliases.
+as configured values with their own slots; and transparent configurable-type aliases. `color` is a
+view parameter type whose values are design color names, resolved against the mounted design at
+render; `Tao Design.md` ("Color values") owns it.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
 future work. Optional item fields and non-blocking `async { ... }` are implemented as described

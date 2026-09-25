@@ -319,8 +319,10 @@ ItemLiteral:
 ItemProperty:
     (label=ID ':')? value=Expression;
 
+// A numeric member names a design color family shade (`schemeAccent.20`), which a `color` argument
+// or default may pass; the validator rejects a shade on any other value.
 MemberAccessExpression:
-    target=[ValueDeclaration:ID] '.' members+=ID ('.' members+=ID)*;
+    target=[ValueDeclaration:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
 
 // A call invokes a pure function or named copy; both share this one shape (`Name(...)`), so a
 // separate phrase-call rule would be structurally ambiguous with this one at parse time — nothing
@@ -368,4 +370,7 @@ RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
 
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration | PhraseDeclaration;
+// A design color is a value only where a `color` argument or default names it; the scope offers
+// the mounted designs' colors there and nowhere else.
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
+type DesignColor = DesignColorEntry | DesignToken;

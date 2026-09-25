@@ -15,6 +15,14 @@ export class TaoReferences extends Langium.DefaultReferences {
   }
 
   override findDeclarations(sourceCstNode: Langium.CstNode): Langium.AstNode[] {
+    const shade = designShadeFromCstNode(sourceCstNode)
+    if (shade) {
+      return [shade]
+    }
+    const parameter = colorClauseParameterFromCstNode(sourceCstNode)
+    if (parameter) {
+      return [parameter]
+    }
     const defaultDeclarations = super.findDeclarations(sourceCstNode)
     if (defaultDeclarations.length > 0) {
       return defaultDeclarations
@@ -27,12 +35,87 @@ export class TaoReferences extends Langium.DefaultReferences {
     options: Langium.FindReferencesOptions,
   ): Langium.Stream<Langium.ReferenceDescription> {
     const defaultRefs = super.findReferences(targetNode, options)
+    if (AST.isParameterDeclaration(targetNode)) {
+      return defaultRefs.concat(this.findColorParameterReferences(targetNode, options))
+    }
     const name = designMemberName(targetNode)
     if (!name) {
       return defaultRefs
     }
     const designRefs = this.findDesignMemberReferences(targetNode, name, options)
     return defaultRefs.concat(designRefs)
+  }
+
+  private findColorParameterReferences(
+    targetNode: AST.ParameterDeclaration,
+    options: Langium.FindReferencesOptions,
+  ): Langium.ReferenceDescription[] {
+    const targetDoc = AST.getDocument(targetNode)
+    const name = targetNode.inlineType?.name
+    if (
+      !name || !AST.isPrimitiveTypeReference(targetNode.inlineType?.type)
+      || targetNode.inlineType.type.primitive !== 'color'
+    ) {
+      return []
+    }
+    const targetPath = this.nodeLocator.getAstNodePath(targetNode)
+    const refs: Langium.ReferenceDescription[] = []
+    const add = (sourceNode: AST.Node, segment: Langium.CstNode): void => {
+      const sourceDoc = AST.getDocument(sourceNode)
+      refs.push({
+        local: sourceDoc.uri.toString() === targetDoc.uri.toString(),
+        segment: {
+          end: segment.end,
+          length: segment.length,
+          offset: segment.offset,
+          range: segment.range,
+        },
+        sourcePath: this.nodeLocator.getAstNodePath(sourceNode),
+        sourceUri: sourceDoc.uri,
+        targetPath,
+        targetUri: targetDoc.uri,
+      })
+    }
+    if (
+      options.includeDeclaration && (!options.documentUri
+        || options.documentUri.toString() === targetDoc.uri.toString())
+    ) {
+      const segment = Langium.GrammarUtils.findNodeForProperty(targetNode.inlineType.$cstNode, 'name')
+      if (segment) {
+        add(targetNode, segment)
+      }
+    }
+    const owner = AST.findOwningView(targetNode)
+    const docs = options.documentUri
+      ? [this.documents.getDocument(options.documentUri)].filter(
+        (doc): doc is Langium.LangiumDocument => doc !== undefined,
+      )
+      : Array.from(this.documents.all)
+    for (const doc of docs) {
+      const file = doc.parseResult.value
+      if (!AST.isTaoFile(file)) {
+        continue
+      }
+      for (const node of AST.streamAllContents(file)) {
+        if (
+          AST.isLayoutWord(node) && node.$cstNode
+          && colorClauseParameterFromCstNode(node.$cstNode) === targetNode
+        ) {
+          add(node, node.$cstNode)
+        }
+        if (
+          owner && AST.isArgument(node) && node.label === name
+          && AST.isRender(node.$container?.$container)
+          && node.$container.$container.view?.ref === owner
+        ) {
+          const segment = Langium.GrammarUtils.findNodeForProperty(node.$cstNode, 'label')
+          if (segment) {
+            add(node, segment)
+          }
+        }
+      }
+    }
+    return refs
   }
 
   private findDesignDeclarations(sourceCstNode: Langium.CstNode): Langium.AstNode[] {
@@ -113,18 +196,24 @@ export class TaoReferences extends Langium.DefaultReferences {
         continue
       }
       for (const node of AST.streamAllContents(file)) {
-        if (!AST.isLayoutWord(node) && !AST.isDesignValuePath(node)) {
+        if (!AST.isLayoutWord(node) && !AST.isDesignValuePath(node) && !AST.isMemberAccessExpression(node)) {
           continue
         }
         const cstNode = node.$cstNode
-        const segment = designReferenceSegment(node, name)
+        const segment = AST.isMemberAccessExpression(node)
+          ? designShadeReferenceSegment(node, targetNode)
+          : designReferenceSegment(node, name)
         if (cstNode === undefined || segment === undefined) {
           continue
         }
         // Spelling only narrows the candidates. Whether this word is a reference to *this* member is
         // settled by resolving it the way go-to-definition does and comparing the declaration itself:
         // two designs may each declare a private `header`, and one is not a reference to the other.
-        if (!this.findDesignDeclarationsForNames(cstNode, [name]).includes(targetNode)) {
+        if (
+          AST.isMemberAccessExpression(node)
+            ? designShadeFromCstNode(segment) !== targetNode
+            : !this.findDesignDeclarationsForNames(cstNode, [name]).includes(targetNode)
+        ) {
           continue
         }
         refs.push({
@@ -264,6 +353,46 @@ function designValuePathFromCstNode(cstNode: Langium.CstNode): AST.DesignValuePa
   return undefined
 }
 
+/** A shade on a color argument is a numeric AST property, not a Langium cross-reference. */
+function designShadeFromCstNode(cstNode: Langium.CstNode): AST.DesignColorFamilyMember | undefined {
+  let current: Langium.AstNode | undefined = cstNode.astNode
+  while (current && !AST.isMemberAccessExpression(current)) {
+    current = current.$container
+  }
+  if (!AST.isMemberAccessExpression(current) || current.shade === undefined) {
+    return undefined
+  }
+  const segment = Langium.GrammarUtils.findNodeForProperty(current.$cstNode, 'shade')
+  if (!segment || !containsCstNode(segment, cstNode)) {
+    return undefined
+  }
+  const color = current.target.ref
+  return AST.isDesignColorEntry(color) ? AST.designColorShade(color, current.shade) : undefined
+}
+
+/** A capitalized color clause word reads a parameter of its owning view. */
+function colorClauseParameterFromCstNode(cstNode: Langium.CstNode): AST.ParameterDeclaration | undefined {
+  const word = layoutWordFromCstNode(cstNode)
+  let current: Langium.AstNode | undefined = word?.$container
+  while (current && !AST.isLayoutEntry(current)) {
+    current = current.$container
+  }
+  const entry = current
+  if (
+    !word || !AST.isLayoutEntry(entry) || entry.terms.length !== 1 || entry.terms[0] !== word
+    || !AST.isLayoutWord(entry.head) || !['background', 'ink', 'border', 'bg', 'fg'].includes(entry.head.value)
+    || !/^[A-Z]/.test(word.value)
+  ) {
+    return undefined
+  }
+  const view = AST.findOwningView(word)
+  return view && AST.parametersOf(view).find(parameter =>
+    parameter.inlineType?.name === word.value
+    && AST.isPrimitiveTypeReference(parameter.inlineType?.type)
+    && parameter.inlineType.type.primitive === 'color'
+  )
+}
+
 function collectLookupNames(
   word: AST.LayoutWord | undefined,
   path: AST.DesignValuePath | undefined,
@@ -324,6 +453,17 @@ function designReferenceSegment(
     return Langium.GrammarUtils.findNodeForProperty(cstNode, AST.isLayoutWord(node) ? 'value' : 'head')
   }
   return undefined
+}
+
+function designShadeReferenceSegment(
+  node: AST.MemberAccessExpression,
+  target: Langium.AstNode,
+): Langium.CstNode | undefined {
+  const color = node.target.ref
+  return AST.isDesignColorFamilyMember(target) && AST.isDesignColorEntry(color)
+      && node.shade !== undefined && AST.designColorShade(color, node.shade) === target
+    ? Langium.GrammarUtils.findNodeForProperty(node.$cstNode, 'shade')
+    : undefined
 }
 
 function containsCstNode(container: Langium.CstNode, candidate: Langium.CstNode): boolean {
@@ -441,7 +581,7 @@ function appSelectedDesign(
   if (app.block) {
     for (const stmt of app.block.statements) {
       if (AST.isAppProperty(stmt) && stmt.name === 'Design') {
-        const design = resolveDesignFromExpression(stmt.value, file)
+        const design = resolveDesignFromValue(stmt.value, file)
         if (design) {
           return design
         }
@@ -449,6 +589,14 @@ function appSelectedDesign(
     }
   }
   if (app.value) {
+    if (AST.isRefinementExpression(app.value)) {
+      const patched = app.value.patchBlock.entries.findLast(entry =>
+        entry.name === 'Design' && entry.value !== undefined
+      )
+      if (patched) {
+        return resolveDesignFromValue(patched.value, file)
+      }
+    }
     const baseApp = resolveBaseApp(app.value, file)
     if (baseApp) {
       return appSelectedDesign(baseApp, file, documents)
@@ -457,14 +605,14 @@ function appSelectedDesign(
   return undefined
 }
 
-function resolveDesignFromExpression(
-  expression: AST.Expression | undefined,
+function resolveDesignFromValue(
+  expression: AST.Expression | AST.ConfigurationValue | undefined,
   file: AST.TaoFile,
 ): AST.DesignDeclaration | undefined {
   if (!expression) {
     return undefined
   }
-  if (AST.isValueReference(expression)) {
+  if (AST.isValueReference(expression) || AST.isConfigurationReference(expression)) {
     const target = expression.target?.ref
     if (AST.isDesignDeclaration(target)) {
       return target
