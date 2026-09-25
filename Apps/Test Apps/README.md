@@ -306,3 +306,21 @@ tests, not journeys.
 
 **Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
 Post-MVP; remote providers; navigation or WordFlower product behavior.
+
+## Test Device and Fixture
+
+Exercise a behavior test's `on <device>` and `with <fixture>` head clauses (Decisions §16).
+
+**Belongs here:** a `with <fixture>` check starting with the fixture's rows visible before any
+interaction; a nested test inheriting its parent's `on`/`with` without repeating them; a nested test
+overriding its parent's `on` while still inheriting `with`. `on phone` versus `on tablet` producing a
+stacked versus side-by-side `Panes()` is not provable from this app's tests — the test language
+selects by visible text, label, placeholder, or `#tag`, with no selector for a chosen layout
+direction — so that half of the proof lives in
+`packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx`, which reads the
+rendered style the harness itself produces.
+
+**Does not belong here:** the device and fixture vocabulary reused from Studio scenarios
+(`ScenarioDeviceClause`, `ScenarioFixtureClause`), which Studio's own scenario coverage owns; the
+still-deferred `network`, `wait for sync`, `datasource fails after`, `as <account>`, and `expect
+refused` test world controls.

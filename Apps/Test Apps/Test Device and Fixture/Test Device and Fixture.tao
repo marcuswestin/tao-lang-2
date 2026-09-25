@@ -1,0 +1,34 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, Panes, Text from @tao/ui
+
+app WordFlower {
+   Name "WordFlower"
+   Navigator StackNav {
+      Initial MainView
+   }
+   Datasource Memory { }
+}
+
+workspace
+data Workspaces / Workspace {
+   Name text
+}
+
+scene MainView() {
+   Title "WordFlower"
+   query Workspaces { }
+   render Panes() [gap 16] {
+      #workspaceList
+      Col() [claim 2] {
+         when Workspaces {
+            empty -> { Text("No workspaces yet") }
+            otherwise -> { loop Workspaces / Workspace {
+               Text(Workspace.Name)
+            } }
+      }  }
+
+      #detailPane
+      Col() [claim 1] {
+         Text("Detail pane")
+}  }  }

@@ -66,6 +66,43 @@ run is reported the same way a one-shot `tao test` reports it and does not stop 
 runs the command prints one line naming what it is watching and that it is waiting for the next
 change.
 
+## Device and fixture
+
+`test "…" on <device>` pins the viewport preset for every check inside that test; `test "…" with
+<fixture>` starts every check's fresh store from a named `fixture` instead of empty. Either or both
+may appear, in either order, and both reuse a scenario's own vocabulary (§13 of Decisions, `Tao
+Studio.md`): `on phone|tablet|laptop`, optionally followed by `width N x height N`, and `with
+<FixtureName>` referencing a `fixture` declaration:
+
+```tao
+fixture StarterWorkspace {
+   Home = create Workspace { Name: "Home" }
+}
+
+test "WordFlower full target" on phone with StarterWorkspace {
+   test "opens the starter workspace" {   // inherits its parent's device and fixture
+      run WordFlower
+      expect text "Home"
+   }
+   test "on a tablet" on tablet { … }     // overrides the device, still inherits the fixture
+}
+```
+
+Tests nest arbitrarily deep, and a nested test inherits the nearest ancestor's `on`/`with` unless it
+repeats the clause itself, which overrides every ancestor's for that test and everything nested
+inside it. A test may declare at most one `on` and one `with`; a fixture name that does not resolve,
+or a fixture whose created entity the running app cannot bind (no bound datasource claims it), are
+diagnostics rather than a runtime failure.
+
+A check's device viewport is applied before its first step, through the same seam a Studio scenario
+uses to size its preview; the test language itself has no selector for a chosen layout direction, so
+a journey proves the device by the rows and controls it can still reach at that size, not by reading
+back which way an adaptive layout laid out. A check's fixture seeds the store the same way: every
+`create` binding in the fixture materializes before launch through the running app's own bound
+datasource, the same runtime seam a Studio scenario's fixture already seeds through (`Tao Studio.md`).
+A fixture's `through <Action>(...)` binding is not yet executed by a test's `with` (Studio's own
+scenario fixtures share this limit); write a `with`-driven fixture without `through` until that lands.
+
 ## Tags and selectors
 
 `#tag` attaches to the immediately following render or loop:
@@ -375,7 +412,10 @@ syntax.
 ## Non-goals
 
 The implemented test-runner surface intentionally omits direct state/value assertions, direct action
-calls, provider-row inspection or fixture/scenario seeding, production datasource access, arbitrary
-sleeps, public runtime or test IDs, entity-ID row selection, focused render subjects, and navigation
-diagnostic assertions. Those may be connected independently without weakening the current
-user-observable testing contract.
+calls, provider-row inspection, production datasource access, arbitrary sleeps, public runtime or
+test IDs, entity-ID row selection, focused render subjects, and navigation diagnostic assertions. A
+`with <fixture>` clause seeds a check's store (`through <Action>(...)` bindings excepted, above), but
+reading it back stays through ordinary rendered output, never a store query. `network`, `wait for
+sync`, `datasource fails after …`, `as <account>`, and `expect refused` remain out of scope for `on`
+and `with`. Those may be connected independently without weakening the current user-observable
+testing contract.

@@ -49,6 +49,10 @@ export const testValidationMessages = {
   interactionVocabulary: (expected: string) => `Expected '${expected}' in this interaction test step.`,
   interactionExpectation:
     "Expected 'target <label>', 'focus region <label>', or 'verbs <label>, ...' in this interaction test step.",
+  duplicateHeadClause: (name: string, clause: string) => `Test '${name}' declares '${clause}' more than once.`,
+  deviceDimensions: 'Test device dimensions must be positive whole numbers.',
+  fixtureAppBinding: (fixture: string, entity: string, app: string) =>
+    `Fixture '${fixture}' creates '${entity}', which app '${app}' does not bind.`,
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -120,6 +124,7 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (AST.testDisplayName(test) === '') {
     ctx.error(test, testValidationMessages.unnamedTest)
   }
+  validateTestHeadClauses(test, ctx)
   const owner = test.$container
   if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
     ctx.error(test, testValidationMessages.testPlacement)
@@ -157,6 +162,7 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
   }
   for (const run of runSteps) {
     validateRun(run, ctx)
+    validateFixtureBinding(check, run, ctx)
   }
   for (const run of runSteps.slice(1)) {
     ctx.error(run, testValidationMessages.duplicateRun(AST.testDisplayName(check)))
@@ -335,6 +341,60 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
   if (!run.app.ref) {
     ctx.error(run, testValidationMessages.runTarget(run.app.$refText))
+  }
+}
+
+/** A test's own `on`/`with` may each appear at most once; a nested test overrides by repeating one. */
+function validateTestHeadClauses(test: AST.TestDeclaration, ctx: ValidationContext): void {
+  allowOneTestClause(test, 'on', AST.isTestDeviceClause, ctx)
+  allowOneTestClause(test, 'with', AST.isTestFixtureClause, ctx)
+  for (const device of test.headClauses.filter(AST.isTestDeviceClause)) {
+    if (
+      device.width !== undefined
+      && (!Number.isInteger(device.width) || !Number.isInteger(device.height) || device.width <= 0
+        || device.height! <= 0)
+    ) {
+      ctx.error(device, testValidationMessages.deviceDimensions)
+    }
+  }
+}
+
+function allowOneTestClause<ClauseT extends AST.TestHeadClause>(
+  test: AST.TestDeclaration,
+  name: string,
+  predicate: (clause: AST.TestHeadClause) => clause is ClauseT,
+  ctx: ValidationContext,
+): void {
+  for (const duplicate of test.headClauses.filter(predicate).slice(1)) {
+    ctx.error(duplicate, testValidationMessages.duplicateHeadClause(AST.testDisplayName(test), name))
+  }
+}
+
+/**
+ * A check's effective fixture must be usable by the app it runs: every entity the fixture creates
+ * must be covered by a datasource the app binds, or seeding it could write rows the app can never
+ * read back. An app with no explicit `Datasource` binding, or one bound datasource with no `Data`
+ * membership (the ordinary shape), holds everything, so there is nothing to check.
+ */
+function validateFixtureBinding(check: AST.TestDeclaration, run: AST.RunStep, ctx: ValidationContext): void {
+  const fixture = AST.effectiveTestClause(check, AST.isTestFixtureClause)?.fixture.ref
+  const app = run.app.ref
+  if (!fixture || !app) {
+    return
+  }
+  const bindings = ASTUtils.appBoundDatasources(app)
+  const hasCatchAll = bindings.some(binding =>
+    !binding.declaration || !ASTUtils.datasourceCollectionNames(binding.declaration)
+  )
+  if (bindings.length === 0 || hasCatchAll) {
+    return
+  }
+  const bound = new Set(bindings.flatMap(binding => ASTUtils.datasourceCollectionNames(binding.declaration!) ?? []))
+  for (const binding of AST.fixtureValueDeclarations(fixture).filter(AST.isFixtureCreateBinding)) {
+    const entity = binding.entity.ref
+    if (entity && !bound.has(entity.name)) {
+      ctx.error(run, testValidationMessages.fixtureAppBinding(fixture.name, entity.singularName, app.name))
+    }
   }
 }
 

@@ -158,8 +158,11 @@ import { createShareSheet, type TaoShareSheet } from './TR-share'
 import { StudioDeviceHost } from './TR-studio-device-host'
 import {
   StudioEnvironmentControls,
+  type TaoStudioCellRuntime,
   type TaoStudioEnvironment,
+  type TaoStudioFixturePlan,
   type TaoStudioProviderOverlay,
+  type TaoStudioScenarioRuntime,
   type TaoStudioStateCapture,
   type TaoStudioStateSeed,
 } from './TR-studio-environment'
@@ -1190,6 +1193,12 @@ namespace TR {
   export type StudioStateCapture = TaoStudioStateCapture
   /** StudioProviderOverlay is the cell-local provider wrapper exposed to generated Studio hosts. */
   export type StudioProviderOverlay = TaoStudioProviderOverlay
+  /** StudioCellRuntime is what `TR.Studio.Environment.Host` mounts above one launched app. */
+  export type StudioCellRuntime = TaoStudioCellRuntime
+  /** StudioFixturePlan is a fixture's created rows, materialized by `TR.Studio.Environment.useFixture`. */
+  export type StudioFixturePlan = TaoStudioFixturePlan
+  /** StudioScenarioRuntime is the generated app-or-view selection a `StudioCellRuntime` carries. */
+  export type StudioScenarioRuntime = TaoStudioScenarioRuntime
   /** StudioStateArtifact is the versioned, explicit-domain durable state transport. */
   export type StudioStateArtifact = TaoStudioStateArtifact
   /** StudioStateLayer is one named input to ordered state composition. */

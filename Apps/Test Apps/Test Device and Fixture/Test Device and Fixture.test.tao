@@ -1,0 +1,30 @@
+use WordFlower, Workspaces from ./
+
+fixture StarterWorkspace {
+   Home = create Workspace {
+      Name: "Home"
+}  }
+
+// `Panes()` in MainView stacks on a narrow device and sits side by side on a wide one (Tao Layout
+// and UI.md's 320-logical-pixel rule), but the test language selects by visible text, label,
+// placeholder, or #tag — it has no selector for a chosen layout direction. `on phone` and `on
+// tablet` are proven here by every check still finding its rows regardless of device, and the
+// device itself is proven at the harness level, where the runner exposes the rendered style: see
+// `packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx`.
+test "WordFlower full target" on phone with StarterWorkspace {
+   test "opens the starter workspace" {
+      run WordFlower
+
+      expect text "Home"
+   }
+   test "a nested test inherits the fixture" {
+      run WordFlower
+
+      expect text "Home"
+   }
+   test "on a tablet" on tablet {
+      run WordFlower
+
+      expect text "Home"
+   }
+}

@@ -2,6 +2,7 @@ import { AST } from '@parser'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
+import { activeDataStorePlan } from './data-store-context'
 
 type TaoFileCompileOptions = CodegenOptions & {
   configurationTypes?: string
@@ -47,10 +48,10 @@ export const FilesCompiler = {
       ${gen.textLines(importLines)}
 
       ${
-      opts.studio && apps.length > 0
+      apps.length > 0 && (opts.studio || (!opts.localDataCatalog && activeDataStorePlan() !== undefined))
         ? gen`
-          const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario
           const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture
+          ${opts.studio ? gen`const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario` : gen.noop()}
         `
         : gen.noop()
     }
