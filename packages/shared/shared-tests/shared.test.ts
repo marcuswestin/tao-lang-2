@@ -37,6 +37,21 @@ AfterEach(async () => {
   }
 })
 
+Describe('CLI', () => {
+  Test('does not call a successful remote ref containing sandbox a policy denial', () => {
+    Expect(CLI.isSandboxDenial({
+      exitCode: 0,
+      stderr: '',
+      stdout: '2ba9b9f6\trefs/heads/merged/portable-sandbox-watching',
+    })).toBe(false)
+    Expect(CLI.isSandboxDenial({
+      exitCode: 128,
+      stderr: 'hostkeys_foreach: Operation not permitted',
+      stdout: '',
+    })).toBe(true)
+  })
+})
+
 Describe('Time', () => {
   Test('pollUntil ignores only its three sentinels and returns other falsey values', async () => {
     const values: Array<false | null | number | undefined> = [false, undefined, null, 0]

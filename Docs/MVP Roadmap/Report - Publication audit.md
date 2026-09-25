@@ -360,6 +360,7 @@ about.
 - **Follow-up (2026-09-25):** The rule is gone from both sandboxes: Codex could only be given it
   as an absolute path naming a login (see `P18`), so file-watching dev loops run on the host
   through named operations instead, and the doctor treats a sandbox without Watchman as expected.
+  A stopped server now warns with a start command; a missing client still fails.
 
 ### P18 — Absolute `/Users/ro/…` paths in a generated harness config — Medium
 
