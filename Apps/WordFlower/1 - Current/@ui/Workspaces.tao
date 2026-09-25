@@ -1,7 +1,7 @@
 use Documents, Duplicate, Finish, Workspaces from @data
 use SlotNav from @tao/nav
 use Join from @tao/text
-use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Box, Col, Image, Panes, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 use DocumentScreen from ./
 
@@ -239,9 +239,26 @@ view WorkspaceDocuments(Workspace) {
 
       #workspaceDocuments
       loop Documents / Document {
-         Text(Document.Title) [card, sectionTitle]
+         Col() [card] {
+            Text(Document.Title) [sectionTitle]
+            // The list mixes drafts and finished work, so each row says which it is.
+            if Document.Final is Final {
+               StatusBadge("Final", Tint: accent)
+            }
+            if Document.Final is Draft {
+               StatusBadge("Draft")
+         }  }
          on select -> { present DocumentScreen(Document) }
 }  }  }
+
+// A status label led by a dot in the caller's color. The dot sits inside the badge, where a caller's
+// clauses cannot reach, so its color travels as a `color` value; the default keeps the common case
+// short. `background Tint` reads the value because a Capitalized word in a clause list is a value.
+view StatusBadge(Label text, Tint color default inkMuted) {
+   render Row() [gapSmall] {
+      Box() [statusDot, background Tint]
+      Text(Label) [caption]
+}  }
 
 let WordFlowerTagline = "A quiet place for words that matter."
 

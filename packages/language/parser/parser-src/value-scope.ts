@@ -43,7 +43,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       if (AST.isDataWriteField(context.container.$container)) {
         return this.createDataWriteValueScope(context.container)
       }
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'target' && AST.isRefinementExpression(context.container)) {
       return this.createPatchBaseScope(context.container)
@@ -52,7 +52,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createConfigurationReferenceScope(context.container)
     }
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'case' && AST.isBooleanWhereClause(context.container)) {
       return this.createBooleanWhereScope(context.container)
@@ -189,6 +189,31 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       [root, ...projectFiles.filter(file => file !== root)]
         .flatMap(file => file.statements.filter(AST.isAppDeclaration)),
     )
+  }
+
+  /**
+   * A design color name is a value only as an argument or a parameter default, where a `color` may be
+   * expected (Decisions §13). It is resolved against the designs this project's apps mount, as the
+   * outermost layer, so any Tao value of the same name shadows it; the argument binding and the
+   * default's declared type then decide whether a `color` was expected there. Design names are
+   * lowercase and values are Capitalized, so only a lowercase name pays for the project walk.
+   */
+  private createDesignColorScope(context: Langium.ReferenceInfo): Langium.Scope | undefined {
+    if (!/^[a-z]/.test(context.reference.$refText) || !AST.isDesignColorPosition(context.container)) {
+      return undefined
+    }
+    const root = AST.findRoot(context.container)
+    if (!AST.isTaoFile(root)) {
+      return undefined
+    }
+    const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    const projectFiles = this.packages.projectSourceFiles({
+      fromFilePath: AST.getDocument(root).uri.path,
+      workspaceFiles,
+    })
+    return this.createScopeForNodes(AST.selectedDesigns(projectFiles).flatMap(AST.designColorsOf))
   }
 
   private createValueScope(reference: AST.Node, outer?: Langium.Scope): Langium.Scope {

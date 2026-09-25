@@ -416,6 +416,74 @@ Describe('parser: minimal design declarations', () => {
   })
 })
 
+Describe('parser: color values', () => {
+  const colorSource = `
+    workspace design Theme {
+      colors {
+        accent #2f6b4f { 20 #cfe3d8 }
+        inkMuted #6b7280
+      }
+      styles { dot [width 8] }
+    }
+    app Demo { view Main Design Theme }
+    view Main() { render Badge(Tint: accent.20) }
+    view Badge(Tint color default inkMuted) { render Surface() [dot, background Tint] }
+    view Surface() { }
+  `
+
+  Test('parses a color parameter whose default and argument link to the mounted design colors', async () => {
+    const parsed = await testParseCode(colorSource)
+
+    const badge = parsed.entry.ast.statements.filter(AST.isViewDeclaration).find(view => view.name === 'Badge')
+    const parameter = badge === undefined ? undefined : AST.parametersOf(badge)[0]
+    const type = parameter?.inlineType?.type
+    Expect.Is(type, AST.isPrimitiveTypeReference)
+    Expect(type.primitive).toBe('color')
+    const fallback = parameter?.defaultValue
+    Expect.Is(fallback, AST.isValueReference)
+    Expect.Is(fallback.target.ref, AST.isDesignColorEntry)
+    Expect(fallback.target.ref.name).toBe('inkMuted')
+
+    const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+    Expect.Is(argument, AST.isMemberAccessExpression)
+    Expect(argument.shade).toBe(20)
+    Expect(argument.members).toEqual([])
+    Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+    Expect(argument.target.ref.name).toBe('accent')
+  })
+
+  Test('reads a Capitalized word after a color head as the value in scope', async () => {
+    const parsed = await testParseCode(colorSource)
+
+    const entry = AST.streamAllContents(parsed.entry.ast).filter(AST.isLayoutEntry)
+      .find(candidate => ASTUtils.layoutEntryValues(candidate)[0] === 'background')
+    Expect.Is(entry, AST.isLayoutEntry)
+    const word = ASTUtils.colorValues.clauseValueRead(entry)
+    Expect(word?.value).toBe('Tint')
+    const value = ASTUtils.colorValues.clauseValueNamed(entry, 'Tint')
+    Expect.Is(value, AST.isParameterDeclaration)
+    Expect(ASTUtils.colorValues.isColorValue(value)).toBe(true)
+  })
+
+  Test('offers design colors only where a color argument or default may be expected', async () => {
+    const parsed = await Parser.parseCode(`
+      workspace design Theme { colors { accent #2f6b4f } }
+      app Demo { view Main Design Theme }
+      view Main() {
+        state Stored = accent
+        render Badge(Tint: acent)
+      }
+      view Badge(Tint color) { render Surface() }
+      view Surface() { }
+    `)
+
+    Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      "No value named 'accent' is in scope.",
+      "No value or design color named 'acent' is in scope.",
+    ])
+  })
+})
+
 type RenameEdit = { changes?: Record<string, readonly Langium.TextEdit[]> } | null | undefined
 
 function renameSegments(document: Langium.LangiumDocument<AST.TaoFile>, edit: RenameEdit): string[] {

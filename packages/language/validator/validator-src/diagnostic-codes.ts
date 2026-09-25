@@ -14,6 +14,8 @@ export const viewValidationCodes = {
 /** designValidationCodes declares stable diagnostics reported by the ordinary design validator. */
 export const designValidationCodes = {
   capitalizedDesignName: 'design-check-capitalized-design-name',
+  clauseValueNeedsHead: 'design-check-clause-value-needs-head',
+  clauseValueType: 'design-check-clause-value-type',
   duplicateMember: 'design-check-duplicate-member',
   duplicateStyleProperty: 'design-check-duplicate-style-property',
   elementDefaultReference: 'design-check-element-default-reference',
@@ -22,4 +24,5 @@ export const designValidationCodes = {
   legacyVisualHead: 'design-check-legacy-visual-head',
   placeholderShipping: 'design-check-placeholder-shipping',
   reservedBundle: 'design-check-reserved-bundle',
+  unknownClauseValue: 'design-check-unknown-clause-value',
 } as const

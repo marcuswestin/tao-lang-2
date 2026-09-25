@@ -1,6 +1,8 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
+import { Compile } from '../Compile'
 
 /** DesignCompiler lowers structured §13 declarations while preserving the absorbed flat ABI. */
 export const DesignCompiler = {
@@ -67,9 +69,31 @@ export const DesignCompiler = {
 } as const
 
 function compileDesignSpec(spec: AST.LayoutClause): Compiled {
-  return gen`TR.Design.Spec(${
-    gen.jsLiteral(spec.entries.map(entry => normalizeDecidedHead(ASTUtils.layoutEntryValues(entry))))
-  })`
+  // A clause that reads no value stays one constant array; the common case costs nothing new.
+  if (!spec.entries.some(entry => ASTUtils.colorValues.clauseValueRead(entry) !== undefined)) {
+    return gen`TR.Design.Spec(${
+      gen.jsLiteral(spec.entries.map(entry => normalizeDecidedHead(ASTUtils.layoutEntryValues(entry))))
+    })`
+  }
+  return gen`TR.Design.Spec([${gen.join(spec.entries, compileDesignSpecEntry)}])`
+}
+
+/**
+ * A value read (`background Tint`) puts the `color` value in the term's place: the design color name
+ * it carries, which the mounted design resolves at render, so a derived color follows `Scheme`.
+ */
+function compileDesignSpecEntry(entry: AST.LayoutEntry): Compiled {
+  const values = normalizeDecidedHead(ASTUtils.layoutEntryValues(entry))
+  const word = ASTUtils.colorValues.clauseValueRead(entry)
+  if (word === undefined) {
+    return gen`${gen.jsLiteral(values)}`
+  }
+  const value = ASTUtils.colorValues.clauseValueNamed(entry, String(ASTUtils.layoutTermValue(word)))
+  Assert.defined(value, 'validated clause value names a value in scope')
+  const read = gen`${Compile.ValueDeclarationReference(value)}.jsValue`
+  // The read is always the first term, right after the head; any condition words follow it.
+  const terms = values.map((term, index) => index === 1 ? read : gen`${gen.jsLiteral(term)}`)
+  return gen`[${gen.join(terms, term => term)}]`
 }
 
 function compileColorValue(value: AST.DesignColorValue): Compiled {

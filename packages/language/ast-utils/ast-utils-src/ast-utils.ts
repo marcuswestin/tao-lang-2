@@ -6,6 +6,7 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { colorValues } from './color-values'
 import {
   commandSlots,
   commandStaticMemberText,
@@ -69,6 +70,7 @@ export const ASTUtils = {
   parseShortcut,
   reservedCommandShortcuts,
   mentionFills,
+  colorValues,
   guardBranches,
   datasourceMembershipSlot,
   datasourceCollectionNames,

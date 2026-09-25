@@ -1,4 +1,4 @@
-import { ASTUtils, Packages } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import { designValidationCodes } from '../diagnostic-codes'
@@ -23,6 +23,9 @@ const designValidationMessages = {
   bundleCycle: (design: string, path: readonly string[]) =>
     `Design '${design}' has a bundle cycle: ${path.join(' -> ')}.`,
   capitalizedDesignName: (name: string) => `Design names are lowercase: '${name}'.`,
+  clauseValueNeedsHead: (name: string) =>
+    `Color value '${name}' needs a clause head to apply to; write 'background ${name}'.`,
+  clauseValueType: (name: string, actual: string) => `Clause value '${name}' expects color, got ${actual}.`,
   duplicateMember: (name: string) => `Design member '${name}' is declared more than once.`,
   duplicateStyleProperty: (property: string, style: string) =>
     `Style property '${property}' is already present in applied style '${style}'.`,
@@ -53,6 +56,8 @@ const designValidationMessages = {
     `Style property '${property}' was already declared by '${entry}'.`,
   reservedBundle: (name: string) => `Design bundle '${name}' collides with built-in clause '${name}'.`,
   unknownBundle: (design: string, name: string) => `Design '${design}' has no bundle '${name}'.`,
+  unknownClauseValue: (name: string) =>
+    `No value named '${name}' is in scope; a Capitalized word in a clause list reads a value.`,
   unknownColor: (path: string) => `Design has no color '${path}'.`,
   unknownSize: (design: string, name: string) => `Design '${design}' has no size '${name}'.`,
   unknownToken: (design: string, name: string) => `Design '${design}' has no token '${name}'.`,
@@ -130,6 +135,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
     }
   }
   for (const bundle of bundles.values()) {
+    validateClauseValues(bundle.spec.entries, ctx)
     validateElementDefaultReferences(bundle.spec.entries, ctx)
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
     warnLegacyVisualHeads(bundle.spec.entries, ctx)
@@ -191,7 +197,9 @@ function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: Val
       })
     }
   }
-  // An element default is never reachable by name, so the rule needs no design and holds in every app.
+  // A value read and an element default are both settled by case and scope rather than by a design,
+  // so these rules hold in every app, however many designs mount the view.
+  validateClauseValues(clause.entries, ctx)
   validateElementDefaultReferences(clause.entries, ctx)
   const designEntries = clause.entries.filter(entry =>
     !LayoutValidator.isLayoutEntry(entry) && !isElementDefaultReference(entry)
@@ -337,7 +345,7 @@ function validateVisualEntry(
       if (!cssHexColor.test(token)) {
         ctx.error(entry, designValidationMessages.malformedColor(token))
       }
-    } else if (design && tokens && !tokens.has(token)) {
+    } else if (design && tokens && !tokens.has(token) && ASTUtils.colorValues.clauseValueRead(entry) === undefined) {
       ctx.error(entry, designValidationMessages.unknownToken(design.name, token))
     }
     return
@@ -459,21 +467,10 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
  * all. Project identity is batched for the same reason; see `Workspace.validateFiles`.
  */
 function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration[] {
-  return ctx.memo('design-validator.selectedWorkspaceDesigns', () => {
-    const designs = new Set<AST.DesignDeclaration>()
-    for (const file of ctx.projectFiles ?? ctx.workspaceFiles) {
-      for (const property of AST.streamAllContents(file).filter(AST.isAppProperty)) {
-        if (property.name !== 'Design' || !property.value || !AST.isValueReference(property.value)) {
-          continue
-        }
-        const design = property.value.target.ref
-        if (AST.isDesignDeclaration(design)) {
-          designs.add(design)
-        }
-      }
-    }
-    return [...designs]
-  })
+  return ctx.memo(
+    'design-validator.selectedWorkspaceDesigns',
+    () => AST.selectedDesigns(ctx.projectFiles ?? ctx.workspaceFiles),
+  )
 }
 
 /**
@@ -504,13 +501,52 @@ function warnLegacyVisualHeads(entries: readonly AST.LayoutEntry[], ctx: Validat
 }
 
 /**
+ * validateClauseValues checks each value a color head reads (`background Tint`): the word must name
+ * a value in scope, and that value must be a `color` (Decisions §13). The design name the value
+ * carries is resolved at render against whichever design is mounted, so no design is consulted here.
+ */
+function validateClauseValues(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
+  for (const entry of entries) {
+    const word = ASTUtils.colorValues.clauseValueRead(entry)
+    if (word === undefined) {
+      continue
+    }
+    const name = String(ASTUtils.layoutTermValue(word))
+    const value = ASTUtils.colorValues.clauseValueNamed(entry, name)
+    if (value === undefined) {
+      ctx.error(word, designValidationMessages.unknownClauseValue(name), {
+        code: designValidationCodes.unknownClauseValue,
+      })
+    } else if (!ASTUtils.colorValues.isColorValue(value)) {
+      // Name the kind of value rather than the parameter's own nominal type: `got text`, not `got Card.Name`.
+      const type = Type.ofValueDeclaration(value)
+      const actual = type.kind === 'primitive' ? type.primitive : Type.displayName(type)
+      ctx.error(word, designValidationMessages.clauseValueType(name, actual), {
+        code: designValidationCodes.clauseValueType,
+      })
+    }
+  }
+}
+
+/**
  * validateElementDefaultReferences rejects a Capitalized style named in a clause list. A Capitalized
  * style is an element default: it applies by element, so naming it would make one style both a
  * default and a bundle, and a Capitalized clause word is reserved for values (Decisions §13).
  */
 function validateElementDefaultReferences(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
   for (const entry of entries.filter(isElementDefaultReference)) {
-    ctx.error(entry, designValidationMessages.elementDefaultReference(entryHead(entry)), {
+    const name = entryHead(entry)
+    // A standalone word naming a `color` value is a value read that lost its head, not a style.
+    const value = ASTUtils.colorValues.standaloneClauseValue(entry) === undefined
+      ? undefined
+      : ASTUtils.colorValues.clauseValueNamed(entry, name)
+    if (value !== undefined && ASTUtils.colorValues.isColorValue(value)) {
+      ctx.error(entry, designValidationMessages.clauseValueNeedsHead(name), {
+        code: designValidationCodes.clauseValueNeedsHead,
+      })
+      continue
+    }
+    ctx.error(entry, designValidationMessages.elementDefaultReference(name), {
       code: designValidationCodes.elementDefaultReference,
     })
   }
@@ -768,8 +804,15 @@ function isCapitalized(name: string): boolean {
   return /^[A-Z]/.test(name)
 }
 
-/** requiresDesignLookup marks the entries a design resolves: bundle references and color tokens. Numeric visuals stand alone. */
+/**
+ * requiresDesignLookup marks the entries a design resolves: bundle references and color tokens.
+ * Numeric visuals stand alone, and so does a value read: the design name it carries was checked
+ * where it was written, against the designs that mount the view.
+ */
 function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
+  if (ASTUtils.colorValues.clauseValueRead(entry) !== undefined) {
+    return false
+  }
   const values = conditionedVisualValues(entry) ?? ASTUtils.layoutEntryValues(entry)
   if (isVisualEntry(entry)) {
     const head = String(values[0])

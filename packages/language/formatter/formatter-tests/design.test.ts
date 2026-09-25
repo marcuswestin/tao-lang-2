@@ -49,4 +49,23 @@ view Surface(){}`,
       `,
     ),
   )
+
+  Test(
+    'formats a color parameter, its design color default and shade argument, and a clause value read',
+    formats(
+      `view   Badge(Label text,Tint   color default   inkMuted){
+render Surface()[statusDot,background   Tint]
+}
+view Main(){render Badge("Final",Tint:accent.20)}`,
+      `
+        view Badge(Label text, Tint color default inkMuted) {
+           render Surface() [statusDot, background Tint]
+        }
+
+        view Main() {
+           render Badge("Final", Tint: accent.20)
+        }
+      `,
+    ),
+  )
 })

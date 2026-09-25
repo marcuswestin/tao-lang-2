@@ -239,7 +239,7 @@ view WorkspaceDocuments(Workspace) {
 
       #workspaceDocuments
       loop Documents / Document {
-         Col() [card, gapSmall] {
+         Col() [card] {
             Text(Document.Title) [sectionTitle]
             // The list mixes drafts and finished work, so each row says which it is.
             if Document.Final is Final {

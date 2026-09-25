@@ -69,6 +69,7 @@ design WordFlowerDesign {
       schemeCard [background schemeCanvas, ink schemeInk, radius designMd, pad designMd, gap designSm]
       Hint [background accentStrong, ink onAccent, radius designSm, pad designSm, weight 700]
       Overview [background surfaceRaised, ink schemeInk, border line, radius designMd, pad designMd, gap designSm]
+      statusDot [width 8, height 8, radius 4]
 
       // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
       // consumed by Tao's portable/web host so product chrome and content use one mounted design.
@@ -142,6 +143,7 @@ design WordFlowerDarkDesign {
    styles {
       Hint [background accentStrong, ink onAccent, radius 8, pad 8, weight 700]
       Overview [background surfaceRaised, ink ink, border line, radius 12, pad 12, gap 8]
+      statusDot [width 8, height 8, radius 4]
       Text [ink ink]
       TextInput [background surfaceRaised, border line, ink ink, radius 12, size 16]
       FormButton [background accentStrong, ink onAccent, radius 12, weight 700]

@@ -13,6 +13,7 @@ export type TaoType =
       | 'boolean'
       | 'time'
       | 'duration'
+      | 'color'
       | 'none'
       | 'shortcut'
       | 'command'
@@ -1059,8 +1060,14 @@ class TypeResolutionContext {
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
-    const rootType = this.ofValueDeclaration(expression.target.ref)
-    return this.atMemberPath(rootType, expression.members)
+    const target = expression.target.ref
+    // A shade is a design color family member (`schemeAccent.20`); nothing else has one.
+    if (expression.shade !== undefined) {
+      return AST.isDesignColorEntry(target) && AST.designColorShade(target, expression.shade)
+        ? primitiveType('color')
+        : unresolvedType()
+    }
+    return this.atMemberPath(this.ofValueDeclaration(target), expression.members)
   }
 
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
@@ -1082,6 +1089,8 @@ class TypeResolutionContext {
       DatasourceDeclaration: declaration =>
         declaration.value ? this.ofExpression(declaration.value) : primitiveType('datasource'),
       DesignDeclaration: () => primitiveType('design'),
+      DesignColorEntry: () => primitiveType('color'),
+      DesignToken: () => primitiveType('color'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),

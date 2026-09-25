@@ -4,7 +4,7 @@ use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something
@@ -16,9 +16,10 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //   name, is a compile error
 // - `selected` joins `pressed`, `focused`, and `hovered`; the navigation host supplies it for the
 //   active tab, so `NavigationTab` carries the active look and `NavigationTabActive` is retired
-// - `color` is a parameter type. A default or an argument is a design color name or another `color`
-//   value, and `background Tint` inside the view reads it, resolved against the mounted design.
-//   `StatusBadge` in @ui/Workspaces forces it: the documents list mixes drafts and finished work
+// - `color` is a view parameter type. A default or an argument is a design color name or another
+//   `color` value, and `background Tint` inside the view reads it, resolved against the mounted
+//   design. `StatusBadge` in @ui/Workspaces forces it: the documents list mixes drafts and finished
+//   work
 // - `tao fix` rewrites `bg`/`fg` to `background`/`ink` and moves flat design entries into the typed
 //   blocks, so this directory's designs are written only in the typed form
 //

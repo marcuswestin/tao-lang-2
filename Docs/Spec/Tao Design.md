@@ -9,7 +9,8 @@ Current implementation status: Tao-authored `design` declarations hold typed `co
 `text`, `screens`, and `styles` blocks in ordinary source (`Decisions.md` §13). An app mounts one
 declaration through `Design`; render specs resolve its styles and merge layout plus the implemented
 `background`, `border`, `ink`, `line`, `radius`, `size`, and `weight` visual entries into the
-existing native root. Static validation owns duplicates, reserved names, references, cycles, colors,
+existing native root. A view may take a `color` parameter that carries a design color into its
+clauses. Static validation owns duplicates, reserved names, references, cycles, colors,
 tags, conditions, and uniquely resolvable app design selection. Parameterized entries, environment
 values other than `Scheme`, and the `when Screen` condition are decided but not implemented. `rules { }` is deferred past MVP, as are `tao design` commands, screenshot
 comparison, design lockfiles, and AI-assisted design iteration.
@@ -183,6 +184,29 @@ giving a design value a Capitalized name, is a compile error.
 
 `patterns { }` is not carried forward: a named arrangement with slots is an ordinary `view` placing
 `@@content`.
+
+### Color values — implemented
+
+A view that tints something inside itself — which a caller's clauses cannot reach, since the root's
+inner renders are private — takes a `color` parameter:
+
+```tao
+view StatusBadge(Label text, Tint color default inkMuted) {
+   render Row() [gapSmall] {
+      Box() [statusDot, background Tint]
+      Text(Label) [caption]
+}  }
+```
+
+A caller passes a design color name, `StatusBadge("Final", Tint: accent)`, including a shade
+(`accent.20`), or another `color` parameter. In a clause list a Capitalized word reads a value, so
+`background Tint` uses the parameter, and the name resolves against the mounted design at render —
+a derived color follows `Scheme`. Every value starts as a design name: text, numbers, data, and
+conversions never become a `color`, so the colors any clause can receive stay listed in source.
+Diagnostics cover a value of the wrong type, a Capitalized word that names no value, a color value
+standing alone as an entry (it needs a clause head), and an unknown shade. `color` is only a view
+parameter's type; `size` parameters, `color` state, `set`, and aliases wait for a feature that
+forces them.
 
 ### Conditions — partly implemented
 

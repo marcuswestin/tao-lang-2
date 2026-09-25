@@ -366,8 +366,8 @@ keyboard and accessibility ledgers, the navigation follow-ups, `tao test` harden
 shell-completion tail. Each is a plan-and-execute task on its own.
 
 - Design system status (2026-09-25): the `bg`/`fg` and flat-catalog deprecations landed; the
-  WordFlower "DESIGN VALUES" tranche is in progress (casing rule as errors, `selected`, `color`
-  parameters, `tao fix` migration); `rules { }` and all rule checks are deferred past MVP. The plan's
+  WordFlower "DESIGN VALUES" tranche is absorbed on its branch (casing rule as errors, `selected`,
+  `color` parameters, `tao fix` migration); `rules { }` and all rule checks are deferred past MVP. The plan's
   "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
 ### A15 — Studio's simulated-user lane — **done**

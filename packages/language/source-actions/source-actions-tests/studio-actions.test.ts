@@ -342,6 +342,39 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("First") [gap 8, body, size 18]')
   })
 
+  Test('inspects and edits a clause that reads a color value without treating it as a token', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme { colors { accent #2f6b4f } }
+      app Demo { view MainView Design Theme }
+      view MainView() { render Badge(Tint: accent) }
+      view Badge(Tint color default accent) {
+         render Text("Badge") [background Tint, pad 4]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("Badge")'))
+    const inspection = SourceActions.inspectStudioRender(document, id)
+
+    Expect(inspection.styleEntries).toEqual([['background', 'Tint']])
+    Expect(inspection.explorations).toEqual([['pad', 4]])
+    Expect(inspection.styleProvenance[0]?.landing).toEqual({ kind: 'element-inline' })
+    // Only a raw color can become a token; a value read is refused as a request, not a crash.
+    await Expect(SourceActions.applyStudioPatch(document, {
+      entry: ['background', 'Tint'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'badge' },
+      renderId: id,
+    })).rejects.toThrow('Current Tao design tokens can only promote raw background, bg, border, fg, or ink colors.')
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['ink', 'Tint'],
+      kind: 'set-style-entry',
+      landing: { kind: 'element-inline' },
+      renderId: id,
+    })
+    Expect(patch.content).toContain('Text("Badge") [background Tint, pad 4, ink Tint]')
+  })
+
   Test('inspects the owning view and its root render so a host can size a focused frame to it', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui

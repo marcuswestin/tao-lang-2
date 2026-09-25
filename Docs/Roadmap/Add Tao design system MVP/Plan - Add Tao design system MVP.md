@@ -143,7 +143,7 @@ recipes and variants, and a state is an ordinary `when` condition. The structure
 - **Landed 2026-09-22** (`merged/design-system-mvp-5-7-44b3e6`): `bg`/`fg` warn in favour of
   `background`/`ink`; a design keeping colors or bundles outside the typed blocks draws one warning;
   `tao create` and the starters write only the typed form.
-- **In progress: the design values tranche**, below — the casing rule, `selected`, `color`
+- **Absorbed 2026-09-25: the design values tranche**, below — the casing rule, `selected`, `color`
   parameters, and the `tao fix` migration.
 
 Exit criteria: every §13 construct the MVP keeps is implemented, and every one it drops is recorded
@@ -173,10 +173,16 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 
 The phased tooling and rollout work this step prepares is laid out in full below.
 
-## Design values tranche (in progress, 2026-09-25)
+## Design values tranche (absorbed, 2026-09-25)
 
-WordFlower `2 - Next` holds the contract (`WordFlower.tao-next` header, "DESIGN VALUES"). It finishes
-the MVP design surface in four decision groups, recorded in `Decisions.md` §13:
+WordFlower `2 - Next` held the contract (`WordFlower.tao-next` header, "DESIGN VALUES"); `1 - Current`
+now matches it and both read absorbed. It finishes the MVP design surface in four decision groups,
+recorded in `Decisions.md` §13. Choices the implementation made where the contract was silent:
+`color` is rejected everywhere except a view parameter; a design name counts as a `color` only
+directly as an argument or a default (not inside a `when` passed as one); where several designs can
+mount a view a name must exist in at least one, and each app resolves it against its own; `color` is
+now a keyword. Not built: go-to-definition from `background Tint` to its parameter, and a journey
+step that asserts a rendered color.
 
 1. **The clause-list casing rule is a compile error.** A reserved lowercase word is a clause head,
    any other lowercase word is a design name (a style in entry position, a color or size in value
