@@ -566,7 +566,7 @@ export const MergeWithMainCommand = {
       const completed = [
         `PASS  Merged '${lockedPreflight.branch}' into main and archived it as ${archiveName(lockedPreflight.branch)}.`,
         `PASS  Preserved the clean invoking worktree at ${lockedPreflight.featureRoot} on detached HEAD; `
-        + 'archive its owning task when you are ready to remove it.',
+        + 'run `./agent start-branch feat/<name>` for the next slice, or archive its owning task.',
       ]
       writeLines(dependencies, completed, 'success')
       return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
