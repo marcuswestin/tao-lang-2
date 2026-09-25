@@ -5,7 +5,7 @@ design PantryDesign {
       canvas #f7f3ea
       surface #ffffff
       ink #2b2118
-      inkMuted #878077
+      inkMuted #746d64
       accent #b5562a
       accentStrong #934926
       accentSoft #f2e1d9
@@ -14,6 +14,7 @@ design PantryDesign {
       dangerSoft #f8e6e3
       onAccent #ffffff
    }
+
    styles {
       Text [ink ink]
       TextInput [background surface, border line, ink ink, radius 12, size 16]
@@ -24,9 +25,9 @@ design PantryDesign {
       NavigationHeader [background surface, border line]
       NavigationTitle [size 18, weight 700, ink ink]
       NavigationTabs [gap 6, pad 6, background surface, border line]
-      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600]
-      NavigationTabActive [NavigationTab, background accentSoft, ink accentStrong]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
+
       screen [fill, content top stretch, pad 24, background canvas]
       column [width max 720, gap 16]
       eyebrow [size 13, line 18, weight 700, ink accentStrong]

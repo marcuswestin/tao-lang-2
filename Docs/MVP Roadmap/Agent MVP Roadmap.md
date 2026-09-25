@@ -84,7 +84,8 @@ is `private`. Nobody outside the repository can install Tao.
   web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
   the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
   "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao dev`, the
-  `tart` virtual-machine gate, removing the managed Node, signing and notarization with the
+  `tart` virtual-machine gate, moving `tao test` onto `bun test` and `tao ship` off Node so the
+  release needs no Node at all, signing and notarization with the
   Foundation Models helper (both need the Developer ID certificate), a test for the interactive
   download of a pinned release, and publishing.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
@@ -381,6 +382,12 @@ Work with an existing plan that needs implementation rather than decision: the d
 (`Docs/Roadmap/Add Tao design system MVP/`, except the caller-override question in `R9`), the
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
+
+- Design system status (2026-09-25): **MVP done**. The `bg`/`fg` and flat-catalog deprecations,
+  WordFlower "DESIGN VALUES" tranche, casing errors, `selected`, `color` parameters, and `tao fix`
+  migration are implemented. Styles and sizes used by a shared view are checked across every
+  mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
+  plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
 ### A15 — Studio's simulated-user lane — **done**
 

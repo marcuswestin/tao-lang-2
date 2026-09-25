@@ -62,6 +62,12 @@ behind it.
   auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
   change to route around the denial. `.rulesync/permissions.jsonc` grants only the named
   `./agent unsandboxed` host commands in default sessions; landing still needs authorization for the named slice.
+- No agent sandbox reaches Watchman's socket, and only the opt-in `tao-local-services` profile
+  reaches Docker's, by design: both sockets live under a developer's home directory, which a tracked
+  config cannot name. Run file-watching dev loops with
+  `./agent unsandboxed app-dev`, `studio`, or `studio-native`, and the local InstantDB stack with
+  `./agent unsandboxed local-instantdb start` or `stop`. A denied Watchman socket in a sandbox is
+  expected; sandboxed tests and builds crawl the tree without it.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
   `./agent unsandboxed studio-smoke` or `./agent unsandboxed studio-proof-real-app`; if the host
   blocks Chrome there, rerun only with explicit review, and never reuse an existing browser profile.

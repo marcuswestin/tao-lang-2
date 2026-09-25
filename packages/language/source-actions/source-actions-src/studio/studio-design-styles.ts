@@ -25,7 +25,7 @@ import {
   setRenderLayoutEntrySource,
 } from './studio-layout-entries'
 import { requireLocalRenderId, requireRenderById } from './studio-render-occurrences'
-import { applySourceEdits, requireIdentifier, type SourceEdit } from './studio-source-text'
+import { applySourceEdits, requireDesignValueName, requireIdentifier, type SourceEdit } from './studio-source-text'
 
 /** styleProvenance explains where one style entry on a render comes from and how far an edit to it reaches. */
 export function styleProvenance(
@@ -212,10 +212,11 @@ async function forkStyleBundle(
     )
   }
   const names = designValueNames(design)
+  // A render names the fork, so it is a lowercase style even when forked from a Capitalized one.
   const forkName = landing.forkName === undefined
-    ? uniqueDesignMemberName(`${landing.bundleName}Variant`, names)
+    ? uniqueDesignMemberName(`${lowercaseFirst(landing.bundleName)}Variant`, names)
     : landing.forkName
-  requireIdentifier(forkName, 'forked style bundle')
+  requireDesignValueName(forkName, 'forked style bundle')
   if (names.has(forkName)) {
     Errors.throwUserInput(`Studio design member already exists: ${forkName}`)
   }
@@ -286,7 +287,7 @@ async function setColorToken(
   values: StudioStyleEntry,
   tokenName: string,
 ): Promise<string> {
-  requireIdentifier(tokenName, 'color token')
+  requireDesignValueName(tokenName, 'color token')
   const [head, value, ...rest] = values
   if (!colorEntryHeads.has(head) || typeof value !== 'string' || !cssHexColor.test(value) || rest.length > 0) {
     Errors.throwUserInput(
@@ -295,51 +296,32 @@ async function setColorToken(
   }
   const source = document.textDocument.getText()
   const colorBlocks = design.block.members.filter(AST.isDesignColorsBlock)
-  if (colorBlocks.length > 0 || designUsesStructuredSurface(design)) {
-    const entries = colorBlocks.flatMap(block => block.entries).filter(candidate => candidate.name === tokenName)
-    if (entries.length > 1) {
-      Errors.throwUserInput(`Studio color token is not uniquely declared: ${tokenName}`)
-    }
-    const tokenEdit = entries[0]?.$cstNode === undefined
-      ? colorBlocks[0] === undefined
-        ? designMemberInsertionEdit(source, design, `colors { ${tokenName} ${value} }`)
-        : typedBlockEntryInsertionEdit(source, colorBlocks[0], `${tokenName} ${value}`)
-      : {
-        end: entries[0].$cstNode.end,
-        replacement: `${tokenName} ${value}`,
-        start: entries[0].$cstNode.offset,
-      }
-    const exploration = requireRenderEntryByHead(render, head)
-    return await Formatter.formatCode(applySourceEdits(source, [
-      tokenEdit,
-      {
-        end: exploration.$cstNode!.end,
-        replacement: `${head} ${tokenName}`,
-        start: exploration.$cstNode!.offset,
-      },
-    ]))
-  }
-  const tokens = design.block.members.filter(AST.isDesignToken).filter(token => token.name === tokenName)
-  if (tokens.length > 1) {
+  // An existing color is edited where it stands, even flat; a new one always lands in `colors { }`.
+  const entries = [
+    ...colorBlocks.flatMap(block => block.entries),
+    ...design.block.members.filter(AST.isDesignToken),
+  ].filter(candidate => candidate.name === tokenName)
+  if (entries.length > 1) {
     Errors.throwUserInput(`Studio color token is not uniquely declared: ${tokenName}`)
   }
-  const tokenEdit = tokens[0]?.$cstNode === undefined
-    ? designMemberInsertionEdit(source, design, `${tokenName} ${value}`)
+  const tokenEdit = entries[0]?.$cstNode === undefined
+    ? colorBlocks[0] === undefined
+      ? designMemberInsertionEdit(source, design, `colors { ${tokenName} ${value} }`)
+      : typedBlockEntryInsertionEdit(source, colorBlocks[0], `${tokenName} ${value}`)
     : {
-      end: tokens[0].$cstNode.end,
+      end: entries[0].$cstNode.end,
       replacement: `${tokenName} ${value}`,
-      start: tokens[0].$cstNode.offset,
+      start: entries[0].$cstNode.offset,
     }
   const exploration = requireRenderEntryByHead(render, head)
-  const content = applySourceEdits(source, [
+  return await Formatter.formatCode(applySourceEdits(source, [
     tokenEdit,
     {
       end: exploration.$cstNode!.end,
       replacement: `${head} ${tokenName}`,
       start: exploration.$cstNode!.offset,
     },
-  ])
-  return await Formatter.formatCode(content)
+  ]))
 }
 
 const sizeTokenHeads = new Set(['gap', 'height', 'line', 'margin', 'pad', 'radius', 'size', 'width'])
@@ -351,7 +333,7 @@ async function setSizeToken(
   values: StudioStyleEntry,
   tokenName: string,
 ): Promise<string> {
-  requireIdentifier(tokenName, 'size token')
+  requireDesignValueName(tokenName, 'size token')
   const [head, ...terms] = values
   const numberIndices = terms.flatMap((term, index) => typeof term === 'number' ? [index] : [])
   if (!sizeTokenHeads.has(head) || numberIndices.length !== 1 || Number(terms[numberIndices[0]!]) <= 0) {
@@ -412,14 +394,8 @@ function uniqueDesignMemberName(base: string, names: ReadonlySet<string>): strin
   return `${base}${suffix}`
 }
 
-function designUsesStructuredSurface(design: AST.DesignDeclaration): boolean {
-  return design.block.members.some(member =>
-    AST.isDesignColorsBlock(member)
-    || AST.isDesignSizesBlock(member)
-    || AST.isDesignTextBlock(member)
-    || AST.isDesignScreensBlock(member)
-    || AST.isDesignStylesBlock(member)
-  )
+function lowercaseFirst(name: string): string {
+  return `${name.slice(0, 1).toLowerCase()}${name.slice(1)}`
 }
 
 function designValueNames(design: AST.DesignDeclaration): Set<string> {
@@ -455,17 +431,15 @@ function designSpecInsertionEdit(
   if (AST.isDesignTextEntry(base) && AST.isDesignTextBlock(base.$container)) {
     return typedBlockEntryInsertionEdit(source, base.$container, entry)
   }
-  return designMemberInsertionEdit(source, design, entry)
+  return preferredStyleInsertionEdit(source, design, entry)
 }
 
+/** preferredStyleInsertionEdit lands a new style in the design's `styles { }` block, creating it when missing. */
 function preferredStyleInsertionEdit(source: string, design: AST.DesignDeclaration, entry: string): SourceEdit {
   const blocks = design.block.members.filter(AST.isDesignStylesBlock)
-  if (blocks[0] !== undefined) {
-    return typedBlockEntryInsertionEdit(source, blocks[0], entry)
-  }
-  return designUsesStructuredSurface(design)
+  return blocks[0] === undefined
     ? designMemberInsertionEdit(source, design, `styles { ${entry} }`)
-    : designMemberInsertionEdit(source, design, entry)
+    : typedBlockEntryInsertionEdit(source, blocks[0], entry)
 }
 
 function typedBlockEntryInsertionEdit(source: string, block: AST.Node, entry: string): SourceEdit {

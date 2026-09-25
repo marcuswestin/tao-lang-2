@@ -81,6 +81,11 @@ export type TaoProps = TaoLayoutProps & {
   /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
   designDefault?: string
   /**
+   * selected marks the element its host names as the current choice, such as the active navigation
+   * tab. The `when selected` design condition reads it on this link alone; it never inherits.
+   */
+  selected?: boolean
+  /**
    * declarationSpec holds the public style defaults a view or scene declares in its header clause.
    * It applies to the occurrence root of every render branch, above the element default and below
    * the caller's own clauses at the same link.
@@ -322,7 +327,7 @@ function resolveDesignProps(
   const designSpec = props.designSpec === undefined || props.designSource === undefined
     ? props.designSpec
     : DesignControls.Source(props.designSpec, props.designSource)
-  const condition = interactionCondition(props)
+  const condition = DesignControls.withSelected(interactionCondition(props), props.selected)
   // The stdlib element default resolves on its own because it is the weakest authored layer: a
   // caller's clause overrules the default of the element it reaches. The declaration header and
   // this link's own clauses resolve together, header first, at this link's own strength.

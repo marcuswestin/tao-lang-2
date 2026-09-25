@@ -95,6 +95,8 @@ Examples:
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed studio Apps/HNReader
+  ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
 

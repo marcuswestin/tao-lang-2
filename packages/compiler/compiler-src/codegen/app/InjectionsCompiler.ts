@@ -124,6 +124,8 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         text: () => gen`string`,
         time: () => gen`number`,
         duration: () => gen`number`,
+        // A color is its design name; the mounted design resolves it.
+        color: () => gen`string`,
         shortcut: () => gen`string`,
         command: () => gen`TR.CommandValue`,
         design: () => gen`any`,

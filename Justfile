@@ -550,7 +550,7 @@ verify-changed no_cache='false': _deps
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
 # catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
-# Verify everything plus the browser, native and bundle lanes. --no-cache ignores a recorded green tree
+# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-full no_cache='false': _deps

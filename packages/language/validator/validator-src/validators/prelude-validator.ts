@@ -12,6 +12,7 @@ const expectedPrimitives = [
   'list',
   'time',
   'duration',
+  'color',
   'action',
   'shortcut',
   'command',

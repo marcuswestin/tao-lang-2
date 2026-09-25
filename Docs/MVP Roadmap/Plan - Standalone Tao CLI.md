@@ -764,18 +764,44 @@ stands between `A2` and done, in the order to take it:
    `android.ts:236,484` resolve the runtime toolchain through the repository and throw outside a
    checkout; `RuntimeToolchainPaths.packageRoot` is the replacement. The files belong to the
    device-loop work (`A4`, `A9`), so this is coordinated with it. Web alone does not meet `A2`'s
-   "create through dev" for a language whose apps are mobile apps.
+   "create through dev" for a language whose apps are mobile apps. A candidate fix for iOS, with an
+   opt-in `ios` target for the standalone acceptance behind a named host command, passed repository
+   verification on 2026-09-25 but has not yet opened a Simulator from an installed binary; the
+   acceptance's failure check should match any `did not open ` line, because a Companion link is not
+   an `exp://` one. Android's `android.ts:257` takes the same fix.
 2. **The clean-machine gate** of implementation decision 10: the acceptance run inside a fresh,
    vanilla macOS `tart` virtual machine, to catch a dependency on something the development Mac
    already has. It needs `tart` installed and a macOS image of tens of GB.
-3. **Removing the managed Node**: uncertainty 1 below, with two small experiments to run before
-   choosing a route.
-4. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
+3. **Moving `tao test` onto `bun test`**, which removes the managed Node, decided 2026-09-25 over
+   running Jest under Bun (uncertainty 1). The journeys need little of Jest itself — `describe`,
+   `test`, `expect`, and one setup file mocking `expo-clipboard`, `expo-haptics`, and `Share` —
+   and most of `jest-expo`: its Babel transform of React Native's Flow-typed sources, platform
+   resolution, React Native's `jest/setup.js` mocks, and Expo's native-module definitions. The
+   route is a `bun test` preload that rebuilds those, reusing the same Babel transform inside a Bun
+   plugin, with `@testing-library/react-native` 14, which replaced the deprecated
+   `react-test-renderer` with `test-renderer` and made Jest optional. Shim first: run the existing
+   test sources unchanged under `bun test`, with Jest beside it, until both agree file by file; only
+   then move `jest.*` calls to runner-neutral names and remove Jest, including from the
+   repository's own `expo-host` tests. Unproven: nobody has published React Native Testing Library
+   running under `bun test`, so a spike on one starter's journeys comes first.
+4. **`tao ship` without Node.** A spike on 2026-09-25 ran the iOS chain from an installed release
+   with no Node on `PATH`: `expo prebuild` succeeds under the binary acting as Bun, despite Expo's
+   documentation asking for Node; `pod install` and a Release `xcodebuild` for the Simulator,
+   JavaScript bundle included, succeed when a two-line `node` script that runs
+   `BUN_BE_BUN=1 <tao> "$@"` answers the Podfile's and Xcode's `node` calls. `tao ship` needs three
+   changes: run prebuild through the binary as `tao dev` runs Expo (today it calls
+   `node_modules/.bin/expo`, whose shebang wants Node); put that script first on `PATH` for
+   `pod install` and `xcodebuild` and name it as `NODE_BINARY` in `ios/.xcode.env.local`; and pass
+   `RuntimeToolchainPaths.expoEnvironment()` to all three, because Metro otherwise climbs to
+   repository paths that do not exist in an install. Signing, export, and upload were not run, and
+   the spike's Mac also had a Node elsewhere, so the clean-machine gate is what proves none leaks.
+   Android builds call `node` from Gradle and have not been tried.
+5. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
    certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
-5. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
+6. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
    covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
    (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
-6. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
+7. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
    licence (`R1`).
 
 Meanwhile about half of all verification-lane runs fail on tests that spawn `git` and hang for their
@@ -799,7 +825,8 @@ landing this work needs.
    there. The Node-free alternative is Bun's own runner with the community `bun-test-react-native`
    setup, which reuses `jest-expo`'s native-module definitions (Expo SDK 56 and later) but moves the
    journeys off Jest. The Vitest React Native projects themselves require Node, and Expo documents
-   only Jest.
+   only Jest. **Decided 2026-09-25:** Bun's own runner, with a harness Tao owns (Remaining work,
+   item 3); the two Jest-under-Bun experiments are dropped.
 2. **Is a `bun install`-resolved host reproducible enough for `tao ship`?** `ship-fingerprints`
    hashes the runtime. Settle by installing the same lockfile twice on different machines and
    comparing the fingerprint.

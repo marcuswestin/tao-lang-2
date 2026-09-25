@@ -56,7 +56,11 @@ function workNode(spec: NodeSpec): WorkNode {
 
 function schedule(
   specs: readonly NodeSpec[],
-  options: { expectedMs?: Record<string, number>; jobs?: number } = {},
+  options: {
+    expectedMs?: Record<string, number>
+    jobs?: number
+    stopOnFailure?: (state: WorkState) => boolean | Promise<boolean>
+  } = {},
 ): ScheduledRun {
   const specsByName = new Map(specs.map(spec => [spec.name, spec]))
   const holds = new Map(specs.map(spec => [spec.name, Deferred()]))
@@ -83,6 +87,7 @@ function schedule(
       }
       return { exitCode: cancelled ? null : specsByName.get(state.name)?.exitCode ?? 0 }
     },
+    stopOnFailure: options.stopOnFailure,
     watchInterrupt: request => {
       interrupt = request
       return () => {}
@@ -101,6 +106,56 @@ function schedule(
 }
 
 Describe('work graph scheduling', () => {
+  Test('stops admitting pending work after a definite failure and drains work already running', async () => {
+    const run = schedule([
+      { exitCode: 1, name: 'failed', priority: 2 },
+      { held: true, name: 'active', priority: 1 },
+      { name: 'pending' },
+    ], { jobs: 2, stopOnFailure: state => state.name === 'failed' })
+
+    await until(() => run.stateOf('pending').status === 'skipped', {
+      description: 'the pending node to be skipped after a definite failure',
+    })
+    Expect(run.started).toEqual(['failed', 'active'])
+    Expect(run.stateOf('active').status).toBe('running')
+    Expect(run.stateOf('pending').reason).toBe('not run after definite failure: failed')
+    Expect(run.stateOf('pending').failure?.kind).toBe('fail-fast')
+
+    run.release('active')
+    const result = await run.finished
+    Expect(result.haltedBy).toBe('failed')
+    Expect(result.interrupted).toBe(false)
+    Expect(run.stateOf('failed').status).toBe('failed')
+    Expect(run.stateOf('active').status).toBe('passed')
+  })
+
+  Test('holds admissions while an asynchronous failure classification is pending', async () => {
+    const classification = Deferred()
+    const run = schedule([
+      { exitCode: 1, name: 'failed', priority: 2 },
+      { held: true, name: 'active', priority: 1 },
+      { name: 'pending' },
+    ], {
+      jobs: 2,
+      stopOnFailure: async () => {
+        await classification.promise
+        return true
+      },
+    })
+
+    await until(() => run.stateOf('failed').status === 'failed', {
+      description: 'the failure awaiting classification',
+    })
+    run.release('active')
+    await until(() => run.stateOf('active').status === 'passed', {
+      description: 'the active node to finish during classification',
+    })
+    Expect(run.started).toEqual(['failed', 'active'])
+    classification.resolve()
+    await run.finished
+    Expect(run.stateOf('pending').status).toBe('skipped')
+  })
+
   Test('holds a node until everything it needs has passed', async () => {
     const run = schedule([
       { held: true, name: 'compile' },

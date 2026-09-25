@@ -200,6 +200,11 @@ design WordFlowerDesign {
                   radius md, weight 700]
       Checkbox [ink ink]
       Progress [background edge, ink accent, radius 999]
+      statusDot [width sm, height sm, radius xs]
+
+      // The active tab takes its look from the same default, through the host-supplied `selected`.
+      NavigationTab [pad sm, radius sm, ink muted, background accent.20 when selected,
+                     ink accent.60 when selected]
 
       // The generated interaction layers are runtime renderings; an app restyles them here without
       // declaring or owning them (KEY-D13).
@@ -945,6 +950,15 @@ view EmptyInspector() {
    render Text("Select a paragraph")
 }
 
+// A status label led by a dot in the caller's color. The dot sits inside the badge, where a caller's
+// clauses cannot reach, so its color travels as a `color` value; a Capitalized word in a clause list
+// is a value, so `background Tint` reads it.
+view StatusBadge(Label text, Tint color default muted) {
+   render Row() [gap xs] {
+      Box() [statusDot, background Tint]
+      Text(Label)
+}  }
+
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap xs, pad sm] {
@@ -957,6 +971,12 @@ view FileTree(Workspace) {
                // Relative @documents resolves to the nearest unique pane; `reveal` focuses an equal
                // mount rather than stacking a second copy of the same product state.
                on press -> { reveal DocumentScreen(Document) in @documents }
+            }
+            if Document.Final is Final {
+               StatusBadge("Final", Tint: accent)
+            }
+            if Document.Final is Draft {
+               StatusBadge("Draft")
             }
             #openRooted
             FormButton("Rooted") {
