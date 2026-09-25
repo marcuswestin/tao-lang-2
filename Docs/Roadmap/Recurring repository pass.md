@@ -28,6 +28,10 @@ notes after each completed pass; Git history is the longer record.
 
 ## Consider next time
 
+- Shortlist developer-environment work from the generated [open index](<Developer environment upgrades.md>).
+  Check each entry's evidence, impact, dependencies, acceptance, and live branch owner against
+  current `main` and the [archive](<Developer environment upgrades archive.md>); reproduce candidates,
+  defer owned or blocked work, and take only a few high-impact items with achievable acceptance checks.
 - Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
   entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
   and current risks rather than repeating every category.
@@ -50,6 +54,9 @@ notes after each completed pass; Git history is the longer record.
     projects' official security notices.
   - If the repository gains another dependency system, identify its official audit command or
     advisory source during planning and add it here only if future passes will need it.
+- Check the delegation routing table against official model availability, harness precedence, and
+  current input, cache-read, cache-write, and output pricing. Compare completed-task cost and review
+  quality before changing a tier; an API-equivalent estimate is not a plan or subscription bill.
 
 ## Run a pass
 

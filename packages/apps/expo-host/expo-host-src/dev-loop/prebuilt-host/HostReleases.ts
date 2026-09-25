@@ -26,7 +26,13 @@ import type { HostSearch, PrebuiltHost } from './PrebuiltHosts'
 const HOST_RELEASE_TAG_PREFIX = 'companion-host-'
 /** The repository whose releases carry prebuilt hosts; `TAO_HOST_RELEASES` names another. */
 const DEFAULT_HOST_RELEASES_REPOSITORY = 'marcuswestin/tao-lang-2'
-const RELEASES_TO_CONSIDER = 30
+/**
+ * Host releases share the repository's release list with the CLI's and Studio's, so the newest
+ * host can sit pages deep. Pages are read one at a time and only until a host fits, within a bound
+ * that keeps an unauthenticated `tao dev` well inside GitHub's hourly request allowance.
+ */
+const RELEASES_PER_PAGE = 30
+const RELEASE_PAGES_TO_CONSIDER = 5
 
 /** HostReleaseAssets names one platform's two assets in a host release. */
 export type HostReleaseAssets = { binary: string; manifest: string }
@@ -78,7 +84,7 @@ export async function downloadCompatibleHost(
   const repository = options.repository ?? hostReleasesRepository()
   const names = hostReleaseAssets(platform)
   const refused: string[] = []
-  for (const release of await listReleases(fetchImpl, repository)) {
+  for await (const release of listReleases(fetchImpl, repository)) {
     if (release.draft || !release.tag_name.startsWith(HOST_RELEASE_TAG_PREFIX)) {
       continue
     }
@@ -101,16 +107,22 @@ export async function downloadCompatibleHost(
   return { refused }
 }
 
-async function listReleases(
+/** listReleases yields the repository's releases newest first, reading each page only when needed. */
+async function* listReleases(
   fetchImpl: NonNullable<HostDownloadOptions['fetch']>,
   repository: string,
-): Promise<Release[]> {
-  const url = `https://api.github.com/repos/${repository}/releases?per_page=${RELEASES_TO_CONSIDER}`
-  const body = await fetchJson(fetchImpl, url, { Accept: 'application/vnd.github+json' })
-  if (!Array.isArray(body)) {
-    Errors.throwHostEnvironment(`GitHub answered ${url} with something other than a list of releases.`)
+): AsyncGenerator<Release> {
+  for (let page = 1; page <= RELEASE_PAGES_TO_CONSIDER; page += 1) {
+    const url = `https://api.github.com/repos/${repository}/releases?per_page=${RELEASES_PER_PAGE}&page=${page}`
+    const body = await fetchJson(fetchImpl, url, { Accept: 'application/vnd.github+json' })
+    if (!Array.isArray(body)) {
+      Errors.throwHostEnvironment(`GitHub answered ${url} with something other than a list of releases.`)
+    }
+    yield* body.filter(isRelease)
+    if (body.length < RELEASES_PER_PAGE) {
+      return
+    }
   }
-  return body.filter(isRelease)
 }
 
 function isRelease(value: unknown): value is Release {

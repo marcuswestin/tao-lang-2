@@ -18,6 +18,31 @@ import {
 } from '../TaoRuntime-src/TR-studio-preview'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
+Describe('Studio cell publication bootstrap', () => {
+  Test('requests a fresh iframe bundle when the registered cell is newer than its publication', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 3, project: '/demo' }
+    const runtime = { identity: { ...publication, compileRevision: 4 } }
+    const outcome = StudioPreview.Bootstrap.reconcile(runtime, publication, revision => reloads.push(revision))
+    Expect(outcome).toBe('newer')
+    Expect(reloads).toEqual([4])
+  })
+
+  Test('applies only a matching cell and does not reload for an older response', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 4, project: '/demo' }
+    const reconcile = (revision: number) =>
+      StudioPreview.Bootstrap.reconcile(
+        { identity: { ...publication, compileRevision: revision } },
+        publication,
+        newer => reloads.push(newer),
+      )
+    Expect(reconcile(3)).toBe('older')
+    Expect(reconcile(4)).toBe('matched')
+    Expect(reloads).toEqual([])
+  })
+})
+
 type Listener = (event: unknown) => void
 
 /** settled drains the microtask turns a queued action root takes to reach its first gate. */

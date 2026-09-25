@@ -199,6 +199,18 @@ export async function readText(inputPath: string): Promise<string> {
   return nodeFs.readFile(inputPath, 'utf8')
 }
 
+/** Read at most maxBytes from the start of a UTF-8 file, without loading the rest. */
+export async function readTextPrefix(inputPath: string, maxBytes: number): Promise<string> {
+  const handle = await nodeFs.open(inputPath, 'r')
+  try {
+    const bytes = Buffer.alloc(maxBytes)
+    const { bytesRead } = await handle.read(bytes, 0, maxBytes, 0)
+    return bytes.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await handle.close()
+  }
+}
+
 /** readTextSync reads UTF-8 text for synchronous compiler and validator passes. */
 export function readTextSync(inputPath: string): string {
   return nodeReadFileSync(inputPath, 'utf8')

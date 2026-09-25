@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { createUpdateService, type ExpoUpdateAsset, type UpdateService } from '../update-server-src/update-service'
 import { FilesystemUpdateStore, InMemoryUpdateStore } from '../update-server-src/update-store'
 
-const baseUrl = 'https://updates.tao-lang.dev'
+const baseUrl = 'https://updates.devtao.com'
 const token = 'update-admin.jwt'
 
 type RecordedRequest = {

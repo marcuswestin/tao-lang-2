@@ -64,11 +64,11 @@ function received<Type extends StudioWindowMessage['type']>(
 }
 
 /**
- * A retained preview keeps its realm across compiles, so it can report layout for a revision the next
- * compile already replaced. The server refuses that as a stale conflict, and the preview measures
- * again under the revision that replaced it, so the refusal carries nothing to act on.
+ * A retained preview keeps its realm across compiles, so it can report a layout or applied
+ * revision after the next manifest replaces it. The server rejects that stale report with 409;
+ * the current preview will send its own report.
  */
-function ignoreSupersededMeasurement(error: unknown): void {
+function ignoreSupersededPreviewReport(error: unknown): void {
   if (error instanceof StudioApiError && error.status === 409) {
     return
   }
@@ -237,7 +237,7 @@ export async function handlePreviewMessage(
     'preview-journey-step-recorded': type => receiveJourneyRecording(preview, received(message, type), actions),
     'preview-lens-render': type => receiveLensRender(preview, received(message, type), actions),
     'preview-layout-measurements': async type => {
-      await StudioApiClient.previewLayoutMeasurements(received(message, type)).catch(ignoreSupersededMeasurement)
+      await StudioApiClient.previewLayoutMeasurements(received(message, type)).catch(ignoreSupersededPreviewReport)
     },
     'preview-runtime-capture-failed': type => receiveRuntimeCapture(preview, received(message, type)),
     'preview-runtime-captured': type => receiveRuntimeCapture(preview, received(message, type)),
@@ -403,7 +403,9 @@ async function receivePreviewApplied(
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')
   }
-  await StudioApiClient.previewApplied(message)
+  // A frame can acknowledge its previous revision while Studio publishes the next manifest.
+  // The server correctly rejects that stale report; it does not indicate a broken preview.
+  await StudioApiClient.previewApplied(message).catch(ignoreSupersededPreviewReport)
 }
 
 async function receiveSourceAction(

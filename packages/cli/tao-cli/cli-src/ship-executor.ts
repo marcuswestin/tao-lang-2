@@ -146,7 +146,7 @@ async function executePreparedShipRun(
     progress.step('compile')
     nativeFingerprint = await runtimeFingerprint(runtimeRoot, runner as typeof CLI.run)
     schemaFingerprint = await dataSchemaFingerprint(prepared.project.root)
-    const updateServer = entry.update?.serverUrl ?? 'https://updates.tao-lang.dev'
+    const updateServer = entry.update?.serverUrl ?? 'https://updates.devtao.com'
     const manifest = runtimeManifest(activePrepared, sourceCommit, nativeFingerprint, updateServer)
     await Runtime.generateApp(activePrepared.app.sourcePath, {
       appName: activePrepared.app.name,
