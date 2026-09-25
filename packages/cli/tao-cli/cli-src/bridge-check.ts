@@ -31,6 +31,24 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     : FS.pathIsWithin(workspaceRoot, checkoutRoot) && await FS.isFile(repositoryConfig)
     ? repositoryConfig
     : undefined
+  // TypeScript resolves `extends` (including package configs) and the declaring file's relative
+  // type roots. Read those effective options before adding the host's installed ambient types.
+  const typescript = await import(
+    FS.resolvePath('typescript/lib/typescript.js', hostModules)
+  ) as typeof import('typescript')
+  const inheritedOptions = inheritedConfig === undefined
+    ? undefined
+    : typescript.getParsedCommandLineOfConfigFile(inheritedConfig, {}, {
+      ...typescript.sys,
+      onUnRecoverableConfigFileDiagnostic: () => {},
+    })?.options
+  const bridgeTypeRoots = [
+    ...new Set([
+      ...(inheritedOptions?.typeRoots ?? [FS.resolvePath('node_modules/@types', workspaceRoot)]),
+      ...typeRoots,
+    ]),
+  ]
+  const bridgeTypes = [...new Set([...(inheritedOptions?.types ?? []), ...ambientTypes])]
   const configPath = FS.resolvePath('.tao/bridge-check.tsconfig.json', workspaceRoot)
   const config = {
     ...(inheritedConfig === undefined ? {} : { extends: inheritedConfig }),
@@ -50,9 +68,8 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       skipLibCheck: true,
       strict: true,
       target: 'ES2022',
-      // A project tsconfig may declare its own ambient types and roots. Let its inheritance
-      // resolve those; standalone projects without a tsconfig use the installed host types.
-      ...(inheritedConfig === undefined ? { typeRoots, types: ambientTypes } : {}),
+      typeRoots: bridgeTypeRoots,
+      types: bridgeTypes,
       ...(inheritedConfig === repositoryConfig ? { rootDir: checkoutRoot } : {}),
     },
     files: modules,

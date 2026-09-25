@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { PROJECT_TSCONFIG } from '../cli-src/app-modules'
 import { runCheck } from '../cli-src/source-commands'
 import { checkedProjectFile, withTaoFixture } from './test-cli-files'
 
@@ -296,6 +297,22 @@ export function CountWords(value: string): number {
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
       Expect(await FS.isSymbolicLink(FS.resolvePath('node_modules/react-native', root))).toBe(true)
+    })
+  })
+
+  Test('adds host ambient types to the generated project tsconfig', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'tsconfig.json': PROJECT_TSCONFIG,
+      'Main.tao': functionSource,
+      'Words.ts': `export function CountWords(value: string): number {
+   return value.length + (${'process'}.env.BUILD_LABEL?.length ?? 0)
+}
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
     })
   })
 })
