@@ -1,6 +1,6 @@
 use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.

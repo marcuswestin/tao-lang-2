@@ -1,7 +1,7 @@
 use Documents, Duplicate, Finish, Workspaces from @data
 use SlotNav from @tao/nav
 use Join from @tao/text
-use Col, Image, Panes, Problems, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Col, Image, Panes, Problems, ScrollView, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 use DocumentScreen from ./
 

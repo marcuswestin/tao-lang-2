@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
 // loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
@@ -550,14 +550,6 @@ project {
    license MIT
 }
 
-// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
-// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
-// unauthorized sentences.
-guard default {
-   loading -> Spinner()
-   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
-}
-
 // The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
 // content. Tao mounts a navigator around a view root, so nothing here names one. Overlay and toast
 // hosting are universal capabilities, so no app declares them.
@@ -589,6 +581,14 @@ app WordFlowerInstantDB = WordFlower with {
 app WordFlowerLocalInstantDB = WordFlower with {
    Name "WordFlower - Local InstantDB"
    Datasource WordFlowerLocalInstantDBStore
+}
+
+// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
+// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
+// unauthorized sentences.
+guard default {
+   loading -> Spinner()
+   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
 }
 
 fixture StudioWorkspace {
