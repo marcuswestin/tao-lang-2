@@ -6,7 +6,7 @@
 # sets CLAUDE_ENV_FILE to a file it sources before every Bash tool command, so one export here
 # replaces an `export PATH=…` prefix on every command an agent runs — a prefix that also took the
 # command out of its allow rule and into permission review. Codex sets no such file. Both
-# harnesses get setup and a bounded, read-only model-drift check. Hooks run outside the Bash
+# harnesses get setup and a bounded, read-only model-routing audit. Hooks run outside the Bash
 # sandbox, so the install setup performs is unrestricted.
 # A fresh detached worktree emits a useful warning from ./agent, but it is not a hook failure.
 # Show setup's output only when setup actually fails.
@@ -32,8 +32,8 @@ if [[ -n "${CLAUDE_ENV_FILE:-}" && -d "$PROFILE_BIN" ]]; then
   } >> "$CLAUDE_ENV_FILE"
 fi
 
-# Read only local model metadata after setup; an absent or stale signal stays quiet.
-# The same warnings appear in ./agent doctor.
+# Stdout reaches the agent's context in both harnesses, so the audit prints one line only when the
+# routing table looks behind this machine. The same findings appear in ./agent doctor.
 if [[ -x "$PROFILE_BIN/bun" ]]; then
-  "$PROFILE_BIN/bun" run "$REPO_ROOT/packages/cli/agent-cli/agent-cli-src/cli/agent-model-drift.ts" "$REPO_ROOT" || true
+  "$PROFILE_BIN/bun" run "$REPO_ROOT/packages/cli/agent-cli/agent-cli-src/cli/agent-model-audit.ts" "$REPO_ROOT" || true
 fi

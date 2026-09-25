@@ -35,9 +35,12 @@ import {
   compare,
   type Evaluable,
   matchesFilter,
+  matchesSearch,
   partialRowValues,
   queryFilterValue,
+  querySearchTerm,
   rowValues,
+  searchFieldNames,
 } from './TR-data-values'
 import {
   errorMessage,
@@ -418,9 +421,14 @@ export class RuntimeDataSchema {
       filter,
       expected: queryFilterValue(plan.entity, entity, filter, this),
     }))
+    const searchFields = plan.search ? searchFieldNames(entity) : undefined
+    const searchTerm = plan.search ? querySearchTerm(plan.search) : undefined
     const source = this.data.rows[plan.entity] ?? []
     const rows = source
-      .filter(row => filters.every(({ filter, expected }) => matchesFilter(row, filter, expected)))
+      .filter(row =>
+        filters.every(({ filter, expected }) => matchesFilter(row, filter, expected))
+        && (searchTerm === undefined || matchesSearch(row, searchFields!, searchTerm))
+      )
       .map(row => this.handle(plan.entity, row.Id))
     const order = plan.order ?? entity.defaultOrder
     if (order) {
