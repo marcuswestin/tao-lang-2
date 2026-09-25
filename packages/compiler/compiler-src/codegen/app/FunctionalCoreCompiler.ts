@@ -57,6 +57,39 @@ export const FunctionalCoreCompiler = {
     }`
   },
 
+  /** PhraseDeclaration compiles named copy into a callable Tao pure-function value. */
+  PhraseDeclaration(phrase: AST.PhraseDeclaration): Compiled {
+    const parameters = AST.parametersOf(phrase).map((parameter, index) => ({ index, parameter }))
+    return gen`
+      ${gen.scopeName(phrase)} = TR.Function((${gen.join(parameters, Compile.FunctionRuntimeParameter)}) => {
+        return TR.BlockScope(_Scope, _Scope => {
+          ${gen.list(parameters, Compile.FunctionParameterBinding)}
+          ${Compile.PhraseBody(phrase)}
+        })
+      })
+    `
+  },
+
+  /** PhraseBody compiles a phrase's one interpolated string, or its plural-selected forms. */
+  PhraseBody(phrase: AST.PhraseDeclaration): Compiled {
+    if (!ASTUtils.phraseIsPlural(phrase)) {
+      Assert.defined(phrase.text, 'validated non-plural phrase has one interpolated string')
+      return gen`return ${Compile.Expression(phrase.text)}`
+    }
+    const numberParameter = ASTUtils.phraseNumberParameters(phrase)[0]
+    Assert.defined(numberParameter, 'validated plural phrase has one number parameter')
+    return gen`
+      return TR.Plural(${gen.scopeName({ name: Type.parameterName(numberParameter) })}.evaluate(), {
+        ${
+      gen.list(
+        phrase.forms,
+        form => gen`${form.category}: ${Compile.Expression(form.text)},`,
+      )
+    }
+      })
+    `
+  },
+
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
   FunctionRuntimeParameter(parameter: FunctionParameter): Compiled {
     return gen`${functionRuntimeParameterName(parameter.index)}${
