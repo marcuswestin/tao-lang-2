@@ -129,11 +129,15 @@ $ codesign --force --sign - --options runtime tao-bin      # hardened runtime
 $ tao-bin check .                                          # still runs, exit 0
 ```
 
-The 2026-09-22 upgrade also exposed a macOS 27 watcher regression: with the same CLI watch tests,
-Bun 1.3.13 delivered native file-edit events and 1.4.2 did not, including with host access.
-Chokidar polling delivered the edits. Tao's shared debounced watcher therefore uses polling on
-macOS with Bun 1.4.2, preserving `tao test --watch` and the development loop without changing
-the backend for other runtime versions.
+The 2026-09-22 upgrade also appeared to expose a macOS 27 watcher regression: with the same CLI
+watch tests, Bun 1.3.13 delivered native file-edit events and 1.4.2 did not. **Corrected
+2026-09-24:** the loss is the agent sandbox, not Bun or macOS. The sandbox refuses the FSEvents
+service, and Bun 1.3.14 moved macOS `fs.watch` onto FSEvents for single files as well as
+directories, so a sandboxed Bun 1.4.2 receives nothing. Outside the sandbox on macOS 27.0, Bun
+1.3.13, Bun 1.4.2, and Node 24 all delivered every event probed. Tao's shared debounced watcher
+still polls on macOS under Bun 1.3.14 or later, which costs an ordinary Mac some CPU, until the
+sandbox is allowed to reach FSEvents; `DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START`
+tracks that change.
 
 ### F4 — What the CLI reads at runtime, and whether it can be embedded
 
@@ -784,9 +788,10 @@ landing this work needs.
    `moduleNameMapper` or transform for `@noble/*` in `jest.tao-test.config.cjs`, or break
    `TR-studio-device-*` out of `TR.ts`'s eager graph, and re-run
    `tao test Apps/Starters/Notebook` with the binary as the runner. A day's work and it removes the
-   managed Node entirely. **Researched 2026-09-25:** nothing public runs the real Jest under Bun;
-   Bun hosts only its own Jest-compatible runner, and the request to support the Jest CLI
-   (oven-sh/bun#4562) closed without a plan. The `@noble/*` failure has two candidate causes: Jest
+   managed Node entirely. **Researched 2026-09-25:** nothing public runs the real Jest under Bun,
+   and Bun states no plan to: it hosts only its own Jest-compatible runner, and the Jest-named issue
+   (oven-sh/bun#4562, closed in 2023) asked for `bun test` to accept Jest's command-line flags, not
+   to run Jest itself. The `@noble/*` failure has two candidate causes: Jest
    documents `require()` of an ES module only from Node 24.9, and under `BUN_BE_BUN` it may not see
    a Node version that qualifies; and those packages reach Jest untransformed. Two experiments
    settle it: transform `@noble/(hashes|curves|ciphers)` through babel-jest (a `transform` entry and
