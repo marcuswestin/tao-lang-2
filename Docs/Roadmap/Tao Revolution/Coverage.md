@@ -237,8 +237,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     parameters are in Current. `screens { }` declares breakpoints, but `when Screen` remains
     unimplemented; parameterized colors and design rules are outside the MVP slice.
 
-[^18]: Test App journeys now exercise `on` and `with`, including a fixture split across a bound
-    datasource and device-local data. Device width is observed at the harness level because Tao
-    tests cannot select a layout direction. `through` fixture bindings remain unexecuted, and the
-    synthetic viewport applies one layout pass. WordFlower adoption and the remaining world controls
-    are separate tranches.
+[^18]: Test App journeys exercise `on` and `with`, including a fixture split across a bound
+    datasource and device-local data. WordFlower document journeys now pin a phone, and its export
+    journeys use a fresh StarterWorkspace graph with a seeded document. Device width is observed at
+    the harness level because Tao tests cannot select a layout direction. `through` fixture
+    bindings remain unexecuted, and the synthetic viewport applies one layout pass. The remaining
+    world controls are a separate tranche.
