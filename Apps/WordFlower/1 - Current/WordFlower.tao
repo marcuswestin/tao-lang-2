@@ -7,6 +7,11 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// PHRASES. A `phrase` is named copy that returns text: one sentence with typed holes, or plural
+// forms (`one`, `other`, and the other CLDR categories, `other` required) chosen by its one number
+// parameter. The outline's count reads "1 paragraph" and "0 paragraphs". Extracting copy for
+// translation and `words` blocks are Post-MVP.
+//
 // READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
 // loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
 // restyles it case by case, as WordFlower does for loading and error. A bare `guard Subject` sends
