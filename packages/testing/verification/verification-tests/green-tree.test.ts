@@ -61,7 +61,7 @@ Describe('green tree records', () => {
     const syntaxRoot = FS.resolvePath('packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes', root)
     const bundle = FS.resolvePath('extension/main.cjs', bundleRoot)
     const added = FS.resolvePath('language/added.cjs', bundleRoot)
-    const syntax = FS.resolvePath('tao-lang.tmLanguage.json', syntaxRoot)
+    const syntax = FS.resolvePath('tao.tmLanguage.json', syntaxRoot)
     try {
       await FS.writeText(wasm, 'wasm-one')
       await FS.writeText(bundle, 'bundle-one\n')

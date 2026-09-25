@@ -151,7 +151,7 @@ Metro, Jest, `tsc`, or the user's editor.
   `FS.readFile`. Bun embeds it automatically — verified by formatting an inject fence from the
   binary (F1).
 - The generated TextMate grammar,
-  `packages/ides/ide-extension/…/_gen_syntaxes/tao-lang.tmLanguage.json`, read by Shiki for `tao review`.
+  `packages/ides/ide-extension/…/_gen_syntaxes/tao.tmLanguage.json`, read by Shiki for `tao review`.
   It is embeddable as a text asset once `StudioHighlight` stops resolving it from the Git root.
 
 **Nothing to ship.** The starter plans (`cli-src/create/starter-plans.ts`) and `PROJECT_TSCONFIG`
