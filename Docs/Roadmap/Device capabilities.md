@@ -39,9 +39,10 @@ one-capability-two-bindings question.
   (`fails <Case> "<sentence>"`), surfaced three-tier at the call site: named case → `rejected` (any
   other declared case) → `error` (a thrown exception). English never crosses the boundary (§15).
 - **The TypeScript boundary is `<expression> from <path>`** — named exports only, bare paths, no
-  inline fences, no `implement`/`inject`; `progress` opt-in; every sidecar gets a `signal`;
-  cancellation is never declared. A command whose action crosses the boundary is non-undoable
-  (§8, §15).
+  inline fences, no `implement`/`inject`. Declared `fails` cases and non-undoability when a command
+  crosses the boundary are decided (§8, §15). `progress`, a sidecar `signal`, and lifecycle
+  cancellation are not decided contracts; `Tao Revolution/Coverage.md` footnote 3 explicitly
+  struck `progress`.
 - **The swap seam is the app variant**: `app SkilletPreview = Skillet with { Datasource Memory }`.
   Test controls must lower to something the runtime can really do — `locale "es"` lowers to mocking
   the localization module; "nothing pretends to change the OS" (§16). `data <status>` was retired in
@@ -295,6 +296,13 @@ simulation program, flagged below, not decided here.
    tests in Tao — the tranche's Definition of Done.
 
 ## Cross-program seams (flag, don't decide)
+
+- **Post-MVP foreign-action contract:** assess typed failures, progress, lifecycle cancellation,
+  bounded authority, and deterministic substitutes together when a real import, upload, or device
+  action forces them. Decisions §§8, 15–16 already own `fails`, `runs latest` (which does not cancel
+  a running call), the sidecar's lack of write authority, and declared-case stubs; Authority owns
+  durable write permission, and Deterministic simulation owns the shared scripted seam. Prove
+  whether unmount or superseding work should cancel a call before choosing additional syntax.
 
 - **Deterministic simulation** (parallel): the scripted capability driver must be one seam with
   that program's provider harness — the engine's injected loaders surfaced through the same
