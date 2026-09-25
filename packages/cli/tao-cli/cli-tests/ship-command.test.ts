@@ -53,10 +53,10 @@ Describe('tao ship command', () => {
         apps: {
           'notes/Notes': {
             accepted: {
-              bundleIdentifier: 'dev.tao-lang.notes',
+              bundleIdentifier: 'com.devtao.notes',
               issuerId: 'issuer-id',
               keyId: 'KEY123',
-              namespace: 'dev.tao-lang',
+              namespace: 'com.devtao',
             },
             appStoreAppId: 'app-42',
             identity: 'notes/Notes',
@@ -122,11 +122,11 @@ Describe('tao ship command', () => {
         execute: async prepared => {
           executed = true
           Expect(prepared.entry.accepted).toEqual({
-            bundleIdentifier: 'dev.tao-lang.notes',
+            bundleIdentifier: 'com.devtao.notes',
             datasourceConfiguration: undefined,
             issuerId: 'issuer-id',
             keyId: 'KEY123',
-            namespace: 'dev.tao-lang',
+            namespace: 'com.devtao',
           })
         },
         inspectPreflight: async () => [],
@@ -135,7 +135,7 @@ Describe('tao ship command', () => {
 
       Expect(result).toBe('shipped')
       Expect(executed).toBe(true)
-      Expect(terminal.outputText()).toContain('Accept bundle identifier dev.tao-lang.notes?')
+      Expect(terminal.outputText()).toContain('Accept bundle identifier com.devtao.notes?')
     })
   })
 })
@@ -160,10 +160,10 @@ async function expectFreshBuildForIneligibleCheckpoint(
       apps: {
         'notes/Notes': {
           accepted: {
-            bundleIdentifier: 'dev.tao-lang.notes',
+            bundleIdentifier: 'com.devtao.notes',
             issuerId: 'issuer-id',
             keyId: 'KEY123',
-            namespace: 'dev.tao-lang',
+            namespace: 'com.devtao',
           },
           appStoreAppId: 'app-42',
           identity: 'notes/Notes',
