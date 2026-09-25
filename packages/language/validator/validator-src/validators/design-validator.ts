@@ -22,12 +22,15 @@ type DesignSpecMember = AST.DesignBundle | AST.DesignStyleEntry | AST.DesignText
 const designValidationMessages = {
   bundleCycle: (design: string, path: readonly string[]) =>
     `Design '${design}' has a bundle cycle: ${path.join(' -> ')}.`,
+  capitalizedDesignName: (name: string) => `Design names are lowercase: '${name}'.`,
   duplicateMember: (name: string) => `Design member '${name}' is declared more than once.`,
   duplicateStyleProperty: (property: string, style: string) =>
     `Style property '${property}' is already present in applied style '${style}'.`,
   duplicateTypedBlock: (design: string) => `Design '${design}' may declare each typed block only once.`,
   duplicateVisualAlias: (first: string, second: string) =>
     `Design entries '${first}' and '${second}' set the same visual property.`,
+  elementDefaultReference: (name: string) =>
+    `Element default '${name}' applies by element and cannot be named in a clause list; restate its clauses or use a condition.`,
   exploration: (entry: string) =>
     `Inline design exploration '${entry}' must be promoted to a token, style bundle, or element default for release.`,
   flatCatalog: (design: string, count: number) =>
@@ -90,6 +93,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
       members.set(member.name, member.node)
     }
   }
+  validateLowercaseValueNames(design, ctx)
   const tokens = designColorNames(design)
   const sizes = designSizeNames(design)
   const bundles = designSpecMembers(design)
@@ -126,6 +130,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
     }
   }
   for (const bundle of bundles.values()) {
+    validateElementDefaultReferences(bundle.spec.entries, ctx)
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
     warnLegacyVisualHeads(bundle.spec.entries, ctx)
     validateRedundantStyleProperties(bundle.spec, bundles, ctx, design)
@@ -186,7 +191,11 @@ function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: Val
       })
     }
   }
-  const designEntries = clause.entries.filter(entry => !LayoutValidator.isLayoutEntry(entry))
+  // An element default is never reachable by name, so the rule needs no design and holds in every app.
+  validateElementDefaultReferences(clause.entries, ctx)
+  const designEntries = clause.entries.filter(entry =>
+    !LayoutValidator.isLayoutEntry(entry) && !isElementDefaultReference(entry)
+  )
   const sizeEntries = clause.entries.filter(requiresSizeLookup)
   if (designEntries.length === 0 && sizeEntries.length === 0) {
     return
@@ -283,6 +292,9 @@ function validateEntries(
     }
     if (isVisualEntry(entry)) {
       validateVisualEntry(entry, design, tokens, ctx, sizes)
+      continue
+    }
+    if (isElementDefaultReference(entry)) {
       continue
     }
     const values = ASTUtils.layoutEntryValues(entry)
@@ -488,6 +500,45 @@ function warnLegacyVisualHeads(entries: readonly AST.LayoutEntry[], ctx: Validat
         code: designValidationCodes.legacyVisualHead,
       })
     }
+  }
+}
+
+/**
+ * validateElementDefaultReferences rejects a Capitalized style named in a clause list. A Capitalized
+ * style is an element default: it applies by element, so naming it would make one style both a
+ * default and a bundle, and a Capitalized clause word is reserved for values (Decisions §13).
+ */
+function validateElementDefaultReferences(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
+  for (const entry of entries.filter(isElementDefaultReference)) {
+    ctx.error(entry, designValidationMessages.elementDefaultReference(entryHead(entry)), {
+      code: designValidationCodes.elementDefaultReference,
+    })
+  }
+}
+
+/**
+ * validateLowercaseValueNames rejects a Capitalized color, size, text style, or screen. Only a style
+ * may be Capitalized, because only a style can be an element default; every other design name is
+ * lowercase so it never shares a spelling with a clause-list value.
+ */
+function validateLowercaseValueNames(design: AST.DesignDeclaration, ctx: ValidationContext): void {
+  const named: Array<{ name: string; node: AST.Node }> = []
+  for (const member of design.block.members) {
+    if (AST.isDesignToken(member)) {
+      named.push({ name: member.name, node: member })
+    } else if (
+      AST.isDesignColorsBlock(member)
+      || AST.isDesignSizesBlock(member)
+      || AST.isDesignTextBlock(member)
+      || AST.isDesignScreensBlock(member)
+    ) {
+      named.push(...member.entries.map(entry => ({ name: entry.name, node: entry })))
+    }
+  }
+  for (const { name, node } of named.filter(({ name }) => isCapitalized(name))) {
+    ctx.error(node, designValidationMessages.capitalizedDesignName(name), {
+      code: designValidationCodes.capitalizedDesignName,
+    })
   }
 }
 
@@ -708,6 +759,15 @@ function isVisualEntry(entry: AST.LayoutEntry): boolean {
   return visualHeads.has(entryHead(entry))
 }
 
+/** isElementDefaultReference marks a clause entry headed by a Capitalized word that is neither a layout nor a visual head. */
+function isElementDefaultReference(entry: AST.LayoutEntry): boolean {
+  return !LayoutValidator.isLayoutEntry(entry) && !isVisualEntry(entry) && isCapitalized(entryHead(entry))
+}
+
+function isCapitalized(name: string): boolean {
+  return /^[A-Z]/.test(name)
+}
+
 /** requiresDesignLookup marks the entries a design resolves: bundle references and color tokens. Numeric visuals stand alone. */
 function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
   const values = conditionedVisualValues(entry) ?? ASTUtils.layoutEntryValues(entry)
@@ -752,7 +812,7 @@ function conditionedVisualValues(entry: AST.LayoutEntry): readonly (number | str
   const subject = String(ASTUtils.layoutTermValue(condition.subject))
   const expected = condition.value && String(ASTUtils.layoutTermValue(condition.value))
   const valid = expected === undefined
-    ? ['pressed', 'focused', 'hovered'].includes(subject)
+    ? ['pressed', 'focused', 'hovered', 'selected'].includes(subject)
     : (subject === 'Scheme' && (expected === 'Dark' || expected === 'Light'))
       || expected === 'active'
   if (!valid) {
@@ -777,8 +837,10 @@ type BundleProperty = {
 function layoutEntryProperties(entry: AST.LayoutEntry): readonly BundleProperty[] {
   const condition = entryConditionText(entry)
   if (isVisualEntry(entry)) {
-    const property = ASTUtils.design.canonicalVisualHead(entryHead(entry))
-    return [{ condition, property, slot: `visual:${property}` }]
+    // The slot is keyed by the runtime ABI spelling so `bg` and `background` still collide, but the
+    // property keeps the head the author wrote so a diagnostic never names a spelling not in source.
+    const property = entryHead(entry)
+    return [{ condition, property, slot: `visual:${ASTUtils.design.canonicalVisualHead(property)}` }]
   }
   if (LayoutValidator.isLayoutEntry(entry)) {
     const property = entryHead(entry)
@@ -873,7 +935,10 @@ function validateRedundantStyleProperties(
     () => computeDesignBundleProperties(bundles),
   )
 
-  const seenProperties = new Map<string, { node: AST.LayoutEntry; sourceStyleName?: string }>()
+  const seenProperties = new Map<
+    string,
+    { node: AST.LayoutEntry; property: BundleProperty; sourceStyleName?: string }
+  >()
 
   for (const entry of clause.entries) {
     const bundle = bundleReference(entry, bundles)
@@ -886,20 +951,35 @@ function validateRedundantStyleProperties(
       const key = bundlePropertyKey(property)
       const existing = seenProperties.get(key)
       if (existing === undefined) {
-        seenProperties.set(key, { node: entry, ...(bundle === undefined ? {} : { sourceStyleName: bundle.name }) })
+        seenProperties.set(key, {
+          node: entry,
+          property,
+          ...(bundle === undefined ? {} : { sourceStyleName: bundle.name }),
+        })
         continue
       }
       if (reported) {
         continue
       }
       reported = true
+      const name = reportedPropertyName(existing.property, property)
       ctx.warning(
         entry,
         existing.sourceStyleName !== undefined
-          ? designValidationMessages.duplicateStyleProperty(property.property, existing.sourceStyleName)
-          : designValidationMessages.precedingStyleProperty(property.property, entryText(existing.node)),
+          ? designValidationMessages.duplicateStyleProperty(name, existing.sourceStyleName)
+          : designValidationMessages.precedingStyleProperty(name, entryText(existing.node)),
         { code: designValidationCodes.duplicateStyleProperty },
       )
     }
   }
+}
+
+/**
+ * reportedPropertyName names a repeated slot the way its source spells it. When the two claims spell
+ * it differently (`bg` against `background`), the decided spelling is the one both sides share.
+ */
+function reportedPropertyName(first: BundleProperty, second: BundleProperty): string {
+  return first.property === second.property
+    ? second.property
+    : legacyVisualSpellings[second.property] ?? second.property
 }

@@ -292,6 +292,95 @@ Describe('validator: minimal design', () => {
   )
 
   Test(
+    'accepts `when selected` as an interaction condition on an element default',
+    accepts(designApp(
+      `
+      workspace design Theme {
+        colors { inkMuted #666, accentSoft #eef, accentStrong #113 }
+        styles {
+          NavigationTab [pad 10, ink inkMuted, background accentSoft when selected, ink accentStrong when selected]
+        }
+      }
+    `,
+      'render Surface()',
+    )),
+  )
+
+  Test('rejects an element default named in a render, header, or style clause list', async () => {
+    const result = await Validator.validateCode(`
+      use StackNav from @tao/nav
+      workspace design Theme {
+        colors { accentSoft #eef }
+        styles {
+          NavigationTab [pad 10]
+          Hint [pad 4]
+          tab [NavigationTab, background accentSoft]
+        }
+        NavigationTabActive [NavigationTab, background accentSoft]
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      scene Main() { Title "Main" render Card() [Hint] }
+      view Card() [Hint, pad 2] {
+        render Surface()
+      }
+      ${surfaceView}
+    `)
+    const errors = result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')
+
+    // Each reference is one error with its own code: none also reads as an unknown bundle.
+    Expect(errors.map(diagnostic => diagnostic.message).sort()).toEqual([
+      messages.elementDefaultReference('Hint'),
+      messages.elementDefaultReference('Hint'),
+      messages.elementDefaultReference('NavigationTab'),
+      messages.elementDefaultReference('NavigationTab'),
+    ])
+    Expect(errors.every(diagnostic => diagnostic.code === designValidationCodes.elementDefaultReference)).toBe(true)
+  })
+
+  Test(
+    'rejects an element default named in a clause list even with no app design selected',
+    async () => {
+      const result = await Validator.validateCode(`
+        app Legacy { view Main }
+        view Main() { render Surface() [Hint] }
+        ${surfaceView}
+      `)
+
+      const errors = result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')
+
+      // Only the rule itself fires: no unknown layout entry and no missing design for a name nothing may reach.
+      Expect(errors.map(diagnostic => diagnostic.message)).toEqual([messages.elementDefaultReference('Hint')])
+    },
+  )
+
+  Test('rejects Capitalized colors, sizes, text styles, screens, and flat color tokens', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        Brand #fff
+        colors { Accent #f60, ink #111 }
+        sizes { Gutter 8.px, sm 4.px }
+        text { Title [size 20] body [size 16] }
+        screens { Narrow below 500.px, wide }
+        styles { Text [ink ink] card [pad sm] }
+        Surface [background Accent]
+      }
+    `)
+    const errors = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.capitalizedDesignName
+    )
+
+    // Capitalized styles and flat bundles are element defaults, so `Text` and `Surface` stay legal.
+    Expect(errors.map(diagnostic => diagnostic.message)).toEqual([
+      messages.capitalizedDesignName('Brand'),
+      messages.capitalizedDesignName('Accent'),
+      messages.capitalizedDesignName('Gutter'),
+      messages.capitalizedDesignName('Title'),
+      messages.capitalizedDesignName('Narrow'),
+    ])
+    Expect(errors.every(diagnostic => diagnostic.severity === 'error')).toBe(true)
+  })
+
+  Test(
     'rejects malformed or unrelated visual conditions',
     rejects(
       designApp(
@@ -618,6 +707,30 @@ Describe('validator: minimal design', () => {
     Expect(warnings).toHaveLength(2)
     Expect(warnings[0]?.message).toBe(messages.duplicateStyleProperty('pad', 'header'))
     Expect(warnings[1]?.message).toBe(messages.duplicateStyleProperty('bg', 'header'))
+  })
+
+  Test('names a repeated visual property as written, and by its decided spelling when the two differ', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          colors { ink #111, paper #fff, accent #f60 }
+          styles {
+            card [ink ink]
+            header [bg accent]
+          }
+        }`,
+        'render Surface() [card, ink paper] render Surface() [header, background paper]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    // The runtime keys both slots as `fg` and `bg`; neither spelling appears in this source.
+    Expect(warnings.map(diagnostic => diagnostic.message)).toEqual([
+      messages.duplicateStyleProperty('ink', 'card'),
+      messages.duplicateStyleProperty('background', 'header'),
+    ])
   })
 
   Test('warns when multiple applied styles share a property', async () => {

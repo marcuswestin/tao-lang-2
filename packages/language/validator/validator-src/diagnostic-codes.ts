@@ -11,10 +11,12 @@ export const viewValidationCodes = {
   renderNotLast: 'tao-render-not-last',
 } as const
 
-/** designValidationCodes declares stable warnings reported by the ordinary design validator. */
+/** designValidationCodes declares stable diagnostics reported by the ordinary design validator. */
 export const designValidationCodes = {
+  capitalizedDesignName: 'design-check-capitalized-design-name',
   duplicateMember: 'design-check-duplicate-member',
   duplicateStyleProperty: 'design-check-duplicate-style-property',
+  elementDefaultReference: 'design-check-element-default-reference',
   exploration: 'design-check-exploration',
   flatCatalog: 'design-check-flat-catalog',
   legacyVisualHead: 'design-check-legacy-visual-head',
