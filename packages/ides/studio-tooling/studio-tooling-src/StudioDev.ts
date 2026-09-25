@@ -745,7 +745,7 @@ function watchmanSocketName(output: string): string | undefined {
 
 function throwWatchmanPreflightError(problem: string, remediation: string): never {
   Errors.throwHostEnvironment(
-    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching, which an agent sandbox refuses outright (Node reports it as EMFILE). ${remediation}`,
+    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching, which an agent sandbox refuses outright (Node reports it as EMFILE). ${remediation} From an agent shell, launch Studio with \`./agent unsandboxed studio\`, which runs it on the host; no agent sandbox is given Watchman's socket.`,
   )
 }
 
