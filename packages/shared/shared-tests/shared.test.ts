@@ -1385,9 +1385,16 @@ Describe('TaoStdlib', () => {
 Describe('TaoHome', () => {
   // The install script spells the same rule in shell; these pin the paths it must agree with.
   Test('defaults to ~/.local/share/tao', () => {
-    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: undefined }, () => {
+    withEnvironment({
+      HOME: '/Users/someone',
+      TAO_HOME: undefined,
+      XDG_DATA_HOME: undefined,
+      XDG_CACHE_HOME: undefined,
+    }, () => {
       Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
       Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.local/share/tao/hosts')
+      Expect(TaoHome.cacheRoot()).toBe('/Users/someone/.cache/tao')
+      Expect(TaoHome.cacheResolve('test-runs')).toBe('/Users/someone/.cache/tao/test-runs')
     })
   })
 
@@ -1401,11 +1408,25 @@ Describe('TaoHome', () => {
   })
 
   Test('takes TAO_HOME over everything, and refuses a relative one', () => {
-    withEnvironment({ HOME: '/Users/someone', TAO_HOME: '/opt/tao', XDG_DATA_HOME: '/data' }, () => {
-      Expect(TaoHome.root()).toBe('/opt/tao')
-    })
+    withEnvironment(
+      { HOME: '/Users/someone', TAO_HOME: '/opt/tao', XDG_DATA_HOME: '/data', XDG_CACHE_HOME: '/cache' },
+      () => {
+        Expect(TaoHome.root()).toBe('/opt/tao')
+        Expect(TaoHome.cacheRoot()).toBe('/opt/tao/cache')
+      },
+    )
     withEnvironment({ HOME: '/Users/someone', TAO_HOME: 'tao', XDG_DATA_HOME: undefined }, () => {
       Expect(() => TaoHome.root()).toThrow('TAO_HOME must be an absolute path')
+      Expect(() => TaoHome.cacheRoot()).toThrow('TAO_HOME must be an absolute path')
+    })
+  })
+
+  Test('honours an absolute XDG_CACHE_HOME and ignores a relative one', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_CACHE_HOME: '/cache' }, () => {
+      Expect(TaoHome.cacheRoot()).toBe('/cache/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_CACHE_HOME: 'cache' }, () => {
+      Expect(TaoHome.cacheRoot()).toBe('/Users/someone/.cache/tao')
     })
   })
 })
