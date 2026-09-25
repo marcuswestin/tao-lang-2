@@ -149,7 +149,7 @@ Describe('Studio Electrobun project', () => {
     Expect(generated.main).toContain("import.meta.dir + '/../service/packages/apps/expo-host'")
     Expect(generated.main).toContain("studioClientBundlePath: import.meta.dir + '/../service/studio.js'")
     Expect(generated.main).toContain('event.response = { allow: false }')
-    Expect(generated.main).toContain('quitting ??= packagedService.stop()')
+    Expect(generated.main).toContain('quitting = Promise.resolve().then(() => packagedService.stop())')
     Expect(generated.main).toContain('quitAfterCleanup = true')
   })
 
