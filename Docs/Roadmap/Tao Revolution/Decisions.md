@@ -1948,7 +1948,15 @@ design SkilletDesign {
   or takes a condition, the way a state does. Design names — colors, sizes, text styles, and styles
   — are lowercase, and a Capitalized word in a clause list is a value (a parameter, state, or
   environment value), so a clause head, a design name, and a value never share a spelling and no
-  reference marker is needed.
+  reference marker is needed. A violation is a compile error (decided 2026-09-25).
+- **A `color` parameter carries a design color as a value** (decided 2026-09-25). A view may declare
+  `Tint color default inkMuted`; a caller passes a design color name (`Tint: accent`) or another
+  `color` value; inside, `background Tint` reads it, resolved against the mounted design at render
+  so it follows the scheme and whichever design is mounted. Every value starts as a design name — no
+  conversion from text or data reaches a clause — so the set of colors a clause can receive stays
+  listed in source. WordFlower's document status badge forces it: the badge tints a dot inside
+  itself, which a caller's clauses cannot reach. `size` parameters, `color` state, and aliases wait
+  for a feature that forces them.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
@@ -1957,7 +1965,10 @@ design SkilletDesign {
   popover, and authored overlay-family syntax remains deferred.
 - **Interaction states are conditions.** `pressed`, `focused`, and `hovered` join the condition
   vocabulary, so state styling is §9's postfix `when` (`background ember.20 when pressed`), not a
-  sub-grammar of its own.
+  sub-grammar of its own. `selected` joins them for the element its host marks as the current
+  choice — today the active navigation tab — so `NavigationTab` carries its active look as
+  `background accentSoft when selected` and there is no separate active-tab default (decided
+  2026-09-25).
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
@@ -1965,10 +1976,11 @@ design SkilletDesign {
   (decided 2026-09-22). The legacy spellings stay accepted and lower identically, and every use
   draws a warning naming the decided head, so MVP source is written the way Revolution writes it
   (Process principle 1). One bundle spelling the same property both ways remains an error.
+  `tao fix` rewrites them (decided 2026-09-25), so canonical source never contains them.
 - **The flat catalog is deprecated** (decided 2026-09-22). A color or bundle written directly in
   `design { }`, outside the typed blocks, is still accepted, but its design draws one warning to
   move colors into `colors { }` and bundles into `styles { }`. `tao create` writes only the typed
-  form.
+  form, and `tao fix` moves flat entries into the typed blocks (decided 2026-09-25).
 - **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
   placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
   element defaults. If a demo finds a need a view cannot meet, it returns.
