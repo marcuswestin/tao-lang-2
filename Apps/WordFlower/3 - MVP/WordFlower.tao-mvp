@@ -365,9 +365,10 @@ scene WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
-      guard WorkspaceName empty -> {
+      if WorkspaceName is empty {
          present WorkspaceNameNotice() as overlay
       }
+      check WorkspaceName is not empty
       create Workspace {
          Name: WorkspaceName
       }
@@ -458,7 +459,7 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. The command is the discoverable verb, so the words a person reads live there.
    action SaveWorkspace() {
-      guard WorkspaceNameDraft empty
+      check WorkspaceNameDraft is not empty
       update Workspace {
          Name: WorkspaceNameDraft
       }
@@ -474,7 +475,7 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    }
    Toolbar { Save }
    action AddDocument() {
-      guard DocumentTitle empty
+      check DocumentTitle is not empty
       async {
          create Document { // don't wait for creation completion to update the text input
             Title: DocumentTitle
@@ -723,7 +724,7 @@ view DocumentEditor(Document) {
       update Document { Final: Value }
    }
    action SaveDocument() {
-      guard Input.Title empty
+      check Input.Title is not empty
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -740,7 +741,7 @@ view DocumentEditor(Document) {
       }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
-      guard ParagraphText empty
+      check ParagraphText is not empty
       // `async` starts as a later root, so capture the submitted value before clearing the input.
       // A failed detached write enters the datasource error state.
       set DetachedParagraphText = ParagraphText

@@ -21,7 +21,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Convertible unit families, dimensional arithmetic (§2)        | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
 | Entities, relations, yes/no poles (§2)                        | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
 | `relation` trait for a differently-named relation (§2)        | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
-| validate / required / refuse (§2)                             | WordFlower · document and workspace rules                                     | MVP      | partially in Current      |
+| validate / required / refuse (§2)                             | WordFlower · document and workspace rules                                     | MVP      | partially in Current[^16] |
 | Cross-row validate, lowered per write path (§2)               | Skillet · a kitchen needs an owner; Wayfare · a trip needs an owner           | Post-MVP | —                         |
 | `together` as one fact (§2)                                   | Skillet · an amount never syncs without its unit                              | Post-MVP | —                         |
 | Preferences incl. device scope (§2)                           | WordFlower · editor preferences                                               | MVP      | pending                   |
@@ -60,7 +60,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Assistant projection (§8)                                     | WordFlower · assistant block                                                  | Post-MVP | —                         |
 | Undo derivation (§8)                                          | WordFlower · document edits                                                   | Post-MVP | —                         |
 | Declared concurrency: single-flight, latest-pending (§8)      | Hearth · a quick tick-untick settles last; Skillet · one sign-in link         | Post-MVP | —                         |
-| Conditionals, ternary, check/guard (§8)                       | WordFlower · everywhere; ternary: focused-writing mode                        | MVP      | partially in Current[^2]  |
+| Conditionals, ternary, check/guard (§8)                       | WordFlower · everywhere; ternary: focused-writing mode                        | MVP      | in Current[^2]            |
 | Ticking clock — @tao/time (§9)                                | **WordFlower · focused-writing mode** (X-minute free write)                   | **MVP**  | in Current                |
 | Unified view kind, inferred capabilities (§9)                 | WordFlower · everywhere; stateful wrapper: settings details                   | MVP      | in Current[^4]            |
 | Scene, host-read chrome slots (§9–§10)                        | WordFlower · reactive workspace title + save; HNReader                        | MVP      | in Current[^5]            |
@@ -122,9 +122,10 @@ The expansion order in `Apps/Tao Future/README.md` is therefore also the order t
 Skillet first (automations, notifications, timers, measurement, a second shape of sharing), then
 Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, draft conflict).
 
-[^2]: `if`, `when` in value and render position, the compact two-outcome `when`, and `guard` are in
-    Current. `check` — §8's action-only early exit — is not: actions still stop on `guard X empty`.
-    The Tao Future apps are written with `check`, so graduating any of their actions needs it.
+[^2]: `if`, `when` in value and render position, the compact two-outcome `when`, view `guard`, and
+    `check` — §8's action-only early exit — are in Current. A `check` may not sit inside an action's
+    `if` or `guard` block, where it would stop only that block. The language still accepts `guard` in
+    an action, which §8 reserves for views; WordFlower no longer uses it.
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
     Declared failures (`fails`), `progress`, and the emitted bridge metadata module are not.
@@ -218,3 +219,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     every query locally. `refreshing` and `stale` are advisory cases a guard may skip, so a failed
     refresh over cached rows is never an error and offline stays a non-error. Staleness is declared
     with `CacheFor` and journeys bind a deterministic stub adapter through an ordinary app variant.
+
+[^16]: `required` and the `Incomplete` and `Problems` it derives on rows and projections are in the
+    language, with `create … with`, and the Write Rules test app proves them. WordFlower does not
+    use them yet: whether `Workspace.Name` and `Document.Title` carry `required` beside `validate` is
+    an open decision. `validate` and `refuse when` are not implemented, and neither is a stdlib view
+    that presents `Problems`, whose spelling is also open.

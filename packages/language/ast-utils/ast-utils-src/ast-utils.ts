@@ -25,7 +25,7 @@ import {
   storeOfCollection,
   storeOfDatasource,
 } from './data-stores'
-import { resolveDataWriteBindings } from './data-write-bindings'
+import { createRequiresField, resolveDataWriteBindings } from './data-write-bindings'
 import { resolveDatasourceValue } from './datasource-values'
 import { design } from './design'
 import { guardBranches } from './guards'
@@ -97,6 +97,7 @@ export const ASTUtils = {
   resolveArgumentBindings,
   resolveActionTarget,
   resolveDataWriteBindings,
+  createRequiresField,
   resolveFunctionInvocation,
   resolveItemPropertyBindings,
   resolveRenderInvocation,

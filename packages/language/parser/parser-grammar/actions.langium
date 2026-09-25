@@ -31,10 +31,14 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | FailStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
+
+// `check` is an action's early exit: a false condition skips the rest of the action without failing.
+CheckStatement:
+    'check' condition=Expression;
 
 AsyncActionStatement:
     'async' block=ActionBlock;
