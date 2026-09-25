@@ -927,10 +927,17 @@ above; where the two disagree, these are later and win.
     passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
     50 seconds. The Developer approved installing Tart and its image on 2026-09-25. The named
     setup operation trusts Tart's `softnet` dependency formula individually before installing Tart;
-    Homebrew rejects the dependency otherwise. The VM gate has not run because this task's existing sandbox
-    still rejects the newly added host operations; a fresh task must load those rules before
-    `./agent unsandboxed standalone-cli-vm-setup` and the clean-machine command can run. No VM
-    duration or hidden dependency finding is claimed yet.
+    Homebrew rejects the dependency otherwise. A completed VM result has not yet been recorded;
+    no VM duration or hidden dependency finding is claimed yet.
+
+    **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
+    DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is
+    installed as a dependency, so repeated disposable VM runs could exhaust available leases.
+    If many runs later fail to obtain an IP address, inspect that cause before changing host
+    settings. [Tart's DHCP FAQ](https://tart.run/faq/#changing-the-default-dhcp-lease-time)
+    suggests reducing the lease to 600 seconds with
+    `sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.InternetSharing.default.plist bootpd -dict DHCPLeaseTimeSecs -int 600`.
+    This is a persistent host change, not part of the setup or gate; do not apply it preemptively.
 
 ## Deferred approaches worth revisiting
 
